@@ -26,16 +26,10 @@ export const DEVICES = [
 ];
 
 export const PRESETS = [
-  { id: "tiktok", label: "TikTok / Reels / Shorts", w: 1080, h: 1920, note: "9:16" },
-  { id: "story", label: "Instagram Story", w: 1080, h: 1920, note: "9:16" },
-  { id: "linkedin_square", label: "LinkedIn Square", w: 1200, h: 1200, note: "1:1" },
-  { id: "linkedin_landscape", label: "LinkedIn Landscape", w: 1920, h: 1080, note: "16:9" },
-  { id: "youtube", label: "YouTube 1080p", w: 1920, h: 1080, note: "16:9" },
-  { id: "source", label: "Tight crop (phone only)", w: 0, h: 0, note: "auto" },
+  { id: "tiktok", label: "TikTok", w: 1080, h: 1920, note: "9:16" },
 ];
 
 export const BACKGROUNDS = [
-  { id: "transparent", label: "Transparent (WebM)", preview: "transparent" },
   { id: "lavender", label: "Lavender", preview: "linear-gradient(135deg,#0c0814,#14101e)" },
   { id: "sage", label: "Sage", preview: "linear-gradient(135deg,#080e0a,#0e1810)" },
   { id: "cloud", label: "Cloud", preview: "linear-gradient(135deg,#080a10,#0e1218)" },
@@ -192,6 +186,18 @@ export function resolveCtaWindow(ctaDuration, clipDuration, ctaTimingMode = "cus
   return dur > 0 ? Math.min(d, dur * 0.45) : d;
 }
 
+/** Clamp one Story message to the unreserved middle of the loaded clip. */
+export function resolveStoryWindow({ clipDuration, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, start = 0, end = null }) {
+  const duration = Number.isFinite(clipDuration) ? Math.max(0, clipDuration) : 0;
+  const min = hookEnabled ? Math.min(hookDuration, duration * 0.45) : 0;
+  const max = Math.max(min, duration - (ctaEnabled ? resolveCtaWindow(ctaDuration, duration, ctaTimingMode) : 0));
+  const available = duration > 0 && max > min;
+  const gap = Math.min(0.1, max - min);
+  const safeStart = Math.max(min, Math.min(Number(start) || 0, max - gap));
+  const safeEnd = Math.max(safeStart + gap, Math.min(end === null ? max : Number(end) || 0, max));
+  return { min, max, start: safeStart, end: safeEnd, available };
+}
+
 export const DEFAULTS = {
   device: "s24",
   preset: "tiktok",
@@ -203,7 +209,6 @@ export const DEFAULTS = {
   videoScale: 1,
   videoOffsetX: 0,
   videoOffsetY: 0,
-  exportFormat: "auto",
   viewMode: "floating",
   envBg: "living_room",
   handZoom: 1,
@@ -246,100 +251,6 @@ export const RANGES = {
 };
 
 export const BASE_PHONE_H = 1800;
-
-/**
- * MP4 candidates, ordered by what can actually encode a 1080x1920 canvas.
- *
- * `avc1.42E01F` is H.264 Baseline Level 3.1, which tops out at 3600
- * macroblocks per frame (1280x720). A 1080x1920 canvas is 8160. The encoder
- * therefore rejects it with "configuration not supported" — but
- * `MediaRecorder.isTypeSupported` only checks the codec string, never the
- * resolution against the level, so it falsely passes and the failure surfaces
- * asynchronously at record time. That exact sequence shipped a confusing error
- * to a real export. High Level 4.0 (`avc1.640028`, 8192 macroblocks) fits, so
- * it goes first; Baseline stays in the list as a last resort for small
- * canvases rather than being dropped.
- */
-export const MP4_CANDIDATES = [
-  'video/mp4;codecs="avc1.640028,mp4a.40.2"',
-  'video/mp4;codecs="avc1.42E01F,mp4a.40.2"',
-  'video/mp4;codecs="h264,aac"',
-  "video/mp4",
-];
-
-export const WEBM_CANDIDATES = [
-  'video/webm;codecs="vp9,opus"',
-  'video/webm;codecs="vp8,opus"',
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm",
-];
-
-export const VIDEO_BITS_PER_SECOND = 8000000;
-export const AUDIO_BITS_PER_SECOND = 192000;
-export const CAPTURE_FPS = 30;
-
-/**
- * The one definition of "how loud this export is".
- *
- * Unity on purpose. The complaint this exists for is an export that came back
- * quieter than what the founder heard, and the cause was that nothing in the
- * pipeline said what the level WAS: the element was left to carry it, two
- * different capture paths read it from two different places, and the level the
- * founder heard and the level written into the file were only ever assumed to
- * be the same number.
- *
- * Both paths now pass through a GainNode set to this value, so the monitored
- * level and the recorded level are the same number by construction rather than
- * by coincidence. Raise it here to make every export louder; there is no second
- * place to change, which is the property that makes it trustworthy.
- *
- * One honest limit: this governs the WebAudio path. The browser's own
- * `captureStream()` is preferred when it works, and that path records the
- * element's own audio at whatever level the element is at — unity today,
- * because the element is unmuted at volume 1 for the capture. So this constant
- * is the level on both paths only while it is 1. Anything else, and the native
- * path has to be routed through the graph to honour it too.
- */
-export const EXPORT_AUDIO_GAIN = 1;
-
-/**
- * MIME selection mirrors the standalone exporter: transparent forces WebM,
- * otherwise MP4 candidates come first unless WebM was explicitly chosen.
- * Returns the full ordered list of supported candidates, not just the first:
- * `isTypeSupported` can pass a configuration the encoder then rejects at
- * record time (see MP4_CANDIDATES), so the exporter walks this list and falls
- * back rather than failing on a lie the browser told.
- */
-export function supportedExportMimes({ transparent, exportFormat }) {
-  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return [];
-  const candidates = transparent
-    ? WEBM_CANDIDATES
-    : exportFormat !== "webm"
-      ? [...MP4_CANDIDATES, ...WEBM_CANDIDATES]
-      : [...WEBM_CANDIDATES, ...MP4_CANDIDATES];
-  return candidates.filter((m) => MediaRecorder.isTypeSupported(m));
-}
-
-export function selectExportMime(opts) {
-  return supportedExportMimes(opts)[0] || null;
-}
-
-export function extensionForMime(mime) {
-  return String(mime || "").startsWith("video/mp4") ? "mp4" : "webm";
-}
-
-/**
- * Floor for a believable recording. A multi-second capture at 8Mbps is
- * megabytes; nothing legitimate is smaller. Anything under this is an empty
- * mux, a truncated write, or a recorder that stopped before the first sample
- * — all of which used to be offered as a download with a confident filename.
- */
-export const MIN_EXPORT_BYTES = 32768;
-
-export function isPlausibleRecordingSize(size) {
-  return Number.isFinite(size) && size >= MIN_EXPORT_BYTES;
-}
 
 /**
  * Identify a recorded container from its first bytes, so a corrupt or

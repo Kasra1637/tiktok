@@ -41,8 +41,6 @@ import {
   ANIMATIONS,
   BACKGROUNDS,
   BASE_PHONE_H,
-  CAPTURE_FPS,
-  EXPORT_AUDIO_GAIN,
   COLOR_PALETTES,
   DEFAULT_SCREEN,
   DEFAULTS,
@@ -57,26 +55,23 @@ import {
   CTA_COPY_VARIANTS,
   CTA_TIMING_PRESETS,
   BUILTIN_LOOK_PRESETS,
-  AUDIO_BITS_PER_SECOND,
-  VIDEO_BITS_PER_SECOND,
   buildExportFilename,
-  extensionForMime,
   formatTime,
-  isPlausibleRecordingSize,
   resolveCtaWindow,
+  resolveStoryWindow,
   sniffRecordingContainer,
-  supportedExportMimes,
 } from "./constants";
-import { checkOverlaySafety, drawEndCard, drawHookOverlay, getEndCardBounds, getHookBounds } from "./overlays";
+import { checkOverlaySafety, drawEndCard, drawHookOverlay, drawStoryOverlay, getEndCardBounds, getHookBounds } from "./overlays";
 import { fitVideoToScreen } from "./fit";
-import { drawHandView, preloadHandViewImages } from "./handView";
+import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
+import { drawHandView, preloadHandViewImages, prepareHandViewImages } from "./handView";
 import { captureZoomLock, getEffectiveZoom, removeZoomKeyframe, sortKeyframes, tickInterval } from "./zoom";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 
 // Render order, which is also the order that decides which group wins when a
 // stored value somehow has more than one open (older versions allowed it).
-const SECTION_ORDER = ["source", "hook", "cta", "output", "advanced"];
+const SECTION_ORDER = ["source", "hook", "story", "cta", "output", "advanced"];
 
 // Remembered overlay taste: font, entrance and size for the hook + CTA
 // overlays, plus the accent. Stored per app with a global fallback, so a
@@ -137,16 +132,17 @@ function singleOpen(openKey) {
 
 /**
  * Load a recorded blob into a throwaway video element and confirm it has a
- * real duration. This is the same check a player performs on open — metadata
- * parses, the container demuxes — so a blob that passes here opens in VLC,
- * QuickTime, and the in-app preview alike. A blob that fails never becomes a
- * download link or a History row.
+ * decoded first frame, expected duration and full TikTok dimensions.
+ * A blob that fails never becomes a download link or a History row.
  */
-function probeRecordingPlays(blob) {
+function probeRecordingPlays(blob, expectedDuration) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const probe = document.createElement("video");
     const cleanup = () => {
+      clearTimeout(timer);
+      probe.onloadeddata = null;
+      probe.onerror = null;
       URL.revokeObjectURL(url);
       probe.removeAttribute("src");
     };
@@ -155,21 +151,21 @@ function probeRecordingPlays(blob) {
       reject(new Error(message));
     };
     const timer = setTimeout(
-      () => fail("The recording would not play back. Try again, or switch Export format to WebM in Output."),
+      () => fail("The TikTok MP4 could not be decoded. Try exporting again in a current Chrome or Edge browser."),
       8000
     );
     probe.preload = "auto";
-    probe.onloadedmetadata = () => {
-      clearTimeout(timer);
-      if (Number.isFinite(probe.duration) && probe.duration > 0) {
+    probe.onloadeddata = () => {
+      if (Number.isFinite(probe.duration) && Math.abs(probe.duration - expectedDuration) <= 0.1 &&
+          probe.videoWidth === TIKTOK_EXPORT.width && probe.videoHeight === TIKTOK_EXPORT.height) {
         cleanup();
         resolve();
       } else {
-        fail("The recording has no playable duration. Try again, or switch Export format to WebM in Output.");
+        fail("The TikTok MP4 failed its duration or resolution check. Export again; this file will not be offered for download.");
       }
     };
     probe.onerror = () =>
-      fail("The recording would not play back. Try again, or switch Export format to WebM in Output.");
+      fail("The TikTok MP4 could not be decoded. Try exporting again in a current Chrome or Edge browser.");
     probe.src = url;
   });
 }
@@ -396,17 +392,17 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
  * entrances plus text size, accent where it lives, and the rest of the
  * section. Collapsed by default; laid out flat it all pushes the section
  * tall, which is why it collapses. Collapsed, the summary still names the
- * current entrance so the choice stays visible. Native <details> keeps every
- * control in the DOM either way, so preview replay, prefs and look matching
- * see no change. The "Customize" label names the group; the summary below
+ * current entrance so the choice stays visible. Controlled <details> keeps
+ * every control in the DOM, with the parent owning the single open disclosure.
+ * The "Customize" label names the group; the summary below
  * it names the current entrance.
  */
-function AnimDisclosure({ testId, currentLabel, children }) {
+function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
   return (
     <div className="space-y-2">
       <SubLabel>Customize</SubLabel>
-      <details data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+      <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -420,15 +416,14 @@ function AnimDisclosure({ testId, currentLabel, children }) {
 
 /**
  * Collapsible wrapper for the font tile grid, mirroring AnimDisclosure:
- * collapsed by default, summary names the current face, native <details>
- * keeps the tiles in the DOM either way so prefs and look matching see no
- * change.
+ * collapsed by default, summary names the current face, and opening this
+ * closes Animation through the same parent-owned disclosure state.
  */
-function FontDisclosure({ testId, groupLabel, currentLabel, children }) {
+function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, children }) {
   return (
     <div className="space-y-2">
-      <details data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+      <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Font · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -533,6 +528,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       return singleOpen("source");
     }
   });
+  const [openDisclosure, setOpenDisclosure] = useState(null);
+  const toggleDisclosure = (key) => setOpenDisclosure((current) => current === key ? null : key);
   const toggleSection = useCallback((key) => {
     setOpenSections((prev) => {
       // Clicking the open group closes it. Nothing open is a valid state, the
@@ -555,7 +552,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [loadingSource, setLoadingSource] = useState(true);
   const [videoMeta, setVideoMeta] = useState(null);
   const [device, setDevice] = useState(DEFAULTS.device);
-  const [preset, setPreset] = useState(DEFAULTS.preset);
+  const preset = "tiktok";
   const [bg, setBg] = useState(DEFAULTS.bg);
   const [anim, setAnim] = useState(DEFAULTS.anim);
   const [scale, setScale] = useState(DEFAULTS.scale);
@@ -571,7 +568,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [saved, setSaved] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [error, setError] = useState(null);
-  const [exportFormat, setExportFormat] = useState(DEFAULTS.exportFormat);
   const [viewMode, setViewMode] = useState(DEFAULTS.viewMode);
   const [envBg, setEnvBg] = useState(DEFAULTS.envBg);
   const [screenX, setScreenX] = useState(DEFAULT_SCREEN.x);
@@ -607,6 +603,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));
   const [activeCtaVariant, setActiveCtaVariant] = useState(0);
   const [ctaTimingMode, setCtaTimingMode] = useState("custom");
+  const [storyEnabled, setStoryEnabled] = useState(false);
+  const [storyText, setStoryText] = useState("");
+  const [storyTiming, setStoryTiming] = useState({ start: 0, end: null });
+  const [storyOffsetY, setStoryOffsetY] = useState(0);
+  const storyWindow = resolveStoryWindow({
+    clipDuration: videoMeta?.d ?? 0,
+    hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode,
+    ...storyTiming,
+  });
+  const { start: storyStart, end: storyEnd, available: storyAvailable } = storyWindow;
+  useEffect(() => {
+    if (storyAvailable) setStoryTiming({ start: storyStart, end: storyEnd });
+  }, [storyStart, storyEnd, storyAvailable]);
   const [customLookPresets, setCustomLookPresets] = useState(() => prefLookPresets(overlayScope));
   const [newLookName, setNewLookName] = useState("");
 
@@ -722,7 +731,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [isPlaying, setIsPlaying] = useState(true);
   // Preview monitoring only: the source element stays muted so autoplay
   // never fights browser policy; the speaker toggle below unmutes on tap.
-  // The export unmutes and captures at unity regardless, then restores this.
+  // Export reads source samples directly; preview mute and volume never affect the file.
   const [previewMuted, setPreviewMuted] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -736,13 +745,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // `data-testid` for the same control.
   const fileInputRef = useRef(null);
   const rafRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const audioSrcRef = useRef(null);
-  const audioDestRef = useRef(null);
-  // The single gain stage between the media element and the recorder. Exists so
-  // the level written into the file and the level heard while recording are the
-  // same number, from one constant.
-  const audioGainRef = useRef(null);
+  const paintFrameRef = useRef(null);
+  const exportAbortRef = useRef(null);
+  useEffect(() => () => exportAbortRef.current?.abort(), []);
   const isExportingRef = useRef(false);
   const zoomKeyframesRef = useRef([]);
   const liveZoomRef = useRef({
@@ -972,7 +977,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       setIsPlaying(true);
       setCurrentTime(0);
     }
-  }, [videoUrl]);
+  }, [videoUrl, sourceFileName]);
 
   // Track current time from the video element
   useEffect(() => {
@@ -1004,6 +1009,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // Stable so the Space shortcut below subscribes once: it closes over the
   // video ref and a state setter only, so an empty dep array is complete.
   const togglePlayPause = useCallback(() => {
+    if (isExportingRef.current) return;
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -1042,7 +1048,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       const el = document.activeElement;
       const tag = el?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
-      if (tag === "BUTTON" || tag === "A") return;
+      if (tag === "BUTTON" || tag === "A" || tag === "SUMMARY") return;
       event.preventDefault();
       togglePlayPause();
     };
@@ -1112,13 +1118,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     canvas.width = cw;
     canvas.height = ch;
 
-    const drawOverlays = () => {
-      const vt = video.currentTime || 0;
+    const drawOverlays = (ctx, vt) => {
       const dur = videoMeta.d || 0;
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
       if (hookEnabled) {
         drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale });
+      }
+      if (storyEnabled && storyAvailable) {
+        drawStoryOverlay(ctx, cw, ch, vt, {
+          text: storyText, start: storyStart, end: storyEnd,
+          accent: overlayAccent, offsetY: storyOffsetY,
+          font: fontStack(captionFont), anim: captionAnim, scale: captionScale,
+        });
       }
       if (ctaEnabled && dur > 0) {
         drawEndCard(ctx, cw, ch, dur - vt, {
@@ -1135,15 +1147,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
     };
 
-    const draw = () => {
+    // Preview and export call this exact painter with an explicit media timestamp.
+    const paintFrame = (target, vt, frame) => {
+      const ctx = target.getContext("2d");
+      if (!ctx) throw new Error("Canvas drawing is unavailable. Reload the editor and try again.");
       ctx.clearRect(0, 0, cw, ch);
-
-      const vt = video.currentTime || 0;
       const ez = getEffectiveZoom({
         keyframes: zoomKeyframesRef.current,
         live: liveZoomRef.current,
         videoTime: vt,
-        isExporting: isExportingRef.current,
+        isExporting: false,
       });
 
       // Hoisted above both renderer branches: each draws the phone, and each
@@ -1156,17 +1169,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
 
       if (viewMode === "hand" && video) {
-        const t = performance.now() / 1000;
-        drawHandView(ctx, cw, ch, video, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
-        drawOverlays();
-        rafRef.current = requestAnimationFrame(draw);
+        const t = vt;
+        drawHandView(ctx, cw, ch, frame, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
+        drawOverlays(ctx, vt);
         return;
       }
 
       const isFloat = bg !== "transparent";
 
       if (isFloat) {
-        const t = performance.now() / 1000;
+        const t = vt;
 
         const bgGrad = ctx.createRadialGradient(cw * 0.5, ch * 0.4, 0, cw * 0.5, ch * 0.5, cw * 0.7);
         bgGrad.addColorStop(0, palette.bg2);
@@ -1428,7 +1440,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctx.transform(1, tiltX * 0.8, tiltY * 0.6, 1, 0, 0);
 
         ctx.translate(-drawW / 2, -drawH / 2);
-        drawPhone(ctx, 0, 0, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
+        drawPhone(ctx, 0, 0, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
         ctx.restore();
 
         ctx.save();
@@ -1450,18 +1462,23 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         const drawH = phoneH * fit;
         const x = (cw - drawW) / 2;
         const y = (ch - drawH) / 2;
-        drawPhone(ctx, x, y, drawW, drawH, dev, video, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
+        drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
-      drawOverlays();
+      drawOverlays(ctx, vt);
+    };
+    paintFrameRef.current = paintFrame;
+    const draw = () => {
+      if (!isExportingRef.current) paintFrame(canvas, video.currentTime || 0, video);
       rafRef.current = requestAnimationFrame(draw);
     };
     rafRef.current = requestAnimationFrame(draw);
 
     return () => {
+      paintFrameRef.current = null;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
 
   // Every overlay choice replays the clip from the top.
   //
@@ -1476,7 +1493,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   useEffect(() => {
     if (lastOverlayStyleRef.current === overlayStyleKey) return;
     lastOverlayStyleRef.current = overlayStyleKey;
-    // Never mid-export: the recorder walks the media element's own timeline,
+    // Never mid-export: settings and the timeline stay frozen during encoding,
     // and a restart here would cut the capture it is writing.
     if (isExportingRef.current) return;
     const video = videoRef.current;
@@ -1492,13 +1509,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     }
     setIsPlaying(true);
   }, [overlayStyleKey]);
-
-  const seekVideo = (video, time) => new Promise((resolve) => {
-    const done = () => { video.removeEventListener("seeked", done); resolve(); };
-    video.addEventListener("seeked", done, { once: true });
-    video.currentTime = time;
-    if (Math.abs(video.currentTime - time) < 0.02) requestAnimationFrame(done);
-  });
 
   const saveExport = async (blob, name) => {
     setSaving(true);
@@ -1524,13 +1534,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const exportVideo = async () => {
     const video = videoRef.current;
-    const canvas = previewCanvasRef.current;
-    if (!video || !canvas || !videoMeta) return;
-    if (typeof MediaRecorder === "undefined" || typeof canvas.captureStream !== "function") {
-      setError("This browser cannot record video here. Download the finished render and export it elsewhere.");
-      return;
-    }
-
+    const paintFrame = paintFrameRef.current;
+    if (!video || !paintFrame || !videoMeta || isExportingRef.current) return;
+    const controller = new AbortController();
+    exportAbortRef.current = controller;
+    const resumePlayback = !video.paused;
+    video.pause();
+    setIsPlaying(false);
     setError(null);
     setSaveError(null);
     setSaved(null);
@@ -1538,264 +1548,45 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setProgress(0);
     setResult(null);
     isExportingRef.current = true;
-
-    // Hoisted above the try because the finally below has to undo both of them
-    // on every exit path, including a pre-flight throw that never got as far as
-    // creating either. An element left unmuted after a failed export is louder
-    // than the preview for the rest of the session.
-    let restoreAudio = null;
-    let stopMonitoring = null;
-
     try {
-      const transparent = viewMode !== "hand" && bg === "transparent";
-      const mimes = supportedExportMimes({ transparent, exportFormat });
-      if (!mimes.length) throw new Error("Your browser does not support video recording.");
-
-      // Pre-flight: an instant stop — zero duration, a canvas that never sized —
-      // produces a valid-looking empty file that no player opens. Fail here with
-      // words instead of offering that file with a confident filename.
-      if (!Number.isFinite(videoMeta.d) || videoMeta.d <= 0) {
-        throw new Error("The clip has no playable duration, so there is nothing to record.");
-      }
-      if (!canvas.width || !canvas.height) {
-        throw new Error("The preview has no size yet. Wait for it to appear, then export again.");
-      }
-
-      const stream = canvas.captureStream(CAPTURE_FPS);
-      video.loop = false;
-      // Captured, not assumed: the element is the source of the export's audio
-      // and its own volume/muted are the first thing that can quietly lower it.
-      // Restored in the finally below, whichever way this leaves.
-      restoreAudio = { muted: video.muted, volume: video.volume };
-      video.muted = false;
-      video.volume = 1;
-      let audioTrackAdded = false;
-      let audioPath = "none";
-
-      try {
-        const capturableVideo = video;
-        const sourceStream = (capturableVideo.captureStream ?? capturableVideo.mozCaptureStream)?.call(video);
-        const audioTracks = sourceStream?.getAudioTracks() ?? [];
-        for (const track of audioTracks) {
-          stream.addTrack(track);
-          audioTrackAdded = true;
-        }
-        if (audioTrackAdded) audioPath = "element-captureStream";
-      } catch (captureErr) {
-        console.warn("Native audio capture failed:", captureErr);
-      }
-
-      try {
-        if (!audioTrackAdded && !audioCtxRef.current) {
-          const Ctx = window.AudioContext || window.webkitAudioContext;
-          audioCtxRef.current = new Ctx();
-        }
-        if (!audioTrackAdded && audioCtxRef.current) {
-          const ac = audioCtxRef.current;
-          if (ac.state === "suspended") await ac.resume();
-          if (!audioSrcRef.current) {
-            audioSrcRef.current = ac.createMediaElementSource(video);
-          }
-          if (!audioDestRef.current) {
-            // The gain node is what makes the exported level the SAME level
-            // that is monitored: both the recorder and the speakers are fed
-            // from one node at EXPORT_AUDIO_GAIN, so "quieter than the
-            // preview" stops being expressible.
-            audioGainRef.current = ac.createGain();
-            audioGainRef.current.gain.value = EXPORT_AUDIO_GAIN;
-            audioDestRef.current = ac.createMediaStreamDestination();
-            audioSrcRef.current.connect(audioGainRef.current);
-            audioGainRef.current.connect(audioDestRef.current);
-          }
-          for (const track of audioDestRef.current.stream.getAudioTracks()) {
-            stream.addTrack(track);
-            audioTrackAdded = true;
-          }
-          if (audioTrackAdded) audioPath = "webaudio-gain";
-        }
-      } catch (audioErr) {
-        console.warn("Audio capture failed:", audioErr);
-      }
-
-      // Monitoring, on the same node that feeds the recorder, and only for as
-      // long as the recording runs. It used to connect to ac.destination once
-      // and stay connected forever, which meant the editor's audio behaviour
-      // changed permanently after the first export that took the WebAudio path
-      // — and left the preview audibly different from the file it produced.
-      if (audioPath === "webaudio-gain" && audioCtxRef.current) {
-        const ac = audioCtxRef.current;
-        try {
-          audioGainRef.current.connect(ac.destination);
-          stopMonitoring = () => {
-            try {
-              audioGainRef.current.disconnect(ac.destination);
-            } catch {
-              /* already disconnected */
-            }
-          };
-        } catch (monitorErr) {
-          console.warn("Audio monitoring unavailable:", monitorErr);
-        }
-      }
-
-      // One line that answers "was the level right?" next time it is reported.
-      // `enabled: false` on a recorded audio track is the failure mode that
-      // produces a quietly-wrong file, and it is invisible from the UI.
-      if (process.env.NODE_ENV !== "production") {
-        const recorded = stream.getAudioTracks().map((t) => ({
-          label: t.label,
-          enabled: t.enabled,
-          readyState: t.readyState,
-        }));
-        console.info("[demo-cta] export audio", {
-          path: audioPath,
-          element: { muted: video.muted, volume: video.volume },
-          gain: EXPORT_AUDIO_GAIN,
-          contextState: audioCtxRef.current?.state ?? null,
-          tracks: recorded,
-        });
-      }
-
-      // One attempt per supported MIME. A recorder-level failure — the encoder
-      // rejecting a configuration `isTypeSupported` passed, which is exactly
-      // what "configuration is not supported" means — advances to the next
-      // candidate instead of failing the export. Validation failures below do
-      // NOT retry: an empty capture is environmental, and every candidate would
-      // produce the same nothing at the cost of another full recording pass.
-      const recordAttempt = async (candidateMime) => {
-        const recorder = new MediaRecorder(stream, {
-          mimeType: candidateMime,
-          videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
-          audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
-        });
-        const chunks = [];
-        recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-        const done = new Promise((res, rej) => {
-          // Without this, a mid-record mux failure resolves the blob anyway and
-          // the partial file is offered as a download. Rejecting here routes it
-          // to the fallback below like any other recorder failure.
-          recorder.onerror = (e) => {
-            const detail = e?.error?.message || e?.error?.name || "unknown recorder error";
-            const err = new Error(`The recording failed mid-capture (${detail}). Trying the next format.`);
-            err.retryableRecorderError = true;
-            rej(err);
-          };
-          recorder.onstop = () => res(new Blob(chunks, { type: candidateMime }));
-        });
-
-        await seekVideo(video, 0);
-        await video.play();
-        setProgress(0);
-        try {
-          // A 250ms timeslice: same accumulated output, but chunks flow during
-          // the capture instead of arriving only at stop, so a stalled recorder
-          // shows itself earlier.
-          recorder.start(250);
-        } catch (e) {
-          const err = new Error(`This format was rejected before recording started (${e?.message || e}). Trying the next one.`);
-          err.retryableRecorderError = true;
-          throw err;
-        }
-
-        const duration = videoMeta.d;
-        const start = performance.now();
-        const finished = new Promise((resolve) => {
-          const tick = () => {
-            const elapsed = (performance.now() - start) / 1000;
-            setProgress(Math.min(1, elapsed / duration));
-            if (video.ended || elapsed >= duration) resolve();
-            else requestAnimationFrame(tick);
-          };
-          tick();
-        });
-        try {
-          // If the recorder dies mid-capture, `done` rejects and this aborts
-          // the wait instead of sitting out the full duration for a dead take.
-          await Promise.race([finished, done]);
-        } finally {
-          // Guarded: stopping an already-inactive recorder throws
-          // InvalidStateError and masks the real failure with noise.
-          if (recorder.state !== "inactive") {
-            try {
-              recorder.stop();
-            } catch {
-              // Already handled through `done`.
-            }
-          }
-          video.pause();
-        }
-        return done;
-      };
-
-      let blob = null;
-      let mime = null;
-      let encoderError = null;
-      for (const candidate of mimes) {
-        try {
-          blob = await recordAttempt(candidate);
-          mime = candidate;
-          encoderError = null;
-          break;
-        } catch (e) {
-          if (e && e.retryableRecorderError) {
-            encoderError = e;
-            continue;
-          }
-          throw e;
-        }
-      }
-      if (!blob) {
-        throw encoderError ?? new Error("Your browser does not support video recording.");
-      }
-      video.loop = true;
-      const ext = extensionForMime(mime);
-
-      // Post-record validation. Everything below is about refusing to offer a
-      // broken download: a file that fails here never gets a URL, a filename,
-      // or a History row.
-      if (!isPlausibleRecordingSize(blob.size)) {
-        throw new Error("The recording came out empty — nothing was captured. Try again, or switch Export format to WebM in Output.");
-      }
+      // Freeze settings, assets and fonts for the entire encode. Never capture a live RAF canvas.
+      await Promise.all([document.fonts?.ready, ...[captionFont, ctaFont].map((id) =>
+        document.fonts?.load(`100px ${fontStack(id)}`))]);
+      if (viewMode === "hand") await prepareHandViewImages(envBg);
+      const response = await fetch(videoUrl, { signal: controller.signal });
+      if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");
+      const canvas = document.createElement("canvas");
+      const { blob, duration } = await exportTikTok({
+        source: await response.blob(), canvas, signal: controller.signal,
+        drawFrame: (time, frame) => paintFrame(canvas, time, frame),
+        onProgress: setProgress,
+      });
       const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
-      const container = sniffRecordingContainer(head);
-      if (!container) {
-        throw new Error("The recording is damaged and would not play. Try again, or switch Export format to WebM in Output.");
-      }
-      if ((ext === "mp4") !== (container === "mp4")) {
-        throw new Error("The recording is not the format it claims to be. Try again, or switch Export format to WebM in Output.");
-      }
-      await probeRecordingPlays(blob);
-
+      if (sniffRecordingContainer(head) !== "mp4") throw new Error("The encoder did not produce a valid MP4. Export again in Chrome or Edge.");
+      await probeRecordingPlays(blob, duration);
+      controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
       if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
       resultObjectUrlRef.current = url;
-      const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
-      const name = buildExportFilename({ device, preset: pre.id, width: canvas.width, height: canvas.height, ext });
+      const name = buildExportFilename({ device, preset: "tiktok", width: canvas.width, height: canvas.height, ext: "mp4" });
+      const mime = "video/mp4";
       setResult({ url, name, size: blob.size, mime, blob });
-      // Saved straight into History, beside the original. The download below
-      // stays as a secondary action, never the only path.
       await saveExport(blob, name);
     } catch (e) {
-      setError(e?.message || "The export could not be recorded.");
+      if (!controller.signal.aborted) setError(e?.message || "The TikTok MP4 export failed. Try again in Chrome or Edge.");
     } finally {
       isExportingRef.current = false;
-      // Monitoring off before anything else, so a failed export cannot leave
-      // the editor permanently louder than the file it just refused to produce.
-      stopMonitoring?.();
-      if (video) {
-        video.loop = true;
-        // Restore what the element actually had, rather than assuming "muted".
-        // Hard-coding muted=true here is what made the second export of a
-        // session differ from the first.
-        video.muted = restoreAudio.muted;
-        video.volume = restoreAudio.volume;
+      exportAbortRef.current = null;
+      if (!controller.signal.aborted) {
+        setRecording(false);
+        setProgress(0);
+        if (resumePlayback) video.play().then(() => setIsPlaying(true)).catch(() => {});
       }
-      setRecording(false);
-      setProgress(0);
     }
   };
 
   const handlePointerDown = (e) => {
+    if (isExportingRef.current) return;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     const rect = el.getBoundingClientRect();
@@ -1818,7 +1609,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const ctaVisible = ctaEnabled && dur > 0 && (dur - vt) <= ctaWindow && (dur - vt) >= 0;
 
     let dragTarget = "video";
-    if (hookVisible) {
+    if (storyEnabled && storyAvailable && vt >= storyStart && vt < storyEnd) {
+      const bounds = getHookBounds(canvasW, canvasH, storyText, 0, storyOffsetY, fontStack(captionFont), captionScale);
+      if (bounds && cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h) {
+        dragTarget = "story";
+      }
+    }
+    if (hookVisible && dragTarget === "video") {
       const hb = getHookBounds(canvasW, canvasH, hookText, hookOffsetX, hookOffsetY, fontStack(captionFont), captionScale);
       if (hb && cx >= hb.x && cx <= hb.x + hb.w && cy >= hb.y && cy <= hb.y + hb.h) {
         dragTarget = "hook";
@@ -1831,6 +1628,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
     }
 
+    const startStoryY = storyOffsetY;
     const startHookY = hookOffsetY;
     const startCtaY = ctaOffsetY;
     const isHand = viewMode === "hand";
@@ -1846,6 +1644,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (dragTarget === "hook") {
         setHookOffsetX(0);
         setHookOffsetY(startHookY + dy);
+      } else if (dragTarget === "story") {
+        setStoryOffsetY(startStoryY + dy);
       } else if (dragTarget === "cta") {
         setCtaOffsetX(0);
         setCtaOffsetY(startCtaY + dy);
@@ -1931,6 +1731,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             6px bar never sits over a card edge. */}
         <div
           ref={settingsRef}
+          inert={recording ? true : undefined}
           className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
         {/* The file input lives outside the collapsible section content on
@@ -2223,6 +2024,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ring, the same language as the accent swatches below. */}
           <FontDisclosure
             testId="caption-fonts-disclosure"
+            open={openDisclosure === "caption-font"}
+            onToggle={() => toggleDisclosure("caption-font")}
             groupLabel="Caption font"
             currentLabel={(OVERLAY_FONTS.find((f) => f.id === captionFont) || {}).label}
           >
@@ -2249,6 +2052,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={setOverlayAccent} />
           <AnimDisclosure
             testId="caption-anim-disclosure"
+            open={openDisclosure === "caption-animation"}
+            onToggle={() => toggleDisclosure("caption-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
           >
             <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption animation">
@@ -2303,6 +2108,44 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ResetButton onClick={() => { setHookOffsetX(0); setHookOffsetY(0); }}>Reset position</ResetButton>
             )}
           </AnimDisclosure>
+        </EditorSection>
+
+        <EditorSection title="Story Text" icon={Type} open={openSections.story} onToggle={() => toggleSection("story")} testId="story-controls">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Switch data-testid="story-toggle" checked={storyEnabled} onCheckedChange={setStoryEnabled} />
+            Show Story text
+          </label>
+          <label className="block space-y-2">
+            <span className="text-xs text-muted-foreground">Your message</span>
+            <textarea
+              data-testid="story-text-input"
+              value={storyText}
+              onChange={(e) => setStoryText(e.target.value)}
+              rows={3}
+              placeholder="Add a detail, tip, or moment to your story"
+              className={TEXTAREA_CLASS}
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">Uses the Hook Text font, animation, size & accent. This overlay does not change the spoken script.</p>
+          {storyAvailable ? (
+            <>
+              <p className="text-xs text-muted-foreground" data-testid="story-timing-hint">
+                Available: {storyWindow.min.toFixed(1)}–{storyWindow.max.toFixed(1)}s. Timing adjusts automatically to stay outside the enabled hook & end card.
+              </p>
+              <ControlSlider label="Starts at" value={storyStart} min={storyWindow.min} max={Math.max(storyWindow.min, storyEnd - 0.1)} step={0.1} onChange={(start) => setStoryTiming({ start, end: storyEnd })} testId="story-start-slider" format={(v) => `${v.toFixed(1)}s`} />
+              <ControlSlider label="Ends at" value={storyEnd} min={Math.min(storyWindow.max, storyStart + 0.1)} max={storyWindow.max} step={0.1} onChange={(end) => setStoryTiming({ start: storyStart, end })} testId="story-end-slider" format={(v) => `${v.toFixed(1)}s`} />
+              <Button variant="outline" size="sm" disabled={!storyEnabled || !storyText.trim()} onClick={() => handleSeek(storyStart + Math.min(0.4, (storyEnd - storyStart) / 2))} data-testid="story-preview-button">Preview Story text</Button>
+            </>
+          ) : (
+            <p role="status" className="text-xs text-muted-foreground" data-testid="story-no-room">
+              {videoMeta ? "No room for Story text. Shorten or disable the hook or end card to free some time." : "Upload a clip to choose when your Story text appears."}
+            </p>
+          )}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs italic text-muted-foreground">Drag the Story text up or down on the preview to reposition</p>
+            <VerticalNudge label="Story text position" upTestId="story-nudge-up" downTestId="story-nudge-down" onNudge={(dy) => setStoryOffsetY((y) => y + dy)} />
+          </div>
+          {storyOffsetY !== 0 && <ResetButton onClick={() => setStoryOffsetY(0)}>Reset position</ResetButton>}
         </EditorSection>
 
         <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
@@ -2387,6 +2230,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           <FontDisclosure
             testId="cta-fonts-disclosure"
+            open={openDisclosure === "cta-font"}
+            onToggle={() => toggleDisclosure("cta-font")}
             groupLabel="CTA font"
             currentLabel={(OVERLAY_FONTS.find((f) => f.id === ctaFont) || {}).label}
           >
@@ -2412,6 +2257,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </FontDisclosure>
           <AnimDisclosure
             testId="cta-anim-disclosure"
+            open={openDisclosure === "cta-animation"}
+            onToggle={() => toggleDisclosure("cta-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}
           >
             <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA animation">
@@ -2473,58 +2320,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         </EditorSection>
 
         <EditorSection title="Output" icon={Download} open={openSections.output} onToggle={() => toggleSection("output")}>
-          {/* Platform preset as a two-line list rather than a native select:
-              "TikTok / Reels / Shorts" as the value and "1080×1920" beneath it.
-              A select truncates both into one clipped line at 420px, and the
-              dimensions are the part you actually check before exporting. */}
-          <div className="space-y-2">
-            <SubLabel>Export size</SubLabel>
-            <p className="text-xs text-muted-foreground">Choose an output size for TikTok, Reels, Shorts, or keep the source clip&apos;s dimensions.</p>
-            <div
-              role="radiogroup"
-              aria-label="Platform preset"
-              data-testid="platform-preset-group"
-              className="space-y-2"
-            >
-              {PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={preset === p.id}
-                  onClick={() => setPreset(p.id)}
-                  title={`${p.label} — ${p.id === "source" ? "auto" : `${p.w}x${p.h}`}`}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition duration-150 ${
-                    preset === p.id
-                      ? "border-[color:var(--brand-indigo)] bg-[color:var(--brand-indigo)]/10"
-                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)] hover:bg-secondary/40"
-                  }`}
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.label}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {p.id === "source" ? "auto" : `${p.w}x${p.h}`}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <SubLabel>Export format</SubLabel>
-            <p className="text-xs text-muted-foreground">Transparent backgrounds require WebM; otherwise choose MP4 or WebM to suit where you will edit or share the clip.</p>
-            <select
-              value={bg === "transparent" ? "webm" : exportFormat}
-              disabled={bg === "transparent"}
-              onChange={(e) => setExportFormat(e.target.value)}
-              className={CONTROL_CLASS}
-              aria-label="Export format"
-            >
-              <option value="auto">Auto (MP4)</option>
-              <option value="mp4">MP4</option>
-              <option value="webm">WebM</option>
-            </select>
-            {bg === "transparent" && (
-              <p className="text-xs text-muted-foreground">Transparent backgrounds export as WebM to keep the alpha channel.</p>
-            )}
+          <div className="space-y-2" data-testid="tiktok-export-spec">
+            <SubLabel>TikTok MP4</SubLabel>
+            <p className="text-sm text-foreground">1080×1920 · 9:16 · 30 fps</p>
+            <p className="text-xs text-muted-foreground">H.264 video at 8 Mbps with AAC audio at 192 kbps when the clip has audio. One upload-ready format, encoded frame by frame to keep timing in sync.</p>
           </div>
         </EditorSection>
 
@@ -2676,7 +2475,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
              without it the column grows a horizontal bar under a player that
              otherwise fits. Tooltips are portalled, so clipping here cuts
              nothing interactive. */
-          <div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player">
+          <div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player" inert={recording ? true : undefined}>
               {/* Scrubber first: tick marks and zoom zones stay clickable but lose
                   their text labels — the readout lives once, beside the play
                   button — so the whole block is a compact strip above the one
@@ -2852,10 +2651,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       onClick={exportVideo}
                       data-testid="demo-cta-export"
                       className="shrink-0"
-                      title={(() => {
-                        const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
-                        return `Export at ${pre.id === "source" ? "the phone's own size" : `${pre.w}x${pre.h}`}`;
-                      })()}
+                      title="Export TikTok MP4 · 1080×1920 · 30 fps"
                     >
                       {recording ? (
                         <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {Math.round(progress * 100)}%</>
@@ -2948,12 +2744,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </Alert>
           )}
         </div>
-        {/* Rendered but visually gone, NOT `display: none`. This element is the source
-          the recorder captures audio from, and a display:none media element is
-          one browsers are allowed to stop processing audio for — the frames
-          still reach the canvas, so the export looks right while its audio
-          comes back quiet or absent. 1px at zero opacity keeps it in the render
-          tree without putting a second video on screen. */}
+        {/* Preview playback only. Export decodes the pinned source bytes directly,
+            so this element's mute, volume and playback scheduler cannot alter the file. */}
         <video
           ref={videoRef}
           className="pointer-events-none absolute h-px w-px opacity-0"
@@ -2970,7 +2762,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           <div ref={resultCardRef}>
             <SectionCard title="Export ready" icon={Download}>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{result.mime.includes("mp4") ? "MP4" : "WebM"} • {(result.size / 1024 / 1024).toFixed(2)} MB</span>
+                <span>MP4 · 1080×1920 · 30 fps • {(result.size / 1024 / 1024).toFixed(2)} MB</span>
                 {saved ? (
                   <Badge variant="secondary"><Check className="mr-1 h-2.5 w-2.5" /> In History</Badge>
                 ) : saving ? (
@@ -3102,15 +2894,15 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.fillStyle = screenBase || "#000";
   ctx.fillRect(sx, sy, sw, sh);
 
-  if (video.readyState >= 2) {
+  if (video instanceof HTMLCanvasElement || video.readyState >= 2) {
     // One shared fit implementation — see demoCta/fit.js. This used to be a
     // local `contain ? min : max`, which meant "fill" fell through to cover and
     // did nothing, while the hand-held phone's copy of the same arithmetic did
     // implement it. Same control, two behaviours.
     const box = fitVideoToScreen({
       fit: videoFit,
-      videoW: video.videoWidth,
-      videoH: video.videoHeight,
+      videoW: video.videoWidth || video.width,
+      videoH: video.videoHeight || video.height,
       screenW: sw,
       screenH: sh,
       scale: videoScale,

@@ -7751,7 +7751,7 @@ async function runDemoCtaChecks() {
           // The player is a plain bar, asserted in source: like the order check
           // below, it only mounts with a real clip's metadata, which jsdom
           // cannot supply, so a DOM query here would silently pass forever.
-          if (!/<div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player">/.test(src)) {
+          if (!/<div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player"/.test(src)) {
             throw new Error(
               "the player is a card again. It must be a plain bar matching the " +
                 "chromeless preview — a surface box under a chromeless frame."
@@ -8056,62 +8056,107 @@ async function runDemoCtaChecks() {
     }
   );
 
-  await check(
-    "a failed recording can never become a download",
-    async () => {
-      // jsdom has no MediaRecorder, so the record path itself cannot run here.
-      // What this guards is the structure that makes a corrupt file impossible
-      // to offer: size floor, container sniff, and playback probe all run
-      // before setResult, and the recorder's own errors reject instead of
-      // resolving partial chunks. A broken download link — the VLC failure —
-      // came from exactly the absence of this gate.
-      const src = fs.readFileSync(
-        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
-        "utf8"
-      );
-      const need = [
-        "isPlausibleRecordingSize(blob.size)",
-        "sniffRecordingContainer(head)",
-        "await probeRecordingPlays(blob)",
-        "recorder.onerror",
-        'recorder.start(250)',
-      ];
-      for (const marker of need) {
-        if (!src.includes(marker)) {
-          throw new Error(
-            `the export validation gate lost a piece: ${marker}. Without all of ` +
-              "them a corrupt recording can reach the download link again."
-          );
-        }
-      }
-      // `isTypeSupported` passes configurations the encoder then rejects at
-      // record time (Baseline Level 3.1 cannot encode 1080x1920, but the check
-      // never looks at the resolution), so the exporter must walk the whole
-      // supported list instead of betting everything on the first answer. A
-      // recorder-level failure advances; anything else throws immediately.
-      for (const marker of [
-        "supportedExportMimes({ transparent, exportFormat })",
-        "for (const candidate of mimes)",
-        "retryableRecorderError",
-      ]) {
-        if (!src.includes(marker)) {
-          throw new Error(
-            `the encoder fallback lost a piece: ${marker}. Without it the export ` +
-              "fails outright on the first configuration the encoder rejects, " +
-              "instead of trying the next one."
-          );
-        }
-      }
-      const probeAt = src.indexOf("await probeRecordingPlays(blob)");
-      const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
-      if (probeAt === -1 || resultAt === -1 || probeAt > resultAt) {
-        throw new Error(
-          "the playback probe does not run before the result is published. A " +
-            "recording that would not play must never get a URL or a History row."
-        );
-      }
+  await check("Output offers only the TikTok delivery specification", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    await mount(DemoCtaEditor)(ctx);
+    const header = [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => b.textContent.trim() === "Output");
+    await clickEl(ctx, header, "open Output");
+    expectText(ctx, "TikTok MP4", "missing TikTok output");
+    expectText(ctx, "1080×1920 · 9:16 · 30 fps", "missing fixed output spec");
+    if (ctx.container.querySelector('[aria-label="Export format"], [aria-label="Platform preset"]')) throw new Error("alternate delivery formats remain selectable");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+  });
+
+  await check("MP4 duration and decoding validation precede download and History", async () => {
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
+    const probeAt = src.indexOf("await probeRecordingPlays(blob, duration)");
+    const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
+    if (probeAt < 0 || resultAt < probeAt || src.indexOf("await saveExport(blob, name)") < resultAt) throw new Error("invalid MP4 can reach download or History");
+    for (const marker of ["probe.onloadeddata", "Math.abs(probe.duration - expectedDuration)", "probe.videoWidth === TIKTOK_EXPORT.width", "probe.videoHeight === TIKTOK_EXPORT.height"]) {
+      if (!src.includes(marker)) throw new Error(`missing export gate: ${marker}`);
     }
-  );
+    if (/new MediaRecorder|captureStream\(/.test(src)) throw new Error("wall-clock capture is back");
+  });
+
+  await check("Story text keeps its message and clamps timing when CTA settings change", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const media = dom.window.HTMLMediaElement.prototype;
+    const original = { createUrl: URL.createObjectURL, play: media.play, load: media.load, context: dom.window.HTMLCanvasElement.prototype.getContext, createElement: document.createElement };
+    const probes = [];
+    URL.createObjectURL = () => "blob:story-smoke";
+    media.play = () => Promise.resolve();
+    media.load = () => {};
+    dom.window.HTMLCanvasElement.prototype.getContext = () => null;
+    document.createElement = function(tag, ...args) {
+      const element = original.createElement.call(this, tag, ...args);
+      if (tag === "video") probes.push(element);
+      return element;
+    };
+    const openGroup = async (label) => clickEl(ctx,
+      [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => b.textContent.trim() === label), `open ${label}`);
+    try {
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      await mount(DemoCtaEditor)(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      Object.defineProperty(input, "files", { value: [new dom.window.File(["video"], "story.mp4", { type: "video/mp4" })] });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      const probe = probes.find((video) => video.onloadedmetadata);
+      if (!probe) throw new Error("uploaded clip was not probed");
+      Object.defineProperties(probe, { videoWidth: { value: 360 }, videoHeight: { value: 640 }, duration: { value: 8 } });
+      await act(async () => probe.onloadedmetadata());
+      await openGroup("Story Text");
+      const text = ctx.container.querySelector('[data-testid="story-text-input"]');
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(text, "My Story message");
+        text.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      });
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="story-toggle"]'), "enable Story");
+      const timing = () => [...ctx.container.querySelectorAll('[data-testid^="story-"] [role="slider"]')].map((s) => Number(s.getAttribute("aria-valuenow")));
+      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 6])) throw new Error(`wrong initial Story timing: ${timing()}`);
+      await openGroup("End Card CTA");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-last3"]'), "reserve last three seconds");
+      await openGroup("Story Text");
+      if (timing()[1] !== 5 || ctx.container.querySelector('[data-testid="story-text-input"]').value !== "My Story message") throw new Error("Story timing did not clamp or message was lost");
+      await openGroup("End Card CTA");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-full"]'), "reserve full clip");
+      await openGroup("Story Text");
+      if (!ctx.container.querySelector('[data-testid="story-no-room"]') || timing().length) throw new Error("full-clip CTA must leave no Story window");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      URL.createObjectURL = original.createUrl;
+      media.play = original.play;
+      media.load = original.load;
+      dom.window.HTMLCanvasElement.prototype.getContext = original.context;
+      document.createElement = original.createElement;
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    }
+  });
+
+  await check("Font & Animation close each other in Hook Text and End Card CTA", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    await mount(DemoCtaEditor)(ctx);
+    for (const [label, prefix] of [["Hook Text", "caption"], ["End Card CTA", "cta"]]) {
+      const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+        .find((button) => button.textContent.trim() === label);
+      await clickEl(ctx, header, `open ${label}`);
+      const font = ctx.container.querySelector(`[data-testid="${prefix}-fonts-disclosure"]`);
+      const animation = ctx.container.querySelector(`[data-testid="${prefix}-anim-disclosure"]`);
+      font.querySelector("summary").focus();
+      const space = new dom.window.KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true, cancelable: true });
+      await act(async () => font.querySelector("summary").dispatchEvent(space));
+      if (space.defaultPrevented) throw new Error(`${label}: playback shortcut swallowed disclosure keyboard activation`);
+      await clickEl(ctx, font.querySelector("summary"), "open Font");
+      if (!font.open || animation.open) throw new Error(`${label}: Font must open alone`);
+      await clickEl(ctx, animation.querySelector("summary"), "open Animation");
+      if (font.open || !animation.open) throw new Error(`${label}: Animation must close Font`);
+      await clickEl(ctx, font.querySelector("summary"), "reopen Font");
+      if (!font.open || animation.open) throw new Error(`${label}: Font must close Animation`);
+      await clickEl(ctx, font.querySelector("summary"), "close Font");
+      if (font.open || animation.open) throw new Error(`${label}: both panels must be collapsible`);
+    }
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+  });
 
   await check(
     "group titles and slider labels read correctly",
@@ -9141,84 +9186,13 @@ await check(
     }
   );
 
-  await check(
-    "the export's audio level is one defined number, not an accident",
-    async () => {
-      // The report this pins: a downloaded clip came back quieter than what the
-      // founder heard. There was no definition of "the level" anywhere — the
-      // element carried it, two capture paths read it from two places, and the
-      // monitored and recorded levels were assumed equal rather than made so.
-      const src = fs.readFileSync(
-        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
-        "utf8"
-      );
-      const constants = fs.readFileSync(
-        path.join(__dirname, "..", "src", "demoCta", "constants.js"),
-        "utf8"
-      );
-
-      if (!/EXPORT_AUDIO_GAIN = 1/.test(constants)) {
-        throw new Error(
-          "EXPORT_AUDIO_GAIN is not unity. Both capture paths assume unity, and a " +
-            "gain the native captureStream path cannot honour makes the exported " +
-            "level diverge again."
-        );
-      }
-      // One gain node, feeding the recorder, so recorded == monitored.
-      for (const marker of [
-        "ac.createGain()",
-        "audioGainRef.current.gain.value = EXPORT_AUDIO_GAIN",
-        "audioGainRef.current.connect(audioDestRef.current)",
-      ]) {
-        if (!src.includes(marker)) {
-          throw new Error(
-            `the audio gain stage lost a piece: ${marker}. Without a single node ` +
-              "feeding the recorder, the exported level and the monitored level " +
-              "are different numbers that happen to look alike."
-          );
-        }
-      }
-      // Monitoring must be torn down. A permanent connection to
-      // ac.destination is what made the editor permanently louder than the
-      // file it produced, and it survived every later export.
-      if (!src.includes("stopMonitoring?.()") || !src.includes("disconnect(ac.destination)")) {
-        throw new Error(
-          "audio monitoring is never disconnected. The editor stays louder than " +
-            "the file it just produced, for the rest of the session."
-        );
-      }
-      // The element's own level is captured and put back, not assumed to be
-      // "muted" — a hard-coded restore made the second export of a session
-      // differ from the first.
-      if (!src.includes("restoreAudio = { muted: video.muted, volume: video.volume }")) {
-        throw new Error(
-          "the source element's audio state is not captured before recording, so " +
-            "it cannot be restored to what it actually was."
-        );
-      }
-      if (!/video\.muted = restoreAudio\.muted/.test(src) || !/video\.volume = restoreAudio\.volume/.test(src)) {
-        throw new Error(
-          "the source element's volume is not restored. Only muted was being put " +
-            "back, so the element's level drifted across exports."
-        );
-      }
-      // display:none is a licence for browsers to skip audio processing on a
-      // media element while still painting its frames to a canvas — which is
-      // exactly a file whose video looks right and whose audio is quiet.
-      if (/<video\s+ref=\{videoRef\}\s+className="hidden"/.test(src)) {
-        throw new Error(
-          "the recorded source element is display:none again. Browsers may stop " +
-            "processing its audio, producing a right-looking, quiet export."
-        );
-      }
-      if (!/ref=\{videoRef\}[\s\S]{0,120}?opacity-0/.test(src)) {
-        throw new Error(
-          "the recorded source element is not visually hidden via opacity. It has " +
-            "to stay in the render tree for its audio to be captured."
-        );
-      }
+  await check("export reads source audio samples independently of preview mute", async () => {
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "exportTikTok.js"), "utf8");
+    for (const marker of ["new AudioSampleSink(audioTrack)", "sample.trim(start, end)", "trimmed.setTimestamp", "audioSource.add(trimmed)", "audio will not be silently removed"]) {
+      if (!src.includes(marker)) throw new Error(`missing direct-audio guarantee: ${marker}`);
     }
-  );
+    if (/createMediaElementSource|captureStream|createGain/.test(src)) throw new Error("export audio depends on preview playback again");
+  });
 await check(
     "both phone renderers share one fit, and neither paints a black void",
     async () => {

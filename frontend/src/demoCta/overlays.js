@@ -219,6 +219,12 @@ export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, off
   ctx.restore();
 }
 
+/** Story reuses the hook painter, with motion local to its selected window. */
+export function drawStoryOverlay(ctx, cw, ch, time, { start, end, ...style }) {
+  if (time < start || time >= end || end <= start) return;
+  drawHookOverlay(ctx, cw, ch, time - start, { ...style, duration: end - start });
+}
+
 /**
  * Lead-gen end card: sits above TikTok's caption strip, clear of the icon rail,
  * with an arrow that pumps toward the bio link.

@@ -32,6 +32,19 @@ export function preloadHandViewImages() {
   for (const env of ENVIRONMENTS) loadImage(env.url);
 }
 
+/** Export must never bake a missing photo or environment into early frames. */
+export async function prepareHandViewImages(environmentId) {
+  const environment = ENVIRONMENTS.find((env) => env.id === environmentId);
+  await Promise.all([HAND_IMAGE_URL, environment?.url].filter(Boolean).map(async (url) => {
+    loadImage(url);
+    try {
+      await imageCache.get(url).decode();
+    } catch {
+      throw new Error("The hand-view images could not be loaded. Check your connection and export again.");
+    }
+  }));
+}
+
 let keyedHandCache = null;
 
 /**
@@ -292,15 +305,15 @@ export function drawHandView(
   const sh = SCREEN.h * drawH;
   const sr = SCREEN_RADIUS_NORM * drawW;
 
-  if (video.readyState >= 2 && video.videoWidth > 0) {
+  if (video instanceof HTMLCanvasElement || (video.readyState >= 2 && video.videoWidth > 0)) {
     ctx.save();
     roundedRect(ctx, sx, sy, sw, sh, sr);
     ctx.clip();
     ctx.fillStyle = screenBase || "#000";
     ctx.fillRect(sx, sy, sw, sh);
 
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
+    const vw = video.videoWidth || video.width;
+    const vh = video.videoHeight || video.height;
     // Shared with the floating phone, so the two cannot drift again — which is
     // how "fill" ended up working in one view and silently doing nothing in the
     // other.

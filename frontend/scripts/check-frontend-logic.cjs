@@ -647,51 +647,11 @@ check("export filenames carry no superseded app branding",
 check("export filenames sanitize hostile parts",
   DC.buildExportFilename({ device: "S24 Ultra!", preset: "", width: 1080.7, height: 1920.2, ext: "webm" })
     === "demo-cta-s24-ultra-preset-1081x1920.webm");
-check("mp4 is detected by prefix, everything else is webm",
-  DC.extensionForMime('video/mp4;codecs="avc1.42E01F,mp4a.40.2"') === "mp4"
-    && DC.extensionForMime("video/webm;codecs=vp9") === "webm");
+check("TikTok is the only output size and transparency is unavailable",
+  DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok" &&
+  DC.PRESETS[0].w === 1080 && DC.PRESETS[0].h === 1920 &&
+  !DC.BACKGROUNDS.some((bg) => bg.id === "transparent"));
 
-// MIME selection without a recorder fails closed rather than guessing.
-check("no recorder means no mime rather than a guess",
-  DC.selectExportMime({ transparent: false, exportFormat: "auto" }) === null);
-
-// Candidate order with a recorder that claims everything: High Level 4.0
-// first, because Baseline Level 3.1 cannot encode a 1080x1920 canvas and the
-// encoder rejects it at record time even though isTypeSupported passes it.
-// The stub goes through loadModule's sandbox — the shipped code reads the bare
-// `MediaRecorder` identifier, which resolves against the vm context, so a stub
-// on Node's global would silently test nothing.
-const DC_REC = loadModule(DEMO_CONST_SRC, {
-  MediaRecorder: { isTypeSupported: () => true },
-});
-check("mp4 candidates lead with a 1080p-capable level",
-  (() => {
-    const list = DC_REC.supportedExportMimes({ transparent: false, exportFormat: "auto" });
-    return list[0] === 'video/mp4;codecs="avc1.640028,mp4a.40.2"'
-      && list.indexOf('video/mp4;codecs="avc1.42E01F,mp4a.40.2"') > 0
-      && list[list.length - 1] === "video/webm"
-      && DC_REC.selectExportMime({ transparent: false, exportFormat: "auto" }) === list[0];
-  })());
-check("transparent and webm choices still prefer webm first",
-  (() => {
-    const t = DC_REC.supportedExportMimes({ transparent: true, exportFormat: "auto" });
-    const w = DC_REC.supportedExportMimes({ transparent: false, exportFormat: "webm" });
-    return t.every((m) => m.startsWith("video/webm")) && w[0].startsWith("video/webm");
-  })());
-check("a recorder that supports nothing yields no candidates",
-  DC_REC.supportedExportMimes
-    && loadModule(DEMO_CONST_SRC, { MediaRecorder: { isTypeSupported: () => false } })
-      .supportedExportMimes({ transparent: false, exportFormat: "auto" }).length === 0);
-
-// A broken recording must never become a download. These pin the pure half of
-// that gate: the size floor and the container sniff that run before a blob
-// gets a URL, a filename, or a History row.
-check("recordings under 32KB are not plausible",
-  DC.isPlausibleRecordingSize(0) === false
-    && DC.isPlausibleRecordingSize(32767) === false
-    && DC.isPlausibleRecordingSize(32768) === true
-    && DC.isPlausibleRecordingSize(10 * 1024 * 1024) === true
-    && DC.isPlausibleRecordingSize(NaN) === false);
 check("an mp4 recording opens with an ftyp box",
   DC.sniffRecordingContainer(new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70])) === "mp4");
 check("a webm recording opens with the EBML header",
@@ -705,9 +665,9 @@ check("a truncated header sniffs as nothing, not as a guess",
 check("the device catalog survived the port",
   DC.DEVICES.length === 7 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8");
 check("the preset catalog survived the port",
-  DC.PRESETS.length === 6 && DC.PRESETS[0].id === "tiktok" && DC.PRESETS[5].id === "source");
+  DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 check("backgrounds, animations, environments and accents survived the port",
-  DC.BACKGROUNDS.length === 8 && DC.ANIMATIONS.length === 6
+  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 6
     && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 5
     && DC.ACCENT_SWATCHES.includes("#8b5cf6"));
 check("defaults match the standalone app",
@@ -1033,6 +993,34 @@ check("resolveCtaWindow anchors last2, last3, and full clip to loaded duration",
   DC.resolveCtaWindow(2, 12, "full") === 12 &&
   DC.resolveCtaWindow(4, 6, "custom") === 6 * 0.45,
   "resolveCtaWindow miscomputed anchored window");
+
+check("Story timing clamps to the enabled hook and CTA windows", (() => {
+  const config = { clipDuration: 12, hookEnabled: true, hookDuration: 2, ctaEnabled: true, ctaDuration: 3, ctaTimingMode: "last3" };
+  const initial = DC.resolveStoryWindow(config);
+  const clamped = DC.resolveStoryWindow({ ...config, start: -5, end: 20 });
+  const shorter = DC.resolveStoryWindow({ ...config, clipDuration: 6, start: 8, end: 10 });
+  const noRoom = DC.resolveStoryWindow({ ...config, ctaTimingMode: "full" });
+  const unrestricted = DC.resolveStoryWindow({ ...config, hookEnabled: false, ctaEnabled: false });
+  const unloaded = DC.resolveStoryWindow({ ...config, clipDuration: 0 });
+  return initial.available && initial.start === 2 && initial.end === 9 &&
+    clamped.start === 2 && clamped.end === 9 &&
+    shorter.start >= shorter.min && shorter.end <= shorter.max && shorter.end > shorter.start &&
+    !noRoom.available && !unloaded.available && unrestricted.start === 0 && unrestricted.end === 12;
+})(), "Story overlapped reserved time or failed to clamp after a duration change");
+
+check("Story paints only inside its window using hook styling and local video time", (() => {
+  const calls = [];
+  const ctx = new Proxy({}, { get: (_, key) => key === "measureText" ? (text) => ({ width: text.length * 20 }) : (...args) => calls.push([key, ...args]), set: (_, key, value) => { calls.push([key, value]); return true; } });
+  const style = { text: "Story message", accent: "#abcdef", font: "Anton", anim: "fade", scale: 0.9, offsetY: 0.1 };
+  OV.drawStoryOverlay(ctx, 1080, 1920, 1.9, { ...style, start: 2, end: 6 });
+  OV.drawStoryOverlay(ctx, 1080, 1920, 6, { ...style, start: 2, end: 6 });
+  if (calls.length) return false;
+  OV.drawStoryOverlay(ctx, 1080, 1920, 3, { ...style, start: 2, end: 6 });
+  const storyCalls = JSON.stringify(calls);
+  calls.length = 0;
+  OV.drawHookOverlay(ctx, 1080, 1920, 1, { ...style, duration: 4 });
+  return calls.some(([key, text]) => key === "fillText" && text === "STORY MESSAGE") && storyCalls === JSON.stringify(calls);
+})(), "Story leaked outside its window or diverged from the shared hook painter");
 
 check("copy variants and builtin look presets are populated",
   Array.isArray(DC.HOOK_COPY_VARIANTS) && DC.HOOK_COPY_VARIANTS.length === 3 &&
