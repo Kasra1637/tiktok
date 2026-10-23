@@ -491,7 +491,7 @@ function AccentPicker({ testPrefix, accent, onAccentChange }) {
   return (
     <div className="space-y-2">
       <SubLabel>Accent</SubLabel>
-      <p className="text-xs text-muted-foreground">Colors the hook text line and the end-card handle chip.</p>
+      <p className="text-xs text-muted-foreground">Colors hook text and handle chip.</p>
       <div className="flex flex-wrap items-center gap-2">
         {ACCENT_SWATCHES.map((c) => (
           <button
@@ -2074,7 +2074,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
-                This finished Hook + Story is the source clip. You can replace it with your own footage; this editor styles one clip at a time and does not assemble separate clips.
+                This Hook + Story render is the source clip. Replace it with your own footage; one clip at a time.
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="secondary">Hook + Story</Badge>
@@ -2088,7 +2088,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Upload one video clip to start. It can be your own footage or a finished render—no Hook + Story generation is required. This editor styles one clip at a time; combine separate clips in your own editor.
+              Upload one clip to start — your footage or a finished render. No generation needed; one clip at a time.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -2118,12 +2118,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           {sourceReplaced && generation && (
             <p className="text-xs text-muted-foreground">
-              Source replaced for this edit. The export is still filed under the selected Hook + Story.
+              Source replaced; export stays under this Hook + Story.
             </p>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <SubLabel>View style</SubLabel>
-            <p className="text-xs text-muted-foreground">Choose a floating phone or hand-held mockup. Drag the preview to adjust its framing; in hand-held mode, pick a scene below.</p>
+            <p className="text-xs text-muted-foreground">Floating phone or hand-held mockup. Drag preview to reframe; in hand mode, pick a scene.</p>
             <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
               {[
                 ["floating", "Floating Phone"],
@@ -2243,7 +2243,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
               <SubLabel>Hand size &amp; position</SubLabel>
-              <p className="text-xs text-muted-foreground">Drag the preview to move • scroll to zoom</p>
+              <p className="text-xs text-muted-foreground">Drag to move • scroll to zoom</p>
               <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setHandZoom} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
               <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanX} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setHandPanY} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
@@ -2254,7 +2254,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="look-presets-block">
             <SubLabel>Named looks</SubLabel>
-            <p className="text-xs text-muted-foreground">Save font, entrance, size &amp; accent as a reusable brand look across clips.</p>
+            <p className="text-xs text-muted-foreground">Save font, entrance, size &amp; accent as a reusable look.</p>
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
               {allLookPresets.map((look) => {
                 const active = isLookPresetActive(look);
@@ -2312,7 +2312,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={setHookEnabled} />
             Show opening hook text
           </label>
-          <p className="text-xs text-muted-foreground">This is an on-screen text overlay; it does not change the clip&apos;s spoken script.</p>
+          <p className="text-xs text-muted-foreground">On-screen overlay only; spoken script unchanged.</p>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">Text to show at the opening</span>
@@ -2406,7 +2406,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </div>
             )}
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs italic text-muted-foreground">Drag the hook text up or down on the preview to reposition</p>
+              <p className="text-xs italic text-muted-foreground">Drag hook text on preview to reposition</p>
               <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
             </div>
             {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
@@ -2431,11 +2431,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               className={TEXTAREA_CLASS}
             />
           </label>
-          <p className="text-xs text-muted-foreground">Uses the Hook Text font, animation, size & accent. This overlay does not change the spoken script.</p>
+          <p className="text-xs text-muted-foreground">Uses Hook Text style; spoken script unchanged.</p>
           {storyAvailable ? (
             <>
               <p className="text-xs text-muted-foreground" data-testid="story-timing-hint">
-                Available: {storyWindow.min.toFixed(1)}–{storyWindow.max.toFixed(1)}s. Timing adjusts automatically to stay outside the enabled hook & end card.
+                Available: {storyWindow.min.toFixed(1)}–{storyWindow.max.toFixed(1)}s. Auto-keeps clear of hook & end card.
               </p>
               <ControlSlider label="Starts at" value={storyStart} min={storyWindow.min} max={Math.max(storyWindow.min, storyEnd - 0.1)} step={0.1} onChange={(start) => setStoryTiming({ start, end: storyEnd })} testId="story-start-slider" format={(v) => `${v.toFixed(1)}s`} />
               <ControlSlider label="Ends at" value={storyEnd} min={Math.min(storyWindow.max, storyStart + 0.1)} max={storyWindow.max} step={0.1} onChange={(end) => setStoryTiming({ start: storyStart, end })} testId="story-end-slider" format={(v) => `${v.toFixed(1)}s`} />
@@ -2443,11 +2443,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           ) : (
             <p role="status" className="text-xs text-muted-foreground" data-testid="story-no-room">
-              {videoMeta ? "No room for Story text. Shorten or disable the hook or end card to free some time." : "Upload a clip to choose when your Story text appears."}
+              {videoMeta ? "No room for Story text. Shorten hook or end card to free time." : "Upload a clip to time Story text."}
             </p>
           )}
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs italic text-muted-foreground">Drag the Story text up or down on the preview to reposition</p>
+            <p className="text-xs italic text-muted-foreground">Drag Story text on preview to reposition</p>
             <VerticalNudge label="Story text position" upTestId="story-nudge-up" downTestId="story-nudge-down" onNudge={(dy) => setStoryOffsetY((y) => y + dy)} />
           </div>
           {storyOffsetY !== 0 && <ResetButton onClick={() => setStoryOffsetY(0)}>Reset position</ResetButton>}
@@ -2458,7 +2458,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={setCtaEnabled} />
             Show closing call-to-action card
           </label>
-          <p className="text-xs text-muted-foreground">Adds an on-screen card to the end of this clip. Write a clear next step, such as downloading your app or visiting your link.</p>
+          <p className="text-xs text-muted-foreground">On-screen end card. Write one clear next step.</p>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">Call-to-action text</span>
@@ -2617,7 +2617,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             main groups is what made the panel taller than the preview it is
             meant to describe. */}
         <EditorSection title="Advanced" icon={SlidersHorizontal} open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
-          <p className="text-xs text-muted-foreground">Optional fine-tuning for mockup, screen placement, and video crop. Most exports do not need changes here.</p>
+          <p className="text-xs text-muted-foreground">Fine-tuning for mockup, placement, crop. Rarely needed.</p>
           <div className="space-y-2">
             <SubLabel>Mockup height</SubLabel>
             <div className="flex items-center gap-2">
@@ -2746,7 +2746,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <Upload className="h-3.5 w-3.5" />
                   Upload a clip
                 </Button>
-                <p className="mt-2 text-xs text-muted-foreground">Upload one clip to preview and style it.</p>
+                <p className="mt-2 text-xs text-muted-foreground">Upload one clip to style it.</p>
               </div>
             )}
         </div>

@@ -7735,7 +7735,7 @@ async function runDemoCtaChecks() {
           // Anchored on the JSX element, not the bare word: the comment above the
           // button explains where the copy used to live, and matching that would
           // read as "still above the button".
-          const liveIdx = src.indexOf('>Upload one clip to preview and style it.</p>');
+          const liveIdx = src.indexOf('>Upload one clip to style it.</p>');
           const uploadIdx = src.indexOf('data-testid="demo-cta-frame-upload"');
           if (liveIdx === -1 || uploadIdx === -1 || liveIdx < uploadIdx) {
             throw new Error(
