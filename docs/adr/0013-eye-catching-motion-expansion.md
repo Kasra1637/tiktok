@@ -1,6 +1,6 @@
 # 0013 — Eye-catching motion catalog expansion
 
-- **Status:** accepted
+- **Status:** partially superseded by 0014 (picker retires underline, spotlight)
 - **Date:** 2026-10-23
 - **Anchors:** `frontend/src/demoCta/constants.js:42` (`ANIMATIONS`);
   `frontend/src/demoCta/constants.js:118` (`OVERLAY_ANIMS`);

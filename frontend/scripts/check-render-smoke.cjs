@@ -7367,10 +7367,11 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // Public Sans is off the overlay font catalog. It shipped in both lists (Hook
-  // Text and End Card CTA) and was the least distinct of the text faces, so a
-  // founder could pick it and get something that read as the browser default.
-  await check("Public Sans is gone from both overlay font lists", async (ctx) => {
+  // Public Sans and Sora are off the overlay font catalog. Public Sans shipped
+  // in both lists (Hook Text and End Card CTA) and was the least distinct of
+  // the text faces, so a founder could pick it and get something that read as
+  // the browser default; Sora followed as a second trim of the same list.
+  await check("Public Sans and Sora are gone from both overlay font lists", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
     // One group is open at a time, so each list is opened in turn.
@@ -7391,22 +7392,29 @@ async function runDemoCtaChecks() {
         for (const [group, prefix] of [["Hook Text", "caption-font"], ["End Card CTA", "cta-font"]]) {
           await openGroup(ctx.container, group);
           const tiles = [...ctx.container.querySelectorAll(`[data-testid^="${prefix}-"]`)];
-          if (tiles.length !== 10) {
-            throw new Error(`expected 10 faces in the ${group} list, saw ${tiles.length}`);
+          if (tiles.length !== 9) {
+            throw new Error(`expected 9 faces in the ${group} list, saw ${tiles.length}`);
           }
-          if (tiles.some((t) => t.getAttribute("data-testid") === `${prefix}-public-sans`)) {
-            throw new Error(`Public Sans is still offered in the ${group} font list`);
+          for (const retired of ["public-sans", "sora"]) {
+            if (tiles.some((t) => t.getAttribute("data-testid") === `${prefix}-${retired}`)) {
+              throw new Error(`${retired} is still offered in the ${group} font list`);
+            }
           }
         }
       }
     );
   });
 
-  // Every overlay change replays from the top. The canvas redraws either way —
-  // the six values are in the preview loop's deps — but a redraw lands mid-clip,
-  // where an entrance has already played out, so the founder cannot see the
-  // choice they just made without scrubbing back by hand.
-  await check("an overlay entrance, size or face change replays the preview", async (ctx) => {
+  // No option change moves the playhead. The canvas redraws either way —
+  // the six values are in the preview loop's deps — so the choice is visible
+  // on the next frame wherever the clip is paused. The old replay-from-top
+  // meant a founder who paused mid-clip to compare two faces lost their place
+  // on every click, and the forced play() restarted audio they had paused.
+  // Pause-then-replay must resume from the same spot, so the playhead and the
+  // play state are owned by the transport alone. (jsdom cannot observe play(),
+  // so this pins currentTime; the deleted effect set both together, and it is
+  // gone as one.)
+  await check("an overlay entrance, size or face change keeps the playhead", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
     // The canvas redraw is what makes a choice visible at all, and jsdom has no
@@ -7446,8 +7454,8 @@ async function runDemoCtaChecks() {
             el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
-          if (video.currentTime !== 0) {
-            throw new Error(`${label} did not replay the preview (stuck at ${video.currentTime}s)`);
+          if (video.currentTime !== 4) {
+            throw new Error(`${label} moved the playhead (now at ${video.currentTime}s)`);
           }
         };
 
@@ -7462,8 +7470,8 @@ async function runDemoCtaChecks() {
           thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
         });
         await act(async () => {});
-        if (video.currentTime !== 0) {
-          throw new Error(`a text size change did not replay the preview (stuck at ${video.currentTime}s)`);
+        if (video.currentTime !== 4) {
+          throw new Error(`a text size change moved the playhead (now at ${video.currentTime}s)`);
         }
       }
     );

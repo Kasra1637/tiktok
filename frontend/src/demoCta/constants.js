@@ -96,7 +96,6 @@ export const OVERLAY_FONTS = [
   { id: "manrope", label: "Manrope", stack: '"Manrope", system-ui, sans-serif' },
   { id: "archivo", label: "Archivo", stack: '"Archivo", system-ui, sans-serif' },
   { id: "dm-sans", label: "DM Sans", stack: '"DM Sans", system-ui, sans-serif' },
-  { id: "sora", label: "Sora", stack: '"Sora", system-ui, sans-serif' },
   { id: "space-grotesk", label: "Space Grotesk", stack: '"Space Grotesk", system-ui, sans-serif' },
   { id: "poppins", label: "Poppins", stack: '"Poppins", system-ui, sans-serif' },
   { id: "montserrat", label: "Montserrat", stack: '"Montserrat", system-ui, sans-serif' },
@@ -105,7 +104,7 @@ export const OVERLAY_FONTS = [
 
 /**
  * Caption/CTA entrance styles. One catalog, picked independently per overlay:
- * the caption and the end card each name one of these twenty, so the hook
+ * the caption and the end card each name one of these eighteen, so the hook
  * and the in-card text always offer the same motion. Every style is a
  * pure function of video time (see overlayIntro in overlays.js) — never
  * wall-clock — so the exported recording matches the preview frame for
@@ -123,7 +122,6 @@ export const OVERLAY_ANIMS = [
   { id: "pop", label: "Pop" },
   { id: "typewriter", label: "Typewriter" },
   { id: "glow", label: "Glow in" },
-  { id: "underline", label: "Underline draw" },
   { id: "drop", label: "Drop in" },
   { id: "steady", label: "Steady" },
   { id: "whip", label: "Whip in" },
@@ -132,7 +130,6 @@ export const OVERLAY_ANIMS = [
   { id: "bounce", label: "Bounce" },
   { id: "flicker", label: "Flicker" },
   { id: "glitch", label: "Glitch" },
-  { id: "spotlight", label: "Spotlight" },
   { id: "wipe", label: "Wipe reveal" },
   { id: "sway", label: "Sway" },
   { id: "thud", label: "Thud" },

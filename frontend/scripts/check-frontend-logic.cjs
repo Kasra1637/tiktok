@@ -885,10 +885,11 @@ console.log("=".repeat(70));
 const OV = loadModule(path.resolve(__dirname, "..", "src", "demoCta", "overlays.js"));
 // DC (demoCta/constants.js) is already loaded above; the overlay catalogs ride it.
 
-check("ten overlay fonts with unique ids, Anton first",
-  Array.isArray(DC.OVERLAY_FONTS) && DC.OVERLAY_FONTS.length === 10 &&
+check("nine overlay fonts with unique ids, Anton first, Sora retired",
+  Array.isArray(DC.OVERLAY_FONTS) && DC.OVERLAY_FONTS.length === 9 &&
   DC.OVERLAY_FONTS[0].id === "anton" &&
-  new Set(DC.OVERLAY_FONTS.map((f) => f.id)).size === 10,
+  new Set(DC.OVERLAY_FONTS.map((f) => f.id)).size === 9 &&
+  !DC.OVERLAY_FONTS.some((f) => f.id === "sora"),
   DC.OVERLAY_FONTS && DC.OVERLAY_FONTS.map((f) => f.id).join(","));
 
 check("every overlay font file exists under public/fonts with an @font-face rule",
@@ -900,9 +901,11 @@ check("every overlay font file exists under public/fonts with an @font-face rule
   })(),
   "missing woff2 or @font-face block");
 
-check("twenty overlay animations with unique ids, punch and rise present",
-  Array.isArray(DC.OVERLAY_ANIMS) && DC.OVERLAY_ANIMS.length === 20 &&
-  new Set(DC.OVERLAY_ANIMS.map((a) => a.id)).size === 20 &&
+check("eighteen overlay animations with unique ids, punch and rise present",
+  Array.isArray(DC.OVERLAY_ANIMS) && DC.OVERLAY_ANIMS.length === 18 &&
+  new Set(DC.OVERLAY_ANIMS.map((a) => a.id)).size === 18 &&
+  !DC.OVERLAY_ANIMS.some((a) => a.id === "underline") &&
+  !DC.OVERLAY_ANIMS.some((a) => a.id === "spotlight") &&
   DC.OVERLAY_ANIMS.some((a) => a.id === "punch") &&
   DC.OVERLAY_ANIMS.some((a) => a.id === "rise") &&
   DC.OVERLAY_ANIMS.some((a) => a.id === "whip") &&

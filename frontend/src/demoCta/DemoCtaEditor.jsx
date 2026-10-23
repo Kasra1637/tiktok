@@ -1801,35 +1801,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
 
-  // Every overlay choice replays the clip from the top.
-  //
-  // The six values below are also in the preview loop's deps above, so the
-  // canvas redraws with the new entrance, size or face on the next frame — but
-  // a redraw alone lands mid-clip, where the entrance has already played out
-  // and the only way to see it is to scrub back by hand. Restarting means the
-  // founder watches the same opening twice and compares the two choices
-  // directly, which is the whole reason to change one.
-  const overlayStyleKey = `${captionAnim}:${captionScale}:${captionFont}:${ctaAnim}:${ctaScale}:${ctaFont}:${activeHookVariant}:${activeCtaVariant}:${ctaTimingMode}`;
-  const lastOverlayStyleRef = useRef(overlayStyleKey);
-  useEffect(() => {
-    if (lastOverlayStyleRef.current === overlayStyleKey) return;
-    lastOverlayStyleRef.current = overlayStyleKey;
-    // Never mid-export: settings and the timeline stay frozen during encoding,
-    // and a restart here would cut the capture it is writing.
-    if (isExportingRef.current) return;
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = 0;
-    setCurrentTime(0);
-    // Playback only when a clip is actually loaded: the media element is always
-    // in the tree (it is what the recorder captures audio from), so an empty
-    // preview would otherwise ask a sourceless element to play.
-    if (video.src || video.currentSrc) {
-      const played = video.play();
-      if (played && typeof played.catch === "function") played.catch(() => {});
-    }
-    setIsPlaying(true);
-  }, [overlayStyleKey]);
+  // Option changes never move the playhead. Every overlay value is also in
+  // the preview loop's deps above, so the canvas redraws with the new
+  // entrance, size or face on the next frame wherever the clip is paused —
+  // and pause-then-replay resumes from that same spot. The playhead and the
+  // play state are owned by the transport (and the source-load effect) alone.
 
   const saveExport = async (blob, name) => {
     setSaving(true);
