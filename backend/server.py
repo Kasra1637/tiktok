@@ -6637,6 +6637,30 @@ async def _schedule_post_kit(
     await _maybe_write_post_kit(generation_id, user_id)
 
 
+async def _load_post_kit_materials(generation_row: dict, user_id: str):
+    """The render material a post kit is grounded in, or (None, None).
+
+    One owner for the two reads every kit path needs: the render's own
+    hook, script and CTA plus the app profile's verified facts. Missing
+    material is not an error here — the frozen writer skips quietly while
+    the explicit regenerate route answers 404 — so the policy difference
+    stays at the call sites and only the reads are shared.
+    """
+    project = None
+    if generation_row.get("studio_project_id"):
+        project = await _fetch_one(
+            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
+            (generation_row["studio_project_id"], user_id),
+        )
+    profile = None
+    if generation_row.get("brand_profile_id"):
+        profile = await _fetch_one(
+            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+            (generation_row["brand_profile_id"], user_id),
+        )
+    return project, profile
+
+
 async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[dict]:
     """Write the frozen post kit for a freshly completed render, once.
 
@@ -6652,18 +6676,7 @@ async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[di
         return None
     if _parse_post_kit(current.get("post_kit")) is not None:
         return None
-    project = None
-    if current.get("studio_project_id"):
-        project = await _fetch_one(
-            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
-            (current["studio_project_id"], user_id),
-        )
-    profile = None
-    if current.get("brand_profile_id"):
-        profile = await _fetch_one(
-            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
-            (current["brand_profile_id"], user_id),
-        )
+    project, profile = await _load_post_kit_materials(current, user_id)
     if not project or not profile:
         logger.warning(
             "Post kit skipped for generation %s: render material not found.", generation_id)
@@ -6712,18 +6725,7 @@ async def regenerate_post_kit(
         raise HTTPException(
             status_code=409, detail="Only completed renders can regenerate post copy."
         )
-    project = None
-    if row.get("studio_project_id"):
-        project = await _fetch_one(
-            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
-            (row["studio_project_id"], user_id),
-        )
-    profile = None
-    if row.get("brand_profile_id"):
-        profile = await _fetch_one(
-            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
-            (row["brand_profile_id"], user_id),
-        )
+    project, profile = await _load_post_kit_materials(row, user_id)
     if not project or not profile:
         raise HTTPException(
             status_code=404, detail="Render material not found for a fresh post kit."

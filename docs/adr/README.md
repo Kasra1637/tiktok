@@ -38,3 +38,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0018](0018-retire-six-background-motions.md) | Retire six background motions from the picker; bloom becomes the default | accepted |
 | [0019](0019-one-caption-post-kit.md) | One TikTok caption per post kit, regenerable on demand | partially superseded by 0020 (export-card regenerate, question guard, completed-only) |
 | [0020](0020-post-kit-regenerate-everywhere.md) | Regenerate reaches the export card; caption must ask; completed-only | accepted |
+| [0021](0021-post-kit-ownership.md) | Post-kit state has one owner per layer | accepted |

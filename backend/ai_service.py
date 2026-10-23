@@ -2245,10 +2245,9 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     if not isinstance(parsed, dict):
         raise RuntimeError("Post kit response was not an object.")
 
-    raw_caption = parsed.get("caption")
-    if isinstance(raw_caption, list):
-        raw_caption = " ".join(str(c) for c in raw_caption)
-    caption = str(raw_caption or "").strip()[:300]
+    # The schema guarantees a string; anything else fails loudly below
+    # instead of being coerced into copy.
+    caption = str(parsed.get("caption") or "").strip()[:300]
     raw_tags = parsed.get("hashtags")
     if isinstance(raw_tags, str):
         raw_tags = raw_tags.split()

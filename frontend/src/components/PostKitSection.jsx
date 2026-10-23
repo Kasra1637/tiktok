@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Copy, MessageSquareText, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 import { GroupLabel } from "./SectionCard";
@@ -9,35 +9,48 @@ import { api, getErrorMessage } from "../lib/api";
 /**
  * The frozen post copy for one render: 1 caption, a hashtag set, cover text.
  *
- * Read-only except for Regenerate: `postKit` is the stored object, and a null
- * or empty kit renders nothing — no placeholder, no derived copy. Old renders
- * frozen with three `captions` still display their first one. Shared by
- * History's drawer, the Details modal, the studio output moment, and the
- * export card.
+ * Sole owner of the displayed copy: `postKit` is the starting value and
+ * `generationId` identifies the row a regeneration replaces. Parents pass
+ * both and own nothing — no merge-back callback, so adding the section to
+ * a new surface is one element, not a state protocol. A reloaded kit is
+ * adopted; a mere re-render never clobbers a fresh regeneration.
+ *
+ * A null or empty kit renders nothing — no placeholder, no derived copy.
+ * Old renders frozen with three `captions` still display their first one.
+ * Shared by History's drawer, the Details modal, the studio output moment,
+ * and the export card.
  *
  * Regeneration is explicit: it only runs when the founder clicks Regenerate,
  * and a failure keeps the current copy on screen with the error instead of
- * replacing it. `generationId` gates the button and identifies the row the
- * fresh copy replaces — including the Demo + CTA export card, whose row
- * inherits the project the endpoint resolves.
+ * replacing it.
  */
-export function PostKitSection({ postKit, generationId, onRegenerated }) {
+export function PostKitSection({ postKit: initialKit, generationId }) {
   const { copiedKey, copy } = useCopyButton();
+  const [kit, setKit] = useState(initialKit);
   const [regenBusy, setRegenBusy] = useState(false);
   const [regenError, setRegenError] = useState(null);
 
-  const legacyFirst = Array.isArray(postKit?.captions)
-    ? postKit.captions.map((c) => String(c || "").trim()).find((c) => c)
+  // Adopt a genuinely new kit (list reload, details fetch) without losing a
+  // fresh regeneration to an unrelated re-render. Render-phase sync, not an
+  // effect, so the first paint after reload is already the new copy.
+  const lastInitial = useRef(initialKit);
+  if (lastInitial.current !== initialKit) {
+    lastInitial.current = initialKit;
+    setKit(initialKit);
+  }
+
+  const legacyFirst = Array.isArray(kit?.captions)
+    ? kit.captions.map((c) => String(c || "").trim()).find((c) => c)
     : "";
   const caption =
-    (typeof postKit?.caption === "string" && postKit.caption.trim()) ||
+    (typeof kit?.caption === "string" && kit.caption.trim()) ||
     legacyFirst ||
     "";
-  const hashtags = postKit && Array.isArray(postKit.hashtags)
-    ? postKit.hashtags.filter((t) => String(t || "").trim())
+  const hashtags = kit && Array.isArray(kit.hashtags)
+    ? kit.hashtags.filter((t) => String(t || "").trim())
     : [];
-  const coverText = postKit && typeof postKit.cover_text === "string"
-    ? postKit.cover_text.trim()
+  const coverText = kit && typeof kit.cover_text === "string"
+    ? kit.cover_text.trim()
     : "";
 
   // A null or empty kit renders nothing: there is nothing honest to show.
@@ -52,8 +65,7 @@ export function PostKitSection({ postKit, generationId, onRegenerated }) {
     setRegenError(null);
     try {
       const res = await api.regeneratePostKit(generationId);
-      const kit = res && typeof res === "object" && res.post_kit ? res.post_kit : res;
-      if (onRegenerated) onRegenerated(kit);
+      setKit(res && typeof res === "object" && res.post_kit ? res.post_kit : res);
     } catch (err) {
       // The stored copy is untouched server-side, so the current copy stays.
       setRegenError(getErrorMessage(err));

@@ -3107,13 +3107,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   Regenerating here rewrites this export's own copy — the row
                   carries the parent's project, so the endpoint resolves. */}
               {saved?.post_kit && (
-                <PostKitSection
-                  postKit={saved.post_kit}
-                  generationId={saved.id}
-                  onRegenerated={(kit) =>
-                    setSaved((s) => (s ? { ...s, post_kit: kit } : s))
-                  }
-                />
+                <PostKitSection postKit={saved.post_kit} generationId={saved.id} />
               )}
             </SectionCard>
           </div>

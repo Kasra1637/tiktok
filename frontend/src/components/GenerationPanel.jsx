@@ -701,9 +701,6 @@ const handleGenerate = async () => {
                   <PostKitSection
                     postKit={generation.post_kit}
                     generationId={generation.id}
-                    onRegenerated={(kit) =>
-                      setGeneration((g) => (g ? { ...g, post_kit: kit } : g))
-                    }
                   />
                 </div>
               )}
