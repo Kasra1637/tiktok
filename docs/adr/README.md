@@ -30,8 +30,9 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0010](0010-no-warm-button-fills.md) | No warm fills on buttons: coral and red move out of the surface | partially superseded by 0011 (Demo + CTA wears accent) |
 | [0011](0011-history-onward-wears-accent.md) | History's onward Demo + CTA wears accent, not brand | accepted |
 | [0012](0012-timestamped-tiktok-export.md) | Timestamped, frame-by-frame encoding delivers one TikTok MP4 without real-time capture drift | accepted |
-| [0013](0013-eye-catching-motion-expansion.md) | Ten new background motions + ten shared overlay entrances; Output group removed | partially superseded by 0014 (picker retires underline, spotlight) |
+| [0013](0013-eye-catching-motion-expansion.md) | Ten new background motions + ten shared overlay entrances; Output group removed | partially superseded by 0014 (picker retires underline, spotlight) and 0018 (picker retires six background motions) |
 | [0014](0014-retire-underline-spotlight-entrances.md) | Retire underline + spotlight from the entrance picker; motion kept for old renders | accepted |
 | [0015](0015-preview-transport-owns-playhead.md) | Preview transport owns the playhead (no replay on option change); Sora leaves the font catalog | partially superseded by 0017 (scoped overlay replay) |
 | [0016](0016-editable-zoom-lock-preview.md) | Paused zoom drafts remain editable; saved hand/phone locks drive preview and export | accepted |
 | [0017](0017-scoped-overlay-review.md) | Replay overlay windows; save reusable looks after final CTA review | accepted |
+| [0018](0018-retire-six-background-motions.md) | Retire six background motions from the picker; bloom becomes the default | accepted |

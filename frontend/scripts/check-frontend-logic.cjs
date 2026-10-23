@@ -693,21 +693,23 @@ check("the device catalog survived the port",
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 // Aurora Waves was removed deliberately (a catalog trim, not port drift),
-// so the animation count is 15 and its absence is pinned below.
+// and six low-pick motions followed in ADR 0018 — so the animation count is
+// 9 and each absence is pinned below.
 check("backgrounds, animations, environments and accents survived the port",
-  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 15
+  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 9
     && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 5
     && DC.ACCENT_SWATCHES.includes("#8b5cf6"));
 
-check("the animation catalog holds five legacy motions plus ten eye-catching ones, without Aurora",
-  DC.ANIMATIONS.some((a) => a.id === "float") && DC.ANIMATIONS.some((a) => a.id === "embers")
+check("the animation catalog holds nine motions, without Aurora or the six retired in ADR 0018",
+  DC.ANIMATIONS.some((a) => a.id === "bloom") && DC.ANIMATIONS.some((a) => a.id === "embers")
     && DC.ANIMATIONS.some((a) => a.id === "meteor")
     && !DC.ANIMATIONS.some((a) => a.id === "aurora")
-    && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 15,
+    && !["float", "pulse", "rays", "orbit", "surge", "cascade"].some((id) => DC.ANIMATIONS.some((a) => a.id === id))
+    && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 9,
   DC.ANIMATIONS && DC.ANIMATIONS.map((a) => a.id).join(","));
 check("defaults match the standalone app",
   DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
-    && DC.DEFAULTS.anim === "float" && DC.DEFAULTS.scale === 0.82
+    && DC.DEFAULTS.anim === "bloom" && DC.DEFAULTS.scale === 0.82
     && DC.DEFAULTS.hookDuration === 1.8 && DC.DEFAULTS.ctaDuration === 2
     && DC.DEFAULTS.overlayAccent === "#c8ff2e" && DC.DEFAULTS.viewMode === "floating");
 check("slider ranges match the standalone app",

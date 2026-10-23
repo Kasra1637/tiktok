@@ -1380,9 +1380,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       });
 
       // Hoisted above both renderer branches: each draws the phone, and each
-      // needs the palette for the screen behind the footage. Left inside the
-      // float branch, the hand branch above referenced an identifier that did
-      // not exist in its scope — and optional chaining does not save that,
+      // needs the palette for the screen behind the footage. Left inside an
+      // animation branch, the hand branch above referenced an identifier that
+      // did not exist in its scope — and optional chaining does not save that,
       // it only guards a declared binding that happens to be nullish. A const
       // read before its declaration throws, killing the draw loop on the
       // first hand-mode frame and freezing the canvas.
@@ -1421,102 +1421,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         const glowY = cy2 + bobY * 0.8;
         const glowR = Math.max(drawW, drawH) * 0.85;
 
-        if (anim === "float") {
-          ctx.save();
-          const glowAlpha = 0.30 + Math.sin(t * 0.4) * 0.10;
-          ctx.globalAlpha = glowAlpha;
-          const glowGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 1.1);
-          glowGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          glowGrad.addColorStop(0.3, palette.glow.replace(/[\d.]+\)$/, "0.7)"));
-          glowGrad.addColorStop(0.6, palette.glow);
-          glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = glowGrad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "pulse") {
-          const pulsePhase = Math.sin(t * 0.5);
-          const pulseR = glowR * (0.7 + pulsePhase * 0.3);
-          const pulseAlpha = 0.25 + pulsePhase * 0.12;
-
-          ctx.save();
-          ctx.globalAlpha = pulseAlpha;
-          const pulseGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, pulseR);
-          pulseGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          pulseGrad.addColorStop(0.35, palette.glow.replace(/[\d.]+\)$/, "0.6)"));
-          pulseGrad.addColorStop(0.7, palette.accent.replace(/[\d.]+\)$/, "0.3)"));
-          pulseGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = pulseGrad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalAlpha = 0.08 + pulsePhase * 0.04;
-          ctx.beginPath();
-          ctx.arc(glowX, glowY, pulseR * 1.1, 0, Math.PI * 2);
-          ctx.lineWidth = drawW * 0.02;
-          ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.5)");
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "orbit") {
-          const orbitAngle = t * 0.6;
-          const orbitR = glowR * 0.65;
-
-          ctx.save();
-          ctx.globalAlpha = 0.08;
-          ctx.beginPath();
-          ctx.ellipse(cx2, cy2, orbitR, orbitR * 0.35, 0.2, 0, Math.PI * 2);
-          ctx.lineWidth = drawW * 0.015;
-          ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.6)");
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          const dotX = cx2 + Math.cos(orbitAngle) * orbitR;
-          const dotY = cy2 + Math.sin(orbitAngle) * orbitR * 0.35;
-          const dotR = drawW * 0.06;
-
-          ctx.save();
-          ctx.globalAlpha = 0.4;
-          const dotGrad = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, dotR * 3);
-          dotGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          dotGrad.addColorStop(0.3, palette.glow.replace(/[\d.]+\)$/, "0.5)"));
-          dotGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = dotGrad;
-          ctx.fillRect(dotX - dotR * 3, dotY - dotR * 3, dotR * 6, dotR * 6);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          const dot2X = cx2 + Math.cos(orbitAngle + Math.PI) * orbitR;
-          const dot2Y = cy2 + Math.sin(orbitAngle + Math.PI) * orbitR * 0.35;
-          ctx.save();
-          ctx.globalAlpha = 0.2;
-          const dot2Grad = ctx.createRadialGradient(dot2X, dot2Y, 0, dot2X, dot2Y, dotR * 2);
-          dot2Grad.addColorStop(0, palette.accent.replace(/[\d.]+\)$/, "1)"));
-          dot2Grad.addColorStop(0.4, palette.accent.replace(/[\d.]+\)$/, "0.4)"));
-          dot2Grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = dot2Grad;
-          ctx.fillRect(dot2X - dotR * 2, dot2Y - dotR * 2, dotR * 4, dotR * 4);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalAlpha = 0.12;
-          const centerGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.5);
-          centerGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          centerGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = centerGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
         if (anim === "breathe") {
           const breathPhase = t * 0.3;
 
@@ -1545,70 +1449,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           bGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
           ctx.fillStyle = bGrad;
           ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "rays") {
-          ctx.save();
-          ctx.globalAlpha = 0.12;
-          const rGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
-          rGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          rGlow.addColorStop(0.4, palette.glow);
-          rGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = rGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalAlpha = 0.07;
-          const rayCount = 8;
-          const rayBaseAngle = t * 0.15;
-          for (let i = 0; i < rayCount; i++) {
-            const angle = rayBaseAngle + (i / rayCount) * Math.PI * 2;
-            const rayLen = Math.max(cw, ch) * 0.8;
-            const rayWidth = 0.08 + Math.sin(t * 0.3 + i * 1.7) * 0.03;
-            ctx.beginPath();
-            ctx.moveTo(glowX, glowY);
-            ctx.lineTo(glowX + Math.cos(angle - rayWidth) * rayLen, glowY + Math.sin(angle - rayWidth) * rayLen);
-            ctx.lineTo(glowX + Math.cos(angle + rayWidth) * rayLen, glowY + Math.sin(angle + rayWidth) * rayLen);
-            ctx.closePath();
-            const rayGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, rayLen);
-            rayGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-            rayGrad.addColorStop(0.4, palette.glow);
-            rayGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-            ctx.fillStyle = rayGrad;
-            ctx.fill();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "surge") {
-          // A hard-breathing glow with a bright band sweeping upward, so even
-          // a static phone feels charged.
-          ctx.save();
-          const swell = 0.5 + 0.5 * Math.sin(t * 4);
-          ctx.globalAlpha = 0.22 + swell * 0.18;
-          const surgeGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * (0.8 + swell * 0.4));
-          surgeGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          surgeGrad.addColorStop(0.5, palette.glow);
-          surgeGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = surgeGrad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          const bandY = ch * (1 - ((t * 0.45) % 1));
-          ctx.globalAlpha = 0.10;
-          const band = ctx.createLinearGradient(0, bandY - ch * 0.06, 0, bandY + ch * 0.06);
-          band.addColorStop(0, "rgba(0,0,0,0)");
-          band.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.9)"));
-          band.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.fillStyle = band;
-          ctx.fillRect(0, bandY - ch * 0.06, cw, ch * 0.12);
           ctx.globalAlpha = 1;
           ctx.restore();
         }
@@ -1643,33 +1483,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             ctx.arc(ex, ey, Math.max(1.5, drawW * (0.004 + fy * 0.008)), 0, Math.PI * 2);
             ctx.fill();
           }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "cascade") {
-          // A diagonal shaft of light sweeps across the frame every few seconds.
-          ctx.save();
-          ctx.globalAlpha = 0.12;
-          const cascadeGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
-          cascadeGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          cascadeGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = cascadeGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          const sweep = (t * 0.22) % 1;
-          ctx.globalAlpha = 0.14;
-          ctx.translate(cw * (sweep * 1.6 - 0.3), 0);
-          ctx.rotate(0.35);
-          const shaft = ctx.createLinearGradient(0, 0, cw * 0.22, 0);
-          shaft.addColorStop(0, "rgba(0,0,0,0)");
-          shaft.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.9)"));
-          shaft.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.fillStyle = shaft;
-          ctx.fillRect(-cw * 0.1, -ch * 0.3, cw * 0.4, ch * 1.6);
           ctx.globalAlpha = 1;
           ctx.restore();
         }
@@ -2378,8 +2191,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     Even widths come from the grid, because `Chip` takes no
                     className. Three columns wherever the panel is full-width
                     (below lg) or wide (xl and up); two in the narrow lg–xl
-                    column, where a third column leaves "Breathing Pulse"
-                    about 92px and it wraps to two lines. */}
+                    column, where a third column leaves longer labels
+                    about 92px and they wrap to two lines. */}
                 <div
                   role="group"
                   aria-label="Animation"

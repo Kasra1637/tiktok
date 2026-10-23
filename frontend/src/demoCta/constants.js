@@ -40,14 +40,8 @@ export const BACKGROUNDS = [
 ];
 
 export const ANIMATIONS = [
-  { id: "float", label: "Gentle Float" },
-  { id: "pulse", label: "Breathing Pulse" },
-  { id: "rays", label: "Light Rays" },
-  { id: "orbit", label: "Orbiting Ring" },
   { id: "breathe", label: "Deep Breathe" },
-  { id: "surge", label: "Energy Surge" },
   { id: "embers", label: "Rising Embers" },
-  { id: "cascade", label: "Light Cascade" },
   { id: "vortex", label: "Neon Vortex" },
   { id: "grid", label: "Retro Grid" },
   { id: "comet", label: "Comet Pass" },
@@ -222,7 +216,7 @@ export const DEFAULTS = {
   device: "s24",
   preset: "tiktok",
   bg: "lavender",
-  anim: "float",
+  anim: "bloom",
   scale: 0.82,
   mockupStretchY: 1,
   videoFit: "cover",
