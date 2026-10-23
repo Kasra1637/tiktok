@@ -75,6 +75,41 @@ export function overlayIntro(style, time, duration, inDur = 0.32, outDur = 0.28)
     }
     case "steady":
       return { ...base, alpha: fadeOut };
+    // Eye-catching entrances. Shared channels only (alpha, dxEm, dyEm,
+    // rise01, reveal01, glow01) so the hook and the end card render them
+    // identically — both painters read exactly these. Flicker and glitch
+    // quantize overlay-local time instead of reading randomness, keeping the
+    // pure-function-of-video-time contract the export depends on.
+    case "whip":
+      return { ...base, alpha: Math.min(1, inT * 2) * fadeOut, dxEm: (1 - easeOutBack(inT)) * 3 };
+    case "backslide":
+      return { ...base, alpha: eased * fadeOut, dxEm: -(1 - eased) * 2.5 };
+    case "slam": {
+      const flash = Math.max(0, 1 - time / 0.5);
+      return { ...base, alpha: Math.min(1, 0.35 + inT * 1.3) * fadeOut, glow01: flash * fadeOut };
+    }
+    case "bounce":
+      return { ...base, alpha: eased * fadeOut, dyEm: (1 - eased) * -1.4 + Math.sin(inT * Math.PI * 3) * (1 - inT) * 0.35 };
+    case "flicker": {
+      const step = Math.floor(time / 0.06);
+      const level = step >= 6 ? 1 : [0.05, 0.65, 0.12, 0.85, 0.4, 1][step];
+      return { ...base, alpha: level * fadeOut };
+    }
+    case "glitch": {
+      const g = Math.floor(time / 0.05);
+      const jitter = (Math.sin(g * 91.7) * 0.6 + Math.sin(g * 47.3 + 1.3) * 0.4) * Math.max(0, 1 - time / 0.5);
+      return { ...base, alpha: Math.min(1, inT * 2) * fadeOut, dxEm: jitter * 0.6 };
+    }
+    case "spotlight":
+      return { ...base, alpha: Math.min(1, inT * 1.2) * fadeOut, glow01: Math.max(0, 1.4 - time / 0.7) * fadeOut };
+    case "wipe":
+      return { ...base, alpha: fadeOut, dxEm: (1 - eased) * 0.8, reveal01: clamp01(time / Math.max(0.15, duration * 0.35)) };
+    case "sway":
+      return { ...base, alpha: eased * fadeOut, dxEm: Math.sin(inT * Math.PI * 2) * (1 - inT) * 1.2 };
+    case "thud": {
+      const impact = Math.max(0, 1 - Math.abs(time - inDur) / 0.3);
+      return { ...base, alpha: Math.min(1, inT * 2.2) * fadeOut, dyEm: (1 - easeOutBack(inT)) * -2, glow01: impact * fadeOut };
+    }
     case "punch":
     default: {
       const scale = 1.24 - 0.24 * easeOutBack(inT) - outT * 0.06;

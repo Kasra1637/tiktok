@@ -8060,13 +8060,18 @@ async function runDemoCtaChecks() {
     }
   );
 
-  await check("Output offers only the TikTok delivery specification", async (ctx) => {
+  await check("no Output group: the TikTok spec lives on the Export action and result", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     await mount(DemoCtaEditor)(ctx);
+    // A single upload-ready format means nothing to choose, so the group is
+    // gone instead of an empty selector. The spec must still surface where
+    // the decision happens (Export title) and where it lands (result card).
     const header = [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => b.textContent.trim() === "Output");
-    await clickEl(ctx, header, "open Output");
-    expectText(ctx, "TikTok MP4", "missing TikTok output");
-    expectText(ctx, "1080×1920 · 9:16 · 30 fps", "missing fixed output spec");
+    if (header) throw new Error("the Output group is back with nothing selectable in it");
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
+    for (const marker of ["title=\"Export TikTok MP4 · 1080×1920 · 30 fps\"", "MP4 · 1080×1920 · 30 fps"]) {
+      if (!src.includes(marker)) throw new Error(`missing TikTok spec on the export path: ${marker}`);
+    }
     if (ctx.container.querySelector('[aria-label="Export format"], [aria-label="Platform preset"]')) throw new Error("alternate delivery formats remain selectable");
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
   });

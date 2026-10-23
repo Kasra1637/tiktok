@@ -46,6 +46,16 @@ export const ANIMATIONS = [
   { id: "aurora", label: "Aurora Waves" },
   { id: "orbit", label: "Orbiting Ring" },
   { id: "breathe", label: "Deep Breathe" },
+  { id: "surge", label: "Energy Surge" },
+  { id: "embers", label: "Rising Embers" },
+  { id: "cascade", label: "Light Cascade" },
+  { id: "vortex", label: "Neon Vortex" },
+  { id: "grid", label: "Retro Grid" },
+  { id: "comet", label: "Comet Pass" },
+  { id: "tide", label: "Neon Tide" },
+  { id: "prism", label: "Prism Beams" },
+  { id: "bloom", label: "Slow Bloom" },
+  { id: "meteor", label: "Meteor Rain" },
 ];
 
 export const COLOR_PALETTES = {
@@ -95,11 +105,15 @@ export const OVERLAY_FONTS = [
 
 /**
  * Caption/CTA entrance styles. One catalog, picked independently per overlay:
- * the caption and the end card each name one of these ten. Every style is a
- * pure function of video time (see overlayMotion in overlays.js) — never
+ * the caption and the end card each name one of these twenty, so the hook
+ * and the in-card text always offer the same motion. Every style is a
+ * pure function of video time (see overlayIntro in overlays.js) — never
  * wall-clock — so the exported recording matches the preview frame for
- * frame. `punch` and `rise` are the two behaviours that shipped before this
- * catalog existed, kept as the defaults so nothing already made changes.
+ * frame. New styles only use the motion channels both painters read
+ * (alpha, dxEm, dyEm, rise01, reveal01, glow01): scale and wobble are
+ * hook-only, so an entrance built on those would not look the same on the
+ * end card. `punch` and `rise` are the two behaviours that shipped before
+ * this catalog existed, kept as the defaults so nothing already made changes.
  */
 export const OVERLAY_ANIMS = [
   { id: "punch", label: "Punch in" },
@@ -112,6 +126,16 @@ export const OVERLAY_ANIMS = [
   { id: "underline", label: "Underline draw" },
   { id: "drop", label: "Drop in" },
   { id: "steady", label: "Steady" },
+  { id: "whip", label: "Whip in" },
+  { id: "backslide", label: "Backslide" },
+  { id: "slam", label: "Slam" },
+  { id: "bounce", label: "Bounce" },
+  { id: "flicker", label: "Flicker" },
+  { id: "glitch", label: "Glitch" },
+  { id: "spotlight", label: "Spotlight" },
+  { id: "wipe", label: "Wipe reveal" },
+  { id: "sway", label: "Sway" },
+  { id: "thud", label: "Thud" },
 ];
 
 export const HOOK_COPY_VARIANTS = [

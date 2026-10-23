@@ -667,9 +667,15 @@ check("the device catalog survived the port",
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 check("backgrounds, animations, environments and accents survived the port",
-  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 6
+  DC.BACKGROUNDS.length === 7 && DC.ANIMATIONS.length === 16
     && DC.ENVIRONMENTS.length === 5 && DC.ACCENT_SWATCHES.length === 5
     && DC.ACCENT_SWATCHES.includes("#8b5cf6"));
+
+check("the animation catalog holds the six legacy motions plus ten eye-catching ones",
+  DC.ANIMATIONS.some((a) => a.id === "float") && DC.ANIMATIONS.some((a) => a.id === "embers")
+    && DC.ANIMATIONS.some((a) => a.id === "meteor")
+    && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 16,
+  DC.ANIMATIONS && DC.ANIMATIONS.map((a) => a.id).join(","));
 check("defaults match the standalone app",
   DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
     && DC.DEFAULTS.anim === "float" && DC.DEFAULTS.scale === 0.82
@@ -894,12 +900,24 @@ check("every overlay font file exists under public/fonts with an @font-face rule
   })(),
   "missing woff2 or @font-face block");
 
-check("ten overlay animations with unique ids, punch and rise present",
-  Array.isArray(DC.OVERLAY_ANIMS) && DC.OVERLAY_ANIMS.length === 10 &&
-  new Set(DC.OVERLAY_ANIMS.map((a) => a.id)).size === 10 &&
+check("twenty overlay animations with unique ids, punch and rise present",
+  Array.isArray(DC.OVERLAY_ANIMS) && DC.OVERLAY_ANIMS.length === 20 &&
+  new Set(DC.OVERLAY_ANIMS.map((a) => a.id)).size === 20 &&
   DC.OVERLAY_ANIMS.some((a) => a.id === "punch") &&
-  DC.OVERLAY_ANIMS.some((a) => a.id === "rise"),
+  DC.OVERLAY_ANIMS.some((a) => a.id === "rise") &&
+  DC.OVERLAY_ANIMS.some((a) => a.id === "whip") &&
+  DC.OVERLAY_ANIMS.some((a) => a.id === "thud"),
   DC.OVERLAY_ANIMS && DC.OVERLAY_ANIMS.map((a) => a.id).join(","));
+
+check("every new overlay entrance is deterministic and shared-channel (hook and end card agree)",
+  ["whip", "backslide", "slam", "bounce", "flicker", "glitch", "spotlight", "wipe", "sway", "thud"].every((id) => {
+    const a = OV.overlayIntro(id, 0.2, 2);
+    const b = OV.overlayIntro(id, 0.2, 2);
+    return JSON.stringify(a) === JSON.stringify(b)
+      && Number.isFinite(a.alpha) && Number.isFinite(a.dxEm) && Number.isFinite(a.dyEm)
+      && Number.isFinite(a.rise01) && Number.isFinite(a.reveal01) && Number.isFinite(a.glow01);
+  }),
+  "new entrance diverged or left a shared channel non-finite");
 
 check("overlay motion is a pure function of its arguments (deterministic)",
   JSON.stringify(OV.overlayIntro("slide", 0.2, 2)) === JSON.stringify(OV.overlayIntro("slide", 0.2, 2)) &&

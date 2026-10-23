@@ -72,7 +72,7 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 
 // Render order, which is also the order that decides which group wins when a
 // stored value somehow has more than one open (older versions allowed it).
-const SECTION_ORDER = ["source", "hook", "story", "cta", "output", "advanced"];
+const SECTION_ORDER = ["source", "hook", "story", "cta", "advanced"];
 
 // Remembered overlay taste: font, entrance and size for the hook + CTA
 // overlays, plus the accent. Stored per app with a global fallback, so a
@@ -1418,6 +1418,281 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           ctx.restore();
         }
 
+        if (anim === "surge") {
+          // A hard-breathing glow with a bright band sweeping upward, so even
+          // a static phone feels charged.
+          ctx.save();
+          const swell = 0.5 + 0.5 * Math.sin(t * 4);
+          ctx.globalAlpha = 0.22 + swell * 0.18;
+          const surgeGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * (0.8 + swell * 0.4));
+          surgeGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          surgeGrad.addColorStop(0.5, palette.glow);
+          surgeGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = surgeGrad;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+
+          ctx.save();
+          const bandY = ch * (1 - ((t * 0.45) % 1));
+          ctx.globalAlpha = 0.10;
+          const band = ctx.createLinearGradient(0, bandY - ch * 0.06, 0, bandY + ch * 0.06);
+          band.addColorStop(0, "rgba(0,0,0,0)");
+          band.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.9)"));
+          band.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = band;
+          ctx.fillRect(0, bandY - ch * 0.06, cw, ch * 0.12);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "embers") {
+          // Sparks rise on looped paths. Positions hash from the particle
+          // index, never Math.random, so the export encodes the same sparks
+          // the preview shows.
+          ctx.save();
+          ctx.globalAlpha = 0.30;
+          const emberGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
+          emberGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          emberGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = emberGlow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+
+          ctx.save();
+          for (let i = 0; i < 26; i++) {
+            const hx = Math.sin(i * 127.1) * 43758.5453;
+            const fx = hx - Math.floor(hx);
+            const hy = Math.sin(i * 311.7 + 17.3) * 12578.1459;
+            const fy = hy - Math.floor(hy);
+            const speed = 0.05 + fy * 0.08;
+            const ey = ch * (1 - ((fy + t * speed) % 1));
+            const ex = cw * fx + Math.sin(t * 1.4 + i) * cw * 0.02;
+            const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i * 1.7));
+            ctx.globalAlpha = 0.5 * tw * (ey / ch + 0.2);
+            ctx.fillStyle = i % 3 === 0 ? "#ffffff" : palette.glow.replace(/[\d.]+\)$/, "1)");
+            ctx.beginPath();
+            ctx.arc(ex, ey, Math.max(1.5, drawW * (0.004 + fy * 0.008)), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "cascade") {
+          // A diagonal shaft of light sweeps across the frame every few seconds.
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          const cascadeGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
+          cascadeGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          cascadeGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = cascadeGlow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+
+          ctx.save();
+          const sweep = (t * 0.22) % 1;
+          ctx.globalAlpha = 0.14;
+          ctx.translate(cw * (sweep * 1.6 - 0.3), 0);
+          ctx.rotate(0.35);
+          const shaft = ctx.createLinearGradient(0, 0, cw * 0.22, 0);
+          shaft.addColorStop(0, "rgba(0,0,0,0)");
+          shaft.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.9)"));
+          shaft.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = shaft;
+          ctx.fillRect(-cw * 0.1, -ch * 0.3, cw * 0.4, ch * 1.6);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "vortex") {
+          // Two spiral arms rotate around the phone, trailing glow.
+          for (let arm = 0; arm < 2; arm++) {
+            ctx.save();
+            ctx.globalAlpha = 0.16;
+            ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.8)");
+            ctx.lineWidth = Math.max(1.5, drawW * 0.02);
+            ctx.beginPath();
+            const vbase = t * 0.9 + arm * Math.PI;
+            for (let s = 0; s <= 40; s++) {
+              const p = s / 40;
+              const va = vbase + p * 3.2;
+              const vr = glowR * (0.25 + p * 0.65);
+              const vx = cx2 + Math.cos(va) * vr;
+              const vy = cy2 + Math.sin(va) * vr * 0.62;
+              if (s === 0) ctx.moveTo(vx, vy);
+              else ctx.lineTo(vx, vy);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.restore();
+          }
+          ctx.save();
+          ctx.globalAlpha = 0.14;
+          const vortexGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.5);
+          vortexGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          vortexGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = vortexGlow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "grid") {
+          // A synthwave floor: lines converge past a horizon, horizontals rush
+          // toward the viewer on a loop.
+          const horizon = ch * 0.62;
+          ctx.save();
+          ctx.globalAlpha = 0.14;
+          ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.8)");
+          ctx.lineWidth = Math.max(1, cw * 0.002);
+          for (let i = -8; i <= 8; i++) {
+            ctx.beginPath();
+            ctx.moveTo(cx2 + i * cw * 0.03, horizon);
+            ctx.lineTo(cx2 + i * cw * 0.16, ch);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+          ctx.save();
+          for (let i = 0; i < 7; i++) {
+            const gp = ((i / 7) + t * 0.3) % 1;
+            const gy = horizon + Math.pow(gp, 2.2) * (ch - horizon);
+            ctx.globalAlpha = 0.05 + gp * 0.14;
+            ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.9)");
+            ctx.lineWidth = Math.max(1, cw * 0.002 * (1 + gp * 2));
+            ctx.beginPath();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(cw, gy);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "comet") {
+          // A comet arcs across the top third on a loop, fading tail behind it.
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          const cometGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.6);
+          cometGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          cometGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = cometGlow;
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+          ctx.save();
+          const cp = (t * 0.18) % 1;
+          for (let k = 14; k >= 1; k--) {
+            const pk = cp - k * 0.012;
+            if (pk < 0) continue;
+            const kx = cw * (1.1 - pk * 2.2);
+            const ky = ch * (0.16 + Math.sin(pk * Math.PI) * 0.1);
+            ctx.globalAlpha = 0.30 * (1 - k / 15);
+            ctx.fillStyle = palette.glow.replace(/[\d.]+\)$/, "1)");
+            ctx.beginPath();
+            ctx.arc(kx, ky, Math.max(1.5, drawW * 0.02 * (1 - k / 18)), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const hx0 = cw * (1.1 - cp * 2.2);
+          const hy0 = ch * (0.16 + Math.sin(cp * Math.PI) * 0.1);
+          ctx.globalAlpha = 0.9;
+          const head = ctx.createRadialGradient(hx0, hy0, 0, hx0, hy0, drawW * 0.09);
+          head.addColorStop(0, "#ffffff");
+          head.addColorStop(0.4, palette.glow.replace(/[\d.]+\)$/, "1)"));
+          head.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = head;
+          ctx.fillRect(hx0 - drawW * 0.09, hy0 - drawW * 0.09, drawW * 0.18, drawW * 0.18);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        if (anim === "tide") {
+          // Three translucent sine bands drift at different speeds.
+          for (let i = 0; i < 3; i++) {
+            ctx.save();
+            ctx.globalAlpha = 0.10 - i * 0.02;
+            ctx.fillStyle = (i % 2 ? palette.accent : palette.glow).replace(/[\d.]+\)$/, "0.8)");
+            ctx.beginPath();
+            const tideBase = ch * (0.3 + i * 0.18);
+            ctx.moveTo(0, ch);
+            for (let gx = 0; gx <= cw; gx += cw / 48) {
+              const wy = tideBase + Math.sin((gx / cw) * Math.PI * 2 + t * (0.6 + i * 0.25) + i * 2) * ch * 0.04;
+              ctx.lineTo(gx, wy);
+            }
+            ctx.lineTo(cw, ch);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        if (anim === "prism") {
+          // Three beams rotate slowly from behind the phone.
+          for (let i = 0; i < 3; i++) {
+            const pa = t * 0.25 + (i / 3) * Math.PI * 2;
+            ctx.save();
+            ctx.globalAlpha = 0.10;
+            ctx.translate(glowX, glowY);
+            ctx.rotate(pa);
+            const beam = ctx.createLinearGradient(0, 0, glowR * 1.1, 0);
+            beam.addColorStop(0, (i % 2 ? palette.accent : palette.glow).replace(/[\d.]+\)$/, "0.9)"));
+            beam.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = beam;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(glowR * 1.1, -glowR * 0.16);
+            ctx.lineTo(glowR * 1.1, glowR * 0.16);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        if (anim === "bloom") {
+          // Petals of light open and close around the phone, very slow.
+          for (let i = 0; i < 6; i++) {
+            const ba = (i / 6) * Math.PI * 2 + t * 0.12;
+            const blen = glowR * (0.55 + 0.25 * Math.sin(t * 0.5 + i));
+            const bx = glowX + Math.cos(ba) * blen * 0.55;
+            const by = glowY + Math.sin(ba) * blen * 0.4;
+            ctx.save();
+            ctx.globalAlpha = 0.10;
+            const petal = ctx.createRadialGradient(bx, by, 0, bx, by, glowR * 0.32);
+            petal.addColorStop(0, palette.accent.replace(/[\d.]+\)$/, "0.9)"));
+            petal.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = petal;
+            ctx.fillRect(bx - glowR * 0.32, by - glowR * 0.32, glowR * 0.64, glowR * 0.64);
+            ctx.restore();
+          }
+        }
+
+        if (anim === "meteor") {
+          // Diagonal streaks fall fast across the frame on looped paths.
+          ctx.save();
+          for (let i = 0; i < 14; i++) {
+            const mx = Math.sin(i * 197.3 + 3.1) * 36211.9271;
+            const mfx = mx - Math.floor(mx);
+            const my = Math.sin(i * 421.9 + 44.7) * 21134.7129;
+            const mfy = my - Math.floor(my);
+            const mp = (mfy + t * (0.35 + mfy * 0.3)) % 1;
+            const sx = cw * (mfx * 1.4 - 0.2 + mp * 0.3);
+            const sy = ch * mp;
+            ctx.globalAlpha = 0.28 * (1 - mp);
+            ctx.strokeStyle = i % 4 === 0 ? "#ffffff" : palette.glow.replace(/[\d.]+\)$/, "1)");
+            ctx.lineWidth = Math.max(1, drawW * (0.003 + mfy * 0.004));
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(sx + cw * 0.03, sy + ch * 0.05);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
         ctx.save();
         ctx.globalAlpha = 0.25;
         ctx.beginPath();
@@ -2319,15 +2594,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </AnimDisclosure>
         </EditorSection>
 
-        <EditorSection title="Output" icon={Download} open={openSections.output} onToggle={() => toggleSection("output")}>
-          <div className="space-y-2" data-testid="tiktok-export-spec">
-            <SubLabel>TikTok MP4</SubLabel>
-            <p className="text-sm text-foreground">1080×1920 · 9:16 · 30 fps</p>
-            <p className="text-xs text-muted-foreground">H.264 video at 8 Mbps with AAC audio at 192 kbps when the clip has audio. One upload-ready format, encoded frame by frame to keep timing in sync.</p>
-          </div>
-        </EditorSection>
-
-        {/* Rarely touched. Mockup height, screen position and crop live here
+        {/* The TikTok spec used to live in an Output group of its own, but with
+            a single upload-ready format there is nothing to choose: the Export
+            button's title and the result card already carry the dimensions,
+            frame rate and container, so a group just to restate them was a
+            fifth stop on a panel that describes one clip. Rarely touched.
+            Mockup height, screen position and crop live here
             because they are set once and then left alone; keeping them in the
             main groups is what made the panel taller than the preview it is
             meant to describe. */}
