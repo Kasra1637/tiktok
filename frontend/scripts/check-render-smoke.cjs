@@ -7869,11 +7869,61 @@ async function runDemoCtaChecks() {
             "the hand-rolled row of borderless text buttons was the deviation."
         );
       }
-      if (!/aria-label="Animation"[\s\S]{0,200}?grid grid-cols-2 gap-1\.5 xl:grid-cols-3/.test(src)) {
+      if (!/aria-label="Animation"[\s\S]{0,200}?grid grid-cols-3 gap-1\.5 lg:grid-cols-2 xl:grid-cols-3/.test(src)) {
         throw new Error(
-          "the animation chips are not 2-per-row below xl and 3 above. A bare " +
-            "grid-cols-3 truncates labels at narrow widths."
+          "the animation chips are not 3-per-row with a 2-per-row guard for " +
+            "the narrow lg-xl column, where a third column wraps labels."
         );
+      }
+      // Both entrance grids render through one shared EntranceGrid: pin the
+      // contract as fragments — the 3-per-row class inside the component, one
+      // call site per overlay with its testid namespace and group label. Whole
+      // div literals would fail the build on attribute reorder or gap tweaks
+      // that change no behavior.
+      if ((src.match(/<EntranceGrid /g) || []).length !== 2) {
+        throw new Error(
+          "the Caption and CTA entrance grids no longer share one EntranceGrid."
+        );
+      }
+      if (!/function EntranceGrid\([\s\S]{0,300}?grid grid-cols-3 gap-2/.test(src)) {
+        throw new Error(
+          "EntranceGrid is not 3-per-row like the font grid above it."
+        );
+      }
+      for (const [prefix, label] of [["caption-anim", "Caption animation"], ["cta-anim", "CTA animation"]]) {
+        if (!src.includes(`testPrefix="${prefix}"`) || !src.includes(`ariaLabel="${label}"`)) {
+          throw new Error(
+            `the ${label} entrance grid lost its testid namespace or group label.`
+          );
+        }
+      }
+      // The font/animation disclosure triggers are <summary> elements, which
+      // a11y trees expose as disclosure triangles without a clickable
+      // reference. Each disclosure component's own trigger must carry the
+      // button role plus expanded state so assistive tech and automation
+      // reach it. Scoped per component (not every <summary> in the file —
+      // the zoom-lock list has its own disclosure pattern), and pinned as
+      // fragments: attribute order is free to move without changing behavior.
+      // Space is deliberately NOT handled here: the playback shortcut owns
+      // Space outside text entry, and the mutual-exclusion check below fails
+      // the build if a disclosure swallows it.
+      for (const fn of ["function AnimDisclosure", "function FontDisclosure"]) {
+        const body = src.split(fn)[1];
+        // Up to className, not the first `>`: the onClick arrow's `=>`
+        // would end a naive tag match before the role is even read.
+        const attrs = body && /<summary([\s\S]*?)className=/.exec(body);
+        if (!attrs || !/role="button"/.test(attrs[1]) || !/aria-expanded=\{open\}/.test(attrs[1])) {
+          throw new Error(
+            `the ${fn} disclosure trigger lost its button role — it is ` +
+              "unreachable to assistive tech and automation again."
+          );
+        }
+        if (/onKeyDown/.test(attrs[1])) {
+          throw new Error(
+            `the ${fn} disclosure trigger handles keys — Space belongs to the ` +
+              "playback shortcut, and swallowing it breaks preview transport."
+          );
+        }
       }
       // The page must stay on the documented control radius. Matched inside a
       // className so the comment that documents the old value does not trip it.

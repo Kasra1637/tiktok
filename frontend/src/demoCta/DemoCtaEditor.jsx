@@ -389,21 +389,66 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
 }
 
 /**
- * Collapsible wrapper for everything from the entrance picker down: the ten
- * entrances plus text size, accent where it lives, and the rest of the
- * section. Collapsed by default; laid out flat it all pushes the section
+ * One entrance grid for both overlays: hook text and end card render the
+ * same shared OVERLAY_ANIMS catalog through this component, parameterized
+ * by selected value, setter, testid namespace and group label — so a change
+ * to entrance layout lands once, not twice.
+ *
+ * Three columns with no narrow-width guard: the text-xs labels were measured
+ * live fitting without wrap or overflow at phone width, unlike the
+ * background chips. No Classic/Bold grouping either: with twenty entrances
+ * the headers would add back the rows the third column saves.
+ */
+function EntranceGrid({ value, onChange, testPrefix, ariaLabel }) {
+  return (
+    <div className="grid grid-cols-3 gap-2" role="group" aria-label={ariaLabel}>
+      {OVERLAY_ANIMS.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          data-testid={`${testPrefix}-${a.id}`}
+          onClick={() => onChange(a.id)}
+          aria-pressed={value === a.id}
+          className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+            value === a.id
+              ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
+              : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
+          }`}
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Collapsible wrapper for everything from the entrance picker down: the
+ * twenty entrances plus text size, accent where it lives, and the rest of
+ * the section. Collapsed by default; laid out flat it all pushes the section
  * tall, which is why it collapses. Collapsed, the summary still names the
  * current entrance so the choice stays visible. Controlled <details> keeps
  * every control in the DOM, with the parent owning the single open disclosure.
  * The "Customize" label names the group; the summary below
  * it names the current entrance.
  */
+/**
+ * The disclosure triggers below are native <summary> elements, which some
+ * accessibility trees expose as disclosure triangles without a clickable
+ * reference. The button role (plus expanded state) fixes the exposure; state
+ * stays with the parent-owned disclosure, so this changes operability, not
+ * behavior. Keyboard activation is Enter, which fires click natively and
+ * reaches onToggle through the existing handler. Space is deliberately left
+ * alone: the global playback shortcut owns Space everywhere outside text
+ * entry, and swallowing it here would break preview transport (enforced by
+ * the "Font & Animation close each other" smoke check).
+ */
 function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
   return (
     <div className="space-y-2">
       <SubLabel>Customize</SubLabel>
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -424,7 +469,7 @@ function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, chil
   return (
     <div className="space-y-2">
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Font · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -2169,13 +2214,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     what `Chip` is for, and it carries the visible border, hover
                     state and indigo selected state the previous version lacked.
                     Even widths come from the grid, because `Chip` takes no
-                    className. Two columns below xl — "Breathing Pulse" does not
-                    fit the ~92px a third column leaves at that width. */}
+                    className. Three columns wherever the panel is full-width
+                    (below lg) or wide (xl and up); two in the narrow lg–xl
+                    column, where a third column leaves "Breathing Pulse"
+                    about 92px and it wraps to two lines. */}
                 <div
                   role="group"
                   aria-label="Animation"
                   data-testid="animation-group"
-                  className="grid grid-cols-2 gap-1.5 xl:grid-cols-3"
+                  className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 xl:grid-cols-3"
                 >
                   {ANIMATIONS.map((a) => (
                     <Chip
@@ -2331,24 +2378,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             onToggle={() => toggleDisclosure("caption-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === captionAnim) || {}).label}
           >
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Caption animation">
-              {OVERLAY_ANIMS.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  data-testid={`caption-anim-${a.id}`}
-                  onClick={() => setCaptionAnim(a.id)}
-                  aria-pressed={captionAnim === a.id}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                    captionAnim === a.id
-                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
-                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
-                  }`}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
+            <EntranceGrid value={captionAnim} onChange={setCaptionAnim} testPrefix="caption-anim" ariaLabel="Caption animation" />
             <div className="space-y-2">
               <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCaptionScale} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={captionScale} onChange={setCaptionScale} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
@@ -2536,24 +2566,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             onToggle={() => toggleDisclosure("cta-animation")}
             currentLabel={(OVERLAY_ANIMS.find((a) => a.id === ctaAnim) || {}).label}
           >
-            <div className="grid grid-cols-2 gap-2" role="group" aria-label="CTA animation">
-              {OVERLAY_ANIMS.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  data-testid={`cta-anim-${a.id}`}
-                  onClick={() => setCtaAnim(a.id)}
-                  aria-pressed={ctaAnim === a.id}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
-                    ctaAnim === a.id
-                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
-                      : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-              ))}
-            </div>
+            <EntranceGrid value={ctaAnim} onChange={setCtaAnim} testPrefix="cta-anim" ariaLabel="CTA animation" />
             <div className="space-y-2">
               <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={setCtaScale} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={ctaScale} onChange={setCtaScale} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
