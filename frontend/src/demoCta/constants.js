@@ -43,7 +43,6 @@ export const ANIMATIONS = [
   { id: "float", label: "Gentle Float" },
   { id: "pulse", label: "Breathing Pulse" },
   { id: "rays", label: "Light Rays" },
-  { id: "aurora", label: "Aurora Waves" },
   { id: "orbit", label: "Orbiting Ring" },
   { id: "breathe", label: "Deep Breathe" },
   { id: "surge", label: "Energy Surge" },

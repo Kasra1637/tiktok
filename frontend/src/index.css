@@ -450,18 +450,19 @@ body {
  * zoom cannot silently resize the video.
  *
  * 253px wide is 450px tall at 9:16: the floor below which the column scrolls
- * instead of the frame shrinking further. Mobile keeps a 45vh budget, and the
- * player row wraps there because it cannot fit beside a 9:16 frame on a phone.
- *
- * The `* 0.75` headroom factor holds the frame 25% below the full budget so
- * the preview stays compact beside the settings panel instead of dominating
- * it. The floor stays untouched — small windows scroll instead. */
+ * instead of the frame shrinking further. Below lg the panel stacks, so the
+ * frame spends a 52vh budget with no headroom factor — beside the settings
+ * panel (lg+) the `* 0.75` factor keeps the preview compact instead of
+ * dominating it, but stacked on a phone the frame IS the preview and a
+ * 45vh-with-headroom box shrank it past usability. The player row wraps
+ * below xl because it cannot fit beside a 9:16 frame on a phone.
+ * Small windows scroll instead of shrinking the frame further. */
 .demo-cta-column {
     /* 16px is slack, not content. Sub-pixel rounding of a 9:16 ratio, or a
        one-pixel border, otherwise puts the column over its own max-h and a
        scrollbar appears beside a video that fits. */
     --demo-cta-chrome: 16px;
-    --demo-cta-frame-w: min(100%, calc(45vh * 9 / 16 * 0.75));
+    --demo-cta-frame-w: min(100%, calc(52vh * 9 / 16));
 }
 .demo-cta-column[data-player="on"] {
     /* With a clip loaded the column is frame + player bar (104px: scrubber 24,
@@ -975,6 +976,17 @@ h1,
     background-color: var(--indigo-15);
 }
 .thumb-pair > button:focus-visible {
+    outline: none;
+    border-color: var(--indigo-45);
+    box-shadow: 0 0 0 3px var(--indigo-15);
+}
+
+/* ---------- Shared keyboard focus ring for pressable chips and swatches ----------
+   Transport and icon buttons carry their own focus-visible ring inline, but
+   the chip grids, swatches, presets and text buttons below had none — keyboard
+   users tabbed through them invisibly. One shared rule so the next pattern
+   gets it by class instead of by remembering the token values. */
+.focus-ring:focus-visible {
     outline: none;
     border-color: var(--indigo-45);
     box-shadow: 0 0 0 3px var(--indigo-15);

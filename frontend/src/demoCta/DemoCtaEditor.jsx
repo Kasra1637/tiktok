@@ -224,7 +224,7 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="row-pad flex w-full items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+        className="row-pad focus-ring flex w-full items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <GroupLabel as="h2" icon={icon}>{title}</GroupLabel>
         <ChevronDown
@@ -299,7 +299,7 @@ function ScalePresets({ value, onChange, testPrefix, ariaLabel }) {
             data-testid={`${testPrefix}-${p.id}`}
             onClick={() => onChange(p.value)}
             aria-pressed={active}
-            className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+            className={`focus-ring flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
               active
                 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
                 : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
@@ -319,7 +319,7 @@ function ResetButton({ onClick, children, testId }) {
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className="text-xs text-muted-foreground underline-offset-2 transition duration-150 hover:text-foreground hover:underline"
+      className="focus-ring rounded text-xs text-muted-foreground underline-offset-2 transition duration-150 hover:text-foreground hover:underline"
     >
       {children || "Reset"}
     </button>
@@ -409,7 +409,7 @@ function EntranceGrid({ value, onChange, testPrefix, ariaLabel }) {
           data-testid={`${testPrefix}-${a.id}`}
           onClick={() => onChange(a.id)}
           aria-pressed={value === a.id}
-          className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+          className={`focus-ring rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
             value === a.id
               ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
               : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
@@ -448,7 +448,7 @@ function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
     <div className="space-y-2">
       <SubLabel>Customize</SubLabel>
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -469,7 +469,7 @@ function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, chil
   return (
     <div className="space-y-2">
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Font · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
@@ -502,7 +502,7 @@ function AccentPicker({ testPrefix, accent, onAccentChange }) {
             style={{ background: c }}
             aria-label={`Accent ${c}`}
             aria-pressed={accent === c}
-            className={`h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
+            className={`focus-ring h-10 w-10 shrink-0 rounded-full border-2 transition duration-150 ${
               accent === c
                 ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
                 : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
@@ -799,6 +799,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const fileInputRef = useRef(null);
   const rafRef = useRef(null);
   const paintFrameRef = useRef(null);
+  // On-demand preview: `dirtyRef` marks a frame to paint, `kickPreviewRef`
+  // restarts the parked loop from outside its effect (export finale).
+  const dirtyRef = useRef(true);
+  const kickPreviewRef = useRef(null);
   const exportAbortRef = useRef(null);
   useEffect(() => () => exportAbortRef.current?.abort(), []);
   const isExportingRef = useRef(false);
@@ -1039,10 +1043,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (!isSeeking) setCurrentTime(video.currentTime);
     };
     video.addEventListener("timeupdate", onTime);
+    // The smoothing tick only runs while the clip plays. Paused seeks land
+    // through `timeupdate`.
     let raf = 0;
     let lastReported = 0;
     const tick = () => {
-      if (!isSeeking && video && !video.paused) {
+      raf = 0;
+      if (!video || video.paused) return;
+      if (!isSeeking) {
         const t = video.currentTime;
         if (Math.abs(t - lastReported) >= 0.05) {
           lastReported = t;
@@ -1051,9 +1059,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
       raf = requestAnimationFrame(tick);
     };
+    const onPlayTick = () => {
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    const onPauseTick = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      // Land the scrubber on the exact paused frame.
+      if (!isSeeking) setCurrentTime(video.currentTime);
+    };
+    video.addEventListener("play", onPlayTick);
+    video.addEventListener("pause", onPauseTick);
     raf = requestAnimationFrame(tick);
     return () => {
       video.removeEventListener("timeupdate", onTime);
+      video.removeEventListener("play", onPlayTick);
+      video.removeEventListener("pause", onPauseTick);
       cancelAnimationFrame(raf);
     };
   }, [isSeeking]);
@@ -1113,6 +1136,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     if (!video) return;
     video.currentTime = time;
     setCurrentTime(time);
+    // No paint here: the `seeked` event repaints once the seek lands, so a
+    // synchronous paint cannot show the stale pre-seek frame.
   };
 
 
@@ -1406,58 +1431,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             rayGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
             ctx.fillStyle = rayGrad;
             ctx.fill();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "aurora") {
-          ctx.save();
-          ctx.globalAlpha = 0.14;
-          const w1Y = ch * 0.35 + Math.sin(t * 0.4) * ch * 0.08;
-          const w1Grad = ctx.createRadialGradient(cw * 0.3 + Math.sin(t * 0.3) * cw * 0.1, w1Y, 0, cw * 0.3, w1Y, cw * 0.5);
-          w1Grad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          w1Grad.addColorStop(0.4, palette.glow);
-          w1Grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = w1Grad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalAlpha = 0.10;
-          const w2Y = ch * 0.5 + Math.sin(t * 0.35 + 1.5) * ch * 0.06;
-          const w2Grad = ctx.createRadialGradient(cw * 0.7 + Math.sin(t * 0.25 + 2) * cw * 0.08, w2Y, 0, cw * 0.7, w2Y, cw * 0.45);
-          w2Grad.addColorStop(0, palette.accent.replace(/[\d.]+\)$/, "1)"));
-          w2Grad.addColorStop(0.4, palette.accent);
-          w2Grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = w2Grad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          const w3Alpha = 0.10 + Math.sin(t * 0.5) * 0.04;
-          ctx.globalAlpha = w3Alpha;
-          const w3Grad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, drawH * 0.7);
-          w3Grad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          w3Grad.addColorStop(0.5, palette.glow);
-          w3Grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = w3Grad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          ctx.globalAlpha = 0.04;
-          for (let i = 0; i < 4; i++) {
-            const sY = ch * (0.25 + i * 0.18) + Math.sin(t * 0.2 + i * 0.8) * ch * 0.03;
-            const sGrad = ctx.createLinearGradient(0, sY - ch * 0.015, 0, sY + ch * 0.015);
-            sGrad.addColorStop(0, "rgba(0,0,0,0)");
-            sGrad.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.8)"));
-            sGrad.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.fillStyle = sGrad;
-            ctx.fillRect(0, sY - ch * 0.015, cw, ch * 0.03);
           }
           ctx.globalAlpha = 1;
           ctx.restore();
@@ -1788,15 +1761,50 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       drawOverlays(ctx, vt);
     };
     paintFrameRef.current = paintFrame;
+    // On-demand preview. A paused clip with settled settings paints the same
+    // frame forever, so an unconditional loop is pure GPU/battery burn: this
+    // loop runs while the clip plays and paints exactly one frame per
+    // settings change or seek while paused, then parks with no scheduled
+    // work. `kick` restarts it; the video's own play/pause/seek events and
+    // this effect's re-run (every setting lives in the deps below) are what
+    // mark a frame dirty.
     const draw = () => {
-      if (!isExportingRef.current) paintFrame(canvas, video.currentTime || 0, video);
-      rafRef.current = requestAnimationFrame(draw);
+      rafRef.current = null;
+      if (isExportingRef.current) return;
+      const v = videoRef.current;
+      const playing = !!v && !v.paused;
+      if (playing || dirtyRef.current) {
+        dirtyRef.current = false;
+        paintFrame(canvas, v ? v.currentTime || 0 : 0, v);
+      }
+      if (playing) rafRef.current = requestAnimationFrame(draw);
     };
-    rafRef.current = requestAnimationFrame(draw);
+    const kick = () => {
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(draw);
+    };
+    kickPreviewRef.current = kick;
+    // Play restarts the loop; a seek repaints once it lands. Pause needs no
+    // paint: the last playing frame is already the paused frame.
+    const onPlayPaint = () => kick();
+    const onSeekedPaint = () => {
+      dirtyRef.current = true;
+      kick();
+    };
+    const previewVideo = videoRef.current;
+    previewVideo?.addEventListener("play", onPlayPaint);
+    previewVideo?.addEventListener("seeked", onSeekedPaint);
+    dirtyRef.current = true;
+    kick();
 
     return () => {
       paintFrameRef.current = null;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      kickPreviewRef.current = null;
+      previewVideo?.removeEventListener("play", onPlayPaint);
+      previewVideo?.removeEventListener("seeked", onSeekedPaint);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
@@ -1877,6 +1885,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       if (!controller.signal.aborted) {
         setRecording(false);
         setProgress(0);
+        // The loop parks for the whole encode; repaint the live preview once
+        // (the `play` event below re-kicks the loop when playback resumes).
+        dirtyRef.current = true;
+        kickPreviewRef.current?.();
         if (resumePlayback) video.play().then(() => setIsPlaying(true)).catch(() => {});
       }
     }
@@ -2111,7 +2123,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   onClick={() => setViewMode(id)}
                   aria-pressed={viewMode === id}
                   data-testid={`view-mode-${id}`}
-                  className={`h-8 rounded-lg text-xs font-semibold transition duration-150 ${
+                  className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
                     viewMode === id
                       ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
                       : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
@@ -2130,7 +2142,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   type="button"
                   onClick={() => setEnvBg(env.id)}
                   title={env.label}
-                  className={`overflow-hidden rounded-xl border text-xs transition ${
+                  className={`focus-ring overflow-hidden rounded-xl border text-xs transition ${
                     envBg === env.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
                   }`}
                 >
@@ -2169,7 +2181,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       aria-label={b.label}
                       aria-pressed={bg === b.id}
                       data-testid={`background-${b.id}`}
-                      className={`h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
+                      className={`focus-ring h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
                         bg === b.id
                           ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
                           : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
@@ -2250,7 +2262,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                         data-testid={`delete-look-preset-${look.id}`}
                         aria-label={`Remove ${look.name}`}
                         onClick={() => handleDeleteLookPreset(look.id)}
-                        className="rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        className="focus-ring rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -2335,7 +2347,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   data-testid={`caption-font-${f.id}`}
                   onClick={() => setCaptionFont(f.id)}
                   aria-pressed={captionFont === f.id}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                  className={`focus-ring flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                     captionFont === f.id
                       ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                       : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
@@ -2497,7 +2509,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                     data-testid={`cta-timing-${p.id}`}
                     onClick={() => selectCtaTimingPreset(p.id)}
                     aria-pressed={active}
-                    className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+                    className={`focus-ring flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
                       active
                         ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-foreground"
                         : "border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--hairline-strong)]"
@@ -2524,7 +2536,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   data-testid={`cta-font-${f.id}`}
                   onClick={() => setCtaFont(f.id)}
                   aria-pressed={ctaFont === f.id}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                  className={`focus-ring flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                     ctaFont === f.id
                       ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                       : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
@@ -2750,7 +2762,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       onClick={() => handleSeek(t)}
                       title={formatTime(t)}
                       aria-label={`Seek to ${formatTime(t)}`}
-                      className="group absolute top-0 flex h-3 w-4 -translate-x-1/2 cursor-pointer items-start justify-center"
+                      className="focus-ring group absolute top-0 flex h-3 w-4 -translate-x-1/2 cursor-pointer items-start justify-center rounded"
                       style={{ left: `${(t / duration) * 100}%` }}
                     >
                       <span className="h-2 w-px bg-muted-foreground/30 transition group-hover:bg-muted-foreground/60" />
@@ -2785,8 +2797,29 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   })}
                 </div>
 
+                {/* The strip is a real slider, not just a pointer surface:
+                    ticks and transport buttons already seek, but a keyboard or
+                    screen-reader user lands here for continuous scrubbing.
+                    Arrows move a second (matching the −1s/+1s buttons), Home
+                    and End jump to the clip ends. Space is left alone: the
+                    global transport shortcut owns it and toggles playback. */}
                 <div
                   className="group relative h-6 cursor-pointer"
+                  role="slider"
+                  tabIndex={0}
+                  aria-label="Seek"
+                  aria-valuemin={0}
+                  aria-valuemax={duration > 0 ? duration : 0}
+                  aria-valuenow={duration > 0 ? currentTime : 0}
+                  aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
+                  onKeyDown={(e) => {
+                    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+                    e.preventDefault();
+                    if (e.key === "ArrowLeft") handleSeek(Math.max(0, currentTime - 1));
+                    else if (e.key === "ArrowRight") handleSeek(Math.min(duration, currentTime + 1));
+                    else if (e.key === "Home") handleSeek(0);
+                    else handleSeek(duration);
+                  }}
                   onPointerDown={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -2948,7 +2981,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           <button
                             type="button"
                             onClick={() => handleSeek(kf.time)}
-                            className="flex-1 text-left font-mono text-xs tabular-nums text-muted-foreground transition hover:text-foreground"
+                            className="focus-ring flex-1 rounded text-left font-mono text-xs tabular-nums text-muted-foreground transition hover:text-foreground"
                             title="Jump to this keyframe"
                           >
                             {formatTime(kf.time)} → {formatTime(nextTime)} • {kf.scale.toFixed(2)}x zoom
@@ -2956,7 +2989,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           <button
                             type="button"
                             onClick={() => handleRemoveZoomKeyframe(kf.id)}
-                            className="flex-shrink-0 text-muted-foreground/60 opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                            className="focus-ring flex-shrink-0 rounded text-muted-foreground/60 opacity-0 transition hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                             title="Remove this keyframe"
                           >
                             <X className="h-3 w-3" />
