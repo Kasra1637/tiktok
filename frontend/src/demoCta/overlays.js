@@ -179,16 +179,10 @@ function wrap(ctx, text, maxWidth) {
  */
 export function textStylePaint(style, accent, signatureText) {
   switch (String(style || "signature")) {
-    case "outline":
-      return { pill: null, text: accent, stroke: "rgba(9,9,12,0.92)", strokeEm: 0.18, glow: null, shadow: 0.28, underline: false };
     case "highlight":
       return { pill: accent, text: "#0b0b0e", stroke: null, strokeEm: 0, glow: null, shadow: 0, underline: false };
-    case "clean":
-      return { pill: null, text: "#ffffff", stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: false };
     case "glow":
       return { pill: null, text: accent, stroke: null, strokeEm: 0, glow: accent, shadow: 0.9, underline: false };
-    case "sticker":
-      return { pill: "rgba(255,255,255,0.95)", text: "#101014", stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: false };
     case "signature":
     default:
       return { pill: "rgba(9,9,12,0.86)", text: signatureText, stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: true };

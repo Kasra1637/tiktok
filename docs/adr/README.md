@@ -40,4 +40,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0020](0020-post-kit-regenerate-everywhere.md) | Regenerate reaches the export card; caption must ask; completed-only | accepted |
 | [0021](0021-post-kit-ownership.md) | Post-kit state has one owner per layer | accepted |
 | [0022](0022-looks-live-together-in-end-card-cta.md) | Saved looks live with saving in End Card CTA | accepted |
-| [0023](0023-shared-caption-text-styles.md) | One shared text treatment across hook, story and end card | accepted |
+| [0023](0023-shared-caption-text-styles.md) | One shared text treatment across hook, story and end card | partially superseded by 0024 (text-style catalog trimmed to three) |
+| [0024](0024-retire-three-text-styles.md) | Retire outline, clean and sticker from the text-style picker | accepted |

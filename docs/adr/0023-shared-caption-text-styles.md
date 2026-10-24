@@ -1,6 +1,6 @@
 # 0023 — One shared text treatment across hook, story and end card
 
-- **Status:** accepted
+- **Status:** partially superseded by 0024 (text-style catalog trimmed to three)
 - **Date:** 2026-10-26
 - **Anchors:** `frontend/src/demoCta/constants.js` (`TEXT_STYLES`);
   `frontend/src/demoCta/overlays.js` (`textStylePaint`, `drawHookOverlay`,

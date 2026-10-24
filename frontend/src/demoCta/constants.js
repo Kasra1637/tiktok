@@ -118,11 +118,8 @@ export const OVERLAY_FONTS = [
  */
 export const TEXT_STYLES = [
   { id: "signature", label: "Signature" },
-  { id: "outline", label: "Outline" },
   { id: "highlight", label: "Highlight" },
-  { id: "clean", label: "Clean" },
   { id: "glow", label: "Glow" },
-  { id: "sticker", label: "Sticker" },
 ];
 
 export const OVERLAY_ANIMS = [

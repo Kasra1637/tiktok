@@ -1007,16 +1007,17 @@ check("overlay defaults preserve the long-standing look",
   DC.DEFAULTS.textStyle === "signature",
   JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale, t: DC.DEFAULTS.textStyle }));
 
-// One shared text treatment for hook, story and end card: six styles, the
+// One shared text treatment for hook, story and end card: three styles, the
 // default is the long-standing signature look, and every painter falls back
 // to it for unknown ids so a stale stored value never blanks the text.
-check("six overlay text styles with signature default and fallback",
-  Array.isArray(DC.TEXT_STYLES) && DC.TEXT_STYLES.length === 6 &&
-  new Set(DC.TEXT_STYLES.map((s) => s.id)).size === 6 &&
+check("three overlay text styles with signature default and fallback",
+  Array.isArray(DC.TEXT_STYLES) && DC.TEXT_STYLES.length === 3 &&
+  new Set(DC.TEXT_STYLES.map((s) => s.id)).size === 3 &&
   DC.DEFAULTS.textStyle === "signature" &&
   DC.TEXT_STYLES.some((s) => s.id === "signature") &&
-  ["outline", "highlight", "clean", "glow", "sticker"].every((id) => DC.TEXT_STYLES.some((s) => s.id === id)) &&
-  ["signature", "outline", "highlight", "clean", "glow", "sticker", "nope"].every((id) => {
+  ["highlight", "glow"].every((id) => DC.TEXT_STYLES.some((s) => s.id === id)) &&
+  ["outline", "clean", "sticker"].every((id) => !DC.TEXT_STYLES.some((s) => s.id === id)) &&
+  ["signature", "highlight", "glow", "nope"].every((id) => {
     const paints = (draw, props) => {
       const calls = [];
       const ctx = new Proxy({}, { get: (_, key) => key === "measureText" ? (text) => ({ width: text.length * 20 }) : (...args) => calls.push([key, ...args]), set: (_, key, value) => { calls.push([key, value]); return true; } });
