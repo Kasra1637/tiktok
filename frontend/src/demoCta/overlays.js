@@ -165,6 +165,36 @@ function wrap(ctx, text, maxWidth) {
   return lines;
 }
 
+/**
+ * Paint recipe for one TEXT_STYLES id. `signatureText` is the text color of
+ * the default style only: the hook renders its headline in the accent, the
+ * end card in white, and every other style is identical on both. Unknown
+ * ids fall back to signature, the same rule overlayIntro uses for entrances.
+ *
+ * pill: fill for the backing pill, or null for none. stroke: outline color
+ * drawn under the fill, with width strokeEm in font-size units. glow:
+ * shadow color for the glow style (shadow stays black otherwise). shadow:
+ * base shadow blur in font-size units; the motion's glow01 lifts it.
+ * underline: draw the accent bar under the hook's last line.
+ */
+export function textStylePaint(style, accent, signatureText) {
+  switch (String(style || "signature")) {
+    case "outline":
+      return { pill: null, text: accent, stroke: "rgba(9,9,12,0.92)", strokeEm: 0.18, glow: null, shadow: 0.28, underline: false };
+    case "highlight":
+      return { pill: accent, text: "#0b0b0e", stroke: null, strokeEm: 0, glow: null, shadow: 0, underline: false };
+    case "clean":
+      return { pill: null, text: "#ffffff", stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: false };
+    case "glow":
+      return { pill: null, text: accent, stroke: null, strokeEm: 0, glow: accent, shadow: 0.9, underline: false };
+    case "sticker":
+      return { pill: "rgba(255,255,255,0.95)", text: "#101014", stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: false };
+    case "signature":
+    default:
+      return { pill: "rgba(9,9,12,0.86)", text: signatureText, stroke: null, strokeEm: 0, glow: null, shadow: 0.28, underline: true };
+  }
+}
+
 function pill(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -189,7 +219,7 @@ function pill(ctx, x, y, w, h, r) {
  * (text plus underline), not just the underline, so the line is never stuck
  * on one color. The pill behind the text stays dark.
  */
-export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, offsetX = 0, offsetY = 0, font = HOOK_FONT, anim = "punch", scale = 1 }) {
+export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, offsetX = 0, offsetY = 0, font = HOOK_FONT, anim = "punch", scale = 1, textStyle = "signature" }) {
   if (!String(text || "").trim() || time > duration) return;
 
   const m = overlayIntro(anim, time, duration, 0.32, 0.28);
@@ -216,6 +246,13 @@ export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, off
   ctx.scale(m.scale + m.wobble, m.scale + m.wobble);
   ctx.translate(-(cw / 2 + offsetX * cw), -(top + blockH / 2));
 
+  // One shared text treatment for hook, story and end card: signature is
+  // the long-standing look (dark pill, accent text, underline bar on the
+  // last line). The hook's headline takes the accent, not fixed white —
+  // picking a swatch recolors the words themselves, the only way to get
+  // the line in anything but one color.
+  const paint = textStylePaint(textStyle, accent, accent);
+
   fullLines.forEach((ln, i) => {
     const line = shown[i];
     if (!line) return;
@@ -226,29 +263,43 @@ export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, off
     const bw = tw + padX * 2;
     const bh = lineH + padY * 2 - lineH * 0.12;
 
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = fontSize * (0.28 + m.glow01 * 0.9);
-    ctx.shadowOffsetY = fontSize * 0.06;
-    ctx.fillStyle = "rgba(9,9,12,0.86)";
-    pill(ctx, bx, by, bw, bh, bh * 0.24);
-    ctx.fill();
-    ctx.restore();
+    if (paint.pill) {
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.45)";
+      ctx.shadowBlur = fontSize * (0.28 + m.glow01 * 0.9);
+      ctx.shadowOffsetY = fontSize * 0.06;
+      ctx.fillStyle = paint.pill;
+      pill(ctx, bx, by, bw, bh, bh * 0.24);
+      ctx.fill();
+      ctx.restore();
+    }
 
-    // Accent underline on the last line for a beat of motion.
-    if (i === fullLines.length - 1) {
+    // Signature-only accent underline on the last line for a beat of motion.
+    if (paint.underline && i === fullLines.length - 1) {
       ctx.fillStyle = accent;
       const uw = bw * m.underline;
       pill(ctx, bx, by + bh - fontSize * 0.09, uw, fontSize * 0.09, fontSize * 0.045);
       ctx.fill();
     }
 
-    // The text line takes the accent, not fixed white: picking a swatch
-    // recolors the words themselves, which is the only way to get the line
-    // in anything but one color. Every swatch is bright enough to read on
-    // the dark pill, and white stays one tap away in the row.
-    ctx.fillStyle = accent;
-    ctx.fillText(line, cw / 2, cy);
+    if (paint.stroke) {
+      ctx.lineWidth = fontSize * paint.strokeEm;
+      ctx.strokeStyle = paint.stroke;
+      ctx.strokeText(line, cw / 2, cy);
+    }
+    // Pill-less styles carry their shadow on the glyphs so they stay
+    // legible over footage; pill styles already shadowed the backing.
+    if (!paint.pill) {
+      ctx.save();
+      ctx.shadowColor = paint.glow || "rgba(0,0,0,0.45)";
+      ctx.shadowBlur = fontSize * (paint.shadow + m.glow01 * 0.9);
+      ctx.fillStyle = paint.text;
+      ctx.fillText(line, cw / 2, cy);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = paint.text;
+      ctx.fillText(line, cw / 2, cy);
+    }
   });
 
   ctx.restore();
@@ -270,7 +321,7 @@ export function drawStoryOverlay(ctx, cw, ch, time, { start, end, ...style }) {
  * previews. There is no out fade on this card by design; it persists to the
  * end of its window, and the caller guards the window itself.
  */
-export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration, accent, offsetX = 0, offsetY = 0, font = HOOK_FONT, anim = "rise", scale = 1 }) {
+export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration, accent, offsetX = 0, offsetY = 0, font = HOOK_FONT, anim = "rise", scale = 1, textStyle = "signature" }) {
   if (timeLeft > duration || timeLeft < 0) return;
   const elapsed = duration - timeLeft;
   const m = overlayIntro(anim, elapsed, duration, 0.4, 0);
@@ -293,20 +344,41 @@ export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration,
   const bottom = ch * (1 - SAFE_BOTTOM) + offsetY * ch;
   const top = bottom - blockH + m.rise01 * ch * 0.05 + m.dyEm * headFont;
 
+  // Same shared treatment as the hook; only the signature text color
+  // differs (white here, accent there), so the default card is untouched.
+  // The handle chip below is a CTA button, not a text treatment, and stays
+  // exactly as it was in every style.
+  const paint = textStylePaint(textStyle, accent, "#ffffff");
   fullLines.forEach((ln, i) => {
     const line = shown[i];
     if (!line) return;
     const cy = top + i * lineH + lineH / 2;
     const tw = ctx.measureText(line).width;
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.5)";
-    ctx.shadowBlur = headFont * (0.3 + m.glow01 * 0.9);
-    ctx.fillStyle = "rgba(9,9,12,0.86)";
-    pill(ctx, x - headFont * 0.24, cy - lineH * 0.46, tw + headFont * 0.48, lineH * 0.92, lineH * 0.22);
-    ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(line, x, cy);
+    if (paint.pill) {
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = headFont * (0.3 + m.glow01 * 0.9);
+      ctx.fillStyle = paint.pill;
+      pill(ctx, x - headFont * 0.24, cy - lineH * 0.46, tw + headFont * 0.48, lineH * 0.92, lineH * 0.22);
+      ctx.fill();
+      ctx.restore();
+    }
+    if (paint.stroke) {
+      ctx.lineWidth = headFont * paint.strokeEm;
+      ctx.strokeStyle = paint.stroke;
+      ctx.strokeText(line, x, cy);
+    }
+    if (!paint.pill) {
+      ctx.save();
+      ctx.shadowColor = paint.glow || "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = headFont * (paint.shadow + m.glow01 * 0.9);
+      ctx.fillStyle = paint.text;
+      ctx.fillText(line, x, cy);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = paint.text;
+      ctx.fillText(line, x, cy);
+    }
   });
 
   // Handle chip + pumping arrow pointing at the bio link.

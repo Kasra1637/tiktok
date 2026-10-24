@@ -1003,8 +1003,41 @@ check("overlay size range is 70-130%",
 check("overlay defaults preserve the long-standing look",
   DC.DEFAULTS.captionFont === "anton" && DC.DEFAULTS.ctaFont === "anton" &&
   DC.DEFAULTS.captionAnim === "punch" && DC.DEFAULTS.ctaAnim === "rise" &&
-  DC.DEFAULTS.captionScale === 1 && DC.DEFAULTS.ctaScale === 1,
-  JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale }));
+  DC.DEFAULTS.captionScale === 1 && DC.DEFAULTS.ctaScale === 1 &&
+  DC.DEFAULTS.textStyle === "signature",
+  JSON.stringify({ f: DC.DEFAULTS.captionFont, a: DC.DEFAULTS.captionAnim, s: DC.DEFAULTS.captionScale, t: DC.DEFAULTS.textStyle }));
+
+// One shared text treatment for hook, story and end card: six styles, the
+// default is the long-standing signature look, and every painter falls back
+// to it for unknown ids so a stale stored value never blanks the text.
+check("six overlay text styles with signature default and fallback",
+  Array.isArray(DC.TEXT_STYLES) && DC.TEXT_STYLES.length === 6 &&
+  new Set(DC.TEXT_STYLES.map((s) => s.id)).size === 6 &&
+  DC.DEFAULTS.textStyle === "signature" &&
+  DC.TEXT_STYLES.some((s) => s.id === "signature") &&
+  ["outline", "highlight", "clean", "glow", "sticker"].every((id) => DC.TEXT_STYLES.some((s) => s.id === id)) &&
+  ["signature", "outline", "highlight", "clean", "glow", "sticker", "nope"].every((id) => {
+    const paints = (draw, props) => {
+      const calls = [];
+      const ctx = new Proxy({}, { get: (_, key) => key === "measureText" ? (text) => ({ width: text.length * 20 }) : (...args) => calls.push([key, ...args]), set: (_, key, value) => { calls.push([key, value]); return true; } });
+      draw(ctx, 1080, 1920, 1, { ...props, textStyle: id });
+      return calls;
+    };
+    // Every style (plus unknown ids, via the signature fallback) paints
+    // without throwing on both painters.
+    const hook = paints(OV.drawHookOverlay, { text: "Hi", duration: 4, accent: "#c8ff2e" });
+    const end = paints((c, w, h, t, p) => OV.drawEndCard(c, w, h, t, p), { headline: "Hi", handle: "@x", duration: 2, accent: "#c8ff2e" });
+    const fills = (calls) => calls.filter(([k]) => k === "fillStyle").map(([, v]) => v);
+    const painted = hook.length > 0 && end.length > 0;
+    if (id === "signature") {
+      // Signature paints exactly the old look: dark pill + accent text on
+      // the hook, dark pill + white text on the end card.
+      return painted && fills(hook).includes("rgba(9,9,12,0.86)") && fills(hook).includes("#c8ff2e") &&
+        fills(end).includes("rgba(9,9,12,0.86)") && fills(end).includes("#ffffff");
+    }
+    return painted;
+  }),
+  DC.TEXT_STYLES && DC.TEXT_STYLES.map((s) => s.id).join(","));
 
 // Paused/idle preview paints on demand, not per frame. A paused clip with
 // settled settings renders the same frame forever, so the draw loop must

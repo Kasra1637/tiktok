@@ -7508,15 +7508,15 @@ async function runDemoCtaChecks() {
     dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
     // The canvas redraw is what makes a choice visible at all, and jsdom has no
     // 2d context to assert it against — so the preview loop's dependency
-    // contract is read from source. These six were missing, which is why a new
-    // entrance, size or face never reached the canvas until the clip reloaded.
+    // contract is read from source. These seven were missing, which is why a new
+    // entrance, size, face or text style never reached the canvas until the clip reloaded.
     const src = fs.readFileSync(
       path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
       "utf8"
     );
     const loopDeps = /}, \[device,[^\]]*\]\);/.exec(src);
     if (!loopDeps) throw new Error("the preview loop's dependency array moved");
-    for (const name of ["captionFont", "ctaFont", "captionAnim", "ctaAnim", "captionScale", "ctaScale"]) {
+    for (const name of ["captionFont", "ctaFont", "captionAnim", "ctaAnim", "captionScale", "ctaScale", "textStyle"]) {
       if (!loopDeps[0].includes(name)) {
         throw new Error(`the preview loop does not depend on ${name}, so the canvas keeps the old choice`);
       }
@@ -7553,6 +7553,7 @@ async function runDemoCtaChecks() {
 
         await change("an entrance", ctx.container.querySelector('[data-testid="caption-anim-fade"]'));
         await change("a face", ctx.container.querySelector('[data-testid="caption-font-nunito"]'));
+        await change("a text style", ctx.container.querySelector('[data-testid="text-style-outline"]'));
 
         // Text size is a Radix slider, so it takes a key press on the thumb.
         const thumb = ctx.container.querySelector('[data-testid="caption-size-slider"] [role="slider"]');
@@ -8854,6 +8855,8 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, get("caption-font-nunito"), "pick hook font");
       await clickEl(ctx, get("caption-anim-fade"), "pick hook entrance");
       await clickEl(ctx, get("caption-size-preset-l"), "pick hook size");
+      await clickEl(ctx, get("text-style-clean"), "pick text treatment");
+      if (get("text-style-clean").getAttribute("aria-pressed") !== "true") throw new Error("text treatment did not take the click");
       await openGroup("End Card CTA");
       const review = get("look-save-review");
       if (!get("cta-controls").contains(review) || review.closest("details")) throw new Error("Save look must finish CTA setup outside its disclosures");
@@ -8874,7 +8877,7 @@ async function runDemoCtaChecks() {
       if (!get("look-save-status").textContent.includes("My Brand Look") || get("look-preset-name-input").value) throw new Error("save lacks confirmation or leaves name populated");
       const prefs = JSON.parse(dom.window.localStorage.getItem("hookforge.demoCta.overlayPrefs.v1"));
       const saved = prefs.global.lookPresets.find((p) => p.name === "My Brand Look");
-      if (!saved || saved.captionFont !== "nunito" || saved.captionAnim !== "fade" || saved.captionScale !== 1.15 || saved.ctaFont !== "dm-sans" || saved.ctaAnim !== "pop" || saved.ctaScale !== 0.85) throw new Error(`saved styling differs from final choices: ${JSON.stringify(saved)}`);
+      if (!saved || saved.captionFont !== "nunito" || saved.captionAnim !== "fade" || saved.captionScale !== 1.15 || saved.ctaFont !== "dm-sans" || saved.ctaAnim !== "pop" || saved.ctaScale !== 0.85 || saved.textStyle !== "clean") throw new Error(`saved styling differs from final choices: ${JSON.stringify(saved)}`);
       await clickEl(ctx, get("look-preset-launch"), "try another look");
       await clickEl(ctx, get("look-preset-custom-my-brand-look"), "reuse saved look");
       if (get("look-preset-custom-my-brand-look").getAttribute("aria-pressed") !== "true") throw new Error("saved look cannot be reapplied");

@@ -107,6 +107,24 @@ export const OVERLAY_FONTS = [
  * end card. `punch` and `rise` are the two behaviours that shipped before
  * this catalog existed, kept as the defaults so nothing already made changes.
  */
+/**
+ * Caption text treatments. One shared style for hook, story and end card:
+ * the story reuses the hook painter and the end card reads the same value,
+ * so one catalog change lands on all three. Every style is a pure function
+ * of video time in the painters — never wall-clock — so the export matches
+ * the preview frame for frame. `signature` is the long-standing look (dark
+ * pill, accent text, underline bar), kept as the default so nothing already
+ * made moves.
+ */
+export const TEXT_STYLES = [
+  { id: "signature", label: "Signature" },
+  { id: "outline", label: "Outline" },
+  { id: "highlight", label: "Highlight" },
+  { id: "clean", label: "Clean" },
+  { id: "glow", label: "Glow" },
+  { id: "sticker", label: "Sticker" },
+];
+
 export const OVERLAY_ANIMS = [
   { id: "punch", label: "Punch in" },
   { id: "fade", label: "Fade" },
@@ -158,6 +176,7 @@ export const BUILTIN_LOOK_PRESETS = [
     captionScale: 1,
     ctaScale: 1,
     overlayAccent: "#c8ff2e",
+    textStyle: "signature",
   },
   {
     id: "ugc",
@@ -170,6 +189,7 @@ export const BUILTIN_LOOK_PRESETS = [
     captionScale: 1,
     ctaScale: 1,
     overlayAccent: "#ff4d8d",
+    textStyle: "signature",
   },
   {
     id: "editorial",
@@ -182,6 +202,7 @@ export const BUILTIN_LOOK_PRESETS = [
     captionScale: 0.85,
     ctaScale: 0.85,
     overlayAccent: "#4dd8ff",
+    textStyle: "signature",
   },
 ];
 
@@ -242,6 +263,7 @@ export const DEFAULTS = {
   overlayAccent: "#c8ff2e",
   captionFont: "anton",
   ctaFont: "anton",
+  textStyle: "signature",
   captionAnim: "punch",
   ctaAnim: "rise",
   captionScale: 1,

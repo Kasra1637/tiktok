@@ -52,6 +52,7 @@ import {
   ACCENT_SWATCHES,
   OVERLAY_FONTS,
   OVERLAY_ANIMS,
+  TEXT_STYLES,
   HOOK_COPY_VARIANTS,
   CTA_COPY_VARIANTS,
   CTA_TIMING_PRESETS,
@@ -104,6 +105,10 @@ function prefFont(profileKey, field, fallback) {
 function prefAnim(profileKey, field, fallback) {
   const value = prefFor(profileKey, field, fallback);
   return OVERLAY_ANIMS.some((a) => a.id === value) ? value : fallback;
+}
+function prefTextStyle(profileKey, field, fallback) {
+  const value = prefFor(profileKey, field, fallback);
+  return TEXT_STYLES.some((s) => s.id === value) ? value : fallback;
 }
 function prefScale(profileKey, field, fallback) {
   const value = Number(prefFor(profileKey, field, fallback));
@@ -648,6 +653,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [ctaAnim, setCtaAnim] = useState(() => prefAnim(overlayScope, "ctaAnim", DEFAULTS.ctaAnim));
   const [captionScale, setCaptionScale] = useState(() => prefScale(overlayScope, "captionScale", DEFAULTS.captionScale));
   const [ctaScale, setCtaScale] = useState(() => prefScale(overlayScope, "ctaScale", DEFAULTS.ctaScale));
+  // One shared text treatment for hook, story and end card: a single state
+  // feeds all three painters, so the picker lives once (Hook Text) and the
+  // story inherits it through the hook painter it already reuses.
+  const [textStyle, setTextStyle] = useState(() => prefTextStyle(overlayScope, "textStyle", DEFAULTS.textStyle));
   const [hookVariants, setHookVariants] = useState(() => prefVariants(overlayScope, "hookVariants", HOOK_COPY_VARIANTS));
   const [activeHookVariant, setActiveHookVariant] = useState(0);
   const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));
@@ -674,7 +683,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // whichever choices happen to be selected after the next edit.
   const lookReviewKey = JSON.stringify([
     videoUrl, captionFont, ctaFont, captionAnim, ctaAnim,
-    captionScale, ctaScale, overlayAccent,
+    captionScale, ctaScale, overlayAccent, textStyle,
   ]);
   const canReviewLook = !!videoUrl && Number.isFinite(videoMeta?.d) && videoMeta.d > 0 && !recording;
   const lookReviewed = reviewedLookKey === lookReviewKey;
@@ -693,6 +702,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         ctaAnim,
         captionScale,
         ctaScale,
+        textStyle,
         hookVariants,
         ctaVariants,
         lookPresets: customLookPresets,
@@ -706,7 +716,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     } catch {
       // Nothing to do: persistence is a convenience, not the feature.
     }
-  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, hookVariants, ctaVariants, customLookPresets, overlayScope]);
+  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, hookVariants, ctaVariants, customLookPresets, overlayScope]);
 
   const selectHookVariant = (idx) => {
     setActiveHookVariant(idx);
@@ -749,6 +759,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     ctaAnim === look.ctaAnim &&
     Math.abs(captionScale - look.captionScale) < 1e-6 &&
     Math.abs(ctaScale - look.ctaScale) < 1e-6 &&
+    textStyle === (look.textStyle || "signature") &&
     overlayAccent.toLowerCase() === String(look.overlayAccent || "").toLowerCase();
 
   const applyLookPreset = (look) => {
@@ -760,6 +771,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setCaptionScale(look.captionScale);
     setCtaScale(look.ctaScale);
     setOverlayAccent(look.overlayAccent);
+    setTextStyle(look.textStyle || "signature");
   };
 
   const handleSaveLookPreset = () => {
@@ -777,6 +789,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       captionScale,
       ctaScale,
       overlayAccent,
+      textStyle,
     };
     setCustomLookPresets((prev) => {
       const filtered = prev.filter((p) => p.name.toLowerCase() !== trimmed.toLowerCase());
@@ -1345,13 +1358,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
       if (hookEnabled) {
-        drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale });
+        drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale, textStyle });
       }
       if (storyEnabled && storyAvailable) {
         drawStoryOverlay(ctx, cw, ch, vt, {
           text: storyText, start: storyStart, end: storyEnd,
           accent: overlayAccent, offsetY: storyOffsetY,
           font: fontStack(captionFont), anim: captionAnim, scale: captionScale,
+          textStyle,
         });
       }
       if (ctaEnabled && dur > 0) {
@@ -1365,6 +1379,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           font: fontStack(ctaFont),
           anim: ctaAnim,
           scale: ctaScale,
+          textStyle,
         });
       }
     };
@@ -1795,7 +1810,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
 
   // Hook/CTA style picks replay their own window; everything else leaves the
   // playhead alone. Every overlay value is also in the preview loop's deps
@@ -2281,6 +2296,29 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </FontDisclosure>
+          {/* Shared text treatment for hook, story and end card: one picker
+              here, one state, all three painters. Scoped replay resets to
+              the hook so the change is visible without scrubbing. */}
+          <div className="space-y-2">
+            <GroupLabel>Text style</GroupLabel>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Text style">
+              {TEXT_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  data-testid={`text-style-${s.id}`}
+                  onClick={() => { setTextStyle(s.id); startScopedPreview("hook"); }}
+                  aria-pressed={textStyle === s.id}
+                  className={`focus-ring rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                    textStyle === s.id
+                      ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                      : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+                  }`}
+                >{s.label}</button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Hook, story &amp; end card share this style.</p>
+          </div>
           <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("hook"); }} />
           <AnimDisclosure
             testId="caption-anim-disclosure"
