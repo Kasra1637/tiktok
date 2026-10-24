@@ -1071,7 +1071,12 @@ const PREVIEW_WIRING_ROWS = [
   ["the seeked listener is cleaned up",
     /removeEventListener\("seeked", onSeekedPaint\)/],
 ];
-const previewSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"), "utf8");
+const editorSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"), "utf8");
+const previewHookSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "usePreviewLoop.js"), "utf8");
+// Transport lives in the hook, composition in the editor: wiring rows match
+// across both files, while scrub/focus-ring rows below keep reading the
+// editor through previewSrc.
+const previewSrc = editorSrc + previewHookSrc;
 const brokenPreviewWiring = PREVIEW_WIRING_ROWS
   .filter(([, re, kind]) => (kind === "absent") === re.test(previewSrc))
   .map(([name]) => name);
@@ -1106,7 +1111,7 @@ const brokenScrubA11y = SCRUB_A11Y_ROWS
 // Ten ringless patterns share the class (presets, entrances, fonts, accents,
 // swatches, view modes, scenes, look delete, keyframe jump/remove, summaries);
 // the count pins the habit against wholesale removal without freezing adds.
-if ((previewSrc.match(/focus-ring/g) || []).length < 10) {
+if ((editorSrc.match(/focus-ring/g) || []).length < 10) {
   brokenScrubA11y.push("fewer than ten editor controls share focus-ring");
 }
 check("the scrub strip is keyboard-operable with visible focus",

@@ -36,6 +36,7 @@ import overlays
 import provider_capabilities
 import ai_service
 import feedback as feedback_mod
+import observability
 from ai_service import (
     generate_video,
     poll_video_job, analyze_app_profile,
@@ -59,7 +60,11 @@ from models import (
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
 )
-from auth import get_current_user_id, get_optional_user_id
+from auth import ensure_auth_configured, get_current_user_id, get_optional_user_id
+
+# Anonymous mode is local-dev-only: refuse to boot hosted without a Clerk
+# key, so production can never serve every request as user 'anonymous'.
+ensure_auth_configured()
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -68,6 +73,26 @@ DB_PATH = ROOT_DIR / "storage" / "hookforge.db"
 
 app = FastAPI(title="HookForge API")
 api_router = APIRouter(prefix="/api")
+
+# Domain routers own their endpoints; server.py keeps composition (include +
+# re-exported helpers) and the single render path. Post kit first: the
+# frozen copy and its regenerate endpoint live in routers.post_kit.
+from routers.post_kit import (
+    router as post_kit_router,
+    configure_post_kit,
+    _parse_post_kit,
+    _schedule_post_kit,
+    regenerate_post_kit,
+)
+api_router.include_router(post_kit_router)
+from routers.health import (
+    router as health_router,
+    configure_health,
+    health_database_report,
+    health,
+    read_metrics,
+)
+api_router.include_router(health_router)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1704,6 +1729,16 @@ async def _log_model_call(operation, modality, model, call, user_id, **refs):
     return result
 
 
+# Post-kit router borrows the DB helpers defined above; injected here, once,
+# so the router module never imports server in either direction.
+configure_post_kit(_fetch_one, _execute, _log_model_call)
+
+
+# Health router borrows the row-count read defined above and the live backend
+# label; injected here, once, so the router module never imports server.
+configure_health(_fetch_one, lambda: _ACTIVE_BACKEND)
+
+
 # The face-swap target is never uploaded by the client. It must be a file this
 # server produced itself, from one of exactly two provenances:
 #   frames/    — a hook frame extracted from a video in the discovery feed
@@ -2431,14 +2466,6 @@ def validate_and_normalize_photo(raw_bytes: bytes) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Face Swap → Video Generation (Two-Phase: Hook + Extend)
 #
@@ -2482,13 +2509,7 @@ from hook_prompting import (
 )
 
 
-
-
-
-
 # Keep the original endpoint for backward compatibility
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -2499,10 +2520,6 @@ from hook_prompting import (
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
 # ---------------------------------------------------------------------------
 # Remix chat: conversational back-and-forth to turn a viral hook into a
 # personalized brief (goal, audience fit, USPs, etc.) before generating the
@@ -2511,12 +2528,6 @@ from hook_prompting import (
 # it's for users who want to describe their goal in their own words and get
 # clarifying questions back, instead of relying on a saved brand profile.
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -2565,20 +2576,6 @@ def _build_sound_reference(music_context: Optional[dict], use_original_sound: bo
         "song_artist": song_artist,
         "song_album": music_context.get("song_album", ""),
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -5455,19 +5452,6 @@ async def _schedule_poster(
     await _eager_poster(generation_id, user_id)
 
 
-def _parse_post_kit(value) -> Optional[dict]:
-    """The frozen post kit for a generation, or None when never written."""
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            return None
-        return parsed if isinstance(parsed, dict) else None
-    return None
-
-
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -5692,20 +5676,6 @@ async def _studio_identity_references(
             detail="The attached character reference image could not be read. Re-upload it before generating.",
         ) from e
     return reference_path
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 async def _submit_generation(
@@ -6135,66 +6105,6 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     return await _with_verdicts(_public_generation_detail(row), user_id)
 
 
-def health_database_report(active_backend: str | None) -> dict:
-    """
-    The database half of /api/health, as a pure function of the active backend.
-
-    Split out so the mapping can be asserted without standing up a cloud
-    database, and so the endpoint body stays about reading rows rather than
-    about deciding what they mean.
-
-    `durable` is the field to read. Only "turso" means writes survive a restart;
-    both local labels mean they do not, and on Render neither does. Reporting
-    anything else here is the one genuinely dangerous thing this endpoint could
-    say, because it is consulted precisely when someone has already lost data.
-    """
-    # An unset backend means the connection has not been opened yet. This
-    # endpoint always reads rows before calling this, so in practice it is set;
-    # the fallback only keeps a direct call honest.
-    backend = active_backend or "local-sqlite"
-    return {"database": backend, "durable": backend == "turso"}
-
-
-@api_router.get("/health")
-async def health(user_id: str = Depends(get_current_user_id)):
-    """
-    Where user data actually is right now, and how much of it there is.
-
-    This exists because "my profile and videos disappeared" has one cause that
-    is not deletion. When Turso is configured but unreachable, `get_db` falls
-    back to local SQLite so the app keeps serving — and on Render that file is
-    on an ephemeral disk, so it starts EMPTY. Every list then renders as "no
-    profiles", which reads exactly like the app deleting the founder's work. The
-    cloud copy is usually untouched; the process is simply pointed at the wrong
-    store.
-
-    That distinction is a one-glance question here and was previously only
-    answerable by digging through the deploy log, which is why the report above
-    kept arriving as "the app deleted my data". The backend is read AFTER the
-    counts below on purpose: `get_db` re-establishes `_ACTIVE_BACKEND` on every
-    connection, so the value that matters is the store THIS request just used,
-    not whatever the previous one happened to leave behind.
-
-    The counts are the other half — "ephemeral, and empty" and "ephemeral, and
-    holding 40 generations" need different responses, and only the numbers
-    distinguish them. Scoped to the caller's own rows so this cannot be used to
-    size up another account.
-
-    Authenticated, because it reports inventory. A founder can read it from the
-    browser console while signed in; an anonymous visitor learns nothing.
-    """
-    counts = {}
-    for table in ("brand_profiles", "studio_projects", "generations"):
-        try:
-            row = await _fetch_one(
-                f"SELECT COUNT(*) AS n FROM {table} WHERE user_id = ?", (user_id,)
-            )
-            counts[table] = int((row or {}).get("n") or 0)
-        except Exception as exc:  # a missing table is itself the answer
-            counts[table] = f"unavailable: {type(exc).__name__}"
-    return {"status": "ok", **health_database_report(_ACTIVE_BACKEND), "your_rows": counts}
-
-
 # --- Native Product Demo + CTA export ----------------------------------------
 #
 # The editor lives inside HookForge, on the same origin. There is no popup,
@@ -6211,6 +6121,7 @@ async def health(user_id: str = Depends(get_current_user_id)):
 
 @api_router.post("/generations/{generation_id}/demo-cta-result", status_code=201)
 @api_router.post("/demo-cta-result", status_code=201)
+@observability.track_demo_cta_export
 async def save_demo_cta_export(
     file: UploadFile = File(...),
     generation_id: str | None = None,
@@ -6620,130 +6531,6 @@ async def submit_project_generation(
     )
     generation["provider_reason"] = video_providers.resolve(payload.model or None)[1]
     return generation
-
-
-async def _schedule_post_kit(
-    background_tasks: BackgroundTasks, generation_id: str, user_id: str
-) -> None:
-    """Kit work runs after the response, never inside it.
-
-    On HTTP the work is deferred to BackgroundTasks; direct (non-HTTP)
-    callers such as tests pass None and run it inline. Same contract as
-    _schedule_poster.
-    """
-    if background_tasks is not None:
-        background_tasks.add_task(_maybe_write_post_kit, generation_id, user_id)
-        return
-    await _maybe_write_post_kit(generation_id, user_id)
-
-
-async def _load_post_kit_materials(generation_row: dict, user_id: str):
-    """The render material a post kit is grounded in, or (None, None).
-
-    One owner for the two reads every kit path needs. Missing material is
-    not an error here — the frozen writer skips quietly while regenerate
-    answers 404 — so that policy stays at the call sites.
-    """
-    project = None
-    if generation_row.get("studio_project_id"):
-        project = await _fetch_one(
-            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
-            (generation_row["studio_project_id"], user_id),
-        )
-    profile = None
-    if generation_row.get("brand_profile_id"):
-        profile = await _fetch_one(
-            "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
-            (generation_row["brand_profile_id"], user_id),
-        )
-    return project, profile
-
-
-async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[dict]:
-    """Write the frozen post kit for a freshly completed render, once.
-
-    Best-effort by design: a kit failure logs loudly and leaves the column
-    NULL rather than failing the completion or inventing copy. A later poll
-    finds post_kit set and returns it untouched.
-    """
-    current = await _fetch_one(
-        "SELECT post_kit, studio_project_id, brand_profile_id FROM generations WHERE id = ?",
-        (generation_id,),
-    )
-    if not current:
-        return None
-    if _parse_post_kit(current.get("post_kit")) is not None:
-        return None
-    project, profile = await _load_post_kit_materials(current, user_id)
-    if not project or not profile:
-        logger.warning(
-            "Post kit skipped for generation %s: render material not found.", generation_id)
-        return None
-    try:
-        kit = await _log_model_call(
-            "post_kit", "text", TEXT_MODEL,
-            lambda: ai_service.generate_post_kit(project, profile),
-            user_id,
-            brand_profile_id=current.get("brand_profile_id"),
-            studio_project_id=current.get("studio_project_id"),
-            generation_id=generation_id,
-        )
-    except Exception as e:
-        logger.warning("Post kit generation failed for %s: %s", generation_id, e)
-        return None
-    if not isinstance(kit, dict):
-        logger.warning("Post kit generation returned no kit for %s.", generation_id)
-        return None
-    await _execute(
-        "UPDATE generations SET post_kit = ?, updated_at = ? "
-        "WHERE id = ? AND (post_kit IS NULL OR post_kit = '')",
-        (json.dumps(kit), now_iso(), generation_id),
-    )
-    return kit
-
-
-@api_router.post("/generations/{generation_id}/post-kit/regenerate")
-async def regenerate_post_kit(
-    generation_id: str, user_id: str = Depends(get_current_user_id)
-):
-    """Write a fresh post kit for a render and replace the saved one.
-
-    Click-only by construction: nothing else calls generate_post_kit. A
-    failure answers loudly and leaves the stored kit untouched.
-    """
-    row = await _fetch_one(
-        "SELECT post_kit, studio_project_id, brand_profile_id, status FROM generations WHERE id = ? AND user_id = ?",
-        (generation_id, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Generation not found")
-    if str(row.get("status") or "") not in ("completed", "archived"):
-        raise HTTPException(
-            status_code=409, detail="Only finished renders can regenerate post copy."
-        )
-    project, profile = await _load_post_kit_materials(row, user_id)
-    if not project or not profile:
-        raise HTTPException(
-            status_code=404, detail="Render material not found for a fresh post kit."
-        )
-    try:
-        kit = await _log_model_call(
-            "post_kit", "text", TEXT_MODEL,
-            lambda: ai_service.generate_post_kit(project, profile),
-            user_id,
-            brand_profile_id=row.get("brand_profile_id"),
-            studio_project_id=row.get("studio_project_id"),
-            generation_id=generation_id,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not regenerate post copy: {str(e)[:800]}")
-    if not isinstance(kit, dict):
-        raise HTTPException(status_code=502, detail="Could not regenerate post copy: empty response.")
-    await _execute(
-        "UPDATE generations SET post_kit = ?, updated_at = ? WHERE id = ?",
-        (json.dumps(kit), now_iso(), generation_id),
-    )
-    return {"post_kit": kit}
 
 
 @api_router.post("/generations/{generation_id}/poll")
@@ -9436,6 +9223,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Structured request logs (method, path, status, request id, duration) live
+# in observability.py. Registered here so CORS stays outermost and every
+# request — including preflights — gets its one log line.
+app.middleware("http")(observability.request_logging_middleware)
 
 # Serve frontend static build (present in container/production deployments).
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend_build"

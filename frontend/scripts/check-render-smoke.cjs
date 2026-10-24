@@ -7511,7 +7511,7 @@ async function runDemoCtaChecks() {
     // contract is read from source. These seven were missing, which is why a new
     // entrance, size, face or text style never reached the canvas until the clip reloaded.
     const src = fs.readFileSync(
-      path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+      path.join(__dirname, "..", "src", "demoCta", "usePreviewLoop.js"),
       "utf8"
     );
     const loopDeps = /}, \[device,[^\]]*\]\);/.exec(src);
@@ -8082,10 +8082,15 @@ async function runDemoCtaChecks() {
       // a Space keydown that calls the play toggle, skips text entry, and
       // leaves focused buttons and links to their native activation (a
       // second toggle there would undo the click).
-      const src = fs.readFileSync(
+      const editorSrc = fs.readFileSync(
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
+      const hookSrc = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "usePreviewLoop.js"),
+        "utf8"
+      );
+      const src = editorSrc + hookSrc;
       for (const part of [
         'event.code !== "Space"',
         "togglePlayPause()",
@@ -8715,7 +8720,11 @@ async function runDemoCtaChecks() {
   });
 
   await check("MP4 duration and decoding validation precede download and History", async () => {
-    const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
+    // The recorder, validation and save live in demoCta/exportFlow.js; the
+    // editor only calls the two actions. Read both so the ordering gate
+    // follows the moved code.
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8")
+      + fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
     const probeAt = src.indexOf("await probeRecordingPlays(blob, duration)");
     const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
     if (probeAt < 0 || resultAt < probeAt || src.indexOf("await saveExport(blob, name)") < resultAt) throw new Error("invalid MP4 can reach download or History");
@@ -8942,13 +8951,18 @@ async function runDemoCtaChecks() {
             throw new Error("clicking L size preset did not update Hook Text scale to 115%");
           }
 
-          // #3 Hook copy variant flipper
-          const hookVar1 = ctx.container.querySelector('[data-testid="hook-variant-1"]');
-          if (!hookVar1) throw new Error("missing Hook copy variant 2 chip");
-          await clickEl(ctx, hookVar1, "flip to Hook variant 2");
+          // #3 Hook copy variant flipper: one button rotates the whole
+          // message list, so flipping once loads the second message.
+          const hookRotate = ctx.container.querySelector('[data-testid="hook-variant-rotate"]');
+          if (!hookRotate) throw new Error("missing Hook rotate-messages button");
+          await clickEl(ctx, hookRotate, "rotate to next Hook message");
           const hookInput = ctx.container.querySelector('[data-testid="hook-text-input"]');
           if (!hookInput || !hookInput.value.includes("Apple Notes")) {
-            throw new Error("flipping to Hook Option 2 did not load its copy into the textarea");
+            throw new Error("rotating Hook messages did not load the next copy into the textarea");
+          }
+          const hookCount = ctx.container.querySelector('[data-testid="hook-variant-count"]');
+          if (!hookCount || !hookCount.textContent.includes("2 of 3")) {
+            throw new Error("Hook message counter did not advance to 2 of 3");
           }
 
           // #2 Safe-area legibility guard when slider pushed below 80%
@@ -10192,11 +10206,15 @@ await check(
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
+      const drawSrc = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "usePreviewLoop.js"),
+        "utf8"
+      );
       const hand = fs.readFileSync(
         path.join(__dirname, "..", "src", "demoCta", "handView.js"),
         "utf8"
       );
-      for (const [name, src] of [["DemoCtaEditor", editor], ["handView", hand]]) {
+      for (const [name, src] of [["usePreviewLoop", drawSrc], ["handView", hand]]) {
         if (!src.includes("fitVideoToScreen(")) {
           throw new Error(
             `${name} does not use the shared fitVideoToScreen. A private copy of ` +
@@ -10238,7 +10256,7 @@ await check(
       // nullish binding, not an undeclared one — so the first hand-mode frame
       // died before rescheduling the loop and the canvas froze on the old
       // view. The declaration must precede both renderer branches.
-      const declAt = editor.indexOf("const palette = COLOR_PALETTES[bg]");
+      const declAt = drawSrc.indexOf("const palette = COLOR_PALETTES[bg]");
       if (declAt === -1) {
         throw new Error("the shared palette declaration is gone from the draw path");
       }
@@ -10246,7 +10264,7 @@ await check(
       // the declaration names the old `palette` access in prose, and the
       // module import mentions drawHandView — neither is a live read, but a
       // naive slice(0, declAt) match treats both as one and fails forever.
-      const beforeDecl = editor
+      const beforeDecl = drawSrc
         .slice(0, declAt)
         .replace(/\/\/[^\n]*/g, "")
         .replace(/\/\*[\s\S]*?\*\//g, "")

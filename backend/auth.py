@@ -55,6 +55,41 @@ if not CLERK_JWKS_URL:
         "instance's JWKS endpoint to enable per-user data isolation."
     )
 
+
+def _hosted_without_auth() -> bool:
+    """True when this process looks hosted but has no Clerk key.
+
+    Reads the environment fresh (not the import-time CLERK_JWKS_URL) so the
+    boot guard answers for the process as launched, and so tests can drive
+    it with monkeypatched env. Render sets RENDER/RENDER_SERVICE_NAME
+    itself — the same signal the database backend uses to tell a dev
+    laptop from hosted infra. ENVIRONMENT/APP_ENV covers other hosts.
+    """
+    if os.environ.get("CLERK_JWKS_URL", "").strip():
+        return False
+    if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"):
+        return True
+    return os.environ.get(
+        "ENVIRONMENT", os.environ.get("APP_ENV", "")).strip().lower() in ("production", "prod")
+
+
+def ensure_auth_configured() -> None:
+    """Refuse to boot hosted without auth. Called once at server boot.
+
+    Anonymous mode exists for local dev and tests, never for production:
+    serving every request as 'anonymous' there would merge all users' data.
+    Raises RuntimeError naming the fix; local dev and tests (no hosted
+    signals) pass through untouched.
+    """
+    if _hosted_without_auth():
+        raise RuntimeError(
+            "Refusing to boot: CLERK_JWKS_URL is not set and this looks like a "
+            "hosted environment (RENDER/RENDER_SERVICE_NAME present or "
+            "ENVIRONMENT/APP_ENV=production). Without it every request is "
+            "served as user 'anonymous'. Set CLERK_JWKS_URL to the Clerk "
+            "JWKS endpoint."
+        )
+
 # PyJWKClient caches the fetched key set in-process, so the blocking fetch
 # normally happens only once per lifespan window.
 _jwks_client: Optional[PyJWKClient] = None

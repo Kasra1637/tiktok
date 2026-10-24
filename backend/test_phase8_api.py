@@ -1102,6 +1102,20 @@ class TestNoPlatformAutomation:
                     w in segments for w in ("publish", "post", "share", "schedule")
                 ), path
 
+    def test_post_kit_regenerate_registered_once(self, api):
+        """The post-kit router contributes exactly one POST regenerate route.
+
+        Guards the extraction: no duplicate registration from both the router
+        and the composition root, and no dropped prefix on the way through
+        include_router.
+        """
+        hits = [
+            (getattr(r, "path", ""), sorted(getattr(r, "methods", None) or []))
+            for r in api.app.routes
+            if getattr(r, "path", "") == "/api/generations/{generation_id}/post-kit/regenerate"
+        ]
+        assert hits == [("/api/generations/{generation_id}/post-kit/regenerate", ["POST"])], hits
+
     def test_legacy_creation_routes_are_unregistered(self, api):
         """
         Exact-match creation is disabled at the router boundary. The retired

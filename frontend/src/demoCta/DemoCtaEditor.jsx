@@ -36,7 +36,6 @@ import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
 import { Chip } from "../components/Chip";
-import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import {
   ANIMATIONS,
@@ -53,22 +52,20 @@ import {
   OVERLAY_FONTS,
   OVERLAY_ANIMS,
   TEXT_STYLES,
-  HOOK_COPY_VARIANTS,
-  CTA_COPY_VARIANTS,
   CTA_TIMING_PRESETS,
-  BUILTIN_LOOK_PRESETS,
-  buildExportFilename,
   formatTime,
   resolveCtaWindow,
   resolveStoryWindow,
-  sniffRecordingContainer,
 } from "./constants";
 import { checkOverlaySafety, drawEndCard, drawHookOverlay, drawStoryOverlay, getEndCardBounds, getHookBounds } from "./overlays";
+import { useOverlayTaste } from "./useOverlayTaste";
 import { fitVideoToScreen } from "./fit";
-import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
-import { drawHandView, preloadHandViewImages, prepareHandViewImages } from "./handView";
+import { preloadHandViewImages } from "./handView";
 import { getEffectiveZoom, tickInterval } from "./zoom";
 import { useZoomKeyframes } from "./useZoomKeyframes";
+import { usePreviewLoop } from "./usePreviewLoop";
+import { useExportFlow } from "./exportFlow";
+import { ExportFailureNote } from "./ExportFailureNote";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 
@@ -76,105 +73,12 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 // stored value somehow has more than one open (older versions allowed it).
 const SECTION_ORDER = ["source", "hook", "story", "cta", "advanced"];
 
-// Remembered overlay taste: font, entrance and size for the hook + CTA
-// overlays, plus the accent. Stored per app with a global fallback, so a
-// founder's look survives reloads without one app imposing it on another.
-// Empty storage yields DEFAULTS, which is what the smoke suite asserts.
-const OVERLAY_PREFS_KEY = "hookforge.demoCta.overlayPrefs.v1";
-function readOverlayPrefs() {
-  try {
-    const raw = window.localStorage.getItem(OVERLAY_PREFS_KEY);
-    if (!raw) return {};
-    const saved = JSON.parse(raw);
-    return saved && typeof saved === "object" ? saved : {};
-  } catch {
-    return {};
-  }
-}
-function prefFor(profileKey, field, fallback) {
-  const all = readOverlayPrefs();
-  const scoped = all?.byProfile?.[profileKey]?.[field];
-  if (scoped !== undefined && scoped !== null && scoped !== "") return scoped;
-  const global = all?.global?.[field];
-  return global !== undefined && global !== null && global !== "" ? global : fallback;
-}
-function prefFont(profileKey, field, fallback) {
-  const value = prefFor(profileKey, field, fallback);
-  return OVERLAY_FONTS.some((f) => f.id === value) ? value : fallback;
-}
-function prefAnim(profileKey, field, fallback) {
-  const value = prefFor(profileKey, field, fallback);
-  return OVERLAY_ANIMS.some((a) => a.id === value) ? value : fallback;
-}
-function prefTextStyle(profileKey, field, fallback) {
-  const value = prefFor(profileKey, field, fallback);
-  return TEXT_STYLES.some((s) => s.id === value) ? value : fallback;
-}
-function prefScale(profileKey, field, fallback) {
-  const value = Number(prefFor(profileKey, field, fallback));
-  return Number.isFinite(value) ? value : fallback;
-}
-function prefVariants(profileKey, field, fallbackList) {
-  const value = prefFor(profileKey, field, null);
-  if (Array.isArray(value) && value.length === fallbackList.length && value.every((v) => typeof v === "string")) {
-    return value;
-  }
-  return [...fallbackList];
-}
-function prefLookPresets(profileKey) {
-  const all = readOverlayPrefs();
-  const scoped = all?.byProfile?.[profileKey]?.lookPresets;
-  if (Array.isArray(scoped)) return scoped;
-  const global = all?.global?.lookPresets;
-  return Array.isArray(global) ? global : [];
-}
-
 /** The one-open shape: every key present, exactly one true (or none). */
 function singleOpen(openKey) {
   return SECTION_ORDER.reduce((acc, key) => {
     acc[key] = key === openKey;
     return acc;
   }, {});
-}
-
-/**
- * Load a recorded blob into a throwaway video element and confirm it has a
- * decoded first frame, expected duration and full TikTok dimensions.
- * A blob that fails never becomes a download link or a History row.
- */
-function probeRecordingPlays(blob, expectedDuration) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const probe = document.createElement("video");
-    const cleanup = () => {
-      clearTimeout(timer);
-      probe.onloadeddata = null;
-      probe.onerror = null;
-      URL.revokeObjectURL(url);
-      probe.removeAttribute("src");
-    };
-    const fail = (message) => {
-      cleanup();
-      reject(new Error(message));
-    };
-    const timer = setTimeout(
-      () => fail("The TikTok MP4 could not be decoded. Try exporting again in a current Chrome or Edge browser."),
-      8000
-    );
-    probe.preload = "auto";
-    probe.onloadeddata = () => {
-      if (Number.isFinite(probe.duration) && Math.abs(probe.duration - expectedDuration) <= 0.1 &&
-          probe.videoWidth === TIKTOK_EXPORT.width && probe.videoHeight === TIKTOK_EXPORT.height) {
-        cleanup();
-        resolve();
-      } else {
-        fail("The TikTok MP4 failed its duration or resolution check. Export again; this file will not be offered for download.");
-      }
-    };
-    probe.onerror = () =>
-      fail("The TikTok MP4 could not be decoded. Try exporting again in a current Chrome or Edge browser.");
-    probe.src = url;
-  });
 }
 
 // Heights, radii, borders and focus rings copied from ui/input.jsx so the
@@ -255,6 +159,8 @@ function SubLabel({ children }) {
 function FieldLabel({ children }) {
   return <span className="text-xs text-muted-foreground">{children}</span>;
 }
+
+
 
 /**
  * A labelled slider with its current value right-aligned in the label row, so
@@ -646,21 +552,39 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // Scope for remembered overlay taste. Resolved once at mount: the editor
   // remounts per route, and reseeding mid-edit would clobber live changes.
   const overlayScope = generation?.brand_profile_id || "global";
-  const [overlayAccent, setOverlayAccent] = useState(() => prefFor(overlayScope, "overlayAccent", DEFAULTS.overlayAccent));
-  const [captionFont, setCaptionFont] = useState(() => prefFont(overlayScope, "captionFont", DEFAULTS.captionFont));
-  const [ctaFont, setCtaFont] = useState(() => prefFont(overlayScope, "ctaFont", DEFAULTS.ctaFont));
-  const [captionAnim, setCaptionAnim] = useState(() => prefAnim(overlayScope, "captionAnim", DEFAULTS.captionAnim));
-  const [ctaAnim, setCtaAnim] = useState(() => prefAnim(overlayScope, "ctaAnim", DEFAULTS.ctaAnim));
-  const [captionScale, setCaptionScale] = useState(() => prefScale(overlayScope, "captionScale", DEFAULTS.captionScale));
-  const [ctaScale, setCtaScale] = useState(() => prefScale(overlayScope, "ctaScale", DEFAULTS.ctaScale));
-  // One shared text treatment for hook, story and end card: a single state
-  // feeds all three painters, so the picker lives once (Hook Text) and the
-  // story inherits it through the hook painter it already reuses.
-  const [textStyle, setTextStyle] = useState(() => prefTextStyle(overlayScope, "textStyle", DEFAULTS.textStyle));
-  const [hookVariants, setHookVariants] = useState(() => prefVariants(overlayScope, "hookVariants", HOOK_COPY_VARIANTS));
-  const [activeHookVariant, setActiveHookVariant] = useState(0);
-  const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));
-  const [activeCtaVariant, setActiveCtaVariant] = useState(0);
+  // Overlay taste lives in useOverlayTaste: same values, setters and
+  // helpers as the inline state it replaces, so everything below reads
+  // unchanged. Copy text stays here; variant picks report back through
+  // the callbacks.
+  const {
+    overlayAccent, setOverlayAccent,
+    captionFont, setCaptionFont,
+    ctaFont, setCtaFont,
+    captionAnim, setCaptionAnim,
+    ctaAnim, setCtaAnim,
+    captionScale, setCaptionScale,
+    ctaScale, setCtaScale,
+    textStyle, setTextStyle,
+    hookVariants, activeHookVariant,
+    ctaVariants, activeCtaVariant,
+    updateHookText, rotateHookVariant, addHookVariant, removeHookVariant,
+    selectCtaVariant, updateCtaHeadline,
+    customLookPresets,
+    allLookPresets,
+    newLookName, setNewLookName,
+    reviewedLookKey, setReviewedLookKey,
+    savedLookNotice,
+    lookReviewKey, canReviewLook, lookReviewed, canSaveLook,
+    isLookPresetActive, applyLookPreset,
+    handleSaveLookPreset, handleDeleteLookPreset,
+  } = useOverlayTaste({
+    overlayScope,
+    videoUrl,
+    clipDuration: videoMeta?.d,
+    recording,
+    onHookText: setHookText,
+    onCtaHeadline: setCtaHeadline,
+  });
   const [ctaTimingMode, setCtaTimingMode] = useState("custom");
   const [storyEnabled, setStoryEnabled] = useState(false);
   const [storyText, setStoryText] = useState("");
@@ -675,69 +599,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   useEffect(() => {
     if (storyAvailable) setStoryTiming({ start: storyStart, end: storyEnd });
   }, [storyStart, storyEnd, storyAvailable]);
-  const [customLookPresets, setCustomLookPresets] = useState(() => prefLookPresets(overlayScope));
-  const [newLookName, setNewLookName] = useState("");
-  const [reviewedLookKey, setReviewedLookKey] = useState(null);
-  const [savedLookNotice, setSavedLookNotice] = useState(null);
-  // Approval belongs to this clip and this exact reusable styling, not to
-  // whichever choices happen to be selected after the next edit.
-  const lookReviewKey = JSON.stringify([
-    videoUrl, captionFont, ctaFont, captionAnim, ctaAnim,
-    captionScale, ctaScale, overlayAccent, textStyle,
-  ]);
-  const canReviewLook = !!videoUrl && Number.isFinite(videoMeta?.d) && videoMeta.d > 0 && !recording;
-  const lookReviewed = reviewedLookKey === lookReviewKey;
-  const canSaveLook = canReviewLook && lookReviewed && !!newLookName.trim();
-
-  // Persist taste on change, per app with a global fallback. Convenience
-  // only: private mode or quota failures must never break the editor.
-  useEffect(() => {
-    try {
-      const all = readOverlayPrefs();
-      const prefs = {
-        overlayAccent,
-        captionFont,
-        ctaFont,
-        captionAnim,
-        ctaAnim,
-        captionScale,
-        ctaScale,
-        textStyle,
-        hookVariants,
-        ctaVariants,
-        lookPresets: customLookPresets,
-      };
-      const next = {
-        ...all,
-        global: { ...(all.global || {}), ...prefs },
-        byProfile: { ...(all.byProfile || {}), [overlayScope]: { ...((all.byProfile || {})[overlayScope] || {}), ...prefs } },
-      };
-      window.localStorage.setItem(OVERLAY_PREFS_KEY, JSON.stringify(next));
-    } catch {
-      // Nothing to do: persistence is a convenience, not the feature.
-    }
-  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, hookVariants, ctaVariants, customLookPresets, overlayScope]);
-
-  const selectHookVariant = (idx) => {
-    setActiveHookVariant(idx);
-    setHookText(hookVariants[idx] ?? "");
-  };
-
-  const updateHookText = (val) => {
-    setHookText(val);
-    setHookVariants((prev) => prev.map((v, i) => (i === activeHookVariant ? val : v)));
-  };
-
-  const selectCtaVariant = (idx) => {
-    setActiveCtaVariant(idx);
-    setCtaHeadline(ctaVariants[idx] ?? "");
-  };
-
-  const updateCtaHeadline = (val) => {
-    setCtaHeadline(val);
-    setCtaVariants((prev) => prev.map((v, i) => (i === activeCtaVariant ? val : v)));
-  };
-
   const selectCtaTimingPreset = (presetId) => {
     setCtaTimingMode(presetId);
     const dur = videoMeta?.d || 0;
@@ -750,67 +611,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     }
   };
 
-  const allLookPresets = [...BUILTIN_LOOK_PRESETS, ...customLookPresets];
-
-  const isLookPresetActive = (look) =>
-    captionFont === look.captionFont &&
-    ctaFont === look.ctaFont &&
-    captionAnim === look.captionAnim &&
-    ctaAnim === look.ctaAnim &&
-    Math.abs(captionScale - look.captionScale) < 1e-6 &&
-    Math.abs(ctaScale - look.ctaScale) < 1e-6 &&
-    textStyle === (look.textStyle || "signature") &&
-    overlayAccent.toLowerCase() === String(look.overlayAccent || "").toLowerCase();
-
-  const applyLookPreset = (look) => {
-    if (!look) return;
-    setCaptionFont(look.captionFont);
-    setCtaFont(look.ctaFont);
-    setCaptionAnim(look.captionAnim);
-    setCtaAnim(look.ctaAnim);
-    setCaptionScale(look.captionScale);
-    setCtaScale(look.ctaScale);
-    setOverlayAccent(look.overlayAccent);
-    setTextStyle(look.textStyle || "signature");
-  };
-
-  const handleSaveLookPreset = () => {
-    const trimmed = newLookName.trim();
-    if (!canSaveLook) return;
-    const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `look-${Date.now()}`;
-    const entry = {
-      id: `custom-${slug}`,
-      name: trimmed,
-      builtin: false,
-      captionFont,
-      ctaFont,
-      captionAnim,
-      ctaAnim,
-      captionScale,
-      ctaScale,
-      overlayAccent,
-      textStyle,
-    };
-    setCustomLookPresets((prev) => {
-      const filtered = prev.filter((p) => p.name.toLowerCase() !== trimmed.toLowerCase());
-      return [...filtered, entry];
-    });
-    setNewLookName("");
-    setReviewedLookKey(null);
-    setSavedLookNotice({ name: trimmed, key: lookReviewKey });
-  };
-
-  const handleDeleteLookPreset = (id) => {
-    setCustomLookPresets((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const [isPlaying, setIsPlaying] = useState(true);
-  // Preview monitoring only: the source element stays muted so autoplay
-  // never fights browser policy; the speaker toggle below unmutes on tap.
-  // Export reads source samples directly; preview mute and volume never affect the file.
-  const [previewMuted, setPreviewMuted] = useState(true);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isSeeking, setIsSeeking] = useState(false);
 
   const {
     zoomKeyframes,
@@ -821,41 +621,60 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     clearZoomKeyframes,
   } = useZoomKeyframes();
 
-  const videoRef = useRef(null);
-  // Scoped replay: hook/CTA style tweaks (accent, face, entrance, size)
-  // restart playback inside that overlay's window only, then park at the
-  // window end — never playing past it into the middle of the clip. The
-  // ref holds the active window end; null means free transport. The video's
-  // loop is switched off for the replay and restored when it parks or the
-  // founder takes over transport, so a CTA replay ending at the clip end
-  // cannot wrap to the top on its own.
-  const scopedReplayRef = useRef(null);
-  const cancelScopedReplay = useCallback(() => {
-    scopedReplayRef.current = null;
-    const video = videoRef.current;
-    if (video) video.loop = true;
-  }, []);
-  const previewCanvasRef = useRef(null);
+  // Preview transport + scoped replay + frame painting live in
+  // usePreviewLoop; the editor only reads the playhead and calls the
+  // transport helpers. Zoom editing stays here and works through the
+  // refs/helpers the hook owns.
+  const {
+    videoRef, previewCanvasRef,
+    isPlaying, setIsPlaying,
+    previewMuted, setPreviewMuted, togglePreviewMuted,
+    currentTime, setCurrentTime,
+    isSeeking, setIsSeeking,
+    startScopedPreview, ensureScopedPreview,
+    togglePlayPause, handleSeek,
+    cancelScopedReplay, dirtyRef,
+    showZoomValues, zoomValuesAt,
+    editingZoomRef, liveZoomRef,
+    paintFrameRef, kickPreviewRef, isExportingRef,
+  } = usePreviewLoop({
+    device, preset, mockupStretchY, scale, videoMeta, bg, anim,
+    videoFit, videoScale, videoOffsetX, videoOffsetY,
+    viewMode, envBg, screenX, screenY, screenW, screenH,
+    handZoom, handPanX, handPanY,
+    hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
+    storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
+    ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
+    overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim,
+    captionScale, ctaScale, textStyle,
+    fontStack,
+    zoomKeyframes, zoomKeyframesRef,
+    setVideoScale, setVideoOffsetX, setVideoOffsetY,
+    setHandZoom, setHandPanX, setHandPanY, setScale,
+  });
+
+
   // The one file input, referenced so the empty frame's upload button can
   // drive it. Two inputs would mean two sources of truth and a duplicate
   // `data-testid` for the same control.
   const fileInputRef = useRef(null);
-  const rafRef = useRef(null);
-  const paintFrameRef = useRef(null);
-  // On-demand preview: `dirtyRef` marks a frame to paint, `kickPreviewRef`
-  // restarts the parked loop from outside its effect (export finale).
-  const dirtyRef = useRef(true);
-  const kickPreviewRef = useRef(null);
-  const exportAbortRef = useRef(null);
-  useEffect(() => () => exportAbortRef.current?.abort(), []);
-  const isExportingRef = useRef(false);
-  const editingZoomRef = useRef(false);
-  const liveZoomRef = useRef({
-    scale: 1, offX: 0, offY: 0,
-    handZoom: 1, handPanX: 0, handPanY: 0, phoneScale: DEFAULTS.scale,
-  });
   const sourceObjectUrlRef = useRef(null);
   const resultObjectUrlRef = useRef(null);
+
+  // Export recording, MP4 validation and History save live in
+  // useExportFlow (with failure history via useExportErrors); the editor
+  // only calls the two actions and reads the outcome states it owns.
+  const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
+    generation, onSaved,
+    videoUrl, videoMeta, device, preset, viewMode, envBg,
+    captionFont, ctaFont, fontStack,
+    videoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
+    resultObjectUrlRef,
+    setIsPlaying,
+    setRecording, setProgress, setResult,
+    setSaving, setSaved, setSaveError, setError,
+  });
+  const latestExportError = exportErrors[exportErrors.length - 1] || null;
   // The "Export ready" card, so a finished export can put itself in front of
   // the founder. A ref rather than a scrollIntoView on mount because the card
   // renders inside the PREVIEW column, which is its own scroll container at
@@ -944,7 +763,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         setVideoUrl(url);
         setSourceReplaced(false);
       } catch (e) {
-        if (!cancelled) setError(sourceErrorMessage(e, "The finished render could not be loaded."));
+        if (!cancelled) {
+          clearExportErrors();
+          setError(sourceErrorMessage(e, "The finished render could not be loaded."));
+        }
       } finally {
         if (!cancelled) setLoadingSource(false);
       }
@@ -963,6 +785,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     setError(null);
     setSaveError(null);
     setSaved(null);
+    clearExportErrors();
     // The new clip has no metadata until the probe below reads it. Clearing
     // here (not just on load) keeps a stale duration from the previous clip
     // from holding Export enabled for a file that may never play.
@@ -997,6 +820,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
    * export be saved to History over and over as duplicate rows.
    */
   const clearSource = () => {
+    // Wipe failure history even on a no-op Remove so a stale
+    // "Failed during save" note can never outlive its source.
+    clearExportErrors();
     // State, not the prop: from the standalone route there is no pinned
     // sourceUrl, only a founder-supplied object URL in videoUrl.
     if (!videoUrl && !sourceUrl) return;
@@ -1083,218 +909,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     }
   }, [videoUrl, sourceFileName]);
 
-  // Track current time from the video element
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return undefined;
-    const onTime = () => {
-      if (!isSeeking) setCurrentTime(video.currentTime);
-    };
-    video.addEventListener("timeupdate", onTime);
-    // The smoothing tick only runs while the clip plays. Paused seeks land
-    // through `timeupdate`.
-    let raf = 0;
-    let lastReported = 0;
-    const tick = () => {
-      raf = 0;
-      if (!video || video.paused) return;
-      if (!isSeeking) {
-        const t = video.currentTime;
-        if (Math.abs(t - lastReported) >= 0.05) {
-          lastReported = t;
-          setCurrentTime(t);
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    const onPlayTick = () => {
-      editingZoomRef.current = false;
-      if (!raf) raf = requestAnimationFrame(tick);
-    };
-    const onPauseTick = () => {
-      if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      // Land the scrubber on the exact paused frame.
-      if (!isSeeking) setCurrentTime(video.currentTime);
-    };
-    video.addEventListener("play", onPlayTick);
-    video.addEventListener("pause", onPauseTick);
-    raf = requestAnimationFrame(tick);
-    return () => {
-      video.removeEventListener("timeupdate", onTime);
-      video.removeEventListener("play", onPlayTick);
-      video.removeEventListener("pause", onPauseTick);
-      cancelAnimationFrame(raf);
-    };
-  }, [isSeeking]);
-
-  // Restart playback inside one overlay window so a style tweak replays
-  // where it lands. Hook replays from frame 0 to the hook end; the end card
-  // replays from its start to the clip end. With no loaded clip there is no
-  // window, so this is a no-op and the on-demand paint carries the change.
-  const startScopedPreview = useCallback((kind) => {
-    if (isExportingRef.current) return;
-    const video = videoRef.current;
-    const dur = videoMeta?.d ?? 0;
-    if (!video || !(dur > 0)) return;
-    let start;
-    let end;
-    if (kind === "hook") {
-      if (!hookEnabled) return;
-      end = Math.min(hookDuration, dur * 0.45);
-      start = 0;
-    } else if (kind === "cta") {
-      if (!ctaEnabled) return;
-      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      end = dur;
-      start = Math.max(0, dur - window);
-    } else {
-      return;
-    }
-    if (!(end > start)) return;
-    scopedReplayRef.current = { end };
-    video.loop = false;
-    try {
-      video.currentTime = start;
-    } catch {
-      // A seekable clip always accepts this; a transient failure leaves the
-      // playhead where it is and the window guard still parks on time.
-    }
-    setCurrentTime(start);
-    video.play().then(() => setIsPlaying(true)).catch(() => {});
-  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode]);
-
-  // Continuous sliders fire dozens of changes per drag; restarting the
-  // window on every tick would yank the playhead under the founder's hand.
-  // If the clip already plays inside the window, just retarget the end and
-  // let it run — otherwise restart it like a discrete pick.
-  const ensureScopedPreview = useCallback((kind) => {
-    const video = videoRef.current;
-    const dur = videoMeta?.d ?? 0;
-    if (!video || !(dur > 0)) return;
-    let start;
-    let end;
-    if (kind === "hook") {
-      if (!hookEnabled) return;
-      end = Math.min(hookDuration, dur * 0.45);
-      start = 0;
-    } else if (kind === "cta") {
-      if (!ctaEnabled) return;
-      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      end = dur;
-      start = Math.max(0, dur - window);
-    } else {
-      return;
-    }
-    if (!(end > start)) return;
-    const t = video.currentTime;
-    if (!video.paused && t >= start - 0.05 && t < end) {
-      scopedReplayRef.current = { end };
-      video.loop = false;
-      return;
-    }
-    startScopedPreview(kind);
-  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview]);
-
-  // Stable so the Space shortcut below subscribes once: it closes over the
-  // video ref and a state setter only, so an empty dep array is complete.
-  // An explicit press means free transport, so it always clears a scoped
-  // window first — resuming from a parked hook end must play on past it.
-  const togglePlayPause = useCallback(() => {
-    if (isExportingRef.current) return;
-    const video = videoRef.current;
-    if (!video) return;
-    cancelScopedReplay();
-    editingZoomRef.current = false;
-    if (video.paused) {
-      video.play().catch(() => {});
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
-  }, [cancelScopedReplay]);
-
-  const togglePreviewMuted = useCallback(() => {
-    const video = videoRef.current;
-    setPreviewMuted((was) => {
-      const next = !was;
-      if (video) {
-        video.muted = next;
-        if (!next) video.volume = 1;
-      }
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = previewMuted;
-  }, [previewMuted]);
-
-  // Space toggles preview playback from anywhere that is not text entry, the
-  // way every video editor answers it. A focused button or link already
-  // answers Space with a click, so it is left to the native activation — a
-  // second toggle here would undo the click. Sliders answer arrows, not
-  // Space, so they keep the shortcut.
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.code !== "Space" || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
-      const el = document.activeElement;
-      const tag = el?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
-      if (tag === "BUTTON" || tag === "A" || tag === "SUMMARY") return;
-      event.preventDefault();
-      togglePlayPause();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlayPause]);
-
-  const handleSeek = (time) => {
-    const video = videoRef.current;
-    if (!video) return;
-    // Founder-driven seeks own the playhead, so a scoped window ends here.
-    // (Scoped replays set currentTime directly and never call this.)
-    cancelScopedReplay();
-    editingZoomRef.current = false;
-    showZoomValues(zoomValuesAt(time));
-    video.currentTime = time;
-    setCurrentTime(time);
-    // No paint here: the `seeked` event repaints once the seek lands, so a
-    // synchronous paint cannot show the stale pre-seek frame.
-  };
 
 
-  const showZoomValues = useCallback((values) => {
-    liveZoomRef.current = values;
-    setVideoScale(values.scale);
-    setVideoOffsetX(values.offX);
-    setVideoOffsetY(values.offY);
-    setHandZoom(values.handZoom);
-    setHandPanX(values.handPanX);
-    setHandPanY(values.handPanY);
-    setScale(values.phoneScale);
-  }, []);
 
-  const zoomValuesAt = useCallback((time) => {
-    const ez = getEffectiveZoom({
-      keyframes: zoomKeyframesRef.current, live: liveZoomRef.current, videoTime: time,
-    });
-    return {
-      scale: ez.vScale, offX: ez.vOffX, offY: ez.vOffY,
-      handZoom: ez.hZoom, handPanX: ez.hPanX, handPanY: ez.hPanY,
-      phoneScale: ez.phoneScale,
-    };
-  }, [zoomKeyframesRef]);
 
-  // Controls follow the lock under the playhead, rather than stale sliders
-  // from the last edit. A paused draft stays visible until Lock or transport.
-  useEffect(() => {
-    if (editingZoomRef.current || isExportingRef.current) return;
-    showZoomValues(zoomValuesAt(videoRef.current?.currentTime ?? currentTime));
-  }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt]);
+
+
+
+
+
 
   const updateZoomDraft = (patch) => {
     if (isExportingRef.current) return;
@@ -1330,574 +953,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     clearZoomKeyframes();
   };
 
-  // Preview loop
-  useEffect(() => {
-    const canvas = previewCanvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video || !videoMeta) return undefined;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return undefined;
-
-    const dev = DEVICES.find((d) => d.id === device) || DEVICES[0];
-    const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
-
-    const phoneW = BASE_PHONE_H * dev.aspect;
-    const phoneH = BASE_PHONE_H * mockupStretchY;
-
-    let cw = pre.w;
-    let ch = pre.h;
-    if (pre.id === "source") {
-      cw = Math.round(phoneW);
-      ch = Math.round(phoneH);
-    }
-    canvas.width = cw;
-    canvas.height = ch;
-
-    const drawOverlays = (ctx, vt) => {
-      const dur = videoMeta.d || 0;
-      const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
-      const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      if (hookEnabled) {
-        drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale, textStyle });
-      }
-      if (storyEnabled && storyAvailable) {
-        drawStoryOverlay(ctx, cw, ch, vt, {
-          text: storyText, start: storyStart, end: storyEnd,
-          accent: overlayAccent, offsetY: storyOffsetY,
-          font: fontStack(captionFont), anim: captionAnim, scale: captionScale,
-          textStyle,
-        });
-      }
-      if (ctaEnabled && dur > 0) {
-        drawEndCard(ctx, cw, ch, dur - vt, {
-          headline: ctaHeadline,
-          handle: ctaHandle,
-          duration: ctaWindow,
-          accent: overlayAccent,
-          offsetX: ctaOffsetX,
-          offsetY: ctaOffsetY,
-          font: fontStack(ctaFont),
-          anim: ctaAnim,
-          scale: ctaScale,
-          textStyle,
-        });
-      }
-    };
-
-    // Preview and export call this exact painter with an explicit media timestamp.
-    const paintFrame = (target, vt, frame) => {
-      const ctx = target.getContext("2d");
-      if (!ctx) throw new Error("Canvas drawing is unavailable. Reload the editor and try again.");
-      ctx.clearRect(0, 0, cw, ch);
-      const ez = getEffectiveZoom({
-        keyframes: zoomKeyframesRef.current,
-        live: liveZoomRef.current,
-        videoTime: vt,
-        isExporting: target !== canvas,
-        isEditing: editingZoomRef.current,
-      });
-
-      // Hoisted above both renderer branches: each draws the phone, and each
-      // needs the palette for the screen behind the footage. Left inside an
-      // animation branch, the hand branch above referenced an identifier that
-      // did not exist in its scope — and optional chaining does not save that,
-      // it only guards a declared binding that happens to be nullish. A const
-      // read before its declaration throws, killing the draw loop on the
-      // first hand-mode frame and freezing the canvas.
-      const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
-
-      if (viewMode === "hand" && video) {
-        const t = vt;
-        drawHandView(ctx, cw, ch, frame, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
-        drawOverlays(ctx, vt);
-        return;
-      }
-
-      const isFloat = bg !== "transparent";
-
-      if (isFloat) {
-        const t = vt;
-
-        const bgGrad = ctx.createRadialGradient(cw * 0.5, ch * 0.4, 0, cw * 0.5, ch * 0.5, cw * 0.7);
-        bgGrad.addColorStop(0, palette.bg2);
-        bgGrad.addColorStop(1, palette.bg1);
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, cw, ch);
-
-        const fit = Math.min(cw / phoneW, ch / phoneH) * ez.phoneScale * 0.85;
-        const drawW = phoneW * fit;
-        const drawH = phoneH * fit;
-        const cx2 = cw / 2;
-        const cy2 = ch / 2;
-
-        const bobY = Math.sin(t * 1.2) * (ch * 0.012) + Math.sin(t * 2.8) * (ch * 0.004);
-        const bobX = Math.sin(t * 0.8) * (cw * 0.003);
-        const tiltX = Math.sin(t * 0.7) * 0.03;
-        const tiltY = Math.sin(t * 1.1) * 0.02;
-        const tiltZ = Math.sin(t * 0.5) * 0.008;
-        const glowX = cx2 + bobX * 1.2;
-        const glowY = cy2 + bobY * 0.8;
-        const glowR = Math.max(drawW, drawH) * 0.85;
-
-        if (anim === "breathe") {
-          const breathPhase = t * 0.3;
-
-          for (let i = 0; i < 3; i++) {
-            const ringPhase = (breathPhase + i * 0.33) % 1;
-            const ringR = glowR * (0.3 + ringPhase * 0.9);
-            const ringAlpha = 0.2 * (1 - ringPhase);
-
-            ctx.save();
-            ctx.globalAlpha = ringAlpha;
-            ctx.beginPath();
-            ctx.arc(glowX, glowY, ringR, 0, Math.PI * 2);
-            ctx.lineWidth = drawW * (0.04 - ringPhase * 0.03);
-            ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "1)");
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-            ctx.restore();
-          }
-
-          ctx.save();
-          const bAlpha = 0.18 + Math.sin(t * 0.5) * 0.08;
-          ctx.globalAlpha = bAlpha;
-          const bGrad = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.5);
-          bGrad.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          bGrad.addColorStop(0.5, palette.glow.replace(/[\d.]+\)$/, "0.4)"));
-          bGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = bGrad;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "embers") {
-          // Sparks rise on looped paths. Positions hash from the particle
-          // index, never Math.random, so the export encodes the same sparks
-          // the preview shows.
-          ctx.save();
-          ctx.globalAlpha = 0.30;
-          const emberGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR);
-          emberGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          emberGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = emberGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-
-          ctx.save();
-          for (let i = 0; i < 26; i++) {
-            const hx = Math.sin(i * 127.1) * 43758.5453;
-            const fx = hx - Math.floor(hx);
-            const hy = Math.sin(i * 311.7 + 17.3) * 12578.1459;
-            const fy = hy - Math.floor(hy);
-            const speed = 0.05 + fy * 0.08;
-            const ey = ch * (1 - ((fy + t * speed) % 1));
-            const ex = cw * fx + Math.sin(t * 1.4 + i) * cw * 0.02;
-            const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i * 1.7));
-            ctx.globalAlpha = 0.5 * tw * (ey / ch + 0.2);
-            ctx.fillStyle = i % 3 === 0 ? "#ffffff" : palette.glow.replace(/[\d.]+\)$/, "1)");
-            ctx.beginPath();
-            ctx.arc(ex, ey, Math.max(1.5, drawW * (0.004 + fy * 0.008)), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "vortex") {
-          // Two spiral arms rotate around the phone, trailing glow.
-          for (let arm = 0; arm < 2; arm++) {
-            ctx.save();
-            ctx.globalAlpha = 0.16;
-            ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.8)");
-            ctx.lineWidth = Math.max(1.5, drawW * 0.02);
-            ctx.beginPath();
-            const vbase = t * 0.9 + arm * Math.PI;
-            for (let s = 0; s <= 40; s++) {
-              const p = s / 40;
-              const va = vbase + p * 3.2;
-              const vr = glowR * (0.25 + p * 0.65);
-              const vx = cx2 + Math.cos(va) * vr;
-              const vy = cy2 + Math.sin(va) * vr * 0.62;
-              if (s === 0) ctx.moveTo(vx, vy);
-              else ctx.lineTo(vx, vy);
-            }
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-            ctx.restore();
-          }
-          ctx.save();
-          ctx.globalAlpha = 0.14;
-          const vortexGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.5);
-          vortexGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          vortexGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = vortexGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "grid") {
-          // A synthwave floor: lines converge past a horizon, horizontals rush
-          // toward the viewer on a loop.
-          const horizon = ch * 0.62;
-          ctx.save();
-          ctx.globalAlpha = 0.14;
-          ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.8)");
-          ctx.lineWidth = Math.max(1, cw * 0.002);
-          for (let i = -8; i <= 8; i++) {
-            ctx.beginPath();
-            ctx.moveTo(cx2 + i * cw * 0.03, horizon);
-            ctx.lineTo(cx2 + i * cw * 0.16, ch);
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-          ctx.save();
-          for (let i = 0; i < 7; i++) {
-            const gp = ((i / 7) + t * 0.3) % 1;
-            const gy = horizon + Math.pow(gp, 2.2) * (ch - horizon);
-            ctx.globalAlpha = 0.05 + gp * 0.14;
-            ctx.strokeStyle = palette.glow.replace(/[\d.]+\)$/, "0.9)");
-            ctx.lineWidth = Math.max(1, cw * 0.002 * (1 + gp * 2));
-            ctx.beginPath();
-            ctx.moveTo(0, gy);
-            ctx.lineTo(cw, gy);
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "comet") {
-          // A comet arcs across the top third on a loop, fading tail behind it.
-          ctx.save();
-          ctx.globalAlpha = 0.12;
-          const cometGlow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowR * 0.6);
-          cometGlow.addColorStop(0, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          cometGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = cometGlow;
-          ctx.fillRect(0, 0, cw, ch);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-          ctx.save();
-          const cp = (t * 0.18) % 1;
-          for (let k = 14; k >= 1; k--) {
-            const pk = cp - k * 0.012;
-            if (pk < 0) continue;
-            const kx = cw * (1.1 - pk * 2.2);
-            const ky = ch * (0.16 + Math.sin(pk * Math.PI) * 0.1);
-            ctx.globalAlpha = 0.30 * (1 - k / 15);
-            ctx.fillStyle = palette.glow.replace(/[\d.]+\)$/, "1)");
-            ctx.beginPath();
-            ctx.arc(kx, ky, Math.max(1.5, drawW * 0.02 * (1 - k / 18)), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          const hx0 = cw * (1.1 - cp * 2.2);
-          const hy0 = ch * (0.16 + Math.sin(cp * Math.PI) * 0.1);
-          ctx.globalAlpha = 0.9;
-          const head = ctx.createRadialGradient(hx0, hy0, 0, hx0, hy0, drawW * 0.09);
-          head.addColorStop(0, "#ffffff");
-          head.addColorStop(0.4, palette.glow.replace(/[\d.]+\)$/, "1)"));
-          head.addColorStop(1, "rgba(0, 0, 0, 0)");
-          ctx.fillStyle = head;
-          ctx.fillRect(hx0 - drawW * 0.09, hy0 - drawW * 0.09, drawW * 0.18, drawW * 0.18);
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        if (anim === "tide") {
-          // Three translucent sine bands drift at different speeds.
-          for (let i = 0; i < 3; i++) {
-            ctx.save();
-            ctx.globalAlpha = 0.10 - i * 0.02;
-            ctx.fillStyle = (i % 2 ? palette.accent : palette.glow).replace(/[\d.]+\)$/, "0.8)");
-            ctx.beginPath();
-            const tideBase = ch * (0.3 + i * 0.18);
-            ctx.moveTo(0, ch);
-            for (let gx = 0; gx <= cw; gx += cw / 48) {
-              const wy = tideBase + Math.sin((gx / cw) * Math.PI * 2 + t * (0.6 + i * 0.25) + i * 2) * ch * 0.04;
-              ctx.lineTo(gx, wy);
-            }
-            ctx.lineTo(cw, ch);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-        }
-
-        if (anim === "prism") {
-          // Three beams rotate slowly from behind the phone.
-          for (let i = 0; i < 3; i++) {
-            const pa = t * 0.25 + (i / 3) * Math.PI * 2;
-            ctx.save();
-            ctx.globalAlpha = 0.10;
-            ctx.translate(glowX, glowY);
-            ctx.rotate(pa);
-            const beam = ctx.createLinearGradient(0, 0, glowR * 1.1, 0);
-            beam.addColorStop(0, (i % 2 ? palette.accent : palette.glow).replace(/[\d.]+\)$/, "0.9)"));
-            beam.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.fillStyle = beam;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(glowR * 1.1, -glowR * 0.16);
-            ctx.lineTo(glowR * 1.1, glowR * 0.16);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-        }
-
-        if (anim === "bloom") {
-          // Petals of light open and close around the phone, very slow.
-          for (let i = 0; i < 6; i++) {
-            const ba = (i / 6) * Math.PI * 2 + t * 0.12;
-            const blen = glowR * (0.55 + 0.25 * Math.sin(t * 0.5 + i));
-            const bx = glowX + Math.cos(ba) * blen * 0.55;
-            const by = glowY + Math.sin(ba) * blen * 0.4;
-            ctx.save();
-            ctx.globalAlpha = 0.10;
-            const petal = ctx.createRadialGradient(bx, by, 0, bx, by, glowR * 0.32);
-            petal.addColorStop(0, palette.accent.replace(/[\d.]+\)$/, "0.9)"));
-            petal.addColorStop(1, "rgba(0,0,0,0)");
-            ctx.fillStyle = petal;
-            ctx.fillRect(bx - glowR * 0.32, by - glowR * 0.32, glowR * 0.64, glowR * 0.64);
-            ctx.restore();
-          }
-        }
-
-        if (anim === "meteor") {
-          // Diagonal streaks fall fast across the frame on looped paths.
-          ctx.save();
-          for (let i = 0; i < 14; i++) {
-            const mx = Math.sin(i * 197.3 + 3.1) * 36211.9271;
-            const mfx = mx - Math.floor(mx);
-            const my = Math.sin(i * 421.9 + 44.7) * 21134.7129;
-            const mfy = my - Math.floor(my);
-            const mp = (mfy + t * (0.35 + mfy * 0.3)) % 1;
-            const sx = cw * (mfx * 1.4 - 0.2 + mp * 0.3);
-            const sy = ch * mp;
-            ctx.globalAlpha = 0.28 * (1 - mp);
-            ctx.strokeStyle = i % 4 === 0 ? "#ffffff" : palette.glow.replace(/[\d.]+\)$/, "1)");
-            ctx.lineWidth = Math.max(1, drawW * (0.003 + mfy * 0.004));
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(sx + cw * 0.03, sy + ch * 0.05);
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.beginPath();
-        const shadowY = cy2 + drawH * 0.52 + bobY * 0.3;
-        const shadowW = drawW * 0.7 * (1 - Math.abs(tiltX) * 2);
-        const shadowH = drawH * 0.06;
-        ctx.ellipse(cx2 + bobX, shadowY, shadowW, shadowH, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "#000";
-        ctx.filter = `blur(${Math.round(drawW * 0.08)}px)`;
-        ctx.fill();
-        ctx.filter = "none";
-        ctx.globalAlpha = 1;
-        ctx.restore();
-
-        ctx.save();
-        ctx.translate(cx2 + bobX, cy2 + bobY);
-        ctx.rotate(tiltZ);
-
-        const perspScale = 1 - Math.abs(tiltX) * 0.5;
-        ctx.scale(1, perspScale);
-        ctx.transform(1, tiltX * 0.8, tiltY * 0.6, 1, 0, 0);
-
-        ctx.translate(-drawW / 2, -drawH / 2);
-        drawPhone(ctx, 0, 0, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
-        ctx.restore();
-
-        ctx.save();
-        const vignette = ctx.createRadialGradient(
-          cx2, cy2, Math.min(cw, ch) * 0.3,
-          cx2, cy2, Math.max(cw, ch) * 0.7
-        );
-        vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-        vignette.addColorStop(0.6, "rgba(0, 0, 0, 0)");
-        vignette.addColorStop(0.85, "rgba(0, 0, 0, 0.25)");
-        vignette.addColorStop(1, "rgba(0, 0, 0, 0.55)");
-        ctx.fillStyle = vignette;
-        ctx.fillRect(0, 0, cw, ch);
-        ctx.restore();
-
-      } else {
-        const fit = Math.min(cw / phoneW, ch / phoneH) * ez.phoneScale;
-        const drawW = phoneW * fit;
-        const drawH = phoneH * fit;
-        const x = (cw - drawW) / 2;
-        const y = (ch - drawH) / 2;
-        drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
-      }
-      drawOverlays(ctx, vt);
-    };
-    paintFrameRef.current = paintFrame;
-    // On-demand preview. A paused clip with settled settings paints the same
-    // frame forever, so an unconditional loop is pure GPU/battery burn: this
-    // loop runs while the clip plays and paints exactly one frame per
-    // settings change or seek while paused, then parks with no scheduled
-    // work. `kick` restarts it; the video's own play/pause/seek events and
-    // this effect's re-run (every setting lives in the deps below) are what
-    // mark a frame dirty.
-    const draw = () => {
-      rafRef.current = null;
-      if (isExportingRef.current) return;
-      const v = videoRef.current;
-      const playing = !!v && !v.paused;
-      if (playing) editingZoomRef.current = false;
-      if (playing || dirtyRef.current) {
-        dirtyRef.current = false;
-        paintFrame(canvas, v ? v.currentTime || 0 : 0, v);
-      }
-      // A scoped replay parks at its window end instead of playing past it:
-      // pausing here lands the scrubber on the exact window frame, and the
-      // loop restore below hands free transport back for the next press.
-      const scoped = scopedReplayRef.current;
-      if (playing && scoped && v && v.currentTime >= scoped.end - 0.08) {
-        scopedReplayRef.current = null;
-        v.pause();
-        v.loop = true;
-        setIsPlaying(false);
-        setCurrentTime(v.currentTime);
-        return;
-      }
-      if (playing) rafRef.current = requestAnimationFrame(draw);
-    };
-    const kick = () => {
-      if (!rafRef.current) rafRef.current = requestAnimationFrame(draw);
-    };
-    kickPreviewRef.current = kick;
-    // Play restarts the loop; a seek repaints once it lands. Pause needs no
-    // paint: the last playing frame is already the paused frame.
-    const onPlayPaint = () => kick();
-    const onSeekedPaint = () => {
-      dirtyRef.current = true;
-      kick();
-    };
-    const previewVideo = videoRef.current;
-    previewVideo?.addEventListener("play", onPlayPaint);
-    previewVideo?.addEventListener("seeked", onSeekedPaint);
-    // A CTA replay ending at the clip end fires `ended` instead of another
-    // frame: clear the window and hand free transport back same as the
-    // guarded park above.
-    const onEndedScoped = () => {
-      scopedReplayRef.current = null;
-      if (previewVideo) previewVideo.loop = true;
-      setIsPlaying(false);
-    };
-    previewVideo?.addEventListener("ended", onEndedScoped);
-    dirtyRef.current = true;
-    kick();
-
-    return () => {
-      paintFrameRef.current = null;
-      kickPreviewRef.current = null;
-      previewVideo?.removeEventListener("play", onPlayPaint);
-      previewVideo?.removeEventListener("seeked", onSeekedPaint);
-      previewVideo?.removeEventListener("ended", onEndedScoped);
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
-
-  // Hook/CTA style picks replay their own window; everything else leaves the
-  // playhead alone. Every overlay value is also in the preview loop's deps
-  // above, so the canvas redraws with the new entrance, size or face on the
-  // next frame even with no clip loaded — and pause-then-replay outside a
-  // scoped window still resumes from that same spot. The playhead and the
-  // play state otherwise stay with the transport (and the source-load
-  // effect) alone.
-
-  const saveExport = async (blob, name) => {
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const savedRow = await api.saveDemoCtaExport(generation?.id, blob, name);
-      setSaved(savedRow);
-      recordSignal("video_downloaded", "demo_cta_exported", {
-        brand_profile_id: generation?.brand_profile_id || "",
-        studio_project_id: generation?.studio_project_id || "",
-        generation_id: savedRow?.id || "",
-        template_id: generation?.template_id || "",
-      });
-      onSaved?.(savedRow);
-      return savedRow;
-    } catch (err) {
-      setSaveError(getErrorMessage(err));
-      return null;
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const exportVideo = async () => {
-    const video = videoRef.current;
-    const paintFrame = paintFrameRef.current;
-    if (!video || !paintFrame || !videoMeta || isExportingRef.current) return;
-    const controller = new AbortController();
-    exportAbortRef.current = controller;
-    const resumePlayback = !video.paused;
-    video.pause();
-    setIsPlaying(false);
-    setError(null);
-    setSaveError(null);
-    setSaved(null);
-    setRecording(true);
-    setProgress(0);
-    setResult(null);
-    isExportingRef.current = true;
-    try {
-      // Freeze settings, assets and fonts for the entire encode. Never capture a live RAF canvas.
-      await Promise.all([document.fonts?.ready, ...[captionFont, ctaFont].map((id) =>
-        document.fonts?.load(`100px ${fontStack(id)}`))]);
-      if (viewMode === "hand") await prepareHandViewImages(envBg);
-      const response = await fetch(videoUrl, { signal: controller.signal });
-      if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");
-      const canvas = document.createElement("canvas");
-      const { blob, duration } = await exportTikTok({
-        source: await response.blob(), canvas, signal: controller.signal,
-        drawFrame: (time, frame) => paintFrame(canvas, time, frame),
-        onProgress: setProgress,
-      });
-      const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
-      if (sniffRecordingContainer(head) !== "mp4") throw new Error("The encoder did not produce a valid MP4. Export again in Chrome or Edge.");
-      await probeRecordingPlays(blob, duration);
-      controller.signal.throwIfAborted();
-      const url = URL.createObjectURL(blob);
-      if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
-      resultObjectUrlRef.current = url;
-      const name = buildExportFilename({ device, preset: "tiktok", width: canvas.width, height: canvas.height, ext: "mp4" });
-      const mime = "video/mp4";
-      setResult({ url, name, size: blob.size, mime, blob });
-      await saveExport(blob, name);
-    } catch (e) {
-      if (!controller.signal.aborted) setError(e?.message || "The TikTok MP4 export failed. Try again in Chrome or Edge.");
-    } finally {
-      isExportingRef.current = false;
-      exportAbortRef.current = null;
-      if (!controller.signal.aborted) {
-        setRecording(false);
-        setProgress(0);
-        // The loop parks for the whole encode; repaint the live preview once
-        // (the `play` event below re-kicks the loop when playback resumes).
-        dirtyRef.current = true;
-        kickPreviewRef.current?.();
-        if (resumePlayback) video.play().then(() => setIsPlaying(true)).catch(() => {});
-      }
-    }
-  };
 
   const handlePointerDown = (e) => {
     if (isExportingRef.current) return;
@@ -2081,7 +1136,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Upload one clip to start — your footage or a finished render. No generation needed; one clip at a time.
+              Upload one clip to start — footage or a finished render.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -2242,17 +1297,31 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">Text to show at the opening</span>
               <div className="flex items-center gap-1.5" role="group" aria-label="Hook copy variants">
-                {hookVariants.map((_, idx) => (
-                  <Chip
-                    key={idx}
-                    active={activeHookVariant === idx}
-                    onClick={() => { selectHookVariant(idx); startScopedPreview("hook"); }}
-                    testId={`hook-variant-${idx}`}
-                    ariaLabel={`Hook variant ${idx + 1}`}
-                  >
-                    {`Option ${idx + 1}`}
-                  </Chip>
-                ))}
+                <span data-testid="hook-variant-count" className="text-xs text-muted-foreground">
+                  {`Message ${Math.min(activeHookVariant + 1, Math.max(hookVariants.length, 1))} of ${hookVariants.length}`}
+                </span>
+                <Chip
+                  onClick={() => { rotateHookVariant(); startScopedPreview("hook"); }}
+                  testId="hook-variant-rotate"
+                  ariaLabel="Show next hook message"
+                >
+                  Next message
+                </Chip>
+                <Chip
+                  onClick={() => { addHookVariant(hookText); startScopedPreview("hook"); }}
+                  testId="hook-variant-add"
+                  ariaLabel="Add current text as a hook message"
+                >
+                  Add current
+                </Chip>
+                <Chip
+                  onClick={() => { removeHookVariant(); startScopedPreview("hook"); }}
+                  testId="hook-variant-remove"
+                  ariaLabel="Remove current hook message"
+                  disabled={hookVariants.length <= 1}
+                >
+                  Remove
+                </Chip>
               </div>
             </div>
             <textarea
@@ -3059,7 +2128,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {error && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{error}<ExportFailureNote entry={latestExportError} /></AlertDescription>
             </Alert>
           )}
         </div>
@@ -3117,7 +2186,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               {saveError && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>{saveError}</AlertDescription>
+                  <AlertDescription>{saveError}<ExportFailureNote entry={latestExportError} /></AlertDescription>
                 </Alert>
               )}
               {saved && (
