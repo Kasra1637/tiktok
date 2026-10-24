@@ -38,6 +38,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The backend suite encodes and probes real clips (mp4 samples,
+      # recovery/R2 fixtures, trim tests), so it needs a real ffmpeg
+      # on PATH. Without it the run fails with FileNotFoundError /
+      # RuntimeError before any product code is exercised.
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

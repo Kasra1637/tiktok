@@ -1095,8 +1095,11 @@ class TestNoPlatformAutomation:
         for r in api.app.routes:
             path = getattr(r, "path", "")
             if path.startswith("/api/generations"):
+                # Whole path segments, not substrings: "post-kit" and
+                # "regenerate" are copy endpoints, not platform automation.
+                segments = set(path.split("/"))
                 assert not any(
-                    w in path for w in ("publish", "post", "share", "schedule")
+                    w in segments for w in ("publish", "post", "share", "schedule")
                 ), path
 
     def test_legacy_creation_routes_are_unregistered(self, api):
