@@ -28,7 +28,7 @@ export function usePreviewLoop(settings) {
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    appendUrl, appendMeta, appendVideoRef, appendOverlays,
+    appendUrl, appendMeta, appendMode, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -49,7 +49,7 @@ export function usePreviewLoop(settings) {
 
   const videoRef = useRef(null);
   const activeVideoRef = useRef(null);
-  const sequence = viewMode === "realistic" && !!appendMeta;
+  const sequence = !!appendMeta;
   const sequenceRef = useRef(null);
   sequenceRef.current = { enabled: sequence, baseDuration: videoMeta?.d || 0, appendDuration: appendMeta?.d || 0 };
   const activeVideo = useCallback(() => activeVideoRef.current || videoRef.current, []);
@@ -421,10 +421,11 @@ export function usePreviewLoop(settings) {
       // first hand-mode frame and freezing the canvas.
       const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
 
-      if (viewMode === "hand" && video) {
+      const mode = segment ? appendMode : viewMode;
+      if (mode === "hand" && video) {
         const t = vt;
         drawHandView(ctx, cw, ch, frame, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
-        drawOverlays(ctx, vt);
+        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
         return;
       }
 
@@ -433,7 +434,7 @@ export function usePreviewLoop(settings) {
       // whole canvas, so the crop controls keep working and the export (which
       // calls this same painter per decoded frame) records exactly this.
       // The added segment uses its own uncoupled framing and overlay window.
-      if (viewMode === "realistic") {
+      if (mode === "realistic") {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, cw, ch);
         if (mediaReady(frame)) {
@@ -773,7 +774,7 @@ export function usePreviewLoop(settings) {
         const y = (ch - drawH) / 2;
         drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
-      drawOverlays(ctx, vt);
+      if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
     };
     paintFrameRef.current = paintFrame;
     // On-demand preview. A paused clip with settled settings paints the same
@@ -851,7 +852,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,

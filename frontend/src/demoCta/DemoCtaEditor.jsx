@@ -611,6 +611,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // export decodes both sources on the same joined timeline.
   const [appendUrl, setAppendUrl] = useState(null);
   const [appendMeta, setAppendMeta] = useState(null);
+  const [appendMode, setAppendMode] = useState("realistic");
   const [appendOverlays, setAppendOverlays] = useState(false);
   const [appendName, setAppendName] = useState("");
   const [appendError, setAppendError] = useState(null);
@@ -639,7 +640,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    appendUrl, appendMeta, appendVideoRef, appendOverlays,
+    appendUrl, appendMeta, appendMode, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -664,7 +665,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // only calls the two actions and reads the outcome states it owns.
   const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
     generation, onSaved,
-    videoUrl, videoMeta, device, preset, viewMode, envBg,
+    videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg,
     appendUrl, appendMeta, appendVideoRef,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -983,10 +984,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     kickPreviewRef.current?.();
   };
 
+  const isAppendTime = (time) => !!appendMeta && time >= (videoMeta?.d ?? 0);
+  const modeAt = (time) => (isAppendTime(time) ? appendMode : viewMode);
   const handleCaptureZoomLock = () => {
     const video = videoRef.current;
     if (!video || !videoMeta || isExportingRef.current) return;
-    if (viewMode === "realistic" && currentTime >= videoMeta.d) return;
+    if (isAppendTime(currentTime) && appendMode === "realistic") return;
     const time = video.currentTime;
     const snapshot = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(time);
     captureZoomKeyframe(time, snapshot);
@@ -1051,7 +1054,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const startStoryY = storyOffsetY;
     const startHookY = hookOffsetY;
     const startCtaY = ctaOffsetY;
-    const isHand = viewMode === "hand";
+    const isHand = modeAt(currentTime) === "hand";
     const framing = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(vt);
     const startOffX = isHand ? framing.handPanX : framing.offX;
     const startOffY = isHand ? framing.handPanY : framing.offY;
@@ -1089,14 +1092,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // In Real Video there is no phone to resize, so the wheel drives the
     // same video zoom the crop slider owns — otherwise scrolling would
     // silently do nothing in this mode.
-    updateZoomDraft((values) => viewMode === "hand"
+    const wheelMode = modeAt(currentTime);
+    if (isAppendTime(currentTime) && wheelMode === "realistic") return;
+    updateZoomDraft((values) => wheelMode === "hand"
       ? { handZoom: Math.max(RANGES.handZoom.min, Math.min(RANGES.handZoom.max, +(values.handZoom - e.deltaY * 0.0015).toFixed(3))) }
-      : viewMode === "realistic"
+      : wheelMode === "realistic"
       ? { scale: Math.max(RANGES.videoScale.min, Math.min(RANGES.videoScale.max, +(values.scale - e.deltaY * 0.0015).toFixed(3))) }
       : { phoneScale: Math.max(RANGES.scale.min, Math.min(RANGES.scale.max, +(values.phoneScale - e.deltaY * 0.0015).toFixed(3))) });
   };
 
-  const duration = (videoMeta?.d ?? 0) + (viewMode === "realistic" ? appendMeta?.d ?? 0 : 0);
+  const duration = (videoMeta?.d ?? 0) + (appendMeta?.d ?? 0);
   const interval = tickInterval(duration);
   const ticks = [];
   if (duration > 0) {
@@ -1144,7 +1149,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // columns peers: the page itself stops growing, the panel scrolls inside its
   // own box, and the preview stays put no matter how long the panel gets.
   const settingsRef = useRef(null);
-  const appendNotReady = viewMode === "realistic" && appendUrl && !appendMeta;
+  const appendNotReady = !!appendUrl && !appendMeta;
 
   return (
     // Radix tooltips need a provider ancestor; the app has none, and the
@@ -1287,7 +1292,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             )}
           </div>
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>View style</SubLabel>
+            <SubLabel>First clip style</SubLabel>
             <p className="text-xs text-muted-foreground">Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene.</p>
             <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
               {[
@@ -1298,7 +1303,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setViewMode(id)}
+                  onClick={() => { invalidateSequence(); setViewMode(id); }}
                   aria-pressed={viewMode === id}
                   data-testid={`view-mode-${id}`}
                   className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
@@ -1312,10 +1317,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
-          {viewMode === "realistic" && (
-            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel>Add clip after base</SubLabel>
-              <p className="text-xs text-muted-foreground">Play the full History base, then this upload, with each clip’s original audio. Export length includes both clips.</p>
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <SubLabel>Add clip after base</SubLabel>
+            <p className="text-xs text-muted-foreground">Play the full History base, then this upload, with each clip’s original audio. Export length includes both clips. Each clip keeps its own style below.</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
@@ -1350,6 +1354,33 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               {appendError && <p role="alert" className="text-xs text-destructive">{appendError}</p>}
               {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
               {appendUrl && (
+                <div className="space-y-2">
+                  <SubLabel>Added clip style</SubLabel>
+                  <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
+                    {[
+                      ["floating", "Floating Phone"],
+                      ["hand", "Hand Holding"],
+                      ["realistic", "Real Video"],
+                    ].map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => { invalidateSequence(); setAppendMode(id); }}
+                        aria-pressed={appendMode === id}
+                        data-testid={`append-mode-${id}`}
+                        className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
+                          appendMode === id
+                            ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {appendUrl && (
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
                     onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
@@ -1357,8 +1388,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </label>
               )}
             </div>
-          )}
-          {viewMode === "hand" && (
+          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
             <div className="grid grid-cols-5 gap-1.5">
               {ENVIRONMENTS.map((env) => (
                 <button
@@ -1376,7 +1406,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           )}
-          {viewMode === "floating" && (
+          {(viewMode === "floating" || (appendMeta && appendMode === "floating")) && (
             <>
               <div className="space-y-2">
                 <SubLabel>Background</SubLabel>
@@ -1437,7 +1467,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
             </>
           )}
-          {viewMode === "hand" && (
+          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
               <SubLabel>Hand size &amp; position</SubLabel>
               <p className="text-xs text-muted-foreground">Drag to move • scroll to zoom</p>
@@ -1881,7 +1911,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
             </div>
           </div>
-          {viewMode === "hand" && (
+          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
             <div className="space-y-2" data-testid="screen-position-controls">
               <SubLabel>Screen position</SubLabel>
               {[
@@ -2289,7 +2319,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           className="pointer-events-none absolute h-px w-px opacity-0"
           playsInline
           muted={previewMuted}
-          loop={!(viewMode === "realistic" && appendUrl)}
+          loop={!appendUrl}
           autoPlay
         />
         {/* Second-segment playback; export decodes the original bytes. */}

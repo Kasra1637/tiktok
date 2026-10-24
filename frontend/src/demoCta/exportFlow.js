@@ -76,7 +76,7 @@ export async function probeRecordingPlays(blob, expectedDuration, audioSegments 
 export function useExportFlow(settings) {
   const {
     generation, onSaved,
-    videoUrl, videoMeta, device, preset, viewMode, envBg,
+    videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg,
     appendUrl, appendMeta, appendVideoRef,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -138,13 +138,13 @@ export function useExportFlow(settings) {
       // Freeze settings, assets and fonts for the entire encode. Never capture a live RAF canvas.
       await Promise.all([document.fonts?.ready, ...[captionFont, ctaFont].map((id) =>
         document.fonts?.load(`100px ${fontStack(id)}`))]);
-      if (viewMode === "hand") {
+      if (viewMode === "hand" || (appendUrl && appendMode === "hand")) {
         await prepareHandViewImages(envBg);
       }
       const response = await fetch(videoUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");
       let appendBlob = null;
-      if (viewMode === "realistic" && appendUrl) {
+      if (appendUrl) {
         const response = await fetch(appendUrl, { signal: controller.signal });
         if (!response.ok) throw new Error("The added clip could not be read. Reload it and export again.");
         appendBlob = await response.blob();

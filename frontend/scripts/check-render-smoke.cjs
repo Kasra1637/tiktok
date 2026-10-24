@@ -9057,7 +9057,7 @@ async function runDemoCtaChecks() {
     );
   });
 
-  await check("Real Video sequences History then upload and leaves phone modes single-source", async (ctx) => {
+  await check("Real Video sequences History then upload with a presentation per clip", async (ctx) => {
     const draws = [];
     const clip = installLoadedClipStubs({ width: 1080, height: 1920, onDraw: (frame) => draws.push(frame) });
     const originalFetch = global.fetch;
@@ -9144,16 +9144,27 @@ async function runDemoCtaChecks() {
       await click('[data-testid="append-overlays"]');
       await click('[data-testid="demo-cta-export"]');
       if (!ctx.container.textContent.includes("Sequence callback verified")) throw new Error("opted-in overlays failed export");
+      // Each clip picks its own presentation: the added clip renders inside
+      // a floating phone while the base stays full-bleed, and the export
+      // keeps both segments.
       hand.drawHandView = (...args) => { handCalls.push(args); };
       hand.prepareHandViewImages = async () => {};
+      await click('[data-testid="append-mode-floating"]');
+      if (ctx.container.querySelector('[data-testid="append-mode-floating"]').getAttribute("aria-pressed") !== "true") throw new Error("added-clip style did not take the floating selection");
+      await click('[data-testid="demo-cta-export"]');
+      if (!encodedOverlay || !ctx.container.textContent.includes("Sequence callback verified")) throw new Error("floating added clip was not exported");
+      await click('[data-testid="append-mode-hand"]');
+      handCalls.length = 0;
+      await click('[data-testid="demo-cta-export"]');
+      if (!encodedOverlay || !handCalls.length) throw new Error("hand added clip never reached the hand painter");
+      // The base keeps its own presentation too: a hand base plus a hand
+      // upload still exports both segments instead of dropping the second.
       await click('[data-testid="view-mode-hand"]');
+      handCalls.length = 0;
       await click('[data-testid="demo-cta-export"]');
-      if (encodedOverlay || !handCalls.length) throw new Error("hand mode changed or included the added clip");
-      await click('[data-testid="view-mode-floating"]');
-      await click('[data-testid="demo-cta-export"]');
-      if (encodedOverlay) throw new Error("phone clip leaked into single-source export");
-      if (!overlay.paused) throw new Error("hidden overlay kept playing in a single-source mode");
+      if (!encodedOverlay || handCalls.length < 2) throw new Error("base style change dropped the added clip or its presentation");
       await click('[data-testid="view-mode-realistic"]');
+      await click('[data-testid="append-mode-realistic"]');
       await act(async () => overlay.dispatchEvent(new dom.window.Event("error")));
       if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("broken overlay still enabled export");
       await click('[data-testid="append-remove"]');
