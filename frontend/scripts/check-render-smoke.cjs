@@ -7337,7 +7337,7 @@ async function runDemoCtaChecks() {
     "which settings groups are open is remembered across visits",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      const key = "hookforge.demoCta.openSections.v3";
+      const key = "hookforge.demoCta.openSections.v4";
       dom.window.localStorage.removeItem(key);
       const mountEditor = async () => {
         // A fresh container per mount: `check` owns one, and creating a second
@@ -7431,7 +7431,7 @@ async function runDemoCtaChecks() {
     "the frame upload still reaches its file input with Source & Look closed",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
       await withApi(
         { getGenerations: async () => ({ generations: [COMPLETED] }) },
         async () => {
@@ -7461,7 +7461,7 @@ async function runDemoCtaChecks() {
   // the browser default; Sora followed as a second trim of the same list.
   await check("Public Sans and Sora are gone from both overlay font lists", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     // One group is open at a time, so each list is opened in turn.
     const openGroup = async (container, label) => {
       const btn = [...container.querySelectorAll("button[aria-expanded]")]
@@ -7501,7 +7501,7 @@ async function runDemoCtaChecks() {
   // play(), so this pins currentTime.)
   await check("an overlay entrance, size or face change keeps the playhead", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     // Overlay prefs persist across checks: a fade picked anywhere earlier
     // would make the fade click below a same-value no-op that still holds
     // the playhead — a pass that proves nothing.
@@ -7640,7 +7640,7 @@ async function runDemoCtaChecks() {
     // fade click a no-op (same value, no repaint), and a group left open
     // would make the open click close it instead. Start clean, end clean.
     const resetUiState = () => {
-      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
       dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
     };
     const restore = () => {
@@ -8637,7 +8637,7 @@ async function runDemoCtaChecks() {
       // one-open change has that shape on disk, and reading it as-is would
       // restore the exact layout the change was made to remove.
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      const key = "hookforge.demoCta.openSections.v3";
+      const key = "hookforge.demoCta.openSections.v4";
       dom.window.localStorage.removeItem(key);
       try {
         dom.window.localStorage.setItem(
@@ -8717,7 +8717,7 @@ async function runDemoCtaChecks() {
       if (!src.includes(marker)) throw new Error(`missing TikTok spec on the export path: ${marker}`);
     }
     if (ctx.container.querySelector('[aria-label="Export format"], [aria-label="Platform preset"]')) throw new Error("alternate delivery formats remain selectable");
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
   });
 
   await check("MP4 duration and decoding validation precede download and History", async () => {
@@ -8752,7 +8752,7 @@ async function runDemoCtaChecks() {
     const openGroup = async (label) => clickEl(ctx,
       [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => b.textContent.trim() === label), `open ${label}`);
     try {
-      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
       await mount(DemoCtaEditor)(ctx);
       const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
       Object.defineProperty(input, "files", { value: [new dom.window.File(["video"], "story.mp4", { type: "video/mp4" })] });
@@ -8785,13 +8785,13 @@ async function runDemoCtaChecks() {
       media.load = original.load;
       dom.window.HTMLCanvasElement.prototype.getContext = original.context;
       document.createElement = original.createElement;
-      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     }
   });
 
   await check("Font & Animation close each other in Hook Text and End Card CTA", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     await mount(DemoCtaEditor)(ctx);
     for (const [label, prefix] of [["Hook Text", "caption"], ["End Card CTA", "cta"]]) {
       const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
@@ -8812,7 +8812,7 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, font.querySelector("summary"), "close Font");
       if (font.open || animation.open) throw new Error(`${label}: both panels must be collapsible`);
     }
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
   });
 
   await check(
@@ -8909,7 +8909,7 @@ async function runDemoCtaChecks() {
     "Demo + CTA offers S/M/L size presets, safe-area guard, copy flipper, timing presets, and named looks",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
       dom.window.localStorage.removeItem("hookforge.demoCta.overlayPrefs.v1");
       const openGroup = async (label) => {
         const btn = [...ctx.container.querySelectorAll("button[aria-expanded]")]
@@ -9030,7 +9030,7 @@ async function runDemoCtaChecks() {
 
   await check("Demo + CTA offers Real Video with a History render picker", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     await withApi(
       {
         getGenerationHistory: async () => ({ generations: [
@@ -9040,6 +9040,9 @@ async function runDemoCtaChecks() {
       },
       async () => {
         await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        // No base, no second clip: the follow-up upload only appears once a
+        // base exists, so the panel never shows two upload buttons at once.
+        if (ctx.container.querySelector('[data-testid="demo-cta-second"]')) throw new Error("Second clip offered before any base exists");
         const mode = ctx.container.querySelector('[data-testid="view-mode-realistic"]');
         if (!mode) throw new Error("Real Video view style is missing");
         await clickEl(ctx, mode, "select Real Video view");
@@ -9093,6 +9096,12 @@ async function runDemoCtaChecks() {
       await clip.flush();
       if (!ctx.container.textContent.includes("History base-composit.mp4")) throw new Error("History attachment did not become the base source");
       const source = base.src;
+      // The follow-up group arrives with the base, carrying its own upload
+      // and style picker. It starts closed (single-open accordion), so open
+      // it before driving the added-clip controls below.
+      if (!ctx.container.querySelector('[data-testid="demo-cta-second"]')) throw new Error("Second clip group missing once the base exists");
+      await click('[data-testid="demo-cta-second"] button');
+      if (ctx.container.querySelector('[data-testid="append-upload-button"]')?.textContent !== "Add clip after base") throw new Error("second-clip upload mislabeled with no added clip");
       const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
       Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
@@ -9151,19 +9160,32 @@ async function runDemoCtaChecks() {
       hand.prepareHandViewImages = async () => {};
       await click('[data-testid="append-mode-floating"]');
       if (ctx.container.querySelector('[data-testid="append-mode-floating"]').getAttribute("aria-pressed") !== "true") throw new Error("added-clip style did not take the floating selection");
+      // Each segment carries its own backdrop and motion: the added clip
+      // takes sage + embers while the base keeps lavender + bloom.
+      await click('[data-testid="append-background-sage"]');
+      if (ctx.container.querySelector('[data-testid="append-background-sage"]').getAttribute("aria-pressed") !== "true") throw new Error("added-clip background did not take the selection");
+      await click('[data-testid="append-animation-embers"]');
+      if (ctx.container.querySelector('[data-testid="append-animation-embers"]').getAttribute("aria-pressed") !== "true") throw new Error("added-clip animation did not take the selection");
       await click('[data-testid="demo-cta-export"]');
       if (!encodedOverlay || !ctx.container.textContent.includes("Sequence callback verified")) throw new Error("floating added clip was not exported");
       await click('[data-testid="append-mode-hand"]');
+      await click('[data-testid="append-env-bedroom"]');
       handCalls.length = 0;
       await click('[data-testid="demo-cta-export"]');
       if (!encodedOverlay || !handCalls.length) throw new Error("hand added clip never reached the hand painter");
+      if (!handCalls.some((args) => args[4] === "bedroom")) throw new Error("added clip did not paint its own scene");
       // The base keeps its own presentation too: a hand base plus a hand
       // upload still exports both segments instead of dropping the second.
+      // Source & Look closed when Second clip opened (single-open
+      // accordion), so reopen it for the base style picker.
+      await click('[data-testid="demo-cta-source"] button');
       await click('[data-testid="view-mode-hand"]');
       handCalls.length = 0;
       await click('[data-testid="demo-cta-export"]');
       if (!encodedOverlay || handCalls.length < 2) throw new Error("base style change dropped the added clip or its presentation");
+      if (!handCalls.some((args) => args[4] === "living_room")) throw new Error("base lost its own scene once the added clip picked another");
       await click('[data-testid="view-mode-realistic"]');
+      await click('[data-testid="demo-cta-second"] button');
       await click('[data-testid="append-mode-realistic"]');
       await act(async () => overlay.dispatchEvent(new dom.window.Event("error")));
       if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("broken overlay still enabled export");
@@ -10418,8 +10440,10 @@ await check(
       // const in the temporal dead zone throws on ANY access — `?.` guards a
       // nullish binding, not an undeclared one — so the first hand-mode frame
       // died before rescheduling the loop and the canvas froze on the old
-      // view. The declaration must precede both renderer branches.
-      const declAt = drawSrc.indexOf("const palette = COLOR_PALETTES[bg]");
+      // view. The declaration must precede both renderer branches. It reads
+      // the per-segment backdrop (`lookBg`), so a sage upload can follow a
+      // lavender base in one export.
+      const declAt = drawSrc.indexOf("const palette = COLOR_PALETTES[lookBg]");
       if (declAt === -1) {
         throw new Error("the shared palette declaration is gone from the draw path");
       }

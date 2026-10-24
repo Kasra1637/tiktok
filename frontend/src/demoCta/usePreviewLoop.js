@@ -28,7 +28,7 @@ export function usePreviewLoop(settings) {
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    appendUrl, appendMeta, appendMode, appendVideoRef, appendOverlays,
+    appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -419,12 +419,19 @@ export function usePreviewLoop(settings) {
       // it only guards a declared binding that happens to be nullish. A const
       // read before its declaration would throw, killing the draw loop on the
       // first hand-mode frame and freezing the canvas.
-      const palette = COLOR_PALETTES[bg] || COLOR_PALETTES.lavender;
-
       const mode = segment ? appendMode : viewMode;
+      // Each segment carries its own look: the added clip starts from the
+      // same defaults but diverges independently, so a calm base can flow
+      // into an energetic upload. Only the selected branch's values are
+      // read — a realistic segment never touches palettes or environments.
+      const lookBg = segment ? (appendBg ?? bg) : bg;
+      const lookAnim = segment ? (appendAnim ?? anim) : anim;
+      const lookEnv = segment ? (appendEnv ?? envBg) : envBg;
+      const palette = COLOR_PALETTES[lookBg] || COLOR_PALETTES.lavender;
+
       if (mode === "hand" && video) {
         const t = vt;
-        drawHandView(ctx, cw, ch, frame, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
+        drawHandView(ctx, cw, ch, frame, lookEnv, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
         if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
         return;
       }
@@ -451,7 +458,7 @@ export function usePreviewLoop(settings) {
         return;
       }
 
-      const isFloat = bg !== "transparent";
+      const isFloat = lookBg !== "transparent";
 
       if (isFloat) {
         const t = vt;
@@ -477,7 +484,7 @@ export function usePreviewLoop(settings) {
         const glowY = cy2 + bobY * 0.8;
         const glowR = Math.max(drawW, drawH) * 0.85;
 
-        if (anim === "breathe") {
+        if (lookAnim === "breathe") {
           const breathPhase = t * 0.3;
 
           for (let i = 0; i < 3; i++) {
@@ -507,7 +514,7 @@ export function usePreviewLoop(settings) {
           ctx.restore();
         }
 
-        if (anim === "embers") {
+        if (lookAnim === "embers") {
           // Sparks rise on looped paths. Positions hash from the particle
           // index, never Math.random, so the export encodes the same sparks
           // the preview shows.
@@ -541,7 +548,7 @@ export function usePreviewLoop(settings) {
           ctx.restore();
         }
 
-        if (anim === "vortex") {
+        if (lookAnim === "vortex") {
           // Two spiral arms rotate around the phone, trailing glow.
           for (let arm = 0; arm < 2; arm++) {
             ctx.save();
@@ -574,7 +581,7 @@ export function usePreviewLoop(settings) {
           ctx.restore();
         }
 
-        if (anim === "grid") {
+        if (lookAnim === "grid") {
           // A synthwave floor: lines converge past a horizon, horizontals rush
           // toward the viewer on a loop.
           const horizon = ch * 0.62;
@@ -606,7 +613,7 @@ export function usePreviewLoop(settings) {
           ctx.restore();
         }
 
-        if (anim === "comet") {
+        if (lookAnim === "comet") {
           // A comet arcs across the top third on a loop, fading tail behind it.
           ctx.save();
           ctx.globalAlpha = 0.12;
@@ -643,7 +650,7 @@ export function usePreviewLoop(settings) {
           ctx.restore();
         }
 
-        if (anim === "tide") {
+        if (lookAnim === "tide") {
           // Three translucent sine bands drift at different speeds.
           for (let i = 0; i < 3; i++) {
             ctx.save();
@@ -663,7 +670,7 @@ export function usePreviewLoop(settings) {
           }
         }
 
-        if (anim === "prism") {
+        if (lookAnim === "prism") {
           // Three beams rotate slowly from behind the phone.
           for (let i = 0; i < 3; i++) {
             const pa = t * 0.25 + (i / 3) * Math.PI * 2;
@@ -685,7 +692,7 @@ export function usePreviewLoop(settings) {
           }
         }
 
-        if (anim === "bloom") {
+        if (lookAnim === "bloom") {
           // Petals of light open and close around the phone, very slow.
           for (let i = 0; i < 6; i++) {
             const ba = (i / 6) * Math.PI * 2 + t * 0.12;
@@ -703,7 +710,7 @@ export function usePreviewLoop(settings) {
           }
         }
 
-        if (anim === "meteor") {
+        if (lookAnim === "meteor") {
           // Diagonal streaks fall fast across the frame on looped paths.
           ctx.save();
           for (let i = 0; i < 14; i++) {
@@ -852,7 +859,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,

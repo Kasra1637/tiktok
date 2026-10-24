@@ -45,4 +45,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0025](0025-real-video-phone-composite.md) | Real Video combines a base clip and looped phone upload through one timestamped painter | superseded by 0027 (appended sequence) |
 | [0027](0027-real-video-appended-sequence.md) | Real Video appends the second clip after the base with both soundtracks | accepted |
 | [0028](0028-per-clip-presentation.md) | Each sequence clip picks its own floating/hand/real presentation | accepted |
+| [0029](0029-second-clip-group-and-look.md) | Second clip gets its own gated group and its own background/motion/scene | accepted |
 | [0026](0026-fresh-opening-message-batches.md) | Opening text consumes twenty app-grounded suggestions instead of saved preset indices | accepted |

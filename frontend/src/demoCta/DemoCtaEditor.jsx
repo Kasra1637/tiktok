@@ -69,11 +69,12 @@ import { ExportFailureNote } from "./ExportFailureNote";
 import { sourceErrorMessage, useHistorySource } from "./useHistorySource";
 import { useOpeningMessages } from "./useOpeningMessages";
 
-const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
+const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
 
 // Render order, which is also the order that decides which group wins when a
 // stored value somehow has more than one open (older versions allowed it).
-const SECTION_ORDER = ["source", "hook", "story", "cta", "advanced"];
+// "second" owns the appended clip so Source & Look stays about the base.
+const SECTION_ORDER = ["source", "second", "hook", "story", "cta", "advanced"];
 
 /** The one-open shape: every key present, exactly one true (or none). */
 function singleOpen(openKey) {
@@ -160,6 +161,127 @@ function SubLabel({ children }) {
 
 function FieldLabel({ children }) {
   return <span className="text-xs text-muted-foreground">{children}</span>;
+}
+
+/**
+ * Three-way presentation picker shared by both clips. `prefix` namespaces
+ * the testids (`view-mode-*` for the base, `append-mode-*` for the added
+ * clip) so the two pickers drive independent state from one component.
+ */
+function StylePicker({ label, hint, value, onChange, prefix }) {
+  return (
+    <>
+      <SubLabel>{label}</SubLabel>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
+        {[
+          ["floating", "Floating Phone"],
+          ["hand", "Hand Holding"],
+          ["realistic", "Real Video"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onChange(id)}
+            aria-pressed={value === id}
+            data-testid={`${prefix}${id}`}
+            className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
+              value === id
+                ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** Hand-scene environment grid, one per clip (`prefix` namespaces testids). */
+function EnvGrid({ value, onChange, prefix }) {
+  return (
+    <div className="grid grid-cols-5 gap-1.5">
+      {ENVIRONMENTS.map((env) => (
+        <button
+          key={env.id}
+          type="button"
+          onClick={() => onChange(env.id)}
+          title={env.label}
+          data-testid={`${prefix}env-${env.id}`}
+          className={`focus-ring overflow-hidden rounded-xl border text-xs transition ${
+            value === env.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+          }`}
+        >
+          <img src={env.url} alt={env.label} className="aspect-[3/4] w-full object-cover" loading="lazy" crossOrigin="anonymous" />
+          <div className="px-0.5 py-1 text-center text-xs leading-tight text-muted-foreground">{env.label}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Floating-phone backdrop swatches, one set per clip. */
+function BackgroundPicker({ value, onChange, prefix }) {
+  return (
+    <div className="space-y-2">
+      <SubLabel>Background</SubLabel>
+      <div className="flex flex-wrap items-center gap-2">
+        {BACKGROUNDS.map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => onChange(b.id)}
+            title={b.label}
+            aria-label={b.label}
+            aria-pressed={value === b.id}
+            data-testid={`${prefix}background-${b.id}`}
+            className={`focus-ring h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
+              value === b.id
+                ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
+                : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
+            }`}
+            style={
+              b.preview === "transparent"
+                ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(-45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
+                : { background: b.preview }
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Floating-phone motion picker. The app's own selectable pill rather than
+ *  another hand-rolled row of text buttons: this list is a segmented choice,
+ *  which is what `Chip` is for, and it carries the visible border, hover
+ *  state and indigo selected state a plain row lacks. */
+function AnimationPicker({ value, onChange, prefix }) {
+  return (
+    <div className="space-y-2">
+      <SubLabel>Animation</SubLabel>
+      <div
+        role="group"
+        aria-label="Animation"
+        data-testid={`${prefix}animation-group`}
+        className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 xl:grid-cols-3"
+      >
+        {ANIMATIONS.map((a) => (
+          <Chip
+            key={a.id}
+            active={value === a.id}
+            onClick={() => onChange(a.id)}
+            testId={`${prefix}animation-${a.id}`}
+            ariaLabel={a.label}
+          >
+            {a.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 
@@ -612,6 +734,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [appendUrl, setAppendUrl] = useState(null);
   const [appendMeta, setAppendMeta] = useState(null);
   const [appendMode, setAppendMode] = useState("realistic");
+  // The added clip keeps its own look: background, motion and hand scene
+  // start from the same defaults as the base but diverge independently.
+  // Zoom framing and phone size stay shared — one timeline, one mockup
+  // geometry — so locks and sliders keep working across the cut.
+  const [appendBg, setAppendBg] = useState(DEFAULTS.bg);
+  const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
+  const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
   const [appendOverlays, setAppendOverlays] = useState(false);
   const [appendName, setAppendName] = useState("");
   const [appendError, setAppendError] = useState(null);
@@ -640,7 +769,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    appendUrl, appendMeta, appendMode, appendVideoRef, appendOverlays,
+    appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -665,7 +794,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // only calls the two actions and reads the outcome states it owns.
   const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
     generation, onSaved,
-    videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg,
+    videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -1182,7 +1311,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         />
         {/* The added clip drives a separate input for the same reason: one input
             per source, so neither upload can clobber the other. Resetting the
-            value lets the same file be picked twice in a row. */}
+            value lets the same file be picked twice in a row. It only exists
+            once a base does — two upload doors with no clip loaded read as a
+            broken choice, and the section button below covers the same input. */}
+        {videoUrl && (
         <input
           ref={appendInputRef}
           type="file"
@@ -1196,6 +1328,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             if (file) handleAppendFile(file);
           }}
         />
+        )}
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
@@ -1292,182 +1425,28 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             )}
           </div>
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>First clip style</SubLabel>
-            <p className="text-xs text-muted-foreground">Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene.</p>
-            <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
-              {[
-                ["floating", "Floating Phone"],
-                ["hand", "Hand Holding"],
-                ["realistic", "Real Video"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => { invalidateSequence(); setViewMode(id); }}
-                  aria-pressed={viewMode === id}
-                  data-testid={`view-mode-${id}`}
-                  className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
-                    viewMode === id
-                      ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <StylePicker
+              label="First clip style"
+              hint="Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene."
+              value={viewMode}
+              onChange={(id) => { invalidateSequence(); setViewMode(id); }}
+              prefix="view-mode-"
+            />
           </div>
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>Add clip after base</SubLabel>
-            <p className="text-xs text-muted-foreground">Play the full History base, then this upload, with each clip’s original audio. Export length includes both clips. Each clip keeps its own style below.</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-10"
-                  onClick={() => appendInputRef.current?.click()}
-                  data-testid="append-upload-button"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>{appendUrl ? "Replace added clip" : "Add clip after base"}</span>
-                </Button>
-                {appendName && (
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={appendName} data-testid="append-file-name">
-                    {appendName}
-                    {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendMeta.d.toFixed(1)}s` : ""}
-                  </span>
-                )}
-                {appendUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-10"
-                    onClick={removeAppend}
-                    title="Remove the added clip"
-                    data-testid="append-remove"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    <span>Remove</span>
-                  </Button>
-                )}
-              </div>
-              {appendError && <p role="alert" className="text-xs text-destructive">{appendError}</p>}
-              {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
-              {appendUrl && (
-                <div className="space-y-2">
-                  <SubLabel>Added clip style</SubLabel>
-                  <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
-                    {[
-                      ["floating", "Floating Phone"],
-                      ["hand", "Hand Holding"],
-                      ["realistic", "Real Video"],
-                    ].map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => { invalidateSequence(); setAppendMode(id); }}
-                        aria-pressed={appendMode === id}
-                        data-testid={`append-mode-${id}`}
-                        className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
-                          appendMode === id
-                            ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {appendUrl && (
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
-                    onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
-                  Apply text and overlays to the added clip too
-                </label>
-              )}
-            </div>
-          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
-            <div className="grid grid-cols-5 gap-1.5">
-              {ENVIRONMENTS.map((env) => (
-                <button
-                  key={env.id}
-                  type="button"
-                  onClick={() => setEnvBg(env.id)}
-                  title={env.label}
-                  className={`focus-ring overflow-hidden rounded-xl border text-xs transition ${
-                    envBg === env.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-                  }`}
-                >
-                  <img src={env.url} alt={env.label} className="aspect-[3/4] w-full object-cover" loading="lazy" crossOrigin="anonymous" />
-                  <div className="px-0.5 py-1 text-center text-xs leading-tight text-muted-foreground">{env.label}</div>
-                </button>
-              ))}
-            </div>
+          {/* Base scene only. The added clip picks its own scene in Second
+              clip, and the painter resolves per segment, so one hand photo
+              can open into a different room. */}
+          {viewMode === "hand" && (
+            <EnvGrid value={envBg} onChange={setEnvBg} prefix="" />
           )}
-          {(viewMode === "floating" || (appendMeta && appendMode === "floating")) && (
+          {viewMode === "floating" && (
             <>
-              <div className="space-y-2">
-                <SubLabel>Background</SubLabel>
-                <div className="flex flex-wrap items-center gap-2">
-                  {BACKGROUNDS.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => setBg(b.id)}
-                      title={b.label}
-                      aria-label={b.label}
-                      aria-pressed={bg === b.id}
-                      data-testid={`background-${b.id}`}
-                      className={`focus-ring h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
-                        bg === b.id
-                          ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
-                          : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-                      }`}
-                      style={
-                        b.preview === "transparent"
-                          ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
-                          : { background: b.preview }
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <SubLabel>Animation</SubLabel>
-                {/* The app's own selectable pill rather than another hand-rolled
-                    row of text buttons: this list is a segmented choice, which is
-                    what `Chip` is for, and it carries the visible border, hover
-                    state and indigo selected state the previous version lacked.
-                    Even widths come from the grid, because `Chip` takes no
-                    className. Three columns wherever the panel is full-width
-                    (below lg) or wide (xl and up); two in the narrow lg–xl
-                    column, where a third column leaves longer labels
-                    about 92px and they wrap to two lines. */}
-                <div
-                  role="group"
-                  aria-label="Animation"
-                  data-testid="animation-group"
-                  className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 xl:grid-cols-3"
-                >
-                  {ANIMATIONS.map((a) => (
-                    <Chip
-                      key={a.id}
-                      active={anim === a.id}
-                      onClick={() => setAnim(a.id)}
-                      testId={`animation-${a.id}`}
-                      ariaLabel={a.label}
-                    >
-                      {a.label}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
+              <BackgroundPicker value={bg} onChange={setBg} prefix="" />
+              <AnimationPicker value={anim} onChange={setAnim} prefix="" />
               <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
             </>
           )}
-          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
+          {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
               <SubLabel>Hand size &amp; position</SubLabel>
               <p className="text-xs text-muted-foreground">Drag to move • scroll to zoom</p>
@@ -1480,6 +1459,73 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </div>
           )}
         </EditorSection>
+
+        {/* The appended clip lives in its own group so Source & Look stays
+            about the base: one clip per group, one style picker per clip.
+            Gated on a loaded base — offering an "after" before there is a
+            "before" was the second upload button nobody could place. */}
+        {videoUrl && (
+        <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
+          <p className="text-xs text-muted-foreground">The full base plays first, then this upload, each with its own audio. Export length covers both clips, and each clip keeps its own style.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10"
+              onClick={() => appendInputRef.current?.click()}
+              data-testid="append-upload-button"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>{appendUrl ? "Replace added clip" : "Add clip after base"}</span>
+            </Button>
+            {appendName && (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={appendName} data-testid="append-file-name">
+                {appendName}
+                {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendMeta.d.toFixed(1)}s` : ""}
+              </span>
+            )}
+            {appendUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-10"
+                onClick={removeAppend}
+                title="Remove the added clip"
+                data-testid="append-remove"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Remove</span>
+              </Button>
+            )}
+          </div>
+          {appendError && <p role="alert" className="text-xs text-destructive">{appendError}</p>}
+          {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
+          {appendUrl && (
+            <StylePicker
+              label="Added clip style"
+              value={appendMode}
+              onChange={(id) => { invalidateSequence(); setAppendMode(id); }}
+              prefix="append-mode-"
+            />
+          )}
+          {appendMeta && appendMode === "hand" && (
+            <EnvGrid value={appendEnv} onChange={setAppendEnv} prefix="append-" />
+          )}
+          {appendMeta && appendMode === "floating" && (
+            <>
+              <BackgroundPicker value={appendBg} onChange={setAppendBg} prefix="append-" />
+              <AnimationPicker value={appendAnim} onChange={setAppendAnim} prefix="append-" />
+            </>
+          )}
+          {appendUrl && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
+                onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
+              Apply text and overlays to the added clip too
+            </label>
+          )}
+        </EditorSection>
+        )}
 
         <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
