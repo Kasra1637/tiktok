@@ -59,6 +59,7 @@ export function useExportFlow(settings) {
   const {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, envBg,
+    overlayUrl, overlayPhone, overlayVideoRef,
     captionFont, ctaFont, fontStack,
     videoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -104,6 +105,11 @@ export function useExportFlow(settings) {
     exportAbortRef.current = controller;
     const resumePlayback = !video.paused;
     video.pause();
+    // The overlay element is preview-only transport: park it for the encode
+    // (the export decodes the overlay bytes itself) and resume it after.
+    const overlayEl = overlayVideoRef?.current;
+    const resumeOverlay = !!overlayEl && !overlayEl.paused;
+    overlayEl?.pause();
     setIsPlaying(false);
     setError(null);
     setSaveError(null);
@@ -117,13 +123,21 @@ export function useExportFlow(settings) {
       // Freeze settings, assets and fonts for the entire encode. Never capture a live RAF canvas.
       await Promise.all([document.fonts?.ready, ...[captionFont, ctaFont].map((id) =>
         document.fonts?.load(`100px ${fontStack(id)}`))]);
-      if (viewMode === "hand") await prepareHandViewImages(envBg);
+      if (viewMode === "hand" || (viewMode === "realistic" && overlayUrl && overlayPhone === "hand")) {
+        await prepareHandViewImages(envBg, viewMode === "realistic");
+      }
       const response = await fetch(videoUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");
+      let overlayBlob = null;
+      if (viewMode === "realistic" && overlayUrl) {
+        const overlayResponse = await fetch(overlayUrl, { signal: controller.signal });
+        if (!overlayResponse.ok) throw new Error("The phone overlay clip could not be read. Reload it and export again.");
+        overlayBlob = await overlayResponse.blob();
+      }
       const canvas = document.createElement("canvas");
       const { blob, duration } = await exportTikTok({
-        source: await response.blob(), canvas, signal: controller.signal,
-        drawFrame: (time, frame) => paintFrame(canvas, time, frame),
+        source: await response.blob(), overlaySource: overlayBlob, canvas, signal: controller.signal,
+        drawFrame: (time, frame, overlayFrame) => paintFrame(canvas, time, frame, overlayFrame),
         onProgress: setProgress,
       });
       const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
@@ -153,6 +167,7 @@ export function useExportFlow(settings) {
         dirtyRef.current = true;
         kickPreviewRef.current?.();
         if (resumePlayback) video.play().then(() => setIsPlaying(true)).catch(() => {});
+        if (resumeOverlay) overlayEl?.play()?.catch(() => {});
       }
     }
   };

@@ -2,7 +2,7 @@
 import json
 from datetime import datetime, timezone
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def now_iso() -> str:
@@ -44,6 +44,11 @@ def row_to_dict(row, columns: list) -> dict:
                 pass
         d[col] = val
     return d
+
+
+class OpeningMessagesRequest(BaseModel):
+    profile_id: Optional[str] = None
+    previous: List[str] = Field(default_factory=list, max_length=20)
 
 
 class CustomizeRequest(BaseModel):

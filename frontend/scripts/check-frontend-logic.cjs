@@ -1186,8 +1186,7 @@ check("Story paints only inside its window using hook styling and local video ti
   return calls.some(([key, text]) => key === "fillText" && text === "STORY MESSAGE") && storyCalls === JSON.stringify(calls);
 })(), "Story leaked outside its window or diverged from the shared hook painter");
 
-check("copy variants and builtin look presets are populated",
-  Array.isArray(DC.HOOK_COPY_VARIANTS) && DC.HOOK_COPY_VARIANTS.length === 3 &&
+check("CTA variants and builtin look presets are populated",
   Array.isArray(DC.CTA_COPY_VARIANTS) && DC.CTA_COPY_VARIANTS.length === 3 &&
   Array.isArray(DC.BUILTIN_LOOK_PRESETS) && DC.BUILTIN_LOOK_PRESETS.length >= 3,
   "missing copy variants or look presets");

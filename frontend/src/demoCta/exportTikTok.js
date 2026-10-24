@@ -7,8 +7,15 @@ export const TIKTOK_EXPORT = Object.freeze({
   width: 1080, height: 1920, fps: 30, videoBitrate: 8_000_000, audioBitrate: 192_000,
 });
 
-/** No playback clock: decoding/encoding can take as long as needed without moving the timeline. */
-export async function exportTikTok({ source, canvas, drawFrame, onProgress, signal }) {
+/** No playback clock: decoding/encoding can take as long as needed without moving the timeline.
+ *
+ * `overlaySource` is the optional second layer: the phone-overlay upload.
+ * It decodes in lockstep with the base on its own loop (overlay time is
+ * base time modulo the overlay duration), and each base frame is drawn
+ * with its overlay canvas — or null when no overlay is attached. Audio
+ * always comes from the base alone; the overlay is a silent layer.
+ */
+export async function exportTikTok({ source, overlaySource, canvas, drawFrame, onProgress, signal }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -22,6 +29,9 @@ export async function exportTikTok({ source, canvas, drawFrame, onProgress, sign
     throw new Error("TikTok MP4 encoding is unavailable in this browser. Open this editor in a current Chrome or Edge browser.");
   }
   const input = new Input({ source: new BlobSource(source), formats: ALL_FORMATS });
+  const overlayInput = overlaySource
+    ? new Input({ source: new BlobSource(overlaySource), formats: ALL_FORMATS })
+    : null;
   let output;
   let finalized = false;
   try {
@@ -30,6 +40,20 @@ export async function exportTikTok({ source, canvas, drawFrame, onProgress, sign
     const origin = Math.max(0, await track.getFirstTimestamp());
     const duration = (await track.computeDuration()) - origin;
     if (!Number.isFinite(duration) || duration <= 0) throw new Error("The source clip has no playable duration. Upload another video.");
+    let overlayTrack = null;
+    let overlayOrigin = 0;
+    let overlayDuration = 0;
+    if (overlayInput) {
+      overlayTrack = await overlayInput.getPrimaryVideoTrack();
+      if (!overlayTrack || !await overlayTrack.canDecode()) {
+        throw new Error("The phone overlay clip cannot be decoded. Upload a playable MP4 or WebM video as the overlay.");
+      }
+      overlayOrigin = Math.max(0, await overlayTrack.getFirstTimestamp());
+      overlayDuration = (await overlayTrack.computeDuration()) - overlayOrigin;
+      if (!Number.isFinite(overlayDuration) || overlayDuration <= 0) {
+        throw new Error("The phone overlay clip has no playable duration. Upload another video.");
+      }
+    }
     const audioTrack = await input.getPrimaryAudioTrack();
     if (audioTrack && (!await audioTrack.canDecode() || !await canEncodeAudio("aac", { sampleRate: 48000, numberOfChannels: 2, bitrate: audioBitrate }))) {
       throw new Error("This browser cannot preserve this clip's audio in TikTok MP4. Use a current Chrome or Edge browser; audio will not be silently removed.");
@@ -48,17 +72,38 @@ export async function exportTikTok({ source, canvas, drawFrame, onProgress, sign
     };
     const encodeVideo = async () => {
       const sink = new CanvasSink(track, { poolSize: 2 });
-      let frame = 0;
-      for await (const decoded of sink.canvasesAtTimestamps(timestamps())) {
-        checkCancelled();
-        if (!decoded) throw new Error(`The source video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
-        const time = frame / fps;
-        drawFrame(time, decoded.canvas);
-        await videoSource.add(time, 1 / fps);
-        frame++;
-        onProgress?.(frame / frameCount);
+      const overlaySink = overlayTrack ? new CanvasSink(overlayTrack, { poolSize: 2 }) : null;
+      // Overlay timestamps loop the shorter (or longer) overlay under the
+      // base timeline, precomputed so both sinks advance in lockstep.
+      const overlayIterator = overlaySink
+        ? overlaySink.canvasesAtTimestamps((function* () {
+          for (let frame = 0; frame < frameCount; frame++) {
+            yield overlayOrigin + ((frame / fps) % overlayDuration);
+          }
+        })())[Symbol.asyncIterator]()
+        : null;
+      try {
+        let frame = 0;
+        for await (const decoded of sink.canvasesAtTimestamps(timestamps())) {
+          checkCancelled();
+          if (!decoded) throw new Error(`The source video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
+          const time = frame / fps;
+          let overlayCanvas = null;
+          if (overlayIterator) {
+            const next = await overlayIterator.next();
+            checkCancelled();
+            if (next.done || !next.value) throw new Error(`The phone overlay video is missing a frame at ${time.toFixed(2)}s. Upload another overlay clip.`);
+            overlayCanvas = next.value.canvas;
+          }
+          drawFrame(time, decoded.canvas, overlayCanvas);
+          await videoSource.add(time, 1 / fps);
+          frame++;
+          onProgress?.(frame / frameCount);
+        }
+        videoSource.close();
+      } finally {
+        await overlayIterator?.return?.();
       }
-      videoSource.close();
     };
     const encodeAudio = async () => {
       if (!audioSource) return;
@@ -100,6 +145,7 @@ export async function exportTikTok({ source, canvas, drawFrame, onProgress, sign
       if (output && !finalized && !failed) await output.cancel();
     } finally {
       input.dispose();
+      overlayInput?.dispose();
     }
   }
 }

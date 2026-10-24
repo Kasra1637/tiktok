@@ -7145,7 +7145,7 @@ async function runDemoCtaChecks() {
       // masthead budget" below; this one is repeated here because the rendered
       // string is what a founder actually reads).
       const STANDALONE_COPY =
-        "Style any clip in a phone mockup, then export to History.";
+        "Style any clip: phone mockup or full-frame for History.";
       if (STANDALONE_COPY.length < 54 || STANDALONE_COPY.length > 60) {
         throw new Error(
           `the standalone copy is ${STANDALONE_COPY.length} chars, outside the 54-60 budget`
@@ -7586,11 +7586,12 @@ async function runDemoCtaChecks() {
    * to global, so without that mapping the first paint throws instead of
    * proving anything. Call restore() in a finally.
    */
-  function installLoadedClipStubs({ width, height, onClear = () => {} }) {
+  function installLoadedClipStubs({ width, height, onClear = () => {}, onDraw = () => {} }) {
     const gradientStub = { addColorStop() {} };
     const fakeCtx = new Proxy({}, {
       get(t, p) {
         if (p === "clearRect") return () => onClear();
+        if (p === "drawImage") return (...args) => onDraw(...args);
         if (p === "measureText") return () => ({ width: 10 });
         if (typeof p === "string" && p.startsWith("create")) return () => gradientStub;
         return () => undefined;
@@ -7680,7 +7681,7 @@ async function runDemoCtaChecks() {
         }
       );
     };
-    return { flush, restore, loadClip };
+    return { flush, restore, loadClip, createdVideos };
   }
 
   for (const mode of ["hand", "floating"]) {
@@ -8918,7 +8919,10 @@ async function runDemoCtaChecks() {
         await clickEl(ctx, btn, `open ${label}`);
       };
       await withApi(
-        { getGenerations: async () => ({ generations: [COMPLETED] }) },
+        {
+          getGenerations: async () => ({ generations: [COMPLETED] }),
+          generateOpeningMessages: async () => ({ messages: Array.from({ length: 20 }, (_, i) => `Fresh app opening ${i + 1}`) }),
+        },
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
 
@@ -8951,8 +8955,8 @@ async function runDemoCtaChecks() {
             throw new Error("clicking L size preset did not update Hook Text scale to 115%");
           }
 
-          // #3 Hook copy surprise: one button generates a fresh preset,
-          // always different from the one showing.
+          // One button requests 20 fresh app-specific openings, then selects
+          // each immediately. No copy counter is exposed.
           const hookSurprise = ctx.container.querySelector('[data-testid="hook-variant-surprise"]');
           if (!hookSurprise) throw new Error("missing Hook surprise-me button");
           const hookInput = ctx.container.querySelector('[data-testid="hook-text-input"]');
@@ -8962,9 +8966,13 @@ async function runDemoCtaChecks() {
             throw new Error("surprise Hook message did not load fresh copy into the textarea");
           }
           const hookCount = ctx.container.querySelector('[data-testid="hook-variant-count"]');
-          if (!hookCount || !hookCount.textContent.includes("of 3")) {
-            throw new Error("Hook message counter lost track of the three presets");
+          if (hookCount) throw new Error("Hook message counter should not be displayed");
+          const seenHooks = new Set([hookInput.value]);
+          for (let i = 1; i < 20; i++) {
+            await clickEl(ctx, hookSurprise, "show another fresh opening");
+            seenHooks.add(hookInput.value);
           }
+          if (seenHooks.size !== 20) throw new Error("Surprise did not display 20 distinct openings");
 
           // #2 Safe-area legibility guard when slider pushed below 80%
           const hookSliderThumb = ctx.container.querySelector('[data-testid="caption-size-slider"] [role="slider"]');
@@ -9019,6 +9027,119 @@ async function runDemoCtaChecks() {
       );
     }
   );
+
+  await check("Demo + CTA offers Real Video with a History render picker", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v3");
+    await withApi(
+      {
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "hist-1", brand_name: "Journal", duration: 10 },
+          { ...COMPLETED, id: "hist-2", status: "failed", video_url: null, playback_url: null, r2_url: null },
+        ] }),
+      },
+      async () => {
+        await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        const mode = ctx.container.querySelector('[data-testid="view-mode-realistic"]');
+        if (!mode) throw new Error("Real Video view style is missing");
+        await clickEl(ctx, mode, "select Real Video view");
+        if (mode.getAttribute("aria-pressed") !== "true") throw new Error("Real Video did not take the view selection");
+        // Phone-only controls leave with the phone: no scene, background or size.
+        if (ctx.container.querySelector('[data-testid="background-lavender"]')) throw new Error("background picker leaked into Real Video");
+        if (ctx.container.querySelector('[data-testid="phone-size-slider"]')) throw new Error("phone size leaked into Real Video");
+        if (ctx.container.querySelector('[data-testid="hand-zoom-slider"]')) throw new Error("hand controls leaked into Real Video");
+        // The History picker lists only the attachable render.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-source-toggle"]'), "open the History picker");
+        const attachable = ctx.container.querySelector('[data-testid="history-source-attach-hist-1"]');
+        if (!attachable) throw new Error("the completed History render cannot be attached as source");
+        if (ctx.container.querySelector('[data-testid="history-source-attach-hist-2"]')) throw new Error("a failed render was offered as a source");
+      }
+    );
+  });
+
+  await check("Real Video attaches a History base, composites a separate phone clip, and leaves single-source export alone", async (ctx) => {
+    const draws = [];
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920, onDraw: (frame) => draws.push(frame) });
+    const originalFetch = global.fetch;
+    const encoder = load("demoCta/exportTikTok.js");
+    const originalEncode = encoder.exportTikTok;
+    const hand = load("demoCta/handView.js");
+    const originalHand = hand.drawHandView;
+    const originalPrepare = hand.prepareHandViewImages;
+    const handCalls = [];
+    let encodedOverlay;
+    try {
+      await clip.loadClip(ctx);
+      const click = async (selector) => {
+        await clickEl(ctx, ctx.container.querySelector(selector), selector);
+        await clip.flush();
+      };
+      const base = ctx.container.querySelector("video");
+      Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
+      await click('[data-testid="view-mode-realistic"]');
+      global.fetch = async () => ({ ok: true, blob: async () => new Blob(["clip"], { type: "video/mp4" }) });
+      await withApi({ getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "composite-base", brand_name: "History base" }] }) }, async () => {
+        await click('[data-testid="history-source-toggle"]');
+        await click('[data-testid="history-source-attach-composite-base"]');
+      });
+      const probe = [...clip.createdVideos].reverse().find((v) => v.onloadedmetadata);
+      await act(async () => probe.onloadedmetadata());
+      await clip.flush();
+      if (!ctx.container.textContent.includes("History base-composit.mp4")) throw new Error("History attachment did not become the base source");
+      const source = base.src;
+      const input = ctx.container.querySelector('[data-testid="overlay-upload-input"]');
+      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      const overlay = ctx.container.querySelector('[data-testid="overlay-video"]');
+      if (!overlay || base.src !== source) throw new Error("overlay upload replaced the base");
+      if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("unloaded overlay did not block export");
+      Object.defineProperty(overlay, "readyState", { configurable: true, value: 4 });
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("loadeddata")));
+      await clip.flush();
+      if (ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("decoded overlay never enabled export");
+      draws.length = 0;
+      base.currentTime = 3;
+      await act(async () => base.dispatchEvent(new dom.window.Event("seeked")));
+      await clip.flush();
+      if (draws[0] !== base || !draws.includes(overlay)) throw new Error("preview did not draw base before the phone clip");
+      if (overlay.currentTime !== 3 || !overlay.paused) throw new Error("paused seek did not synchronize the overlay");
+      await click('[data-testid="overlay-x-slider"] [role="slider"]');
+      encoder.exportTikTok = async ({ overlaySource, drawFrame }) => {
+        encodedOverlay = overlaySource;
+        const baseFrame = document.createElement("canvas");
+        const phoneFrame = document.createElement("canvas");
+        draws.length = 0;
+        drawFrame(1, baseFrame, overlaySource ? phoneFrame : null);
+        if (draws[0] !== baseFrame) throw new Error("export lost its base frame");
+        if (overlaySource && !handCalls.length && !draws.includes(phoneFrame)) throw new Error("export lost its phone frame");
+        throw new Error("Composite callback verified");
+      };
+      await click('[data-testid="demo-cta-export"]');
+      if (!encodedOverlay || !ctx.container.textContent.includes("Composite callback verified")) throw new Error("dual-source export was not exercised");
+      hand.drawHandView = (...args) => { handCalls.push(args); };
+      hand.prepareHandViewImages = async () => {};
+      await click('[data-testid="overlay-phone-hand"]');
+      await click('[data-testid="demo-cta-export"]');
+      if (!handCalls.some((args) => args[15] === true)) throw new Error("hand overlay did not request a transparent backdrop");
+      await click('[data-testid="view-mode-floating"]');
+      await click('[data-testid="demo-cta-export"]');
+      if (encodedOverlay) throw new Error("phone clip leaked into single-source export");
+      if (!overlay.paused) throw new Error("hidden overlay kept playing in a single-source mode");
+      await click('[data-testid="view-mode-realistic"]');
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("error")));
+      if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("broken overlay still enabled export");
+      await click('[data-testid="overlay-remove"]');
+      if (ctx.container.querySelector('[data-testid="overlay-video"]') || base.src !== source) throw new Error("remove failed or cleared the base");
+      if (ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("removing broken overlay did not recover base-only export");
+    } finally {
+      encoder.exportTikTok = originalEncode;
+      hand.drawHandView = originalHand;
+      hand.prepareHandViewImages = originalPrepare;
+      global.fetch = originalFetch;
+      clip.restore();
+    }
+  });
 
   await check("History opens as a clip and expands to its context and actions", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;

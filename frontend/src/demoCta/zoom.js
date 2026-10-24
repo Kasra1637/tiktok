@@ -83,6 +83,18 @@ export function getEffectiveZoom({ keyframes, live, videoTime, isExporting = fal
   };
 }
 
+/**
+ * One-line framing label for the timeline strip: which zoom a locked segment
+ * or keyframe holds in the active view mode. Lives here so the strip titles
+ * and the export math share one policy; the phone fallback matches
+ * getEffectiveZoom, so the title never names a zoom the export would not bake.
+ */
+export function describeFraming(viewMode, entry = {}) {
+  if (viewMode === "hand") return `${entry.handZoom.toFixed(2)}x hand`;
+  if (viewMode === "realistic") return `${entry.scale.toFixed(2)}x full-frame`;
+  return `${Math.round((entry.phoneScale ?? DEFAULT_LOCKED.phoneScale) * 100)}% phone`;
+}
+
 /** Timeline tick interval: aims for roughly 6–10 visible ticks. */
 export function tickInterval(duration) {
   const dur = Number(duration) || 0;

@@ -33,9 +33,9 @@ export function preloadHandViewImages() {
 }
 
 /** Export must never bake a missing photo or environment into early frames. */
-export async function prepareHandViewImages(environmentId) {
+export async function prepareHandViewImages(environmentId, transparentBackground = false) {
   const environment = ENVIRONMENTS.find((env) => env.id === environmentId);
-  await Promise.all([HAND_IMAGE_URL, environment?.url].filter(Boolean).map(async (url) => {
+  await Promise.all([HAND_IMAGE_URL, !transparentBackground && environment?.url].filter(Boolean).map(async (url) => {
     loadImage(url);
     try {
       await imageCache.get(url).decode();
@@ -235,16 +235,17 @@ export function drawHandView(
   handPanX = 0,
   handPanY = 0,
   screenBase = "#000",
+  transparentBackground = false,
 ) {
   const SCREEN = screenOverride ?? DEFAULT_SCREEN;
   const env = ENVIRONMENTS.find((e) => e.id === envId) ?? ENVIRONMENTS[0];
-  const bgImg = loadImage(env.url);
+  const bgImg = transparentBackground ? null : loadImage(env.url);
   const handImg = loadImage(HAND_IMAGE_URL);
 
   ctx.clearRect(0, 0, cw, ch);
 
   // --- 1. Environment background, native aspect, softly blurred for depth ---
-  if (bgImg) {
+  if (!transparentBackground && bgImg) {
     const bgScale = Math.max(cw / bgImg.naturalWidth, ch / bgImg.naturalHeight);
     const bw = bgImg.naturalWidth * bgScale;
     const bh = bgImg.naturalHeight * bgScale;
@@ -252,7 +253,7 @@ export function drawHandView(
     ctx.filter = "brightness(0.86) blur(6px)";
     ctx.drawImage(bgImg, (cw - bw) / 2, (ch - bh) / 2, bw, bh);
     ctx.restore();
-  } else {
+  } else if (!transparentBackground) {
     ctx.fillStyle = "#15130f";
     ctx.fillRect(0, 0, cw, ch);
   }

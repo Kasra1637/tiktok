@@ -54,7 +54,7 @@ from models import (
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     FeedbackRequest,
-    GenerateStrategyRequest,
+    GenerateStrategyRequest, OpeningMessagesRequest,
     APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
@@ -2894,6 +2894,33 @@ async def list_app_profiles(user_id: str = Depends(get_current_user_id)):
         (user_id,),
     )
     return {"profiles": rows or []}
+
+
+@api_router.post("/demo-cta/opening-messages")
+async def generate_opening_messages(
+    payload: OpeningMessagesRequest, user_id: str = Depends(get_current_user_id)
+):
+    profile = (
+        await _fetch_one("SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+                         (payload.profile_id, user_id))
+        if payload.profile_id else await _fetch_active_brand(user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Choose or research an App Profile before generating opening text.")
+    if profile.get("status") != "approved":
+        raise HTTPException(status_code=409, detail="Approve this App Profile before generating opening text.")
+    if not ai_service.OPENROUTER_API_KEY:
+        raise HTTPException(status_code=503, detail="Opening text needs the server's OpenRouter API key. Configure OPENROUTER_API_KEY and restart the backend, then try Surprise me again.")
+    try:
+        messages = await _log_model_call(
+            "opening_messages", "text", TEXT_MODEL,
+            lambda: ai_service.generate_opening_messages(profile, payload.previous),
+            user_id, brand_profile_id=profile["id"],
+        )
+    except Exception as e:
+        logger.warning("Opening message generation failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not generate fresh opening text. Try Surprise me again.")
+    return {"messages": messages}
 
 
 @api_router.get("/app-profiles/{profile_id}")

@@ -61,11 +61,13 @@ import { checkOverlaySafety, drawEndCard, drawHookOverlay, drawStoryOverlay, get
 import { useOverlayTaste } from "./useOverlayTaste";
 import { fitVideoToScreen } from "./fit";
 import { preloadHandViewImages } from "./handView";
-import { getEffectiveZoom, tickInterval } from "./zoom";
+import { describeFraming, getEffectiveZoom, tickInterval } from "./zoom";
 import { useZoomKeyframes } from "./useZoomKeyframes";
 import { usePreviewLoop } from "./usePreviewLoop";
 import { useExportFlow } from "./exportFlow";
 import { ExportFailureNote } from "./ExportFailureNote";
+import { sourceErrorMessage, useHistorySource } from "./useHistorySource";
+import { useOpeningMessages } from "./useOpeningMessages";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v3";
 
@@ -442,20 +444,6 @@ function AccentPicker({ testPrefix, accent, onAccentChange }) {
  *   from the sidebar with no generation it is the whole input, and the export
  *   is saved standalone. Either way it never creates a Hook + Story.
  */
-/**
- * A browser network failure surfaces as the raw TypeError text "Failed to
- * fetch", which names the mechanism instead of the remedy. Say what happened
- * and what fixes it: the clip's link may have expired or the connection may
- * have dropped, and refreshing loads it fresh.
- */
-function sourceErrorMessage(err, fallback) {
-  const message = err?.message || "";
-  if (/failed to fetch|network error/i.test(message)) {
-    return "The clip couldn't be reached over the network. Check your connection, then refresh for a fresh link.";
-  }
-  return message || fallback;
-}
-
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) {
   // A programmatic scroll cannot be switched off by a Tailwind motion-reduce
   // variant, so the preference is read here and honoured in JS.
@@ -540,6 +528,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [handPanY, setHandPanY] = useState(DEFAULTS.handPanY);
   const [hookEnabled, setHookEnabled] = useState(DEFAULTS.hookEnabled);
   const [hookText, setHookText] = useState(DEFAULTS.hookText);
+  const [openingProfileId, setOpeningProfileId] = useState(generation?.brand_profile_id || null);
+  const openingMessages = useOpeningMessages({ profileId: openingProfileId, text: hookText, onText: setHookText });
   const [hookDuration, setHookDuration] = useState(DEFAULTS.hookDuration);
   const [hookOffsetX, setHookOffsetX] = useState(DEFAULTS.hookOffsetX);
   const [hookOffsetY, setHookOffsetY] = useState(DEFAULTS.hookOffsetY);
@@ -565,8 +555,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     captionScale, setCaptionScale,
     ctaScale, setCtaScale,
     textStyle, setTextStyle,
-    hookVariants, activeHookVariant,
-    updateHookText, surpriseHookVariant,
     updateCtaHeadline, surpriseCtaVariant,
     customLookPresets,
     allLookPresets,
@@ -581,7 +569,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     videoUrl,
     clipDuration: videoMeta?.d,
     recording,
-    onHookText: setHookText,
     onCtaHeadline: setCtaHeadline,
   });
   const [ctaTimingMode, setCtaTimingMode] = useState("custom");
@@ -620,6 +607,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     clearZoomKeyframes,
   } = useZoomKeyframes();
 
+  // Second layer for Real Video: a phone-overlay upload composited over the
+  // full-bleed base. Independent source state — replacing the base never
+  // clears it — synced to base transport by usePreviewLoop and decoded
+  // separately by the export, which is why the painter takes both frames.
+  const [overlayUrl, setOverlayUrl] = useState(null);
+  const [overlayMeta, setOverlayMeta] = useState(null);
+  const [overlayPhone, setOverlayPhone] = useState("floating");
+  const [overlayName, setOverlayName] = useState("");
+  const [overlayPlacement, setOverlayPlacement] = useState({ size: 0.52, x: 0.5, y: 0.95 });
+  const [overlayError, setOverlayError] = useState(null);
+  const overlayVideoRef = useRef(null);
+  const overlayObjectUrlRef = useRef(null);
+  const overlayInputRef = useRef(null);
+
   // Preview transport + scoped replay + frame painting live in
   // usePreviewLoop; the editor only reads the playhead and calls the
   // transport helpers. Zoom editing stays here and works through the
@@ -641,6 +642,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
+    overlayUrl, overlayPhone, overlayVideoRef, overlayPlacement,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -666,6 +668,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, envBg,
+    overlayUrl, overlayPhone, overlayVideoRef,
     captionFont, ctaFont, fontStack,
     videoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -825,6 +828,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // State, not the prop: from the standalone route there is no pinned
     // sourceUrl, only a founder-supplied object URL in videoUrl.
     if (!videoUrl && !sourceUrl) return;
+    setOpeningProfileId(generation?.brand_profile_id || null);
     if (resultObjectUrlRef.current) {
       URL.revokeObjectURL(resultObjectUrlRef.current);
       resultObjectUrlRef.current = null;
@@ -873,6 +877,58 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       }
     })();
   };
+
+  // History-as-source lives in useHistorySource: same open/rows/error/
+  // attaching state and the same attach behavior as the inline code it
+  // replaces, so everything below reads unchanged.
+  const {
+    historyOpen,
+    setHistoryOpen,
+    historyRows,
+    historyError,
+    attachingId,
+    attachHistoryVideo,
+  } = useHistorySource({
+    onAttachFile: (file, row) => {
+      handleFile(file);
+      setOpeningProfileId(row?.brand_profile_id || null);
+    },
+  });
+
+  const invalidateComposite = () => {
+    if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
+    resultObjectUrlRef.current = null;
+    setResult(null);
+    setSaved(null);
+    setSaveError(null);
+    clearExportErrors();
+  };
+
+  const handleOverlayFile = (file) => {
+    if (!file) return;
+    invalidateComposite();
+    setOverlayError(null);
+    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    overlayObjectUrlRef.current = url;
+    setOverlayMeta(null);
+    setOverlayUrl(url);
+    setOverlayName(file.name || "overlay");
+  };
+
+  const removeOverlay = () => {
+    invalidateComposite();
+    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
+    overlayObjectUrlRef.current = null;
+    setOverlayUrl(null);
+    setOverlayMeta(null);
+    setOverlayName("");
+    setOverlayError(null);
+  };
+
+  useEffect(() => () => {
+    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
+  }, []);
 
   // Probe metadata and ensure preview video starts playing
   useEffect(() => {
@@ -1034,8 +1090,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const handleWheel = (e) => {
     e.preventDefault();
+    // In Real Video there is no phone to resize, so the wheel drives the
+    // same video zoom the crop slider owns — otherwise scrolling would
+    // silently do nothing in this mode.
     updateZoomDraft((values) => viewMode === "hand"
       ? { handZoom: Math.max(RANGES.handZoom.min, Math.min(RANGES.handZoom.max, +(values.handZoom - e.deltaY * 0.0015).toFixed(3))) }
+      : viewMode === "realistic"
+      ? { scale: Math.max(RANGES.videoScale.min, Math.min(RANGES.videoScale.max, +(values.scale - e.deltaY * 0.0015).toFixed(3))) }
       : { phoneScale: Math.max(RANGES.scale.min, Math.min(RANGES.scale.max, +(values.phoneScale - e.deltaY * 0.0015).toFixed(3))) });
   };
 
@@ -1087,6 +1148,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // columns peers: the page itself stops growing, the panel scrolls inside its
   // own box, and the preview stays put no matter how long the panel gets.
   const settingsRef = useRef(null);
+  const overlayNotReady = viewMode === "realistic" && overlayUrl && !overlayMeta;
 
   return (
     // Radix tooltips need a provider ancestor; the app has none, and the
@@ -1116,6 +1178,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           data-testid="demo-cta-file-input"
           className="sr-only"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+        />
+        {/* The overlay drives a separate input for the same reason: one input
+            per source, so neither upload can clobber the other. Resetting the
+            value lets the same file be picked twice in a row. */}
+        <input
+          ref={overlayInputRef}
+          type="file"
+          accept="video/*"
+          aria-label="Choose a phone overlay clip"
+          data-testid="overlay-upload-input"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) handleOverlayFile(file);
+          }}
         />
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
@@ -1169,12 +1247,57 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </p>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <SubLabel>History render</SubLabel>
+            <p className="text-xs text-muted-foreground">Use a finished Create-video render as the source — full video, as it rendered.</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10"
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
+              data-testid="history-source-toggle"
+            >
+              {historyOpen ? "Hide History" : "Choose from History"}
+            </Button>
+            {historyOpen && (
+              <div className="space-y-1.5" role="group" aria-label="History renders">
+                {historyError && <p className="text-xs text-destructive">{historyError}</p>}
+                {historyRows === null && !historyError && (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading finished renders…
+                  </p>
+                )}
+                {historyRows !== null && historyRows.length === 0 && !historyError && (
+                  <p className="text-xs text-muted-foreground">No completed renders with a playable copy yet.</p>
+                )}
+                {historyRows !== null && historyRows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => attachHistoryVideo(row)}
+                    disabled={attachingId !== null}
+                    data-testid={`history-source-attach-${row.id}`}
+                    className="focus-ring flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--hairline)] px-3 py-2 text-left text-xs transition-colors hover:border-[color:var(--hairline-strong)] disabled:opacity-50"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      {row.brand_name || "Untitled render"}{row.duration ? ` • ${Math.round(row.duration)}s` : ""}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {attachingId === row.id ? "Attaching…" : "Use as source"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <SubLabel>View style</SubLabel>
-            <p className="text-xs text-muted-foreground">Floating phone or hand-held mockup. Drag preview to reframe; in hand mode, pick a scene.</p>
-            <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
+            <p className="text-xs text-muted-foreground">Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene.</p>
+            <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
               {[
                 ["floating", "Floating Phone"],
                 ["hand", "Hand Holding"],
+                ["realistic", "Real Video"],
               ].map(([id, label]) => (
                 <button
                   key={id}
@@ -1193,6 +1316,79 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               ))}
             </div>
           </div>
+          {viewMode === "realistic" && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+              <SubLabel>Phone overlay</SubLabel>
+              <p className="text-xs text-muted-foreground">Upload a second clip for the phone. It loops over the History base; only base audio is exported.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-10"
+                  onClick={() => overlayInputRef.current?.click()}
+                  data-testid="overlay-upload-button"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>{overlayUrl ? "Replace overlay" : "Upload overlay"}</span>
+                </Button>
+                {overlayName && (
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={overlayName} data-testid="overlay-file-name">
+                    {overlayName}
+                    {overlayMeta && Number.isFinite(overlayMeta.d) ? ` • ${overlayMeta.d.toFixed(1)}s` : ""}
+                  </span>
+                )}
+                {overlayUrl && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10"
+                    onClick={removeOverlay}
+                    title="Remove the phone overlay"
+                    data-testid="overlay-remove"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    <span>Remove</span>
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
+                {[
+                  ["floating", "Floating Phone"],
+                  ["hand", "Hand Holding"],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => { invalidateComposite(); setOverlayPhone(id); }}
+                    aria-pressed={overlayPhone === id}
+                    data-testid={`overlay-phone-${id}`}
+                    className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
+                      overlayPhone === id
+                        ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {overlayError && <p role="alert" className="text-xs text-destructive">{overlayError}</p>}
+              {overlayUrl && !overlayMeta && !overlayError && <p role="status" className="text-xs text-muted-foreground">Loading phone clip…</p>}
+              {overlayUrl && [
+                ["size", "Phone size", 0.25, 0.75],
+                ["x", "Phone horizontal position", 0, 1],
+                ["y", "Phone vertical position", 0, 1],
+              ].map(([key, label, min, max]) => (
+                <ControlSlider key={key} label={label} value={overlayPlacement[key]}
+                  min={min} max={max} step={0.01} testId={`overlay-${key}-slider`}
+                  format={(value) => `${Math.round(value * 100)}%`}
+                  onChange={(value) => {
+                    invalidateComposite();
+                    setOverlayPlacement((prev) => ({ ...prev, [key]: value }));
+                  }} />
+              ))}
+            </div>
+          )}
           {viewMode === "hand" && (
             <div className="grid grid-cols-5 gap-1.5">
               {ENVIRONMENTS.map((env) => (
@@ -1296,15 +1492,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">Text to show at the opening</span>
               <div className="flex items-center gap-1.5" role="group" aria-label="Hook copy variants">
-                <span data-testid="hook-variant-count" className="text-xs text-muted-foreground">
-                  {`Message ${Math.min(activeHookVariant + 1, Math.max(hookVariants.length, 1))} of ${hookVariants.length}`}
-                </span>
                 <Chip
-                  onClick={() => { surpriseHookVariant(); startScopedPreview("hook"); }}
+                  onClick={async () => {
+                    if (await openingMessages.surprise()) startScopedPreview("hook");
+                  }}
+                  disabled={openingMessages.generating || recording}
                   testId="hook-variant-surprise"
                   ariaLabel="Generate a fresh hook message"
                 >
-                  Surprise me
+                  {openingMessages.generating ? "Writing fresh openings…" : "Surprise me"}
                 </Chip>
               </div>
             </div>
@@ -1312,12 +1508,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               data-testid="hook-text-input"
               aria-label="Text to show at the opening"
               value={hookText}
-              onChange={(e) => updateHookText(e.target.value)}
+              onChange={(e) => openingMessages.updateText(e.target.value)}
               rows={3}
               placeholder="I built this so I'd stop journaling in Notes app"
               className={TEXTAREA_CLASS}
             />
           </div>
+          {openingMessages.error && (
+            <p role="alert" className="text-xs text-destructive" data-testid="hook-message-error">
+              {openingMessages.error} <Link to="/brand">Review App Profile</Link>
+            </p>
+          )}
           <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={(val) => { setHookDuration(val); ensureScopedPreview("hook"); }} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {/* Caption face: each tile set in its own face so the choice is
               visual, not a name to imagine. Selected state is the indigo
@@ -1878,7 +2079,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           left: `${(seg.time / duration) * 100}%`,
                           width: `${((end - seg.time) / duration) * 100}%`,
                         }}
-                        title={`${formatTime(seg.time)} → ${formatTime(end)}: ${viewMode === "hand" ? `${seg.handZoom.toFixed(2)}x hand` : `${Math.round((seg.phoneScale ?? DEFAULTS.scale) * 100)}% phone`} · ${seg.scale.toFixed(2)}x video`}
+                        title={`${formatTime(seg.time)} → ${formatTime(end)}: ${describeFraming(viewMode, seg)} · ${seg.scale.toFixed(2)}x video`}
                       />
                     );
                   })}
@@ -2023,7 +2224,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       type="button"
                       variant="accent"
                       size="sm"
-                      disabled={!videoUrl || !videoMeta || recording || saving}
+                      disabled={!videoUrl || !videoMeta || recording || saving || overlayNotReady}
                       onClick={exportVideo}
                       data-testid="demo-cta-export"
                       className="shrink-0"
@@ -2071,7 +2272,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                             className="focus-ring flex-1 rounded text-left font-mono text-xs tabular-nums text-muted-foreground transition hover:text-foreground"
                             title="Jump to this keyframe"
                           >
-                            {formatTime(kf.time)} → {formatTime(nextTime)} • {viewMode === "hand" ? `${kf.handZoom.toFixed(2)}x hand` : `${Math.round((kf.phoneScale ?? DEFAULTS.scale) * 100)}% phone`} · {kf.scale.toFixed(2)}x video
+                            {formatTime(kf.time)} → {formatTime(nextTime)} • {describeFraming(viewMode, kf)} · {kf.scale.toFixed(2)}x video
                           </button>
                           <button
                             type="button"
@@ -2122,6 +2323,36 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           loop
           autoPlay
         />
+        {/* Preview playback for the overlay layer only. Export decodes the
+            overlay bytes directly, so this element never touches the file. */}
+        {overlayUrl && (
+          <video
+            key={overlayUrl}
+            ref={overlayVideoRef}
+            src={overlayUrl}
+            onLoadedData={(event) => {
+              const v = event.currentTarget;
+              if (!(v.videoWidth > 0 && v.videoHeight > 0 && Number.isFinite(v.duration) && v.duration > 0)) {
+                setOverlayError("This phone clip has no playable duration. Upload another MP4 or WebM.");
+                return;
+              }
+              setOverlayMeta({ w: v.videoWidth, h: v.videoHeight, d: v.duration });
+              setOverlayError(null);
+              dirtyRef.current = true;
+              kickPreviewRef.current?.();
+            }}
+            onError={() => {
+              setOverlayMeta(null);
+              setOverlayError(`"${overlayName}" couldn't be played. Upload a playable MP4 or WebM, or remove the overlay.`);
+            }}
+            data-testid="overlay-video"
+            className="pointer-events-none absolute h-px w-px opacity-0"
+            playsInline
+            muted
+            loop
+            preload="auto"
+          />
+        )}
 
         {result && (
           /* A plain wrapper because SectionCard is a function component and

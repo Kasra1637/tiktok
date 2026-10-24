@@ -28,6 +28,7 @@ export function usePreviewLoop(settings) {
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
+    overlayUrl, overlayPhone, overlayVideoRef, overlayPlacement,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -69,6 +70,10 @@ export function usePreviewLoop(settings) {
   const kickPreviewRef = useRef(null);
   const isExportingRef = useRef(false);
   const editingZoomRef = useRef(false);
+  // Offscreen canvas for the hand-style overlay vignette: drawHandView
+  // clears its own target first, so it cannot paint into a transformed
+  // main context without wiping the base. One cached canvas per size.
+  const overlayHandCacheRef = useRef(null);
   const liveZoomRef = useRef({
     scale: 1, offX: 0, offY: 0,
     handZoom: 1, handPanX: 0, handPanY: 0, phoneScale: DEFAULTS.scale,
@@ -287,6 +292,38 @@ export function usePreviewLoop(settings) {
     showZoomValues(zoomValuesAt(videoRef.current?.currentTime ?? currentTime));
   }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt]);
 
+  // The base owns transport. The phone follows its looped timestamp, including
+  // scoped replay, source replacement, base wraparound and export resume.
+  useEffect(() => {
+    const base = videoRef.current;
+    const overlay = overlayVideoRef?.current;
+    if (!base || !overlay) return undefined;
+    const repaint = () => { dirtyRef.current = true; kickPreviewRef.current?.(); };
+    const sync = (event) => {
+      if (viewMode !== "realistic" || isExportingRef.current || !Number.isFinite(overlay.duration) || overlay.duration <= 0) {
+        overlay.pause();
+        return;
+      }
+      const time = base.currentTime % overlay.duration;
+      const tolerance = base.paused || event?.type === "seeked" || event?.type === "loadeddata" ? 0.001 : 0.08;
+      if (!overlay.seeking && Math.abs(overlay.currentTime - time) > tolerance) overlay.currentTime = time;
+      if (base.paused || base.seeking) overlay.pause();
+      else if (overlay.paused) overlay.play().catch(() => {});
+      repaint();
+    };
+    const events = ["play", "pause", "seeking", "seeked", "timeupdate", "loadeddata", "ended"];
+    events.forEach((event) => base.addEventListener(event, sync));
+    overlay.addEventListener("loadeddata", sync);
+    overlay.addEventListener("seeked", repaint);
+    sync();
+    return () => {
+      events.forEach((event) => base.removeEventListener(event, sync));
+      overlay.removeEventListener("loadeddata", sync);
+      overlay.removeEventListener("seeked", repaint);
+      overlay.pause();
+    };
+  }, [overlayUrl, viewMode, overlayVideoRef]);
+
   // Preview loop
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -342,7 +379,11 @@ export function usePreviewLoop(settings) {
     };
 
     // Preview and export call this exact painter with an explicit media timestamp.
-    const paintFrame = (target, vt, frame) => {
+    // The overlay frame rides along as a fourth argument: the preview passes
+    // its synced element, the export its decoded canvas at the looped overlay
+    // timestamp. Both layers arrive as arguments, so preview and export
+    // composite the same two layers from the same code.
+    const paintFrame = (target, vt, frame, overlayFrame = null) => {
       const ctx = target.getContext("2d");
       if (!ctx) throw new Error("Canvas drawing is unavailable. Reload the editor and try again.");
       ctx.clearRect(0, 0, cw, ch);
@@ -366,6 +407,81 @@ export function usePreviewLoop(settings) {
       if (viewMode === "hand" && video) {
         const t = vt;
         drawHandView(ctx, cw, ch, frame, envBg, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
+        drawOverlays(ctx, vt);
+        return;
+      }
+
+      // Second layer: the overlay upload on a phone over the full-bleed
+      // base. Size, placement and motion are pure functions of the media
+      // timestamp, so the export encodes exactly the phone the preview
+      // shows. The hand vignette renders into the cached offscreen canvas
+      // at inset size — drawHandView clears its own target first, so it
+      // must never run against the main context or it wipes the base.
+      const drawOverlayPhone = (overlay) => {
+        const oh = ch * overlayPlacement.size;
+        const ow = (phoneW * oh) / phoneH;
+        const ox = (cw - ow) * overlayPlacement.x;
+        const oy = (ch - oh) * overlayPlacement.y + Math.sin(vt * 1.2) * ch * 0.006;
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.ellipse(ox + ow / 2, oy + oh + oh * 0.03, ow * 0.36, oh * 0.03, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(ox + ow / 2, oy + oh / 2);
+        ctx.rotate(Math.sin(vt * 0.5) * 0.008);
+        ctx.translate(-ow / 2, -oh / 2);
+        drawPhone(ctx, 0, 0, ow, oh, dev, overlay, "cover", 1, 0, 0, "#000");
+        ctx.restore();
+      };
+      const drawOverlayHand = (overlay) => {
+        const dh = ch * overlayPlacement.size;
+        const dw = dh * 0.83;
+        const w = Math.max(2, Math.round(dw));
+        const h = Math.max(2, Math.round(dh));
+        const ix = (cw - dw) * overlayPlacement.x;
+        const iy = (ch - dh) * overlayPlacement.y;
+        let entry = overlayHandCacheRef.current;
+        if (!entry || entry.w !== w || entry.h !== h) {
+          const offscreen = document.createElement("canvas");
+          offscreen.width = w;
+          offscreen.height = h;
+          entry = overlayHandCacheRef.current = { canvas: offscreen, w, h };
+        }
+        const octx = entry.canvas.getContext("2d");
+        if (!octx) throw new Error("The hand overlay canvas is unavailable. Reload and export again.");
+        drawHandView(octx, w, h, overlay, envBg, vt, "cover", 1, 0, 0, null, 1, 0, 0, "#000", true);
+        ctx.save();
+        roundRect(ctx, ix, iy, dw, dh, Math.min(dw, dh) * 0.06);
+        ctx.clip();
+        ctx.drawImage(entry.canvas, ix, iy, dw, dh);
+        ctx.restore();
+      };
+
+      // Real Video: the actual clip full-bleed, no phone and no scene — the
+      // same Video-crop zoom and offsets as the phone screen, applied to the
+      // whole canvas, so the crop controls keep working and the export (which
+      // calls this same painter per decoded frame) records exactly this. A
+      // phone overlay floats over the base when one is attached.
+      if (viewMode === "realistic") {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, cw, ch);
+        if (mediaReady(frame)) {
+          const vw = frame.videoWidth || frame.width;
+          const vh = frame.videoHeight || frame.height;
+          const box = fitVideoToScreen({ fit: videoFit, videoW: vw, videoH: vh, screenW: cw, screenH: ch, scale: ez.vScale });
+          if (box) {
+            const maxOffX = Math.max(0, (box.dw - cw) / 2);
+            const maxOffY = Math.max(0, (box.dh - ch) / 2);
+            ctx.drawImage(frame, (cw - box.dw) / 2 + (ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (ez.vOffY / 100) * maxOffY, box.dw, box.dh);
+          }
+        }
+        if (mediaReady(overlayFrame)) {
+          if (overlayPhone === "hand") drawOverlayHand(overlayFrame);
+          else drawOverlayPhone(overlayFrame);
+        }
         drawOverlays(ctx, vt);
         return;
       }
@@ -711,7 +827,7 @@ export function usePreviewLoop(settings) {
       if (playing) editingZoomRef.current = false;
       if (playing || dirtyRef.current) {
         dirtyRef.current = false;
-        paintFrame(canvas, v ? v.currentTime || 0 : 0, v);
+        paintFrame(canvas, v ? v.currentTime || 0 : 0, v, overlayVideoRef?.current);
       }
       // A scoped replay parks at its window end instead of playing past it:
       // pausing here lands the scrubber on the exact window frame, and the
@@ -765,7 +881,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, overlayUrl, overlayPhone, overlayPlacement, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
 
   return {
     videoRef, previewCanvasRef,
@@ -911,6 +1027,18 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.restore();
 
   ctx.restore();
+}
+
+// A frame is drawable when it has decoded pixels: a live element past
+// HAVE_CURRENT_DATA, or a decoded export canvas (an HTMLCanvasElement).
+// One guard for the base and the overlay, so the preview never draws a
+// layer the export would skip.
+function mediaReady(f) {
+  if (!f) return false;
+  const w = f.videoWidth || f.width || 0;
+  const h = f.videoHeight || f.height || 0;
+  if (!(w > 0 && h > 0)) return false;
+  return f instanceof HTMLCanvasElement || f.readyState >= 2;
 }
 
 function shade(hex, percent) {

@@ -78,6 +78,69 @@ test("unsupported AAC refuses the export rather than dropping source audio", asy
   expect(input.dispose).toHaveBeenCalled();
 });
 
+test("realistic composite draws base with its looped overlay canvas every frame", async () => {
+  const drawFrame = jest.fn();
+  const overlayTrack = { canDecode: async () => true, getFirstTimestamp: async () => 0.2, computeDuration: async () => 0.25 };
+  const overlayInput = { getPrimaryVideoTrack: async () => overlayTrack, dispose: jest.fn() };
+  Input.mockImplementationOnce(() => input).mockImplementationOnce(() => overlayInput);
+  await encode({ drawFrame, overlaySource: new Blob() });
+  // A second input opens for the overlay layer.
+  expect(Input).toHaveBeenCalledTimes(2);
+  expect(drawFrame).toHaveBeenCalledTimes(4);
+  const baseTimes = [0, 1 / 30, 2 / 30, 0.1];
+  expect(drawFrame.mock.calls.map(([time]) => time)).toEqual(baseTimes);
+  // The 0.05s overlay wraps twice under the longer base timeline.
+  drawFrame.mock.calls.forEach(([time, base, overlay], i) => {
+    expect(base.sourceTime).toBeCloseTo(0.5 + time, 10);
+    expect(overlay.sourceTime).toBeCloseTo(0.2 + (baseTimes[i] % 0.05), 10);
+  });
+  expect(output.finalize).toHaveBeenCalledTimes(1);
+  expect(input.dispose).toHaveBeenCalledTimes(1);
+  expect(overlayInput.dispose).toHaveBeenCalledTimes(1);
+});
+
+test("an undecodable overlay fails loudly and releases both inputs", async () => {
+  const badInput = {
+    getPrimaryVideoTrack: async () => ({ canDecode: async () => false }),
+    dispose: jest.fn(),
+  };
+  Input.mockImplementationOnce(() => input).mockImplementationOnce(() => badInput);
+  await expect(encode({ overlaySource: new Blob() })).rejects.toThrow(/overlay clip cannot be decoded/);
+  expect(output.finalize).not.toHaveBeenCalled();
+  expect(badInput.dispose).toHaveBeenCalledTimes(1);
+  expect(input.dispose).toHaveBeenCalledTimes(1);
+});
+
+test("a missing overlay frame refuses partial output and closes its decoder", async () => {
+  let closed = false;
+  CanvasSink.mockImplementationOnce(() => ({
+    canvasesAtTimestamps: async function* () { yield { canvas: {} }; },
+  })).mockImplementationOnce(() => ({
+    canvasesAtTimestamps: async function* () {
+      try { yield null; } finally { closed = true; }
+    },
+  }));
+  await expect(encode({ overlaySource: new Blob() })).rejects.toThrow(/phone overlay video is missing a frame/);
+  expect(closed).toBe(true);
+  expect(output.cancel).toHaveBeenCalledTimes(1);
+  expect(output.finalize).not.toHaveBeenCalled();
+});
+
+test("cancelling a composite closes the overlay iterator and both inputs", async () => {
+  const controller = new AbortController();
+  let closed = false;
+  CanvasSink.mockImplementation(() => ({
+    canvasesAtTimestamps: async function* (timestamps) {
+      try { for (const time of timestamps) yield { canvas: { sourceTime: time } }; }
+      finally { closed = true; }
+    },
+  }));
+  await expect(encode({ overlaySource: new Blob(), signal: controller.signal, onProgress: () => controller.abort() })).rejects.toThrow();
+  expect(closed).toBe(true);
+  expect(input.dispose).toHaveBeenCalledTimes(2);
+  expect(output.finalize).not.toHaveBeenCalled();
+});
+
 test("a missing frame cancels the muxer and never finalizes partial output", async () => {
   CanvasSink.mockImplementation(() => ({ canvasesAtTimestamps: async function* () { yield null; } }));
   await expect(encode()).rejects.toThrow(/missing a frame/);

@@ -3,7 +3,6 @@ import {
   BUILTIN_LOOK_PRESETS,
   CTA_COPY_VARIANTS,
   DEFAULTS,
-  HOOK_COPY_VARIANTS,
   OVERLAY_ANIMS,
   OVERLAY_FONTS,
   TEXT_STYLES,
@@ -49,8 +48,7 @@ function prefScale(profileKey, field, fallback) {
 }
 function prefVariants(profileKey, field, fallbackList) {
   const value = prefFor(profileKey, field, null);
-  // Any non-empty string list loads: founders can keep a limitless rotation
-  // of hook messages, not just the three shipped defaults.
+  // CTA presets remain user-editable and remembered independently of openings.
   if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === "string")) {
     return value;
   }
@@ -66,14 +64,14 @@ function prefLookPresets(profileKey) {
 
 /**
  * Overlay taste, one owner. Fonts, entrances, sizes, accent, text style,
- * copy variants, clip review approval and named looks all live here; the
+ * CTA variants, clip review approval and named looks all live here; the
  * editor only reads the values and calls the setters/helpers.
  *
- * Copy text itself stays editor-owned: variant selection reports through
- * onHookText/onCtaHeadline, and review approval reads videoUrl plus the
+ * Copy text itself stays editor-owned: CTA selection reports through
+ * onCtaHeadline, and review approval reads videoUrl plus the
  * loaded clip duration passed in as clipDuration.
  */
-export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recording, onHookText, onCtaHeadline }) {
+export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recording, onCtaHeadline }) {
   const [overlayAccent, setOverlayAccent] = useState(() => prefFor(overlayScope, "overlayAccent", DEFAULTS.overlayAccent));
   const [captionFont, setCaptionFont] = useState(() => prefFont(overlayScope, "captionFont", DEFAULTS.captionFont));
   const [ctaFont, setCtaFont] = useState(() => prefFont(overlayScope, "ctaFont", DEFAULTS.ctaFont));
@@ -85,8 +83,6 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
   // feeds all three painters, so the picker lives once (Hook Text) and the
   // story inherits it through the hook painter it already reuses.
   const [textStyle, setTextStyle] = useState(() => prefTextStyle(overlayScope, "textStyle", DEFAULTS.textStyle));
-  const [hookVariants, setHookVariants] = useState(() => prefVariants(overlayScope, "hookVariants", HOOK_COPY_VARIANTS));
-  const [activeHookVariant, setActiveHookVariant] = useState(0);
   const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));
   const [activeCtaVariant, setActiveCtaVariant] = useState(0);
   const [customLookPresets, setCustomLookPresets] = useState(() => prefLookPresets(overlayScope));
@@ -117,7 +113,6 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
         captionScale,
         ctaScale,
         textStyle,
-        hookVariants,
         ctaVariants,
         lookPresets: customLookPresets,
       };
@@ -130,28 +125,7 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     } catch {
       // Nothing to do: persistence is a convenience, not the feature.
     }
-  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, hookVariants, ctaVariants, customLookPresets, overlayScope]);
-
-  // Surprise me: one button picks a fresh preset message, always different
-  // from the one showing (a single-message list just re-applies itself).
-  // Typing still edits the active slot in place; this only swaps which
-  // preset fills the textarea and the overlay.
-  const surpriseHookVariant = () => {
-    if (hookVariants.length === 0) return;
-    let next = activeHookVariant;
-    if (hookVariants.length > 1) {
-      do {
-        next = Math.floor(Math.random() * hookVariants.length);
-      } while (next === activeHookVariant);
-    }
-    setActiveHookVariant(next);
-    onHookText(hookVariants[next] ?? "");
-  };
-
-  const updateHookText = (val) => {
-    onHookText(val);
-    setHookVariants((prev) => prev.map((v, i) => (i === activeHookVariant ? val : v)));
-  };
+  }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, ctaVariants, customLookPresets, overlayScope]);
 
   const surpriseCtaVariant = () => {
     if (ctaVariants.length === 0) return;
@@ -233,9 +207,7 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     captionScale, setCaptionScale,
     ctaScale, setCtaScale,
     textStyle, setTextStyle,
-    hookVariants, activeHookVariant,
     ctaVariants, activeCtaVariant,
-    updateHookText, surpriseHookVariant,
     updateCtaHeadline, surpriseCtaVariant,
     customLookPresets,
     allLookPresets,

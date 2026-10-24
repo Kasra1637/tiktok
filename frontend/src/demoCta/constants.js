@@ -143,12 +143,6 @@ export const OVERLAY_ANIMS = [
   { id: "thud", label: "Thud" },
 ];
 
-export const HOOK_COPY_VARIANTS = [
-  "I built this so I'd stop journaling in Notes app",
-  "How I stopped losing my best thoughts in Apple Notes",
-  "The 10-second check-in that replaced my messy journal",
-];
-
 export const CTA_COPY_VARIANTS = [
   "Try it free — link in bio",
   "Download free on the App Store",

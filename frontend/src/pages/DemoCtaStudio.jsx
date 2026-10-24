@@ -98,8 +98,8 @@ export function DemoCtaStudio() {
         title="Demo + CTA"
         description={
           generationId
-            ? "Style a finished clip in a phone mockup, then add the CTA."
-            : "Style any clip in a phone mockup, then export to History."
+            ? "Style a finished clip: phone or full-frame, then add CTA."
+            : "Style any clip: phone mockup or full-frame for History."
         }
       />
       {generationId ? (

@@ -187,6 +187,8 @@ export const api = {
   // App Profiles (template-studio workflow: research -> review/approve -> refresh)
   researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
   getAppProfiles: () => client.get("/app-profiles").then((r) => r.data),
+  generateOpeningMessages: (profileId, previous) =>
+    client.post("/demo-cta/opening-messages", { profile_id: profileId || null, previous }).then((r) => r.data),
   getAppProfile: (id) => client.get(`/app-profiles/${id}`).then((r) => r.data),
   deleteAppProfile: (id) => client.delete(`/app-profiles/${id}`).then((r) => r.data),
   updateAppProfile: (id, payload) => client.patch(`/app-profiles/${id}`, payload).then((r) => r.data),

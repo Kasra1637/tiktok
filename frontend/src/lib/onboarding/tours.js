@@ -205,15 +205,15 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="demo-cta-source"]',
-        title: "One clip in, one styled clip out",
+        title: "A base clip, one finished export",
         body:
-          "Bring your own footage or style a finished Hook + Story render. One source clip at a time — stitch separate clips in your own editor."
+          "Upload footage or choose a finished render from History. Real Video can add a second upload on a floating or hand-held phone over the base, exported together."
       },
       {
         target: '[data-testid="view-mode-floating"]',
-        title: "Frame the phone, not the screen",
+        title: "Mockup or full-frame",
         body:
-          "Floating phone or hand-held mockup — pick the look. Drag the preview to frame it; the hand-held option also lets you set a scene."
+          "Floating phone, hand-held mockup, or full-frame Real Video — pick the look. Drag the preview to frame it; the hand-held option also lets you set a scene."
       },
       {
         target: '[data-testid="hook-controls"]',
