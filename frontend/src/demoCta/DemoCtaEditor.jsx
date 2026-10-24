@@ -607,19 +607,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     clearZoomKeyframes,
   } = useZoomKeyframes();
 
-  // Second layer for Real Video: a phone-overlay upload composited over the
-  // full-bleed base. Independent source state — replacing the base never
-  // clears it — synced to base transport by usePreviewLoop and decoded
-  // separately by the export, which is why the painter takes both frames.
-  const [overlayUrl, setOverlayUrl] = useState(null);
-  const [overlayMeta, setOverlayMeta] = useState(null);
-  const [overlayPhone, setOverlayPhone] = useState("floating");
-  const [overlayName, setOverlayName] = useState("");
-  const [overlayPlacement, setOverlayPlacement] = useState({ size: 0.52, x: 0.5, y: 0.95 });
-  const [overlayError, setOverlayError] = useState(null);
-  const overlayVideoRef = useRef(null);
-  const overlayObjectUrlRef = useRef(null);
-  const overlayInputRef = useRef(null);
+  // Optional second segment. The preview hook owns sequence transport;
+  // export decodes both sources on the same joined timeline.
+  const [appendUrl, setAppendUrl] = useState(null);
+  const [appendMeta, setAppendMeta] = useState(null);
+  const [appendOverlays, setAppendOverlays] = useState(false);
+  const [appendName, setAppendName] = useState("");
+  const [appendError, setAppendError] = useState(null);
+  const appendVideoRef = useRef(null);
+  const appendObjectUrlRef = useRef(null);
+  const appendInputRef = useRef(null);
 
   // Preview transport + scoped replay + frame painting live in
   // usePreviewLoop; the editor only reads the playhead and calls the
@@ -636,13 +633,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     cancelScopedReplay, dirtyRef,
     showZoomValues, zoomValuesAt,
     editingZoomRef, liveZoomRef,
-    paintFrameRef, kickPreviewRef, isExportingRef,
+    paintFrameRef, kickPreviewRef, isExportingRef, activeVideoRef,
   } = usePreviewLoop({
     device, preset, mockupStretchY, scale, videoMeta, bg, anim,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    overlayUrl, overlayPhone, overlayVideoRef, overlayPlacement,
+    appendUrl, appendMeta, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -668,9 +665,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, envBg,
-    overlayUrl, overlayPhone, overlayVideoRef,
+    appendUrl, appendMeta, appendVideoRef,
     captionFont, ctaFont, fontStack,
-    videoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
+    videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
     setIsPlaying,
     setRecording, setProgress, setResult,
@@ -895,7 +892,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     },
   });
 
-  const invalidateComposite = () => {
+  const invalidateSequence = () => {
     if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
     resultObjectUrlRef.current = null;
     setResult(null);
@@ -904,30 +901,30 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     clearExportErrors();
   };
 
-  const handleOverlayFile = (file) => {
+  const handleAppendFile = (file) => {
     if (!file) return;
-    invalidateComposite();
-    setOverlayError(null);
-    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
+    invalidateSequence();
+    setAppendError(null);
+    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
     const url = URL.createObjectURL(file);
-    overlayObjectUrlRef.current = url;
-    setOverlayMeta(null);
-    setOverlayUrl(url);
-    setOverlayName(file.name || "overlay");
+    appendObjectUrlRef.current = url;
+    setAppendMeta(null);
+    setAppendUrl(url);
+    setAppendName(file.name || "added clip");
   };
 
-  const removeOverlay = () => {
-    invalidateComposite();
-    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
-    overlayObjectUrlRef.current = null;
-    setOverlayUrl(null);
-    setOverlayMeta(null);
-    setOverlayName("");
-    setOverlayError(null);
+  const removeAppend = () => {
+    invalidateSequence();
+    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
+    appendObjectUrlRef.current = null;
+    setAppendUrl(null);
+    setAppendMeta(null);
+    setAppendName("");
+    setAppendError(null);
   };
 
   useEffect(() => () => {
-    if (overlayObjectUrlRef.current) URL.revokeObjectURL(overlayObjectUrlRef.current);
+    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
   }, []);
 
   // Probe metadata and ensure preview video starts playing
@@ -955,14 +952,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       refVideo.src = videoUrl;
       refVideo.muted = true;
       setPreviewMuted(true);
-      refVideo.loop = true;
       refVideo.playsInline = true;
       refVideo.load();
       refVideo.play().catch(() => {});
       setIsPlaying(true);
       setCurrentTime(0);
     }
-  }, [videoUrl, sourceFileName]);
+  }, [videoUrl, sourceFileName, videoRef, setPreviewMuted, setIsPlaying, setCurrentTime]);
 
 
 
@@ -976,8 +972,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
 
   const updateZoomDraft = (patch) => {
     if (isExportingRef.current) return;
-    const video = videoRef.current;
-    const base = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(video?.currentTime ?? 0);
+    const video = activeVideoRef.current || videoRef.current;
+    const base = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(currentTime);
     cancelScopedReplay();
     video?.pause();
     setIsPlaying(false);
@@ -990,6 +986,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const handleCaptureZoomLock = () => {
     const video = videoRef.current;
     if (!video || !videoMeta || isExportingRef.current) return;
+    if (viewMode === "realistic" && currentTime >= videoMeta.d) return;
     const time = video.currentTime;
     const snapshot = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(time);
     captureZoomKeyframe(time, snapshot);
@@ -1024,8 +1021,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const cx = (e.clientX - rect.left) * scaleX;
     const cy = (e.clientY - rect.top) * scaleY;
 
-    const video = videoRef.current;
-    const vt = video ? video.currentTime : 0;
+    const vt = currentTime;
     const dur = videoMeta?.d ?? 0;
     const hookWindow = hookDuration + 0.28;
     const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode) + 0.4;
@@ -1100,7 +1096,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       : { phoneScale: Math.max(RANGES.scale.min, Math.min(RANGES.scale.max, +(values.phoneScale - e.deltaY * 0.0015).toFixed(3))) });
   };
 
-  const duration = videoMeta?.d ?? 0;
+  const duration = (videoMeta?.d ?? 0) + (viewMode === "realistic" ? appendMeta?.d ?? 0 : 0);
   const interval = tickInterval(duration);
   const ticks = [];
   if (duration > 0) {
@@ -1148,7 +1144,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // columns peers: the page itself stops growing, the panel scrolls inside its
   // own box, and the preview stays put no matter how long the panel gets.
   const settingsRef = useRef(null);
-  const overlayNotReady = viewMode === "realistic" && overlayUrl && !overlayMeta;
+  const appendNotReady = viewMode === "realistic" && appendUrl && !appendMeta;
 
   return (
     // Radix tooltips need a provider ancestor; the app has none, and the
@@ -1179,20 +1175,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           className="sr-only"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
-        {/* The overlay drives a separate input for the same reason: one input
+        {/* The added clip drives a separate input for the same reason: one input
             per source, so neither upload can clobber the other. Resetting the
             value lets the same file be picked twice in a row. */}
         <input
-          ref={overlayInputRef}
+          ref={appendInputRef}
           type="file"
           accept="video/*"
-          aria-label="Choose a phone overlay clip"
-          data-testid="overlay-upload-input"
+          aria-label="Choose a clip to add after base"
+          data-testid="append-upload-input"
           className="sr-only"
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (file) handleOverlayFile(file);
+            if (file) handleAppendFile(file);
           }}
         />
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
@@ -1318,75 +1314,48 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           {viewMode === "realistic" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel>Phone overlay</SubLabel>
-              <p className="text-xs text-muted-foreground">Upload a second clip for the phone. It loops over the History base; only base audio is exported.</p>
+              <SubLabel>Add clip after base</SubLabel>
+              <p className="text-xs text-muted-foreground">Play the full History base, then this upload, with each clip’s original audio. Export length includes both clips.</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
                   className="h-10"
-                  onClick={() => overlayInputRef.current?.click()}
-                  data-testid="overlay-upload-button"
+                  onClick={() => appendInputRef.current?.click()}
+                  data-testid="append-upload-button"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  <span>{overlayUrl ? "Replace overlay" : "Upload overlay"}</span>
+                  <span>{appendUrl ? "Replace added clip" : "Add clip after base"}</span>
                 </Button>
-                {overlayName && (
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={overlayName} data-testid="overlay-file-name">
-                    {overlayName}
-                    {overlayMeta && Number.isFinite(overlayMeta.d) ? ` • ${overlayMeta.d.toFixed(1)}s` : ""}
+                {appendName && (
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={appendName} data-testid="append-file-name">
+                    {appendName}
+                    {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendMeta.d.toFixed(1)}s` : ""}
                   </span>
                 )}
-                {overlayUrl && (
+                {appendUrl && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-10"
-                    onClick={removeOverlay}
-                    title="Remove the phone overlay"
-                    data-testid="overlay-remove"
+                    onClick={removeAppend}
+                    title="Remove the added clip"
+                    data-testid="append-remove"
                   >
                     <X className="h-3.5 w-3.5" />
                     <span>Remove</span>
                   </Button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
-                {[
-                  ["floating", "Floating Phone"],
-                  ["hand", "Hand Holding"],
-                ].map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => { invalidateComposite(); setOverlayPhone(id); }}
-                    aria-pressed={overlayPhone === id}
-                    data-testid={`overlay-phone-${id}`}
-                    className={`focus-ring h-8 rounded-lg text-xs font-semibold transition duration-150 ${
-                      overlayPhone === id
-                        ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {overlayError && <p role="alert" className="text-xs text-destructive">{overlayError}</p>}
-              {overlayUrl && !overlayMeta && !overlayError && <p role="status" className="text-xs text-muted-foreground">Loading phone clip…</p>}
-              {overlayUrl && [
-                ["size", "Phone size", 0.25, 0.75],
-                ["x", "Phone horizontal position", 0, 1],
-                ["y", "Phone vertical position", 0, 1],
-              ].map(([key, label, min, max]) => (
-                <ControlSlider key={key} label={label} value={overlayPlacement[key]}
-                  min={min} max={max} step={0.01} testId={`overlay-${key}-slider`}
-                  format={(value) => `${Math.round(value * 100)}%`}
-                  onChange={(value) => {
-                    invalidateComposite();
-                    setOverlayPlacement((prev) => ({ ...prev, [key]: value }));
-                  }} />
-              ))}
+              {appendError && <p role="alert" className="text-xs text-destructive">{appendError}</p>}
+              {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
+              {appendUrl && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
+                    onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
+                  Apply text and overlays to the added clip too
+                </label>
+              )}
             </div>
           )}
           {viewMode === "hand" && (
@@ -2224,7 +2193,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       type="button"
                       variant="accent"
                       size="sm"
-                      disabled={!videoUrl || !videoMeta || recording || saving || overlayNotReady}
+                      disabled={!videoUrl || !videoMeta || recording || saving || appendNotReady}
                       onClick={exportVideo}
                       data-testid="demo-cta-export"
                       className="shrink-0"
@@ -2320,36 +2289,35 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           className="pointer-events-none absolute h-px w-px opacity-0"
           playsInline
           muted={previewMuted}
-          loop
+          loop={!(viewMode === "realistic" && appendUrl)}
           autoPlay
         />
-        {/* Preview playback for the overlay layer only. Export decodes the
-            overlay bytes directly, so this element never touches the file. */}
-        {overlayUrl && (
+        {/* Second-segment playback; export decodes the original bytes. */}
+        {appendUrl && (
           <video
-            key={overlayUrl}
-            ref={overlayVideoRef}
-            src={overlayUrl}
+            key={appendUrl}
+            ref={appendVideoRef}
+            src={appendUrl}
             onLoadedData={(event) => {
               const v = event.currentTarget;
               if (!(v.videoWidth > 0 && v.videoHeight > 0 && Number.isFinite(v.duration) && v.duration > 0)) {
-                setOverlayError("This phone clip has no playable duration. Upload another MP4 or WebM.");
+                setAppendError("This added clip has no playable duration. Upload another MP4 or WebM.");
                 return;
               }
-              setOverlayMeta({ w: v.videoWidth, h: v.videoHeight, d: v.duration });
-              setOverlayError(null);
+              setAppendMeta((previous) => previous?.w === v.videoWidth && previous?.h === v.videoHeight && previous?.d === v.duration
+                ? previous : { w: v.videoWidth, h: v.videoHeight, d: v.duration });
+              setAppendError(null);
               dirtyRef.current = true;
               kickPreviewRef.current?.();
             }}
             onError={() => {
-              setOverlayMeta(null);
-              setOverlayError(`"${overlayName}" couldn't be played. Upload a playable MP4 or WebM, or remove the overlay.`);
+              setAppendMeta(null);
+              setAppendError(`"${appendName}" couldn't be played. Upload a playable MP4 or WebM, or remove the added clip.`);
             }}
-            data-testid="overlay-video"
+            data-testid="append-video"
             className="pointer-events-none absolute h-px w-px opacity-0"
             playsInline
-            muted
-            loop
+            muted={previewMuted}
             preload="auto"
           />
         )}

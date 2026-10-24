@@ -42,5 +42,6 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0022](0022-looks-live-together-in-end-card-cta.md) | Saved looks live with saving in End Card CTA | accepted |
 | [0023](0023-shared-caption-text-styles.md) | One shared text treatment across hook, story and end card | partially superseded by 0024 (text-style catalog trimmed to three) |
 | [0024](0024-retire-three-text-styles.md) | Retire outline, clean and sticker from the text-style picker | accepted |
-| [0025](0025-real-video-phone-composite.md) | Real Video combines a base clip and looped phone upload through one timestamped painter | accepted |
+| [0025](0025-real-video-phone-composite.md) | Real Video combines a base clip and looped phone upload through one timestamped painter | superseded by 0027 (appended sequence) |
+| [0027](0027-real-video-appended-sequence.md) | Real Video appends the second clip after the base with both soundtracks | accepted |
 | [0026](0026-fresh-opening-message-batches.md) | Opening text consumes twenty app-grounded suggestions instead of saved preset indices | accepted |

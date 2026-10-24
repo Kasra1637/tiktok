@@ -8726,7 +8726,7 @@ async function runDemoCtaChecks() {
     // follows the moved code.
     const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8")
       + fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
-    const probeAt = src.indexOf("await probeRecordingPlays(blob, duration)");
+    const probeAt = src.indexOf("await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : [])");
     const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
     if (probeAt < 0 || resultAt < probeAt || src.indexOf("await saveExport(blob, name)") < resultAt) throw new Error("invalid MP4 can reach download or History");
     for (const marker of ["probe.onloadeddata", "Math.abs(probe.duration - expectedDuration)", "probe.videoWidth === TIKTOK_EXPORT.width", "probe.videoHeight === TIKTOK_EXPORT.height"]) {
@@ -9057,7 +9057,7 @@ async function runDemoCtaChecks() {
     );
   });
 
-  await check("Real Video attaches a History base, composites a separate phone clip, and leaves single-source export alone", async (ctx) => {
+  await check("Real Video sequences History then upload and leaves phone modes single-source", async (ctx) => {
     const draws = [];
     const clip = installLoadedClipStubs({ width: 1080, height: 1920, onDraw: (frame) => draws.push(frame) });
     const originalFetch = global.fetch;
@@ -9068,6 +9068,12 @@ async function runDemoCtaChecks() {
     const originalPrepare = hand.prepareHandViewImages;
     const handCalls = [];
     let encodedOverlay;
+    const overlays = load("demoCta/overlays.js");
+    const originalHook = overlays.drawHookOverlay;
+    const originalEnd = overlays.drawEndCard;
+    const textCalls = [];
+    overlays.drawHookOverlay = () => textCalls.push("hook");
+    overlays.drawEndCard = () => textCalls.push("cta");
     try {
       await clip.loadClip(ctx);
       const click = async (selector) => {
@@ -9087,11 +9093,11 @@ async function runDemoCtaChecks() {
       await clip.flush();
       if (!ctx.container.textContent.includes("History base-composit.mp4")) throw new Error("History attachment did not become the base source");
       const source = base.src;
-      const input = ctx.container.querySelector('[data-testid="overlay-upload-input"]');
+      const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
       Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
       await clip.flush();
-      const overlay = ctx.container.querySelector('[data-testid="overlay-video"]');
+      const overlay = ctx.container.querySelector('[data-testid="append-video"]');
       if (!overlay || base.src !== source) throw new Error("overlay upload replaced the base");
       if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("unloaded overlay did not block export");
       Object.defineProperty(overlay, "readyState", { configurable: true, value: 4 });
@@ -9102,26 +9108,47 @@ async function runDemoCtaChecks() {
       base.currentTime = 3;
       await act(async () => base.dispatchEvent(new dom.window.Event("seeked")));
       await clip.flush();
-      if (draws[0] !== base || !draws.includes(overlay)) throw new Error("preview did not draw base before the phone clip");
-      if (overlay.currentTime !== 3 || !overlay.paused) throw new Error("paused seek did not synchronize the overlay");
-      await click('[data-testid="overlay-x-slider"] [role="slider"]');
-      encoder.exportTikTok = async ({ overlaySource, drawFrame }) => {
-        encodedOverlay = overlaySource;
+      if (draws[0] !== base || draws.includes(overlay)) throw new Error("base preview still composites the added clip");
+      if (!overlay.paused || overlay.loop) throw new Error("added clip loops or plays over the base");
+      if (ctx.container.querySelector('[data-testid="append-overlays"]').checked) throw new Error("added-clip overlays must default off");
+      const seek = ctx.container.querySelector('[aria-label="Seek"]');
+      if (Number(seek.getAttribute("aria-valuemax")) !== 16) throw new Error("timeline did not sum both 8s clips");
+      await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("seeked")));
+      draws.length = 0;
+      await clip.flush();
+      if (!draws.includes(overlay) || draws.includes(base)) throw new Error("seek across the cut did not paint only the added clip");
+      if (overlay.currentTime !== 8 || Number(seek.getAttribute("aria-valuenow")) !== 16) throw new Error("seek did not use global time");
+      await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+      await click('[data-testid="transport-forward-1s"]');
+      encoder.exportTikTok = async ({ appendSource, drawFrame }) => {
+        encodedOverlay = appendSource;
         const baseFrame = document.createElement("canvas");
-        const phoneFrame = document.createElement("canvas");
+        const addedFrame = document.createElement("canvas");
         draws.length = 0;
-        drawFrame(1, baseFrame, overlaySource ? phoneFrame : null);
-        if (draws[0] !== baseFrame) throw new Error("export lost its base frame");
-        if (overlaySource && !handCalls.length && !draws.includes(phoneFrame)) throw new Error("export lost its phone frame");
-        throw new Error("Composite callback verified");
+        textCalls.length = 0;
+        drawFrame(1, baseFrame, 0);
+        if (draws[0] !== baseFrame || !textCalls.length) throw new Error("export lost base footage or its overlays");
+        if (appendSource) {
+          draws.length = 0;
+          textCalls.length = 0;
+          drawFrame(base.duration + 1, addedFrame, 1);
+          if (draws[0] !== addedFrame || draws.includes(baseFrame)) throw new Error("export did not switch to the added frame");
+          const enabled = ctx.container.querySelector('[data-testid="append-overlays"]').checked;
+          if (Boolean(textCalls.length) !== enabled) throw new Error("added-segment overlays did not follow the opt-in");
+        }
+        throw new Error("Sequence callback verified");
       };
       await click('[data-testid="demo-cta-export"]');
-      if (!encodedOverlay || !ctx.container.textContent.includes("Composite callback verified")) throw new Error("dual-source export was not exercised");
+      if (!encodedOverlay || !ctx.container.textContent.includes("Sequence callback verified")) throw new Error("joined export was not exercised");
+      await click('[data-testid="append-overlays"]');
+      await click('[data-testid="demo-cta-export"]');
+      if (!ctx.container.textContent.includes("Sequence callback verified")) throw new Error("opted-in overlays failed export");
       hand.drawHandView = (...args) => { handCalls.push(args); };
       hand.prepareHandViewImages = async () => {};
-      await click('[data-testid="overlay-phone-hand"]');
+      await click('[data-testid="view-mode-hand"]');
       await click('[data-testid="demo-cta-export"]');
-      if (!handCalls.some((args) => args[15] === true)) throw new Error("hand overlay did not request a transparent backdrop");
+      if (encodedOverlay || !handCalls.length) throw new Error("hand mode changed or included the added clip");
       await click('[data-testid="view-mode-floating"]');
       await click('[data-testid="demo-cta-export"]');
       if (encodedOverlay) throw new Error("phone clip leaked into single-source export");
@@ -9129,11 +9156,13 @@ async function runDemoCtaChecks() {
       await click('[data-testid="view-mode-realistic"]');
       await act(async () => overlay.dispatchEvent(new dom.window.Event("error")));
       if (!ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("broken overlay still enabled export");
-      await click('[data-testid="overlay-remove"]');
-      if (ctx.container.querySelector('[data-testid="overlay-video"]') || base.src !== source) throw new Error("remove failed or cleared the base");
+      await click('[data-testid="append-remove"]');
+      if (ctx.container.querySelector('[data-testid="append-video"]') || base.src !== source) throw new Error("remove failed or cleared the base");
       if (ctx.container.querySelector('[data-testid="demo-cta-export"]').disabled) throw new Error("removing broken overlay did not recover base-only export");
     } finally {
       encoder.exportTikTok = originalEncode;
+      overlays.drawHookOverlay = originalHook;
+      overlays.drawEndCard = originalEnd;
       hand.drawHandView = originalHand;
       hand.prepareHandViewImages = originalPrepare;
       global.fetch = originalFetch;

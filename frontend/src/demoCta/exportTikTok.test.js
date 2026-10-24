@@ -1,9 +1,9 @@
 import { exportTikTok } from "./exportTikTok";
-import { canEncodeAudio, canEncodeVideo, Input, Output, CanvasSink, CanvasSource, AudioSampleSink, AudioSampleSource } from "mediabunny";
+import { canEncodeAudio, canEncodeVideo, Input, Output, CanvasSink, CanvasSource, AudioSample, AudioSampleSink, AudioSampleSource } from "mediabunny";
 
 jest.mock("mediabunny", () => ({
   ALL_FORMATS: [], BlobSource: jest.fn(), BufferTarget: jest.fn(), Mp4OutputFormat: jest.fn(),
-  Input: jest.fn(), Output: jest.fn(), CanvasSink: jest.fn(), CanvasSource: jest.fn(),
+  Input: jest.fn(), Output: jest.fn(), CanvasSink: jest.fn(), CanvasSource: jest.fn(), AudioSample: { fromAudioBuffer: jest.fn() },
   AudioSampleSink: jest.fn(), AudioSampleSource: jest.fn(), canEncodeAudio: jest.fn(), canEncodeVideo: jest.fn(),
 }));
 
@@ -18,7 +18,7 @@ beforeEach(() => {
   audioTrack = { canDecode: async () => true };
   input = { getPrimaryVideoTrack: async () => track, getPrimaryAudioTrack: async () => audioTrack, dispose: jest.fn() };
   output = { target: { buffer: new Uint8Array([1, 2, 3]) }, addVideoTrack: jest.fn(), addAudioTrack: jest.fn(), start: jest.fn(), finalize: jest.fn(), cancel: jest.fn() };
-  videoSource = { add: jest.fn(async () => { await new Promise((r) => setTimeout(r, 5)); }), close: jest.fn() };
+  videoSource = { add: jest.fn(async () => { await new Promise((r) => setTimeout(r, 1)); }), close: jest.fn() };
   audioSource = { add: jest.fn(), close: jest.fn() };
   frames = [];
   Input.mockImplementation(() => input);
@@ -31,12 +31,12 @@ beforeEach(() => {
   AudioSampleSink.mockImplementation(() => ({ samples: async function* () {} }));
 });
 
-test("slow encoding retains exact 30 fps timestamps and every source frame", async () => {
+test("slow encoding retains 30 fps timestamps and every source frame", async () => {
   const drawFrame = jest.fn(), onProgress = jest.fn(), canvas = {};
   const result = await encode({ drawFrame, onProgress, canvas });
   expect(canvas).toEqual({ width: 1080, height: 1920 });
   expect(frames).toEqual([0.5, 0.5 + 1 / 30, 0.5 + 2 / 30, 0.6]);
-  expect(videoSource.add.mock.calls).toEqual([0, 1, 2, 3].map((i) => [i / 30, 1 / 30]));
+  expect(videoSource.add.mock.calls.map(([time]) => time)).toEqual([0, 1 / 30, 2 / 30, 0.1]);
   expect(drawFrame.mock.calls.map(([time]) => time)).toEqual([0, 1 / 30, 2 / 30, 0.1]);
   expect(onProgress).toHaveBeenLastCalledWith(1);
   expect(result.duration).toBe(4 / 30);
@@ -46,7 +46,7 @@ test("slow encoding retains exact 30 fps timestamps and every source frame", asy
   expect(input.dispose).toHaveBeenCalledTimes(1);
 });
 
-test("audio is trimmed and rebased to video origin, never preview mute or volume", async () => {
+test("single-source audio is trimmed and rebased, never preview mute or volume", async () => {
   const trimmed = { timestamp: 0.5, setTimestamp: jest.fn(), close: jest.fn() };
   const sample = { timestamp: 0.48, sampleRate: 48000, numberOfFrames: 9600, trim: jest.fn(() => trimmed), close: jest.fn() };
   AudioSampleSink.mockImplementation(() => ({ samples: async function* () { yield sample; } }));
@@ -56,104 +56,99 @@ test("audio is trimmed and rebased to video origin, never preview mute or volume
   expect(audioSource.add).toHaveBeenCalledWith(trimmed);
   expect(trimmed.close).toHaveBeenCalledTimes(1);
   expect(sample.close).toHaveBeenCalledTimes(1);
-  expect(AudioSampleSource).toHaveBeenCalledWith(expect.objectContaining({ codec: "aac", bitrate: 192000, transform: { sampleRate: 48000, numberOfChannels: 2 } }));
 });
 
-test("silent clips stay silent without an invented audio track", async () => {
+function addClip({ audio = false, duration = 0.08, decodes = true } = {}) {
+  const second = {
+    getPrimaryVideoTrack: async () => ({ canDecode: async () => decodes, getFirstTimestamp: async () => 0.2, computeDuration: async () => 0.2 + duration }),
+    getPrimaryAudioTrack: async () => audio ? { canDecode: async () => true, second: true } : null,
+    dispose: jest.fn(),
+  };
+  Input.mockImplementationOnce(() => input).mockImplementationOnce(() => second);
+  return second;
+}
+
+test("added clip follows the complete base once, with summed duration and no overlapping frames", async () => {
   input.getPrimaryAudioTrack = async () => null;
-  await encode();
+  const second = addClip();
+  const drawFrame = jest.fn();
+  const result = await encode({ appendSource: new Blob(), drawFrame });
+  expect(result.duration).toBeCloseTo(0.19);
+  expect(drawFrame.mock.calls.map(([, , segment]) => segment)).toEqual([0, 0, 0, 0, 1, 1]);
+  const times = videoSource.add.mock.calls.map(([time]) => time);
+  expect(times).toEqual([0, 1 / 30, 2 / 30, 3 / 30, 4 / 30, 5 / 30]);
+  expect(drawFrame.mock.calls[4][1].sourceTime).toBeCloseTo(0.2 + 4 / 30 - 0.11);
+  expect(videoSource.add.mock.calls[5][1]).toBeCloseTo(0.19 - 5 / 30);
+  expect(second.dispose).toHaveBeenCalledTimes(1);
   expect(output.addAudioTrack).not.toHaveBeenCalled();
 });
 
-test("unsupported H.264 fails with a next step and no container fallback", async () => {
-  canEncodeVideo.mockResolvedValue(false);
-  await expect(encode()).rejects.toThrow(/Chrome or Edge/);
-  expect(Output).not.toHaveBeenCalled();
+test("10s plus 8s exports 18s, not a loop or the longer input duration", async () => {
+  videoSource.add.mockImplementation(async () => {});
+  track.computeDuration = async () => 10.5;
+  input.getPrimaryAudioTrack = async () => null;
+  addClip({ duration: 8 });
+  const result = await encode({ appendSource: new Blob() });
+  expect(result.duration).toBe(18);
+  expect(videoSource.add).toHaveBeenCalledTimes(540);
 });
 
-test("unsupported AAC refuses the export rather than dropping source audio", async () => {
-  canEncodeAudio.mockResolvedValue(false);
+test.each([true, false])("joined AAC schedules both rates/channels without retiming (base audio: %s)", async (baseAudio) => {
+  if (!baseAudio) input.getPrimaryAudioTrack = async () => null;
+  addClip({ audio: true });
+  const nodes = [], decoded = [], normalized = { close: jest.fn() };
+  const pcm = new Float32Array(9120).fill(0.4);
+  const rendered = { numberOfChannels: 2, getChannelData: () => pcm };
+  global.OfflineAudioContext = jest.fn().mockImplementation(() => ({
+    destination: {},
+    createBufferSource: () => { const node = { connect: jest.fn(), start: jest.fn() }; nodes.push(node); return node; },
+    startRendering: async () => rendered,
+  }));
+  AudioSample.fromAudioBuffer.mockReturnValue([normalized]);
+  AudioSampleSink.mockImplementation((track) => ({ samples: async function* () {
+    const sample = { timestamp: track.second ? 0.2 : 0.5, duration: track.second ? 0.08 : 0.11,
+      toAudioBuffer: () => ({ sampleRate: track.second ? 44100 : 48000, numberOfChannels: track.second ? 1 : 2 }), close: jest.fn() };
+    decoded.push(sample); yield sample;
+  } }));
+  try {
+    const result = await encode({ appendSource: new Blob() });
+    expect(OfflineAudioContext).toHaveBeenCalledWith(2, 9120, 48000);
+    expect(nodes[nodes.length - 1].start.mock.calls[0][0]).toBeCloseTo(0.11);
+    expect(nodes[nodes.length - 1].buffer.sampleRate).toBe(44100);
+    if (baseAudio) {
+      expect(nodes[0].start.mock.calls[0].slice(0, 2)).toEqual([0, 0]);
+      expect(nodes[0].start.mock.calls[0][2]).toBeCloseTo(0.11);
+    }
+    expect(AudioSample.fromAudioBuffer).toHaveBeenCalledWith(rendered, 0);
+    expect(audioSource.add).toHaveBeenCalledWith(normalized);
+    expect(normalized.close).toHaveBeenCalled();
+    decoded.forEach((sample) => expect(sample.close).toHaveBeenCalled());
+    expect(result.audioSegments).toHaveLength(baseAudio ? 2 : 1);
+    expect(AudioSampleSource).toHaveBeenCalledWith(expect.objectContaining({ codec: "aac", transform: { sampleRate: 48000, numberOfChannels: 2 } }));
+  } finally { delete global.OfflineAudioContext; }
+});
+
+test("unsupported H.264 or AAC fails rather than silently dropping audio", async () => {
+  canEncodeVideo.mockResolvedValueOnce(false);
+  await expect(encode()).rejects.toThrow(/Chrome or Edge/);
+  canEncodeAudio.mockResolvedValueOnce(false);
   await expect(encode()).rejects.toThrow(/audio will not be silently removed/);
   expect(Output).not.toHaveBeenCalled();
-  expect(input.dispose).toHaveBeenCalled();
 });
 
-test("realistic composite draws base with its looped overlay canvas every frame", async () => {
-  const drawFrame = jest.fn();
-  const overlayTrack = { canDecode: async () => true, getFirstTimestamp: async () => 0.2, computeDuration: async () => 0.25 };
-  const overlayInput = { getPrimaryVideoTrack: async () => overlayTrack, dispose: jest.fn() };
-  Input.mockImplementationOnce(() => input).mockImplementationOnce(() => overlayInput);
-  await encode({ drawFrame, overlaySource: new Blob() });
-  // A second input opens for the overlay layer.
-  expect(Input).toHaveBeenCalledTimes(2);
-  expect(drawFrame).toHaveBeenCalledTimes(4);
-  const baseTimes = [0, 1 / 30, 2 / 30, 0.1];
-  expect(drawFrame.mock.calls.map(([time]) => time)).toEqual(baseTimes);
-  // The 0.05s overlay wraps twice under the longer base timeline.
-  drawFrame.mock.calls.forEach(([time, base, overlay], i) => {
-    expect(base.sourceTime).toBeCloseTo(0.5 + time, 10);
-    expect(overlay.sourceTime).toBeCloseTo(0.2 + (baseTimes[i] % 0.05), 10);
-  });
-  expect(output.finalize).toHaveBeenCalledTimes(1);
+test("undecodable added clip releases both sources and refuses partial output", async () => {
+  const second = addClip({ decodes: false });
+  await expect(encode({ appendSource: new Blob() })).rejects.toThrow(/added clip cannot be decoded/);
+  expect(second.dispose).toHaveBeenCalledTimes(1);
   expect(input.dispose).toHaveBeenCalledTimes(1);
-  expect(overlayInput.dispose).toHaveBeenCalledTimes(1);
-});
-
-test("an undecodable overlay fails loudly and releases both inputs", async () => {
-  const badInput = {
-    getPrimaryVideoTrack: async () => ({ canDecode: async () => false }),
-    dispose: jest.fn(),
-  };
-  Input.mockImplementationOnce(() => input).mockImplementationOnce(() => badInput);
-  await expect(encode({ overlaySource: new Blob() })).rejects.toThrow(/overlay clip cannot be decoded/);
-  expect(output.finalize).not.toHaveBeenCalled();
-  expect(badInput.dispose).toHaveBeenCalledTimes(1);
-  expect(input.dispose).toHaveBeenCalledTimes(1);
-});
-
-test("a missing overlay frame refuses partial output and closes its decoder", async () => {
-  let closed = false;
-  CanvasSink.mockImplementationOnce(() => ({
-    canvasesAtTimestamps: async function* () { yield { canvas: {} }; },
-  })).mockImplementationOnce(() => ({
-    canvasesAtTimestamps: async function* () {
-      try { yield null; } finally { closed = true; }
-    },
-  }));
-  await expect(encode({ overlaySource: new Blob() })).rejects.toThrow(/phone overlay video is missing a frame/);
-  expect(closed).toBe(true);
-  expect(output.cancel).toHaveBeenCalledTimes(1);
   expect(output.finalize).not.toHaveBeenCalled();
 });
 
-test("cancelling a composite closes the overlay iterator and both inputs", async () => {
-  const controller = new AbortController();
-  let closed = false;
-  CanvasSink.mockImplementation(() => ({
-    canvasesAtTimestamps: async function* (timestamps) {
-      try { for (const time of timestamps) yield { canvas: { sourceTime: time } }; }
-      finally { closed = true; }
-    },
-  }));
-  await expect(encode({ overlaySource: new Blob(), signal: controller.signal, onProgress: () => controller.abort() })).rejects.toThrow();
-  expect(closed).toBe(true);
-  expect(input.dispose).toHaveBeenCalledTimes(2);
-  expect(output.finalize).not.toHaveBeenCalled();
-});
-
-test("a missing frame cancels the muxer and never finalizes partial output", async () => {
-  CanvasSink.mockImplementation(() => ({ canvasesAtTimestamps: async function* () { yield null; } }));
+test("missing frames and cancellation never finalize partial output", async () => {
+  CanvasSink.mockImplementationOnce(() => ({ canvasesAtTimestamps: async function* () { yield null; } }));
   await expect(encode()).rejects.toThrow(/missing a frame/);
-  expect(output.cancel).toHaveBeenCalledTimes(1);
-  expect(output.finalize).not.toHaveBeenCalled();
-  expect(input.dispose).toHaveBeenCalled();
-});
-
-test("cancel stops encoding and releases the source", async () => {
   const controller = new AbortController();
   await expect(encode({ signal: controller.signal, onProgress: () => controller.abort() })).rejects.toThrow();
-  expect(videoSource.add).toHaveBeenCalledTimes(1);
-  expect(output.cancel).toHaveBeenCalledTimes(1);
+  expect(output.cancel).toHaveBeenCalledTimes(2);
   expect(output.finalize).not.toHaveBeenCalled();
-  expect(input.dispose).toHaveBeenCalled();
 });

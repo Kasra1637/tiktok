@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from "mediabunny";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
@@ -11,7 +12,24 @@ import { useExportErrors } from "./useExportErrors";
  * decoded first frame, expected duration and full TikTok dimensions.
  * A blob that fails never becomes a download link or a History row.
  */
-export function probeRecordingPlays(blob, expectedDuration) {
+export async function probeRecordingPlays(blob, expectedDuration, audioSegments = []) {
+  if (audioSegments.length) {
+    const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+    try {
+      const track = await input.getPrimaryAudioTrack();
+      if (!track || await track.getCodec() !== "aac" || !await track.canDecode() ||
+          await track.getSampleRate() !== 48000 || await track.getNumberOfChannels() !== 2) {
+        throw new Error("The TikTok MP4 lost its AAC audio. Export again; this file will not be offered for download.");
+      }
+      const end = await track.computeDuration();
+      for (const segment of audioSegments) {
+        if (end < segment.start + segment.duration - 0.1) throw new Error("The TikTok MP4 audio ends before the joined video. Export again.");
+        const sample = await new AudioSampleSink(track).getSample(segment.start + Math.min(0.05, segment.duration / 2));
+        if (!sample) throw new Error("The TikTok MP4 is missing audio at a segment boundary. Export again.");
+        sample.close();
+      }
+    } finally { input.dispose(); }
+  }
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const probe = document.createElement("video");
@@ -59,9 +77,9 @@ export function useExportFlow(settings) {
   const {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, envBg,
-    overlayUrl, overlayPhone, overlayVideoRef,
+    appendUrl, appendMeta, appendVideoRef,
     captionFont, ctaFont, fontStack,
-    videoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
+    videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
     setIsPlaying,
     setRecording, setProgress, setResult,
@@ -103,13 +121,10 @@ export function useExportFlow(settings) {
     if (!video || !paintFrame || !videoMeta || isExportingRef.current) return;
     const controller = new AbortController();
     exportAbortRef.current = controller;
-    const resumePlayback = !video.paused;
+    const active = activeVideoRef?.current || video;
+    const resumePlayback = !active.paused;
     video.pause();
-    // The overlay element is preview-only transport: park it for the encode
-    // (the export decodes the overlay bytes itself) and resume it after.
-    const overlayEl = overlayVideoRef?.current;
-    const resumeOverlay = !!overlayEl && !overlayEl.paused;
-    overlayEl?.pause();
+    appendVideoRef?.current?.pause();
     setIsPlaying(false);
     setError(null);
     setSaveError(null);
@@ -123,26 +138,27 @@ export function useExportFlow(settings) {
       // Freeze settings, assets and fonts for the entire encode. Never capture a live RAF canvas.
       await Promise.all([document.fonts?.ready, ...[captionFont, ctaFont].map((id) =>
         document.fonts?.load(`100px ${fontStack(id)}`))]);
-      if (viewMode === "hand" || (viewMode === "realistic" && overlayUrl && overlayPhone === "hand")) {
-        await prepareHandViewImages(envBg, viewMode === "realistic");
+      if (viewMode === "hand") {
+        await prepareHandViewImages(envBg);
       }
       const response = await fetch(videoUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");
-      let overlayBlob = null;
-      if (viewMode === "realistic" && overlayUrl) {
-        const overlayResponse = await fetch(overlayUrl, { signal: controller.signal });
-        if (!overlayResponse.ok) throw new Error("The phone overlay clip could not be read. Reload it and export again.");
-        overlayBlob = await overlayResponse.blob();
+      let appendBlob = null;
+      if (viewMode === "realistic" && appendUrl) {
+        const response = await fetch(appendUrl, { signal: controller.signal });
+        if (!response.ok) throw new Error("The added clip could not be read. Reload it and export again.");
+        appendBlob = await response.blob();
       }
       const canvas = document.createElement("canvas");
-      const { blob, duration } = await exportTikTok({
-        source: await response.blob(), overlaySource: overlayBlob, canvas, signal: controller.signal,
-        drawFrame: (time, frame, overlayFrame) => paintFrame(canvas, time, frame, overlayFrame),
+      const { blob, duration, audioSegments } = await exportTikTok({
+        source: await response.blob(), appendSource: appendBlob, canvas, signal: controller.signal,
+        drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
         onProgress: setProgress,
       });
       const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
       if (sniffRecordingContainer(head) !== "mp4") throw new Error("The encoder did not produce a valid MP4. Export again in Chrome or Edge.");
-      await probeRecordingPlays(blob, duration);
+      const expectedDuration = appendBlob ? videoMeta.d + appendMeta.d : duration;
+      await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : []);
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
       if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
@@ -166,8 +182,7 @@ export function useExportFlow(settings) {
         // (the `play` event below re-kicks the loop when playback resumes).
         dirtyRef.current = true;
         kickPreviewRef.current?.();
-        if (resumePlayback) video.play().then(() => setIsPlaying(true)).catch(() => {});
-        if (resumeOverlay) overlayEl?.play()?.catch(() => {});
+        if (resumePlayback) active.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       }
     }
   };

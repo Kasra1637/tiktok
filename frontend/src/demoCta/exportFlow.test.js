@@ -1,7 +1,12 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { api } from "../lib/api";
-import { useExportFlow } from "./exportFlow";
+import { probeRecordingPlays, useExportFlow } from "./exportFlow";
+import { AudioSampleSink, Input } from "mediabunny";
+
+jest.mock("mediabunny", () => ({
+  ALL_FORMATS: [], BlobSource: jest.fn(), Input: jest.fn(), AudioSampleSink: jest.fn(),
+}));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -119,6 +124,42 @@ test("a retry wipes the prior failure so the banner cannot name it", async () =>
   expect(result).toEqual({ id: "saved-2" });
   expect(probe.hook().exportErrors).toEqual([]);
   await probe.unmount();
+});
+
+test.each(["missing", "short", "undecodable"])("export gate rejects %s joined audio before offering download", async (failure) => {
+  const track = { getCodec: async () => "aac", canDecode: async () => true, getSampleRate: async () => 48000, getNumberOfChannels: async () => 2, computeDuration: async () => failure === "short" ? 10 : 18 };
+  const input = { getPrimaryAudioTrack: async () => failure === "missing" ? null : track, dispose: jest.fn() };
+  Input.mockImplementation(() => input);
+  AudioSampleSink.mockImplementation(() => ({ getSample: async () => null }));
+  await expect(probeRecordingPlays(new Blob(), 18, [{ start: 10, duration: 8 }])).rejects.toThrow(/audio/);
+  expect(input.dispose).toHaveBeenCalledTimes(1);
+});
+
+test("export gate checks AAC coverage for both joined segments and the 18s video length", async () => {
+  const sample = { close: jest.fn() };
+  const getSample = jest.fn(async () => sample);
+  const input = { getPrimaryAudioTrack: async () => ({ getCodec: async () => "aac", canDecode: async () => true, getSampleRate: async () => 48000, getNumberOfChannels: async () => 2, computeDuration: async () => 18 }), dispose: jest.fn() };
+  Input.mockImplementation(() => input);
+  AudioSampleSink.mockImplementation(() => ({ getSample }));
+  const create = document.createElement.bind(document);
+  const video = create("video");
+  Object.defineProperties(video, { duration: { value: 18 }, videoWidth: { value: 1080 }, videoHeight: { value: 1920 } });
+  const spy = jest.spyOn(document, "createElement").mockImplementation((tag) => tag === "video" ? video : create(tag));
+  const oldCreate = URL.createObjectURL, oldRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = () => "blob:joined";
+  URL.revokeObjectURL = jest.fn();
+  try {
+    const pending = probeRecordingPlays(new Blob(), 18, [{ start: 0, duration: 10 }, { start: 10, duration: 8 }]);
+    for (let i = 0; i < 20 && !video.onloadeddata; i++) await Promise.resolve();
+    expect(video.onloadeddata).toBeInstanceOf(Function);
+    video.onloadeddata();
+    await pending;
+    expect(getSample.mock.calls).toEqual([[0.05], [10.05]]);
+    expect(sample.close).toHaveBeenCalledTimes(2);
+    expect(input.dispose).toHaveBeenCalled();
+  } finally {
+    spy.mockRestore(); URL.createObjectURL = oldCreate; URL.revokeObjectURL = oldRevoke;
+  }
 });
 
 test("a successful save records nothing", async () => {

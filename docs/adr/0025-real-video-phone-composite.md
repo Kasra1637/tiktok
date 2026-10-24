@@ -1,6 +1,6 @@
 # 0025 — Real Video combines a base clip and a phone upload
 
-Status: accepted
+Status: superseded by 0027
 
 ## Context
 

@@ -28,7 +28,7 @@ export function usePreviewLoop(settings) {
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
-    overlayUrl, overlayPhone, overlayVideoRef, overlayPlacement,
+    appendUrl, appendMeta, appendVideoRef, appendOverlays,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -48,6 +48,13 @@ export function usePreviewLoop(settings) {
   const [isSeeking, setIsSeeking] = useState(false);
 
   const videoRef = useRef(null);
+  const activeVideoRef = useRef(null);
+  const sequence = viewMode === "realistic" && !!appendMeta;
+  const sequenceRef = useRef(null);
+  sequenceRef.current = { enabled: sequence, baseDuration: videoMeta?.d || 0, appendDuration: appendMeta?.d || 0 };
+  const activeVideo = useCallback(() => activeVideoRef.current || videoRef.current, []);
+  const timelineTime = useCallback((video) => (video?.currentTime || 0) +
+    (video && video === appendVideoRef?.current ? sequenceRef.current.baseDuration : 0), [appendVideoRef]);
   // Scoped replay: hook/CTA style tweaks (accent, face, entrance, size)
   // restart playback inside that overlay's window only, then park at the
   // window end — never playing past it into the middle of the clip. The
@@ -59,7 +66,7 @@ export function usePreviewLoop(settings) {
   const cancelScopedReplay = useCallback(() => {
     scopedReplayRef.current = null;
     const video = videoRef.current;
-    if (video) video.loop = true;
+    if (video) video.loop = !sequenceRef.current.enabled;
   }, []);
   const previewCanvasRef = useRef(null);
   const rafRef = useRef(null);
@@ -70,32 +77,31 @@ export function usePreviewLoop(settings) {
   const kickPreviewRef = useRef(null);
   const isExportingRef = useRef(false);
   const editingZoomRef = useRef(false);
-  // Offscreen canvas for the hand-style overlay vignette: drawHandView
-  // clears its own target first, so it cannot paint into a transformed
-  // main context without wiping the base. One cached canvas per size.
-  const overlayHandCacheRef = useRef(null);
   const liveZoomRef = useRef({
     scale: 1, offX: 0, offY: 0,
     handZoom: 1, handPanX: 0, handPanY: 0, phoneScale: DEFAULTS.scale,
   });
 
-  // Track current time from the video element
+  // Track the active segment on a single global playhead.
   useEffect(() => {
     const video = videoRef.current;
+    const added = appendVideoRef?.current;
     if (!video) return undefined;
+    const elements = [video, added].filter(Boolean);
     const onTime = () => {
-      if (!isSeeking) setCurrentTime(video.currentTime);
+      if (!isSeeking) setCurrentTime(timelineTime(activeVideo()));
     };
-    video.addEventListener("timeupdate", onTime);
+    elements.forEach((el) => el.addEventListener("timeupdate", onTime));
     // The smoothing tick only runs while the clip plays. Paused seeks land
     // through `timeupdate`.
     let raf = 0;
     let lastReported = 0;
     const tick = () => {
       raf = 0;
+      const video = activeVideo();
       if (!video || video.paused) return;
       if (!isSeeking) {
-        const t = video.currentTime;
+        const t = timelineTime(video);
         if (Math.abs(t - lastReported) >= 0.05) {
           lastReported = t;
           setCurrentTime(t);
@@ -113,18 +119,22 @@ export function usePreviewLoop(settings) {
         raf = 0;
       }
       // Land the scrubber on the exact paused frame.
-      if (!isSeeking) setCurrentTime(video.currentTime);
+      if (!isSeeking) setCurrentTime(timelineTime(activeVideo()));
     };
-    video.addEventListener("play", onPlayTick);
-    video.addEventListener("pause", onPauseTick);
+    elements.forEach((el) => {
+      el.addEventListener("play", onPlayTick);
+      el.addEventListener("pause", onPauseTick);
+    });
     raf = requestAnimationFrame(tick);
     return () => {
-      video.removeEventListener("timeupdate", onTime);
-      video.removeEventListener("play", onPlayTick);
-      video.removeEventListener("pause", onPauseTick);
+      elements.forEach((el) => {
+        el.removeEventListener("timeupdate", onTime);
+        el.removeEventListener("play", onPlayTick);
+        el.removeEventListener("pause", onPauseTick);
+      });
       cancelAnimationFrame(raf);
     };
-  }, [isSeeking]);
+  }, [isSeeking, appendUrl, appendMeta, appendVideoRef, activeVideo, timelineTime]);
 
   // Restart playback inside one overlay window so a style tweak replays
   // where it lands. Hook replays from frame 0 to the hook end; the end card
@@ -150,6 +160,8 @@ export function usePreviewLoop(settings) {
       return;
     }
     if (!(end > start)) return;
+    appendVideoRef?.current?.pause();
+    activeVideoRef.current = video;
     scopedReplayRef.current = { end };
     video.loop = false;
     try {
@@ -160,7 +172,7 @@ export function usePreviewLoop(settings) {
     }
     setCurrentTime(start);
     video.play().then(() => setIsPlaying(true)).catch(() => {});
-  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode]);
+  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
 
   // Continuous sliders fire dozens of changes per drag; restarting the
   // window on every tick would yank the playhead under the founder's hand.
@@ -200,34 +212,38 @@ export function usePreviewLoop(settings) {
   // window first — resuming from a parked hook end must play on past it.
   const togglePlayPause = useCallback(() => {
     if (isExportingRef.current) return;
-    const video = videoRef.current;
+    const video = activeVideo();
     if (!video) return;
     cancelScopedReplay();
     editingZoomRef.current = false;
     if (video.paused) {
-      video.play().catch(() => {});
-      setIsPlaying(true);
+      if (video.ended) {
+        const base = videoRef.current;
+        activeVideoRef.current = base;
+        base.currentTime = 0;
+        base.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      } else video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } else {
       video.pause();
       setIsPlaying(false);
     }
-  }, [cancelScopedReplay]);
+  }, [cancelScopedReplay, activeVideo]);
 
   const togglePreviewMuted = useCallback(() => {
     const video = videoRef.current;
     setPreviewMuted((was) => {
       const next = !was;
-      if (video) {
-        video.muted = next;
-        if (!next) video.volume = 1;
-      }
+      [video, appendVideoRef?.current].filter(Boolean).forEach((el) => {
+        el.muted = next;
+        if (!next) el.volume = 1;
+      });
       return next;
     });
-  }, []);
+  }, [appendVideoRef]);
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = previewMuted;
-  }, [previewMuted]);
+    [videoRef.current, appendVideoRef?.current].filter(Boolean).forEach((el) => { el.muted = previewMuted; });
+  }, [previewMuted, appendUrl, appendVideoRef]);
 
   // Space toggles preview playback from anywhere that is not text entry, the
   // way every video editor answers it. A focused button or link already
@@ -256,7 +272,14 @@ export function usePreviewLoop(settings) {
     cancelScopedReplay();
     editingZoomRef.current = false;
     showZoomValues(zoomValuesAt(time));
-    video.currentTime = time;
+    const config = sequenceRef.current;
+    const next = config.enabled && time >= config.baseDuration ? appendVideoRef.current : video;
+    const previous = activeVideo();
+    const playing = previous && !previous.paused;
+    if (previous !== next) previous?.pause();
+    activeVideoRef.current = next;
+    next.currentTime = next === video ? time : Math.min(config.appendDuration, time - config.baseDuration);
+    if (playing && next.paused) next.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     setCurrentTime(time);
     // No paint here: the `seeked` event repaints once the seek lands, so a
     // synchronous paint cannot show the stale pre-seek frame.
@@ -292,37 +315,35 @@ export function usePreviewLoop(settings) {
     showZoomValues(zoomValuesAt(videoRef.current?.currentTime ?? currentTime));
   }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt]);
 
-  // The base owns transport. The phone follows its looped timestamp, including
-  // scoped replay, source replacement, base wraparound and export resume.
+  // Only one segment plays at a time. No looping, mixing or retiming at the cut.
   useEffect(() => {
     const base = videoRef.current;
-    const overlay = overlayVideoRef?.current;
-    if (!base || !overlay) return undefined;
-    const repaint = () => { dirtyRef.current = true; kickPreviewRef.current?.(); };
-    const sync = (event) => {
-      if (viewMode !== "realistic" || isExportingRef.current || !Number.isFinite(overlay.duration) || overlay.duration <= 0) {
-        overlay.pause();
-        return;
-      }
-      const time = base.currentTime % overlay.duration;
-      const tolerance = base.paused || event?.type === "seeked" || event?.type === "loadeddata" ? 0.001 : 0.08;
-      if (!overlay.seeking && Math.abs(overlay.currentTime - time) > tolerance) overlay.currentTime = time;
-      if (base.paused || base.seeking) overlay.pause();
-      else if (overlay.paused) overlay.play().catch(() => {});
-      repaint();
+    const added = appendVideoRef?.current;
+    if (!base) return undefined;
+    added?.pause();
+    activeVideoRef.current = base;
+    base.loop = !sequence;
+    setCurrentTime(base.currentTime || 0);
+    setIsPlaying(!base.paused);
+    const advance = () => {
+      if (!sequence || scopedReplayRef.current || isExportingRef.current) return;
+      activeVideoRef.current = added;
+      added.currentTime = 0;
+      setCurrentTime(videoMeta.d);
+      added.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     };
-    const events = ["play", "pause", "seeking", "seeked", "timeupdate", "loadeddata", "ended"];
-    events.forEach((event) => base.addEventListener(event, sync));
-    overlay.addEventListener("loadeddata", sync);
-    overlay.addEventListener("seeked", repaint);
-    sync();
+    const finish = () => {
+      setCurrentTime((videoMeta?.d || 0) + (appendMeta?.d || 0));
+      setIsPlaying(false);
+    };
+    base.addEventListener("ended", advance);
+    added?.addEventListener("ended", finish);
     return () => {
-      events.forEach((event) => base.removeEventListener(event, sync));
-      overlay.removeEventListener("loadeddata", sync);
-      overlay.removeEventListener("seeked", repaint);
-      overlay.pause();
+      base.removeEventListener("ended", advance);
+      added?.removeEventListener("ended", finish);
+      added?.pause();
     };
-  }, [overlayUrl, viewMode, overlayVideoRef]);
+  }, [appendUrl, appendMeta, videoMeta, viewMode, sequence, appendVideoRef]);
 
   // Preview loop
   useEffect(() => {
@@ -347,8 +368,7 @@ export function usePreviewLoop(settings) {
     canvas.width = cw;
     canvas.height = ch;
 
-    const drawOverlays = (ctx, vt) => {
-      const dur = videoMeta.d || 0;
+    const drawOverlays = (ctx, vt, dur = videoMeta.d || 0) => {
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
       if (hookEnabled) {
@@ -379,11 +399,8 @@ export function usePreviewLoop(settings) {
     };
 
     // Preview and export call this exact painter with an explicit media timestamp.
-    // The overlay frame rides along as a fourth argument: the preview passes
-    // its synced element, the export its decoded canvas at the looped overlay
-    // timestamp. Both layers arrive as arguments, so preview and export
-    // composite the same two layers from the same code.
-    const paintFrame = (target, vt, frame, overlayFrame = null) => {
+    // The fourth argument identifies the base or added segment.
+    const paintFrame = (target, vt, frame, segment = 0) => {
       const ctx = target.getContext("2d");
       if (!ctx) throw new Error("Canvas drawing is unavailable. Reload the editor and try again.");
       ctx.clearRect(0, 0, cw, ch);
@@ -411,78 +428,25 @@ export function usePreviewLoop(settings) {
         return;
       }
 
-      // Second layer: the overlay upload on a phone over the full-bleed
-      // base. Size, placement and motion are pure functions of the media
-      // timestamp, so the export encodes exactly the phone the preview
-      // shows. The hand vignette renders into the cached offscreen canvas
-      // at inset size — drawHandView clears its own target first, so it
-      // must never run against the main context or it wipes the base.
-      const drawOverlayPhone = (overlay) => {
-        const oh = ch * overlayPlacement.size;
-        const ow = (phoneW * oh) / phoneH;
-        const ox = (cw - ow) * overlayPlacement.x;
-        const oy = (ch - oh) * overlayPlacement.y + Math.sin(vt * 1.2) * ch * 0.006;
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "#000";
-        ctx.beginPath();
-        ctx.ellipse(ox + ow / 2, oy + oh + oh * 0.03, ow * 0.36, oh * 0.03, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        ctx.save();
-        ctx.translate(ox + ow / 2, oy + oh / 2);
-        ctx.rotate(Math.sin(vt * 0.5) * 0.008);
-        ctx.translate(-ow / 2, -oh / 2);
-        drawPhone(ctx, 0, 0, ow, oh, dev, overlay, "cover", 1, 0, 0, "#000");
-        ctx.restore();
-      };
-      const drawOverlayHand = (overlay) => {
-        const dh = ch * overlayPlacement.size;
-        const dw = dh * 0.83;
-        const w = Math.max(2, Math.round(dw));
-        const h = Math.max(2, Math.round(dh));
-        const ix = (cw - dw) * overlayPlacement.x;
-        const iy = (ch - dh) * overlayPlacement.y;
-        let entry = overlayHandCacheRef.current;
-        if (!entry || entry.w !== w || entry.h !== h) {
-          const offscreen = document.createElement("canvas");
-          offscreen.width = w;
-          offscreen.height = h;
-          entry = overlayHandCacheRef.current = { canvas: offscreen, w, h };
-        }
-        const octx = entry.canvas.getContext("2d");
-        if (!octx) throw new Error("The hand overlay canvas is unavailable. Reload and export again.");
-        drawHandView(octx, w, h, overlay, envBg, vt, "cover", 1, 0, 0, null, 1, 0, 0, "#000", true);
-        ctx.save();
-        roundRect(ctx, ix, iy, dw, dh, Math.min(dw, dh) * 0.06);
-        ctx.clip();
-        ctx.drawImage(entry.canvas, ix, iy, dw, dh);
-        ctx.restore();
-      };
-
       // Real Video: the actual clip full-bleed, no phone and no scene — the
       // same Video-crop zoom and offsets as the phone screen, applied to the
       // whole canvas, so the crop controls keep working and the export (which
-      // calls this same painter per decoded frame) records exactly this. A
-      // phone overlay floats over the base when one is attached.
+      // calls this same painter per decoded frame) records exactly this.
+      // The added segment uses its own uncoupled framing and overlay window.
       if (viewMode === "realistic") {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, cw, ch);
         if (mediaReady(frame)) {
           const vw = frame.videoWidth || frame.width;
           const vh = frame.videoHeight || frame.height;
-          const box = fitVideoToScreen({ fit: videoFit, videoW: vw, videoH: vh, screenW: cw, screenH: ch, scale: ez.vScale });
+          const box = fitVideoToScreen({ fit: segment ? "cover" : videoFit, videoW: vw, videoH: vh, screenW: cw, screenH: ch, scale: segment ? 1 : ez.vScale });
           if (box) {
             const maxOffX = Math.max(0, (box.dw - cw) / 2);
             const maxOffY = Math.max(0, (box.dh - ch) / 2);
-            ctx.drawImage(frame, (cw - box.dw) / 2 + (ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (ez.vOffY / 100) * maxOffY, box.dw, box.dh);
+            ctx.drawImage(frame, (cw - box.dw) / 2 + (segment ? 0 : ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segment ? 0 : ez.vOffY / 100) * maxOffY, box.dw, box.dh);
           }
         }
-        if (mediaReady(overlayFrame)) {
-          if (overlayPhone === "hand") drawOverlayHand(overlayFrame);
-          else drawOverlayPhone(overlayFrame);
-        }
-        drawOverlays(ctx, vt);
+        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
         return;
       }
 
@@ -822,12 +786,12 @@ export function usePreviewLoop(settings) {
     const draw = () => {
       rafRef.current = null;
       if (isExportingRef.current) return;
-      const v = videoRef.current;
+      const v = activeVideo();
       const playing = !!v && !v.paused;
       if (playing) editingZoomRef.current = false;
       if (playing || dirtyRef.current) {
         dirtyRef.current = false;
-        paintFrame(canvas, v ? v.currentTime || 0 : 0, v, overlayVideoRef?.current);
+        paintFrame(canvas, timelineTime(v), v, v === appendVideoRef?.current ? 1 : 0);
       }
       // A scoped replay parks at its window end instead of playing past it:
       // pausing here lands the scrubber on the exact window frame, and the
@@ -836,7 +800,7 @@ export function usePreviewLoop(settings) {
       if (playing && scoped && v && v.currentTime >= scoped.end - 0.08) {
         scopedReplayRef.current = null;
         v.pause();
-        v.loop = true;
+        v.loop = !sequence;
         setIsPlaying(false);
         setCurrentTime(v.currentTime);
         return;
@@ -855,15 +819,19 @@ export function usePreviewLoop(settings) {
       kick();
     };
     const previewVideo = videoRef.current;
-    previewVideo?.addEventListener("play", onPlayPaint);
-    previewVideo?.addEventListener("seeked", onSeekedPaint);
+    const previewElements = [previewVideo, appendVideoRef?.current].filter(Boolean);
+    previewElements.forEach((el) => {
+      el.addEventListener("play", onPlayPaint);
+      el.addEventListener("seeked", onSeekedPaint);
+    });
     // A CTA replay ending at the clip end fires `ended` instead of another
     // frame: clear the window and hand free transport back same as the
     // guarded park above.
     const onEndedScoped = () => {
+      const wasScoped = !!scopedReplayRef.current;
       scopedReplayRef.current = null;
-      if (previewVideo) previewVideo.loop = true;
-      setIsPlaying(false);
+      if (previewVideo) previewVideo.loop = !sequence;
+      if (!sequence || wasScoped) setIsPlaying(false);
     };
     previewVideo?.addEventListener("ended", onEndedScoped);
     dirtyRef.current = true;
@@ -872,8 +840,10 @@ export function usePreviewLoop(settings) {
     return () => {
       paintFrameRef.current = null;
       kickPreviewRef.current = null;
-      previewVideo?.removeEventListener("play", onPlayPaint);
-      previewVideo?.removeEventListener("seeked", onSeekedPaint);
+      previewElements.forEach((el) => {
+        el.removeEventListener("play", onPlayPaint);
+        el.removeEventListener("seeked", onSeekedPaint);
+      });
       previewVideo?.removeEventListener("ended", onEndedScoped);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
@@ -881,10 +851,10 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, overlayUrl, overlayPhone, overlayPlacement, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
 
   return {
-    videoRef, previewCanvasRef,
+    videoRef, activeVideoRef, previewCanvasRef,
     isPlaying, setIsPlaying,
     previewMuted, setPreviewMuted, togglePreviewMuted,
     currentTime, setCurrentTime,
