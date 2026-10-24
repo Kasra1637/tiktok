@@ -566,9 +566,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     ctaScale, setCtaScale,
     textStyle, setTextStyle,
     hookVariants, activeHookVariant,
-    ctaVariants, activeCtaVariant,
-    updateHookText, rotateHookVariant, addHookVariant, removeHookVariant,
-    selectCtaVariant, updateCtaHeadline,
+    updateHookText, surpriseHookVariant,
+    updateCtaHeadline, surpriseCtaVariant,
     customLookPresets,
     allLookPresets,
     newLookName, setNewLookName,
@@ -1301,27 +1300,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   {`Message ${Math.min(activeHookVariant + 1, Math.max(hookVariants.length, 1))} of ${hookVariants.length}`}
                 </span>
                 <Chip
-                  onClick={() => { rotateHookVariant(); startScopedPreview("hook"); }}
-                  testId="hook-variant-rotate"
-                  ariaLabel="Show next hook message"
-                  disabled={hookVariants.length <= 1}
+                  onClick={() => { surpriseHookVariant(); startScopedPreview("hook"); }}
+                  testId="hook-variant-surprise"
+                  ariaLabel="Generate a fresh hook message"
                 >
-                  Next message
-                </Chip>
-                <Chip
-                  onClick={() => { addHookVariant(); startScopedPreview("hook"); }}
-                  testId="hook-variant-add"
-                  ariaLabel="Add a copy of this message to edit"
-                >
-                  Add message
-                </Chip>
-                <Chip
-                  onClick={() => { removeHookVariant(); startScopedPreview("hook"); }}
-                  testId="hook-variant-remove"
-                  ariaLabel="Remove current hook message"
-                  disabled={hookVariants.length <= 1}
-                >
-                  Remove
+                  Surprise me
                 </Chip>
               </div>
             </div>
@@ -1481,17 +1464,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">Call-to-action text</span>
               <div className="flex items-center gap-1.5" role="group" aria-label="CTA copy variants">
-                {ctaVariants.map((_, idx) => (
-                  <Chip
-                    key={idx}
-                    active={activeCtaVariant === idx}
-                    onClick={() => { selectCtaVariant(idx); startScopedPreview("cta"); }}
-                    testId={`cta-variant-${idx}`}
-                    ariaLabel={`CTA variant ${idx + 1}`}
-                  >
-                    {`Option ${idx + 1}`}
-                  </Chip>
-                ))}
+                <Chip
+                  onClick={() => { surpriseCtaVariant(); startScopedPreview("cta"); }}
+                  testId="cta-variant-surprise"
+                  ariaLabel="Generate a fresh call-to-action"
+                >
+                  Surprise me
+                </Chip>
               </div>
             </div>
             <input

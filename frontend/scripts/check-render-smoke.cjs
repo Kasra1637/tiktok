@@ -8951,28 +8951,19 @@ async function runDemoCtaChecks() {
             throw new Error("clicking L size preset did not update Hook Text scale to 115%");
           }
 
-          // #3 Hook copy variant flipper: one button rotates the whole
-          // message list, so flipping once loads the second message.
-          const hookRotate = ctx.container.querySelector('[data-testid="hook-variant-rotate"]');
-          if (!hookRotate) throw new Error("missing Hook rotate-messages button");
-          await clickEl(ctx, hookRotate, "rotate to next Hook message");
+          // #3 Hook copy surprise: one button generates a fresh preset,
+          // always different from the one showing.
+          const hookSurprise = ctx.container.querySelector('[data-testid="hook-variant-surprise"]');
+          if (!hookSurprise) throw new Error("missing Hook surprise-me button");
           const hookInput = ctx.container.querySelector('[data-testid="hook-text-input"]');
-          if (!hookInput || !hookInput.value.includes("Apple Notes")) {
-            throw new Error("rotating Hook messages did not load the next copy into the textarea");
+          const beforeHook = hookInput ? hookInput.value : null;
+          await clickEl(ctx, hookSurprise, "generate a fresh Hook message");
+          if (!hookInput || hookInput.value === beforeHook) {
+            throw new Error("surprise Hook message did not load fresh copy into the textarea");
           }
           const hookCount = ctx.container.querySelector('[data-testid="hook-variant-count"]');
-          if (!hookCount || !hookCount.textContent.includes("2 of 3")) {
-            throw new Error("Hook message counter did not advance to 2 of 3");
-          }
-          // Add duplicates the live message into a new slot; Remove drops
-          // the live slot. The round trip leaves the three defaults.
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-variant-add"]'), "add a copy of the Hook message");
-          if (!ctx.container.querySelector('[data-testid="hook-variant-count"]').textContent.includes("3 of 4")) {
-            throw new Error("adding a Hook message did not grow the rotation to 4");
-          }
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-variant-remove"]'), "remove the copied Hook message");
-          if (!ctx.container.querySelector('[data-testid="hook-variant-count"]').textContent.includes("3 of 3")) {
-            throw new Error("removing the Hook copy did not return the rotation to 3");
+          if (!hookCount || !hookCount.textContent.includes("of 3")) {
+            throw new Error("Hook message counter lost track of the three presets");
           }
 
           // #2 Safe-area legibility guard when slider pushed below 80%
@@ -9004,12 +8995,13 @@ async function runDemoCtaChecks() {
             throw new Error("clicking S size preset did not update End Card CTA scale to 85%");
           }
 
-          const ctaVar2 = ctx.container.querySelector('[data-testid="cta-variant-2"]');
-          if (!ctaVar2) throw new Error("missing CTA copy variant 3 chip");
-          await clickEl(ctx, ctaVar2, "flip to CTA variant 3");
+          const ctaSurprise = ctx.container.querySelector('[data-testid="cta-variant-surprise"]');
+          if (!ctaSurprise) throw new Error("missing CTA surprise-me button");
           const ctaInput = ctx.container.querySelector('[data-testid="cta-headline-input"]');
-          if (!ctaInput || !ctaInput.value.includes("first entry")) {
-            throw new Error("flipping to CTA Option 3 did not update the headline input");
+          const beforeCta = ctaInput ? ctaInput.value : null;
+          await clickEl(ctx, ctaSurprise, "generate a fresh CTA");
+          if (!ctaInput || ctaInput.value === beforeCta) {
+            throw new Error("surprise CTA did not load fresh copy into the headline input");
           }
 
           const timingLast3 = ctx.container.querySelector('[data-testid="cta-timing-last3"]');

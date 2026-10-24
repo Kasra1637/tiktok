@@ -132,40 +132,20 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     }
   }, [overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, hookVariants, ctaVariants, customLookPresets, overlayScope]);
 
-  const selectHookVariant = (idx) => {
-    setActiveHookVariant(idx);
-    onHookText(hookVariants[idx] ?? "");
-  };
-
-  // Auto-rotate: one button walks the whole message list and wraps, so the
-  // rotation never runs out no matter how many texts the founder keeps.
-  const rotateHookVariant = () => {
+  // Surprise me: one button picks a fresh preset message, always different
+  // from the one showing (a single-message list just re-applies itself).
+  // Typing still edits the active slot in place; this only swaps which
+  // preset fills the textarea and the overlay.
+  const surpriseHookVariant = () => {
     if (hookVariants.length === 0) return;
-    const next = (activeHookVariant + 1) % hookVariants.length;
+    let next = activeHookVariant;
+    if (hookVariants.length > 1) {
+      do {
+        next = Math.floor(Math.random() * hookVariants.length);
+      } while (next === activeHookVariant);
+    }
     setActiveHookVariant(next);
     onHookText(hookVariants[next] ?? "");
-  };
-
-  // Add duplicates the active message into a new slot and selects it, so
-  // the founder edits the copy into something new. Typing edits the active
-  // slot in place, so appending the textarea text could never grow the
-  // list — the duplicate is what makes the rotation limitless.
-  const addHookVariant = () => {
-    if (hookVariants.length === 0) return;
-    const idx = Math.min(activeHookVariant, hookVariants.length - 1);
-    const next = [...hookVariants.slice(0, idx + 1), hookVariants[idx], ...hookVariants.slice(idx + 1)];
-    setHookVariants(next);
-    setActiveHookVariant(idx + 1);
-    onHookText(next[idx + 1]);
-  };
-
-  const removeHookVariant = () => {
-    if (hookVariants.length <= 1) return;
-    const next = hookVariants.filter((_, i) => i !== activeHookVariant);
-    const idx = Math.min(activeHookVariant, next.length - 1);
-    setHookVariants(next);
-    setActiveHookVariant(idx);
-    onHookText(next[idx] ?? "");
   };
 
   const updateHookText = (val) => {
@@ -173,9 +153,16 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     setHookVariants((prev) => prev.map((v, i) => (i === activeHookVariant ? val : v)));
   };
 
-  const selectCtaVariant = (idx) => {
-    setActiveCtaVariant(idx);
-    onCtaHeadline(ctaVariants[idx] ?? "");
+  const surpriseCtaVariant = () => {
+    if (ctaVariants.length === 0) return;
+    let next = activeCtaVariant;
+    if (ctaVariants.length > 1) {
+      do {
+        next = Math.floor(Math.random() * ctaVariants.length);
+      } while (next === activeCtaVariant);
+    }
+    setActiveCtaVariant(next);
+    onCtaHeadline(ctaVariants[next] ?? "");
   };
 
   const updateCtaHeadline = (val) => {
@@ -248,8 +235,8 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     textStyle, setTextStyle,
     hookVariants, activeHookVariant,
     ctaVariants, activeCtaVariant,
-    selectHookVariant, updateHookText, rotateHookVariant, addHookVariant, removeHookVariant,
-    selectCtaVariant, updateCtaHeadline,
+    updateHookText, surpriseHookVariant,
+    updateCtaHeadline, surpriseCtaVariant,
     customLookPresets,
     allLookPresets,
     newLookName, setNewLookName,
