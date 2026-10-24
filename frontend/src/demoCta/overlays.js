@@ -229,9 +229,9 @@ export function drawHookOverlay(ctx, cw, ch, time, { text, duration, accent, off
   // typewriter reveal fills in; only revealed text is painted, in place.
   const fullLines = wrap(ctx, String(text).toUpperCase(), maxWidth);
   const shown = revealLines(fullLines, m.reveal01);
-  const lineH = fontSize * 1.16;
+  const lineH = fontSize * 1.0;
   const padX = fontSize * 0.3;
-  const padY = fontSize * 0.16;
+  const padY = fontSize * 0.04;
   const blockH = fullLines.length * lineH;
   const top = ch * 0.13 + offsetY * ch;
 
@@ -451,9 +451,9 @@ export function getHookBounds(cw, ch, text, offsetX, offsetY, font = HOOK_FONT, 
     lines = est.lines;
     maxLineW = est.maxLineWidth;
   }
-  const lineH = fontSize * 1.16;
+  const lineH = fontSize * 1.0;
   const padX = fontSize * 0.3;
-  const padY = fontSize * 0.16;
+  const padY = fontSize * 0.04;
   const blockH = lines.length * lineH;
   const blockW = maxLineW + padX * 2;
   const top = ch * 0.13 + offsetY * ch;
