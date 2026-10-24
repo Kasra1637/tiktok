@@ -1304,15 +1304,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   onClick={() => { rotateHookVariant(); startScopedPreview("hook"); }}
                   testId="hook-variant-rotate"
                   ariaLabel="Show next hook message"
+                  disabled={hookVariants.length <= 1}
                 >
                   Next message
                 </Chip>
                 <Chip
-                  onClick={() => { addHookVariant(hookText); startScopedPreview("hook"); }}
+                  onClick={() => { addHookVariant(); startScopedPreview("hook"); }}
                   testId="hook-variant-add"
-                  ariaLabel="Add current text as a hook message"
+                  ariaLabel="Add a copy of this message to edit"
                 >
-                  Add current
+                  Add message
                 </Chip>
                 <Chip
                   onClick={() => { removeHookVariant(); startScopedPreview("hook"); }}

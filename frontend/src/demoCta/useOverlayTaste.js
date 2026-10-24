@@ -146,19 +146,17 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
     onHookText(hookVariants[next] ?? "");
   };
 
-  const addHookVariant = (text) => {
-    const trimmed = String(text || "").trim();
-    if (!trimmed) return;
-    const existing = hookVariants.indexOf(trimmed);
-    if (existing >= 0) {
-      setActiveHookVariant(existing);
-      onHookText(hookVariants[existing]);
-      return;
-    }
-    const next = [...hookVariants, trimmed];
+  // Add duplicates the active message into a new slot and selects it, so
+  // the founder edits the copy into something new. Typing edits the active
+  // slot in place, so appending the textarea text could never grow the
+  // list — the duplicate is what makes the rotation limitless.
+  const addHookVariant = () => {
+    if (hookVariants.length === 0) return;
+    const idx = Math.min(activeHookVariant, hookVariants.length - 1);
+    const next = [...hookVariants.slice(0, idx + 1), hookVariants[idx], ...hookVariants.slice(idx + 1)];
     setHookVariants(next);
-    setActiveHookVariant(next.length - 1);
-    onHookText(trimmed);
+    setActiveHookVariant(idx + 1);
+    onHookText(next[idx + 1]);
   };
 
   const removeHookVariant = () => {

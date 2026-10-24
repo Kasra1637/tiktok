@@ -8964,6 +8964,16 @@ async function runDemoCtaChecks() {
           if (!hookCount || !hookCount.textContent.includes("2 of 3")) {
             throw new Error("Hook message counter did not advance to 2 of 3");
           }
+          // Add duplicates the live message into a new slot; Remove drops
+          // the live slot. The round trip leaves the three defaults.
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-variant-add"]'), "add a copy of the Hook message");
+          if (!ctx.container.querySelector('[data-testid="hook-variant-count"]').textContent.includes("3 of 4")) {
+            throw new Error("adding a Hook message did not grow the rotation to 4");
+          }
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-variant-remove"]'), "remove the copied Hook message");
+          if (!ctx.container.querySelector('[data-testid="hook-variant-count"]').textContent.includes("3 of 3")) {
+            throw new Error("removing the Hook copy did not return the rotation to 3");
+          }
 
           // #2 Safe-area legibility guard when slider pushed below 80%
           const hookSliderThumb = ctx.container.querySelector('[data-testid="caption-size-slider"] [role="slider"]');
