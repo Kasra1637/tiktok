@@ -82,8 +82,13 @@ export default function TourOverlay() {
   const rafRef = useRef(null);
   const mountedRef = useRef(true);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
+  // Re-armed on mount: StrictMode double-invokes this cleanup in dev, so a
+  // write-only `false` would stick and the overlay could never appear there.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const clearTimers = useCallback(() => {

@@ -176,6 +176,20 @@ export const TOURS = {
         body:
           "Approved, needs review, banned. The script plan runs a claim check against these, and a prohibited claim blocks rendering until the script is edited. Do not publish anything you cannot back."
       },
+      {
+        target: '[data-testid="pending-proposal-alert"]',
+        title: "A proposal waits — nothing changed yet",
+        optional: true,
+        body:
+          "Re-research lands as a proposal, never an overwrite. Your approved profile is untouched until you review and approve — approving applies the proposal across every video about this app."
+      },
+      {
+        target: '[data-testid="delete-profile-button"]',
+        title: "Delete means everything",
+        optional: true,
+        body:
+          "Deleting a profile takes its drafts, renders, assets, and recorded results with it — type-to-confirm, because the blast radius is every finished video, not one regenerable row."
+      },
       // The results card moved off this page (bound for Analytics); the step
       // goes with it rather than pointing at nothing. Angles and drafts used
       // to live on this page; both moved to Create
@@ -214,10 +228,14 @@ export const TOURS = {
           "A clear next step, plus your social handle if you want it. It sits as an overlay on this clip — it does not publish anything anywhere."
       },
       {
-        target: '[data-testid="platform-preset-group"]',
+        target: '[data-testid="demo-cta-export"]',
         title: "Export right, once",
+        // Optional: the player row (and its Export button) only exists once
+        // a clip is loaded. Empty standalone editor, no spotlight — the
+        // pinned-render route still gets it.
+        optional: true,
         body:
-          "Output size and format to match where the clip is going next. The advanced controls are optional; preview before exporting."
+          "One fixed TikTok export — 1080×1920 MP4 at 30 fps, saved beside the original in History. Preview first, then export once."
       },
     ],
   },
@@ -247,6 +265,16 @@ export const TOURS = {
         body:
           "Click the tab at the bottom of a tile — or drag it up — to open the render's facts, its download and Demo + CTA, and Details: the generation prompt and the claim-check saved with it. Read them before you publish."
       },
+      {
+        // Centered summary: with no rows both tile steps skip, so a fresh
+        // account still leaves the tour knowing where renders land and what
+        // to do next. No testid — it names the empty state's own Create
+        // action rather than adding a new one.
+        target: null,
+        title: "Your shelf, not your publisher",
+        body:
+          "Every finished render lands here as its own tile — review it, download it, or take it to Demo + CTA. Nothing here yet? Create your first video and it lands here. Nothing publishes itself either way.",
+      },
     ],
   },
 
@@ -260,6 +288,20 @@ export const TOURS = {
         title: "Results per app, verdicts per choice",
         body:
           "Numbers follow the app profile — what works depends on the app. Switch apps here. Your thumbs on goals, templates, plans, and scripts feed every verdict you see; real calls, not guesses.",
+      },
+      {
+        target: '[data-testid="analytics-funnel"]',
+        title: "Every clip, counted by status",
+        optional: true,
+        body:
+          "Every clip for this app, counted by status — the same rows History shows, so the counts can never disagree. Archived renders keep their own row rather than folding into completed.",
+      },
+      {
+        target: '[data-testid="analytics-signals"]',
+        title: "What happened, counts only",
+        optional: true,
+        body:
+          "Captured automatically as you worked — a count list, not judgments about why. Each row links to the latest render behind it, so a count answers which clip without inventing a mapping.",
       },
     ],
   },
@@ -285,13 +327,16 @@ export const TOURS = {
  * tour earns its keep: those are working surfaces with a next action.
  */
 export function getTourIdForPath(pathname) {
-  if (pathname === "/create") return "create";
-  if (pathname === "/brand") return "brand";
-  if (pathname === "/history") return "history";
-  if (pathname === "/analytics") return "analytics";
-  if (pathname === "/assets") return "assets";
-  if (pathname === "/demo-cta" || /^\/demo-cta\/[^/]+$/.test(pathname)) return "demo-cta";
-  if (/^\/app-profiles\/[^/]+\/assets$/.test(pathname)) return "assets";
-  if (/^\/app-profiles\/[^/]+$/.test(pathname)) return "app-profile";
+  // Direct loads and refreshes can carry a trailing slash (/demo-cta/);
+  // without this the tour and its replay both vanish on those arrivals.
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (path === "/create") return "create";
+  if (path === "/brand") return "brand";
+  if (path === "/history") return "history";
+  if (path === "/analytics") return "analytics";
+  if (path === "/assets") return "assets";
+  if (path === "/demo-cta" || /^\/demo-cta\/[^/]+$/.test(path)) return "demo-cta";
+  if (/^\/app-profiles\/[^/]+\/assets$/.test(path)) return "assets";
+  if (/^\/app-profiles\/[^/]+$/.test(path)) return "app-profile";
   return null;
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, Sparkles } from "lucide-react";
+import { HelpCircle, Menu, Sparkles } from "lucide-react";
 import Sidebar, { MobileSidebar } from "./Sidebar";
+import { useOnboarding } from "./onboarding/OnboardingProvider";
 
 const SIDEBAR_COLLAPSED_KEY = "hookforge_sidebar_collapsed";
 const SIDEBAR_W = 264;
@@ -47,6 +48,11 @@ export function AppShell({ children }) {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
+
+  // Tour replay for phone founders: the sidebar's "Show me around" lives
+  // in the drawer on small screens, so without this the replay is
+  // undiscoverable until the drawer is opened. Same gate as the sidebar.
+  const { hasTourForPage, replayCurrentPageTour } = useOnboarding();
 
   // Escape closes the drawer. Registered only while it's open so the tour
   // overlay's own Escape handler stays unaffected the rest of the time.
@@ -95,6 +101,18 @@ export function AppShell({ children }) {
             </span>
             <span className="font-display text-sm font-semibold tracking-tight">HookForge</span>
           </span>
+          {hasTourForPage && (
+            <button
+              type="button"
+              onClick={replayCurrentPageTour}
+              aria-label="Show me around"
+              title="Show me around"
+              data-testid="mobile-tour-replay"
+              className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--hairline)] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <main id="main-content" tabIndex={-1} className="relative z-10 mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 outline-none md:px-6 md:py-8 lg:px-8">
