@@ -39,3 +39,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0019](0019-one-caption-post-kit.md) | One TikTok caption per post kit, regenerable on demand | partially superseded by 0020 (export-card regenerate, question guard, completed-only) |
 | [0020](0020-post-kit-regenerate-everywhere.md) | Regenerate reaches the export card; caption must ask; completed-only | accepted |
 | [0021](0021-post-kit-ownership.md) | Post-kit state has one owner per layer | accepted |
+| [0022](0022-looks-live-together-in-end-card-cta.md) | Saved looks live with saving in End Card CTA | accepted |

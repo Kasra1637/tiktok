@@ -2227,38 +2227,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="look-presets-block">
-            <SubLabel>Named looks</SubLabel>
-            <p className="text-xs text-muted-foreground">Start with a saved look. Save your finished styling in End Card CTA.</p>
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
-              {allLookPresets.map((look) => {
-                const active = isLookPresetActive(look);
-                return (
-                  <div key={look.id} className="inline-flex items-center gap-1">
-                    <Chip
-                      active={active}
-                      onClick={() => { applyLookPreset(look); startScopedPreview(hookEnabled ? "hook" : "cta"); }}
-                      testId={`look-preset-${look.id}`}
-                      ariaLabel={look.name}
-                    >
-                      {look.name}
-                    </Chip>
-                    {!look.builtin && (
-                      <button
-                        type="button"
-                        data-testid={`delete-look-preset-${look.id}`}
-                        aria-label={`Remove ${look.name}`}
-                        onClick={() => handleDeleteLookPreset(look.id)}
-                        className="focus-ring rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </EditorSection>
 
         <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
@@ -2565,6 +2533,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <p className="text-xs text-muted-foreground">
               Review the hook &amp; end card in the preview, then save their fonts, entrances, text sizes &amp; accent for your next video. Footage, copy &amp; zoom locks are not included.
             </p>
+            <div className="space-y-2" data-testid="look-presets-block">
+              <SubLabel>Your looks</SubLabel>
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
+                {allLookPresets.map((look) => {
+                  const active = isLookPresetActive(look);
+                  return (
+                    <div key={look.id} className="inline-flex items-center gap-1">
+                      <Chip
+                        active={active}
+                        onClick={() => { applyLookPreset(look); startScopedPreview(hookEnabled ? "hook" : "cta"); }}
+                        testId={`look-preset-${look.id}`}
+                        ariaLabel={look.name}
+                      >
+                        {look.name}
+                      </Chip>
+                      {!look.builtin && (
+                        <button
+                          type="button"
+                          data-testid={`delete-look-preset-${look.id}`}
+                          aria-label={`Remove ${look.name}`}
+                          onClick={() => handleDeleteLookPreset(look.id)}
+                          className="focus-ring rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             {!canReviewLook && (
               <p className="text-xs text-muted-foreground" data-testid="look-review-hint">
                 {recording ? "Wait for export to finish before saving a look." : "Upload a playable clip to review your look before saving."}
@@ -2603,7 +2602,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </Button>
             </div>
             <p role="status" className="text-xs text-muted-foreground" data-testid="look-save-status">
-              {savedLookNotice?.key === lookReviewKey ? `“${savedLookNotice.name}” saved. Apply it from Named looks in Source & Look.` : ""}
+              {savedLookNotice?.key === lookReviewKey ? `“${savedLookNotice.name}” saved above.` : ""}
             </p>
           </div>
         </EditorSection>

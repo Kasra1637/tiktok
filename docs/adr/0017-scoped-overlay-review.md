@@ -1,6 +1,6 @@
 # 0017 — Review overlay changes in place, save looks after CTA setup
 
-- **Status:** accepted
+- **Status:** partially superseded by 0022 (apply list joins saving in End Card CTA)
 - **Amends:** ADR 0015's playhead rule for hook/CTA option changes only; its font retirement remains accepted.
 - **Anchors:** `frontend/src/demoCta/DemoCtaEditor.jsx` (`startScopedPreview`, `ensureScopedPreview`, `lookReviewKey`, `handleSaveLookPreset`, `look-save-review`); `frontend/scripts/check-render-smoke.cjs` (scoped-replay and finished-look review checks).
 

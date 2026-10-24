@@ -8875,7 +8875,6 @@ async function runDemoCtaChecks() {
       const prefs = JSON.parse(dom.window.localStorage.getItem("hookforge.demoCta.overlayPrefs.v1"));
       const saved = prefs.global.lookPresets.find((p) => p.name === "My Brand Look");
       if (!saved || saved.captionFont !== "nunito" || saved.captionAnim !== "fade" || saved.captionScale !== 1.15 || saved.ctaFont !== "dm-sans" || saved.ctaAnim !== "pop" || saved.ctaScale !== 0.85) throw new Error(`saved styling differs from final choices: ${JSON.stringify(saved)}`);
-      await openGroup("Source & Look");
       await clickEl(ctx, get("look-preset-launch"), "try another look");
       await clickEl(ctx, get("look-preset-custom-my-brand-look"), "reuse saved look");
       if (get("look-preset-custom-my-brand-look").getAttribute("aria-pressed") !== "true") throw new Error("saved look cannot be reapplied");
@@ -8884,8 +8883,8 @@ async function runDemoCtaChecks() {
       await act(async () => ctx.root.unmount());
       ctx.root = createRoot(ctx.container);
       await mount(load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor)(ctx);
-      if (!get("look-preset-custom-my-brand-look")) throw new Error("look was not restored after remount");
       await openGroup("End Card CTA");
+      if (!get("look-preset-custom-my-brand-look")) throw new Error("look was not restored after remount");
       if (!get("look-reviewed-checkbox").disabled || !get("look-preset-save-btn").disabled || !get("look-preset-name-input").disabled) throw new Error("no-clip editor allows review or saving");
       if (!get("look-review-hint").textContent.includes("Upload")) throw new Error("blocked save does not explain next step");
     } finally {
@@ -8911,15 +8910,20 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
 
-          // #5 Named look presets in Source & Look (open by default)
+          // #5 Named look presets live with saving in End Card CTA, not Source & Look
+          await openGroup("End Card CTA");
+          if (ctx.container.querySelector('[data-testid="demo-cta-source"] [data-testid="look-preset-ugc"]')) {
+            throw new Error("look presets are still offered prematurely in Source & Look");
+          }
           const ugcPreset = ctx.container.querySelector('[data-testid="look-preset-ugc"]');
           if (!ugcPreset) throw new Error("missing built-in UGC style look preset");
           await clickEl(ctx, ugcPreset, "apply UGC style preset");
           if (ugcPreset.getAttribute("aria-pressed") !== "true") {
             throw new Error("UGC style preset did not become active after click");
           }
-          if (ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) {
-            throw new Error("saving a new look is still offered prematurely in Source & Look");
+          const review = ctx.container.querySelector('[data-testid="look-save-review"]');
+          if (!review || !review.contains(ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) || !review.contains(ugcPreset)) {
+            throw new Error("saving and applying a look are not together in End Card CTA");
           }
 
           // #1 & #2 & #3 on Hook Text
