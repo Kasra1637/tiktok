@@ -213,7 +213,7 @@ export function resolveStoryWindow({ clipDuration, hookEnabled, hookDuration, ct
 }
 
 export const DEFAULTS = {
-  device: "s24",
+  device: "s24_ultra",
   preset: "tiktok",
   bg: "lavender",
   anim: "bloom",

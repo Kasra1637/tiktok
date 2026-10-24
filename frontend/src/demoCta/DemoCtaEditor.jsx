@@ -598,7 +598,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [sourceReplaced, setSourceReplaced] = useState(false);
   const [loadingSource, setLoadingSource] = useState(true);
   const [videoMeta, setVideoMeta] = useState(null);
-  const [device, setDevice] = useState(DEFAULTS.device);
+  // Fixed frame: Samsung Galaxy S24 Ultra. The picker is gone by design —
+  // one frame, no choice — so this is state only so the painters keep
+  // reading it like any other value.
+  const [device] = useState(DEFAULTS.device);
   const preset = "tiktok";
   const [bg, setBg] = useState(DEFAULTS.bg);
   const [anim, setAnim] = useState(DEFAULTS.anim);
@@ -2141,21 +2144,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           {viewMode === "floating" && (
             <>
-              <div className="space-y-2">
-                <SubLabel>Device frame</SubLabel>
-                <select
-                  value={device}
-                  onChange={(e) => setDevice(e.target.value)}
-                  className={CONTROL_CLASS}
-                  title={(DEVICES.find((d) => d.id === device) || {}).label}
-                  aria-label="Device frame"
-                  data-testid="device-frame-select"
-                >
-                  {DEVICES.map((d) => (
-                    <option key={d.id} value={d.id}>{d.label}</option>
-                  ))}
-                </select>
-              </div>
               <div className="space-y-2">
                 <SubLabel>Background</SubLabel>
                 <div className="flex flex-wrap items-center gap-2">

@@ -708,7 +708,7 @@ check("the animation catalog holds nine motions, without Aurora or the six retir
     && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 9,
   DC.ANIMATIONS && DC.ANIMATIONS.map((a) => a.id).join(","));
 check("defaults match the standalone app",
-  DC.DEFAULTS.device === "s24" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
+  DC.DEFAULTS.device === "s24_ultra" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
     && DC.DEFAULTS.anim === "bloom" && DC.DEFAULTS.scale === 0.82
     && DC.DEFAULTS.hookDuration === 1.8 && DC.DEFAULTS.ctaDuration === 2
     && DC.DEFAULTS.overlayAccent === "#c8ff2e" && DC.DEFAULTS.viewMode === "floating");
