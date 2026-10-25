@@ -2071,22 +2071,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => setHistoryOpen(true)}
-                  data-testid="demo-cta-frame-history"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  aria-expanded={historyOpen}
+                  aria-controls={historyOpen ? historyPanelId : undefined}
+                  data-testid="history-source-toggle"
                 >
-                  Choose from library
+                  {historyOpen ? "Hide library" : "Choose from library"}
                 </Button>
               </div>
             )}
         </div>
 
-        {/* The second door to base footage, beside the frame instead of in
-            the settings: uploading a clip and picking a finished History
-            render are one choice made where the clip lands, so they sit
-            together. The toggle keeps its testid and panel wiring — only
-            the address changed — and it stays mounted with a loaded clip
-            so a base can still be swapped after it loads. */}
+        {/* The History door lives where the clip lands: inside the empty frame
+            before anything is loaded, below the frame once a clip is — so the
+            empty state offers one choice (upload or library) and a loaded base
+            can still be swapped. One toggle, one testid, one panel; only its
+            address changes with the frame. */}
         <div className="space-y-2" data-testid="demo-cta-history-source">
+          {videoUrl && (
           <Button
             type="button"
             variant="secondary"
@@ -2099,6 +2101,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           >
             {historyOpen ? "Hide History" : "Choose from History"}
           </Button>
+          )}
           {historyOpen && (
             <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
               {historyError && <p className="text-xs text-destructive">{historyError}</p>}

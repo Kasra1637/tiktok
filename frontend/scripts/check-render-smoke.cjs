@@ -9903,7 +9903,7 @@ async function runDemoCtaChecks() {
               "clicking the empty frame outside the button did not reach the file input"
             );
           }
-          // The History toggle beside the frame is the second door to base
+          // The History toggle in the empty frame is the second door to base
           // footage: it must open the History panel, never the file picker.
           reached = false;
           const historyToggle = ctx.container.querySelector('[data-testid="history-source-toggle"]');
@@ -9931,10 +9931,11 @@ async function runDemoCtaChecks() {
     // The History render block used to sit in the Source & Look settings
     // group while the empty preview offered only a link to the /history
     // page — two doors to footage in two places, neither beside the Upload
-    // button. The toggle now sits in the preview column beside the frame,
-    // so upload-vs-history is one choice where the clip lands; the Source
-    // group keeps only looks. The toggle keeps its testid, so the picker
-    // behavior pins below exercise the moved control unchanged.
+    // button. The toggle now lives where the clip lands: inside the empty
+    // frame (upload or library, one choice), below it once a clip is loaded
+    // so a base can still be swapped. The Source group keeps only looks.
+    // The toggle keeps its testid in both addresses, so the picker behavior
+    // pins exercise the moved control unchanged.
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     await withApi(
       { getGenerationHistory: async () => ({ generations: [] }) },
@@ -9958,9 +9959,10 @@ async function runDemoCtaChecks() {
   });
 
   // The empty frame offers both doors where the clip lands: upload first,
-  // then an "or" separator, then the library shortcut. The shortcut opens
-  // the same History panel as the toggle beside the frame — never the file
-  // picker (the frame's click-through excludes every button).
+  // then an "or" separator, then the library shortcut. The shortcut is the
+  // History toggle itself, so it opens the same panel — never the file
+  // picker (the frame's click-through excludes every button). No second
+  // History button sits below the frame while it is empty.
   await check("the empty frame offers upload or the library shortcut", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     await withApi(
@@ -9970,9 +9972,12 @@ async function runDemoCtaChecks() {
         const frame = ctx.container.querySelector('[data-testid="demo-cta-frame-empty"]');
         if (!frame) throw new Error("the empty frame has no clickable container");
         const upload = frame.querySelector('[data-testid="demo-cta-frame-upload"]');
-        const library = frame.querySelector('[data-testid="demo-cta-frame-history"]');
+        const library = frame.querySelector('[data-testid="history-source-toggle"]');
         if (!upload) throw new Error("the empty frame lost its upload button");
         if (!library) throw new Error("the empty frame has no library shortcut");
+        if (ctx.container.querySelectorAll('[data-testid="history-source-toggle"]').length !== 1) {
+          throw new Error("the old below-frame History button is still mounted beside the in-frame shortcut");
+        }
         if (library.textContent.trim() !== "Choose from library") {
           throw new Error(`the library shortcut is mislabeled: ${JSON.stringify(library.textContent)}`);
         }
