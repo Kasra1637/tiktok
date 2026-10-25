@@ -4847,27 +4847,25 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The "what's missing" gate is one section wherever it appears: a helper line
-  // with the red action under it, spaced the same everywhere. Review's stack is
+  // Every gate is one section wherever it appears: the red action first, the
+  // helper line under it, spaced the same everywhere. Review's stack is
   // the reference, so a gate cannot drift tighter and make the same ask read as
   // a different kind of control.
-  await check("every step spaces its gate hint from the red button the same", async (ctx) => {
+  await check("every gate puts its red action above its hint", async (ctx) => {
     const gates = [];
-    const record = (label, hint) => {
-      if (!hint) throw new Error(`no gate hint on ${label}`);
-      const token = (/space-y-\d/.exec(hint.parentElement.className) || [""])[0];
-      if (!token) throw new Error(`the gate hint on ${label} shares no spacing token with its button`);
-      const button = hint.nextElementSibling;
-      if (!button || button.tagName !== "BUTTON") {
-        throw new Error(`no button directly under the gate hint on ${label}`);
-      }
+    const record = (label, button) => {
+      if (!button || button.tagName !== "BUTTON") throw new Error(`no red action on ${label}`);
       if (!button.className.includes("bg-[color:var(--brand-indigo)]")) {
         throw new Error(`the gate action on ${label} is not the indigo button`);
       }
+      const hint = button.nextElementSibling;
+      if (!hint || hint.tagName !== "P") {
+        throw new Error(`no hint directly under the red action on ${label}`);
+      }
+      const token = (/space-y-\d/.exec(hint.parentElement.className) || [""])[0];
+      if (!token) throw new Error(`the gate action on ${label} shares no spacing token with its hint`);
       gates.push({ label, token });
     };
-    const hintStartingWith = (prefix) =>
-      [...ctx.container.querySelectorAll("p")].find((p) => (p.textContent || "").trim().startsWith(prefix));
 
     // The choosing screen from a blank draft (no angle, no goal, no template)
     // and the still-missing panel: the goal hint below the angle gate names the
@@ -4876,9 +4874,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Audience & template");
-    record("Audience & template", ctx.container.querySelector('[data-testid="angles-cta-copy"]'));
+    record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'));
     await openStep(ctx, "Review & submit");
-    record("Review & submit", hintStartingWith("Your free plan starts"));
+    record("Review & submit", ctx.container.querySelector('[data-testid="goto-first-gap-button"]'));
 
     // The render gate with an angle but no template: the gate that used to state
     // the problem with no way out. A planned project, because the gate below
@@ -4892,9 +4890,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-        const button = ctx.container.querySelector('[data-testid="hook-first-gap-button"]');
-        if (!button) throw new Error("the render gate has no red button");
-        record("render gate", button.previousElementSibling);
+        record("render gate", ctx.container.querySelector('[data-testid="hook-first-gap-button"]'));
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -4922,6 +4918,143 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (goal.getAttribute("aria-pressed") !== "true") throw new Error("legacy angle blocks fallback selection");
       });
     } finally { global.__SMOKE_PARAMS = ""; }
+  });
+
+  // Guidance copy used to sit above the action it explains, so every gate
+  // read as a paragraph with a button lost underneath it. The rule now: the
+  // primary action renders first, the explanation follows it — same words,
+  // same buttons, new order only. Form labels keep label-then-input; this is
+  // about buttons that act, and status readouts stay where they are.
+  await check("Review and dense panels put the primary action above its guidance copy", async (ctx) => {
+    // One mount per draft: re-rendering the same root keeps the first draft's
+    // state (proved by the two-draft angle-gate check), so each fixture gets
+    // its own root, unmounted after.
+    const freshCtx = () => {
+      const el = dom.window.document.createElement("div");
+      dom.window.document.body.appendChild(el);
+      const root = createRoot(el);
+      return {
+        root,
+        container: el,
+        text: () => el.textContent || "",
+        cleanup: async () => { await act(async () => { root.unmount(); }); el.remove(); },
+      };
+    };
+    const before = (container, action, copy, label) => {
+      if (!action) throw new Error(`no action button for ${label}`);
+      if (!copy) throw new Error(`no guidance copy for ${label}`);
+      if (!(action.compareDocumentPosition(copy) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error(`guidance still precedes the action on ${label}`);
+      }
+    };
+    const hintStartingWith = (container, prefix) =>
+      [...container.querySelectorAll("p")].find((p) => (p.textContent || "").trim().startsWith(prefix));
+    const buttonWithText = (container, text) =>
+      [...container.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === text);
+
+    // The angle gate and the still-missing panel from a bare mount: one mount,
+    // walked the way a founder walks it, so no remount is involved.
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Audience & template");
+    before(
+      ctx.container,
+      ctx.container.querySelector('[data-testid="generate-angles-button"]'),
+      ctx.container.querySelector('[data-testid="angles-cta-copy"]'),
+      "the angle gate"
+    );
+    await openStep(ctx, "Review & submit");
+    before(
+      ctx.container,
+      ctx.container.querySelector('[data-testid="goto-first-gap-button"]'),
+      hintStartingWith(ctx.container, "Your free plan starts"),
+      "the still-missing panel"
+    );
+
+    // The render gate: a planned project with no template.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "a1", template_id: "" }),
+        getTemplateRecommendations: async () => ({ recommendations: [] }),
+      }, async () => {
+        const c = freshCtx();
+        try {
+          await mount(CreateVideo, {})(c);
+          await openStep(c, "Review & submit");
+          const gate = c.container.querySelector('[data-testid="hook-first-gap-button"]');
+          before(c.container, gate, gate?.parentElement?.querySelector("p"), "the render gate");
+        } finally { await c.cleanup(); }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+
+    // The failed-plan panel: the retry buttons precede the explanation.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
+        createStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
+        updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, script_version: 0, script: "", ...payload, script_version: 0, script: "" }),
+        generatePlan: async () => { throw new Error("plan unavailable in this check"); },
+      }, async () => {
+        const c = freshCtx();
+        try {
+          await mount(CreateVideo, {})(c);
+          await openStep(c, "Review & submit");
+          before(c.container, buttonWithText(c.container, "Try again"), hintStartingWith(c.container, "The plan didn't generate"), "the failed-plan panel");
+        } finally { await c.cleanup(); }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+
+    // The photo gate: a planned project whose template still wants a photo.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, assets: [] }),
+      }, async () => {
+        const c = freshCtx();
+        try {
+          await mount(CreateVideo, {})(c);
+          await openStep(c, "Review & submit");
+          const add = buttonWithText(c.container, "Add your photo");
+          before(c.container, add, add?.closest(".inset-panel")?.querySelector("p"), "the photo gate");
+        } finally { await c.cleanup(); }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+
+    // The Demo + CTA upsell after a finished render: mounted directly like
+    // the other GenerationPanel checks, since the block only renders for a
+    // finished render.
+    {
+      const c = freshCtx();
+      try {
+        // COMPLETED lives inside the Demo + CTA checks below, out of scope
+        // here, so the finished render is built from SEGMENT directly.
+        const finished = {
+          ...SEGMENT,
+          id: "gen-1",
+          status: "completed",
+          video_url: "/api/media/videos/gen-1.mp4",
+          r2_url: null,
+          playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
+        };
+        await withApi({
+          getGenerations: async () => ({ generations: [finished] }),
+        }, async () => {
+          await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(c);
+        });
+        const open = [...c.container.querySelectorAll("a")].find((a) =>
+          (a.textContent || "").includes("Open in Demo + CTA")
+        );
+        before(c.container, open, hintStartingWith(c.container, "This is the hook and the middle"), "the Demo + CTA upsell");
+      } finally { await c.cleanup(); }
+    }
   });
 
   await check("progress ticks mean done, not merely being to the left", async (ctx) => {

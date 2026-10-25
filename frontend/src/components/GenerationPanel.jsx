@@ -751,10 +751,6 @@ const handleGenerate = async () => {
                   rather than leaving the founder to find it elsewhere. */}
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
-                <p className="text-xs text-muted-foreground">
-                  This is the hook and the middle. Use it as is, or open it in Demo + CTA
-                  to add your demo and call to action — exports save beside the original.
-                </p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="accent" size="sm" asChild>
                     <Link to={`/demo-cta/${generation.id}`}>
@@ -762,6 +758,10 @@ const handleGenerate = async () => {
                     </Link>
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  This is the hook and the middle. Use it as is, or open it in Demo + CTA
+                  to add your demo and call to action — exports save beside the original.
+                </p>
               </div>
             </>
           )}

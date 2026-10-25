@@ -324,20 +324,21 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
 
   return (
     <div className="inset-panel space-y-4">
+      {/* The button leads and the explanation follows it: the button says where
+          the upload is, and the upload is on the template step now. It used
+          to point at a step called "Assets" whose only content was this same
+          upload. */}
+      {onGoToTemplatePhoto && (
+        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
+          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
+        </Button>
+      )}
       <p className="text-sm font-semibold">
         This template needs a character reference before it can generate
       </p>
       <p className="text-xs text-muted-foreground" data-subtitle="">
         Your photograph is what the generated video is built from.
       </p>
-      {/* The button says where the upload is, and the upload is on the template
-          step now. It used to point at a step called "Assets" whose only
-          content was this same upload. */}
-      {onGoToTemplatePhoto && (
-        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
-          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
-        </Button>
-      )}
     </div>
   );
 }
@@ -588,13 +589,12 @@ function AngleSelector({
     </p>
   ) : null;
   const body = !showAngles || angles.length === 0 ? (
-    // 12px, matching the Review step's "what's missing" panel: the helper line
-    // and the red action under it are one gate section, and a tighter stack
+    // 12px, matching the Review step's "what's missing" panel: the red action
+    // and the helper line under it are one gate section, and a tighter stack
     // here made the same ask read as a different control two steps later.
+    // The action leads: the copy explains the button, so the button comes
+    // first and the explanation follows it.
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
-        {ANGLES_CTA_COPY}
-      </p>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -615,6 +615,9 @@ function AngleSelector({
             {generating ? generatingLabel : generateLabel}
           </Button>
           {progressLine}
+      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
+        {ANGLES_CTA_COPY}
+      </p>
         </div>
       ) : (
     <div className="space-y-4" data-testid="audience-angle-list">
@@ -2511,12 +2514,10 @@ setObjective("");
              consumed this selection-set, so nothing here fires on its own. The
              photo is not listed: it is required to render, never to plan. */
           <div className="inset-panel space-y-4">
-            <p className="text-sm text-muted-foreground">
-              The plan didn't generate. Fix what's missing below, then try again — still free.
-            </p>
-            {/* One red button naming the single gap, then the goal list (which
-                shows its waits marker until the angle is picked). Button and
-                subtitle sit in one panel so the ask never splits in two. */}
+            {/* The retry buttons lead and the explanation follows them: one red
+                button naming the single gap, then the goal list (which shows
+                its waits marker until the angle is picked). Button and subtitle
+                sit in one panel so the ask never splits in two. */}
             {firstGap && (
               <Button
                 variant="accent"
@@ -2556,6 +2557,9 @@ setObjective("");
               <Sparkles className="h-4 w-4" />
               Try again
             </Button>
+            <p className="text-sm text-muted-foreground">
+              The plan didn't generate. Fix what's missing below, then try again — still free.
+            </p>
             <p className="text-xs text-muted-foreground" data-subtitle="">
               Writes hook, script, shots, and demo note. Editable below.
             </p>
@@ -2591,9 +2595,6 @@ setObjective("");
                 goes; the single subtitle below stays constant. Angle and goal
                 stay fixable in place just beneath it. */}
             <GroupLabel icon={ListChecks}>Still missing</GroupLabel>
-            <p className="text-xs text-muted-foreground" data-subtitle="">
-              Your free plan starts once all required choices are set.
-            </p>
             {firstGap && (
               <Button
                 variant="accent"
@@ -2605,6 +2606,9 @@ setObjective("");
                 {firstGap.label}
               </Button>
             )}
+            <p className="text-xs text-muted-foreground" data-subtitle="">
+              Your free plan starts once all required choices are set.
+            </p>
             {/* Angle and goal are chosen on step 1, not here. The red button
                 above names the first missing choice, and the goal list below
                 stays absent until an angle exists; angle selection itself
@@ -3012,15 +3016,10 @@ setObjective("");
                     whole chain ("choose an App Profile, goal, and template,
                     then review the free plan") — a fourth copy of an
                     instruction the pills and each step already carry. The red
-                    button is the same one Review shows: a gate that cannot act
+                    button leads and the explanation follows it: a gate that cannot act
                     names the step that fixes it instead of stating the problem
                     and stopping. Only once a plan exists, for the same reason
                     as the angle gate above: one gap, one red button. */}
-                <p className="text-sm text-muted-foreground">
-                  {!profileId
-                    ? "Pick an approved App Profile on the first step to continue."
-                    : "Pick a template on the Audience & template step to continue."}
-                </p>
                 {firstGap && (
                   <Button
                     variant="accent"
@@ -3032,6 +3031,11 @@ setObjective("");
                     {firstGap.label}
                   </Button>
                 )}
+                <p className="text-sm text-muted-foreground">
+                  {!profileId
+                    ? "Pick an approved App Profile on the first step to continue."
+                    : "Pick a template on the Audience & template step to continue."}
+                </p>
               </div>
             ) : blockedOnAssets ? (
               <MissingRequirements
