@@ -279,6 +279,8 @@ export const api = {
     client.post(`/generations/${id}/storage/retry`, null, { timeout: 600000 })
       .then((r) => r.data),
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
+  setTikTokLink: (id, tiktok_url) =>
+    client.post(`/generations/${id}/tiktok-link`, { tiktok_url }).then((r) => r.data),
 
   // App-specific creative direction for the one render.
   //

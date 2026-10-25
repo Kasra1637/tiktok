@@ -441,6 +441,15 @@ class AttachAssetRequest(BaseModel):
     audio_gain: Optional[float] = None
 
 
+class TikTokLinkRequest(BaseModel):
+    """Mark a render as posted by attaching its live TikTok URL.
+
+    Empty string clears the link. A set link is the posted half of a real
+    winner; the other half is a thumbs up on the render itself.
+    """
+    tiktok_url: str = ""
+
+
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

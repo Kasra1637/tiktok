@@ -919,6 +919,7 @@ const CreateVideo = load("pages/CreateVideo.jsx").default;
 const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
 const { FirstRunChecklist } = load("components/onboarding/FirstRunChecklist.jsx");
 const { OnboardingProvider } = load("components/onboarding/OnboardingProvider.jsx");
+const { HistoryFeedback } = load("components/HistoryFeedback.jsx");
 
 // The shipped order, in the order the founder walks it. Asserted as a whole
 // sequence rather than a set: the point of the reorder is that the free, claim-
@@ -3852,7 +3853,36 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       // Dismiss retires the card without claiming an export.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-dismiss"]'), "no dismiss control");
       if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("dismiss did not hide the first-run checklist");
-      // A saved export retires it too: remount with the done flag set.
+      // A TikTok link marks the render posted and opens the live video — but a
+  // link alone carries no weight. Only a thumbs up PLUS a link counts as a
+  // real winner for the hook-learning loop.
+  await check("history tile takes a TikTok link and crowns winners only with thumbs up", async (ctx) => {
+    const LINK = "https://www.tiktok.com/@founder/video/7345";
+    const row = { id: "link-t1", verdicts: {}, tiktok_url: null };
+    await withApi({ getGeneration: async () => ({ verdicts: {} }) }, async () => {
+      await mount(HistoryFeedback, { row, signalRefs: {} })(ctx);
+    });
+    if (!ctx.container.querySelector('[data-testid="history-tiktok-input-link-t1"]')) throw new Error("no TikTok link input next to the thumbs");
+    if (ctx.container.querySelector('[data-testid="history-posted-link-t1"]')) throw new Error("Posted shown without a link");
+    if (ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("Winner shown without a link or a vote");
+    // Save a link: Posted badge and live link appear, still no Winner.
+    await withApi({
+      getGeneration: async () => ({ verdicts: {} }),
+      setTikTokLink: async (id, url) => ({ tiktok_url: url }),
+    }, async () => {
+      await typeInto(ctx, ctx.container.querySelector('[data-testid="history-tiktok-input-link-t1"]'), LINK);
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-tiktok-save-link-t1"]'), "no link save");
+    });
+    if (!ctx.container.querySelector('[data-testid="history-posted-link-t1"]')) throw new Error("saved link did not mark the render posted");
+    const live = ctx.container.querySelector('[data-testid="history-live-link-link-t1"]');
+    if (!live || live.getAttribute("href") !== LINK) throw new Error("live video does not reopen the posted link");
+    if (ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("link alone counted as a winner");
+    // Thumbs up on the linked render crowns it.
+    await clickEl(ctx, ctx.container.querySelector('[data-testid="history-video-feedback-link-t1"] [aria-label="Good"]'), "no thumbs up");
+    if (!ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("thumbs up plus link did not crown a winner");
+  });
+
+  // A saved export retires it too: remount with the done flag set.
       dom.window.localStorage.setItem("hookforge_first_export_done.v1", "1");
       await mount(WithProvider, {})(ctx);
       if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("a saved export did not retire the first-run checklist");

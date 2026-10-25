@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Clapperboard } from "lucide-react";
+import { Check, Clapperboard, ExternalLink, Link2, Loader2, X } from "lucide-react";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { GroupLabel } from "./SectionCard";
-import { api } from "../lib/api";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { api, getErrorMessage } from "../lib/api";
 import { verdictFor } from "../lib/feedback";
 
 /**
@@ -36,6 +39,41 @@ export function HistoryFeedback({ row, signalRefs }) {
   const savedVerdicts = freshVerdicts ?? row.verdicts ?? {};
   const thumbValue = (component) =>
     voteOverrides[component] ?? verdictFor(savedVerdicts, component);
+  // Posted link: one nullable text column, saved beside the render. A link
+  // marks the render posted and opens the live video — but a link alone
+  // carries no weight. Only a thumbs up on the render PLUS a link counts
+  // as a real winner for the hook-learning loop.
+  const [link, setLink] = useState(row.tiktok_url || "");
+  const [savedLink, setSavedLink] = useState(row.tiktok_url || null);
+  const [savingLink, setSavingLink] = useState(false);
+  const [linkError, setLinkError] = useState(null);
+  const isWinner = thumbValue("video") === 1 && !!savedLink;
+  const saveLink = useCallback(async () => {
+    setSavingLink(true);
+    setLinkError(null);
+    try {
+      const updated = await api.setTikTokLink(row.id, link.trim());
+      setSavedLink(updated.tiktok_url || null);
+      setLink(updated.tiktok_url || "");
+    } catch (err) {
+      setLinkError(getErrorMessage(err));
+    } finally {
+      setSavingLink(false);
+    }
+  }, [row.id, link]);
+  const clearLink = useCallback(async () => {
+    setSavingLink(true);
+    setLinkError(null);
+    try {
+      await api.setTikTokLink(row.id, "");
+      setSavedLink(null);
+      setLink("");
+    } catch (err) {
+      setLinkError(getErrorMessage(err));
+    } finally {
+      setSavingLink(false);
+    }
+  }, [row.id]);
   const rememberVote = useCallback((component, verdict) => {
     setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
   }, []);
@@ -63,6 +101,75 @@ export function HistoryFeedback({ row, signalRefs }) {
         }}
         testId={`history-video-feedback-${row.id}`}
       />
+      {/* Posted link lives next to the thumbs, inside the same vote block:
+          the winner signal (thumbs up) and the posted proof (link) are read
+          together, so they are set together. */}
+      <div className="space-y-2" data-testid={`history-tiktok-link-${row.id}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          {savedLink ? (
+            <>
+              <Badge variant="secondary" data-testid={`history-posted-${row.id}`}>
+                <Check className="h-3 w-3" /> Posted
+              </Badge>
+              <a
+                href={savedLink}
+                target="_blank"
+                rel="noreferrer"
+                data-testid={`history-live-link-${row.id}`}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
+              >
+                Open live video <ExternalLink className="h-3 w-3" />
+              </a>
+              {isWinner && (
+                <Badge variant="indigo" data-testid={`history-winner-${row.id}`} title="Thumbs up plus posted link — a real winner">
+                  Winner
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={savingLink}
+                onClick={clearLink}
+                data-testid={`history-tiktok-clear-${row.id}`}
+                title="Remove the posted link"
+              >
+                <X className="h-3.5 w-3.5" /> Remove
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <Input
+                  type="url"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="Paste the TikTok link once posted…"
+                  aria-label="TikTok link for this render"
+                  data-testid={`history-tiktok-input-${row.id}`}
+                  disabled={savingLink}
+                  className="h-9"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={savingLink || !link.trim()}
+                onClick={saveLink}
+                data-testid={`history-tiktok-save-${row.id}`}
+              >
+                {savingLink ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save link"}
+              </Button>
+            </>
+          )}
+        </div>
+        {linkError && <p role="alert" className="text-xs text-destructive">{linkError}</p>}
+        {!savedLink && (
+          <p className="text-xs text-muted-foreground">
+            Marks this render posted. Only a thumbs up plus a link counts as a winner.
+          </p>
+        )}
+      </div>
       <details data-testid={`history-parts-feedback-${row.id}`} className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
         <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           Rate the parts (optional) — goal, template, plan, script

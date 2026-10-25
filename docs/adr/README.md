@@ -49,3 +49,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0026](0026-fresh-opening-message-batches.md) | Opening text consumes twenty app-grounded suggestions instead of saved preset indices | accepted |
 | [0030](0030-per-clip-audio-mutes.md) | Each sequence clip mutes its own audio in preview and export | accepted |
 | [0031](0031-first-run-checklist.md) | First-run checklist carries the founder across pages with their tours | accepted |
+| [0032](0032-history-tiktok-link-and-winner.md) | A TikTok link marks a render posted; thumbs up plus link is the winner | accepted |
