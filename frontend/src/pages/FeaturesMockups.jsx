@@ -76,7 +76,7 @@ function ScriptMockup() {
     <div className="surface" aria-hidden="true">
       <span className="eyebrow">Script plan</span>
       <div className="mt-4 space-y-2.5">
-        <p className="inset-panel text-sm leading-relaxed">Hook: the line your viewer reads first.</p>
+        <p className="inset-panel text-sm leading-relaxed">Hook: the line your presenter says first.</p>
         <p className="inset-panel text-sm leading-relaxed text-muted-foreground">Story: three beats, your words.</p>
         <p className="inset-panel flex items-start gap-2 text-sm leading-relaxed">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-coral)]" />
@@ -92,7 +92,7 @@ function RenderMockup() {
     <div className="surface" aria-hidden="true">
       <div className="mx-auto w-fit rounded-2xl border border-[color:var(--hairline)] bg-black/60 px-5 py-4">
         <p className="rounded-lg bg-white/95 px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wide text-black">
-          Your hook, on screen
+          Your spoken hook
         </p>
         <div className="mx-auto mt-3 flex h-24 w-14 items-end justify-center rounded-lg border border-[color:var(--hairline)] bg-[color:var(--indigo-6)]">
           <Star className="mb-3 h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -119,8 +119,8 @@ function OutcomesMockup() {
         <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex gap-4 font-mono text-xs tabular-nums text-muted-foreground">
             <span>1.2k views</span>
-            <span>84 likes</span>
-            <span>12 saves</span>
+            <span>Posted</span>
+            <span>Your vote: Good</span>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">Logged by hand, not synced — your verdict decides the next draft.</p>
         </div>

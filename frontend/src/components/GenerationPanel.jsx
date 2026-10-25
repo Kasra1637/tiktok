@@ -58,8 +58,10 @@ function resolutionStorageKey(projectId) {
   return `studio-video-resolution:${projectId}`;
 }
 
-export function GenerationPanel({ project, onGenerationChange, onProjectChange }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false }) {
   const [models, setModels] = useState(null);
+  const [modelError, setModelError] = useState(null);
+  const [modelRetry, setModelRetry] = useState(0);
   const [selectedModel, setSelectedModel] = useState("");  const [generation, setGeneration] = useState(null);
   // A per-render resolution override, only for models that offer a choice.
   // "" means the catalog default; anything else must be one of the model's
@@ -130,6 +132,8 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
 
   useEffect(() => {
     let cancelled = false;
+    setModels(null);
+    setModelError(null);
     api
       .getStudioVideoModels()
       .then((data) => {
@@ -164,13 +168,13 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange }
           /* a choice that does not persist is still a choice for this render */
         }
       })
-      .catch(() => {
-        if (!cancelled) setModels(null);
+      .catch((err) => {
+        if (!cancelled) setModelError(getErrorMessage(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, modelRetry]);
 
   // schedulePoll is declared BEFORE the effect that depends on it. A dependency
   // array is evaluated during render, so listing this effect above the `const`
@@ -422,7 +426,7 @@ const handleGenerate = async () => {
         <Alert variant="destructive">
           <AlertTitle>No photo attached</AlertTitle>
           <AlertDescription>
-            Add a clear photo of the person you want on camera on the Audience &amp; template step. The video model uses it as a presenter reference; without it, the presenter may be invented.
+            Add a clear photo of the person you want on camera on the Audience &amp; template step. The video model uses it as a presenter reference; rendering stays blocked until it is attached.
           </AlertDescription>
         </Alert>
       )}
@@ -447,7 +451,7 @@ const handleGenerate = async () => {
             Your approved script has {project.spoken_overflow.dropped_chars} characters that do not
             fit in the {project.spoken_overflow.middle_seconds}s middle. A generated plan is trimmed
             to fit on arrival, so this is your own edit above — shorten it, or press Regenerate plan
-            on the Review step, then rebuild the strategy and generate.
+            above on Review &amp; submit, then rebuild the strategy and generate.
           </AlertDescription>
         </Alert>
       )}
@@ -573,7 +577,7 @@ const handleGenerate = async () => {
         variant="accent"
         onClick={handleGenerate}
         disabled={
-          busy || inFlight || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
+          busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
         }
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -584,12 +588,32 @@ const handleGenerate = async () => {
             : "Generate the video"}
       </Button>
 
+      {hasUnsavedEdits && (
+        <p role="status" className="text-sm text-muted-foreground" data-testid="render-unsaved-edits">
+          Save edits in the script plan above before rendering. The video uses the saved plan, not your unsaved text.
+        </p>
+      )}
+      {!models && (
+        <div role={modelError ? "alert" : "status"} className="space-y-2 text-sm text-muted-foreground" data-testid="render-model-status">
+          <p>{modelError ? `Video models could not load: ${modelError}` : "Loading video models before rendering…"}</p>
+          {modelError && (
+            <Button variant="secondary" size="sm" onClick={() => setModelRetry((value) => value + 1)}>
+              Retry loading models
+            </Button>
+          )}
+        </div>
+      )}
+      {tooLong && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Choose a model above that supports {pieceSeconds}s, or pick a shorter template on Audience &amp; template and regenerate the plan.
+        </p>
+      )}
       {noAngle && (
         <Alert variant="destructive">
           <AlertTitle>No audience angle picked</AlertTitle>
           <AlertDescription>
             Pick one on the Audience &amp; template step. The strategy and the render are built around
-            it — without one the piece falls back to generic framing.
+            it — rendering is blocked until an angle is picked.
           </AlertDescription>
         </Alert>
       )}

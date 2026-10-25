@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { Button } from "../components/ui/button";
 import { TriangleAlert as AlertTriangle, Smartphone } from "lucide-react";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
@@ -47,7 +48,7 @@ function EditorRoute({ generationId }) {
         const sourceUrl = durableMediaUrl(row);
         if (!sourceUrl) {
           setError(
-            "This render has no durable copy the browser can open. Refresh for a fresh link, or choose a different render."
+            "This render has no saved copy the browser can open. Open this clip in History to retry the durable save, or upload your own footage."
           );
           setGeneration(null);
           return;
@@ -65,7 +66,18 @@ function EditorRoute({ generationId }) {
     return (
       <Alert variant="destructive">
         <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
+        <AlertDescription>
+          {error}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={load}>Try loading again</Button>
+            <Button variant="accent" size="sm" asChild>
+              <Link to={`/history#generation-${generationId}`}>Review clip in History</Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/demo-cta">Upload your own clip</Link>
+            </Button>
+          </div>
+        </AlertDescription>
       </Alert>
     );
   }

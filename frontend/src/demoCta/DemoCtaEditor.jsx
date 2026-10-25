@@ -1339,7 +1339,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {generation ? (
             <>
               <p className="text-xs text-muted-foreground">
-                This Hook + Story render is the source clip. Replace it with your own footage; one clip at a time.
+                This finished render is the base clip. Use Second clip to add footage after it, or Real Video for a phone overlay.
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="secondary">Hook + Story</Badge>
@@ -1372,7 +1372,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   size="sm"
                   className="h-10"
                   onClick={clearSource}
-                  title="Remove this clip and go back to the finished render"
+                  title={generation ? "Remove this upload and go back to the finished render" : "Remove this clip and choose another"}
                   data-testid="demo-cta-remove-source"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -2086,7 +2086,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 title="Upload a clip to style it"
                 data-testid="demo-cta-frame-empty"
                 onClick={(event) => {
-                  if (event.target.closest("a")) return;
+                  if (event.target.closest("a, button")) return;
                   fileInputRef.current?.click();
                 }}
               >
@@ -2466,7 +2466,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 </Button>
                 {saved ? (
                   <Button variant="accent" size="sm" asChild>
-                    <Link to="/history">View in History</Link>
+                    <Link to={`/history#generation-${saved.id}`}>View in History</Link>
                   </Button>
                 ) : (
                   <Button variant="secondary" size="sm" disabled={saving} onClick={() => result.blob && saveExport(result.blob, result.name)}>
@@ -2484,7 +2484,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 <Alert>
                   <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                   <AlertDescription>
-                    Saved beside the original Hook + Story in History. The original is untouched and still downloadable.
+                    {generation ? "Saved beside the original clip in History. The original is untouched and still downloadable." : "Saved as a finished export in History. Download it here, then publish it yourself."}
                   </AlertDescription>
                 </Alert>
               )}

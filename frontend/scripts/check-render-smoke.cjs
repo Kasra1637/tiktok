@@ -1354,6 +1354,29 @@ async function main() {
     expectAbsent(ctx, "No photo attached", "the gate fired on a project that has a photo");
   });
 
+  await check("render waits for saved edits and model loading has a real retry", async (ctx) => {
+    let modelCalls = 0;
+    let renders = 0;
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => {
+        if (++modelCalls === 1) throw new Error("Model catalog unavailable");
+        return { default: CAPABILITY.key, models: [CAPABILITY] };
+      },
+      generateVideo: async () => { renders++; return {}; },
+    }, async () => {
+      await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY, hasUnsavedEdits: true })(ctx);
+      if (!buttonByText(ctx, /Generate the video/).disabled) throw new Error("render enabled without models or saved edits");
+      expectText(ctx, "Model catalog unavailable");
+      expectText(ctx, "not your unsaved text");
+      await clickEl(ctx, buttonByText(ctx, /Retry loading models/));
+      if (modelCalls !== 2 || ctx.text().includes("Model catalog unavailable")) throw new Error("model retry did not recover");
+      if (!buttonByText(ctx, /Generate the video/).disabled || renders !== 0) throw new Error("retry bypassed unsaved edits or started a paid render");
+      await act(async () => ctx.root.render(React.createElement(GenerationPanel, { project: PROJECT_WITH_STRATEGY, hasUnsavedEdits: false })));
+      if (buttonByText(ctx, /Generate the video/).disabled) throw new Error("saved edits left render blocked");
+    });
+  });
+
   await check("GenerationPanel refuses a project with no angle picked", async (ctx) => {
     // The strategy and the render are built around one audience angle: a
     // render without one is the generic framing the angle step exists to
@@ -3397,6 +3420,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Review & submit");
+      if (ctx.container.querySelector('[data-testid="create-draft-button"]')) throw new Error("a draft action that cannot run competes with the missing-input action");
       const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
       if (!btn) throw new Error("no angle CTA on Review & submit with no angle picked");
       if (!/Pick an audience angle/.test(btn.textContent || "")) {
@@ -3414,6 +3438,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("an angle list rendered outside its home step");
       }
+      expectText(ctx, "Generate and pick an audience angle first");
+      expectAbsent(ctx, "Pick a goal above", "goal guidance points at a hidden control");
     });
   });
 
@@ -3788,8 +3814,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // ...and it must say what is missing and how to fix it, rather than
     // rendering an empty step.
-    if (!text.includes("Pick a goal above — the templates below rank for it.")) {
-      throw new Error("the merged step does not explain that the objective is required");
+    if (!text.includes("Generate and pick an audience angle first; then choose its goal and template.")) {
+      throw new Error("the merged step does not explain the missing angle before its goal");
     }
     // The fix lives on this same screen: the angle gate above is what ranks
     // the goal that ranks the templates, so no jump elsewhere is needed.
@@ -5171,7 +5197,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     for (const phrase of ["one AI-generated clip", "demo and closing message are not generated footage", "Record the demo yourself"]) {
       if (!generation.includes(phrase)) throw new Error(`missing generation boundary: ${phrase}`);
     }
-    for (const phrase of ["one source clip at a time", "an end card you write", "Combine separate clips in your own editor", "does not assemble them for you"]) {
+    for (const phrase of ["a base clip", "an end card you write", "Second clip", "Real Video", "one TikTok MP4"]) {
       if (!editor.includes(phrase)) throw new Error(`missing editor boundary: ${phrase}`);
     }
     if (!review.includes("not a guarantee that every claim is correct")) throw new Error("claim checks presented as factual certification");
@@ -5180,8 +5206,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       /own video.*don’t need to generate a Hook \+ Story first/,
       /not a recording of you or a clone of your voice/,
       /Audio depends.*some models produce silent clips/,
-      /MP4 or WebM depending on your browser/,
-      /publish them yourself.*manually logged, not synced from TikTok/,
+      /1080×1920 MP4 at 30 fps.*Chrome or Edge/,
+      /publish them yourself.*posted TikTok link.*manually logged, not synced from TikTok.*do not prove conversions/,
     ]) {
       if (!answers.some((a) => pattern.test(a))) throw new Error(`missing buyer disclosure: ${pattern}`);
     }
@@ -5195,7 +5221,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const steps = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
     if (steps.length !== 5) throw new Error("expected five workflow steps");
     const workflow = ctx.container.querySelector('[data-testid="landing-how-it-works"]').textContent;
-    for (const phrase of ["approve the facts", "Set a goal", "presenter photo", "save it", "publish them yourself"]) {
+    for (const phrase of ["approve the facts", "set a goal", "both are required", "Tone is optional", "presenter photo", "save it", "Second clip", "publish them yourself"]) {
       if (!workflow.includes(phrase)) throw new Error(`missing workflow action: ${phrase}`);
     }
     for (const link of ctx.container.querySelectorAll('a[href^="#"]')) {
@@ -5603,6 +5629,7 @@ async function runAnalyticsChecks() {
       throw new Error("an empty signals card renders with nothing to count");
     }
     expectText(ctx, "Nothing captured yet", "an empty Analytics page is not explained");
+    if (!ctx.container.querySelector('a[href^="/create"]')) throw new Error("empty Analytics has no next action");
   });
 
   await check("no app at all points at the profile editor", async (ctx) => {
@@ -6703,6 +6730,30 @@ async function runBrandSetupChecks() {
     );
     await act(async () => {});
   }
+
+  await check("profile next action approves a manual draft before opening its scoped studio", async (ctx) => {
+    let approval = null;
+    const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    global.__SMOKE_NAVIGATIONS = [];
+    try {
+      await withApi({
+        getActiveBrand: async () => handTyped,
+        getAppProfiles: async () => ({ profiles: [handTyped] }),
+        approveAppProfile: async (id, applyPending) => { approval = { id, applyPending }; return { ...handTyped, status: "approved" }; },
+      }, async () => {
+        await mount(BrandSetup)(ctx);
+        const next = () => ctx.container.querySelector('[data-testid="find-video-to-remix-button"]');
+        if (!next().textContent.includes("Approve saved profile")) throw new Error("draft points at a studio it cannot use");
+        await clickEl(ctx, next());
+        if (approval?.id !== "p2" || approval.applyPending !== false || global.__SMOKE_NAVIGATIONS.length) throw new Error("approval skipped review or navigated prematurely");
+        if (!next().textContent.includes("Create Video")) throw new Error("approved profile has no next action");
+        await clickEl(ctx, next());
+        if (!global.__SMOKE_NAVIGATIONS.includes("/create?profile=p2")) throw new Error("studio navigation lost approved profile");
+      });
+    } finally {
+      global.__SMOKE_NAVIGATIONS = previousNavigations;
+    }
+  });
 
   await check(
     "save and approve sit in the research row once research has generated the profile",
@@ -8323,6 +8374,24 @@ async function runDemoCtaChecks() {
       }
     }
   );
+
+  await check("unavailable editor sources offer recovery, retry and an upload exit", async (ctx) => {
+    global.__SMOKE_ROUTE_PARAMS = { generationId: "missing-source" };
+    let calls = 0;
+    try {
+      await withApi({ getGeneration: async () => { calls++; return { id: "missing-source", status: "completed" }; } }, async () => {
+        await mount(DemoCtaStudio)(ctx);
+        expectText(ctx, "retry the durable save");
+        for (const href of ["/history#generation-missing-source", "/demo-cta"]) {
+          if (!ctx.container.querySelector(`a[href="${href}"]`)) throw new Error(`editor dead end: ${href}`);
+        }
+        await clickEl(ctx, buttonByText(ctx, /Try loading again/));
+        if (calls !== 2) throw new Error("editor retry did not fetch the source again");
+      });
+    } finally {
+      global.__SMOKE_ROUTE_PARAMS = {};
+    }
+  });
 
   await check(
     "the editor opens a finished render only from its durable, fetchable copy",

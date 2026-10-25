@@ -18,13 +18,13 @@ const FEATURES = [
     icon: Briefcase,
     title: "Start with your app’s facts",
     description:
-      "Research your website and store listings, or add the details yourself. Review and approve one profile to use across your videos.",
+      "Research an App Store or Google Play listing, then correct and approve the draft. Reuse that profile across your videos.",
   },
   {
     icon: Target,
     title: "Make your message specific",
     description:
-      "Choose the required video goal, then optionally add an audience angle and tone. These guide template suggestions and the free script plan.",
+      "Pick a required audience angle and video goal. Tone is optional. These guide template suggestions and the free script plan.",
   },
   {
     icon: LayoutTemplate,
@@ -60,7 +60,7 @@ const FEATURES = [
     icon: Video,
     title: "Keep your next idea within reach",
     description:
-      "Revisit clips in History, make a draft variation, and record results by hand. Review each new draft before generating another video.",
+      "Revisit clips in History, record posted links, views, and votes, then compare them in Analytics. Reuse a saved draft for another take; views do not prove conversions.",
   },
 ];
 
@@ -68,12 +68,12 @@ const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    detail: "Add your website or store links—or enter the details yourself. Review the profile and approve the facts.",
+    detail: "Add an App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts.",
   },
   {
     step: "2",
     label: "Choose a goal and audience",
-    detail: "Set a goal for the video (required). Add an audience angle and tone if you want to focus the story; both are optional.",
+    detail: "Pick an audience angle and set a goal for the video; both are required. Tone is optional. These choices share the Audience & template step.",
   },
   {
     step: "3",
@@ -88,7 +88,7 @@ const FLOW_STEPS = [
   {
     step: "5",
     label: "Add your real product demo",
-    detail: "Record your demo separately. Demo + CTA styles one clip at a time; combine clips in your own editor, then download and publish them yourself.",
+    detail: "Record your demo separately. In Demo + CTA, style a base clip, optionally add a Second clip after it or a phone overlay in Real Video, then export and publish them yourself.",
   },
 ];
 
@@ -171,7 +171,7 @@ const PIPELINE_BLOCKS = [
     tone: "indigo",
     kicker: "Demo + CTA",
     title: "Put your own footage in the spotlight",
-    body: "Style one source clip at a time—your own recording or a finished Hook + Story. Add a floating or hand-held phone mockup, framing and zoom, plus hook text and an end card you write. Combine separate clips in your own editor when needed; Demo + CTA does not assemble them for you.",
+    body: "Style a base clip—your own recording or a finished Hook + Story. Add a Second clip to play after it, or use Real Video to put a separate recording in a phone over the base. Choose each clip's look, framing and zoom, plus hook text and an end card you write. Export the result as one TikTok MP4.",
   },
   {
     icon: ShieldCheck,
@@ -197,11 +197,11 @@ const QUESTIONS = [
   },
   {
     question: "Will my clip have sound, and how can I export it?",
-    answer: "Audio depends on the video model you choose; some models produce silent clips. Demo + CTA exports MP4 or WebM depending on your browser and settings. Transparent exports use WebM.",
+    answer: "Audio depends on the video model you choose; some models produce silent clips. Demo + CTA exports one 1080×1920 MP4 at 30 fps. Use a current Chrome or Edge browser; unsupported encoding is reported, not silently replaced with another format.",
   },
   {
     question: "Does HookForge post or track results for me?",
-    answer: "No. Download your videos and publish them yourself. You can enter views, likes, comments, shares, and saves in History, along with notes and your own verdict. Results are manually logged, not synced from TikTok.",
+    answer: "No. Download your videos and publish them yourself. In History, add the posted TikTok link, paste back views, and rate the clip. Compare those saved results in Analytics. Views are manually logged, not synced from TikTok, and do not prove conversions.",
   },
 ];
 

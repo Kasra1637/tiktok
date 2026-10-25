@@ -180,7 +180,12 @@ export default function Analytics() {
         <EmptyState
           icon={Activity}
           title="Nothing captured yet"
-          description="Signals appear here as you work with this app."
+          description="Create a clip, then add its posted link, views, and your vote in History."
+          action={
+            <Button variant="accent" asChild>
+              <Link to={selectedId ? `/create?profile=${encodeURIComponent(selectedId)}` : "/create"}>Create Video</Link>
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-6">

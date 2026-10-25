@@ -23,7 +23,7 @@ const ROWS = [
     icon: Briefcase,
     eyebrow: "App profile",
     title: "Start with your app's facts",
-    body: "Research your website and store listings, or add the details yourself. Review and approve one profile to use across your videos.",
+    body: "Research an App Store or Google Play listing, then correct and approve the draft. Reuse that profile across your videos.",
   },
   {
     id: "templates",
@@ -51,14 +51,14 @@ const ROWS = [
     icon: Film,
     eyebrow: "Demo + CTA",
     title: "Give your footage a polished frame",
-    body: "Bring a clip to Demo + CTA. Choose a phone mockup, adjust framing and zoom, and add your own hook text and end card.",
+    body: "Bring a base clip to Demo + CTA, optionally add a Second clip after it or a phone overlay in Real Video, then adjust looks, text, and framing. Export one TikTok MP4.",
   },
   {
     id: "outcomes",
     icon: Video,
     eyebrow: "Outcomes",
     title: "Keep your next idea within reach",
-    body: "Revisit clips in History, make a draft variation, and record results by hand. Review each new draft before generating another video.",
+    body: "Revisit clips in History, add posted links, views, and votes, then compare them in Analytics before reusing a draft. Views measure reach, not conversions.",
   },
 ];
 

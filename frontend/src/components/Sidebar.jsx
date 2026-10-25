@@ -58,7 +58,7 @@ import {
  */
 const NAV_ITEMS = [
   { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
-  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style one clip; add overlays" },
+  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
@@ -242,7 +242,7 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
           to="/"
           className="flex min-w-0 items-center gap-2.5 outline-none"
           data-testid="logo-home-link"
-          title="HookForge — go to Create Video"
+          title="HookForge — go to home page"
         >
           <LogoMark />
           {!collapsed && (

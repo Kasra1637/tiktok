@@ -97,7 +97,7 @@ export const TOURS = {
       },
       {
         target: '[data-testid="find-video-to-remix-button"]',
-        title: "Next: choose a video goal",
+        title: "Next: choose an audience angle",
         optional: true,
         body:
           "Approved and ready? Open Create Video, pick the angle that fits, and let it suggest templates. One profile serves every video about this app.",
@@ -149,7 +149,7 @@ export const TOURS = {
         target: '[data-testid="app-profile-header"]',
         title: "One profile, every video",
         body:
-          "Draft or approved — the badge says which. This page is the reporting center for each video, angle, and claim. Navigate back to the profiles list, or open the library and history from any profile."
+          "Draft or approved — the badge says which. Review this app's facts and claims here. Use App Profile to edit or approve it, Create Video to plan a clip, History for finished clips, and Analytics for saved results."
       },
       {
         target: '[data-testid="profile-facts"]',
@@ -195,10 +195,10 @@ export const TOURS = {
         target: '[data-testid="demo-cta-source"]',
         title: "A base clip, one finished export",
         body:
-          "Upload footage or choose a finished render from History. Real Video can add a second upload on a floating or hand-held phone over the base, exported together."
+          "Upload footage or choose a finished render from History. Add a Second clip to play after the base, with its own look. Real Video also supports a separate upload in a phone over the base. Export the result together."
       },
       {
-        target: '[data-testid="view-mode-floating"]',
+        target: '[data-testid="demo-cta-source"] button[aria-pressed]',
         title: "Mockup or full-frame",
         body:
           "Floating phone, hand-held mockup, or full-frame Real Video — pick the look. Drag the preview to frame it; the hand-held option also lets you set a scene."
@@ -211,7 +211,7 @@ export const TOURS = {
       },
       {
         target: '[data-testid="cta-controls"]',
-        title: "The close that converts",
+        title: "Give viewers a next step",
         body:
           "A clear next step, plus your social handle if you want it. It sits as an overlay on this clip — it does not publish anything anywhere."
       },
@@ -223,7 +223,7 @@ export const TOURS = {
         // pinned-render route still gets it.
         optional: true,
         body:
-          "One fixed TikTok export — 1080×1920 MP4 at 30 fps, saved beside the original in History. Preview first, then export once."
+          "One fixed TikTok export — 1080×1920 MP4 at 30 fps, saved to History. A render-based export keeps its original clip unchanged. Preview first, then export once."
       },
     ],
   },
@@ -244,7 +244,7 @@ export const TOURS = {
         title: "Each tile is the clip",
         optional: true,
         body:
-          "History opens as a contact sheet of finished clips: play one right there. Facts, actions, and the paper trail stay folded into the tile's drawer until you ask for them.",
+          "Tiles show the app, hook or clip ID, status, date, posted status, recorded views, and your vote. Play a finished clip here; open its drawer for working controls and the paper trail.",
       },
       {
         target: '[data-testid="history-expand"]',
@@ -289,7 +289,7 @@ export const TOURS = {
         title: "Every clip, counted by status",
         optional: true,
         body:
-          "Every clip for this app, counted by status — the same rows History shows, so the counts can never disagree. Archived renders keep their own row rather than folding into completed.",
+          "Counts use the loaded set of up to 200 recent renders for the selected scope, not lifetime totals. History starts with 100 and can show more. Archived renders are counted separately from completed.",
       },
       {
         target: '[data-testid="analytics-signals"]',

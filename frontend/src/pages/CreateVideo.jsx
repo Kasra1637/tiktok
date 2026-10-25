@@ -2243,7 +2243,7 @@ setObjective("");
                 choice ranks. */}
             {!objective && (
               <p className="text-xs text-muted-foreground">
-                Pick a goal above — the templates below rank for it.
+                {angle ? "Pick a goal above — the templates below rank for it." : "Generate and pick an audience angle first; then choose its goal and template."}
               </p>
             )}
             {profileId && objective && (
@@ -2921,7 +2921,7 @@ setObjective("");
         )}
             {/* Plan above, render below: the claim check in Review has been read
                 before any render down here runs. */}
-            {!angle && project?.script_version ? (
+            {(project?.script_version || !firstGap) && (!angle && project?.script_version ? (
               /* The render is built around the audience angle, so it is the
                  first thing asked for here. This step never generates: its red
                  button sends the founder to Audience & template, where selection
@@ -2985,23 +2985,7 @@ setObjective("");
                   variant="accent"
                   className="mt-4"
                   disabled={busy}
-                  onClick={() => {
-                    /* Redirect before generating, same rule as every other red
-                       button on a gated step: a click that cannot create must
-                       take the founder to what is missing instead of dying
-                       silently inside ensureProject's early return. The gates
-                       above currently guarantee both values here, so these two
-                       branches are backstops, not live paths. */
-                    if (!profileId) {
-                      setStep(0);
-                      return;
-                    }
-                    if (!templateId) {
-                      setStep(1);
-                      return;
-                    }
-                    ensureProject();
-                  }}
+                  onClick={ensureProject}
                   data-testid="create-draft-button"
                 >
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
@@ -3031,26 +3015,18 @@ setObjective("");
                         testId="script-feedback"
                       />
                     )}
-                    {/* The one and only render. It used to sit on the review
-                        step, where it let a render run on text the founder had
-                        not read yet, and it sat BELOW the segmented chain, which
-                        made the chain look like the product.
-
-                        onProjectChange lets the panel build the strategy itself
-                        on the way to a render. It was a button above,
-                        which meant a founder could skip it and get a
-                        generic take without ever being told the specific one
-                        existed. */}                    <div id="review-submit" className="scroll-mt-4">
+                    <div id="review-submit" className="scroll-mt-4">
                       <GenerationPanel
                         project={project}
                         onGenerationChange={() => {}}
                         onProjectChange={setProject}
+                        hasUnsavedEdits={hasEdits}
                       />
                     </div>
                   </>
                 )}
               </>
-            )}
+            ))}
         </StepShell>
       );
     }
@@ -3092,7 +3068,7 @@ setObjective("");
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Pick an approved app and goal, then review the script plan."
+        description="Pick app, angle, goal & template; review before rendering."
       />
       {/* Progress that tracks state rather than position.
           The tick used to mean "this step is to the left of the one you are on",

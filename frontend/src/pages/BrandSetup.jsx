@@ -532,7 +532,7 @@ export default function BrandSetup() {
             )}
             {brand?.id && (
               <Button variant="secondary" size="sm" asChild>
-                <Link to={`/app-profiles/${brand.id}`}>Content angles</Link>
+                <Link to={`/app-profiles/${brand.id}`}>Review app facts</Link>
               </Button>
             )}
           </div>
@@ -1069,7 +1069,7 @@ export default function BrandSetup() {
             {brand?.id && (
               <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                <AlertTitle>Ready for the template studio</AlertTitle>
+                <AlertTitle>{status === "approved" ? "Ready for Create Video" : "Approval needed before Create Video"}</AlertTitle>
                 <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <span className="text-muted-foreground">
             {status === "approved"
@@ -1080,10 +1080,13 @@ export default function BrandSetup() {
                     variant="secondary"
                     size="sm"
                     className="shrink-0"
-                    onClick={() => navigate("/create")}
+                    onClick={status === "approved"
+                      ? () => navigate(`/create?profile=${encodeURIComponent(brand.id)}`)
+                      : () => handleApprove(false)}
+                    disabled={approving || saving}
                     data-testid="find-video-to-remix-button"
                   >
-                    Open the studio <ArrowRight className="h-3.5 w-3.5" />
+                    {approving ? "Approving…" : status === "approved" ? "Create Video" : "Approve saved profile"} <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDescription>
               </Alert>

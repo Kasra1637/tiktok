@@ -327,8 +327,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>No character reference attached</AlertTitle>
           <AlertDescription>
-            Attach a <code>character_reference</code> image on the Audience &amp; template step. Otherwise,
-            the model will invent the presenter instead of using you.
+            Attach a presenter photo on the Audience &amp; template step. Rendering is blocked until the photo is attached; the app will not invent a replacement.
           </AlertDescription>
         </Alert>
       )}
@@ -357,7 +356,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         <Alert variant="destructive">
           <AlertTitle>Script too long for this piece</AlertTitle>
           <AlertDescription>
-            Trim the script on the Review step — the middle&apos;s spoken words are shown
+            Trim the script above on Review &amp; submit — the middle&apos;s spoken words are shown
             there, with a button that keeps only what fits. Then rebuild the strategy
             here, because a trim is a plan edit. Rendering is blocked until every approved
             word fits in the piece&apos;s seconds.
@@ -437,8 +436,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Built automatically when you generate, and shown here before then if you
-            would rather read it first. Text only either way.
+            Built automatically once the saved plan is ready. If the build fails, use the button above to retry, then read the strategy before rendering. This step creates text, not video.
           </p>
         </div>
       )}
@@ -457,7 +455,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 strategy and still reaches the render prompt — this is the
                 duplicate display that was removed, not the field. */}
             <p className="text-xs text-muted-foreground">
-              What is said is the hook line you approved on the Review step, spoken as written.
+              What is said is the hook line you saved above, spoken as written.
             </p>
           </div>
           <div className="space-y-1">
@@ -510,7 +508,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               what tells the founder where to fix a disagreement. */}
           <StrategyBlock
             title="The scene"
-            description="Locked for both sections, and one render, so the hook and the middle cannot disagree about the room. Built from the plan's visual and voice direction, which you edit on the Review step."
+            description="Locked for both sections, and one render, so the hook and the middle cannot disagree about the room. Built from the plan's visual and voice direction, which you edit above on Review & submit."
             icon={MapPin}
             rows={[
               ...Object.entries(strategy.scene || {}),
@@ -552,7 +550,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                   Your approved script has {project.spoken_overflow.dropped_chars} characters that
                   do not fit in the {project.spoken_overflow.middle_seconds}s middle (spoken budget:
                   {project.spoken_overflow.budget} characters). Anything past that is not spoken in
-                  the render. Shorten it on the Review step, or press Regenerate plan there — a
+                  the render. Shorten it above, or press Regenerate plan — a
                   generated plan is trimmed to fit on arrival — then rebuild the strategy here. Or
                   pick a longer template and rebuild.
                 </AlertDescription>
