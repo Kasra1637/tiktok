@@ -9547,6 +9547,43 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // The empty studio must not grow a page-level scrollbar: the capped
+  // columns plus the PageHeader used to exceed the viewport, so a thin bar
+  // sat beside a preview that fitted. Both columns share one budget that
+  // already subtracts the page chrome, and the frame spends that same
+  // budget — a column or frame on the old offset reintroduces the bar.
+  await check(
+    "the demo-cta columns fit below the page header without growing a page scrollbar",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      const columns = src.match(/lg:max-h-\[calc\(100vh-12rem\)\]/g) || [];
+      if (columns.length !== 2) {
+        throw new Error(
+          `found ${columns.length} columns on the 100vh-12rem budget, expected exactly 2 ` +
+            "(settings panel and preview column). Both must share the budget that " +
+            "subtracts the page chrome, or the page grows its own scrollbar."
+        );
+      }
+      if (/100vh-7rem|100vh-3rem/.test(src)) {
+        throw new Error(
+          "a demo-cta column is back on its old viewport budget. The capped " +
+            "columns plus the PageHeader exceed the viewport and the page " +
+            "grows a scrollbar beside a studio that fits."
+        );
+      }
+      if (!/\(100vh - 12rem - var\(--demo-cta-chrome\)\)/.test(css)) {
+        throw new Error(
+          "the preview frame is not spending the 12rem page-chrome budget. A " +
+            "frame taller than its capped column overflows it from the inside."
+        );
+      }
+    }
+  );
+
   await check(
     "swatches are fixed size and animation uses the app's chip",
     async () => {

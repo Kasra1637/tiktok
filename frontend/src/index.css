@@ -432,9 +432,12 @@ body {
 
 /* Demo + CTA sticky-column geometry.
  *
- * The right column caps at the viewport minus its own offsets
- * (`lg:max-h-[calc(100vh-3rem)]` in JSX) and holds the frame, plus the player
- * bar once a clip is loaded. The frame gets everything left over.
+ * The right column caps at the viewport minus the page chrome above the grid
+ * (`lg:max-h-[calc(100vh-12rem)]` in JSX: PageHeader, main padding, grid gap,
+ * sticky offset) and holds the frame, plus the player bar once a clip is
+ * loaded. The frame gets everything left over. Without that headroom the
+ * capped columns plus the header always exceed the viewport and the page
+ * grows its own scrollbar beside a studio that fits.
  *
  * `--demo-cta-frame-w` expresses that. The width is derived from the height
  * budget rather than a percentage of the column, so the 9:16 ratio is never
@@ -476,7 +479,7 @@ body {
 }
 @media (min-width: 1024px) {
     .demo-cta-column {
-        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 3rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
+        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 12rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
     }
     /* Width comes from the column height budget, so the 9:16 ratio is exact and
        the frame is centred by its own margin rather than by a grid track. */

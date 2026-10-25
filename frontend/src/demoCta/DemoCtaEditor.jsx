@@ -1285,9 +1285,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // that column and the video scrolled away with the page. Sticky has to be on
   // the COLUMN, and the settings column has to own the scrolling.
   //
-  // `max-h-[calc(100vh-7rem)]` on the settings column is what makes the two
+  // `max-h-[calc(100vh-12rem)]` on the settings column is what makes the two
   // columns peers: the page itself stops growing, the panel scrolls inside its
   // own box, and the preview stays put no matter how long the panel gets.
+  // 12rem is the page chrome above the grid (PageHeader, main padding, grid
+  // gap, sticky offset) — without it the capped columns plus the header
+  // always exceed the viewport and the page grows a scrollbar beside a
+  // studio that fits.
   const settingsRef = useRef(null);
   const appendNotReady = !!appendUrl && !appendMeta;
 
@@ -1302,7 +1306,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <div
           ref={settingsRef}
           inert={recording ? true : undefined}
-          className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
+          className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
         {/* The file input lives outside the collapsible section content on
             purpose. The preview frame's Upload button drives it by ref from
@@ -2008,7 +2012,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           the stylesheet whether the player bar is in the column, because its
           104px comes out of the frame's height budget when it is. */}
       <div
-        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
         
