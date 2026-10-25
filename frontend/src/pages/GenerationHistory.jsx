@@ -98,9 +98,21 @@ function GenerationDetails({ generationId, onClose, postKit, onUpdated }) {
   }, [generationId]);
 
   // Esc closes, matching the row drawer below. Focus lands on Close when the
-  // modal opens so keyboard users start inside it instead of behind it.
+  // modal opens so keyboard users start inside it instead of behind it, and
+  // returns to the invoking control on unmount so focus is never dropped.
+  const prevFocusRef = useRef(null);
   useEffect(() => {
+    if (!prevFocusRef.current) {
+      prevFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     closeRef.current?.focus?.();
+    return () => {
+      prevFocusRef.current?.focus?.();
+      prevFocusRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -130,7 +142,7 @@ function GenerationDetails({ generationId, onClose, postKit, onUpdated }) {
           </Button>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!detail && !error && (
           <div className="space-y-2" aria-label="Loading details">
             <Skeleton className="h-4 w-1/2" />

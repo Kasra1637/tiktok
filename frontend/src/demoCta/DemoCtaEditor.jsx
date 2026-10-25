@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -131,12 +131,14 @@ function fontStack(id) {
  * `open`/`onToggle` are lifted so the parent can persist which groups are open.
  */
 function EditorSection({ title, icon, open, onToggle, testId, children }) {
+  const panelId = useId();
   return (
     <SectionCard flush data-testid={testId}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         className="row-pad focus-ring flex w-full items-center justify-between gap-2 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
       >
         <GroupLabel as="h2" icon={icon}>{title}</GroupLabel>
@@ -144,7 +146,7 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && <div className="space-y-5 px-5 pb-5">{children}</div>}
+      {open && <div id={panelId} className="space-y-5 px-5 pb-5">{children}</div>}
     </SectionCard>
   );
 }
@@ -480,15 +482,16 @@ function EntranceGrid({ value, onChange, testPrefix, ariaLabel }) {
  * the "Font & Animation close each other" smoke check).
  */
 function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
+  const panelId = useId();
   return (
     <div className="space-y-2">
       <SubLabel>Customize</SubLabel>
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} aria-controls={panelId} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
-        <div className="space-y-5 pb-1 pt-3">
+        <div id={panelId} className="space-y-5 pb-1 pt-3">
           {children}
         </div>
       </details>
@@ -502,14 +505,15 @@ function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
  * closes Animation through the same parent-owned disclosure state.
  */
 function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, children }) {
+  const panelId = useId();
   return (
     <div className="space-y-2">
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
-        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} aria-controls={panelId} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Font · <span className="text-foreground">{currentLabel}</span></span>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
         </summary>
-        <div className="pb-1 pt-3" role="group" aria-label={groupLabel}>
+        <div id={panelId} className="pb-1 pt-3" role="group" aria-label={groupLabel}>
           {children}
         </div>
       </details>
@@ -598,6 +602,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   });
   const [openDisclosure, setOpenDisclosure] = useState(null);
   const toggleDisclosure = (key) => setOpenDisclosure((current) => current === key ? null : key);
+  const historyPanelId = useId();
   const toggleSection = useCallback((key) => {
     setOpenSections((prev) => {
       // Clicking the open group closes it. Nothing open is a valid state, the
@@ -1395,12 +1400,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               className="h-10"
               onClick={() => setHistoryOpen((v) => !v)}
               aria-expanded={historyOpen}
+              aria-controls={historyOpen ? historyPanelId : undefined}
               data-testid="history-source-toggle"
             >
               {historyOpen ? "Hide History" : "Choose from History"}
             </Button>
             {historyOpen && (
-              <div className="space-y-1.5" role="group" aria-label="History renders">
+              <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
                 {historyError && <p className="text-xs text-destructive">{historyError}</p>}
                 {historyRows === null && !historyError && (
                   <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1895,7 +1901,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           data-testid={`delete-look-preset-${look.id}`}
                           aria-label={`Remove ${look.name}`}
                           onClick={() => handleDeleteLookPreset(look.id)}
-                          className="focus-ring rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground"
+                          className="focus-ring rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -2358,8 +2364,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                           <button
                             type="button"
                             onClick={() => handleRemoveZoomKeyframe(kf.id)}
-                            className="focus-ring flex-shrink-0 rounded text-muted-foreground/60 opacity-0 transition hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                            className="focus-ring flex-shrink-0 rounded p-1.5 -m-1.5 text-muted-foreground/60 opacity-0 transition hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                             title="Remove this keyframe"
+                            aria-label="Remove this keyframe"
                           >
                             <X className="h-3 w-3" />
                           </button>

@@ -81,6 +81,8 @@ export default function TourOverlay() {
   const timeoutRef = useRef(null);
   const rafRef = useRef(null);
   const mountedRef = useRef(true);
+  const cardRef = useRef(null);
+  const prevFocusRef = useRef(null);
 
   // Re-armed on mount: StrictMode double-invokes this cleanup in dev, so a
   // write-only `false` would stick and the overlay could never appear there.
@@ -203,6 +205,24 @@ export default function TourOverlay() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeTour, next, back, skip]);
 
+  // Keep the previously focused element so focus can return when the tour
+  // ends, and move focus into the tooltip card on each settled step so
+  // screen-reader and keyboard users land in the dialog instead of behind it.
+  useEffect(() => {
+    if (!activeTour) {
+      prevFocusRef.current?.focus?.({ preventScroll: true });
+      prevFocusRef.current = null;
+      return;
+    }
+    if (!prevFocusRef.current) {
+      prevFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+  }, [activeTour]);
+  useEffect(() => {
+    if (activeTour && !searching) cardRef.current?.focus?.({ preventScroll: true });
+  }, [activeTour, stepIndex, searching]);
+
   if (!activeTour || !currentStep || searching) return null;
 
   const isLast = stepIndex === totalSteps - 1;
@@ -256,10 +276,16 @@ export default function TourOverlay() {
           />
         )}
 
-        {/* Tooltip / welcome card */}
+        {/* Tooltip / welcome card. Modeless dialog semantics (no aria-modal:
+            background content stays reachable by design) with focus moved in
+            so screen readers announce each step. */}
         <motion.div
           key={`tour-card-${stepIndex}`}
-          className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4"
+          ref={cardRef}
+          role="dialog"
+          aria-label={currentStep.title}
+          tabIndex={-1}
+          className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4 focus-ring"
           style={{ width: isCentered ? 360 : TOOLTIP_WIDTH, ...tooltipStyle }}
           initial={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -278,7 +304,7 @@ export default function TourOverlay() {
             <button
               onClick={skip}
               aria-label="Close tour"
-              className="text-muted-foreground hover:text-foreground shrink-0 -mt-0.5 -mr-0.5"
+              className="text-muted-foreground hover:text-foreground shrink-0 p-1.5 -m-1.5"
               data-testid="onboarding-tour-close-button"
             >
               <X className="h-3.5 w-3.5" />
@@ -288,6 +314,7 @@ export default function TourOverlay() {
 
           <div className="flex items-center justify-between mt-3.5">
             <div className="flex items-center gap-1" data-testid="onboarding-tour-progress">
+              <span className="sr-only">Step {stepIndex + 1} of {totalSteps}</span>
               {activeTour.steps.map((_, i) => (
                 <span
                   key={i}

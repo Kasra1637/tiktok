@@ -7623,6 +7623,143 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // Disclosure triggers must not name a panel that is not in the DOM: a
+  // collapsed trigger pointing at a missing id sends a screen reader
+  // nowhere, and an expanded trigger whose controls resolve nowhere is a
+  // lie. Exercised through the real editor in both states, not just the
+  // default render — the History panel starts collapsed and only exists
+  // once opened.
+  await check(
+    "collapsed disclosures name no panel; expanded ones resolve",
+    async (ctx) => {
+      const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [COMPLETED] }),
+          getGenerationHistory: async () => ({ generations: [] }),
+        },
+        async () => {
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          const dangling = () => {
+            const bad = [];
+            for (const btn of ctx.container.querySelectorAll("button[aria-expanded]")) {
+              const controls = btn.getAttribute("aria-controls");
+              if (controls && !ctx.container.ownerDocument.getElementById(controls)) {
+                bad.push((btn.textContent || "").trim().slice(0, 40) || controls);
+              }
+            }
+            return bad;
+          };
+          const collapsedNaming = () =>
+            [...ctx.container.querySelectorAll('button[aria-expanded="false"]')].filter((b) =>
+              b.hasAttribute("aria-controls")
+            );
+          let bad = dangling();
+          if (bad.length) {
+            throw new Error(`triggers point at missing panels: ${bad.join("; ")}`);
+          }
+          // The History toggle starts collapsed and must not name its panel
+          // until the panel exists.
+          const toggle = ctx.container.querySelector('[data-testid="history-source-toggle"]');
+          if (!toggle) throw new Error("no history-source-toggle to expand");
+          if (toggle.hasAttribute("aria-controls")) {
+            throw new Error("collapsed History toggle names a panel that is not rendered");
+          }
+          await act(async () => {
+            toggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+          const controls = toggle.getAttribute("aria-controls");
+          if (!controls || !ctx.container.ownerDocument.getElementById(controls)) {
+            throw new Error("expanded History toggle does not resolve to its panel");
+          }
+          bad = dangling();
+          if (bad.length) {
+            throw new Error(`after expanding History: ${bad.join("; ")}`);
+          }
+          if (collapsedNaming().length) {
+            throw new Error("a collapsed disclosure still names a panel");
+          }
+        }
+      );
+    }
+  );
+
+  // The mobile drawer stays mounted for its slide transition, so the closed
+  // state must be inert — otherwise keyboard users tab into an off-screen
+  // panel. And focus must travel: into the drawer on open (it opens over
+  // whatever had focus), back to the trigger on close (or focus is dropped
+  // on the page behind it).
+  await check(
+    "the closed mobile drawer is inert; focus enters on open and returns on close",
+    async (ctx) => {
+      const { MobileSidebar } = load("components/Sidebar.jsx");
+      const renderDrawer = (open) =>
+        React.createElement(
+          OnboardingProvider,
+          null,
+          React.createElement(MobileSidebar, { open, onClose: () => {} })
+        );
+      const trigger = dom.window.document.createElement("button");
+      trigger.textContent = "Menu";
+      dom.window.document.body.appendChild(trigger);
+      trigger.focus();
+      try {
+        await act(async () => {
+          ctx.root.render(renderDrawer(false));
+        });
+        await act(async () => {});
+        const drawer = ctx.container.querySelector('[data-testid="mobile-sidebar"]');
+        if (!drawer) throw new Error("no mobile drawer rendered");
+        if (!drawer.hasAttribute("inert")) {
+          throw new Error("closed drawer is not inert and stays tabbable off-screen");
+        }
+        await act(async () => {
+          ctx.root.render(renderDrawer(true));
+        });
+        await act(async () => {});
+        const close = ctx.container.querySelector('[data-testid="mobile-sidebar-close-button"]');
+        if (drawer.hasAttribute("inert")) {
+          throw new Error("open drawer is still inert");
+        }
+        if (dom.window.document.activeElement !== close) {
+          throw new Error("opening the drawer did not move focus to Close");
+        }
+        await act(async () => {
+          ctx.root.render(renderDrawer(false));
+        });
+        await act(async () => {});
+        if (dom.window.document.activeElement !== trigger) {
+          throw new Error("closing the drawer did not return focus to the trigger");
+        }
+      } finally {
+        trigger.remove();
+      }
+    }
+  );
+
+  // The tour tooltip is a programmatic focus target: it needs dialog
+  // semantics, a real step position, and a visible focus indicator. Pinned
+  // here because each half fails silently — a missing role just never
+  // announces, and outline-none just never shows.
+  await check("the tour tooltip is an announced dialog with a visible focus target", async () => {
+    const src = fs.readFileSync(
+      path.join(SRC, "components", "onboarding", "TourOverlay.jsx"),
+      "utf8"
+    );
+    for (const [needle, why] of [
+      ['role="dialog"', "the tooltip names no dialog role"],
+      ["Step {stepIndex + 1} of {totalSteps}", "the tooltip announces no step position"],
+      ["focus-ring", "the tooltip card carries no visible focus indicator"],
+    ]) {
+      if (!src.includes(needle)) throw new Error(why);
+    }
+    if (/p-4 outline-none/.test(src)) {
+      throw new Error("the tooltip card still suppresses its focus outline");
+    }
+  });
+
   // The frame's Upload a clip button drives the file input by ref from OUTSIDE
   // the collapsible Source & Look group, so the input must survive that group
   // closing. The regression: the input lived inside the collapsible content,

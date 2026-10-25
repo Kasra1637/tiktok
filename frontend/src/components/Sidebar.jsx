@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AccountButton } from "./auth/AuthControls";
 import { isClerkConfigured } from "../lib/clerk";
@@ -293,6 +294,22 @@ export function Sidebar({ collapsed, onToggleCollapsed }) {
  * shadows the desktop sidebar's canonical selectors.
  */
 export function MobileSidebar({ open, onClose }) {
+  // Focus moves into the drawer while it is open and returns to the menu
+  // button on close. `inert` keeps the off-canvas panel out of the tab order
+  // and the accessibility tree while closed — it stays mounted for the
+  // slide transition, so without this keyboard users could tab into it.
+  const closeRef = useRef(null);
+  const prevFocusRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    prevFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus?.({ preventScroll: true });
+    return () => {
+      prevFocusRef.current?.focus?.({ preventScroll: true });
+      prevFocusRef.current = null;
+    };
+  }, [open]);
   return (
     /* z-45 deliberately sits above the tour's floating help button (z-40) so
        the drawer isn't punctured by it, while staying below Radix dialogs
@@ -300,6 +317,7 @@ export function MobileSidebar({ open, onClose }) {
     <div
       className={`fixed inset-0 z-[45] lg:hidden ${open ? "" : "pointer-events-none"}`}
       aria-hidden={!open}
+      inert={!open}
       data-testid="mobile-sidebar"
     >
       <div
@@ -329,6 +347,7 @@ export function MobileSidebar({ open, onClose }) {
           </Link>
           <button
             type="button"
+            ref={closeRef}
             onClick={onClose}
             aria-label="Close navigation"
             data-testid="mobile-sidebar-close-button"
