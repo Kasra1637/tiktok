@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Check, ChevronRight, HelpCircle, ListChecks, X } from "lucide-react";
 import { SectionCard } from "../SectionCard";
@@ -71,7 +71,22 @@ export function FirstRunChecklist() {
     setTimeout(() => onboarding.startTour(step.tourId), 150);
   };
   const [visible, setVisible] = useState(() => shouldShowChecklist(storage()));
+  // "You are here" nudge: clicking the row for the page already on screen
+  // cannot navigate, so the row answers with a single ring pulse instead of
+  // reading dead. Holds the pinged step key and clears itself after the
+  // animation lands, so every click replays it.
+  const [ping, setPing] = useState(null);
+  const pingTimer = useRef(null);
+  useEffect(() => () => {
+    if (pingTimer.current) clearTimeout(pingTimer.current);
+  }, []);
   if (!visible) return null;
+
+  const pingRow = (key) => {
+    if (pingTimer.current) clearTimeout(pingTimer.current);
+    setPing(key);
+    pingTimer.current = setTimeout(() => setPing(null), 900);
+  };
 
   const dismiss = () => {
     dismissFirstRun(storage());
@@ -102,7 +117,7 @@ export function FirstRunChecklist() {
           <li
             key={step.key}
             data-testid={`first-run-step-${step.key}`}
-            className="flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2.5"
+            className={`flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2.5${ping === step.key ? " first-run-ping" : ""}`}
           >
             <span
               aria-hidden="true"
@@ -112,14 +127,28 @@ export function FirstRunChecklist() {
             </span>
             {/* The whole bar is the door: text and chevron share one link so
                 a click anywhere on the row (not just the 32px chevron)
-                navigates. The tour shortcut stays a separate button beside
-                it — a button inside a link is invalid markup and would make
-                "show me around" navigate away instead. */}
+                navigates. Hover answers with the same indigo wash the five
+                Demo + CTA group headers use — one hover language, not two.
+                The tour shortcut stays a separate button beside it — a button
+                inside a link is invalid markup and would make "show me
+                around" navigate away instead. Already on that page (row 1,
+                since this card lives on /create), the link would be a no-op,
+                so the row plays its "you are here" pulse instead. */}
             <Link
               to={step.to}
-              aria-label={`Go to ${step.title}`}
+              aria-label={pathname === step.to ? `You are already on ${step.title}` : `Go to ${step.title}`}
               data-testid={`first-run-go-${step.key}`}
-              className="focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left"
+              className="focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left transition duration-150 hover:bg-[color:var(--indigo-6)]"
+              onClick={(event) => {
+                // Same-page navigation is a no-op: the founder is already
+                // where this step points (the card lives on /create, so row
+                // 1 always is), and a click that only re-links reads dead.
+                // The pulse names where they are; the tour shortcut beside
+                // the row stays the way to get guided.
+                if (pathname !== step.to) return;
+                event.preventDefault();
+                pingRow(step.key);
+              }}
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{step.title}</span>

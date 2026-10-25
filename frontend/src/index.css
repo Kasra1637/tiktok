@@ -772,6 +772,28 @@ h1,
         animation: none;
     }
 }
+/* "You are here" nudge for the first-run checklist: clicking the row for
+ * the page already on screen cannot navigate, so the row answers with a
+ * single indigo ring pulse instead of reading dead. The component clears
+ * the class after 900ms so every click replays it. Motion is dropped
+ * entirely under `prefers-reduced-motion`, per the app's rule. */
+@keyframes first-run-here {
+    0% {
+        box-shadow: 0 0 0 0 var(--indigo-35);
+    }
+    100% {
+        box-shadow: 0 0 0 12px transparent;
+    }
+}
+.first-run-ping {
+    animation: first-run-here 0.9s ease-out;
+    border-color: var(--indigo-35);
+}
+@media (prefers-reduced-motion: reduce) {
+    .first-run-ping {
+        animation: none;
+    }
+}
 @media (min-width: 768px) {
     .history-card {
         --history-preview-h: 340px;

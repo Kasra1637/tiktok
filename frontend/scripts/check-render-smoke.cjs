@@ -3850,6 +3850,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       const overlay = () => dom.window.document.querySelector('[data-testid="onboarding-tour-overlay"]');
       if (!overlay()) throw new Error("first-run tour button did not open the create tour");
       await clickEl(ctx, dom.window.document.querySelector('[data-testid="onboarding-tour-close-button"]'), "no tour close");
+      // Row 1 links to /create while the card lives on /create: a click
+      // that only re-linked would read dead, so the row answers with its
+      // "you are here" pulse instead. The smoke router always reports
+      // /create, which is exactly the same-page case.
+      const rowLink = ctx.container.querySelector('[data-testid="first-run-go-create"]');
+      // Hover reacts like the five Demo + CTA group headers: the same
+      // indigo wash token, not a second hover language.
+      if (!rowLink || !rowLink.className.includes("hover:bg-[color:var(--indigo-6)]")) throw new Error("the create row does not share the Demo + CTA hover wash");
+      const row = ctx.container.querySelector('[data-testid="first-run-step-create"]');
+      global.__SMOKE_NAVIGATIONS = [];
+      await clickEl(ctx, rowLink, "no create row");
+      if (!row.className.includes("first-run-ping")) throw new Error("clicking the create row on /create played no you-are-here pulse");
+      if ((global.__SMOKE_NAVIGATIONS || []).length !== 0) throw new Error("the create row navigated instead of acknowledging");
+      await act(async () => { await new Promise((r) => setTimeout(r, 1200)); });
+      if (row.className.includes("first-run-ping")) throw new Error("the you-are-here pulse never cleared, so a second click replays nothing");
       // A tour shortcut for another page navigates first: opening Demo +
       // CTA's tour while still on Create would spotlight nothing.
       global.__SMOKE_NAVIGATIONS = [];
