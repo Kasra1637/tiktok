@@ -8224,6 +8224,101 @@ async function runDemoCtaChecks() {
     }
   });
 
+  // The tour dims the whole page behind a spotlight: keyboard focus must stay
+  // inside the tooltip card while it is open, and return to the trigger on
+  // dismiss — otherwise Tab walks an invisible page the founder cannot see,
+  // and closing drops focus on the body. jsdom performs no native Tab
+  // navigation, so the wrap is driven by dispatching Tab keydowns at the
+  // card's edge buttons and asserting where focus lands.
+  await check(
+    "the open tour traps Tab inside its tooltip and returns focus on dismiss",
+    async (ctx) => {
+      const { useOnboarding } = load("components/onboarding/OnboardingProvider.jsx");
+      const HistoryDriver = () => {
+        const { startTour } = useOnboarding();
+        return React.createElement(
+          React.Fragment,
+          null,
+          React.createElement("button", { "data-testid": "tour-trigger", onClick: () => startTour("history") }, "Show me around"),
+          React.createElement("div", { "data-testid": "history-header" }, "History")
+        );
+      };
+      global.__SMOKE_PATHNAME = "/history";
+      // jsdom reports zero-size boxes, so the overlay's target search would
+      // never resolve and the tour would skip forward on its 3.5s timeout.
+      // A visible box exercises the real spotlight path instead.
+      const rectProto = dom.window.Element.prototype;
+      const origRect = rectProto.getBoundingClientRect;
+      rectProto.getBoundingClientRect = () => ({
+        top: 100, left: 100, width: 200, height: 40, bottom: 140, right: 300, x: 100, y: 100,
+        toJSON: () => {},
+      });
+      try {
+        await act(async () => {
+          ctx.root.render(
+            React.createElement(OnboardingProvider, null, React.createElement(HistoryDriver))
+          );
+        });
+        const trigger = ctx.container.querySelector('[data-testid="tour-trigger"]');
+        if (!trigger) throw new Error("no tour trigger rendered");
+        trigger.focus();
+        await act(async () => {
+          trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        let tooltip = null;
+        for (let i = 0; i < 30 && !tooltip; i += 1) {
+          await act(async () => {
+            await new Promise((r) => setTimeout(r, 100));
+          });
+          tooltip = dom.window.document.body.querySelector('[data-testid="onboarding-tour-tooltip"]');
+        }
+        if (!tooltip) throw new Error("the history tour never opened its tooltip");
+        if (!tooltip.contains(dom.window.document.activeElement)) {
+          throw new Error("opening the tour did not move focus into the tooltip");
+        }
+        const buttons = [...tooltip.querySelectorAll("button:not([disabled])")];
+        if (buttons.length < 2) throw new Error("the tooltip has no edge buttons to trap between");
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        const tab = (shift) =>
+          last.dispatchEvent(
+            new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true, shiftKey: shift })
+          );
+        await act(async () => {
+          last.focus();
+          tab(false);
+        });
+        if (dom.window.document.activeElement !== first) {
+          throw new Error("Tab from the tooltip's last button left the trapped card");
+        }
+        await act(async () => {
+          first.focus();
+          first.dispatchEvent(
+            new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true, shiftKey: true })
+          );
+        });
+        if (dom.window.document.activeElement !== last) {
+          throw new Error("Shift+Tab from the tooltip's first button left the trapped card");
+        }
+        const close = tooltip.querySelector('[data-testid="onboarding-tour-close-button"]');
+        if (!close) throw new Error("no tour close button");
+        await act(async () => {
+          close.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (dom.window.document.body.querySelector('[data-testid="onboarding-tour-tooltip"]')) {
+          throw new Error("closing the tour left the tooltip mounted");
+        }
+        if (dom.window.document.activeElement !== trigger) {
+          throw new Error("dismissing the tour did not return focus to the trigger");
+        }
+      } finally {
+        rectProto.getBoundingClientRect = origRect;
+        delete global.__SMOKE_PATHNAME;
+      }
+    }
+  );
+
   // The frame's Upload a clip button drives the file input by ref from OUTSIDE
   // the collapsible Source & Look group, so the input must survive that group
   // closing. The regression: the input lived inside the collapsible content,

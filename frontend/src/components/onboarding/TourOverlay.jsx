@@ -205,6 +205,39 @@ export default function TourOverlay() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeTour, next, back, skip]);
 
+  // Tab trap while the tour is open. The dim layer hides the page behind
+  // the spotlight, so letting Tab walk there strands keyboard and
+  // screen-reader users on controls they cannot see. Focus cycles across
+  // the card's own buttons instead; Escape, the close button and the
+  // backdrop still dismiss, and the effect below returns focus to the
+  // element that opened the tour.
+  useEffect(() => {
+    if (!activeTour) return;
+    const onKeyDown = (e) => {
+      if (e.key !== "Tab") return;
+      const card = cardRef.current;
+      if (!card || !card.contains(document.activeElement)) return;
+      const focusables = [...card.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )];
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [activeTour]);
+
   // Keep the previously focused element so focus can return when the tour
   // ends, and move focus into the tooltip card on each settled step so
   // screen-reader and keyboard users land in the dialog instead of behind it.
@@ -276,13 +309,16 @@ export default function TourOverlay() {
           />
         )}
 
-        {/* Tooltip / welcome card. Modeless dialog semantics (no aria-modal:
-            background content stays reachable by design) with focus moved in
-            so screen readers announce each step. */}
+        {/* Tooltip / welcome card. A trapped dialog (aria-modal: Tab cycles
+            inside the card while the tour is open) with focus moved in so
+            screen readers announce each step, and returned to the trigger on
+            dismiss. The backdrop still dismisses on click — the trap is for
+            the keyboard, not the pointer. */}
         <motion.div
           key={`tour-card-${stepIndex}`}
           ref={cardRef}
           role="dialog"
+          aria-modal="true"
           aria-label={currentStep.title}
           tabIndex={-1}
           className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4 focus-ring"
