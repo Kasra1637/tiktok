@@ -520,8 +520,7 @@ function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, chil
   );
 }
 
-/**
- * Accent swatch picker, shared by Hook Text and End Card CTA. One global
+/**  * Accent swatch picker, shared by Hook Text and End Card. One global
  * accent colors both the hook text line and the end-card handle chip, so
  * both sections offer the same control rather than one hiding it from the
  * other. `testPrefix` keeps the two instances' testids distinct.
@@ -1394,8 +1393,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
-              label="First clip style"
-              hint="Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene."
+              label="Base clip style"
+              hint="Floating phone, hand-held mockup, or the Real Video full-frame. Drag preview to reframe; in hand mode, pick a scene."
               value={viewMode}
               onChange={(id) => { invalidateSequence(); setViewMode(id); }}
               prefix="view-mode-"
@@ -1457,7 +1456,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="screen-position-controls">
-              <SubLabel>Screen position</SubLabel>
+              <SubLabel>Phone screen position</SubLabel>
               {[
                 ["Left", screenX, setScreenX, "left"],
                 ["Top", screenY, setScreenY, "top"],
@@ -1527,7 +1526,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               data-testid="append-upload-button"
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>{appendUrl ? "Replace added clip" : "Add clip after base"}</span>
+              <span>{appendUrl ? "Replace second clip" : "Add second clip"}</span>
             </Button>
             {appendName && (
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={appendName} data-testid="append-file-name">
@@ -1541,7 +1540,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 size="sm"
                 className="h-10"
                 onClick={removeAppend}
-                title="Remove the added clip"
+                title="Remove the second clip"
                 data-testid="append-remove"
               >
                 <X className="h-3.5 w-3.5" />
@@ -1553,7 +1552,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
           {appendUrl && (
             <StylePicker
-              label="Added clip style"
+              label="Second clip style"
               value={appendMode}
               onChange={(id) => { invalidateSequence(); setAppendMode(id); }}
               prefix="append-mode-"
@@ -1572,7 +1571,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
                 onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
-              Apply text and overlays to the added clip too
+              Apply text and overlays to the second clip too
             </label>
           )}
           {appendUrl && (
@@ -1588,7 +1587,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={(next) => { setHookEnabled(next); if (next) startScopedPreview("hook"); }} />
-            Show opening hook text
+            Show hook text
           </label>
           <p className="text-xs text-muted-foreground">On-screen overlay only; spoken script unchanged.</p>
           <div className="space-y-2">
@@ -1622,7 +1621,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               {openingMessages.error} <Link to="/brand">Review App Profile</Link>
             </p>
           )}
-          <ControlSlider label="On screen" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={(val) => { setHookDuration(val); ensureScopedPreview("hook"); }} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
+          <ControlSlider label="Visible for" value={hookDuration} min={RANGES.hookDuration.min} max={RANGES.hookDuration.max} step={RANGES.hookDuration.step} onChange={(val) => { setHookDuration(val); ensureScopedPreview("hook"); }} testId="hook-duration-slider" format={(v) => `${v.toFixed(1)}s`} />
           {/* Caption face: each tile set in its own face so the choice is
               visual, not a name to imagine. Selected state is the indigo
               ring, the same language as the accent swatches below. */}
@@ -1723,10 +1722,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         <EditorSection title="Story Text" icon={Type} open={openSections.story} onToggle={() => toggleSection("story")} testId="story-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="story-toggle" checked={storyEnabled} onCheckedChange={setStoryEnabled} />
-            Show Story text
+            Show story text
           </label>
           <label className="block space-y-2">
-            <span className="text-xs text-muted-foreground">Your message</span>
+            <span className="text-xs text-muted-foreground">Text to show in the story</span>
             <textarea
               data-testid="story-text-input"
               value={storyText}
@@ -1748,7 +1747,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           ) : (
             <p role="status" className="text-xs text-muted-foreground" data-testid="story-no-room">
-              {videoMeta ? "No room for Story text. Shorten hook or end card to free time." : "Upload a clip to time Story text."}
+              {videoMeta ? "No room for story text. Shorten hook or end card to free time." : "Upload a clip to time story text."}
             </p>
           )}
           <div className="flex items-center justify-between gap-2">
@@ -1758,10 +1757,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {storyOffsetY !== 0 && <ResetButton onClick={() => setStoryOffsetY(0)}>Reset position</ResetButton>}
         </EditorSection>
 
-        <EditorSection title="End Card CTA" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
+        <EditorSection title="End Card" icon={Megaphone} open={openSections.cta} onToggle={() => toggleSection("cta")} testId="cta-controls">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={(next) => { setCtaEnabled(next); if (next) startScopedPreview("cta"); }} />
-            Show closing call-to-action card
+            Show end card
           </label>
           <p className="text-xs text-muted-foreground">On-screen end card. Write one clear next step.</p>
           <div className="space-y-2">
@@ -1955,7 +1954,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 disabled={!canReviewLook}
                 onCheckedChange={(checked) => setReviewedLookKey(checked === true ? lookReviewKey : null)}
               />
-              I&apos;ve reviewed the current hook &amp; end-card styling in the preview.
+              I&apos;ve reviewed the current hook &amp; end card styling in the preview.
             </label>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -2065,7 +2064,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   aria-controls={historyOpen ? historyPanelId : undefined}
                   data-testid="history-source-toggle"
                 >
-                  {historyOpen ? "Hide library" : "Choose from library"}
+                  {historyOpen ? "Hide History" : "Choose from History"}
                 </Button>
               </div>
             )}

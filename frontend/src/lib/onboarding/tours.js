@@ -205,7 +205,7 @@ export const TOURS = {
       },
       {
         target: '[data-testid="hook-controls"]',
-        title: "Opening text, your call",
+        title: "Hook text, your call",
         body:
           "Optional on-screen text, separate from the clip's spoken hook. Set its words, timing, and position, and check the preview before committing."
       },

@@ -8292,7 +8292,7 @@ async function runDemoCtaChecks() {
         }
         // And the content assertion: the duration reads once, right-aligned.
         const firstText = first.container.textContent;
-        if (!firstText.includes("On screen") || !firstText.includes("1.8s")) {
+        if (!firstText.includes("Visible for") || !firstText.includes("1.8s")) {
           throw new Error("Hook Text did not open on click");
         }
         const saved = JSON.parse(dom.window.localStorage.getItem(key) || "{}");
@@ -8592,7 +8592,7 @@ async function runDemoCtaChecks() {
   );
 
   // Public Sans and Sora are off the overlay font catalog. Public Sans shipped
-  // in both lists (Hook Text and End Card CTA) and was the least distinct of
+  // in both lists (Hook Text and End Card) and was the least distinct of
   // the text faces, so a founder could pick it and get something that read as
   // the browser default; Sora followed as a second trim of the same list.
   await check("Public Sans and Sora are gone from both overlay font lists", async (ctx) => {
@@ -8613,7 +8613,7 @@ async function runDemoCtaChecks() {
       { getGenerations: async () => ({ generations: [COMPLETED] }) },
       async () => {
         await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-        for (const [group, prefix] of [["Hook Text", "caption-font"], ["End Card CTA", "cta-font"]]) {
+        for (const [group, prefix] of [["Hook Text", "caption-font"], ["End Card", "cta-font"]]) {
           await openGroup(ctx.container, group);
           const tiles = [...ctx.container.querySelectorAll(`[data-testid^="${prefix}-"]`)];
           if (tiles.length !== 9) {
@@ -9060,7 +9060,7 @@ async function runDemoCtaChecks() {
       if (video.loop !== false) {
         throw new Error("a hook replay did not hold the window (loop still on)");
       }
-      await openGroup("End Card CTA");
+      await openGroup("End Card");
       video.currentTime = 1;
       const ctaFade = ctx.container.querySelector('[data-testid="cta-anim-fade"]');
       if (!ctaFade) throw new Error("no CTA fade chip");
@@ -9896,10 +9896,13 @@ async function runDemoCtaChecks() {
     if (keys.length !== 5 || keys.includes("advanced")) {
       throw new Error(`the section order is not the five living groups: ${JSON.stringify(keys)}`);
     }
-    for (const marker of ["Mockup height", 'data-testid="screen-position-controls"', "Video crop"]) {
+    for (const marker of ["Mockup height", 'data-testid="screen-position-controls"', "Phone screen position", "Video crop"]) {
       if (!src.includes(marker)) {
         throw new Error(`fine-tuning lost on the move: ${marker} is nowhere in the editor`);
       }
+    }
+    if (/<SubLabel>Screen position<\/SubLabel>/.test(src)) {
+      throw new Error("the ambiguous Screen position label is back — it must name the phone screen");
     }
     const sourceBlock = src.split('testId="demo-cta-second"')[0];
     for (const marker of ["Mockup height", "Video crop"]) {
@@ -10013,11 +10016,11 @@ async function runDemoCtaChecks() {
   });
 
   // The empty frame offers both doors where the clip lands: upload first,
-  // then an "or" separator, then the library shortcut. The shortcut is the
+  // then an "or" separator, then the History shortcut. The shortcut is the
   // History toggle itself, so it opens the same panel — never the file
   // picker (the frame's click-through excludes every button). No second
   // History button sits below the frame while it is empty.
-  await check("the empty frame offers upload or the library shortcut", async (ctx) => {
+  await check("the empty frame offers upload or History", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     await withApi(
       { getGenerations: async () => ({ generations: [COMPLETED] }) },
@@ -10032,7 +10035,7 @@ async function runDemoCtaChecks() {
         if (ctx.container.querySelectorAll('[data-testid="history-source-toggle"]').length !== 1) {
           throw new Error("the old below-frame History button is still mounted beside the in-frame shortcut");
         }
-        if (library.textContent.trim() !== "Choose from library") {
+        if (library.textContent.trim() !== "Choose from History") {
           throw new Error(`the library shortcut is mislabeled: ${JSON.stringify(library.textContent)}`);
         }
         // Order: upload, then "or", then the library shortcut.
@@ -10129,11 +10132,11 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, ctx.container.querySelector('[data-testid="story-toggle"]'), "enable Story");
       const timing = () => [...ctx.container.querySelectorAll('[data-testid^="story-"] [role="slider"]')].map((s) => Number(s.getAttribute("aria-valuenow")));
       if (JSON.stringify(timing()) !== JSON.stringify([1.8, 6])) throw new Error(`wrong initial Story timing: ${timing()}`);
-      await openGroup("End Card CTA");
+      await openGroup("End Card");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-last3"]'), "reserve last three seconds");
       await openGroup("Story Text");
       if (timing()[1] !== 5 || ctx.container.querySelector('[data-testid="story-text-input"]').value !== "My Story message") throw new Error("Story timing did not clamp or message was lost");
-      await openGroup("End Card CTA");
+      await openGroup("End Card");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-full"]'), "reserve full clip");
       await openGroup("Story Text");
       if (!ctx.container.querySelector('[data-testid="story-no-room"]') || timing().length) throw new Error("full-clip CTA must leave no Story window");
@@ -10148,11 +10151,11 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("Font & Animation close each other in Hook Text and End Card CTA", async (ctx) => {
+  await check("Font & Animation close each other in Hook Text and End Card", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     await mount(DemoCtaEditor)(ctx);
-    for (const [label, prefix] of [["Hook Text", "caption"], ["End Card CTA", "cta"]]) {
+    for (const [label, prefix] of [["Hook Text", "caption"], ["End Card", "cta"]]) {
       const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
         .find((button) => button.textContent.trim() === label);
       await clickEl(ctx, header, `open ${label}`);
@@ -10182,7 +10185,7 @@ async function runDemoCtaChecks() {
         { getGenerations: async () => ({ generations: [COMPLETED] }) },
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-          if (!ctx.text().includes("End Card CTA")) {
+          if (!ctx.text().includes("End Card")) {
             throw new Error("the end-card group is mislabeled or missing");
           }
           // Group headers always render, but the hook duration only exists once
@@ -10209,7 +10212,7 @@ async function runDemoCtaChecks() {
     }
   );
 
-  await check("finished looks save only after clip review in End Card CTA and remain reusable", async (ctx) => {
+  await check("finished looks save only after clip review in End Card and remain reusable", async (ctx) => {
     const clip = installLoadedClipStubs({ width: 720, height: 1280 });
     const openGroup = async (label) => {
       const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
@@ -10226,7 +10229,7 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, get("caption-size-preset-l"), "pick hook size");
       await clickEl(ctx, get("text-style-glow"), "pick text treatment");
       if (get("text-style-glow").getAttribute("aria-pressed") !== "true") throw new Error("text treatment did not take the click");
-      await openGroup("End Card CTA");
+      await openGroup("End Card");
       const review = get("look-save-review");
       if (!get("cta-controls").contains(review) || review.closest("details")) throw new Error("Save look must finish CTA setup outside its disclosures");
       if (get("look-preset-save-btn").disabled !== true) throw new Error("Save look enabled before review");
@@ -10255,7 +10258,7 @@ async function runDemoCtaChecks() {
       await act(async () => ctx.root.unmount());
       ctx.root = createRoot(ctx.container);
       await mount(load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor)(ctx);
-      await openGroup("End Card CTA");
+      await openGroup("End Card");
       if (!get("look-preset-custom-my-brand-look")) throw new Error("look was not restored after remount");
       if (!get("look-reviewed-checkbox").disabled || !get("look-preset-save-btn").disabled || !get("look-preset-name-input").disabled) throw new Error("no-clip editor allows review or saving");
       if (!get("look-review-hint").textContent.includes("Upload")) throw new Error("blocked save does not explain next step");
@@ -10283,10 +10286,8 @@ async function runDemoCtaChecks() {
           generateOpeningMessages: async () => ({ messages: Array.from({ length: 20 }, (_, i) => `Fresh app opening ${i + 1}`) }),
         },
         async () => {
-          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-
-          // #5 Named look presets live with saving in End Card CTA, not Source & Look
-          await openGroup("End Card CTA");
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);           // #5 Named look presets live with saving in End Card, not Source & Look
+          await openGroup("End Card");
           if (ctx.container.querySelector('[data-testid="demo-cta-source"] [data-testid="look-preset-ugc"]')) {
             throw new Error("look presets are still offered prematurely in Source & Look");
           }
@@ -10297,8 +10298,7 @@ async function runDemoCtaChecks() {
             throw new Error("UGC style preset did not become active after click");
           }
           const review = ctx.container.querySelector('[data-testid="look-save-review"]');
-          if (!review || !review.contains(ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) || !review.contains(ugcPreset)) {
-            throw new Error("saving and applying a look are not together in End Card CTA");
+          if (!review || !review.contains(ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) || !review.contains(ugcPreset)) {             throw new Error("saving and applying a look are not together in End Card");
           }
 
           // #1 & #2 & #3 on Hook Text
@@ -10350,16 +10350,12 @@ async function runDemoCtaChecks() {
           await clickEl(ctx, hookFix, "click Fit safe area on Hook Text");
           if (ctx.container.querySelector('[data-testid="hook-safety-warning"]')) {
             throw new Error("Fit safe area did not clear the Hook Text safety warning");
-          }
-
-          // #1, #3, #4 on End Card CTA
-          await openGroup("End Card CTA");
+          }           // #1, #3, #4 on End Card
+          await openGroup("End Card");
           const ctaSizeS = ctx.container.querySelector('[data-testid="cta-size-preset-s"]');
           const ctaSizeL = ctx.container.querySelector('[data-testid="cta-size-preset-l"]');
-          if (!ctaSizeS || !ctaSizeL) throw new Error("End Card CTA is missing S/M/L size presets");
-          await clickEl(ctx, ctaSizeS, "select S size on End Card CTA");
-          if (ctaSizeS.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("85%")) {
-            throw new Error("clicking S size preset did not update End Card CTA scale to 85%");
+          if (!ctaSizeS || !ctaSizeL) throw new Error("End Card is missing S/M/L size presets");            await clickEl(ctx, ctaSizeS, "select S size on End Card");
+          if (ctaSizeS.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("85%")) {             throw new Error("clicking S size preset did not update End Card scale to 85%");
           }
 
           const ctaSurprise = ctx.container.querySelector('[data-testid="cta-variant-surprise"]');
@@ -10460,7 +10456,7 @@ async function runDemoCtaChecks() {
       // it before driving the added-clip controls below.
       if (!ctx.container.querySelector('[data-testid="demo-cta-second"]')) throw new Error("Second clip group missing once the base exists");
       await click('[data-testid="demo-cta-second"] button');
-      if (ctx.container.querySelector('[data-testid="append-upload-button"]')?.textContent !== "Add clip after base") throw new Error("second-clip upload mislabeled with no added clip");
+      if (ctx.container.querySelector('[data-testid="append-upload-button"]')?.textContent !== "Add second clip") throw new Error("second-clip upload mislabeled");
       const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
       Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
