@@ -1,4 +1,5 @@
 import "./App.css";
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
@@ -16,10 +17,24 @@ import GenerationHistory from "./pages/GenerationHistory";
 import BrandSetup from "./pages/BrandSetup";
 import AppProfileDetail from "./pages/AppProfileDetail";
 import CreateVideo from "./pages/CreateVideo";
-import DemoCtaStudio from "./pages/DemoCtaStudio";
+// Split out of the landing chunk: the editor pulls in mediabunny (encode /
+// decode, megabytes), which the landing page must never download. Both
+// /demo-cta routes resolve through this one component, so one lazy boundary
+// covers them.
+const DemoCtaStudio = lazy(() => import("./pages/DemoCtaStudio"));
 import AssetLibrary from "./pages/AssetLibrary";
 import Analytics from "./pages/Analytics";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
+
+// The editor chunk is fetched on first navigation here, so the fallback
+// names what is coming rather than spinning silently.
+function EditorLoading() {
+  return (
+    <div className="surface" role="status">
+      <p className="text-sm text-muted-foreground">Loading the editor…</p>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -86,8 +101,16 @@ function App() {
                             /demo-cta and the editor at /demo-cta/:generationId,
                             so a finished render is the input and the export is
                             saved beside it in History. */}
-                        <Route path="/demo-cta" element={<DemoCtaStudio />} />
-                        <Route path="/demo-cta/:generationId" element={<DemoCtaStudio />} />
+                        <Route path="/demo-cta" element={
+                          <Suspense fallback={<EditorLoading />}>
+                            <DemoCtaStudio />
+                          </Suspense>
+                        } />
+                        <Route path="/demo-cta/:generationId" element={
+                          <Suspense fallback={<EditorLoading />}>
+                            <DemoCtaStudio />
+                          </Suspense>
+                        } />
                         <Route path="/brand" element={<BrandSetup />} />
                         {/* Generation History is the history view. */}
                         <Route path="/history" element={<GenerationHistory />} />

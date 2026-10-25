@@ -11,6 +11,7 @@ import {
   FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { LazyHeroVideo } from "../components/LazyHeroVideo";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
 
 const FEATURES = [
@@ -319,8 +320,9 @@ export default function Landing() {
               (471:710) with the footage contained, so the whole interface
               shows with no cropping and no letterbox gap. The card grows on
               wide screens and sits on a soft indigo glow so it holds its
-              own next to the headline. Autoplay is silent and loops; under
-              reduced motion it stays paused on the poster frame. */}
+              own next to the headline. Autoplay is silent and loops; the
+              footage loads lazily as the frame nears the viewport, and under
+              reduced motion it stays a poster frame that never loads. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
@@ -329,24 +331,15 @@ export default function Landing() {
             <div className="border-gradient relative rounded-2xl p-[1px] shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)]">
               <div className="overflow-hidden rounded-2xl bg-black">
                 <div className="relative aspect-[471/710] w-full">
-                  <video
+                  <LazyHeroVideo
                     className="absolute inset-0 block h-full w-full object-contain"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
                     poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                    aria-label="Screen recording: the three-step Create Video wizard, the Demo plus CTA canvas, and an expanded History tile — full interface with no page header or footer"
-                    ref={(v) => {
-                      if (!v) return;
-                      v.muted = true;
-                      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
-                    }}
-                  >
-                    <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
-                    <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
-                  </video>
+                    sources={[
+                      { src: `${process.env.PUBLIC_URL}/hero-demo.webm`, type: "video/webm" },
+                      { src: `${process.env.PUBLIC_URL}/hero-demo.mp4`, type: "video/mp4" },
+                    ]}
+                    ariaLabel="Screen recording: the three-step Create Video wizard, the Demo plus CTA canvas, and an expanded History tile — full interface with no page header or footer"
+                  />
                 </div>
               </div>
             </div>

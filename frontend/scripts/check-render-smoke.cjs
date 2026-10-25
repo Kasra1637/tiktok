@@ -5622,6 +5622,93 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   }
 
+  // The landing payload must stay lean: the Demo + CTA editor pulls in
+  // mediabunny (megabytes of encode/decode), and the hero footage competes
+  // with JS on slow networks. So the editor route is split out of the
+  // landing chunk, and the hero video carries no bytes until it nears the
+  // viewport — poster first, so fast connections swap frames with no flicker.
+  await check("the landing payload excludes the editor bundle", async () => {
+    const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
+    if (/import\s+DemoCtaStudio\s+from/.test(src)) {
+      throw new Error("App still statically imports the editor, dragging mediabunny into the landing payload");
+    }
+    if (!/lazy\(\(\)\s*=>\s*import\(["']\.\/pages\/DemoCtaStudio["']\)/.test(src.replace(/\s+/g, ""))) {
+      throw new Error("the editor route is not route-split out of the landing chunk");
+    }
+    if (!src.includes("Suspense")) {
+      throw new Error("the split editor route has no Suspense boundary");
+    }
+    // mediabunny may only be reachable through the editor chunk: anything
+    // outside demoCta/ importing it lands back in the landing payload.
+    // Comments are stripped first, so a comment naming the dependency (like
+    // this one) cannot trip the pin — only a real import can.
+    const leaking = sourceFiles()
+      .filter((abs) => !abs.includes(`${path.sep}demoCta${path.sep}`) && !/\.test\.jsx?$/.test(abs))
+      .filter((abs) => stripComments(fs.readFileSync(abs, "utf8")).includes("mediabunny"))
+      .map((abs) => path.relative(SRC, abs));
+    if (leaking.length) {
+      throw new Error(`mediabunny leaks into the landing payload via: ${leaking.join(", ")}`);
+    }
+  });
+
+  await check("the hero video loads no bytes until it nears the viewport", async (ctx) => {
+    // A stubbed IntersectionObserver that never fires on its own: the hero
+    // must stay a poster-only frame until the observer says it is near. The
+    // component reads the bare global (not dom.window), so the stub replaces
+    // the harness NoopObserver there and restores it after.
+    const observers = [];
+    const prevObserver = global.IntersectionObserver;
+    const StubObserver = class {
+      constructor(cb) { this.cb = cb; observers.push(this); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      fire(intersecting) { this.cb([{ isIntersecting: intersecting }]); }
+    };
+    global.IntersectionObserver = StubObserver;
+    dom.window.IntersectionObserver = StubObserver;
+    try {
+      await mount(load("pages/Landing.jsx").default)(ctx);
+      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
+      if (!video) throw new Error("no hero video rendered");
+      // No flicker on fast connections: the poster is there from first paint,
+      // so the frame is already correct before any bytes arrive.
+      if (!video.getAttribute("poster")) throw new Error("the hero shows no poster before its footage loads");
+      if (video.getAttribute("preload") !== "none") throw new Error("the hero video still preloads against the landing JS");
+      if (video.querySelector("source") || video.getAttribute("src")) {
+        throw new Error("the hero video carries footage before nearing the viewport");
+      }
+      await act(async () => { observers.forEach((o) => o.fire(true)); });
+      await act(async () => {});
+      const sources = [...video.querySelectorAll("source")].map((s) => s.getAttribute("src") || "");
+      if (!sources.some((s) => s.includes("hero-demo"))) {
+        throw new Error("nearing the viewport did not load the hero footage");
+      }
+    } finally {
+      global.IntersectionObserver = prevObserver;
+      dom.window.IntersectionObserver = prevObserver;
+    }
+  });
+
+  await check("the hero video stays a poster frame under reduced motion", async (ctx) => {
+    // The reduced-motion contract is a paused poster: downloading footage
+    // that never plays wastes the very bytes the lazy load was saving.
+    const prevMatchMedia = dom.window.matchMedia;
+    dom.window.matchMedia = () => ({ matches: true });
+    try {
+      await mount(load("pages/Landing.jsx").default)(ctx);
+      await act(async () => {});
+      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
+      if (!video) throw new Error("no hero video rendered");
+      if (video.querySelector("source") || video.getAttribute("src")) {
+        throw new Error("reduced motion still downloads hero footage that never plays");
+      }
+      if (!video.getAttribute("poster")) throw new Error("the reduced-motion hero lost its poster frame");
+    } finally {
+      dom.window.matchMedia = prevMatchMedia;
+    }
+  });
+
   // Features page: six alternating rows, code-built mockups, nav both ways.
   // Copy reuses the landing descriptions, so the claim pins above apply to
   // Landing only — here the shape is pinned: one H1, five rows each with a

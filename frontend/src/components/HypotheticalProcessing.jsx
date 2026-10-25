@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { LazyHeroVideo } from "./LazyHeroVideo";
 import { GroupLabel } from "./SectionCard";
 import { Play, RotateCcw, Check, Film } from "lucide-react";
 
@@ -165,24 +166,15 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
               inside the video — playback runs at 8x. */}
           <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-xl border border-[color:var(--hairline-strong)] bg-black">
             <div className="relative aspect-[9/13] w-full">
-              <video
+              <LazyHeroVideo
                 className="absolute inset-0 block h-full w-full object-contain"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
                 poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                aria-label="Hypothetical preview at 8x speed: the Create Video wizard interface and the Demo CTA canvas, full interface"
-                ref={(v) => {
-                  if (!v) return;
-                  v.muted = true;
-                  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) v.pause();
-                }}
-              >
-                <source src={`${process.env.PUBLIC_URL}/hero-demo.webm`} type="video/webm" />
-                <source src={`${process.env.PUBLIC_URL}/hero-demo.mp4`} type="video/mp4" />
-              </video>
+                sources={[
+                  { src: `${process.env.PUBLIC_URL}/hero-demo.webm`, type: "video/webm" },
+                  { src: `${process.env.PUBLIC_URL}/hero-demo.mp4`, type: "video/mp4" },
+                ]}
+                ariaLabel="Hypothetical preview at 8x speed: the Create Video wizard interface and the Demo CTA canvas, full interface"
+              />
               <span className="absolute left-2 top-2 rounded-full border border-[color:var(--hairline-strong)] bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
                 0:{String(pieceSeconds).padStart(2, "0")} hypothetical{modelName ? ` · ${modelName}` : ""}
               </span>
