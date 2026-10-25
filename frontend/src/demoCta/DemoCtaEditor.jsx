@@ -15,7 +15,6 @@ import {
   Pause,
   Play,
   RotateCcw,
-  SlidersHorizontal,
   Smartphone,
   Type,
   Upload,
@@ -74,7 +73,7 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
 // Render order, which is also the order that decides which group wins when a
 // stored value somehow has more than one open (older versions allowed it).
 // "second" owns the appended clip so Source & Look stays about the base.
-const SECTION_ORDER = ["source", "second", "hook", "story", "cta", "advanced"];
+const SECTION_ORDER = ["source", "second", "hook", "story", "cta"];
 
 /** The one-open shape: every key present, exactly one true (or none). */
 function singleOpen(openKey) {
@@ -1434,6 +1433,82 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
+          {/* Fine-tuning lives at the bottom of Source & Look rather than in
+              its own Advanced group: mockup height, screen position and crop
+              all modify the look chosen above, and one group per concern
+              beats an extra stop for set-once sliders. */}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <SubLabel>Mockup height</SubLabel>
+            <div className="flex items-center gap-2">
+              <Slider
+                value={[mockupStretchY]}
+                min={RANGES.mockupStretchY.min}
+                max={RANGES.mockupStretchY.max}
+                step={RANGES.mockupStretchY.step}
+                onValueChange={([next]) => setMockupStretchY(next)}
+                className="flex-1"
+                aria-label="Mockup height"
+              />
+              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                {Math.round(mockupStretchY * 100)}%
+              </span>
+              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
+            </div>
+          </div>
+          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="screen-position-controls">
+              <SubLabel>Screen position</SubLabel>
+              {[
+                ["Left", screenX, setScreenX, "left"],
+                ["Top", screenY, setScreenY, "top"],
+                ["Width", screenW, setScreenW, "width"],
+                ["Height", screenH, setScreenH, "height"],
+              ].map(([label, val, setter, key]) => (
+                <div key={key} className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <FieldLabel>{label}</FieldLabel>
+                    <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
+                  </div>
+                  <Slider
+                    data-testid={`screen-${key}-slider`}
+                    value={[val]}
+                    min={RANGES.screen.min}
+                    max={RANGES.screen.max}
+                    step={RANGES.screen.step}
+                    onValueChange={([next]) => setter(next)}
+                  />
+                </div>
+              ))}
+              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
+                Reset to photo screen
+              </ResetButton>
+            </div>
+          )}
+          {videoUrl && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+              <SubLabel>Video crop</SubLabel>
+              <div className="flex items-center justify-between gap-2">
+                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={CONTROL_CLASS} aria-label="Video fit">
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="fill">Fill</option>
+                </select>
+                <ResetButton onClick={() => { setVideoFit("cover"); updateZoomDraft({ scale: 1, offX: 0, offY: 0 }); }}>Reset</ResetButton>
+              </div>
+              {/* What each mode actually does, and the source size it is doing it
+                  to. "Fill" reads as a synonym for "Cover" until you have seen
+                  them side by side, and picking Fill to remove a blank strip
+                  used to change nothing at all. Naming the consequence is the
+                  difference between a control and a guess. */}
+              <p className="text-xs text-muted-foreground">
+                {VIDEO_FIT_HINTS[videoFit] || VIDEO_FIT_HINTS.cover}
+                {videoMeta ? ` Source ${videoMeta.w}×${videoMeta.h}.` : ""}
+              </p>
+              <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={(scale) => updateZoomDraft({ scale })} format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offX: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
+              <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offY: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
+            </div>
+          )}
         </EditorSection>
 
         {/* The appended clip lives in its own group so Source & Look stays
@@ -1911,90 +1986,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
         </EditorSection>
 
-        {/* The TikTok spec used to live in an Output group of its own, but with
-            a single upload-ready format there is nothing to choose: the Export
-            button's title and the result card already carry the dimensions,
-            frame rate and container, so a group just to restate them was a
-            fifth stop on a panel that describes one clip. Rarely touched.
-            Mockup height, screen position and crop live here
-            because they are set once and then left alone; keeping them in the
-            main groups is what made the panel taller than the preview it is
-            meant to describe. */}
-        <EditorSection title="Advanced" icon={SlidersHorizontal} open={openSections.advanced} onToggle={() => toggleSection("advanced")}>
-          <p className="text-xs text-muted-foreground">Fine-tuning for mockup, placement, crop. Rarely needed.</p>
-          <div className="space-y-2">
-            <SubLabel>Mockup height</SubLabel>
-            <div className="flex items-center gap-2">
-              <Slider
-                value={[mockupStretchY]}
-                min={RANGES.mockupStretchY.min}
-                max={RANGES.mockupStretchY.max}
-                step={RANGES.mockupStretchY.step}
-                onValueChange={([next]) => setMockupStretchY(next)}
-                className="flex-1"
-                aria-label="Mockup height"
-              />
-              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
-                {Math.round(mockupStretchY * 100)}%
-              </span>
-              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
-            </div>
-          </div>
-          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
-            <div className="space-y-2" data-testid="screen-position-controls">
-              <SubLabel>Screen position</SubLabel>
-              {[
-                ["Left", screenX, setScreenX, "left"],
-                ["Top", screenY, setScreenY, "top"],
-                ["Width", screenW, setScreenW, "width"],
-                ["Height", screenH, setScreenH, "height"],
-              ].map(([label, val, setter, key]) => (
-                <div key={key} className="space-y-2">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <FieldLabel>{label}</FieldLabel>
-                    <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
-                  </div>
-                  <Slider
-                    data-testid={`screen-${key}-slider`}
-                    value={[val]}
-                    min={RANGES.screen.min}
-                    max={RANGES.screen.max}
-                    step={RANGES.screen.step}
-                    onValueChange={([next]) => setter(next)}
-                  />
-                </div>
-              ))}
-              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
-                Reset to photo screen
-              </ResetButton>
-            </div>
-          )}
-          {videoUrl && (
-            <div className="space-y-2">
-              <SubLabel>Video crop</SubLabel>
-              <div className="flex items-center justify-between gap-2">
-                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={CONTROL_CLASS} aria-label="Video fit">
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="fill">Fill</option>
-                </select>
-                <ResetButton onClick={() => { setVideoFit("cover"); updateZoomDraft({ scale: 1, offX: 0, offY: 0 }); }}>Reset</ResetButton>
-              </div>
-              {/* What each mode actually does, and the source size it is doing it
-                  to. "Fill" reads as a synonym for "Cover" until you have seen
-                  them side by side, and picking Fill to remove a blank strip
-                  used to change nothing at all. Naming the consequence is the
-                  difference between a control and a guess. */}
-              <p className="text-xs text-muted-foreground">
-                {VIDEO_FIT_HINTS[videoFit] || VIDEO_FIT_HINTS.cover}
-                {videoMeta ? ` Source ${videoMeta.w}×${videoMeta.h}.` : ""}
-              </p>
-              <ControlSlider label="Zoom" value={videoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={(scale) => updateZoomDraft({ scale })} format={(v) => `${v.toFixed(2)}x`} />
-              <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offX: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
-              <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offY: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
-            </div>
-          )}
-        </EditorSection>
         </div>
       </div>
 

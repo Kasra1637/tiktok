@@ -9879,6 +9879,36 @@ async function runDemoCtaChecks() {
     }
   );
 
+  // Mockup height, screen position and crop modify the Source & Look choice
+  // above, so they live at the bottom of that group — not in a sixth
+  // Advanced drawer. One group per concern: the text groups stay text, and
+  // the stored one-open shape has exactly the five living groups.
+  await check("no Advanced group: fine-tuning lives in Source & Look", async () => {
+    const src = fs.readFileSync(
+      path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
+      "utf8"
+    );
+    if (/title="Advanced"/.test(src)) {
+      throw new Error("the Advanced group is back — fine-tuning belongs in Source & Look");
+    }
+    const order = (src.match(/const SECTION_ORDER = \[([^\]]*)\]/) || [])[1] || "";
+    const keys = order.split(",").map((k) => k.trim().replace(/["']/g, "")).filter(Boolean);
+    if (keys.length !== 5 || keys.includes("advanced")) {
+      throw new Error(`the section order is not the five living groups: ${JSON.stringify(keys)}`);
+    }
+    for (const marker of ["Mockup height", 'data-testid="screen-position-controls"', "Video crop"]) {
+      if (!src.includes(marker)) {
+        throw new Error(`fine-tuning lost on the move: ${marker} is nowhere in the editor`);
+      }
+    }
+    const sourceBlock = src.split('testId="demo-cta-second"')[0];
+    for (const marker of ["Mockup height", "Video crop"]) {
+      if (!sourceBlock.includes(marker)) {
+        throw new Error(`${marker} is not inside Source & Look (before the Second clip group)`);
+      }
+    }
+  });
+
   await check(
     "the empty frame offers a real upload control",
     async (ctx) => {
