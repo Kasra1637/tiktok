@@ -12082,6 +12082,82 @@ await check(
       }
     }
   );
+
+  // Small muted text is 12px across the workspace, so it lives or dies on the
+  // token ratio alone: no layout change rescues a gray that is too dark for
+  // its surface. The secondary and input surfaces were the failures (4.27 and
+  // 4.14 at 55% lightness); the fix is one token step, asserted here as ratios
+  // so a future re-tint fails loudly instead of silently dimming every hint.
+  await check(
+    "small muted text clears AA on every dark surface",
+    async () => {
+      const css = fs.readFileSync(
+        path.join(__dirname, "..", "src", "index.css"),
+        "utf8"
+      );
+      const token = (name) => {
+        const m = css.match(
+          new RegExp(`--${name}:\\s*([\\d.]+)\\s+([\\d.]+)%\\s+([\\d.]+)%`)
+        );
+        if (!m) {
+          throw new Error(
+            `--${name} is no longer a plain HSL token, so the ratio math below cannot read it.`
+          );
+        }
+        return { h: +m[1], s: +m[2], l: +m[3] };
+      };
+      const toRgb = ({ h, s, l }) => {
+        s /= 100;
+        l /= 100;
+        const k = (n) => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = (n) =>
+          l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return [f(0), f(8), f(4)];
+      };
+      const luminance = (rgb) => {
+        const f = (c) =>
+          c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
+      };
+      const ratio = (a, b) => {
+        const hi = Math.max(luminance(a), luminance(b));
+        const lo = Math.min(luminance(a), luminance(b));
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      // Alpha compositing in sRGB, the way the browser layers these washes.
+      const over = (top, alpha, bottom) => {
+        const a = toRgb(top);
+        const b = toRgb(bottom);
+        return a.map((v, i) => alpha * v + (1 - alpha) * b[i]);
+      };
+      const fg = toRgb(token("muted-foreground"));
+      const on = (rgb) => ratio(fg, rgb);
+      // Opaque studio surfaces, straight from the :root token table, plus the
+      // three translucent washes composited over the surface beneath them:
+      // .inset-panel (secondary/0.3) and .history-tab (secondary/0.18) sit on
+      // cards; .input-well (background/0.65) sits on cards too.
+      const pairs = {
+        "--background": on(toRgb(token("background"))),
+        "--card": on(toRgb(token("card"))),
+        "--popover": on(toRgb(token("popover"))),
+        "--secondary": on(toRgb(token("secondary"))),
+        "--muted": on(toRgb(token("muted"))),
+        "--input": on(toRgb(token("input"))),
+        ".inset-panel": on(over(token("secondary"), 0.3, token("card"))),
+        ".history-tab": on(over(token("secondary"), 0.18, token("card"))),
+        ".input-well": on(over(token("background"), 0.65, token("card"))),
+      };
+      for (const [surface, r] of Object.entries(pairs)) {
+        if (r < 4.5) {
+          throw new Error(
+            `text-muted-foreground on ${surface} is ${r.toFixed(2)}:1, below the 4.5:1 AA floor for 12px text. ` +
+              "Lighten the token; no layout change rescues a gray this dark."
+          );
+        }
+      }
+    }
+  );
 }
 
 function stepPill(ctx, label) {

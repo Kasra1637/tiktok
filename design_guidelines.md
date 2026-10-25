@@ -54,7 +54,7 @@ because the loudest thing on the screen is no longer a colour.
 
 ```
 --background 228 14% 7%     --foreground        220 20% 93%
---card       228 14% 10%    --muted-foreground  220 10% 55%
+--card       228 14% 10%    --muted-foreground  220 10% 58%
 --secondary  228 12% 16%    --border            228 12% 17%
 --primary    244 75% 63%    --ring              244 75% 63%
 --radius     0.75rem
