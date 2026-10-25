@@ -46,6 +46,9 @@ One render path, single-pass video generation via OpenRouter.
 - One logical change per commit. A behavior or default change is an explicit
   product decision named in the message, never bundled inside a fix; copy
   sync rides in its own commit so behavior stays reviewable and revertable.
+- Red before green: a behavior fix ships with a regression check that fails
+  without it. Suites staying green proves nothing changed, not that the new
+  behavior works.
 - Wizard subtitles carry `data-subtitle`, stay `text-xs` and 55–60 chars,
   enforced by the smoke suite. Loading indicators narrate fresh work and
   unmount on settle *and* error; lists arrive staggered, collapsing to
