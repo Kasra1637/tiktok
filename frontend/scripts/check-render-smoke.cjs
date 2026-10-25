@@ -9849,25 +9849,59 @@ async function runDemoCtaChecks() {
               "clicking the empty frame outside the button did not reach the file input"
             );
           }
-          // The History link inside the box is a second destination: it
-          // must navigate, never open the picker instead.
+          // The History toggle beside the frame is the second door to base
+          // footage: it must open the History panel, never the file picker.
           reached = false;
-          const historyLink = frame.querySelector('a[href="/history"]');
-          if (!historyLink) {
-            throw new Error("the empty frame lost its History door");
+          const historyToggle = ctx.container.querySelector('[data-testid="history-source-toggle"]');
+          if (!historyToggle) {
+            throw new Error("the frame lost its beside-it History door");
           }
           await act(async () => {
-            historyLink.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+            historyToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
+          await act(async () => {});
           if (reached) {
             throw new Error(
-              "clicking the frame's History link opened the picker instead of navigating"
+              "opening the History picker reached the file input instead"
             );
+          }
+          if (!ctx.container.querySelector('[role="group"][aria-label="History renders"]')) {
+            throw new Error("the History toggle opened no History panel");
           }
         }
       );
     }
   );
+
+  await check("the History source toggle lives in the preview column, not the Source settings", async (ctx) => {
+    // The History render block used to sit in the Source & Look settings
+    // group while the empty preview offered only a link to the /history
+    // page — two doors to footage in two places, neither beside the Upload
+    // button. The toggle now sits in the preview column beside the frame,
+    // so upload-vs-history is one choice where the clip lands; the Source
+    // group keeps only looks. The toggle keeps its testid, so the picker
+    // behavior pins below exercise the moved control unchanged.
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    await withApi(
+      { getGenerationHistory: async () => ({ generations: [] }) },
+      async () => {
+        await mount(DemoCtaEditor)(ctx);
+        const toggle = ctx.container.querySelector('[data-testid="history-source-toggle"]');
+        if (!toggle) throw new Error("no History source toggle in the preview column");
+        if (toggle.closest('[data-testid="demo-cta-source"]')) {
+          throw new Error("the History source toggle is back in the Source settings group");
+        }
+        if (!toggle.closest(".demo-cta-column")) {
+          throw new Error("the History source toggle is not in the preview column beside the frame");
+        }
+        // The empty frame's /history link is gone with the old split: the
+        // toggle beside the frame is the History door now.
+        if (ctx.container.querySelector('[data-testid="demo-cta-frame-empty"] a[href="/history"]')) {
+          throw new Error("the empty frame still links out to /history instead of offering the toggle beside it");
+        }
+      }
+    );
+  });
 
   await check("no Output group: the TikTok spec lives on the Export action and result", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;

@@ -1392,51 +1392,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </p>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>History render</SubLabel>
-            <p className="text-xs text-muted-foreground">Use a finished Create-video render as the source — full video, as it rendered.</p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-10"
-              onClick={() => setHistoryOpen((v) => !v)}
-              aria-expanded={historyOpen}
-              aria-controls={historyOpen ? historyPanelId : undefined}
-              data-testid="history-source-toggle"
-            >
-              {historyOpen ? "Hide History" : "Choose from History"}
-            </Button>
-            {historyOpen && (
-              <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
-                {historyError && <p className="text-xs text-destructive">{historyError}</p>}
-                {historyRows === null && !historyError && (
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading finished renders…
-                  </p>
-                )}
-                {historyRows !== null && historyRows.length === 0 && !historyError && (
-                  <p className="text-xs text-muted-foreground">No completed renders with a playable copy yet.</p>
-                )}
-                {historyRows !== null && historyRows.map((row) => (
-                  <button
-                    key={row.id}
-                    type="button"
-                    onClick={() => attachHistoryVideo(row)}
-                    disabled={attachingId !== null}
-                    data-testid={`history-source-attach-${row.id}`}
-                    className="focus-ring flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--hairline)] px-3 py-2 text-left text-xs transition-colors hover:border-[color:var(--hairline-strong)] disabled:opacity-50"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-foreground">
-                      {row.brand_name || "Untitled render"}{row.duration ? ` • ${Math.round(row.duration)}s` : ""}
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {attachingId === row.id ? "Attaching…" : "Use as source"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
               label="First clip style"
               hint="Floating phone, hand-held mockup, or the real video full-frame. Drag preview to reframe; in hand mode, pick a scene."
@@ -2083,9 +2038,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </div>
 ) : (
               // The whole empty box opens the picker: only the button did,
-              // so clicks on the copy and padding fell on dead space. The
-              // History link below is a second destination inside this box,
-              // so a click on it navigates and must never open the picker
+              // so clicks on the copy and padding fell on dead space. Button
+              // clicks are excluded below so they drive the file input
               // instead. Keyboard users keep the real button.
               <div
                 className="cursor-pointer px-6 text-center"
@@ -2107,11 +2061,59 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   Upload a clip
                 </Button>
                 <p className="mt-2 text-xs text-muted-foreground">Upload one clip to style it.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Or pick a finished render from <Link to="/history" className="underline underline-offset-2 hover:text-foreground">History</Link>.
-                </p>
               </div>
             )}
+        </div>
+
+        {/* The second door to base footage, beside the frame instead of in
+            the settings: uploading a clip and picking a finished History
+            render are one choice made where the clip lands, so they sit
+            together. The toggle keeps its testid and panel wiring — only
+            the address changed — and it stays mounted with a loaded clip
+            so a base can still be swapped after it loads. */}
+        <div className="space-y-2" data-testid="demo-cta-history-source">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-10 w-full"
+            onClick={() => setHistoryOpen((v) => !v)}
+            aria-expanded={historyOpen}
+            aria-controls={historyOpen ? historyPanelId : undefined}
+            data-testid="history-source-toggle"
+          >
+            {historyOpen ? "Hide History" : "Choose from History"}
+          </Button>
+          {historyOpen && (
+            <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
+              {historyError && <p className="text-xs text-destructive">{historyError}</p>}
+              {historyRows === null && !historyError && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading finished renders…
+                </p>
+              )}
+              {historyRows !== null && historyRows.length === 0 && !historyError && (
+                <p className="text-xs text-muted-foreground">No completed renders with a playable copy yet.</p>
+              )}
+              {historyRows !== null && historyRows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => attachHistoryVideo(row)}
+                  disabled={attachingId !== null}
+                  data-testid={`history-source-attach-${row.id}`}
+                  className="focus-ring flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--hairline)] px-3 py-2 text-left text-xs transition-colors hover:border-[color:var(--hairline-strong)] disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1 truncate text-foreground">
+                    {row.brand_name || "Untitled render"}{row.duration ? ` • ${Math.round(row.duration)}s` : ""}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {attachingId === row.id ? "Attaching…" : "Use as source"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {videoUrl && videoMeta && (
