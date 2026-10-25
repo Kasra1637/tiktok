@@ -8787,6 +8787,36 @@ async function runDemoCtaChecks() {
               "clicking the frame's upload button did not reach the file input"
             );
           }
+          // The whole empty box is the upload target, not just the button:
+          // a click on the box padding must reach the same file input.
+          reached = false;
+          const frame = ctx.container.querySelector('[data-testid="demo-cta-frame-empty"]');
+          if (!frame) {
+            throw new Error("the empty frame has no clickable container");
+          }
+          await act(async () => {
+            frame.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          if (!reached) {
+            throw new Error(
+              "clicking the empty frame outside the button did not reach the file input"
+            );
+          }
+          // The History link inside the box is a second destination: it
+          // must navigate, never open the picker instead.
+          reached = false;
+          const historyLink = frame.querySelector('a[href="/history"]');
+          if (!historyLink) {
+            throw new Error("the empty frame lost its History door");
+          }
+          await act(async () => {
+            historyLink.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          if (reached) {
+            throw new Error(
+              "clicking the frame's History link opened the picker instead of navigating"
+            );
+          }
         }
       );
     }

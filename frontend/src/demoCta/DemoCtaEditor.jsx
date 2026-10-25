@@ -2076,7 +2076,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <span className="sr-only">Loading the finished render…</span>
             </div>
 ) : (
-              <div className="px-6 text-center">
+              // The whole empty box opens the picker: only the button did,
+              // so clicks on the copy and padding fell on dead space. The
+              // History link below is a second destination inside this box,
+              // so a click on it navigates and must never open the picker
+              // instead. Keyboard users keep the real button.
+              <div
+                className="cursor-pointer px-6 text-center"
+                title="Upload a clip to style it"
+                data-testid="demo-cta-frame-empty"
+                onClick={(event) => {
+                  if (event.target.closest("a")) return;
+                  fileInputRef.current?.click();
+                }}
+              >
                 <Button
                   type="button"
                   variant="accent"
