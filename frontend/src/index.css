@@ -432,18 +432,21 @@ body {
 
 /* Demo + CTA sticky-column geometry.
  *
- * The right column caps at the viewport minus the page chrome above the grid
- * (`lg:max-h-[calc(100vh-12rem)]` in JSX: PageHeader, main padding, grid gap,
- * sticky offset) and holds the frame, plus the player bar once a clip is
- * loaded. The frame gets everything left over. Without that headroom the
- * capped columns plus the header always exceed the viewport and the page
- * grows its own scrollbar beside a studio that fits.
+ * On desktop the page is exactly one viewport tall (DemoCtaStudio's
+ * `lg:h-[calc(100vh-4rem)]`) and the grid takes the flex leftover below the
+ * header, so no viewport cap is guessed any more: both columns fill the
+ * grid height and scroll inside their own boxes, and the page itself can
+ * never overflow — no page-level scrollbar beside a studio that fits.
+ * The right column holds the frame, plus the player bar once a clip is
+ * loaded. The frame gets everything left over.
  *
  * `--demo-cta-frame-w` expresses that. The width is derived from the height
  * budget rather than a percentage of the column, so the 9:16 ratio is never
  * distorted and the frame never leaves dead space beside it. The column is a
  * fixed 740px at xl, so this width is normally bounded by height, not by the
- * track.
+ * track. The 12rem below approximates the page chrome (main padding, grid
+ * gap, header) so the frame spends roughly the column's real height; any
+ * remainder is absorbed by the column's own slim scroll, never the page.
  *
  * `--demo-cta-chrome` is the height the frame does NOT get. Only the player bar
  * is real content now: the caption row went away when "Live preview" moved

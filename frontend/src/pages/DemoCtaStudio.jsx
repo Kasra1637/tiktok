@@ -104,7 +104,13 @@ function EditorRoute({ generationId }) {
 export function DemoCtaStudio() {
   const { generationId } = useParams();
   return (
-    <PageFrame className="space-y-6">
+    <PageFrame className="space-y-6 lg:flex lg:h-[calc(100vh-4rem)] lg:flex-col lg:overflow-hidden">
+      {/* On desktop the page is exactly one viewport tall (main contributes
+          4rem of vertical padding) and the grid below takes the leftover:
+          the header keeps whatever height it needs, the two columns scroll
+          inside their own boxes, and the page itself can never overflow —
+          so no page-level scrollbar beside a studio that fits. Stacked
+          (below lg) this is untouched: the page scrolls to the settings. */}
       <PageHeader
         icon={Smartphone}
         title="Demo + CTA"

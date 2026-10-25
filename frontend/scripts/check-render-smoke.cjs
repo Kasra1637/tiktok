@@ -9566,38 +9566,60 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // The empty studio must not grow a page-level scrollbar: the capped
-  // columns plus the PageHeader used to exceed the viewport, so a thin bar
-  // sat beside a preview that fitted. Both columns share one budget that
-  // already subtracts the page chrome, and the frame spends that same
-  // budget — a column or frame on the old offset reintroduces the bar.
+  // The empty studio must not grow a page-level scrollbar: guessing the
+  // header height in viewport caps kept missing, so a thin bar sat beside
+  // a preview that fitted. The page is now exactly one viewport tall and
+  // the grid takes the flex leftover below the header — no guessed budget
+  // anywhere — so the page cannot overflow at any header height. Both
+  // columns fill the grid and scroll inside their own boxes.
   await check(
-    "the demo-cta columns fit below the page header without growing a page scrollbar",
+    "the demo-cta page fits the viewport without a page scrollbar",
     async () => {
-      const src = fs.readFileSync(
+      const editor = fs.readFileSync(
         path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
+      const studio = fs.readFileSync(
+        path.join(SRC, "pages", "DemoCtaStudio.jsx"),
+        "utf8"
+      );
       const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-      const columns = src.match(/lg:max-h-\[calc\(100vh-12rem\)\]/g) || [];
-      if (columns.length !== 2) {
+      for (const marker of ["lg:h-[calc(100vh-4rem)]", "lg:flex-col", "lg:overflow-hidden"]) {
+        if (!studio.includes(marker)) {
+          throw new Error(
+            `the Demo + CTA page lost ${marker}: without the fixed-height page, ` +
+              "the columns plus the header exceed the viewport and the page " +
+              "grows its own scrollbar."
+          );
+        }
+      }
+      for (const marker of ["lg:flex-1", "lg:min-h-0"]) {
+        if (!editor.includes(marker)) {
+          throw new Error(
+            `the demo-cta grid lost ${marker}: without the flex leftover, the ` +
+              "grid grows past the page and its scrollbar is back."
+          );
+        }
+      }
+      // A viewport cap back on either column reintroduces the guessing game:
+      // the cap plus the header is what overflowed the page before.
+      if (/lg:max-h-\[calc\(100vh-/.test(editor)) {
         throw new Error(
-          `found ${columns.length} columns on the 100vh-12rem budget, expected exactly 2 ` +
-            "(settings panel and preview column). Both must share the budget that " +
-            "subtracts the page chrome, or the page grows its own scrollbar."
+          "a demo-cta column is capped against the viewport again. The page " +
+            "fit must come from the flex leftover, not a guessed header height."
         );
       }
-      if (/100vh-7rem|100vh-3rem/.test(src)) {
+      // Both columns still scroll inside their own boxes at any height.
+      if ((editor.match(/lg:h-full/g) || []).length < 2) {
         throw new Error(
-          "a demo-cta column is back on its old viewport budget. The capped " +
-            "columns plus the PageHeader exceed the viewport and the page " +
-            "grows a scrollbar beside a studio that fits."
+          "a demo-cta column no longer fills the grid: short viewports would " +
+            "clip it instead of scrolling it."
         );
       }
       if (!/\(100vh - 12rem - var\(--demo-cta-chrome\)\)/.test(css)) {
         throw new Error(
-          "the preview frame is not spending the 12rem page-chrome budget. A " +
-            "frame taller than its capped column overflows it from the inside."
+          "the preview frame lost its height budget. A frame taller than its " +
+            "column overflows it from the inside."
         );
       }
     }
