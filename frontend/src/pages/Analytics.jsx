@@ -236,6 +236,16 @@ export default function Analytics() {
   );
 }
 
+function clipName(row) {
+  return row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`;
+}
+
+function nextTakeFor(row, historyHref) {
+  if (row.studio_project_id) return { label: "Reuse draft", to: `/create?project=${encodeURIComponent(row.studio_project_id)}` };
+  if (row.status === "completed") return { label: "Style clip", to: `/demo-cta/${row.id}` };
+  return { label: "Review clip", to: `${historyHref}#generation-${row.id}` };
+}
+
 function ClipResults({ generations, profileId }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
@@ -244,6 +254,11 @@ function ClipResults({ generations, profileId }) {
   const counted = clips.filter((row) => row.tiktok_views != null).length;
   const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
   const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
+  // The one recommendation the ledger earns: highest recorded reach among
+  // clips the founder rated Good and actually posted. Anything less —
+  // unrated, unposted, uncounted — stays comparison, never advice.
+  const pick = clips.filter((row) => row.tiktok_url && row.tiktok_views != null && verdictFor(row.verdicts, "video") > 0)[0] || null;
+  const pickNext = pick ? nextTakeFor(pick, historyHref) : null;
   return (
     <SectionCard title="Clip results" icon={TrendingUp} description="Compare reach & your judgment before choosing another take." data-testid="analytics-results">
       <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
@@ -251,6 +266,16 @@ function ClipResults({ generations, profileId }) {
         Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
         Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
       </p>
+      {pick && pickNext && (
+        <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
+          <p className="text-sm font-semibold">Suggested next take: {clipName(pick)}</p>
+          <p className="text-xs text-muted-foreground">
+            Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
+            Past reach does not promise the next take repeats it.{" "}
+            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
+          </p>
+        </div>
+      )}
       {clips.length === 0 ? (
         <p className="text-sm text-muted-foreground">No finished clips to compare yet.</p>
       ) : (
@@ -265,11 +290,12 @@ function ClipResults({ generations, profileId }) {
             <tbody>
               {clips.map((row) => {
                 const vote = verdictFor(row.verdicts, "video");
+                const next = nextTakeFor(row, historyHref);
                 return (
                   <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
                     <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
                       <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
-                        {row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
+                        {clipName(row)}
                       </Link>
                       <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
                     </th>
@@ -279,11 +305,7 @@ function ClipResults({ generations, profileId }) {
                     <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs">{row.tiktok_views == null ? "Not recorded" : row.tiktok_views.toLocaleString("en-US")}</td>
                     <td className="whitespace-nowrap py-3 pr-4 text-xs">{vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}</td>
                     <td className="py-3 text-xs">
-                      {row.studio_project_id
-                        ? <Link to={`/create?project=${encodeURIComponent(row.studio_project_id)}`} className="text-[color:var(--brand-indigo)] hover:underline">Reuse draft</Link>
-                        : row.status === "completed"
-                          ? <Link to={`/demo-cta/${row.id}`} className="text-[color:var(--brand-indigo)] hover:underline">Style clip</Link>
-                          : <Link to={`${historyHref}#generation-${row.id}`} className="text-[color:var(--brand-indigo)] hover:underline">Review clip</Link>}
+                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
                     </td>
                   </tr>
                 );

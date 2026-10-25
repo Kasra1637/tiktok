@@ -5636,6 +5636,41 @@ async function runAnalyticsChecks() {
     }
   });
 
+  await check("Analytics recommends the highest-reach Good-rated posted clip", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        // Higher reach, but unrated: comparison only, never the recommendation.
+        { id: "viral", status: "completed", hook_line: "Unrated viral", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", verdicts: {} },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        // Rated Good but never posted: not eligible either.
+        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, verdicts: { video: 1 } },
+        { id: "failed", status: "failed", tiktok_views: 30000 },
+      ] }),
+    });
+    const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
+    if (!pick) throw new Error("no next-take recommendation rendered");
+    if (!/A good opening/.test(pick.textContent || "")) {
+      throw new Error("the recommendation names the wrong clip");
+    }
+    const action = pick.querySelector("a");
+    if (!action) throw new Error("the recommendation has no next action");
+    if (!/\/create\?project=draft1$/.test(action.getAttribute("href") || "")) {
+      throw new Error(`the recommendation reuses the wrong draft: ${action.getAttribute("href")}`);
+    }
+  });
+
+  await check("Analytics stays silent with no qualifying clip", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "unrated", status: "completed", hook_line: "Unrated", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", verdicts: {} },
+        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, verdicts: { video: 1 } },
+      ] }),
+    });
+    if (ctx.container.querySelector('[data-testid="analytics-next-take"]')) {
+      throw new Error("a recommendation rendered with no qualifying clip");
+    }
+  });
+
   await check("clip results compare reach, posted links and votes without inferring conversions", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
