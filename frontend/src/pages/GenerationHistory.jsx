@@ -16,6 +16,7 @@ import { PostKitSection } from "../components/PostKitSection";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
+import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -864,10 +865,6 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
 export default function GenerationHistory() {
   const [rows, setRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
-  // Draft ids for the current filter, so a winner's onward entry never links
-  // a project that no longer resolves. Null means unverified: the entries
-  // link exactly as they did before verification existed.
-  const [draftIds, setDraftIds] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // The URL owns filters, so back/forward and same-page links cannot disagree
@@ -929,18 +926,13 @@ export default function GenerationHistory() {
     api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    setDraftIds(null);
-    api.getStudioProjects(profileFilter ? { brand_profile_id: profileFilter } : {})
-      .then((d) => {
-        if (!cancelled) setDraftIds(new Set((d.projects || []).map((p) => p.id)));
-      })
-      .catch(() => {
-        if (!cancelled) setDraftIds(null);
-      });
-    return () => { cancelled = true; };
-  }, [profileFilter]);
+  // One owner for the verification both the winner entry and the variation
+  // entry read: a confirmed-gone draft offers nothing, an unverified list
+  // links as before. Runs only when some visible row names a draft.
+  const draftIds = useVerifiedDraftIds(
+    profileFilter,
+    rows.some((r) => r.studio_project_id)
+  );
 
   // Hook-text search is client-side: founders remember "the plumber one",
   // not its status, and the endpoint only filters by app + status.

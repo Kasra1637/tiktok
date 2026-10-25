@@ -12,7 +12,8 @@ import { FactChip } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
-import { isWinnerRow, nextTakeFor } from "../lib/nextTake";
+import { nextTakeFor, pickNextTake } from "../lib/nextTake";
+import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
@@ -132,29 +133,8 @@ export default function Analytics() {
   const signals = feedback?.summary?.top_signals || [];
   const reasons = feedback?.summary?.top_reasons || [];
   const renders = Array.isArray(generations) ? generations : null;
-  // The recommendation's draft, verified against the live project list so a
-  // deleted draft can never be linked. Null means unverified or unnecessary:
-  // the link then stays exactly what it was before verification existed.
-  const [draftIds, setDraftIds] = useState(null);
-  const takePick = (renders || [])
-    .filter(isTakeCandidate)
-    .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))[0] || null;
-  const takeDraftId = takePick?.studio_project_id || "";
-
-  useEffect(() => {
-    let cancelled = false;
-    setDraftIds(null);
-    if (!takeDraftId) return undefined;
-    api.getStudioProjects(selectedId ? { brand_profile_id: selectedId } : {})
-      .then((d) => {
-        if (!cancelled) setDraftIds(new Set((d.projects || []).map((p) => p.id)));
-      })
-      .catch(() => {
-        // Unknown, not absent: failing open keeps the previous behavior.
-        if (!cancelled) setDraftIds(null);
-      });
-    return () => { cancelled = true; };
-  }, [selectedId, profiles, retryVersion, takeDraftId]);
+  const takePick = pickNextTake(renders);
+  const draftIds = useVerifiedDraftIds(selectedId, takePick?.studio_project_id);
   const hasFeedback = (feedback?.summary?.total || 0) > 0 || (feedback?.feedback?.length || 0) > 0;
   const hasAnything = hasFeedback || signals.length > 0 || reasons.length > 0 || (renders?.length || 0) > 0;
 
@@ -264,20 +244,6 @@ function clipName(row) {
   return row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`;
 }
 
-/**
- * The one row the ledger earns the right to advise on: a finished winner
- * with a recorded count. Archived clips are shelved on purpose, so they
- * stay comparison and never become the suggestion.
- */
-function isTakeCandidate(row) {
-  return row.status === "completed" && row.tiktok_views != null && isWinnerRow(row);
-}
-
-/** Winners name the take; every other row keeps its plain action. */
-function takeActionLabel(row, next) {
-  return next.label === "Reuse draft" && isWinnerRow(row) ? "Another take like this" : next.label;
-}
-
 function ClipResults({ generations, profileId, pick, draftIds }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
@@ -300,7 +266,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
           <p className="text-xs text-muted-foreground">
             Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
             Past reach does not promise the next take repeats it.{" "}
-            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{takeActionLabel(pick, pickNext)}</Link> to test another take.
+            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
           </p>
         </div>
       )}
@@ -333,7 +299,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                     <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs">{row.tiktok_views == null ? "Not recorded" : row.tiktok_views.toLocaleString("en-US")}</td>
                     <td className="whitespace-nowrap py-3 pr-4 text-xs">{vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}</td>
                     <td className="py-3 text-xs">
-                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{takeActionLabel(row, next)}</Link>
+                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
                     </td>
                   </tr>
                 );
