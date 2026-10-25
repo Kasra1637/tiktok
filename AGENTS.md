@@ -43,6 +43,9 @@ One render path, single-pass video generation via OpenRouter.
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
   generic take. A refusal must name the next step. A red button that cannot
   act must navigate to what's missing instead of dying silently.
+- One logical change per commit. A behavior or default change is an explicit
+  product decision named in the message, never bundled inside a fix; copy
+  sync rides in its own commit so behavior stays reviewable and revertable.
 - Wizard subtitles carry `data-subtitle`, stay `text-xs` and 55–60 chars,
   enforced by the smoke suite. Loading indicators narrate fresh work and
   unmount on settle *and* error; lists arrive staggered, collapsing to

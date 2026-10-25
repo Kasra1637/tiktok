@@ -3445,6 +3445,70 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // The draft button only renders when every input exists and no draft does,
+  // so by construction it must always act: clicking it starts the create
+  // call, never a silent early return. Pinned here because the gates that
+  // guarantee this live in three different places (outer gate, firstGap, the
+  // ensureProject guard), and a future edit could render the button where
+  // the guarantees no longer hold.
+  await check("the draft button acts instead of dying silently", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    // A template with no photo requirement: with character_reference required
+    // the render step rightly shows the photo gate instead, and the draft
+    // button is the wrong assertion there.
+    const NOPHOTO = { ...TEMPLATE, id: "t-nophoto", name: "No Photo Pick", required_assets: [] };
+    try {
+      await withApi(
+        {
+          // No draft anywhere: the list, the fetch and the eager create all
+          // answer empty, so the wizard holds complete inputs and no draft —
+          // exactly the state the draft button exists for.
+          getStudioProject: async () => null,
+          createStudioProject: async () => null,
+          updateStudioProject: async () => null,
+          getTemplates: async () => ({ templates: [NOPHOTO] }),
+          getTemplateRecommendations: async () => ({
+            recommendations: [
+              { template: NOPHOTO, score: 9, why_it_fits: ["needs no photo"], limitations: [] },
+            ],
+          }),
+          ensureObjectiveTemplates: async () => ({
+            templates: [NOPHOTO],
+            generated: true,
+            objective: "address_user_problem",
+            error: null,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "App Profile");
+          const picker = ctx.container.querySelector('[data-testid="app-profile-picker"]');
+          if (!picker) throw new Error("no app profile picker on the first step");
+          await clickEl(ctx, picker.querySelector("button"), "no approved profile to pick");
+          await openTemplateStep(ctx);
+          const card = [...ctx.container.querySelectorAll('[role="button"]')].find((el) =>
+            (el.textContent || "").includes("No Photo Pick")
+          );
+          if (!card) throw new Error("no template card to pick after goal");
+          await clickEl(ctx, card);
+          await openStep(ctx, "Review & submit");
+          await act(async () => {});
+          await act(async () => {});
+          const draft = ctx.container.querySelector('[data-testid="create-draft-button"]');
+          if (!draft) throw new Error("complete inputs with no draft show no draft button");
+          if (draft.disabled) throw new Error("the draft button renders disabled with nothing missing");
+          apiCalls.length = 0;
+          await clickEl(ctx, draft);
+          if (!apiCalls.includes("createStudioProject")) {
+            throw new Error("the draft button died silently instead of creating the draft");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("a failed angle generation is named and stays retryable", async (ctx) => {
     await withApi({
       getContentAngles: async () => ({ angles: [] }),
