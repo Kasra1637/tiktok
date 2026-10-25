@@ -11,7 +11,6 @@ import EmptyState from "../components/EmptyState";
 import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
-import { FirstRunChecklist } from "../components/onboarding/FirstRunChecklist";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { ThumbPair } from "../components/ThumbPair";
@@ -3095,11 +3094,6 @@ setObjective("");
         title="Create Video"
         description="Pick an approved app and goal, then review the script plan."
       />
-      {/* Step zero of the golden path: Create, then Demo + CTA, then Export.
-          The page tours explain each page; this card carries the founder
-          across them, and retires itself after the first export saves. */}
-      <FirstRunChecklist />
-
       {/* Progress that tracks state rather than position.
           The tick used to mean "this step is to the left of the one you are on",
           which is not the same thing at all: jump straight to the last step and

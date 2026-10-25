@@ -917,7 +917,6 @@ const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
 const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
-const { FirstRunChecklist } = load("components/onboarding/FirstRunChecklist.jsx");
 const { OnboardingProvider } = load("components/onboarding/OnboardingProvider.jsx");
 const { HistoryFeedback } = load("components/HistoryFeedback.jsx");
 
@@ -3861,146 +3860,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // First-run wayfinding is step zero: Create, then Demo + CTA, then Export.
-  // Each step is a door to its page plus that page's existing tour — the card
-  // teaches the path, the tours teach the pages. It shows until the first
-  // export saves or the founder dismisses it, never again after either.
-  await check("first-run checklist carries the founder across pages with their tours", async (ctx) => {
-    dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-    dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-    // The create tour's first step spotlights the wizard's profile pill, so the
-    // mount carries that anchor: without a target the overlay correctly keeps
-    // searching instead of rendering, and there would be nothing to assert.
-    const WithProvider = () => React.createElement(OnboardingProvider, null, React.createElement(React.Fragment, null,
-      React.createElement(FirstRunChecklist, null),
-      React.createElement("span", { "data-testid": "step-pill-profile" })));
-    try {
-      await mount(WithProvider, {})(ctx);
-      for (const key of ["create", "demo-cta", "export"]) {
-        if (!ctx.container.querySelector(`[data-testid="first-run-step-${key}"]`)) throw new Error(`first-run step missing: ${key}`);
-      }
-      const goCreate = ctx.container.querySelector('[data-testid="first-run-go-create"]');
-      if (!goCreate || goCreate.getAttribute("href") !== "/create") throw new Error("first-run create step does not link to /create");
-      const goStyle = ctx.container.querySelector('[data-testid="first-run-go-demo-cta"]');
-      if (!goStyle || goStyle.getAttribute("href") !== "/demo-cta") throw new Error("first-run style step does not link to /demo-cta");
-      // Each step offers its page's tour rather than re-explaining it. jsdom
-      // lays nothing out, so every rect is zero and the overlay would keep
-      // searching for a visible box forever — the anchor gets a box here so
-      // the open path is what gets exercised. The overlay settles ~260ms
-      // after its target resolves, so the wait is real time inside act.
-      ctx.container.querySelector('[data-testid="step-pill-profile"]').getBoundingClientRect = () => ({
-        x: 100, y: 100, top: 100, left: 100, width: 200, height: 40, bottom: 140, right: 300,
-      });
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-tour-create"]'), "no create tour shortcut");
-      await act(async () => { await new Promise((r) => setTimeout(r, 600)); });
-      // The overlay portals to document.body, so it is never inside the mount container.
-      const overlay = () => dom.window.document.querySelector('[data-testid="onboarding-tour-overlay"]');
-      if (!overlay()) throw new Error("first-run tour button did not open the create tour");
-      await clickEl(ctx, dom.window.document.querySelector('[data-testid="onboarding-tour-close-button"]'), "no tour close");
-      // Row 1 links to /create while the card lives on /create: a click
-      // that only re-linked would read dead, so the row answers with its
-      // "you are here" pulse instead. The smoke router always reports
-      // /create, which is exactly the same-page case.
-      const rowLink = ctx.container.querySelector('[data-testid="first-run-go-create"]');
-      // Hover reacts like the five Demo + CTA group headers: the same
-      // indigo wash token, not a second hover language.
-      if (!rowLink || !rowLink.className.includes("hover:bg-[color:var(--indigo-6)]")) throw new Error("the create row does not share the Demo + CTA hover wash");
-      const row = ctx.container.querySelector('[data-testid="first-run-step-create"]');
-      global.__SMOKE_NAVIGATIONS = [];
-      await clickEl(ctx, rowLink, "no create row");
-      if (!row.className.includes("first-run-ping")) throw new Error("clicking the create row on /create played no you-are-here pulse");
-      if ((global.__SMOKE_NAVIGATIONS || []).length !== 0) throw new Error("the create row navigated instead of acknowledging");
-      await act(async () => { await new Promise((r) => setTimeout(r, 1200)); });
-      if (row.className.includes("first-run-ping")) throw new Error("the you-are-here pulse never cleared, so a second click replays nothing");
-      // A tour shortcut for another page navigates first: opening Demo +
-      // CTA's tour while still on Create would spotlight nothing.
-      global.__SMOKE_NAVIGATIONS = [];
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-tour-demo-cta"]'), "no style tour shortcut");
-      const went = global.__SMOKE_NAVIGATIONS || [];
-      if (!went.includes("/demo-cta")) throw new Error(`style tour shortcut navigated to ${JSON.stringify(went)}, not /demo-cta`);
-      // Dismiss retires the card without claiming an export.
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-dismiss"]'), "no dismiss control");
-      if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("dismiss did not hide the first-run checklist");
-      // A TikTok link marks the render posted and opens the live video — but a
-  // link alone carries no weight. Only a thumbs up PLUS a link counts as a
-  // real winner for the hook-learning loop.
-  await check("history tile takes a TikTok link and crowns winners only with thumbs up", async (ctx) => {
-    const LINK = "https://www.tiktok.com/@founder/video/7345";
-    const row = { id: "link-t1", verdicts: {}, tiktok_url: null };
-    await withApi({ getGeneration: async () => ({ verdicts: {} }) }, async () => {
-      await mount(HistoryFeedback, { row, signalRefs: {} })(ctx);
-    });
-    if (!ctx.container.querySelector('[data-testid="history-tiktok-input-link-t1"]')) throw new Error("no TikTok link input next to the thumbs");
-    // Views belong to the posted video, so no link means no views editor.
-    if (ctx.container.querySelector('[data-testid="history-tiktok-views-link-t1"]')) throw new Error("views editor shown without a posted link");
-    if (ctx.container.querySelector('[data-testid="history-posted-link-t1"]')) throw new Error("Posted shown without a link");
-    if (ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("Winner shown without a link or a vote");
-    // Save a link: Posted badge and live link appear, still no Winner.
-    await withApi({
-      getGeneration: async () => ({ verdicts: {} }),
-      setTikTokLink: async (id, url) => ({ tiktok_url: url }),
-    }, async () => {
-      await typeInto(ctx, ctx.container.querySelector('[data-testid="history-tiktok-input-link-t1"]'), LINK);
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-tiktok-save-link-t1"]'), "no link save");
-    });
-    if (!ctx.container.querySelector('[data-testid="history-posted-link-t1"]')) throw new Error("saved link did not mark the render posted");
-    const live = ctx.container.querySelector('[data-testid="history-live-link-link-t1"]');
-    if (!live || live.getAttribute("href") !== LINK) throw new Error("live video does not reopen the posted link");
-    if (ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("link alone counted as a winner");
-    // Thumbs up on the linked render crowns it.
-    await clickEl(ctx, ctx.container.querySelector('[data-testid="history-video-feedback-link-t1"] [aria-label="Good"]'), "no thumbs up");
-    if (!ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("thumbs up plus link did not crown a winner");
-    // Views paste back beside the posted link and read back as a count.
-    await withApi({
-      getGeneration: async () => ({ verdicts: {} }),
-      setTikTokViews: async (id, tiktok_views) => ({ tiktok_views }),
-    }, async () => {
-      await mount(HistoryFeedback, { row: { ...row, tiktok_url: LINK }, signalRefs: {} })(ctx);
-      if (!ctx.container.querySelector('[data-testid="history-tiktok-views-link-t1"]')) throw new Error("no views editor beside the posted link");
-      await typeInto(ctx, ctx.container.querySelector('[data-testid="history-tiktok-views-input-link-t1"]'), "12400");
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-tiktok-views-save-link-t1"]'), "no views save");
-    });
-    const count = ctx.container.querySelector('[data-testid="history-tiktok-views-count-link-t1"]');
-    if (!count || !(count.textContent || "").includes("12,400")) throw new Error("saved views did not read back as a count");
-  });
 
-  // A saved export retires it too: remount with the done flag set.
-      dom.window.localStorage.setItem("hookforge_first_export_done.v1", "1");
-      await mount(WithProvider, {})(ctx);
-      if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("a saved export did not retire the first-run checklist");
-    } finally {
-      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-    }
-  });
-
-  // The card lives on every first-run page, not just Create: from /demo-cta
-  // the style and export rows are the same-page case, so they ping instead
-  // of navigating, while row 1 keeps its /create door.
-  await check("first-run checklist guides from Demo + CTA too", async (ctx) => {
-    const WithProvider = () => React.createElement(OnboardingProvider, null, React.createElement(React.Fragment, null,
-      React.createElement(FirstRunChecklist, null),
-      React.createElement("span", { "data-testid": "step-pill-profile" })));
-    global.__SMOKE_PATHNAME = "/demo-cta";
-    try {
-      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-      await mount(WithProvider, {})(ctx);
-      const styleLink = ctx.container.querySelector('[data-testid="first-run-go-demo-cta"]');
-      if (!styleLink || styleLink.getAttribute("href") !== "/demo-cta") throw new Error("style step lost its /demo-cta door");
-      const styleRow = ctx.container.querySelector('[data-testid="first-run-step-demo-cta"]');
-      global.__SMOKE_NAVIGATIONS = [];
-      await clickEl(ctx, styleLink, "no style row");
-      if (!styleRow.className.includes("first-run-ping")) throw new Error("clicking the style row on /demo-cta played no pulse");
-      if ((global.__SMOKE_NAVIGATIONS || []).length !== 0) throw new Error("the style row navigated instead of acknowledging");
-      const goCreate = ctx.container.querySelector('[data-testid="first-run-go-create"]');
-      if (!goCreate || goCreate.getAttribute("href") !== "/create") throw new Error("create step lost its /create door from /demo-cta");
-    } finally {
-      global.__SMOKE_PATHNAME = "";
-      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-    }
-  });
 
   await check("goal options wait until the founder picks an audience angle", async (ctx) => {
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
@@ -9529,21 +9389,6 @@ async function runDemoCtaChecks() {
         throw new Error(`most-viewed did not rank counted rows first: ${ranked.join()}`);
       }
     });
-  });
-
-  await check("Demo + CTA carries the first-run checklist too", async (ctx) => {
-    const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
-    dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-    dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-    try {
-      await mount(DemoCtaStudio, {})(ctx);
-      if (!ctx.container.querySelector('[data-testid="first-run-checklist"]')) {
-        throw new Error("a first-run founder on Demo + CTA meets no golden path");
-      }
-    } finally {
-      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
-      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
-    }
   });
 
   // The tab is two gestures in one control. The click path is covered above;

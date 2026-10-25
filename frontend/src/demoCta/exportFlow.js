@@ -4,7 +4,6 @@ import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
-import { markFirstRunDone } from "../lib/onboarding/firstRun";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 
@@ -105,10 +104,6 @@ export function useExportFlow(settings) {
         template_id: generation?.template_id || "",
       });
       onSaved?.(savedRow);
-      // The golden path is complete: Create, then Demo + CTA, then Export.
-      // Retire the first-run checklist so it never greets a founder who has
-      // already shipped. A storage failure just shows the card once more.
-      try { markFirstRunDone(window.localStorage); } catch { /* see firstRun.js */ }
       clearExportErrors();
       return savedRow;
     } catch (err) {

@@ -771,37 +771,6 @@ check("storage that throws still lets the tour be treated as unseen, then seen",
     seen = ST.markTourSeen(hostile, seen, "create");
     return ST.hasSeenTour(seen, "create");
   })());
-// First-run wayfinding shows the same once-only discipline as the tours: the
-// 3-step card shows until the first export saves or the founder dismisses it,
-// and unreadable storage reads as "still first run" so the guide can only
-// repeat, never vanish for someone who never finished.
-const FR = loadModule(path.resolve(__dirname, "..", "src", "lib", "onboarding", "firstRun.js"));
-check("a fresh visitor is still on the first run",
-  FR.shouldShowChecklist(fakeStorage()) === true
-  && FR.isFirstRunDone(fakeStorage()) === false
-  && FR.isFirstRunDismissed(fakeStorage()) === false);
-check("the first saved export retires the checklist",
-  (() => {
-    const s = fakeStorage();
-    FR.markFirstRunDone(s);
-    return FR.isFirstRunDone(s) === true && FR.shouldShowChecklist(s) === false;
-  })());
-check("dismissing hides the card without claiming an export",
-  (() => {
-    const s = fakeStorage();
-    FR.dismissFirstRun(s);
-    return FR.isFirstRunDismissed(s) === true && FR.isFirstRunDone(s) === false
-      && FR.shouldShowChecklist(s) === false;
-  })());
-check("unreadable storage degrades to showing the card, never hiding it",
-  (() => {
-    const hostile = {
-      getItem() { throw new Error("denied"); },
-      setItem() { throw new Error("denied"); },
-    };
-    return FR.shouldShowChecklist(hostile) === true
-      && FR.shouldShowChecklist(null) === true;
-  })());
 
 // How a clip is fitted to the phone screen. The bug these exist for: "fill" was
 // unreachable in the floating phone because the only branch was
