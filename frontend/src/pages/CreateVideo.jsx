@@ -380,6 +380,8 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 
   const [clip, setClip] = useState(null);
   const [clipLoaded, setClipLoaded] = useState(false);
+  const [clipError, setClipError] = useState(null);
+  const [clipCheck, setClipCheck] = useState(0);
   const projectId = project?.id;
   useEffect(() => {
     let cancelled = false;
@@ -394,17 +396,21 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
       .then((data) => {
         if (cancelled) return;
         setClip(data?.generations?.[0] || null);
+        setClipError(null);
         setClipLoaded(true);
       })
-      .catch(() => {
+      .catch((err) => {
+        // A failed check is not an empty shelf: naming it stops the panel
+        // from inviting a duplicate paid render for a clip that exists.
         if (cancelled) return;
         setClip(null);
+        setClipError(getErrorMessage(err));
         setClipLoaded(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [projectId, scriptVersion]);
+  }, [projectId, scriptVersion, clipCheck]);
 
   if (!scriptVersion) return null;
 
@@ -482,6 +488,10 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
   } else if (clipIsCurrent) {
     status =
       `${planState} Strategy v${strategyVersion} matches · rendered clip is current.`;
+  } else if (clipError) {
+    status =
+      `${planState} Strategy v${strategyVersion} matches. ` +
+      `Could not check for rendered clips (${clipError}) — check again below.`;
   } else {
     status =
       `${planState} Strategy v${strategyVersion} matches. ` +
@@ -497,6 +507,20 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
       <p className="text-sm" data-testid="revisions-status">
         {status}
       </p>
+      {clipError && clipLoaded && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setClipError(null);
+            setClipLoaded(false);
+            setClipCheck((k) => k + 1);
+          }}
+          data-testid="clip-recheck"
+        >
+          Check again
+        </Button>
+      )}
       {onGoToHookStory && (
         <Button variant="secondary" size="sm" onClick={onGoToHookStory}>
           Review strategy below
@@ -1098,7 +1122,10 @@ export default function CreateVideo() {
   // pointing at a deleted angle must not open a list of strangers on first
   // view, which is the exact screenshot this rule fixes.
   const showAngles = anglesRevealed || Boolean(angle);
-  const template = templates.find((t) => t.id === templateId) || null;
+  // The detail card prefers the full library, but a failed library fetch must
+  // not blank a chosen template the recommendation rows already carry.
+  const template = templates.find((t) => t.id === templateId)
+    || recommendations.map((r) => r?.template).find((t) => t?.id === templateId) || null;
   const objectiveOptions = facets?.objectives || [];
   const recommendedObjectives = angle
     ? facets?.angle_goal_recommendations?.[angle.kind] || []
@@ -1115,9 +1142,24 @@ export default function CreateVideo() {
   const projectParam = params.get("project") || "";
   const profileParam = params.get("profile") || "";
 
+  // Goal options come from the template facets, not the angle: a failure
+  // here empties a required picker with no reason, so it names itself and
+  // retries on its own button instead of borrowing the plan error.
+  const [facetsError, setFacetsError] = useState(null);
+  const loadFacets = useCallback(() => {
+    setFacetsError(null);
+    api.getTemplateFacets()
+      .then((f) => setFacets(f))
+      .catch((err) => {
+        setFacets(null);
+        setFacetsError(getErrorMessage(err));
+      });
+  }, []);
+  useEffect(() => {
+    loadFacets();
+  }, [loadFacets]);
   useEffect(() => {
     let cancelled = false;
-    api.getTemplateFacets().then(setFacets).catch(() => setFacets(null));
     api
       .getAppProfiles()
       .then(async (data) => {
@@ -1139,7 +1181,12 @@ export default function CreateVideo() {
             }
             const angleData = await api
               .getContentAngles(draftProfile.id)
-              .catch(() => ({ angles: [] }));
+              .catch((err) => {
+                // The deep link still lands: the gate offers Generate, and the
+                // error says why the list is empty.
+                if (!cancelled) setAngleError(getErrorMessage(err));
+                return { angles: [] };
+              });
             if (cancelled) return;
             setProject(draft);
             // This row came from the server, so it is already current: recording
@@ -1185,9 +1232,12 @@ export default function CreateVideo() {
           // angle step when none was asked for, so the link survives the
           // profiles load instead of being overridden by it.
           if (!params.get("step")) setStep(1);
-          api.getContentAngles(chosen.id).then((d) => adoptAngles(d)).catch(() => {
-            setAngles([]);
-            setObjectiveEvidence({});
+          api.getContentAngles(chosen.id).then((d) => adoptAngles(d)).catch((err) => {
+            if (!cancelled) {
+              setAngles([]);
+              setObjectiveEvidence({});
+              setAngleError(getErrorMessage(err));
+            }
           });
         }
       })
@@ -1517,9 +1567,10 @@ setObjective("");
         try {
           const d = await api.getContentAngles(id);
           adoptAngles(d);
-        } catch {
+        } catch (err) {
           setAngles([]);
           setObjectiveEvidence({});
+          setAngleError(getErrorMessage(err));
     }
     setStep(1);
   };
@@ -2017,6 +2068,8 @@ setObjective("");
     if (reviewSynced.current === key) return;
     reviewSynced.current = key;
     let cancelled = false;
+    // A background re-read: the current project stays valid when it fails,
+    // so the failure stays silent rather than erroring a healthy step.
     api
       .getStudioProject(project.id)
       .then((fresh) => {
@@ -2208,6 +2261,14 @@ setObjective("");
                 empty marker in an inset-panel is how the stray empty box below
                 the angle panel happened. */}
             <div className={angle ? "inset-panel" : "hidden"}>
+              {angle && facetsError && (
+                <p className="text-xs text-destructive" role="alert">
+                  {facetsError}{" "}
+                  <button type="button" className="underline" onClick={loadFacets} data-testid="goal-options-retry">
+                    Try again
+                  </button>
+                </p>
+              )}
 <AngleGoalPicker
               angle={angle}
               value={objective}
@@ -2425,6 +2486,7 @@ setObjective("");
                     onProjectChanged={(fresh) => setProject(fresh || project)}
                     onChanged={() => {
                       // Re-read the project's attached assets so the picker updates.
+                      // Silent on failure: the pre-change project is still valid.
                       api.getStudioProject(project.id).then(setProject).catch(() => {});
                     }}
                   />

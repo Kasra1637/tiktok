@@ -33,6 +33,8 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
     let cancelled = false;
     api.getGeneration(row.id)
       .then((d) => { if (!cancelled) setFreshVerdicts(d.verdicts || {}); })
+      // A failed refresh is not a lost vote: savedVerdicts falls back to the
+      // row's own verdicts, so the tile keeps showing what the founder saved.
       .catch(() => { if (!cancelled) setFreshVerdicts(null); });
     return () => { cancelled = true; };
   }, [row.id]);

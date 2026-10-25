@@ -3267,6 +3267,101 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // generating, and coming back. The empty state now offers the generation
   // itself — and it must stay honest about failure, or a silent zero reads as
   // "this app has no angles" rather than "the call failed".
+  await check("a failed angles load names the error with Generate as the way back", async (ctx) => {
+    await withApi({
+      getContentAngles: async () => { throw new Error("Angles unavailable"); },
+      generateContentAngles: async () => ({ angles: [ANGLE] }),
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (!step?.textContent.includes("Angles unavailable")) {
+        throw new Error("a failed angles load shows no named error");
+      }
+      if (!step.querySelector('[data-testid="generate-angles-button"]')) {
+        throw new Error("a failed angles load offers no Generate recovery");
+      }
+    });
+  });
+
+  await check("a failed goal-options load names the error and retries it", async (ctx) => {
+    let failFacets = true;
+    await withApi({
+      getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+      generateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+      getTemplateFacets: async () => {
+        if (failFacets) throw new Error("Goal options unavailable");
+        return { objectives: ["address_user_problem"], angle_goal_recommendations: {}, objective_outcomes: {}, angle_goal_fit_reasons: {} };
+      },
+    }, async () => {
+      global.__SMOKE_PARAMS = "";
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      await passAngleGate(ctx);
+      const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
+        .find((button) => button.textContent.includes(ANGLE.label));
+      if (!angleButton) throw new Error("the audience step has no selectable audience angle");
+      await clickEl(ctx, angleButton);
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (!step?.textContent.includes("Goal options unavailable")) {
+        throw new Error("a failed goal-options load shows no named error");
+      }
+      const retry = ctx.container.querySelector('[data-testid="goal-options-retry"]');
+      if (!retry) throw new Error("a failed goal-options load offers no retry");
+      failFacets = false;
+      await clickEl(ctx, retry, "no retry control on the goal-options error");
+      await act(async () => {});
+      if (!ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]')) {
+        throw new Error("retrying the goal options did not render the goals");
+      }
+    });
+  });
+
+  await check("a failed clip check names the error and rechecks it", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    let fail = true;
+    try {
+      await withApi(
+        {
+          // A planned, strategy-current draft: the revisions panel reaches
+          // the clip check instead of stopping at an earlier missing piece.
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy_version: 1,
+            strategy_script_version: 1,
+          }),
+          getGenerations: async () => {
+            if (fail) throw new Error("Clip check unavailable");
+            return { generations: [] };
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          const status = ctx.container.querySelector('[data-testid="revisions-status"]');
+          if (!status?.textContent.includes("Clip check unavailable")) {
+            throw new Error("a failed clip check shows no named error");
+          }
+          const retry = ctx.container.querySelector('[data-testid="clip-recheck"]');
+          if (!retry) throw new Error("a failed clip check offers no recheck");
+          fail = false;
+          await clickEl(ctx, retry, "no recheck control on the clip error");
+          await act(async () => {});
+          const after = ctx.container.querySelector('[data-testid="revisions-status"]');
+          if (!after?.textContent.includes("No rendered clip yet")) {
+            throw new Error("rechecking the clip did not resolve the status");
+          }
+          if (ctx.container.querySelector('[data-testid="clip-recheck"]')) {
+            throw new Error("the recheck control survives its own success");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   // -------------------------------------------------------------------------
   await check("the Audience step offers to generate missing angles", async (ctx) => {
     await withApi({
@@ -3678,6 +3773,44 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!text.includes(TEMPLATE.middle_structure)) {
       throw new Error("the template card does not show the template's middle structure");
     }
+  });
+
+  await check("the selected template card survives a failed template list", async (ctx) => {
+    // The rows come from recommendations; only the selected card reads the
+    // full library. When the library fails, the card falls back to the
+    // recommendation rows instead of vanishing.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => { throw new Error("Template library unavailable"); },
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            { template: ORDERED_TEMPLATES[0], score: 9, why_it_fits: ["fits"], limitations: [] },
+            { template: ORDERED_TEMPLATES[1], score: 5, why_it_fits: ["ok"], limitations: [] },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        const text = ctx.text();
+        if (!text.includes("Top Pick")) {
+          throw new Error("recommendation rows vanished with the library");
+        }
+        if (!text.includes("Suggested")) {
+          throw new Error("the selected template card needs the failed library");
+        }
+        if (!text.includes(`${TEMPLATE.default_duration}s piece`)) {
+          throw new Error("the selected card lost its length without the library");
+        }
+      }
+    );
   });
 
   await check("every fit reason and limitation is on the card, with no toggle to hide them", async (ctx) => {
@@ -6770,6 +6903,50 @@ async function runDeleteDialogChecks() {
       }
     );
   });
+
+  await check("a failed profile load names the error and retries it", async (ctx) => {
+    let fail = true;
+    await withApi(stubProfileApi({
+      getAppProfile: async () => {
+        if (fail) throw new Error("Profile unavailable");
+        return PROFILE;
+      },
+    }), async () => {
+      await mountProfileDetail()(ctx);
+      expectText(ctx, "Profile unavailable", "a failed profile load shows no named error");
+      const retry = ctx.container.querySelector('[data-testid="profile-retry"]');
+      if (!retry) throw new Error("a failed profile load offers no retry");
+      fail = false;
+      await clickEl(ctx, retry, "no retry control on the profile error");
+      await act(async () => {});
+      if (!ctx.container.querySelector('[data-testid="app-profile-header"]')) {
+        throw new Error("retrying the profile load did not render the profile");
+      }
+    });
+  });
+
+  await check("the delete dialog warns when its counts are unknown", async (ctx) => {
+    let failAngles = true;
+    await withApi(stubProfileApi({
+      getContentAngles: async () => {
+        if (failAngles) throw new Error("Angles unavailable");
+        return { angles: [{ id: "a1", label: "Confession" }] };
+      },
+    }), async () => {
+      await mountProfileDetail()(ctx);
+      const dialog = await openDialog(ctx);
+      if (!dialog.querySelector('[data-testid="delete-counts-warning"]')) {
+        throw new Error("the dialog states counts it never loaded");
+      }
+      failAngles = false;
+      await clickEl(ctx, dialog.querySelector('[data-testid="delete-counts-retry"]'), "no retry control on the counts warning");
+      await act(async () => {});
+      await act(async () => {});
+      if (dialog.querySelector('[data-testid="delete-counts-warning"]')) {
+        throw new Error("retrying the counts did not clear the warning");
+      }
+    });
+  });
 }
 
 /**
@@ -6978,6 +7155,81 @@ async function runBrandSetupChecks() {
     );
     await act(async () => {});
   }
+
+  await check("a failed profile load names the error and retries it", async (ctx) => {
+    let fail = true;
+    await withApi(
+      {
+        getActiveBrand: async () => {
+          if (fail) throw new Error("Brand unavailable");
+          return researched;
+        },
+        getAppProfiles: async () => ({ profiles: [researched] }),
+      },
+      async () => {
+        await mount(BrandSetup, {})(ctx);
+        await act(async () => {});
+        expectText(ctx, "Brand unavailable", "a failed profile load shows no named error");
+        const retry = ctx.container.querySelector('[data-testid="brand-load-retry"]');
+        if (!retry) throw new Error("a failed profile load offers no retry");
+        fail = false;
+        await clickEl(ctx, retry, "no retry control on the profile error");
+        await act(async () => {});
+        const name = ctx.container.querySelector('[data-testid="brand-name-field"]');
+        if (!name || name.value !== "Threadly") {
+          throw new Error("retrying the profile load did not render the profile");
+        }
+      }
+    );
+  });
+
+  await check("no profile reads as a blank form, not a failure", async (ctx) => {
+    const missing = new Error("No active brand");
+    missing.response = { status: 404 };
+    await withApi(
+      {
+        getActiveBrand: async () => { throw missing; },
+        getAppProfiles: async () => ({ profiles: [] }),
+      },
+      async () => {
+        await mount(BrandSetup, {})(ctx);
+        await act(async () => {});
+        if (ctx.container.querySelector('[data-testid="brand-load-error"]')) {
+          throw new Error("an empty account reads as a load failure");
+        }
+        if (!ctx.container.querySelector('[data-testid="app-research-card"]')) {
+          throw new Error("no research form for a first profile");
+        }
+      }
+    );
+  });
+
+  await check("a failed app list names the error and retries it", async (ctx) => {
+    let fail = true;
+    await withApi(
+      {
+        getActiveBrand: async () => researched,
+        getAppProfiles: async () => {
+          if (fail) throw new Error("Apps unavailable");
+          return { profiles: [researched, handTyped] };
+        },
+      },
+      async () => {
+        await mount(BrandSetup, {})(ctx);
+        await act(async () => {});
+        expectText(ctx, "Apps unavailable", "a failed app list shows no named error");
+        const retry = ctx.container.querySelector('[data-testid="profiles-retry"]');
+        if (!retry) throw new Error("a failed app list offers no retry");
+        fail = false;
+        await clickEl(ctx, retry, "no retry control on the app list error");
+        await act(async () => {});
+        const options = [...ctx.container.querySelectorAll("option")].map((o) => o.value);
+        if (!options.includes("p1") || !options.includes("p2")) {
+          throw new Error("retrying the app list did not restore the app options");
+        }
+      }
+    );
+  });
 
   await check("profile next action approves a manual draft before opening its scoped studio", async (ctx) => {
     let approval = null;
@@ -9947,6 +10199,71 @@ async function runDemoCtaChecks() {
     });
   });
 
+  await check("History names a failed rows fetch and retries it", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    let fail = true;
+    await withApi({
+      getGenerationHistory: async () => {
+        if (fail) throw new Error("History unavailable");
+        return { generations: [{ ...COMPLETED, id: "recovered" }] };
+      },
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(History)(ctx);
+      expectText(ctx, "History unavailable", "a failed rows fetch shows no named error");
+      const retry = ctx.container.querySelector('[data-testid="history-retry"]');
+      if (!retry) throw new Error("a failed rows fetch offers no retry");
+      fail = false;
+      await clickEl(ctx, retry, "no retry control on the history error");
+      await act(async () => {});
+      if (!ctx.container.querySelector("#generation-recovered")) {
+        throw new Error("retrying the rows fetch did not load history");
+      }
+      if (ctx.container.querySelector('[data-testid="history-retry"]')) {
+        throw new Error("the retry control survives its own success");
+      }
+    });
+  });
+
+  await check("History names a failed app list and retries it", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    let fail = true;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [] }),
+      getAppProfiles: async () => {
+        if (fail) throw new Error("Apps unavailable");
+        return { profiles: [PROFILE] };
+      },
+    }, async () => {
+      await mount(History)(ctx);
+      expectText(ctx, "Apps unavailable", "a failed app list shows no named error");
+      const retry = ctx.container.querySelector('[data-testid="profiles-retry"]');
+      if (!retry) throw new Error("a failed app list offers no retry");
+      fail = false;
+      await clickEl(ctx, retry, "no retry control on the app list error");
+      await act(async () => {});
+      const picker = ctx.container.querySelector('[data-testid="history-search"]');
+      if (!picker) throw new Error("retrying the app list did not restore the header");
+      if (![...ctx.container.querySelectorAll("option")].some((o) => o.value === PROFILE.id)) {
+        throw new Error("retrying the app list did not restore the app options");
+      }
+    });
+  });
+
+  await check("History keeps the saved vote when its refresh fails", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "vote-1", verdicts: { video: 1 } }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      getGeneration: async () => { throw new Error("Vote refresh unavailable"); },
+    }, async () => {
+      await mount(History)(ctx);
+      if (!ctx.text().includes("Your vote: Good")) {
+        throw new Error("a failed vote refresh hid the saved vote");
+      }
+    });
+  });
+
   await check("History honors same-page query navigation and opens a new clip anchor", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const oldParams = global.__SMOKE_PARAMS;
@@ -10234,6 +10551,63 @@ async function runDemoCtaChecks() {
         }
         if (!text.includes("1 of 2 match")) {
           throw new Error("the search reports no count of what matched");
+        }
+      }
+    );
+  });
+
+  await check("Asset Library names a failed assets fetch and retries it", async (ctx) => {
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    let fail = true;
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAssets: async () => {
+          if (fail) throw new Error("Photos unavailable");
+          return {
+            assets: [
+              { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: new Date().toISOString(), used_in: [] },
+            ],
+          };
+        },
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1" })(ctx);
+        expectText(ctx, "Photos unavailable", "a failed assets fetch shows no named error");
+        const retry = ctx.container.querySelector('[data-testid="asset-retry"]');
+        if (!retry) throw new Error("a failed assets fetch offers no retry");
+        fail = false;
+        await clickEl(ctx, retry, "no retry control on the assets error");
+        await act(async () => {});
+        if (!ctx.text().includes("Founder photo")) {
+          throw new Error("retrying the assets fetch did not load the photos");
+        }
+      }
+    );
+  });
+
+  await check("Asset Library names a failed app list and retries it", async (ctx) => {
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    let fail = true;
+    await withApi(
+      {
+        getAppProfiles: async () => {
+          if (fail) throw new Error("Apps unavailable");
+          return { profiles: [PROFILE, { ...PROFILE, id: "p2", brand_name: "Second" }] };
+        },
+        getAssets: async () => ({ assets: [] }),
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1" })(ctx);
+        expectText(ctx, "Apps unavailable", "a failed app list shows no named error");
+        const retry = ctx.container.querySelector('[data-testid="profiles-retry"]');
+        if (!retry) throw new Error("a failed app list offers no retry");
+        fail = false;
+        await clickEl(ctx, retry, "no retry control on the app list error");
+        await act(async () => {});
+        const options = [...ctx.container.querySelectorAll("option")].map((o) => o.value);
+        if (!options.includes(PROFILE.id) || !options.includes("p2")) {
+          throw new Error("retrying the app list did not restore the app options");
         }
       }
     );

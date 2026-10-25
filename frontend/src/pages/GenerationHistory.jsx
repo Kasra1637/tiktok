@@ -922,9 +922,21 @@ export default function GenerationHistory() {
     return () => { loadRequest.current = null; };
   }, [load]);
 
-  useEffect(() => {
-    api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
+  // The app filter is a convenience: its load failing must not silently
+  // narrow the page to "All apps". It names itself with its own retry.
+  const [profilesError, setProfilesError] = useState(null);
+  const loadProfiles = useCallback(() => {
+    setProfilesError(null);
+    api.getAppProfiles()
+      .then((d) => setProfiles(d.profiles || []))
+      .catch((err) => {
+        setProfiles([]);
+        setProfilesError(getErrorMessage(err));
+      });
   }, []);
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
 
   // One owner for the verification both the winner entry and the variation
   // entry read: a confirmed-gone draft offers nothing, an unverified list
@@ -981,6 +993,14 @@ export default function GenerationHistory() {
               allLabel="All apps"
               ariaLabel="Filter by app"
             />
+            {profilesError && (
+              <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+                {profilesError}{" "}
+                <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">
+                  Try again
+                </button>
+              </span>
+            )}
             <label className="sr-only" htmlFor="history-search">Search by hook text</label>
             <input
               id="history-search"
@@ -1024,7 +1044,12 @@ export default function GenerationHistory() {
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{error}</span>
+            <Button variant="secondary" size="sm" onClick={load} data-testid="history-retry">
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 

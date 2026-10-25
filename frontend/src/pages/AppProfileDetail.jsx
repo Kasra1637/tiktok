@@ -165,19 +165,30 @@ export default function AppProfileDetail() {
     }
   }, [profileId]);
 
-  const load = useCallback(async () => {
+  // Angles and drafts feed the delete dialog's destruction counts: a silent
+  // empty list would understate what delete removes, so their failure is
+  // tracked and the dialog warns instead of stating counts it never loaded.
+  const [countsError, setCountsError] = useState(null);
+  // Background refreshes (the delete dialog's counts retry) must not flip
+  // the page to its skeleton: the dialog lives above the page, and unmounting
+  // it mid-retry would strand the founder's typed confirmation.
+  const load = useCallback(async (opts = {}) => {
+    setError(null);
+    if (!opts.background) setLoading(true);
+    let countsErr = null;
     try {
       const [p, a, d] = await Promise.all([
         api.getAppProfile(profileId),
-        api.getContentAngles(profileId).catch(() => ({ angles: [] })),
+        api.getContentAngles(profileId).catch((err) => { countsErr = getErrorMessage(err); return { angles: [] }; }),
         // A profile is reusable for as many videos as you want, so the page
         // shows the drafts already built on it. Scoped by brand_profile_id, and
         // the backend filters on the caller's user_id too.
-        api.getStudioProjects({ brand_profile_id: profileId }).catch(() => ({ projects: [] })),
+        api.getStudioProjects({ brand_profile_id: profileId }).catch((err) => { countsErr = getErrorMessage(err); return { projects: [] }; }),
       ]);
       setProfile(p);
       setAngles(a.angles || []);
       setDrafts(d.projects || []);
+      setCountsError(countsErr);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -201,8 +212,10 @@ export default function AppProfileDetail() {
       const updated = await api.regenerateEverything(profileId);
       setProfile(updated);
       // Reload angles after regeneration
-      const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
+      let anglesErr = null;
+      const a = await api.getContentAngles(profileId).catch((err) => { anglesErr = getErrorMessage(err); return { angles: [] }; });
       setAngles(a.angles || []);
+      setCountsError(anglesErr);
       const src = Array.isArray(updated?.research_sources) ? updated.research_sources : [];
       const readSrc = src.filter((s) => s && s.ok).length;
       // Angles are regenerated too but managed in Create Video now, so the
@@ -250,8 +263,10 @@ export default function AppProfileDetail() {
     try {
       const saved = await api.approveAppProfile(profileId, true);
       setProfile(saved);
-      const a = await api.getContentAngles(profileId).catch(() => ({ angles: [] }));
+      let anglesErr = null;
+      const a = await api.getContentAngles(profileId).catch((err) => { anglesErr = getErrorMessage(err); return { angles: [] }; });
       setAngles(a.angles || []);
+      setCountsError(anglesErr);
       setNotice("Proposal applied — profile and angles are current.");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -356,7 +371,12 @@ export default function AppProfileDetail() {
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Could not load this profile</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{error}</span>
+            <Button variant="secondary" size="sm" onClick={() => load()} data-testid="profile-retry">
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       </PageFrame>
     );
@@ -767,6 +787,15 @@ return (
               {formatList(destroyedBy(drafts, angles))}. Your
               provider call log is kept.
             </DialogDescription>
+            {countsError && (
+              <p className="mt-2 text-xs text-destructive" data-testid="delete-counts-warning">
+                Could not load the full list ({countsError}) — delete still
+                removes everything built on this app.{" "}
+                <button type="button" className="underline" onClick={() => load({ background: true })} data-testid="delete-counts-retry">
+                  Try again
+                </button>
+              </p>
+            )}
           </DialogHeader>
 
           <label className="block text-sm font-semibold" htmlFor="delete-confirm-name">

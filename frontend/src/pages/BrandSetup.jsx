@@ -271,26 +271,45 @@ export default function BrandSetup() {
     rememberCurrentAppId(data.id);
   };
 
-  const refreshProfilesList = () => {
+  // A missing picker is a missing way to switch apps, so its failure names
+  // itself with its own retry rather than collapsing to no options.
+  const [profilesError, setProfilesError] = useState(null);
+  const refreshProfilesList = useCallback(() => {
+    setProfilesError(null);
     api
       .getAppProfiles()
       .then((data) => setProfiles(data.profiles || []))
-      .catch(() => setProfiles([]));
-  };
+      .catch((err) => {
+        setProfiles([]);
+        setProfilesError(getErrorMessage(err));
+      });
+  }, []);
 
-  useEffect(() => {
+  // A 404 means no brand profile yet — that's fine, the form stays empty.
+  // Anything else is a failed load, and it names itself with a retry.
+  const [loadError, setLoadError] = useState(null);
+  const loadBrand = useCallback(() => {
+    setLoadError(null);
+    setLoadingActive(true);
     api
       .getActiveBrand()
       .then((data) => {
         applyProfile(data);
       })
-      .catch(() => {
-        // No brand profile yet — that's fine, form stays empty.
-        setBrand(null);
+      .catch((err) => {
+        if (err?.response?.status === 404) {
+          setBrand(null);
+        } else {
+          setLoadError(getErrorMessage(err));
+        }
       })
       .finally(() => setLoadingActive(false));
-    refreshProfilesList();
   }, []);
+
+  useEffect(() => {
+    loadBrand();
+    refreshProfilesList();
+  }, [loadBrand, refreshProfilesList]);
 
   const handleSelectProfile = (id) => {
     if (!id) return;
@@ -510,6 +529,14 @@ export default function BrandSetup() {
                 showStatus
                 testId="app-profile-picker"
               />
+            )}
+            {profilesError && (
+              <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+                {profilesError}{" "}
+                <button type="button" className="underline" onClick={refreshProfilesList} data-testid="profiles-retry">
+                  Try again
+                </button>
+              </span>
             )}
             {brand?.id ? (
               <Badge variant={status === "approved" ? "indigo" : "secondary"} className="px-3 py-1">
@@ -736,6 +763,19 @@ export default function BrandSetup() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Could not analyze this URL</AlertTitle>
           <AlertDescription>{analyzeError}</AlertDescription>
+        </Alert>
+      )}
+
+      {loadError && (
+        <Alert variant="destructive" data-testid="brand-load-error">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not load your app profile</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{loadError}</span>
+            <Button variant="secondary" size="sm" onClick={() => loadBrand()} data-testid="brand-load-retry">
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 

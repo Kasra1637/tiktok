@@ -481,6 +481,7 @@ export default function AssetLibrary({
   const load = useCallback(async () => {
     if (!activeProfileId) return;
     setLoading(true);
+    setError(null);
     try {
       const data = await api.getAssets(activeProfileId, {
         include_archived: includeArchived || undefined,
@@ -512,23 +513,25 @@ export default function AssetLibrary({
   // The standalone page has to discover which apps exist, because the sidebar
   // link carries no profile. Only there: embedded in the studio the profile is
   // already known and this would be a wasted request on every step render.
-  useEffect(() => {
+  // An empty list here also means "you have no apps", so a failed fetch
+  // must not collapse into the empty state: it names itself with a retry.
+  const [profilesError, setProfilesError] = useState(null);
+  const loadProfiles = useCallback(() => {
     if (embedded) return;
-    let cancelled = false;
+    setProfilesError(null);
     api
       .getAppProfiles()
       .then((d) => {
-        if (!cancelled) setProfiles(d.profiles || []);
+        setProfiles(d.profiles || []);
       })
-      .catch(() => {
-        // Leave the list empty; the page falls back to its empty state, which
-        // now links to the editor rather than stranding anyone.
-        if (!cancelled) setProfiles([]);
+      .catch((err) => {
+        setProfiles([]);
+        setProfilesError(getErrorMessage(err));
       });
-    return () => {
-      cancelled = true;
-    };
   }, [embedded]);
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
 
   // Choosing an app here is the same choice the editor makes, so it is
   // remembered and becomes the default the next time /assets is opened with no
@@ -700,6 +703,17 @@ export default function AssetLibrary({
         )}
         {loading ? (
           <Skeleton className="h-48 w-full rounded-2xl" aria-label="Loading your apps" />
+        ) : profilesError ? (
+          <EmptyState
+            icon={Images}
+            title="Could not load your apps"
+            description={profilesError}
+            action={
+              <Button variant="secondary" onClick={loadProfiles} data-testid="profiles-retry">
+                Try again
+              </Button>
+            }
+          />
         ) : profiles.length === 0 ? (
           <EmptyState
             icon={Images}
@@ -778,6 +792,14 @@ export default function AssetLibrary({
                   testId="asset-profile-picker"
                 />
               )}
+              {profilesError && (
+                <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+                  {profilesError}{" "}
+                  <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">
+                    Try again
+                  </button>
+                </span>
+              )}
               {/* The approval state is stated here unconditionally, not left to
                   the picker. With exactly one app there is no picker, so this
                   line is the only place it can appear — and "here but not
@@ -823,7 +845,12 @@ export default function AssetLibrary({
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{error}</span>
+            <Button variant="secondary" size="sm" onClick={load} data-testid="asset-retry">
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
       {notice && (
