@@ -12,6 +12,7 @@ import { FactChip } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
+import { isWinnerRow, nextTakeFor } from "../lib/nextTake";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
@@ -264,28 +265,17 @@ function clipName(row) {
 }
 
 /**
- * The one row the ledger earns the right to advise on: finished, posted,
- * counted, and rated Good by the founder. Archived clips are shelved on
- * purpose, so they stay comparison and never become the suggestion.
+ * The one row the ledger earns the right to advise on: a finished winner
+ * with a recorded count. Archived clips are shelved on purpose, so they
+ * stay comparison and never become the suggestion.
  */
 function isTakeCandidate(row) {
-  return (
-    row.status === "completed" &&
-    row.tiktok_url &&
-    row.tiktok_views != null &&
-    verdictFor(row.verdicts, "video") > 0
-  );
+  return row.status === "completed" && row.tiktok_views != null && isWinnerRow(row);
 }
 
-function nextTakeFor(row, historyHref, draftIds) {
-  // A draft verified gone falls through to the row's own next step instead
-  // of linking a project that no longer resolves. Unverified stays Reuse
-  // draft: what the page linked before verification existed.
-  if (row.studio_project_id && (!draftIds || draftIds.has(row.studio_project_id))) {
-    return { label: "Reuse draft", to: `/create?project=${encodeURIComponent(row.studio_project_id)}` };
-  }
-  if (row.status === "completed") return { label: "Style clip", to: `/demo-cta/${row.id}` };
-  return { label: "Review clip", to: `${historyHref}#generation-${row.id}` };
+/** Winners name the take; every other row keeps its plain action. */
+function takeActionLabel(row, next) {
+  return next.label === "Reuse draft" && isWinnerRow(row) ? "Another take like this" : next.label;
 }
 
 function ClipResults({ generations, profileId, pick, draftIds }) {
@@ -310,7 +300,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
           <p className="text-xs text-muted-foreground">
             Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
             Past reach does not promise the next take repeats it.{" "}
-            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
+            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{takeActionLabel(pick, pickNext)}</Link> to test another take.
           </p>
         </div>
       )}
@@ -343,7 +333,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                     <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs">{row.tiktok_views == null ? "Not recorded" : row.tiktok_views.toLocaleString("en-US")}</td>
                     <td className="whitespace-nowrap py-3 pr-4 text-xs">{vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}</td>
                     <td className="py-3 text-xs">
-                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
+                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{takeActionLabel(row, next)}</Link>
                     </td>
                   </tr>
                 );

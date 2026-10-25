@@ -15,6 +15,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { recordSignal, verdictFor } from "../lib/feedback";
+import { isWinnerRow } from "../lib/nextTake";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -332,7 +333,7 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
  */
-function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
+function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, draftIds = null }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   useEffect(() => {
     if (defaultExpanded) setExpanded(true);
@@ -594,8 +595,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
           <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
-          <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>
-          {row.tiktok_url && verdictFor(row.verdicts, "video") > 0 && <FactChip>Winner</FactChip>}
+          <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
         </div>
       </div>
 
@@ -745,7 +745,12 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
                     routes are gone. Reopening this generation's draft project
                     in the studio is the variation: the plan arrives intact and
                     the next render is a fresh generation. */}
-                {row.studio_project_id && (
+                {/* Winners name the take: the thumbs plus the posted link are
+                    the loop's proof, so the onward entry says what it reuses.
+                    A draft verified gone offers nothing — no dead link, and no
+                    fallback that duplicates the Demo + CTA button above. An
+                    unverified list fails open to the draft, as before. */}
+                {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
                   <Button
                     variant="secondary"
                     asChild
@@ -754,9 +759,11 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
                   >
                     <Link
                       to={`/create?project=${row.studio_project_id}`}
-                      title="Open this plan in Create Video for another take — your recorded thumbs steer the next plan"
+                      title={isWinnerRow(row)
+                        ? "Open this winner's plan in Create Video for another take like this"
+                        : "Open this plan in Create Video for another take — your recorded thumbs steer the next plan"}
                     >
-                      <CopyPlus className="h-4 w-4" /> New variation
+                      <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "New variation"}
                     </Link>
                   </Button>
                 )}
@@ -857,6 +864,10 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
 export default function GenerationHistory() {
   const [rows, setRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  // Draft ids for the current filter, so a winner's onward entry never links
+  // a project that no longer resolves. Null means unverified: the entries
+  // link exactly as they did before verification existed.
+  const [draftIds, setDraftIds] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // The URL owns filters, so back/forward and same-page links cannot disagree
@@ -917,6 +928,19 @@ export default function GenerationHistory() {
   useEffect(() => {
     api.getAppProfiles().then((d) => setProfiles(d.profiles || [])).catch(() => setProfiles([]));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDraftIds(null);
+    api.getStudioProjects(profileFilter ? { brand_profile_id: profileFilter } : {})
+      .then((d) => {
+        if (!cancelled) setDraftIds(new Set((d.projects || []).map((p) => p.id)));
+      })
+      .catch(() => {
+        if (!cancelled) setDraftIds(null);
+      });
+    return () => { cancelled = true; };
+  }, [profileFilter]);
 
   // Hook-text search is client-side: founders remember "the plumber one",
   // not its status, and the endpoint only filters by app + status.
@@ -1062,6 +1086,7 @@ export default function GenerationHistory() {
               onChanged={load}
               onUpdated={updateRow}
               defaultExpanded={hashId !== "" && hashId === row.id}
+              draftIds={draftIds}
             />
           ))}
           {rows.length >= limit && limit < 200 && (

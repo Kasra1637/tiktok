@@ -396,6 +396,11 @@ const apiStub = {
     duration_segments: { 8: 1, 10: 1, 12: 1, 15: 1 },
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
+  // Empty by default: History and Analytics verify draft links against the
+  // live list, and an unverified list fails open to the draft link — the
+  // behavior every pre-verification check asserts. Checks that exercise the
+  // verified paths override this with the drafts their fixtures name.
+  getStudioProjects: async () => ({ projects: [] }),
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Empty by default: the base stub has angles, so this only answers checks
   // that override the read to empty and then exercise the generate button.
@@ -5753,6 +5758,31 @@ async function runAnalyticsChecks() {
     }
   });
 
+  await check("Analytics names the winner CTA Another take like this", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "win", status: "completed", hook_line: "Winner clip", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", verdicts: { video: 1 }, studio_project_id: "wd1" },
+        { id: "plain", status: "completed", hook_line: "Plain clip", tiktok_views: 100, tiktok_url: "https://www.tiktok.com/@founder/video/2", verdicts: {}, studio_project_id: "wd2" },
+      ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "wd1" }, { id: "wd2" }] }),
+    });
+    await act(async () => {});
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const winLink = card.querySelector('a[href="/create?project=wd1"]');
+    if (!winLink || winLink.textContent.trim() !== "Another take like this") {
+      throw new Error("the winner row does not offer another take like this");
+    }
+    const plainLink = card.querySelector('a[href="/create?project=wd2"]');
+    if (!plainLink || plainLink.textContent.trim() !== "Reuse draft") {
+      throw new Error("a non-winner row lost its Reuse draft entry");
+    }
+    const pickAction = ctx.container.querySelector('[data-testid="analytics-next-take"] a');
+    if (!pickAction || pickAction.textContent.trim() !== "Another take like this") {
+      throw new Error("the recommendation does not offer another take like this");
+    }
+  });
+
   await check("clip results compare reach, posted links and votes without inferring conversions", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
@@ -10800,6 +10830,76 @@ async function runDemoCtaChecks() {
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=proj-9")) {
             throw new Error(`the variation entry does not reopen the draft: ${href}`);
+          }
+        }
+      );
+    }
+  );
+  await check(
+    "History surfaces Another take like this on a winner with a live draft",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-win", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "wd1", brand_name: "Test App", duration: 10 }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getStudioProjects: async () => ({ projects: [{ id: "wd1" }] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the winner tile"
+          );
+          await act(async () => {});
+          const entry = [...ctx.container.querySelectorAll("a")].find(
+            (a) => (a.textContent || "").trim() === "Another take like this"
+          );
+          if (!entry) {
+            throw new Error("a winner has no Another take like this entry");
+          }
+          const href = entry.getAttribute("href") || "";
+          if (!href.includes("/create?project=wd1")) {
+            throw new Error(`the winner entry does not reopen the draft: ${href}`);
+          }
+        }
+      );
+    }
+  );
+  await check(
+    "History never links a deleted draft on a winner",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-ghost", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "ghost", brand_name: "Test App", duration: 10 }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getStudioProjects: async () => ({ projects: [{ id: "something-else" }] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          await clickEl(
+            ctx,
+            ctx.container.querySelector('[data-testid="history-expand"]'),
+            "expand the winner tile"
+          );
+          await act(async () => {});
+          const dead = [...ctx.container.querySelectorAll("a")].find((a) =>
+            (a.getAttribute("href") || "").includes("project=ghost")
+          );
+          if (dead) {
+            throw new Error(`a winner links a deleted draft: ${dead.getAttribute("href")}`);
+          }
+          const entry = [...ctx.container.querySelectorAll("a")].find(
+            (a) => (a.textContent || "").trim() === "Another take like this"
+          );
+          if (entry) {
+            throw new Error("a winner with no live draft still offers another take");
           }
         }
       );
