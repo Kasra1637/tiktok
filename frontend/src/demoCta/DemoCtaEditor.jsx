@@ -2044,7 +2044,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               // The whole empty box opens the picker: only the button did,
               // so clicks on the copy and padding fell on dead space. Button
               // clicks are excluded below so they drive the file input
-              // instead. Keyboard users keep the real button.
+              // instead — except the library shortcut, which opens the
+              // History panel. Keyboard users keep the real buttons.
               <div
                 className="cursor-pointer px-6 text-center"
                 title="Upload a clip to style it"
@@ -2065,6 +2066,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   Upload a clip
                 </Button>
                 <p className="mt-2 text-xs text-muted-foreground">Upload one clip to style it.</p>
+                <p className="my-2 text-xs text-muted-foreground">or</p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setHistoryOpen(true)}
+                  data-testid="demo-cta-frame-history"
+                >
+                  Choose from library
+                </Button>
               </div>
             )}
         </div>

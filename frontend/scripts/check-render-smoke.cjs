@@ -9957,6 +9957,53 @@ async function runDemoCtaChecks() {
     );
   });
 
+  // The empty frame offers both doors where the clip lands: upload first,
+  // then an "or" separator, then the library shortcut. The shortcut opens
+  // the same History panel as the toggle beside the frame — never the file
+  // picker (the frame's click-through excludes every button).
+  await check("the empty frame offers upload or the library shortcut", async (ctx) => {
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    await withApi(
+      { getGenerations: async () => ({ generations: [COMPLETED] }) },
+      async () => {
+        await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        const frame = ctx.container.querySelector('[data-testid="demo-cta-frame-empty"]');
+        if (!frame) throw new Error("the empty frame has no clickable container");
+        const upload = frame.querySelector('[data-testid="demo-cta-frame-upload"]');
+        const library = frame.querySelector('[data-testid="demo-cta-frame-history"]');
+        if (!upload) throw new Error("the empty frame lost its upload button");
+        if (!library) throw new Error("the empty frame has no library shortcut");
+        if (library.textContent.trim() !== "Choose from library") {
+          throw new Error(`the library shortcut is mislabeled: ${JSON.stringify(library.textContent)}`);
+        }
+        // Order: upload, then "or", then the library shortcut.
+        const order = [...frame.querySelectorAll("button, p")].filter((el) =>
+          el === upload || el === library || el.textContent.trim().toLowerCase() === "or"
+        );
+        if (order.length !== 3 || order[0] !== upload || order[2] !== library) {
+          throw new Error("the empty frame is not upload, \"or\", then library");
+        }
+        // Behaviour: the shortcut opens the History panel without touching
+        // the file input.
+        const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+        let reached = false;
+        input.addEventListener("click", () => {
+          reached = true;
+        });
+        await act(async () => {
+          library.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (reached) {
+          throw new Error("the library shortcut reached the file input instead of History");
+        }
+        if (!ctx.container.querySelector('[role="group"][aria-label="History renders"]')) {
+          throw new Error("the library shortcut opened no History panel");
+        }
+      }
+    );
+  });
+
   await check("no Output group: the TikTok spec lives on the Export action and result", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     await mount(DemoCtaEditor)(ctx);
