@@ -339,6 +339,18 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
   useEffect(() => {
     if (defaultExpanded) setExpanded(true);
   }, [defaultExpanded]);
+  // A #generation- deep link (export "View in History", Analytics "View
+  // render") opens this row; when it is still awaiting its TikTok link,
+  // finish the job by focusing that input, so the founder lands with the
+  // cursor where the next action is instead of having to remember the link
+  // step and find the field inside the drawer. Scoped to the deep-linked
+  // row and the awaiting state only: a manual expand never steals focus,
+  // and a row that already has its link keeps focus where it was.
+  const linkAwaiting = defaultExpanded && !row.tiktok_url;
+  useEffect(() => {
+    if (!linkAwaiting || !expanded) return;
+    document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
+  }, [linkAwaiting, expanded, row.id]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showDetails, setShowDetails] = useState(false);

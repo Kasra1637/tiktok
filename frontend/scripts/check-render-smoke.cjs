@@ -10623,6 +10623,64 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("a #generation- link lands focus on the awaiting TikTok link input", async (ctx) => {
+    // The export card's "View in History" lands here with a hash and the row
+    // opens — and then the founder still has to remember the link step and
+    // find the field inside the drawer. The deep link should finish the job:
+    // when the named row is still awaiting its TikTok link, focus lands in
+    // that input; when the row already has one, focus stays where it was.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const awaiting = { ...COMPLETED, id: "link-wait", tiktok_url: null, tiktok_views: null };
+    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10 };
+    global.__SMOKE_HASH = "#generation-link-wait";
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: [posted, awaiting] }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+        }
+      );
+    } finally {
+      global.__SMOKE_HASH = "";
+    }
+    const input = ctx.container.querySelector('[data-testid="history-tiktok-input-link-wait"]');
+    if (!input) throw new Error("the deep-linked row opened with no TikTok link field");
+    if (dom.window.document.activeElement !== input) {
+      throw new Error("the deep link opened the row but left the awaiting TikTok link unfocused");
+    }
+  });
+
+  await check("a #generation- link to a posted row steals no focus", async (ctx) => {
+    // The focus-follows-link rule is for the awaiting state only: landing on
+    // a row that already has its link must not yank focus anywhere.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10 };
+    global.__SMOKE_HASH = "#generation-link-have";
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: [posted] }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+        }
+      );
+    } finally {
+      global.__SMOKE_HASH = "";
+    }
+    const tab = ctx.container.querySelector('#generation-link-have [data-testid="history-expand"]');
+    if (!tab || tab.getAttribute("aria-expanded") !== "true") {
+      throw new Error("the deep-linked posted row is not opened on arrival");
+    }
+    if (dom.window.document.activeElement !== dom.window.document.body) {
+      throw new Error("landing on a posted row moved focus without an awaiting link");
+    }
+  });
+
   await check("Asset Library searches its photos by name", async (ctx) => {
     const AssetLibrary = load("pages/AssetLibrary.jsx").default;
     await withApi(
