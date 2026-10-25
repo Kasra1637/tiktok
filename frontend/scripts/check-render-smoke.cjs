@@ -701,7 +701,7 @@ function load(relPath) {
         // Hash rides alongside for #generation- deep links: History opens the
         // named render on load, and without this the mount would always read
         // "no hash" no matter what the check asked for.
-        useLocation: () => ({ pathname: "/create", search: searchParams().toString(), hash: global.__SMOKE_HASH || "" }),
+        useLocation: () => ({ pathname: global.__SMOKE_PATHNAME || "/create", search: searchParams().toString(), hash: global.__SMOKE_HASH || "" }),
       };
     }
     // Exercise the real AuthControls branches without contacting Clerk or
@@ -3884,6 +3884,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await mount(HistoryFeedback, { row, signalRefs: {} })(ctx);
     });
     if (!ctx.container.querySelector('[data-testid="history-tiktok-input-link-t1"]')) throw new Error("no TikTok link input next to the thumbs");
+    // Views belong to the posted video, so no link means no views editor.
+    if (ctx.container.querySelector('[data-testid="history-tiktok-views-link-t1"]')) throw new Error("views editor shown without a posted link");
     if (ctx.container.querySelector('[data-testid="history-posted-link-t1"]')) throw new Error("Posted shown without a link");
     if (ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("Winner shown without a link or a vote");
     // Save a link: Posted badge and live link appear, still no Winner.
@@ -3901,6 +3903,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // Thumbs up on the linked render crowns it.
     await clickEl(ctx, ctx.container.querySelector('[data-testid="history-video-feedback-link-t1"] [aria-label="Good"]'), "no thumbs up");
     if (!ctx.container.querySelector('[data-testid="history-winner-link-t1"]')) throw new Error("thumbs up plus link did not crown a winner");
+    // Views paste back beside the posted link and read back as a count.
+    await withApi({
+      getGeneration: async () => ({ verdicts: {} }),
+      setTikTokViews: async (id, tiktok_views) => ({ tiktok_views }),
+    }, async () => {
+      await mount(HistoryFeedback, { row: { ...row, tiktok_url: LINK }, signalRefs: {} })(ctx);
+      if (!ctx.container.querySelector('[data-testid="history-tiktok-views-link-t1"]')) throw new Error("no views editor beside the posted link");
+      await typeInto(ctx, ctx.container.querySelector('[data-testid="history-tiktok-views-input-link-t1"]'), "12400");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-tiktok-views-save-link-t1"]'), "no views save");
+    });
+    const count = ctx.container.querySelector('[data-testid="history-tiktok-views-count-link-t1"]');
+    if (!count || !(count.textContent || "").includes("12,400")) throw new Error("saved views did not read back as a count");
   });
 
   // A saved export retires it too: remount with the done flag set.
@@ -3908,6 +3922,34 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await mount(WithProvider, {})(ctx);
       if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("a saved export did not retire the first-run checklist");
     } finally {
+      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
+    }
+  });
+
+  // The card lives on every first-run page, not just Create: from /demo-cta
+  // the style and export rows are the same-page case, so they ping instead
+  // of navigating, while row 1 keeps its /create door.
+  await check("first-run checklist guides from Demo + CTA too", async (ctx) => {
+    const WithProvider = () => React.createElement(OnboardingProvider, null, React.createElement(React.Fragment, null,
+      React.createElement(FirstRunChecklist, null),
+      React.createElement("span", { "data-testid": "step-pill-profile" })));
+    global.__SMOKE_PATHNAME = "/demo-cta";
+    try {
+      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
+      await mount(WithProvider, {})(ctx);
+      const styleLink = ctx.container.querySelector('[data-testid="first-run-go-demo-cta"]');
+      if (!styleLink || styleLink.getAttribute("href") !== "/demo-cta") throw new Error("style step lost its /demo-cta door");
+      const styleRow = ctx.container.querySelector('[data-testid="first-run-step-demo-cta"]');
+      global.__SMOKE_NAVIGATIONS = [];
+      await clickEl(ctx, styleLink, "no style row");
+      if (!styleRow.className.includes("first-run-ping")) throw new Error("clicking the style row on /demo-cta played no pulse");
+      if ((global.__SMOKE_NAVIGATIONS || []).length !== 0) throw new Error("the style row navigated instead of acknowledging");
+      const goCreate = ctx.container.querySelector('[data-testid="first-run-go-create"]');
+      if (!goCreate || goCreate.getAttribute("href") !== "/create") throw new Error("create step lost its /create door from /demo-cta");
+    } finally {
+      global.__SMOKE_PATHNAME = "";
       dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
       dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
     }
@@ -9394,6 +9436,45 @@ async function runDemoCtaChecks() {
         if (!opened.textContent.includes(label)) throw new Error(`History lost ${label}`);
       }
     });
+  });
+
+  await check("history sorts most-viewed above uncounted renders", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "v-old", tiktok_views: 10 },
+        { ...COMPLETED, id: "v-top", tiktok_views: 9000 },
+        { ...COMPLETED, id: "v-none" },
+      ] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const order = () => [...ctx.container.querySelectorAll('article[id^="generation-"]')].map((e) => e.id);
+      const newest = order();
+      if (newest.join() !== "generation-v-old,generation-v-top,generation-v-none") {
+        throw new Error(`newest-first did not preserve server order: ${newest.join()}`);
+      }
+      await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
+      const ranked = order();
+      if (ranked.join() !== "generation-v-top,generation-v-old,generation-v-none") {
+        throw new Error(`most-viewed did not rank counted rows first: ${ranked.join()}`);
+      }
+    });
+  });
+
+  await check("Demo + CTA carries the first-run checklist too", async (ctx) => {
+    const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
+    dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+    dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
+    try {
+      await mount(DemoCtaStudio, {})(ctx);
+      if (!ctx.container.querySelector('[data-testid="first-run-checklist"]')) {
+        throw new Error("a first-run founder on Demo + CTA meets no golden path");
+      }
+    } finally {
+      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
+    }
   });
 
   // The tab is two gestures in one control. The click path is covered above;

@@ -53,7 +53,7 @@ from models import (
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
-    FeedbackRequest, TikTokLinkRequest,
+    FeedbackRequest, TikTokLinkRequest, TikTokViewsRequest,
     GenerateStrategyRequest, OpeningMessagesRequest,
     APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
@@ -791,6 +791,10 @@ async def init_db():
                 -- NULL until set; a set link is the posted half of a real
                 -- winner, the thumbs up on the render is the other half.
                 tiktok_url TEXT,
+                -- Views read off the posted TikTok by hand, NULL until the
+                -- founder pastes them back. Manual until any TikTok API;
+                -- most-viewed sorts first in History.
+                tiktok_views INTEGER,
                 -- Set once the founder approves this segment. Only approved
                 -- segments are used as continuity anchors and included in the
                 -- assembled video.
@@ -1216,6 +1220,9 @@ async def init_db():
             # Posted link for History. Additive: pre-column rows read as
             # NULL, which renders as not posted.
             ("generations", "tiktok_url", "TEXT"),
+            # Pasted-back view counts. Additive: pre-column rows read as
+            # NULL, which renders as uncounted and sorts after counted rows.
+            ("generations", "tiktok_views", "INTEGER"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -5507,6 +5514,8 @@ def _public_generation(row: dict) -> dict:
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out["post_kit"] = _parse_post_kit(row.get("post_kit"))
     out["tiktok_url"] = (row.get("tiktok_url") or "").strip() or None
+    views = row.get("tiktok_views")
+    out["tiktok_views"] = int(views) if views is not None else None
     out.pop("prompt_used", None)
     # Stored unsigned so a row never holds a signature that outlives its own
     # expiry; signed fresh on every read. video_url and r2_url are both stored
@@ -7831,6 +7840,34 @@ async def set_generation_tiktok_link(
     ), user_id)
 
 
+@api_router.post("/generations/{generation_id}/tiktok-views")
+async def set_generation_tiktok_views(
+    generation_id: str, payload: TikTokViewsRequest, user_id: str = Depends(get_current_user_id)
+):
+    row = await _fetch_one(
+        "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    views = payload.tiktok_views
+    if views is None:
+        stored = None
+    else:
+        try:
+            stored = int(views)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Views must be a whole number of 0 or more.")
+        if isinstance(views, bool) or stored < 0 or stored > 10_000_000_000:
+            raise HTTPException(status_code=400, detail="Views must be a whole number of 0 or more.")
+    await _execute(
+        "UPDATE generations SET tiktok_views = ?, updated_at = ? WHERE id = ?",
+        (stored, now_iso(), generation_id),
+    )
+    return await _with_verdicts(_public_generation_detail(
+        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    ), user_id)
+
+
 @api_router.post("/generations/{generation_id}/archive")
 async def archive_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
     row = await _fetch_one(
@@ -8421,7 +8458,7 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   g.post_kit, g.tiktok_url,
+                   g.post_kit, g.tiktok_url, g.tiktok_views,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
                    p.strategy_version, ca.kind AS angle_kind
             FROM generations g
@@ -8451,6 +8488,8 @@ async def generation_history(
         entry["poster_url"] = _poster_url(row)
         entry["post_kit"] = _parse_post_kit(entry.get("post_kit"))
         entry["tiktok_url"] = (entry.get("tiktok_url") or "").strip() or None
+        views = entry.get("tiktok_views")
+        entry["tiktok_views"] = int(views) if views is not None else None
         entry["composition"] = None
         out.append(entry)
     await _with_verdicts(out, user_id)

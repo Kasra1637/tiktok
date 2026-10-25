@@ -7,6 +7,7 @@ import PageFrame from "../components/PageFrame";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl } from "../lib/api";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
+import { FirstRunChecklist } from "../components/onboarding/FirstRunChecklist";
 
 /**
  * Native Product Demo + CTA studio.
@@ -102,6 +103,12 @@ export function DemoCtaStudio() {
             : "Style any clip: phone mockup or full-frame for History."
         }
       />
+      {/* Step zero of the golden path lives here too, not just on Create:
+          a first-run founder landing on Demo + CTA from the sidebar meets
+          the same three doors, with rows 2 and 3 answering the "you are
+          here" pulse instead of navigating. Retires itself after the first
+          export saves, same as on Create. */}
+      <FirstRunChecklist />
       {generationId ? (
         <EditorRoute generationId={generationId} />
       ) : (

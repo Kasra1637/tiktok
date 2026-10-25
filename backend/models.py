@@ -450,6 +450,16 @@ class TikTokLinkRequest(BaseModel):
     tiktok_url: str = ""
 
 
+class TikTokViewsRequest(BaseModel):
+    """Views pasted back from the posted TikTok, read by hand.
+
+    Manual until any TikTok API: the founder reads the count off the live
+    video and pastes it here. None clears it. Out-of-range values are
+    refused at the endpoint, not coerced, so a typo never becomes data.
+    """
+    tiktok_views: Optional[int] = None
+
+
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

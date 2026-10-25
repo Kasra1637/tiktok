@@ -281,6 +281,8 @@ export const api = {
   archiveGeneration: (id) => client.post(`/generations/${id}/archive`).then((r) => r.data),
   setTikTokLink: (id, tiktok_url) =>
     client.post(`/generations/${id}/tiktok-link`, { tiktok_url }).then((r) => r.data),
+  setTikTokViews: (id, tiktok_views) =>
+    client.post(`/generations/${id}/tiktok-views`, { tiktok_views }).then((r) => r.data),
 
   // App-specific creative direction for the one render.
   //

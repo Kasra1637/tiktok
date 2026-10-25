@@ -844,6 +844,10 @@ export default function GenerationHistory() {
   // The endpoint caps at 200 and the page first asks for 100: a history that
   // outgrows the first page says so with a second page, not a silent cut.
   const [limit, setLimit] = useState(100);
+  // Sort is client-side like the hook-text search: the endpoint owns
+  // app + status filters, the page owns presentation. Uncounted renders
+  // (no pasted-back views) always sort after counted ones.
+  const [sort, setSort] = useState("newest");
 
   useEffect(() => {
     const next = {};
@@ -894,6 +898,9 @@ export default function GenerationHistory() {
 
   const completed = visible.filter((r) => r.status === "completed").length;
   const failed = visible.filter((r) => r.status === "failed").length;
+  const ordered = sort === "views"
+    ? [...visible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
+    : visible;
 
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
@@ -947,6 +954,18 @@ export default function GenerationHistory() {
               {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
                 <option key={s} value={s}>{humanize(s)}</option>
               ))}
+            </select>
+            <label className="sr-only" htmlFor="history-sort">Sort history</label>
+            <select
+              id="history-sort"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              aria-label="Sort history"
+              data-testid="history-sort"
+              className={PILL_SELECT_CLASS}
+            >
+              <option value="newest">Newest first</option>
+              <option value="views">Most viewed</option>
             </select>
           </div>
         }
@@ -1002,7 +1021,7 @@ export default function GenerationHistory() {
               No renders match “{query.trim()}”. Clear the search to see everything.
             </p>
           )}
-          {visible.map((row) => (
+          {ordered.map((row) => (
             <GenerationRow
               key={row.id}
               row={row}

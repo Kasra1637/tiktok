@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Clapperboard, ExternalLink, Link2, Loader2, X } from "lucide-react";
+import { Check, Clapperboard, ExternalLink, Eye, Link2, Loader2, X } from "lucide-react";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { GroupLabel } from "./SectionCard";
 import { Badge } from "./ui/badge";
@@ -48,6 +48,37 @@ export function HistoryFeedback({ row, signalRefs }) {
   const [savingLink, setSavingLink] = useState(false);
   const [linkError, setLinkError] = useState(null);
   const isWinner = thumbValue("video") === 1 && !!savedLink;
+  // Views pasted back from the posted TikTok: read by hand until any TikTok
+  // API. Shown only beside a posted link — views belong to the live video,
+  // not the render. Displayed, never decided on: only a thumbs up plus a
+  // link counts as a winner.
+  const [views, setViews] = useState(row.tiktok_views ?? "");
+  const [savedViews, setSavedViews] = useState(row.tiktok_views ?? null);
+  const [savingViews, setSavingViews] = useState(false);
+  const [viewsError, setViewsError] = useState(null);
+  const saveViews = useCallback(async () => {
+    const text = String(views).trim().replace(/,/g, "");
+    if (!/^\d+$/.test(text)) {
+      setViewsError("Views must be a whole number of 0 or more.");
+      return;
+    }
+    const count = Number(text);
+    if (count > 10000000000) {
+      setViewsError("That count is too large to be a TikTok view count.");
+      return;
+    }
+    setSavingViews(true);
+    setViewsError(null);
+    try {
+      const updated = await api.setTikTokViews(row.id, count);
+      setSavedViews(updated.tiktok_views ?? null);
+      setViews(updated.tiktok_views ?? "");
+    } catch (err) {
+      setViewsError(getErrorMessage(err));
+    } finally {
+      setSavingViews(false);
+    }
+  }, [row.id, views]);
   const saveLink = useCallback(async () => {
     setSavingLink(true);
     setLinkError(null);
@@ -168,6 +199,48 @@ export function HistoryFeedback({ row, signalRefs }) {
           <p className="text-xs text-muted-foreground">
             Marks this render posted. Only a thumbs up plus a link counts as a winner.
           </p>
+        )}
+        {savedLink && (
+          <div className="space-y-1.5 pt-1" data-testid={`history-tiktok-views-${row.id}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              {savedViews != null && (
+                <span className="text-xs font-semibold" data-testid={`history-tiktok-views-count-${row.id}`}>
+                  {Number(savedViews).toLocaleString("en-US")} views
+                </span>
+              )}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <label className="sr-only" htmlFor={`history-views-input-${row.id}`}>Views on the posted TikTok</label>
+                <Input
+                  id={`history-views-input-${row.id}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={views}
+                  onChange={(e) => setViews(e.target.value)}
+                  placeholder="Paste the view count…"
+                  aria-label="Views on the posted TikTok"
+                  data-testid={`history-tiktok-views-input-${row.id}`}
+                  disabled={savingViews}
+                  className="h-9"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={savingViews || String(views).trim() === ""}
+                onClick={saveViews}
+                data-testid={`history-tiktok-views-save-${row.id}`}
+              >
+                {savingViews ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save views"}
+              </Button>
+            </div>
+            {viewsError && <p role="alert" className="text-xs text-destructive">{viewsError}</p>}
+            {savedViews == null && (
+              <p className="text-xs text-muted-foreground">
+                Read the count off TikTok and paste it back — most-viewed renders sort first.
+              </p>
+            )}
+          </div>
         )}
       </div>
       <details data-testid={`history-parts-feedback-${row.id}`} className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
