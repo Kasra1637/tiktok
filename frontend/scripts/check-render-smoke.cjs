@@ -3850,6 +3850,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       const overlay = () => dom.window.document.querySelector('[data-testid="onboarding-tour-overlay"]');
       if (!overlay()) throw new Error("first-run tour button did not open the create tour");
       await clickEl(ctx, dom.window.document.querySelector('[data-testid="onboarding-tour-close-button"]'), "no tour close");
+      // A tour shortcut for another page navigates first: opening Demo +
+      // CTA's tour while still on Create would spotlight nothing.
+      global.__SMOKE_NAVIGATIONS = [];
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-tour-demo-cta"]'), "no style tour shortcut");
+      const went = global.__SMOKE_NAVIGATIONS || [];
+      if (!went.includes("/demo-cta")) throw new Error(`style tour shortcut navigated to ${JSON.stringify(went)}, not /demo-cta`);
       // Dismiss retires the card without claiming an export.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-dismiss"]'), "no dismiss control");
       if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("dismiss did not hide the first-run checklist");

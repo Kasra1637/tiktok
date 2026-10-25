@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Check, ChevronRight, HelpCircle, ListChecks, X } from "lucide-react";
 import { SectionCard } from "../SectionCard";
 import { useOptionalOnboarding } from "./OnboardingProvider";
@@ -55,6 +55,21 @@ export function FirstRunChecklist() {
   // down in the harness while working fine in the app. Without a provider
   // the steps are still doors — they just lose the tour shortcut.
   const onboarding = useOptionalOnboarding();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // A tour shortcut must land on its page first: opening the Demo + CTA
+  // tour while still on Create spotlights nothing and skips itself shut,
+  // which reads as a dead button. Navigate, then open the tour once the
+  // new page has rendered. Already there: just open it.
+  const goTour = (step) => {
+    if (!onboarding) return;
+    if (pathname === step.to) {
+      onboarding.startTour(step.tourId);
+      return;
+    }
+    navigate(step.to);
+    setTimeout(() => onboarding.startTour(step.tourId), 150);
+  };
   const [visible, setVisible] = useState(() => shouldShowChecklist(storage()));
   if (!visible) return null;
 
@@ -95,14 +110,27 @@ export function FirstRunChecklist() {
             >
               {i + 1}
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{step.title}</p>
-              <p className="truncate text-xs text-muted-foreground">{step.body}</p>
-            </div>
+            {/* The whole bar is the door: text and chevron share one link so
+                a click anywhere on the row (not just the 32px chevron)
+                navigates. The tour shortcut stays a separate button beside
+                it — a button inside a link is invalid markup and would make
+                "show me around" navigate away instead. */}
+            <Link
+              to={step.to}
+              aria-label={`Go to ${step.title}`}
+              data-testid={`first-run-go-${step.key}`}
+              className="focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{step.title}</span>
+                <span className="block truncate text-xs text-muted-foreground">{step.body}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
             {onboarding && (
             <button
               type="button"
-              onClick={() => onboarding.startTour(step.tourId)}
+              onClick={() => goTour(step)}
               title={`Show me around ${step.title}`}
               aria-label={`Show me around ${step.title}`}
               data-testid={`first-run-tour-${step.key}`}
@@ -111,14 +139,6 @@ export function FirstRunChecklist() {
               <HelpCircle className="h-4 w-4" />
             </button>
             )}
-            <Link
-              to={step.to}
-              aria-label={`Go to ${step.title}`}
-              data-testid={`first-run-go-${step.key}`}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[color:var(--indigo-8)] hover:text-foreground"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Link>
           </li>
         ))}
       </ol>
