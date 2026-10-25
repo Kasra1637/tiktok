@@ -2305,9 +2305,9 @@ setObjective("");
                 picker above, the goal it ranks, then the templates filtered
                 below it. No step change between choosing and seeing what the
                 choice ranks. */}
-            {!objective && (
+            {!objective && angle && (
               <p className="text-xs text-muted-foreground">
-                {angle ? "Pick a goal above — the templates below rank for it." : "Generate and pick an audience angle first; then choose its goal and template."}
+                Pick a goal above — the templates below rank for it.
               </p>
             )}
             {profileId && objective && (

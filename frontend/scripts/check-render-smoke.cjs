@@ -3540,7 +3540,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("an angle list rendered outside its home step");
       }
-      expectText(ctx, "Generate and pick an audience angle first");
+      expectAbsent(ctx, "Generate and pick an audience angle first", "the removed angle-first hint is back");
       expectAbsent(ctx, "Pick a goal above", "goal guidance points at a hidden control");
     });
   });
@@ -4016,10 +4016,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (text.includes("Fit 9")) {
       throw new Error("a fit score is shown for a template ranked with no objective");
     }
-    // ...and it must say what is missing and how to fix it, rather than
-    // rendering an empty step.
-    if (!text.includes("Generate and pick an audience angle first; then choose its goal and template.")) {
-      throw new Error("the merged step does not explain the missing angle before its goal");
+    // ...and it must not restate the angle ask here: the angle gate above
+    // already requires an angle, and the goal-wait marker stays empty for
+    // the same reason — a third copy of one instruction. The step stays quiet
+    // until the gate above is satisfied.
+    if (text.includes("Generate and pick an audience angle first")) {
+      throw new Error("the removed angle-first hint is back below the templates");
     }
     // The fix lives on this same screen: the angle gate above is what ranks
     // the goal that ranks the templates, so no jump elsewhere is needed.
