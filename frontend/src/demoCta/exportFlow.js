@@ -4,6 +4,7 @@ import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
+import { markFirstRunDone } from "../lib/onboarding/firstRun";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 
@@ -77,7 +78,7 @@ export function useExportFlow(settings) {
   const {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
-    appendUrl, appendMeta, appendVideoRef,
+    appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -104,6 +105,10 @@ export function useExportFlow(settings) {
         template_id: generation?.template_id || "",
       });
       onSaved?.(savedRow);
+      // The golden path is complete: Create, then Demo + CTA, then Export.
+      // Retire the first-run checklist so it never greets a founder who has
+      // already shipped. A storage failure just shows the card once more.
+      try { markFirstRunDone(window.localStorage); } catch { /* see firstRun.js */ }
       clearExportErrors();
       return savedRow;
     } catch (err) {
@@ -158,6 +163,7 @@ export function useExportFlow(settings) {
       const canvas = document.createElement("canvas");
       const { blob, duration, audioSegments } = await exportTikTok({
         source: await response.blob(), appendSource: appendBlob, canvas, signal: controller.signal,
+        baseMuted: !!baseMuted, appendMuted: !!appendMuted,
         drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
         onProgress: setProgress,
       });

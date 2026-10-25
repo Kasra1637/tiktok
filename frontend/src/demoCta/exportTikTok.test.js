@@ -128,6 +128,38 @@ test.each([true, false])("joined AAC schedules both rates/channels without retim
   } finally { delete global.OfflineAudioContext; }
 });
 
+test("a muted base keeps its video length but exports no audio", async () => {
+  const result = await encode({ baseMuted: true });
+  expect(result.duration).toBe(4 / 30);
+  expect(output.addAudioTrack).not.toHaveBeenCalled();
+  expect(audioSource.add).not.toHaveBeenCalled();
+  expect(result.audioSegments).toEqual([]);
+  expect(output.finalize).toHaveBeenCalledTimes(1);
+});
+
+test("a muted added clip keeps the joined length with base audio only", async () => {
+  input.getPrimaryAudioTrack = async () => ({ canDecode: async () => true });
+  addClip({ audio: true });
+  const decoded = [];
+  global.OfflineAudioContext = jest.fn().mockImplementation(() => ({
+    destination: {},
+    createBufferSource: () => ({ connect: jest.fn(), start: jest.fn() }),
+    startRendering: async () => ({ numberOfChannels: 2, getChannelData: () => new Float32Array(9120) }),
+  }));
+  AudioSample.fromAudioBuffer.mockReturnValue([]);
+  AudioSampleSink.mockImplementation((track) => ({ samples: async function* () {
+    decoded.push(track.second ? "added" : "base");
+    yield { timestamp: 0.5, duration: 0.11, toAudioBuffer: () => ({}), close: jest.fn() };
+  } }));
+  try {
+    const result = await encode({ appendSource: new Blob(), appendMuted: true });
+    expect(result.duration).toBeCloseTo(0.19);
+    expect(decoded).toEqual(["base"]);
+    expect(result.audioSegments).toHaveLength(1);
+    expect(result.audioSegments[0].start).toBe(0);
+  } finally { delete global.OfflineAudioContext; }
+});
+
 test("unsupported H.264 or AAC fails rather than silently dropping audio", async () => {
   canEncodeVideo.mockResolvedValueOnce(false);
   await expect(encode()).rejects.toThrow(/Chrome or Edge/);

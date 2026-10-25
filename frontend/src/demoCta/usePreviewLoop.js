@@ -29,6 +29,7 @@ export function usePreviewLoop(settings) {
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
+    baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -241,9 +242,21 @@ export function usePreviewLoop(settings) {
     });
   }, [appendVideoRef]);
 
+  // Per-clip mute rides on top of the monitor mute: a muted segment stays
+  // silent even after the founder unmutes preview, and export reads the
+  // same flags from the editor rather than this element state.
   useEffect(() => {
-    [videoRef.current, appendVideoRef?.current].filter(Boolean).forEach((el) => { el.muted = previewMuted; });
-  }, [previewMuted, appendUrl, appendVideoRef]);
+    const base = videoRef.current;
+    const added = appendVideoRef?.current;
+    if (base) {
+      base.muted = previewMuted || !!baseMuted;
+      if (!base.muted) base.volume = 1;
+    }
+    if (added) {
+      added.muted = previewMuted || !!appendMuted;
+      if (!added.muted) added.volume = 1;
+    }
+  }, [previewMuted, baseMuted, appendMuted, appendUrl, appendVideoRef]);
 
   // Space toggles preview playback from anywhere that is not text entry, the
   // way every video editor answers it. A focused button or link already

@@ -742,6 +742,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
   const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
   const [appendOverlays, setAppendOverlays] = useState(false);
+  // Per-clip audio: each segment mutes independently in preview and
+  // export. Export keeps the segment's video length and writes silence
+  // for a muted clip, so the join never shifts.
+  const [baseMuted, setBaseMuted] = useState(false);
+  const [appendMuted, setAppendMuted] = useState(false);
   const [appendName, setAppendName] = useState("");
   const [appendError, setAppendError] = useState(null);
   const appendVideoRef = useRef(null);
@@ -770,6 +775,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
+    baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
@@ -795,7 +801,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const { saveExport, exportVideo, exportErrors, clearExportErrors } = useExportFlow({
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
-    appendUrl, appendMeta, appendVideoRef,
+    appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -1433,6 +1439,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               prefix="view-mode-"
             />
           </div>
+          {videoUrl && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={baseMuted} data-testid="base-audio-mute"
+                onChange={(event) => { invalidateSequence(); setBaseMuted(event.target.checked); }} />
+              Mute base clip audio in preview and export
+            </label>
+          )}
           {/* Base scene only. The added clip picks its own scene in Second
               clip, and the painter resolves per segment, so one hand photo
               can open into a different room. */}
@@ -1522,6 +1535,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
                 onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
               Apply text and overlays to the added clip too
+            </label>
+          )}
+          {appendUrl && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={appendMuted} data-testid="append-audio-mute"
+                onChange={(event) => { invalidateSequence(); setAppendMuted(event.target.checked); }} />
+              Mute added clip audio in preview and export
             </label>
           )}
         </EditorSection>
@@ -2068,6 +2088,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   Upload a clip
                 </Button>
                 <p className="mt-2 text-xs text-muted-foreground">Upload one clip to style it.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Or pick a finished render from <Link to="/history" className="underline underline-offset-2 hover:text-foreground">History</Link>.
+                </p>
               </div>
             )}
         </div>

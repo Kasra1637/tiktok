@@ -15,7 +15,7 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
   const duration = segments.reduce((sum, segment) => sum + segment.duration, 0);
   const context = new OfflineAudioContext(2, Math.round(duration * rate), rate);
   for (const segment of segments) {
-    if (!segment.audioTrack) continue;
+    if (!segment.audioTrack || segment.muted) continue;
     for await (const sample of new AudioSampleSink(segment.audioTrack).samples(segment.origin, segment.origin + segment.duration)) {
       try {
         checkCancelled();
@@ -57,8 +57,9 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
   }
 }
 
-/** Decode pinned sources, base then optional upload, on one 30 fps timeline. */
-export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal }) {
+/** Decode pinned sources, base then optional upload, on one 30 fps timeline.
+ * A muted segment keeps its video length; only its audio is left out. */
+export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -90,7 +91,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       if (audioTrack && (!await audioTrack.canDecode() || !await canEncodeAudio("aac", { sampleRate: 48000, numberOfChannels: 2, bitrate: audioBitrate }))) {
         throw new Error("This browser cannot preserve this clip's audio in TikTok MP4. Use a current Chrome or Edge browser; audio will not be silently removed.");
       }
-      segments.push({ track, audioTrack, origin, duration: length, start: duration });
+      segments.push({ track, audioTrack, origin, duration: length, start: duration, muted: index ? appendMuted : baseMuted });
       duration += length;
     }
     canvas.width = width;
@@ -98,7 +99,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
     output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
     const videoSource = new CanvasSource(canvas, videoConfig);
     output.addVideoTrack(videoSource, { frameRate: fps });
-    const hasAudio = segments.some((segment) => segment.audioTrack);
+    const hasAudio = segments.some((segment) => segment.audioTrack && !segment.muted);
     const audioSource = hasAudio ? new AudioSampleSource(audioConfig) : null;
     if (audioSource) output.addAudioTrack(audioSource);
     await output.start();
@@ -128,7 +129,8 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       if (segments.length > 1) {
         await encodeJoinedAudio(segments, audioSource, checkCancelled);
       } else {
-        const { audioTrack, origin, duration } = segments[0];
+        const { audioTrack, origin, duration, muted } = segments[0];
+        if (muted) { audioSource.close(); return; }
         for await (const sample of new AudioSampleSink(audioTrack).samples(origin, origin + duration)) {
           try {
             checkCancelled();
@@ -159,7 +161,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
     finalized = true;
     return {
       blob: new Blob([output.target.buffer], { type: "video/mp4" }), duration: segments.length > 1 ? duration : frameCount / fps,
-      audioSegments: segments.filter((segment) => segment.audioTrack).map(({ start, duration }) => ({ start, duration })),
+      audioSegments: segments.filter((segment) => segment.audioTrack && !segment.muted).map(({ start, duration }) => ({ start, duration })),
     };
   } finally {
     try {
