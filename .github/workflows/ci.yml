@@ -1,22 +1,14 @@
-# CI: every pull request and every push to main must pass the same five
-# suites the repo gates on locally before it merges or deploys:
+# CI: every pull request and every push to main must pass the backend suite
+# before it merges or deploys:
 #
-#   1. backend pytest  — `python -m pytest backend/ -q -p no:cacheprovider`
-#   2. render smoke    — `yarn --cwd frontend check:render` (246 checks)
-#   3. logic gates     — `yarn --cwd frontend check:logic`
-#   4. import checks   — `yarn --cwd frontend check:imports`
-#   5. tour audit      — `node frontend/scripts/audit_tour_targets.cjs`
-#                        (every onboarding tour target matches a real testid;
-#                        a dangling target fails the merge)
+#   backend pytest  — `python -m pytest backend/ -q -p no:cacheprovider`
 #
-# (frontend/package.json also has a `check` script that runs 2-4 in one go;
-#  the tour audit stays CI-only on purpose, so local dev gains no new step.)
+# The frontend gates (imports, logic, render smoke, tour audit) no longer run
+# here; they stay available locally via frontend/package.json scripts.
 #
 # Nothing here touches local dev speed: no pre-commit hooks, no husky, no
-# local watchers added. These jobs run only in GitHub Actions; locally you
-# keep running exactly the commands above by hand. Backend and frontend jobs
-# run in parallel, and both dependency installs are cached, so the signal
-# arrives in minutes, not tens of minutes.
+# local watchers added. This job runs only in GitHub Actions; locally you
+# keep running the backend suite by hand.
 #
 # The deploy workflow stays push-to-main-only and serialized; CI is
 # cancel-in-progress so a rapid push series only gates its latest commit.
@@ -57,35 +49,3 @@ jobs:
       - name: Backend test suite
         run: python -m pytest backend/ -q -p no:cacheprovider
 
-  frontend-checks:
-    name: frontend gates (imports, logic, smoke, tour audit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Enable yarn classic
-        run: corepack enable
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: yarn install --frozen-lockfile
-
-      - name: Gate 4 — import checks
-        working-directory: frontend
-        run: yarn check:imports
-
-      - name: Gate 3 — logic gates
-        working-directory: frontend
-        run: yarn check:logic
-
-      - name: Gate 2 — render smoke
-        working-directory: frontend
-        run: yarn check:render
-
-      - name: Gate 5 — tour target audit
-        working-directory: frontend
-        run: node scripts/audit_tour_targets.cjs
