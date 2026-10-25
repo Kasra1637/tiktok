@@ -10780,6 +10780,200 @@ async function runDemoCtaChecks() {
     );
   });
 
+  await check("History mounts one page of cards with 200 rows and measures the load", async (ctx) => {
+    // The 200-row path mounted 200 heavy GenerationRows: a video element,
+    // poster logic, and feedback hooks each. The render window is one page;
+    // the fetch stays one call and the rest is navigation, not DOM.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 200 }, (_, i) => ({ ...COMPLETED, id: `scale-${i}` }));
+    let fetches = 0;
+    const t0 = Date.now();
+    await withApi(
+      {
+        getGenerationHistory: async () => { fetches += 1; return { generations: rows }; },
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+      }
+    );
+    const ms = Date.now() - t0;
+    const cards = ctx.container.querySelectorAll('[data-testid="history-card"]');
+    console.log(`         200 rows settled in ${ms}ms with ${cards.length} cards in the DOM (${fetches} fetch)`);
+    if (cards.length > 50) {
+      throw new Error(`200 rows mounted ${cards.length} cards; the render window is one page of 50`);
+    }
+    if (fetches !== 1) {
+      throw new Error(`200 rows cost ${fetches} history fetches; paging loaded rows must not refetch`);
+    }
+    if (ms > 60000) {
+      throw new Error(`200 rows took ${ms}ms to settle; something in the row path blocks the load`);
+    }
+  });
+
+  await check("History pages through loaded rows without refetching", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    let fetches = 0;
+    await withApi(
+      {
+        getGenerationHistory: async () => { fetches += 1; return { generations: rows }; },
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        const pager = ctx.container.querySelector('[data-testid="history-pager"]');
+        if (!pager) {
+          throw new Error("120 rows offer no pager; every row mounts on one page");
+        }
+        if (!/Page 1 of 3/.test(pager.textContent || "")) {
+          throw new Error(`the pager mislabels 120 rows: ${JSON.stringify((pager.textContent || "").trim())}`);
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-next-page"]'), "no next page");
+        if (fetches !== 1) {
+          throw new Error("turning the page refetched history instead of slicing loaded rows");
+        }
+        if (!ctx.container.querySelector("#generation-pg-55")) {
+          throw new Error("page 2 does not show its rows");
+        }
+        if (ctx.container.querySelector("#generation-pg-5")) {
+          throw new Error("page 1 rows stay mounted under page 2");
+        }
+      }
+    );
+  });
+
+  await check("a #generation- link past the first page lands on its row's page", async (ctx) => {
+    // The deep link names a render, not a page: when the row sits past the
+    // render window, the pager has to jump to its page before the existing
+    // open-and-scroll can reach it.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    global.__SMOKE_HASH = "#generation-pg-100";
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: rows }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+        }
+      );
+    } finally {
+      global.__SMOKE_HASH = "";
+    }
+    const card = ctx.container.querySelector("#generation-pg-100");
+    if (!card) {
+      throw new Error("the deep-linked row is on another page and the pager never jumped to it");
+    }
+    if (card.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
+      throw new Error("the deep-linked row mounted but stayed closed");
+    }
+    const current = ctx.container.querySelector('[data-testid="history-pager"] [aria-current="page"]');
+    if (!current || current.textContent.trim() !== "3") {
+      throw new Error("the deep link opened its row without moving the pager to page 3");
+    }
+  });
+
+  await check("turning History pages keeps keyboard focus on the pager", async (ctx) => {
+    // The pager buttons survive the turn, so the control that took the
+    // keypress is still there to keep focus — a turn that rebuilds the
+    // pager drops focus to <body> and strands keyboard users.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    await withApi(
+      {
+        getGenerationHistory: async () => ({ generations: rows }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      },
+      async () => {
+        await mount(GenerationHistory)(ctx);
+        const next = ctx.container.querySelector('[data-testid="history-next-page"]');
+        if (!next) throw new Error("no next page to turn to");
+        next.focus();
+        await clickEl(ctx, next, "no next page");
+        if (dom.window.document.activeElement !== next) {
+          throw new Error("turning the page dropped keyboard focus; the activating control must survive the turn");
+        }
+        if (!/Page 2 of 3/.test(ctx.container.querySelector('[data-testid="history-pager"]').textContent || "")) {
+          throw new Error("the page did not turn");
+        }
+      }
+    );
+  });
+
+  await check("narrowing History resets to page 1 without moving focus", async (ctx) => {
+    // A search that leaves the founder on page 3 of a one-page result is a
+    // stranded empty page. The reset keeps them on results, and focus stays
+    // in the search field that caused it — the pager is gone, but nothing
+    // yanked focus anywhere.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 120 }, (_, i) => ({
+      ...COMPLETED,
+      id: `f-${i}`,
+      hook_line: i < 10 ? "plumber fixes the sink" : `render number ${i}`,
+    }));
+    const oldParams = global.__SMOKE_PARAMS;
+    global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(History)); };
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: rows }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(History)(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="history-next-page"]'), "no next page");
+          const search = ctx.container.querySelector('[data-testid="history-search"]');
+          search.focus();
+          await typeInto(ctx, search, "plumber");
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="history-pager"]')) {
+            throw new Error("ten matching rows still offer a pager stranded on page 2");
+          }
+          if (!/10 results/.test(ctx.text())) {
+            throw new Error("the search did not narrow the results");
+          }
+          if (dom.window.document.activeElement !== search) {
+            throw new Error("narrowing the results moved focus out of the search field");
+          }
+        }
+      );
+    } finally { global.__SMOKE_ROUTE_CHANGE = null; global.__SMOKE_PARAMS = oldParams; }
+  });
+
+  await check("turning History pages brings the list back into view", async (ctx) => {
+    // jsdom has no layout and no scrollIntoView, so the pin installs one and
+    // watches who it is called on. A turn that leaves the scroll wherever it
+    // was strands the founder at the bottom of a list that just changed above.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    const seen = [];
+    const proto = dom.window.Element.prototype;
+    const had = Object.prototype.hasOwnProperty.call(proto, "scrollIntoView");
+    const prev = proto.scrollIntoView;
+    proto.scrollIntoView = function () { seen.push(this); };
+    try {
+      await withApi(
+        {
+          getGenerationHistory: async () => ({ generations: rows }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="history-next-page"]'), "no next page");
+        }
+      );
+    } finally {
+      if (had) proto.scrollIntoView = prev; else delete proto.scrollIntoView;
+    }
+    const list = ctx.container.querySelector('[data-testid="history-list"]');
+    if (!seen.includes(list)) {
+      throw new Error("turning the page left the list scrolled wherever it was; the turn must bring it back into view");
+    }
+  });
+
   await check("History's details modal answers Escape", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi(

@@ -27,6 +27,7 @@ import {
   RotateCcw,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   Film,
   Info,
@@ -49,6 +50,13 @@ import {
  */
 const DRAG_COMMIT_PX = 56;
 const DRAG_COMMIT_RATIO = 0.6;
+/**
+ * Rows per History page. The fetch window (100, then 200 via show-more) is
+ * bytes; this is DOM. One page of heavy tiles — a video element, poster
+ * logic, and feedback hooks each — keeps the 200-row path mounted light
+ * while every row stays one pager turn away.
+ */
+const HISTORY_PAGE_SIZE = 50;
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -896,6 +904,10 @@ export default function GenerationHistory() {
   // Deep links load the same 200-row window as Analytics; other visits start
   // with 100 and offer a second page instead of silently cutting off history.
   const [limit, setLimit] = useState(() => location.hash.startsWith("#generation-") ? 200 : 100);
+  // The pager navigates loaded rows; the reset below (after `sort`, which it
+  // depends on) keeps a new filter, search, sort, or fetch window from
+  // stranding the founder on page 3 of a one-page result.
+  const [page, setPage] = useState(1);
   // Sort is client-side like the hook-text search: the endpoint owns
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
@@ -975,6 +987,27 @@ export default function GenerationHistory() {
   const ordered = sort === "views"
     ? [...visible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
     : visible;
+  // The render window over the loaded rows: at most one page mounts. The
+  // fetch window above still owns how many rows arrive; this owns how many
+  // are in the DOM. Clamped, never empty-headed: a shrink lands on page 1
+  // via the reset above, and a mid-list page survives deletions.
+  const pageCount = Math.max(1, Math.ceil(ordered.length / HISTORY_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = ordered.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
+  // Turning the page swaps the rows above the fold, so bring the list back
+  // into view instead of stranding the founder at its bottom. The pager
+  // buttons survive the turn, so the activating control keeps focus.
+  const listRef = useRef(null);
+  const goToPage = useCallback((next) => {
+    setPage(next);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    listRef.current?.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }, []);
+  // Focus needs no rescue here: the filter and sort controls that caused the
+  // reset stay mounted, so focus is already somewhere sensible.
+  useEffect(() => {
+    setPage(1);
+  }, [profileFilter, statusFilter, query, sort, limit]);
 
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
@@ -984,10 +1017,21 @@ export default function GenerationHistory() {
   const hashId = (location.hash || "").startsWith("#generation-")
     ? location.hash.slice("#generation-".length)
     : "";
+  // The deep link names a render, not a page: when the row sits past the
+  // render window, jump the pager to its page first. Setting an unchanged
+  // page is a React no-op, so this settles instead of looping.
+  useEffect(() => {
+    if (!hashId || ordered.length === 0) return;
+    const index = ordered.findIndex((row) => row.id === hashId);
+    if (index !== -1) setPage(Math.floor(index / HISTORY_PAGE_SIZE) + 1);
+  }, [hashId, ordered]);
   useEffect(() => {
     if (!hashId || rows.length === 0) return;
     document.getElementById(`generation-${hashId}`)?.scrollIntoView?.({ block: "nearest" });
-  }, [hashId, rows]);
+    // safePage re-fires this once the jump above mounts the named row; without
+    // it the scroll runs while the row is still on another page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hashId, rows, safePage]);
 
   return (
     <PageFrame className="space-y-6">
@@ -1097,7 +1141,7 @@ export default function GenerationHistory() {
           }
         />
       ) : (
-        <div className="history-grid" data-testid="history-list">
+        <div className="history-grid" data-testid="history-list" ref={listRef}>
           {visible.length > 1 && (
             <p className="col-span-full text-xs text-muted-foreground">
               {visible.length} results · {completed} completed · {failed} failed
@@ -1108,7 +1152,7 @@ export default function GenerationHistory() {
               No renders match “{query.trim()}”. Clear the search to see everything.
             </p>
           )}
-          {ordered.map((row) => (
+          {paged.map((row) => (
             <GenerationRow
               key={row.id}
               row={row}
@@ -1131,6 +1175,50 @@ export default function GenerationHistory() {
             </div>
           )}
         </div>
+      )}
+      {/* The pager navigates the loaded rows; show-more above still owns how
+          many rows load. Numbered buttons all stay mounted so turning pages
+          never unmounts the control holding focus. At most four pages: the
+          fetch window caps at 200 rows of 50. */}
+      {pageCount > 1 && (
+        <nav aria-label="History pages" data-testid="history-pager" className="flex items-center justify-center gap-1 pt-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={safePage === 1}
+            onClick={() => goToPage(safePage - 1)}
+            data-testid="history-prev-page"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+            <Button
+              key={n}
+              variant="secondary"
+              size="sm"
+              onClick={() => goToPage(n)}
+              data-testid={`history-page-${n}`}
+              aria-label={`Page ${n}`}
+              aria-current={n === safePage ? "page" : undefined}
+            >
+              {n}
+            </Button>
+          ))}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={safePage === pageCount}
+            onClick={() => goToPage(safePage + 1)}
+            data-testid="history-next-page"
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          <span className="ml-2 text-xs text-muted-foreground" data-testid="history-page-status">
+            Page {safePage} of {pageCount}
+          </span>
+        </nav>
       )}
     </PageFrame>
   );
