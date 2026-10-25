@@ -29,10 +29,18 @@ export function ComponentThumbs({
   const startValue = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
   const [value, setValue] = useState(() => startValue(initialValue));
   const [saved, setSaved] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const pendingRef = useRef(null);
   // The last (resetKey, initialValue) actually applied. Without this, an own
   // vote round-tripping back through initialValue would clear the "Thanks"
   // confirmation the vote just earned.
   const appliedRef = useRef({ key: undefined, init: undefined });
+
+  useEffect(() => {
+    pendingRef.current = null;
+    setSaving(false);
+    return () => { pendingRef.current = null; };
+  }, [resetKey]);
 
   useEffect(() => {
     const start = startValue(initialValue);
@@ -47,10 +55,17 @@ export function ComponentThumbs({
   }, [resetKey, initialValue]);
 
   const onChange = async (next) => {
+    if (disabled || pendingRef.current) return;
     setValue(next);
     setSaved(null);
     if (next === 0) return;
+    const request = {};
+    pendingRef.current = request;
+    setSaving(true);
     const ok = await recordThumb(component, next, refs);
+    if (pendingRef.current !== request) return;
+    pendingRef.current = null;
+    setSaving(false);
     if (!ok) {
       setSaved("failed");
       setValue(appliedRef.current.init ?? 0);
@@ -70,7 +85,7 @@ export function ComponentThumbs({
         <span className="eyebrow block">{question}</span>
         <p className="text-xs text-muted-foreground" aria-live="polite">
           {saved === "saved"
-            ? "Thanks — future suggestions for this app will learn from it."
+            ? "Rating saved — it informs future suggestions, not proof of performance."
             : saved === "failed"
               ? "Could not save your rating. Try again."
               : hint}
@@ -78,7 +93,7 @@ export function ComponentThumbs({
       </div>
       <ThumbPair
         value={value}
-        disabled={disabled}
+        disabled={disabled || saving}
         size={size}
         upLabel="Good"
         downLabel="Not good"

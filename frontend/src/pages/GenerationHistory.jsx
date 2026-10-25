@@ -84,7 +84,7 @@ function DetailRow({ label, children }) {
  * Those two together are the audit trail for a claim in a published video,
  * so they belong one click away rather than only in the database.
  */
-function GenerationDetails({ generationId, onClose }) {
+function GenerationDetails({ generationId, onClose, postKit, onUpdated }) {
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState(null);
   const closeRef = useRef(null);
@@ -166,8 +166,9 @@ function GenerationDetails({ generationId, onClose }) {
             {/* Same frozen kit as the drawer, read off the detail endpoint. */}
             {detail.post_kit && (
               <PostKitSection
-                postKit={detail.post_kit}
+                postKit={postKit ?? detail.post_kit}
                 generationId={detail.id || generationId}
+                onUpdated={(kit) => onUpdated?.(generationId, { post_kit: kit })}
               />
             )}
 
@@ -321,6 +322,9 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  */
 function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  useEffect(() => {
+    if (defaultExpanded) setExpanded(true);
+  }, [defaultExpanded]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -635,7 +639,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
             {/* Frozen post copy for this render; pre-kit rows show nothing. */}
             {row.post_kit && (
               <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-                <PostKitSection postKit={row.post_kit} generationId={row.id} />
+                <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
               </div>
             )}
 
@@ -832,7 +836,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
       )}
 
       {showDetails && (
-        <GenerationDetails generationId={row.id} onClose={() => setShowDetails(false)} />
+        <GenerationDetails generationId={row.id} postKit={row.post_kit} onUpdated={onUpdated} onClose={() => setShowDetails(false)} />
       )}
     </article>
   );
@@ -843,15 +847,20 @@ export default function GenerationHistory() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Filters mirror into ?profile=&status=&q= so a view like "failed renders
-  // for this app" is a shareable link, not a re-click every visit. State
-  // stays the source of truth; the URL is a mirror updated below.
+  // The URL owns filters, so back/forward and same-page links cannot disagree
+  // with a second local copy. Preserve the clip anchor when editing a filter.
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [profileFilter, setProfileFilter] = useState(() => searchParams.get("profile") || "");
-  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
-  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  const profileFilter = searchParams.get("profile") || "";
+  const statusFilter = searchParams.get("status") || "";
+  const query = searchParams.get("q") || "";
+  const setFilter = (name, value) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(name, value);
+    else next.delete(name);
+    navigate({ search: next.toString(), hash: location.hash }, { replace: true });
+  };
   // Deep links load the same 200-row window as Analytics; other visits start
   // with 100 and offer a second page instead of silently cutting off history.
   const [limit, setLimit] = useState(() => location.hash.startsWith("#generation-") ? 200 : 100);
@@ -864,14 +873,14 @@ export default function GenerationHistory() {
   }, []);
 
   useEffect(() => {
-    const next = {};
-    if (profileFilter) next.profile = profileFilter;
-    if (statusFilter) next.status = statusFilter;
-    if (query.trim()) next.q = query.trim();
-    navigate({ search: new URLSearchParams(next).toString(), hash: location.hash }, { replace: true });
-  }, [profileFilter, statusFilter, query, location.hash, navigate]);
+    if (location.hash.startsWith("#generation-")) setLimit(200);
+  }, [location.hash]);
+
+  const loadRequest = useRef(null);
 
   const load = useCallback(async () => {
+    const request = {};
+    loadRequest.current = request;
     setLoading(true);
     setError(null);
     try {
@@ -880,16 +889,17 @@ export default function GenerationHistory() {
         status: statusFilter || undefined,
         limit,
       });
-      setRows(data.generations || []);
+      if (request === loadRequest.current) setRows(data.generations || []);
     } catch (err) {
-      setError(getErrorMessage(err));
+      if (request === loadRequest.current) setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   }, [profileFilter, statusFilter, limit]);
 
   useEffect(() => {
     load();
+    return () => { loadRequest.current = null; };
   }, [load]);
 
   useEffect(() => {
@@ -939,7 +949,7 @@ export default function GenerationHistory() {
             <AppPicker
               profiles={profiles}
               value={profileFilter}
-              onChange={setProfileFilter}
+              onChange={(value) => setFilter("profile", value)}
               allLabel="All apps"
               ariaLabel="Filter by app"
             />
@@ -948,7 +958,7 @@ export default function GenerationHistory() {
               id="history-search"
               type="search"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => setFilter("q", e.target.value)}
               placeholder="Search hooks…"
               aria-label="Search by hook text"
               data-testid="history-search"
@@ -958,7 +968,7 @@ export default function GenerationHistory() {
             <select
               id="history-status-filter"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => setFilter("status", e.target.value)}
               aria-label="Filter by status"
               className={PILL_SELECT_CLASS}
             >

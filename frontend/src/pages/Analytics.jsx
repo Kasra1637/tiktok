@@ -130,7 +130,8 @@ export default function Analytics() {
   const signals = feedback?.summary?.top_signals || [];
   const reasons = feedback?.summary?.top_reasons || [];
   const renders = Array.isArray(generations) ? generations : null;
-  const hasAnything = signals.length > 0 || reasons.length > 0 || (renders?.length || 0) > 0;
+  const hasFeedback = (feedback?.summary?.total || 0) > 0 || (feedback?.feedback?.length || 0) > 0;
+  const hasAnything = hasFeedback || signals.length > 0 || reasons.length > 0 || (renders?.length || 0) > 0;
 
   return (
     <PageFrame className="space-y-6">
@@ -202,6 +203,15 @@ export default function Analytics() {
           )}
           {renders !== null && renders.length > 0 && (
             <RenderActivity generations={renders} />
+          )}
+          {hasFeedback && !signals.length && !reasons.length && !renders?.length && (
+            <p className="text-sm text-muted-foreground" role="status">
+              Feedback is saved. No renders or automatic workflow signals are in this loaded set yet.
+              Ratings inform future suggestions; they are not conversions or proof that a clip works.
+            </p>
+          )}
+          {hasFeedback && (
+            <p className="text-xs text-muted-foreground">Feedback below uses up to 500 most recent saved events{selectedId ? " for this app" : " across all apps"}. Repeated ratings are events, not unique clips or measured outcomes.</p>
           )}
           {signals.length > 0 && (
             <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />

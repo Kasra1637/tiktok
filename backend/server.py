@@ -7829,7 +7829,10 @@ async def set_generation_tiktok_link(
             parts = urlsplit(link)
         except ValueError:
             raise HTTPException(status_code=400, detail="That is not a TikTok link. Paste the video's tiktok.com URL.")
-        if parts.scheme not in ("http", "https") or "tiktok.com" not in (parts.netloc or ""):
+        host = (parts.hostname or "").lower()
+        if (parts.scheme not in ("http", "https")
+                or not (host == "tiktok.com" or host.endswith(".tiktok.com"))
+                or parts.username is not None or parts.password is not None):
             raise HTTPException(status_code=400, detail="That is not a TikTok link. Paste the video's tiktok.com URL.")
     await _execute(
         "UPDATE generations SET tiktok_url = ?, updated_at = ? WHERE id = ?",

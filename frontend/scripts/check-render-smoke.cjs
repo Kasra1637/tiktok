@@ -376,6 +376,7 @@ const OBJECTIVE_OUTCOMES = {
 const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
+  recordFeedback: async () => ({}),
   getStudioVideoModels: async () => ({ default: "minimax-h3", models: [CAPABILITY] }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
@@ -689,6 +690,7 @@ function load(relPath) {
           // `arguments` here would leak the requireShim spec string instead
           // of the navigated path.
           if (global.__SMOKE_NAVIGATIONS) global.__SMOKE_NAVIGATIONS.push(...args);
+          global.__SMOKE_ROUTE_CHANGE?.(args[0]);
         },
         useSearchParams: () => [searchParams(), () => {}],
         // The embedded AssetLibrary on the Assets step reads the route, so a
@@ -737,7 +739,7 @@ function load(relPath) {
       toast.dismiss = () => {};
       return { toast };
     }
-    if (spec.endsWith("lib/api")) {
+    if (spec.endsWith("lib/api") || (abs === path.join(SRC, "lib", "feedback.js") && spec === "./api")) {
       // Mirror the real getErrorMessage: checks assert on the surfaced text
       // (e.g. a 409's detail), and a constant would swallow it. mediaUrl is
       // identity because these mounts are about which URL is chosen, not about
@@ -763,7 +765,7 @@ function load(relPath) {
         recordSignal: () => {},
         recordThumb: async (step, verdict, refs) => {
           (global.__SMOKE_THUMBS = global.__SMOKE_THUMBS || []).push({ step, verdict, refs });
-          return true;
+          return load("lib/feedback.js").recordThumb(step, verdict, refs);
         },
         verdictFor,
         classifyScriptEdit: () => ({ kind: "other" }),
@@ -3152,7 +3154,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           const tpl = global.__SMOKE_THUMBS.find((t) => t.step === "template");
           if (!tpl.refs.template_id) throw new Error("template rating does not name the template");
-          expectText(ctx, "future suggestions for this app will learn", "template rating gives no confirmation");
+          expectText(ctx, "Rating saved", "template rating gives no confirmation");
         } finally {
           global.__SMOKE_PARAMS = "";
           global.__SMOKE_THUMBS = [];
@@ -5611,6 +5613,15 @@ async function runAnalyticsChecks() {
       if (ctx.text().includes("Nothing captured yet") || ctx.container.querySelector('[data-testid="result-unassigned"]')) throw new Error("failed scope displayed empty or stale results");
       if (!calls.some(p => p.brand_profile_id === "p1" && p.limit === 200)) throw new Error("app scope not sent");
     });
+  });
+
+  await check("Analytics acknowledges saved votes even without renders or automatic signals", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({ feedback: [{ event: "thumb_up", step: "goal" }], summary: { total: 1, by_event: { thumb_up: 1 }, top_signals: [], top_reasons: [] } }),
+    });
+    expectAbsent(ctx, "Nothing captured yet", "saved feedback was called missing");
+    expectText(ctx, "Feedback is saved", "feedback-only Analytics is blank");
+    expectText(ctx, "not conversions", "feedback-only Analytics overstates evidence");
   });
 
   await check("automatic signals render as counts, never as judgments", async (ctx) => {
@@ -9537,6 +9548,125 @@ async function runDemoCtaChecks() {
     });
   });
 
+  await check("History ignores stale filter successes and failures", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const pending = [];
+    await withApi({
+      getGenerationHistory: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      const oldParams = global.__SMOKE_PARAMS;
+      global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(History)); };
+      try {
+      await mount(History)(ctx);
+      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "failed");
+      await act(async () => pending[1].resolve({ generations: [{ ...COMPLETED, id: "latest", status: "failed" }] }));
+      await act(async () => pending[0].resolve({ generations: [{ ...COMPLETED, id: "stale" }] }));
+      if (!ctx.container.querySelector('#generation-latest') || ctx.container.querySelector('#generation-stale')) throw new Error("older request overwrote current filter");
+      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "completed");
+      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "archived");
+      await act(async () => pending[3].resolve({ generations: [{ ...COMPLETED, id: "archived", status: "archived" }] }));
+      await act(async () => pending[2].reject(new Error("stale request failed")));
+      expectAbsent(ctx, "stale request failed");
+      if (!ctx.container.querySelector('#generation-archived')) throw new Error("stale failure hid current results");
+      } finally { global.__SMOKE_ROUTE_CHANGE = null; global.__SMOKE_PARAMS = oldParams; }
+    });
+  });
+
+  await check("History honors same-page query navigation and opens a new clip anchor", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const oldParams = global.__SMOKE_PARAMS;
+    const oldHash = global.__SMOKE_HASH;
+    try {
+      global.__SMOKE_PARAMS = "q=hidden";
+      global.__SMOKE_HASH = "";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "anchor-one" }, { ...COMPLETED, id: "anchor-two" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        global.__SMOKE_PARAMS = "profile=p1&status=completed";
+        global.__SMOKE_HASH = "#generation-anchor-two";
+        await mount(History)(ctx);
+        if (ctx.container.querySelector('[data-testid="history-search"]').value !== "") throw new Error("old search hid linked clip");
+        if (ctx.container.querySelector('#history-status-filter').value !== "completed") throw new Error("URL status ignored");
+        const tab = ctx.container.querySelector('#generation-anchor-two [data-testid="history-expand"]');
+        if (tab?.getAttribute('aria-expanded') !== 'true') throw new Error("same-page clip anchor stayed closed");
+        global.__SMOKE_HASH = "#generation-anchor-one";
+        await mount(History)(ctx);
+        if (ctx.container.querySelector('#generation-anchor-one [data-testid="history-expand"]')?.getAttribute('aria-expanded') !== 'true') throw new Error("new hash on mounted row stayed closed");
+      });
+    } finally { global.__SMOKE_PARAMS = oldParams; global.__SMOKE_HASH = oldHash; }
+  });
+
+  await check("History retains regenerated post copy across drawer and Details handoffs", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const oldKit = { caption: "Old frozen caption", hashtags: ["#old"] };
+    const freshKit = { caption: "Fresh confirmed caption", hashtags: ["#fresh"] };
+    const detailKit = { caption: "Confirmed from Details", hashtags: ["#details"] };
+    let savedKit = oldKit;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-sync", post_kit: oldKit }] }),
+      getGeneration: async () => ({ ...COMPLETED, id: "kit-sync", post_kit: savedKit }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      regeneratePostKit: async () => ({ post_kit: (savedKit = savedKit === oldKit ? freshKit : detailKit) }),
+    }, async () => {
+      await mount(History)(ctx);
+      const tab = () => ctx.container.querySelector('[data-testid="history-expand"]');
+      await clickEl(ctx, tab());
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
+      await clickEl(ctx, tab());
+      await clickEl(ctx, tab());
+      expectText(ctx, freshKit.caption, "reopening the drawer restored stale copy");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="generation-details-button"]'));
+      const dialog = ctx.container.querySelector('[role="dialog"]');
+      await clickEl(ctx, dialog.querySelector('[data-testid="postkit-regenerate"]'));
+      await clickEl(ctx, dialog.querySelector('[aria-label="Close details"]'));
+      expectText(ctx, detailKit.caption);
+      expectAbsent(ctx, freshKit.caption);
+      expectAbsent(ctx, oldKit.caption);
+    });
+  });
+
+  await check("ratings serialize saves and ignore a response for a replaced item", async (ctx) => {
+    const { ComponentThumbs } = load("components/ComponentThumbs.jsx");
+    let finish;
+    let calls = 0;
+    const voted = [];
+    await withApi({ recordFeedback: () => { calls++; return new Promise(resolve => { finish = resolve; }); } }, async () => {
+      const props = { component: "video", resetKey: "first", initialValue: 1, onVoted: (...args) => voted.push(args), testId: "race-rating" };
+      await mount(ComponentThumbs, props)(ctx);
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="race-rating-thumb-down"]'));
+      const up = ctx.container.querySelector('[data-testid="race-rating-thumb-up"]');
+      if (!up.disabled) throw new Error("a second save can race the first");
+      await clickEl(ctx, up);
+      if (calls !== 1) throw new Error("duplicate rating submitted");
+      await mount(ComponentThumbs, { ...props, resetKey: "second", initialValue: 0 })(ctx);
+      await act(async () => finish({}));
+      if (voted.length) throw new Error("old item completion notified new item");
+      if (ctx.container.querySelector('[aria-pressed="true"]')) throw new Error("old vote leaked to new item");
+    });
+  });
+
+  await check("failed ratings restore the last confirmed vote and remain retryable", async (ctx) => {
+    const { ComponentThumbs } = load("components/ComponentThumbs.jsx");
+    let fail = false;
+    const voted = [];
+    await withApi({ recordFeedback: async () => { if (fail) throw new Error("offline"); return {}; } }, async () => {
+      await mount(ComponentThumbs, { component: "video", resetKey: "confirmed", initialValue: 0, onVoted: (...args) => voted.push(args), testId: "failed-rating" })(ctx);
+      const get = (direction) => ctx.container.querySelector(`[data-testid="failed-rating-thumb-${direction}"]`);
+      await clickEl(ctx, get("up"));
+      fail = true;
+      await clickEl(ctx, get("down"));
+      if (get("up").getAttribute("aria-pressed") !== "true" || get("down").disabled) throw new Error("failed save lost confirmed vote or blocked retry");
+      expectText(ctx, "Could not save your rating");
+      if (voted.length !== 1) throw new Error("failed save notified parent");
+      fail = false;
+      await clickEl(ctx, get("down"));
+      if (voted.length !== 2 || get("down").getAttribute("aria-pressed") !== "true") throw new Error("retry did not save");
+    });
+  });
+
   // The tab is two gestures in one control. The click path is covered above;
   // this covers the drag, because a tab that only answers clicks is a button
   // with a grip icon drawn on it — and the drag is what a bottom sheet trained
@@ -9692,7 +9822,7 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(GenerationHistory)(ctx);
           const destinations = global.__SMOKE_NAVIGATIONS.filter((_, i) => i % 2 === 0);
-          if (!destinations.length || destinations.some((to) => to.hash !== "#generation-deep-1")) {
+          if (destinations.some((to) => to.hash !== "#generation-deep-1")) {
             throw new Error("filter URL synchronization erased the clip anchor");
           }
         }

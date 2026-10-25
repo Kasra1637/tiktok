@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, MessageSquareText, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 import { GroupLabel } from "./SectionCard";
@@ -9,11 +9,9 @@ import { api, getErrorMessage } from "../lib/api";
 /**
  * The frozen post copy for one render: 1 caption, a hashtag set, cover text.
  *
- * Sole owner of the displayed copy: `postKit` is the starting value and
- * `generationId` identifies the row a regeneration replaces. Parents pass
- * both and own nothing — no merge-back callback, so adding the section to
- * a new surface is one element, not a state protocol. Every new kit in
- * the app arrives via mount, never via re-render, so plain state suffices.
+ * Owns display and regeneration. `onUpdated` optionally commits confirmed
+ * copy to a containing record (History), so reopening a drawer or switching
+ * between it and Details cannot resurrect the old snapshot.
  *
  * A null or empty kit renders nothing — no placeholder, no derived copy.
  * Old renders frozen with three `captions` still display their first one.
@@ -24,11 +22,12 @@ import { api, getErrorMessage } from "../lib/api";
  * and a failure keeps the current copy on screen with the error instead of
  * replacing it.
  */
-export function PostKitSection({ postKit: initialKit, generationId }) {
+export function PostKitSection({ postKit: initialKit, generationId, onUpdated }) {
   const { copiedKey, copy } = useCopyButton();
   const [kit, setKit] = useState(initialKit);
   const [regenBusy, setRegenBusy] = useState(false);
   const [regenError, setRegenError] = useState(null);
+  useEffect(() => { setKit(initialKit); }, [initialKit]);
 
   const legacyFirst = Array.isArray(kit?.captions)
     ? kit.captions.map((c) => String(c || "").trim()).find((c) => c)
@@ -56,7 +55,9 @@ export function PostKitSection({ postKit: initialKit, generationId }) {
     setRegenError(null);
     try {
       const res = await api.regeneratePostKit(generationId);
-      setKit(res && typeof res === "object" && res.post_kit ? res.post_kit : res);
+      const nextKit = res && typeof res === "object" && res.post_kit ? res.post_kit : res;
+      setKit(nextKit);
+      onUpdated?.(nextKit);
     } catch (err) {
       // The stored copy is untouched server-side, so the current copy stays.
       setRegenError(getErrorMessage(err));

@@ -38,7 +38,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0018](0018-retire-six-background-motions.md) | Retire six background motions from the picker; bloom becomes the default | accepted |
 | [0019](0019-one-caption-post-kit.md) | One TikTok caption per post kit, regenerable on demand | partially superseded by 0020 (export-card regenerate, question guard, completed-only) |
 | [0020](0020-post-kit-regenerate-everywhere.md) | Regenerate reaches the export card; caption must ask; completed-only | accepted |
-| [0021](0021-post-kit-ownership.md) | Post-kit state has one owner per layer | accepted |
+| [0021](0021-post-kit-ownership.md) | Post-kit state has one owner per layer | partially superseded by 0034 (frontend snapshot synchronization) |
 | [0022](0022-looks-live-together-in-end-card-cta.md) | Saved looks live with saving in End Card CTA | accepted |
 | [0023](0023-shared-caption-text-styles.md) | One shared text treatment across hook, story and end card | partially superseded by 0024 (text-style catalog trimmed to three) |
 | [0024](0024-retire-three-text-styles.md) | Retire outline, clean and sticker from the text-style picker | accepted |
@@ -51,3 +51,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0031](0031-first-run-checklist.md) | First-run checklist carries the founder across pages with their tours | accepted |
 | [0032](0032-history-tiktok-link-and-winner.md) | A TikTok link marks a render posted; thumbs up plus link is the winner | accepted |
 | [0033](0033-clip-results-comparison.md) | Compare saved clip reach and votes; keep History summaries synchronized | accepted |
+| [0034](0034-history-snapshot-synchronization.md) | History owns confirmed snapshots; URL filters and current requests prevent stale handoffs | accepted |

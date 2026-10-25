@@ -1,6 +1,6 @@
 # 0021 — Post-kit state has one owner per layer
 
-- **Status:** accepted
+- **Status:** partially superseded by 0034 (frontend snapshot synchronization)
 - **Date:** 2026-10-26
 - **Anchors:** `backend/server.py` (`_load_post_kit_materials`);
   `frontend/src/components/PostKitSection.jsx` (internal kit state);

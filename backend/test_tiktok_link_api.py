@@ -98,6 +98,29 @@ class TestTikTokLink:
             assert exc.value.status_code == 400
         assert _run(api.get_generation(generation_id, ANON)).get("tiktok_url") is None
 
+    @pytest.mark.parametrize("bad", [
+        "https://not-tiktok.com/video/123",
+        "https://tiktok.com.example.org/video/123",
+        "https://tiktok.com@example.org/video/123",
+        "https://example.org/?next=tiktok.com",
+        "https://user@www.tiktok.com/video/123",
+    ])
+    def test_lookalikes_and_userinfo_cannot_mark_a_render_posted(self, api, bad):
+        generation_id = _insert_generation(api)
+        _set_link(api, generation_id, LINK)
+        with pytest.raises(HTTPException) as exc:
+            _set_link(api, generation_id, bad)
+        assert exc.value.status_code == 400
+        assert _run(api.get_generation(generation_id, ANON))["tiktok_url"] == LINK
+
+    @pytest.mark.parametrize("link", [
+        LINK, "https://vm.tiktok.com/ABC123/", "https://vt.tiktok.com/ABC123/",
+        "https://TIKTOK.COM/@founder/video/123",
+    ])
+    def test_real_tiktok_hosts_remain_supported(self, api, link):
+        generation_id = _insert_generation(api)
+        assert _set_link(api, generation_id, link)["tiktok_url"] == link
+
     def test_empty_string_clears_the_link(self, api):
         generation_id = _insert_generation(api)
         _set_link(api, generation_id, LINK)
