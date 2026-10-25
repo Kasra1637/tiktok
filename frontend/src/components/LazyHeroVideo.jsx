@@ -18,11 +18,9 @@ import { useEffect, useRef, useState } from "react";
  */
 export function LazyHeroVideo({ poster, sources, ariaLabel, className }) {
   const videoRef = useRef(null);
-  const [reduceMotion] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
-  );
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
   const [shouldLoad, setShouldLoad] = useState(false);
 
   useEffect(() => {
