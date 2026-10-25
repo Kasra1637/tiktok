@@ -310,16 +310,17 @@ export default function Landing() {
             </span>
           </div>
           </div>
-          {/* The app itself, beside the pitch: the real Create Video
-              journey (profile → angle → goal → ranked templates) plus the
-              editable Demo + CTA canvas, recorded from the running app.
-              A minimal floating card frames it: gradient hairline and a
-              portrait viewport at the capture's exact aspect (471:710) with
-              the footage contained, so the whole interface shows with no
-              cropping and no letterbox gap. The card grows on wide screens
-              and sits on a soft indigo glow so it holds its own next to the
-              headline. Autoplay is silent and loops; under reduced motion
-              it stays paused on the poster frame. */}
+          {/* The app itself, beside the pitch: the real three-step Create
+              Video journey (App Profile → Audience & template, with the
+              Review & submit gate naming what's missing) plus the editable
+              Demo + CTA canvas and an expanded History tile, recorded from
+              the running app. A minimal floating card frames it: gradient
+              hairline and a portrait viewport at the capture's exact aspect
+              (471:710) with the footage contained, so the whole interface
+              shows with no cropping and no letterbox gap. The card grows on
+              wide screens and sits on a soft indigo glow so it holds its
+              own next to the headline. Autoplay is silent and loops; under
+              reduced motion it stays paused on the poster frame. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
@@ -336,7 +337,7 @@ export default function Landing() {
                     playsInline
                     preload="metadata"
                     poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                    aria-label="Screen recording: the Create Video wizard interface and the Demo CTA canvas, full interface with no page header or footer"
+                    aria-label="Screen recording: the three-step Create Video wizard, the Demo plus CTA canvas, and an expanded History tile — full interface with no page header or footer"
                     ref={(v) => {
                       if (!v) return;
                       v.muted = true;
