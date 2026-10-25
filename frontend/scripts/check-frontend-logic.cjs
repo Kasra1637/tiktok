@@ -164,7 +164,7 @@ console.log("\n" + "-".repeat(70));
 console.log("The length is computed, so it is read rather than chosen");
 console.log("-".repeat(70));
 
-// New surface: this is the read-only statement the "Audience & goal" step
+// New surface: this is the read-only statement the "Audience & template" step
 // renders. The property it has to hold is that every branch produces a usable
 // number, because a NaN here does not fail a render — it prints "NaN seconds" in
 // the one sentence telling the founder what they are about to get.
@@ -900,8 +900,8 @@ check("nothing usable falls back to a generic line",
 // opens lowercase and renders that way.
 //
 // These assertions exist because getting this wrong in the obvious direction is
-// silent. A naive .replace(/^./) on the six JSX continuation literals in
-// CreateVideo.jsx turns "Hook + Story " + "before rendering" into "Hook + Story
+// silent. A naive capitalize-after-a-space on the JSX continuation literals in
+// CreateVideo.jsx turns "...below " + "before rendering" into "...below
 // Before rendering" -- a real sentence, broken. So the first, second and third
 // cases below are the shapes a careless version produces.
 const SC = loadModule(path.resolve(__dirname, "..", "src", "lib", "copyCase.js"));

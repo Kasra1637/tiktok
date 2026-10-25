@@ -5,7 +5,7 @@ import { GroupLabel, SectionHeading } from "./SectionCard";
 
 /**
  * Shared profile card system — the App Profile page's card language, on the
- * same tokens as the Content Angles list on Create Video's Audience & goal
+ * same tokens as the Content Angles list on Create Video's Audience & template
  * step. The two screens are read side by side, so what a heading, a label
  * and a piece of chrome look like is decided here to match that list.
  *
@@ -218,7 +218,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
       >
         <div className="min-h-0 overflow-hidden">
           <div className="border-t border-[color:var(--hairline)] p-5 md:p-7">
-            {/* One darker well per group, mirroring the Audience & goal step:
+            {/* One darker well per group, mirroring the Audience & template step:
                 label, controls and rows read as one organized unit instead of
                 cards scattered on the group surface. 16px between cards; a
                 single child (one card, one field stack) is unaffected. */}

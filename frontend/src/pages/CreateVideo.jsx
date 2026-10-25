@@ -41,14 +41,14 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, LayoutTemplate, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
 
 // The order is the product, and it is deliberate.
 //
-//   profile -> angle -> template -> assets -> plan -> review -> Hook + Story
+//   profile -> angle+goal+template+photo -> review+submit (plan above, render below)
 //
 // The script is written, checked for banned claims and read by the founder
 // BEFORE any video is rendered. The last step then renders the piece that
@@ -60,10 +60,14 @@ import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefc
 // different video — with the claim check and the SafetyPanel running against
 // text nobody had looked at before the render.
 /**
- * The five steps, in order.
+ * The three steps, in order.
  *
- * Was seven. "Assets" and "Creative plan" were steps that existed only to hold a
- * button, and both are now part of the step they belonged to:
+ * Was seven, then five. "Assets" and "Creative plan" were steps that existed
+ * only to hold a button, and both are now part of the step they belonged to;
+ * then angle, goal, template and photo merged into one screen (choosing
+ * precedes seeing what the choice ranks, with no step change between), and
+ * the plan and the render merged into Review & submit (reading precedes the
+ * model call, top to bottom of one screen):
  *
  *   - Assets was a photo upload. The template step already says what a template
  *     needs from you and already links to it, so the upload moved there and the
@@ -83,12 +87,17 @@ import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefc
  * render containing a hook and a middle. The demo and the close are the
  * founder's own footage, added afterwards in their editor.
  */
+/* Three steps, not five: angle and goal share a screen with the templates
+   they rank and the photo that attaches to them, and the script plan shares
+   a screen with the render it approves. Nothing was cut — choosing still
+   precedes seeing what the choice ranks, and reading still precedes the
+   model call — there are just no steps whose only job was walking to the
+   next one. */
+const LEGACY_STEP_KEYS = { template: "angle", hook: "review" };
 const STEPS = [
   { key: "profile", label: "App Profile", icon: Briefcase },
-  { key: "angle", label: "Audience & goal", icon: Target },
-  { key: "template", label: "Template & photo", icon: LayoutTemplate },
-  { key: "review", label: "Review", icon: CheckCircle2 },
-  { key: "hook", label: "Hook + Story", icon: Sparkles },
+  { key: "angle", label: "Audience & template", icon: Target },
+  { key: "review", label: "Review & submit", icon: CheckCircle2 },
 ];
 
 /* The single instruction for the angle picker, shared by the empty state
@@ -443,11 +452,11 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
       `${planState} Unsaved edits in: ${editedLabels.join(", ")}. ` +
       "Save below first — rendering needs the saved plan.";
   } else if (!hasStrategy) {
-    status = `${planState} No strategy yet — build it on Hook + Story before rendering.`;
+    status = `${planState} No strategy yet — build it below before rendering.`;
   } else if (strategyUnversioned) {
     status =
       `${planState} Strategy exists but its version was not recorded — ` +
-      "rebuild it on Hook + Story before rendering.";
+      "rebuild it below before rendering.";
   } else if (staleStrategy) {
     status =
       `${planState} Strategy v${strategyVersion} was built from plan v${strategyScriptVersion}. ` +
@@ -462,7 +471,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
     status =
       `${planState} Strategy v${strategyVersion} matches. ` +
       `Rendered clip reflects plan v${clip.script_version} and strategy v${clip.strategy_version} — ` +
-      "re-render on Hook + Story.";
+      "re-render below.";
   } else if (clipUnversioned) {
     status =
       `${planState} Strategy v${strategyVersion} matches. ` +
@@ -470,14 +479,14 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
   } else if (clip && clip.status !== "completed") {
     status =
       `${planState} Strategy v${strategyVersion} matches. ` +
-      `Latest render is ${clip.status || "not finished"} — finish or retry it on Hook + Story.`;
+      `Latest render is ${clip.status || "not finished"} — finish or retry it below.`;
   } else if (clipIsCurrent) {
     status =
       `${planState} Strategy v${strategyVersion} matches · rendered clip is current.`;
   } else {
     status =
       `${planState} Strategy v${strategyVersion} matches. ` +
-      "No rendered clip yet — render on Hook + Story when ready.";
+      "No rendered clip yet — render below when ready.";
   }
 
   return (
@@ -491,7 +500,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
       </p>
       {onGoToHookStory && (
         <Button variant="secondary" size="sm" onClick={onGoToHookStory}>
-          Review strategy on Hook + Story
+          Review strategy below
         </Button>
       )}
     </div>
@@ -499,9 +508,9 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 }
 
 /**
- * The studio's angle-selection control. It lives on Audience & goal and on
- * Hook + Story — one control, one behaviour, wherever the founder is asked
- * for it. Review picks the angle through the single red jump back to step 1,
+ * The studio's angle-selection control. It lives on Audience & template and on
+ * Review & submit — one control, one behaviour, wherever the founder is asked
+ * for it. The review copy picks the angle through the single red jump back to step 1,
  * never a second copy of this list: the goal picker there waits silently.
  *
  * Landing is always gated: one "Generate angles" action, never a finished list.
@@ -521,7 +530,7 @@ function AngleSelector({
   onGenerate,
   onRegenerate,
   notice = "",
-  // Steps other than Audience & goal never generate inline: their red button
+  // Steps other than Audience & template never generate inline: their red button
   // sends the founder to step 1, where selection lives, instead of spending
   // a call from a screen whose job is something else. The label names the
   // destination so the redirect never reads as a broken Generate.
@@ -700,8 +709,7 @@ function AngleSelector({
   );
 }
 
-/**
- * Goal picker shared by the Audience & goal step and Review recovery. Its
+/**  * Goal picker shared by the Audience & template step and Review recovery. Its
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
  *
@@ -945,27 +953,19 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
   return STEPS.map((step) => {
     let state = "done";
     if (step.key === "profile") state = profileId ? "done" : "todo";
-    // The angle is required, not optional: the strategy and the render are
-    // built around it, so a video without one is the generic framing this
-    // step exists to prevent. Objective alone no longer satisfies it.
-    else if (step.key === "angle") state = angleId && objective ? "done" : "blocked";
-    else if (step.key === "template") {
-      if (!templateId) state = "blocked";
-      else if (!hasPhoto) state = "blocked";
+    // Angle, goal, template and photo are one step now, so one verdict: the
+    // angle is still required (the strategy and the render are built around
+    // it), and the step is only done when the template and its photo are
+    // set too. Anything less reports what is still missing.
+    else if (step.key === "angle") {
+      state = angleId && objective && templateId && hasPhoto ? "done" : "blocked";
     } else if (step.key === "review") {
       // A plan with unsaved edits is not reviewed. The step says so itself, and
       // a tick here would tell the founder they had finished reading a script
-      // they had changed and not stored.
+      // they had changed and not stored. And the render below needs the photo,
+      // so a plan without one leaves this step reporting what is owed.
       if (!project?.script_version) state = "todo";
-      else if (hasEdits) state = "blocked";
-    } else {
-      // The render step has NO completion state, deliberately. A clip can be
-      // generated, but the workflow does not end there - it ends at "attach
-      // your own demo", which happens in the founder's editor and cannot be
-      // observed from here. So this step is never ticked: doing so would claim
-      // the job is finished when the half the founder still has to shoot is not.
-      // It reports what is waiting instead.
-      state = templateId && !hasPhoto ? "blocked" : "todo";
+      else if (hasEdits || (templateId && !hasPhoto)) state = "blocked";
     }
     return { step, state };
   });
@@ -988,7 +988,11 @@ export default function CreateVideo() {
   // after that, so a ?step= pointing past the founder's progress still lands
   // on a step whose guards say what is missing.
   const [step, setStep] = useState(() => {
-    const at = STEPS.findIndex((s) => s.key === params.get("step"));
+    // Retired keys still land somewhere honest: a ?step=template link means
+    // the merged angle step now, ?step=hook means the merged review step.
+    const raw = params.get("step");
+    const key = LEGACY_STEP_KEYS[raw] || raw;
+    const at = STEPS.findIndex((s) => s.key === key);
     return at >= 0 ? at : 0;
   });
   useEffect(() => {
@@ -1073,7 +1077,7 @@ export default function CreateVideo() {
   // there is no hook-only render to choose between.
   const [tone, setTone] = useState("");
   const [edits, setEdits] = useState({});
-  // Thumbs verdict on the saved Review plan: up advances to Hook + Story,
+  // Thumbs verdict on the saved Review plan: up advances to the render below,
   // down records the rejection and asks the AI for a fresh plan. Manual
   // editing stays untouched — this is an additive fast path, not a
   // replacement, so the claim check and ready gate keep working as before.
@@ -1162,7 +1166,7 @@ export default function CreateVideo() {
             setStep(
               draft.script_version > 0
                 ? STEPS.findIndex((s) => s.key === "review")
-                : STEPS.findIndex((s) => s.key === "template")
+                : STEPS.findIndex((s) => s.key === "angle")
             );
           } catch (err) {
             if (cancelled) return;
@@ -1415,7 +1419,7 @@ export default function CreateVideo() {
   }, [profileId, angleId, adoptAngles]);
 
   useEffect(() => {
-    if (step !== 2 || !profileId || !objective) return;
+    if (step !== 1 || !profileId || !objective) return;
     const key = `${profileId}:${objective}`;
     if (tailorKeyRef.current === key) return;
     tailorKeyRef.current = key;
@@ -1504,7 +1508,7 @@ export default function CreateVideo() {
     // different field: both are creative direction chosen against the PREVIOUS
     // app, and both are written onto the next project in createProject. Carrying
     // them over means the new app's plan is built toward another app's goal,
-    // and the Audience & goal step shows a choice the founder already made for
+    // and the Audience & template step shows a choice the founder already made for
     // a product they just switched away from.
 setObjective("");
         setTone("");
@@ -1728,11 +1732,12 @@ setObjective("");
       setProject(settled);
       setEdits({});
       setReviewThumb(0);
-      // Straight to the top of Review, which is this step now: the plan is the
-      // thing to read, and the render step below it is the first one that
-      // calls the model. The old indices were 5 (Review) and 6 (Hook and
-      // middle); merging the plan step into Review moved both down by one.
-      setStep(3);
+      // Straight to the top of Review & submit, where the fresh plan reads: the
+      // plan is the thing to read first, and the render section below it is the
+      // first one that calls the model. Looked up by key, not written as a
+      // number — a hardcoded index is exactly what silently sent this jump past
+      // the end of the wizard when the steps merged.
+      setStep(STEPS.findIndex((s) => s.key === "review"));
     } catch (err) {
       setError(getErrorMessage(err));
       setPlanFailed(true);
@@ -1743,16 +1748,29 @@ setObjective("");
   };
 
   /* Takes the founder to the photo upload, wherever they currently are.
-     It lives on the template step now, so this both jumps to that step and
-     scrolls to the field — otherwise "Add your photo" would land them on a step
-     with nothing obviously about photographs in view. */
+     It lives on the angle & template step now, so this both jumps to that
+     step and scrolls to the field — otherwise "Add your photo" would land
+     them on a step with nothing obviously about photographs in view. */
+  /* Thumbs-up on the review loop used to walk to the render step; the render
+     panel lives on this step now, so approval scrolls to the submit panel
+     instead. Same destination, no step change. */
+  const scrollToSubmit = () => {
+    requestAnimationFrame(() => {
+      // Optional call, not just optional element: environments without a
+      // scrolling view (tests, previews) expose no scrollIntoView, and a
+      // reducing jump must never throw there. Same convention as History.
+      document
+        .getElementById("review-submit")
+        ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    });
+  };
   const scrollToTemplatePhoto = () => {
-    setStep(2);
+    setStep(1);
     // After the step renders, not before: the element does not exist yet.
     requestAnimationFrame(() => {
       document
         .getElementById("template-photo")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     });
   };
 
@@ -1809,7 +1827,7 @@ setObjective("");
   };
 
   // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
-  // the approval and moves to Hook + Story. Down reuses the existing plan
+  // the approval and moves to the render below. Down reuses the existing plan
   // generation (claim check + ready marking included), capped at three
   // refinements per saved plan version so the loop always terminates.
   const handleReviewThumb = async (next) => {
@@ -1822,7 +1840,7 @@ setObjective("");
       detail: `plan v${Number(project.script_version) || 0}`,
     });
     if (next === 1) {
-      setStep(4);
+      scrollToSubmit();
       return;
     }
     const versionKey = String(Number(project.script_version) || 0);
@@ -1863,7 +1881,7 @@ setObjective("");
       : !objective
         ? { step: 1, label: "Set the video goal first" }
         : !effectiveTemplateId
-          ? { step: 2, label: "Pick a template first" }
+          ? { step: 1, label: "Pick a template first" }
           : null;
 
   // Face-only product: every template requires exactly the character
@@ -1939,7 +1957,7 @@ setObjective("");
   useEffect(() => {
     // The plan needs a profile, a template and a goal. The character photo is
     // required to RENDER, not to write the plan, so it does not gate this.
-    if (step !== 3 || busy || !canGenerate || !angle) return;
+    if (step !== 2 || busy || !canGenerate || !angle) return;
     if (!objective && project?.objective) {
       // The draft already holds the goal but this session's state does not:
       // adopt it so the gates below read one consistent choice and the plan
@@ -1982,7 +2000,7 @@ setObjective("");
     editsRef.current = edits;
   }, [edits]);
   useEffect(() => {
-    if (step !== 3 || !project?.id || busy) return;
+    if (step !== 2 || !project?.id || busy) return;
     // A row the wizard already adopted from a server response needs no read,
     // and cannot be improved on by another one. That covers the deep-link load
     // and the plan handler's own settled row.
@@ -2042,11 +2060,11 @@ setObjective("");
      thing. Angle, template and plan keep their picks — those are choices
      made here that nothing else on the page restates. */
   function pillValue(key) {
+    // The merged step names its most concrete pick: the template once chosen,
+    // else the angle that ranks the list. Goal alone names nothing — it is a
+    // filter on the angle, not a choice of its own.
     if (key === "angle") {
-      return angles.find((a) => a.id === angleId)?.label || objective || null;
-    }
-    if (key === "template") {
-      return template?.name || null;
+      return template?.name || angles.find((a) => a.id === angleId)?.label || null;
     }
     if (key === "review") {
       return project?.script_version ? `Plan v${project.script_version}` : null;
@@ -2159,7 +2177,7 @@ setObjective("");
       return (
         <StepShell
           icon={Target}
-          title="Audience & goal"
+          title="Audience & template"
         >
           <div className="space-y-4" data-testid="audience-goal-step">
             {/* No description on this shell. It carried one three times over:
@@ -2220,42 +2238,14 @@ setObjective("");
                 testId="goal-feedback"
               />
             )}
-          </div>
-        </StepShell>
-      );
-    }
-
-    if (step === 2) {
-      return (
-        <StepShell
-          icon={LayoutTemplate}
-          title="Choose a template & add your photo"
-        >
-          <div className="space-y-4">
-            {/* No description here either: it restated the rail and then
-                pre-empted the Presenter photo section's own instruction, which
-                sits directly under it. The photo is described where it is
-                attached, not twice above it. */}
-            {/* No objective means no honest scoring to show. The card list used
-                to render anyway with the empty rationale the scorer returns, so a
-                founder could pick the top card from reasons that did not mention
-                their goal at all. */}
+            {/* Angle, goal, template and photo share one step now: the angle
+                picker above, the goal it ranks, then the templates filtered
+                below it. No step change between choosing and seeing what the
+                choice ranks. */}
             {!objective && (
-              <div className="inset-panel space-y-4">
-                {/* Same recessed sub-card as the angle picker: eyebrow label,
-                    one helper line, the coral action beneath — and the same
-                    12px stack, so the two gates read as one control. The
-                    dashed centered box said the same thing with more chrome
-                    and a quieter button. */}
-                <GroupLabel icon={LayoutTemplate}>Template</GroupLabel>
-                <p className="text-xs text-muted-foreground" data-subtitle="">
-                  Set the goal first, then the templates are ranked for it.
-                </p>
-                <Button variant="accent" onClick={() => setStep(1)} className="gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {firstGap ? firstGap.label : "Set the goal first"}
-                </Button>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Pick a goal above — the templates below rank for it.
+              </p>
             )}
             {profileId && objective && (
               <div className="flex flex-wrap items-center gap-2">
@@ -2448,164 +2438,11 @@ setObjective("");
       );
     }
 
-    if (step === 4) {
-      return (
-        <StepShell
-          icon={Sparkles}
-          title="Hook + Story"
-        >
-          <div className="space-y-4">
-            {/* No description on this shell. The one it carried was the
-                progress rail's sentence almost word for word, followed by the
-                piece's scope, which the render panel states itself. Neither
-                fact needed a third copy. */}
-            {!angle ? (
-              /* The render is built around the audience angle, so it is the
-                 first thing asked for here. This step never generates: its red
-                 button sends the founder to Audience & goal, where selection
-                 lives, instead of spending a call from a screen whose job is
-                 the render. Same control and gate as step two; only the red
-                 action differs, and its label names the destination. */
-              <AngleSelector
-                angles={angles}
-                angleId={angleId}
-                onSelect={setAngleId}
-                showAngles={showAngles}
-                generating={generatingAngles}
-                error={angleError}
-                onGenerate={() => setStep(1)}
-                generateLabel="Pick an audience angle first"
-                onRegenerate={handleRegenerateAngles}
-                notice={angleRegenNotice}
-              />
-            ) : !canGenerate ? (
-              <div className="inset-panel space-y-4">
-                {/* Names what is actually missing, read from the same two
-                    values that gated this panel. It used to spell out the
-                    whole chain ("choose an App Profile, goal, and template,
-                    then review the free plan") — a fourth copy of an
-                    instruction the pills and each step already carry. The red
-                    button is the same one Review shows: a gate that cannot act
-                    names the step that fixes it instead of stating the problem
-                    and stopping. */}
-                <p className="text-sm text-muted-foreground">
-                  {!profileId
-                    ? "Pick an approved App Profile on the first step to continue."
-                    : "Pick a template on the Template & photo step to continue."}
-                </p>
-                {firstGap && (
-                  <Button
-                    variant="accent"
-                    className="gap-1.5"
-                    onClick={() => setStep(firstGap.step)}
-                    data-testid="hook-first-gap-button"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {firstGap.label}
-                  </Button>
-                )}
-              </div>
-            ) : blockedOnAssets ? (
-              <MissingRequirements
-                identity={missingIdentity}
-                onGoToTemplatePhoto={scrollToTemplatePhoto}
-              />
-            ) : !project ? (
-              <div className="inset-panel">
-                <p className="text-sm text-muted-foreground">
-                  Preparing the video draft for your photo…
-                </p>
-                <Button
-                  variant="accent"
-                  className="mt-4"
-                  disabled={busy}
-                  onClick={() => {
-                    /* Redirect before generating, same rule as every other red
-                       button on a gated step: a click that cannot create must
-                       take the founder to what is missing instead of dying
-                       silently inside ensureProject's early return. The gates
-                       above currently guarantee both values here, so these two
-                       branches are backstops, not live paths. */
-                    if (!profileId) {
-                      setStep(0);
-                      return;
-                    }
-                    if (!templateId) {
-                      setStep(2);
-                      return;
-                    }
-                    ensureProject();
-                  }}
-                  data-testid="create-draft-button"
-                >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Create the draft
-                </Button>
-              </div>
-            ) : (
-              <>
-                {!project?.script_version ? (
-                  <div className="inset-panel">
-                    <p className="text-sm text-muted-foreground">
-                      There's no plan yet. Generate one on Review first — it is free.
-                    </p>
-                    <Button
-                      variant="accent"
-                      className="mt-4 gap-1.5"
-                      onClick={() => setStep(3)}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Go to Review first
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <HookContinuityPanel
-                      project={project}
-                      onProjectChange={setProject}
-                    />
-                    {project?.strategy && (
-                      <ComponentThumbs
-                        component="script"
-                        question="Does this script speak to your customers?"
-                        hint="Rates the generated script only. It guides future scripts for this app."
-                        resetKey={`${project.id}:${project.strategy_version || 0}`}
-                        refs={{
-                          brand_profile_id: profileId,
-                          studio_project_id: project.id,
-                          template_id: project.template_id,
-                          detail: `strategy v${Number(project.strategy_version) || 0}`,
-                        }}
-                        testId="script-feedback"
-                      />
-                    )}
-                    {/* The one and only render. It used to sit on the review
-                        step, where it let a render run on text the founder had
-                        not read yet, and it sat BELOW the segmented chain, which
-                        made the chain look like the product.
-
-                        onProjectChange lets the panel build the strategy itself
-                        on the way to a render. It was a button above,
-                        which meant a founder could skip it and get a
-                        generic take without ever being told the specific one
-                        existed. */}                    <GenerationPanel
-                      project={project}
-                      onGenerationChange={() => {}}
-                      onProjectChange={setProject}
-                    />
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </StepShell>
-      );
-    }
-
-if (step === 3) {
+    if (step === 2) {
       return (
         <StepShell
           icon={CheckCircle2}
-          title="Review your script plan"
+          title="Review & submit"
         >
         {!project?.script_version && planFailed && !busy ? (
           /* A plan attempt ran and failed. The page-level error above says why;
@@ -2778,7 +2615,7 @@ if (step === 3) {
               project={project}
               edits={edits}
               hasEdits={hasEdits}
-              onGoToHookStory={() => setStep(4)}
+              onGoToHookStory={scrollToSubmit}
             />
             <div className="inset-panel space-y-4" data-testid="review-thumb-loop">
               <span className="eyebrow block">Does this plan work?</span>
@@ -3079,14 +2916,146 @@ if (step === 3) {
               onGoToTemplatePhoto={scrollToTemplatePhoto}
             />
 
-            {/* Nothing that calls the model renders on this step. GenerationPanel
-                lives on the step below, so the claim check above has been read
-                before any render runs. */}
+            {/* The render panel closes this step below, so the claim check above
+                has been read before any render runs. */}
           </div>
         )}
+            {/* Plan above, render below: the claim check in Review has been read
+                before any render down here runs. */}
+            {!angle && project?.script_version ? (
+              /* The render is built around the audience angle, so it is the
+                 first thing asked for here. This step never generates: its red
+                 button sends the founder to Audience & template, where selection
+                 lives, instead of spending a call from a screen whose job is
+                 the render. Same control and gate as step two; only the red
+                 action differs, and its label names the destination. Only once
+                 a plan exists: before that the missing panel above already
+                 names the gap with its own red button, and a second identical
+                 ask below would split one decision in two. */
+              <AngleSelector
+                angles={angles}
+                angleId={angleId}
+                onSelect={setAngleId}
+                showAngles={showAngles}
+                generating={generatingAngles}
+                error={angleError}
+                onGenerate={() => setStep(1)}
+                generateLabel="Pick an audience angle first"
+                onRegenerate={handleRegenerateAngles}
+                notice={angleRegenNotice}
+              />
+            ) : !canGenerate && project?.script_version ? (
+              <div className="inset-panel space-y-4">
+                {/* Names what is actually missing, read from the same two
+                    values that gated this panel. It used to spell out the
+                    whole chain ("choose an App Profile, goal, and template,
+                    then review the free plan") — a fourth copy of an
+                    instruction the pills and each step already carry. The red
+                    button is the same one Review shows: a gate that cannot act
+                    names the step that fixes it instead of stating the problem
+                    and stopping. Only once a plan exists, for the same reason
+                    as the angle gate above: one gap, one red button. */}
+                <p className="text-sm text-muted-foreground">
+                  {!profileId
+                    ? "Pick an approved App Profile on the first step to continue."
+                    : "Pick a template on the Audience & template step to continue."}
+                </p>
+                {firstGap && (
+                  <Button
+                    variant="accent"
+                    className="gap-1.5"
+                    onClick={() => setStep(firstGap.step)}
+                    data-testid="hook-first-gap-button"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {firstGap.label}
+                  </Button>
+                )}
+              </div>
+            ) : blockedOnAssets ? (
+              <MissingRequirements
+                identity={missingIdentity}
+                onGoToTemplatePhoto={scrollToTemplatePhoto}
+              />
+            ) : !project ? (
+              <div className="inset-panel">
+                <p className="text-sm text-muted-foreground">
+                  Preparing the video draft for your photo…
+                </p>
+                <Button
+                  variant="accent"
+                  className="mt-4"
+                  disabled={busy}
+                  onClick={() => {
+                    /* Redirect before generating, same rule as every other red
+                       button on a gated step: a click that cannot create must
+                       take the founder to what is missing instead of dying
+                       silently inside ensureProject's early return. The gates
+                       above currently guarantee both values here, so these two
+                       branches are backstops, not live paths. */
+                    if (!profileId) {
+                      setStep(0);
+                      return;
+                    }
+                    if (!templateId) {
+                      setStep(1);
+                      return;
+                    }
+                    ensureProject();
+                  }}
+                  data-testid="create-draft-button"
+                >
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Create the draft
+                </Button>
+              </div>
+            ) : (
+              <>
+                {!project?.script_version ? null : (
+                  <>
+                    <HookContinuityPanel
+                      project={project}
+                      onProjectChange={setProject}
+                    />
+                    {project?.strategy && (
+                      <ComponentThumbs
+                        component="script"
+                        question="Does this script speak to your customers?"
+                        hint="Rates the generated script only. It guides future scripts for this app."
+                        resetKey={`${project.id}:${project.strategy_version || 0}`}
+                        refs={{
+                          brand_profile_id: profileId,
+                          studio_project_id: project.id,
+                          template_id: project.template_id,
+                          detail: `strategy v${Number(project.strategy_version) || 0}`,
+                        }}
+                        testId="script-feedback"
+                      />
+                    )}
+                    {/* The one and only render. It used to sit on the review
+                        step, where it let a render run on text the founder had
+                        not read yet, and it sat BELOW the segmented chain, which
+                        made the chain look like the product.
+
+                        onProjectChange lets the panel build the strategy itself
+                        on the way to a render. It was a button above,
+                        which meant a founder could skip it and get a
+                        generic take without ever being told the specific one
+                        existed. */}                    <div id="review-submit" className="scroll-mt-4">
+                      <GenerationPanel
+                        project={project}
+                        onGenerationChange={() => {}}
+                        onProjectChange={setProject}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
         </StepShell>
       );
     }
+
 
     // Unreachable: every index in STEPS has a branch above. This is a guard
     // against an index out of range rendering an empty page, so it must not

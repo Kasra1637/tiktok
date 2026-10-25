@@ -252,7 +252,7 @@ const SEGMENT = {
 
 // The key is `asset_id`, not `id`: the attached-photo row slices
 // attachment.asset_id for the label, so a fixture using `id` throws on the
-// template step.
+// merged choosing step.
 //
 // No start/end, no audio_role, no audio_gain. Those fields are still accepted
 // on the wire for legacy rows, but the studio no longer renders a control for
@@ -926,27 +926,29 @@ const { HistoryFeedback } = load("components/HistoryFeedback.jsx");
 // checked plan comes before the step that calls the model, and a set comparison
 // would pass just as happily if the render went back to fourth.
 //
-// The last step is "Hook + Story" rather than "Influencer hook" because that is
-// what it produces: one render with two sections. The old label named the first
-// beat of a chain, and a step called "Influencer hook" whose output is a hook
-// plus a story is a step that under-describes the thing being rendered. "Story"
-// replaced "middle" on request: the section is the narrative that carries the
-// viewer to the demo, which is what the founder recognises it as, and "middle"
-// reads as filler between two more interesting things.
-// Five, not seven. "Assets" was a step whose only content was the photo upload,
+// The last step is "Review & submit" rather than "Hook + Story" because that is
+// what it holds: the free, claim-checked plan above and the one render it
+// approves below. The old label named only the output; a step called
+// "Hook + Story" whose first job is reading words understated the read that
+// must come before any model call. "Story" replaced "middle" on request: the
+// section is the narrative that carries the viewer to the demo, which is what
+// the founder recognises it as, and "middle" reads as filler between two more
+// interesting things.
+// Three, not seven. "Assets" was a step whose only content was the photo upload,
 // and "Creative plan" was a step whose only content was a button whose result
 // you had to go to the next screen to read. Both are now part of the step they
-// belonged to, so the founder picks a template and attaches the photo without
-// leaving, and presses Generate on the same page that shows the result.
+// belonged to; then angle, goal, template and photo merged into one choosing
+// screen and plan and render merged into one reviewing screen. So the founder
+// picks a template and attaches the photo without leaving, chooses everything
+// the ranking needs before seeing it, and presses Generate on the same page
+// that shows the plan it renders.
 //
 // The order still matters and is still asserted as a whole sequence: the
 // free, claim-checked plan is read before the step that calls the model, and a// comparison would pass just as happily if the render went back to third.
 const STEP_LABELS = [
   "App Profile",
-  "Audience & goal",
-  "Template & photo",
-  "Review",
-  "Hook + Story",
+  "Audience & template",
+  "Review & submit",
 ];
 
 
@@ -964,18 +966,18 @@ async function main() {
   });
 
   // -------------------------------------------------------------------------
-  // The wizard is five steps, and every step that existed only to hold a button
+  // The wizard is three steps, and every step that existed only to hold a button
   // has been folded into the step it belonged to. These prove the shape is real
-  // rather than a label change: the photo upload is ON the template step, and
-  // the plan is generated from the Review step that reads it.
+  // rather than a label change: the photo upload is ON the merged choosing step,
+  // and the plan is generated from the Review & submit step that reads it.
   // -------------------------------------------------------------------------
-  await check("the photo upload lives on the template step, not its own", async (ctx) => {
+  await check("the photo upload lives on the merged choosing step, not its own", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openTemplateStep(ctx);
     const text = ctx.text();
     if (!text.includes("Presenter photo")) {
-      throw new Error("the template step does not offer the presenter photo upload");
+      throw new Error("the merged step does not offer the presenter photo upload");
     }
     // The draft is created eagerly now (ensureProject fires on profile +
     // template), so the photo attaches to a project without the founder
@@ -985,7 +987,7 @@ async function main() {
     const ownsPhoto =
       /prepar(?:e|ing).*draft/i.test(text) || /attach/i.test(text) || !!ctx.container.querySelector("input[type=file]");
     if (!ownsPhoto) {
-      throw new Error("the template step cannot create the draft the photo attaches to");
+      throw new Error("the merged step cannot create the draft the photo attaches to");
     }
     // No step of its own: this is the assertion that the old "Assets" pill is
     // gone rather than merely renamed.
@@ -1002,7 +1004,7 @@ async function main() {
   });
 
   // The photo is the identity input the render needs, so it only makes sense
-  // once there is a story to put it in. Landing on the template step straight
+  // once there is a story to put it in. Landing on the merged step straight
   // from the pill, with no audience angles generated, shows the template ask
   // alone -- not a section asking for a photograph nothing can use yet.
   // The step mirrors into ?step= so a step with its draft is a shareable
@@ -1011,12 +1013,12 @@ async function main() {
   // in the DOM and the write half in source, including the guard that keeps
   // the mirror from re-firing the deep-link load it shares the URL with.
   await check("the wizard lands on its ?step= and mirrors it back", async (ctx) => {
-    global.__SMOKE_PARAMS = "?step=template";
+    global.__SMOKE_PARAMS = "?step=angle";
     try {
       await mount(CreateVideo, {})(ctx);
-      const pill = ctx.container.querySelector('[data-testid="step-pill-template"]');
+      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
       if (!pill || pill.getAttribute("aria-current") !== "step") {
-        throw new Error("a ?step=template link does not land on the template step");
+        throw new Error("a ?step=angle link does not land on the angle step");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -1041,22 +1043,51 @@ async function main() {
     }
   });
 
+  // Retired keys still land somewhere honest: ?step=template means the merged
+  // angle step now, ?step=hook the merged review step. One check, two mounts on
+  // separate roots — re-mounting in one container would keep the first link's
+  // step and prove nothing about the second. Pinned so a future rename cannot
+  // strand a shared link on the first step.
+  await check("retired ?step= keys land on their merged steps", async (ctx) => {
+    const second = dom.window.document.createElement("div");
+    dom.window.document.body.appendChild(second);
+    const secondRoot = createRoot(second);
+    const later = { root: secondRoot, container: second, text: () => second.textContent || "" };
+    try {
+      for (const [legacy, testid, target] of [
+        ["template", "step-pill-angle", ctx],
+        ["hook", "step-pill-review", later],
+      ]) {
+        global.__SMOKE_PARAMS = `?step=${legacy}`;
+        await mount(CreateVideo, {})(target);
+        const pill = target.container.querySelector(`[data-testid="${testid}"]`);
+        if (!pill || pill.getAttribute("aria-current") !== "step") {
+          throw new Error(`a ?step=${legacy} link does not land on ${testid}`);
+        }
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      await act(async () => { secondRoot.unmount(); });
+      second.remove();
+    }
+  });
+
   await check("the presenter photo section waits for the audience angles", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Template & photo");
+    await openStep(ctx, "Audience & template");
     if (ctx.text().includes("Presenter photo")) {
       throw new Error("the presenter photo section shows before the audience angles are generated");
     }
     // Generating and picking an angle is what proceeds the photo: the same
     // step now offers the section.
-    await openStep(ctx, "Audience & goal");
+    await openStep(ctx, "Audience & template");
     await passAngleGate(ctx);
     const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
       .find((button) => button.textContent.includes(ANGLE.label));
     if (!angleButton) throw new Error("the audience step has no selectable audience angle");
     await clickEl(ctx, angleButton);
-    await openStep(ctx, "Template & photo");
+    await openStep(ctx, "Audience & template");
     if (!ctx.text().includes("Presenter photo")) {
       throw new Error("the presenter photo section did not appear after an angle was picked");
     }
@@ -1112,7 +1143,7 @@ async function main() {
         await openTemplateStep(ctx);
         await act(async () => {});
         await act(async () => {});
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         await act(async () => {});
         await act(async () => {});
         if (plans.length === 0) {
@@ -1151,7 +1182,7 @@ async function main() {
         // fresh draft (script_version 0) rather than a still-null project.
         await act(async () => {});
         await act(async () => {});
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         await act(async () => {});
         await act(async () => {});
         // Assert inside the stub scope: the calls above are async and would
@@ -1200,7 +1231,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
           if (plans.length !== 0) {
@@ -1243,7 +1274,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
           await act(async () => {});
@@ -1299,7 +1330,7 @@ async function main() {
     );
     expectText(ctx, "No photo attached", "the missing-photograph gate did not render");
     expectText(ctx, "presenter reference", "the gate did not explain why the photo matters");
-    expectText(ctx, "Template & photo", "the gate did not name the step that fixes it");
+    expectText(ctx, "Audience & template", "the gate did not name the step that fixes it");
     // The old ready hint and the new one must not both be talking at once.
     expectAbsent(ctx, "Mark the project ready for generation", "the ready hint competes with the real blocker");
   });
@@ -1332,7 +1363,7 @@ async function main() {
       mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, content_angle_id: "" } })(ctx)
     );
     expectText(ctx, "No audience angle picked", "the missing-angle gate did not render");
-    expectText(ctx, "Audience & goal", "the gate did not name the step that fixes it");
+    expectText(ctx, "Audience & template", "the gate did not name the step that fixes it");
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => (b.textContent || "").includes("Generate the video"));
     if (!generate) throw new Error("no Generate button to gate");
@@ -1655,7 +1686,7 @@ async function main() {
       throw new Error("the strategy builds with no audience angle picked");
     }
     if (!ctx.container.querySelector('[data-testid="strategy-needs-angle"]')) {
-      throw new Error("the gate does not name the Audience & goal step");
+      throw new Error("the gate does not name the Audience & template step");
     }
     if (apiCalls.includes("generateStrategy")) {
       throw new Error("the mount fired a strategy build with no angle picked");
@@ -1933,8 +1964,7 @@ async function main() {
   await check("no mounted path calls a deleted endpoint", async (ctx) => {
     retiredCalls.length = 0;
     // Drive every surface that could plausibly have kept a chain call: both
-    // panels directly, and every step of the wizard with a drafted project
-    // behind it so the render step actually mounts both.
+    // panels directly, and every step of the wizard with a drafted project      // behind it so the last step actually mounts both.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
@@ -2005,12 +2035,12 @@ async function main() {
     const next = () => ctx.container.querySelector('[data-testid="wizard-continue-button"]');
     if (!back() || back().disabled !== true) throw new Error("Back is not disabled on the first step");
     if (!next()) throw new Error("Continue is missing on the first step");
-    if (next().getAttribute("aria-label") !== "Continue to Audience & goal") {
+    if (next().getAttribute("aria-label") !== "Continue to Audience & template") {
       throw new Error(`Continue does not name its destination: ${next().getAttribute("aria-label")}`);
     }
     await clickEl(ctx, next(), "Continue to the angle step");
     if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
-      throw new Error("Continue did not move to the Audience & goal step");
+      throw new Error("Continue did not move to the Audience & template step");
     }
     if (back().disabled !== false) throw new Error("Back is still disabled after moving forward");
     await clickEl(ctx, back(), "Back to the profile step");
@@ -2018,7 +2048,7 @@ async function main() {
       throw new Error("Back did not return to the profile step");
     }
     // Last step: there is nowhere to continue to.
-    await openStep(ctx, "Hook + Story");
+    await openStep(ctx, "Review & submit");
     if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
       throw new Error("Continue is offered on the last step");
     }
@@ -2048,7 +2078,7 @@ async function main() {
     }
   });
 
-  await check("the render step holds the render controls once a plan exists", async (ctx) => {
+  await check("Review & submit holds the render controls once a plan exists", async (ctx) => {
     // A plan reviewed, no strategy yet: the state the reorder puts the founder
     // in when they arrive here. Deep-linked so the wizard has that draft.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -2069,7 +2099,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Hook + Story");
+          const pill = stepPill(ctx, "Review & submit");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -2077,7 +2107,7 @@ async function main() {
         }
       );
       if (!ctx.text().includes("Build the app-specific strategy")) {
-        throw new Error("the render step no longer offers the strategy button");
+        throw new Error("Review & submit no longer offers the strategy button");
       }
       // The button now has an empty state behind it. Previously every panel
       // detail rendered only once a strategy existed, so this was a paragraph
@@ -2124,7 +2154,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const btn = renderButton(ctx);
           if (!btn.disabled) {
             throw new Error("the generate button is live with no strategy to render from");
@@ -2171,7 +2201,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const btn = renderButton(ctx);
           await act(async () => {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -2207,7 +2237,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const btn = renderButton(ctx);
           if (!/Generate another/.test((btn.textContent || "").trim())) {
             throw new Error("expected a re-roll button when a generation already exists");
@@ -2261,7 +2291,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
           await act(async () => {
             build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -2311,7 +2341,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
           await act(async () => {
             build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -2361,7 +2391,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
         }
       );
     } finally {
@@ -2420,7 +2450,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
           if (!rebuild) throw new Error("no rebuild control on the last step");
@@ -2477,7 +2507,7 @@ async function main() {
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Hook + Story");
+          await openStep(ctx, "Review & submit");
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
           if (!rebuild) throw new Error("no rebuild control on the last step");
@@ -2500,37 +2530,51 @@ async function main() {
     }
   });
 
-  await check("the render step refuses to run without an approved plan", async (ctx) => {
+  await check("Review & submit refuses to run without an approved plan", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       // A draft that exists but has no plan: the strategy and the one render
-      // must both stay out of reach.
+      // must both stay out of reach. Entering this step writes the plan on its
+      // own, so the fixture fails the write: a plan the step cannot produce is
+      // the only plan-less state reachable here.
       await withApi(
-        { getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }) },
+        {
+          getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
+          createStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
+          updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, script_version: 0, script: "", ...payload, script_version: 0, script: "" }),
+          generatePlan: async () => {
+            throw new Error("plan unavailable in this check");
+          },
+        },
         async () => {
           await mount(CreateVideo, {})(ctx);
-          const pill = stepPill(ctx, "Hook + Story");
+          const pill = stepPill(ctx, "Review & submit");
           await act(async () => {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
+          await act(async () => {});
+          // Assert inside the stub scope: the plan write is async and would
+          // otherwise land after the throwing stub restores, planning the
+          // draft with the default fixture and hiding the gate this check
+          // is about.
+          const text = ctx.text();
+          if (!text.includes("The plan didn't generate")) {
+            throw new Error(
+              `Review & submit does not explain that a plan comes first; it rendered: ${JSON.stringify(
+                text.slice(300, 800)
+              )}`
+            );
+          }
+          for (const control of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
+            if (text.includes(control)) {
+              throw new Error(`Review & submit offers ${JSON.stringify(control)} with no approved plan`);
+            }
+          }
         }
       );
     } finally {
       global.__SMOKE_PARAMS = "";
-    }
-    const text = ctx.text();
-    if (!text.includes("no plan yet")) {
-      throw new Error(
-        `the render step does not explain that a plan comes first; it rendered: ${JSON.stringify(
-          text.slice(300, 800)
-        )}`
-      );
-    }
-    for (const control of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
-      if (text.includes(control)) {
-        throw new Error(`the render step offers ${JSON.stringify(control)} with no approved plan`);
-      }
     }
   });
 
@@ -2564,7 +2608,7 @@ async function main() {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review");
+      await openStep(ctx, "Review & submit");
       const timeline = ctx.container.querySelector('[data-testid="shot-timeline"]');
       if (!timeline) throw new Error("the shot timeline no longer renders");
       if (!timeline.textContent.includes("read-only")) {
@@ -2600,7 +2644,7 @@ async function main() {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
-      const pill = stepPill(ctx, "Review");
+      const pill = stepPill(ctx, "Review & submit");
       await act(async () => {
         pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
@@ -2658,7 +2702,7 @@ async function main() {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
           if (ctx.container.querySelector('[data-testid="caption-editor"]')) {
@@ -2697,7 +2741,7 @@ async function main() {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           expectText(
             ctx,
             "Hook line: 40 characters, aiming for about 60",
@@ -2740,7 +2784,7 @@ async function main() {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           expectText(ctx, "What the middle will say", "the spoken partition is not shown");
           expectText(ctx, kept, "the kept spoken line is not shown");
           // The dropped words are no longer a tail sliced out of the script:
@@ -2783,7 +2827,7 @@ async function main() {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           const note = ctx.container.querySelector('[data-testid="plan-trimmed-note"]');
           if (!note) throw new Error("a trimmed plan is not reported to the founder");
           const text = note.textContent || "";
@@ -2803,14 +2847,14 @@ async function main() {
   // Review must read the words from the server, not from whatever the wizard
   // last held: an eager draft update issued while the plan was still being
   // written can resolve after it, leaving the editors on a pre-plan copy of
-  // the row — an empty script above a plan the render step can count in.
+  // the row — an empty script above a plan the render section can count in.
   await check("Review shows the server's words, not a stale local copy", async (ctx) => {
     await withApi(
       {
         // The server's row carries the plan. An eager draft update issued while
         // the plan was being written can resolve after it, which left the
         // editors on a pre-plan copy of the row: an empty Hook line and Script
-        // above a plan the render step can count characters in.
+        // above a plan the render section can count characters in.
         getStudioProject: async () => ({
           ...PROJECT_WITH_STRATEGY,
           hook_line: "Hook line from the server",
@@ -2821,7 +2865,7 @@ async function main() {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           expectText(
             ctx,
@@ -2854,7 +2898,7 @@ await check("Review offers no manual mark-ready control", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review");
+      await openStep(ctx, "Review & submit");
       const buttons = [...ctx.container.querySelectorAll("button")].map(
         (b) => (b.textContent || "").trim()
       );
@@ -2895,7 +2939,7 @@ await check("the Review re-read never downgrades a ready project", async (ctx) =
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
           // One read is the deep link. A second would mean the wizard is
@@ -2938,7 +2982,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await mount(CreateVideo, {})(ctx);
           await openTemplateStep(ctx);
           await act(async () => {});
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
           if (!resolveProject || reads === 0) {
             throw new Error("Review never issued the re-read it should have");
@@ -2992,7 +3036,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         dom.window.confirm = () => true;
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           const btn = buttonByText(ctx, /Regenerate plan/);
           await act(async () => {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -3036,7 +3080,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           const down = () => ctx.container.querySelector('[data-testid="review-thumb-down"]');
           if (!down()) throw new Error("Review has no thumbs-down control");
           for (let i = 0; i < 3; i++) {
@@ -3070,10 +3114,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_THUMBS = [];
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review");
+          await openStep(ctx, "Review & submit");
           const up = ctx.container.querySelector('[data-testid="review-thumb-up"]');
           await clickEl(ctx, up, "Review has no thumbs-up control");
-          await openStep(ctx, "Template & photo");
+          await openStep(ctx, "Audience & template");
           const tUp = ctx.container.querySelector('[data-testid="template-feedback-thumb-down"]');
           await clickEl(ctx, tUp, "Template step has no template rating");
           await act(async () => {});
@@ -3153,7 +3197,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review");
+      await openStep(ctx, "Review & submit");
       const text = ctx.text();
       if (!text.includes("Length of the generated piece")) {
         throw new Error(
@@ -3180,7 +3224,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // The template fallback for a draft that declares no length of its own is
     // asserted directly against readPieceSeconds in check-frontend-logic.cjs.
     await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & goal");
+    await openStep(ctx, "Audience & template");
     if (ctx.container.querySelector('[data-testid="create-what-you-get"]')) {
       throw new Error("the Audience step's length card is back, stating the length a second time");
     }
@@ -3202,7 +3246,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      const pill = stepPill(ctx, "Audience & goal");
+      const pill = stepPill(ctx, "Audience & template");
       await act(async () => {
         pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
@@ -3250,7 +3294,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Audience & goal");
+      await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       if (step.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("the pre-generated six show before the founder clicks anything");
@@ -3289,7 +3333,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "?angle=ghost-id";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Audience & goal");
+      await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       if (step.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("a dangling pick opened the list on first view");
@@ -3314,7 +3358,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Audience & goal");
+      await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       await clickEl(ctx, step.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA on empty angles");
       const progress = step.querySelector('[data-testid="angles-progress"]');
@@ -3342,9 +3386,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Hook + Story never generates angles: its red button names Audience & goal
+  // Review & submit never generates angles: its red button names Audience & template
   // and jumps there, so no call goes out from a screen whose job is the render.
-  await check("Hook + Story redirects angle-less founders instead of generating", async (ctx) => {
+  // The render section's own angle CTA is covered by the same-control check below.
+  await check("Review & submit redirects angle-less founders instead of generating", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
@@ -3352,20 +3397,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Hook + Story");
-      const btn = ctx.container.querySelector('[data-testid="generate-angles-button"]');
-      if (!btn) throw new Error("no angle CTA on Hook + Story with no angle picked");
+      await openStep(ctx, "Review & submit");
+      const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+      if (!btn) throw new Error("no angle CTA on Review & submit with no angle picked");
       if (!/Pick an audience angle/.test(btn.textContent || "")) {
         throw new Error(`the CTA does not name its destination: ${JSON.stringify(btn.textContent)}`);
       }
       apiCalls.length = 0;
       await clickEl(ctx, btn);
       if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
-        throw new Error("Hook + Story spent an angle call instead of redirecting");
+        throw new Error("Review & submit spent an angle call instead of redirecting");
       }
       const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
       if (!pill || pill.getAttribute("aria-current") !== "step") {
-        throw new Error("the red button did not land on the Audience & goal step");
+        throw new Error("the red button did not land on the Audience & template step");
       }
       if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
         throw new Error("an angle list rendered outside its home step");
@@ -3382,7 +3427,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      const pill = stepPill(ctx, "Audience & goal");
+      const pill = stepPill(ctx, "Audience & template");
       await act(async () => {
         pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
@@ -3466,7 +3511,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
       // And the field that replaced the second: the founder's own note about
       // what to record, editable, and clearly not an instruction to the model.
-      const reviewPill = stepPill(ctx, "Review");
+      const reviewPill = stepPill(ctx, "Review & submit");
       await act(async () => {
         reviewPill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
@@ -3530,7 +3575,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // The chosen template's declared length and curated middle, on the card.
     // This is where the founder learns the piece is not 20s and not their
-    // choice, which used to be a separate picker two steps later.
+    // choice, which once lived on its own step before the merge.
     if (!text.includes(`${TEMPLATE.default_duration}s piece`)) {
       throw new Error("the template card does not state the length this template produces");
     }
@@ -3720,7 +3765,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // tailored templates, so leaving it optional meant the strongest
   // recommendation input was silently dropped whenever a founder skipped it -
   // and the step still claimed to be "scored for this app".
-  await check("the template step refuses to rank anything without an objective", async (ctx) => {
+  await check("the merged step refuses to rank anything without an objective", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi(
       {
@@ -3733,7 +3778,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Template & photo");
+        await openStep(ctx, "Audience & template");
       }
     );
     const text = ctx.text();
@@ -3744,12 +3789,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // ...and it must say what is missing and how to fix it, rather than
     // rendering an empty step.
-    if (!text.includes("Set the goal first, then the templates are ranked for it.")) {
-      throw new Error("the template step does not explain that the objective is required");
+    if (!text.includes("Pick a goal above — the templates below rank for it.")) {
+      throw new Error("the merged step does not explain that the objective is required");
     }
-    const back = [...ctx.container.querySelectorAll("button")]
-      .find((b) => /first/.test((b.textContent || "")));
-    if (!back) throw new Error("there is no way from the template step to fix the missing choice");
+    // The fix lives on this same screen: the angle gate above is what ranks
+    // the goal that ranks the templates, so no jump elsewhere is needed.
+    if (!ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+      throw new Error("there is no way on this step to fix the missing choice");
+    }
   });
 
   await check("no objective is silently reported as done on the progress pills", async (ctx) => {
@@ -3760,7 +3807,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (pill.getAttribute("data-state") === "done") {
       throw new Error("the Audience step is ticked before an objective is chosen");
     }
-    if (pill.getAttribute("aria-label") !== "Audience & goal: needs something from you") {
+    if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
       throw new Error(
         `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
       );
@@ -3786,7 +3833,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (pill.getAttribute("data-state") === "done") {
         throw new Error("the Audience step is ticked with an objective but no angle picked");
       }
-      if (pill.getAttribute("aria-label") !== "Audience & goal: needs something from you") {
+      if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
         throw new Error(
           `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
         );
@@ -3959,7 +4006,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Audience & goal");
+      await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       if (!step?.querySelector('[data-testid="angles-cta-copy"]')
           || !step.textContent.includes("(required)")) {
@@ -3986,7 +4033,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await check("six goals are tailored when an angle is selected without an all-goals control", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & goal");
+    await openStep(ctx, "Audience & template");
     await passAngleGate(ctx);
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
     const angleButtons = [...step.querySelectorAll("button")]
@@ -4013,7 +4060,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await check("changing an angle reranks goals without changing a chosen goal", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & goal");
+    await openStep(ctx, "Audience & template");
     await passAngleGate(ctx);
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
     const buttons = [...step.querySelectorAll("button")];
@@ -4062,7 +4109,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       if (step.querySelector('[data-testid^="angle-details-"]')) {
@@ -4127,7 +4174,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       global.__SMOKE_PARAMS = "";
       try {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
         const rendered = [...step.querySelectorAll('[data-testid^="angle-option-"]')];
@@ -4175,7 +4222,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       global.__SMOKE_PARAMS = "";
       try {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
         if (rows.length !== 2) throw new Error(`expected two angle rows, saw ${rows.length}`);
@@ -4212,7 +4259,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       global.__SMOKE_PARAMS = "";
       try {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
         const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
@@ -4297,7 +4344,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           const objLine = ctx.container.querySelector('[data-testid="goal-objective-evidence-address_user_problem"]');
@@ -4334,7 +4381,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           // Wait for facet recommendations to load - need to flush effects and wait for async
           await act(async () => {});
@@ -4396,7 +4443,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           const first = orderOf();
@@ -4445,7 +4492,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
@@ -4503,7 +4550,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
@@ -4561,11 +4608,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       await mount(CreateVideo, {})(ctx);
       await openTemplateStep(ctx);
-      await openStep(ctx, "Audience & goal");
+      await openStep(ctx, "Audience & template");
       const goal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
       await clickEl(ctx, goal);
       if (goal.getAttribute("aria-pressed") !== "true") throw new Error("the sixth goal was not selected");
-      await openStep(ctx, "Template & photo");
+      await openStep(ctx, "Audience & template");
       if (!rankings.some((query) => query.objective === "educate_viewers" && query.angle_id === "a1")) {
         throw new Error("ranking did not receive the sixth suggested goal and selected angle");
       }
@@ -4585,7 +4632,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         generatePlan: async () => { plans += 1; return PROJECT_WITH_STRATEGY; },
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         if (plans !== 0) throw new Error("a plan was generated before an angle was selected");
         if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
         // No angle control lives here anymore: one red jump back to step 1,
@@ -4593,11 +4640,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-first-gap-button"]'), "no first-gap button on Review");
         const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
-          throw new Error("the red button did not land on the Audience & goal step");
+          throw new Error("the red button did not land on the Audience & template step");
         }
         await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'));
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         await act(async () => {});
         if (plans !== 1) throw new Error(`selecting an angle started ${plans} plans instead of one`);
       });
@@ -4617,7 +4664,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         getContentAngles: async () => ({ angles: [] }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
         if (!btn) throw new Error("no single red button on the still-missing panel");
         if (!/Choose an App Profile/.test(btn.textContent || "")) {
@@ -4650,12 +4697,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         getContentAngles: async () => ({ angles: [] }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Review");
-        const firsts = [...ctx.container.querySelectorAll("button")]
-          .filter((b) => /first/.test((b.textContent || "")));
-        if (firsts.length !== 1) {
-          throw new Error(`expected exactly one 'first' action, saw ${firsts.length}: ${JSON.stringify(firsts.map((b) => b.textContent))}`);
-        }
+        await openStep(ctx, "Review & submit");
+      const firsts = [...ctx.container.querySelectorAll("button")]
+        .filter((b) => /first/.test((b.textContent || "")));
+      if (firsts.length !== 1) {
+        throw new Error(`expected exactly one 'first' action, saw ${firsts.length}: ${JSON.stringify(firsts.map((b) => b.textContent))}`);
+      }
         if (!/Pick an audience angle first/.test(firsts[0].textContent || "")) {
           throw new Error(`the lone action does not name the missing angle: ${JSON.stringify(firsts[0].textContent)}`);
         }
@@ -4663,39 +4710,57 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     } finally { global.__SMOKE_PARAMS = ""; }
   });
 
-  // The red "Pick an audience angle first" on Review is the same ask as the
-  // one on Hook + Story, so it must be the same control: the small size read
-  // as a lesser action than the button it duplicates.
-  await check("Review's first-gap button is the Hook + Story control", async (ctx) => {
+  // The red "Pick an audience angle first" above the plan is the same ask as the
+  // render section's own angle CTA below it, so it must be the same control:
+  // the small size read as a lesser action than the button it duplicates.
+  // One check, two drafts on separate roots: no plan (the missing panel names
+  // the gap) and a plan but no angle (the render section asks instead of
+  // generating). Re-mounting in one container would keep the first draft's
+  // state and prove nothing about the second.
+  await check("Review & submit's angle gap asks once, with one shared control", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
+    const second = dom.window.document.createElement("div");
+    dom.window.document.body.appendChild(second);
+    const secondRoot = createRoot(second);
+    const later = { root: secondRoot, container: second, text: () => second.textContent || "" };
+    let reviewBtn = null;
     try {
       await withApi({
         getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Hook + Story");
-        const hookBtn = ctx.container.querySelector('[data-testid="generate-angles-button"]');
-        if (!hookBtn) throw new Error("Hook + Story has no angle CTA to compare against");
-        await openStep(ctx, "Review");
-        const reviewBtn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
-        if (!reviewBtn) throw new Error("Review has no first-gap button");
+        await openStep(ctx, "Review & submit");
+        reviewBtn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+        if (!reviewBtn) throw new Error("Review & submit has no first-gap button");
         if (!/Pick an audience angle first/.test(reviewBtn.textContent || "")) {
-          throw new Error(`Review's first-gap button names something else: ${JSON.stringify(reviewBtn.textContent)}`);
+          throw new Error(`Review & submit's first-gap button names something else: ${JSON.stringify(reviewBtn.textContent)}`);
         }
-        if (reviewBtn.className !== hookBtn.className) {
-          throw new Error(
-            "Review's first-gap button is not the Hook + Story control:\n" +
-              `  review: ${reviewBtn.className}\n  hook:   ${hookBtn.className}`
-          );
-        }
+        await withApi({
+          getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
+        }, async () => {
+          await mount(CreateVideo, {})(later);
+          await openStep(later, "Review & submit");
+          const hookBtn = later.container.querySelector('[data-testid="generate-angles-button"]');
+          if (!hookBtn) throw new Error("the render section has no angle CTA to compare against");
+          if (hookBtn.className !== reviewBtn.className) {
+            throw new Error(
+              "Review & submit's first-gap button is not the render gate control:\n" +
+                `  review: ${reviewBtn.className}\n  hook:   ${hookBtn.className}`
+            );
+          }
+        });
       });
-    } finally { global.__SMOKE_PARAMS = ""; }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      await act(async () => { secondRoot.unmount(); });
+      second.remove();
+    }
   });
 
-  // The "what's missing" gate is one section on every step: a helper line with
-  // the red action under it, spaced the same everywhere. Review's stack is the
-  // reference, so a step cannot drift tighter and make the same ask read as a
-  // different kind of control.
+  // The "what's missing" gate is one section wherever it appears: a helper line
+  // with the red action under it, spaced the same everywhere. Review's stack is
+  // the reference, so a gate cannot drift tighter and make the same ask read as
+  // a different kind of control.
   await check("every step spaces its gate hint from the red button the same", async (ctx) => {
     const gates = [];
     const record = (label, hint) => {
@@ -4714,30 +4779,32 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hintStartingWith = (prefix) =>
       [...ctx.container.querySelectorAll("p")].find((p) => (p.textContent || "").trim().startsWith(prefix));
 
-    // Steps one to three from a blank draft: no angle, no goal, no template.
+    // The choosing screen from a blank draft (no angle, no goal, no template)
+    // and the still-missing panel: the goal hint below the angle gate names the
+    // next pick but carries no red button of its own — the angle CTA above is
+    // the fix — so only the angle gate records a spacing here.
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & goal");
-    record("Audience & goal", ctx.container.querySelector('[data-testid="angles-cta-copy"]'));
-    await openStep(ctx, "Template & photo");
-    record("Template & photo", hintStartingWith("Set the goal first"));
-    await openStep(ctx, "Review");
-    record("Review", hintStartingWith("Your free plan starts"));
+    await openStep(ctx, "Audience & template");
+    record("Audience & template", ctx.container.querySelector('[data-testid="angles-cta-copy"]'));
+    await openStep(ctx, "Review & submit");
+    record("Review & submit", hintStartingWith("Your free plan starts"));
 
-    // Hook + Story with an angle but no template: the gate that used to state
-    // the problem with no way out. Recommendations are empty so nothing is
-    // preselected into the template slot.
+    // The render gate with an angle but no template: the gate that used to state
+    // the problem with no way out. A planned project, because the gate below
+    // the plan only renders once a plan exists to approve. Recommendations are
+    // empty so nothing is preselected into the template slot.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({
-        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "a1", template_id: "" }),
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "a1", template_id: "" }),
         getTemplateRecommendations: async () => ({ recommendations: [] }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Hook + Story");
+        await openStep(ctx, "Review & submit");
         const button = ctx.container.querySelector('[data-testid="hook-first-gap-button"]');
-        if (!button) throw new Error("the Hook + Story gate has no red button");
-        record("Hook + Story", button.previousElementSibling);
+        if (!button) throw new Error("the render gate has no red button");
+        record("render gate", button.previousElementSibling);
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -4756,7 +4823,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     try {
       await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         const goals = ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]');
         if (goals.length !== 6) throw new Error("legacy angle does not provide six fallback goals");
         if (ctx.container.querySelector("#all-video-goals")) throw new Error("legacy angle shows the removed selector");
@@ -4769,7 +4836,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   await check("progress ticks mean done, not merely being to the left", async (ctx) => {
     // The tick used to mean "this step index is below the current one", so
-    // jumping straight to the last step showed a tick on all five while nothing
+    // jumping straight to the last step showed a tick on all three while nothing
     // had been done - telling the founder they had finished the workflow before
     // starting it. The state is now derived from what actually exists.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -4787,11 +4854,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (review?.getAttribute("data-state") !== "done") {
       throw new Error(`Review should be done for a project with a plan: ${states.join(", ")}`);
     }
-    const render = ctx.container.querySelector('[data-testid="step-pill-hook"]');
-    // The render step has no completion state by design: the workflow ends at
-    // "attach your own demo", which happens in the founder's editor.
-    if (render?.getAttribute("data-state") === "done") {
-      throw new Error("the render step is ticked although no clip has been generated");
+    // No render-only pill exists anymore: the render lives at the bottom of
+    // Review & submit, so there is no separate step that could tick. The merge
+    // is pinned by asserting the retired pills are gone rather than unticked.
+    for (const retired of ["step-pill-template", "step-pill-hook"]) {
+      if (ctx.container.querySelector(`[data-testid="${retired}"]`)) {
+        throw new Error(`the retired ${retired} pill still exists as its own step`);
+      }
     }
   });
 
@@ -4802,7 +4871,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review");
+      await openStep(ctx, "Review & submit");
       const script = [...ctx.container.querySelectorAll("textarea")]
         .find((t) => (t.value || "").length > 40);
       if (!script) throw new Error("no script field on Review to edit");
@@ -4865,10 +4934,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => {});
 
         // Leave and come back, which re-runs the load with a flipped order.
-        // Review is the step that follows the template step; it used to be
-        // "Assets", which no longer exists as its own step.
-        await openStep(ctx, "Review");
-        await openStep(ctx, "Template & photo");
+        // Review & submit follows the merged choosing screen on the same step;
+        // "Assets" used to be its own step, which no longer exists.
+        await openStep(ctx, "Review & submit");
+        await openStep(ctx, "Audience & template");
       }
     );
     const text = ctx.text();
@@ -4886,7 +4955,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "";
       // The override has to span the whole check, not just the mount: the
     // tailored request does not fire until the objective is chosen and the
-    // template step opens, which is after mount.
+    // merged step opens, which is after mount.
     await withApi(
       {
         ensureObjectiveTemplates: async () => ({
@@ -4898,11 +4967,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
-        const pill = stepPill(ctx, "Template & photo");
+        const pill = stepPill(ctx, "Audience & template");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -4925,11 +4994,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & goal");
+          await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
-        const pill = stepPill(ctx, "Template & photo");
+        const pill = stepPill(ctx, "Audience & template");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -5112,26 +5181,26 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         // The create path: the draft is created eagerly from profile + template
         // (ensureProject fires on selection), so the POST happens without a
-        // manual button. Opening the template step is enough to trigger it.
+        // manual button. Opening the merged step is enough to trigger it.
         global.__SMOKE_PARAMS = "";
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
         await act(async () => {});
 
         // The update path: with a project already in hand, generating the plan
-        // writes the draft again first. The plan button is on Review, which is
-        // where the result is read — it was its own step holding one button.
+        // writes the draft again first. The plan button sits on Review & submit
+        // above the result it writes — generating and reading share one screen.
         global.__SMOKE_PARAMS = "?project=p1";
         await mount(CreateVideo, {})(ctx);
         // Changing the goal first, so the draft genuinely needs rewriting.
         // ensureProject short-circuits when nothing the project carries has
         // moved, and a write that does not happen proves nothing about what it
         // would have sent.
-        await openStep(ctx, "Audience & goal");
+        await openStep(ctx, "Audience & template");
         const otherGoal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
         await clickEl(ctx, otherGoal);
         if (otherGoal.getAttribute("aria-pressed") !== "true") throw new Error("the goal picker did not retain the sixth goal");
-        await openStep(ctx, "Review");
+        await openStep(ctx, "Review & submit");
         const generate = [...ctx.container.querySelectorAll("button")]
           .find((b) => /^(Generate|Regenerate) (the )?plan/.test((b.textContent || "").trim()));
         if (!generate) throw new Error("Review offers no generate control");
@@ -10755,7 +10824,7 @@ async function openStep(ctx, label) {
 /**
  * Pass the angle gate the way a founder does.
  *
- * Landing on Audience & goal shows one Generate CTA, never the list. Clicking
+ * Landing on Audience & template shows one Generate CTA, never the list. Clicking
  * it reveals a pre-generated set for free (no endpoint call) or generates
  * fresh when there is none. Tests that assert on rows call this first; tests
  * that assert on the gate itself do not.
@@ -10767,14 +10836,16 @@ async function passAngleGate(ctx) {
 }
 
 /**
- * Reach the template step the way the workflow now requires.
+ * Reach the ranked templates the way the workflow now requires.
  *
- * The video goal is required, and the template step refuses to show a ranked
- * list without one. The fixture enters via the same angle-first suggested-goal
- * control that the founder uses before opening templates.
+ * The video goal is required, and the merged step refuses to show a ranked
+ * list without one. Angle, goal, templates and photo share one screen now,
+ * so picking the angle and goal IS arriving: no second step to open after.
+ * The fixture enters via the same angle-first suggested-goal control that
+ * the founder uses before the list below ranks itself.
  */
 async function openTemplateStep(ctx) {
-  await openStep(ctx, "Audience & goal");
+  await openStep(ctx, "Audience & template");
   // The pre-generated six wait behind the Generate CTA: pass it the way a
   // founder does (free reveal, no endpoint call) before picking.
   await passAngleGate(ctx);
@@ -10785,7 +10856,6 @@ async function openTemplateStep(ctx) {
   const goalButton = ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]');
   if (!goalButton) throw new Error("the audience step has no recommended goal control");
   await clickEl(ctx, goalButton, "no recommended goal control");
-  await openStep(ctx, "Template & photo");
 }
 
 /** Click an element the way a person would, so React's onClick fires. */

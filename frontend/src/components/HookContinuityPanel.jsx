@@ -327,7 +327,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>No character reference attached</AlertTitle>
           <AlertDescription>
-            Attach a <code>character_reference</code> image on the Template &amp; photo step. Otherwise,
+            Attach a <code>character_reference</code> image on the Audience &amp; template step. Otherwise,
             the model will invent the presenter instead of using you.
           </AlertDescription>
         </Alert>
@@ -392,7 +392,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         {busy && <StrategyBuildLine />}
         {needsAngle && (
           <p className="text-xs text-muted-foreground" data-testid="strategy-needs-angle">
-            Pick an audience angle on the Audience &amp; goal step first — the strategy is built around it.
+            Pick an audience angle on the Audience &amp; template step first — the strategy is built around it.
           </p>
         )}
         {!hasStrategy && !needsAngle && (

@@ -422,7 +422,7 @@ const handleGenerate = async () => {
         <Alert variant="destructive">
           <AlertTitle>No photo attached</AlertTitle>
           <AlertDescription>
-            Add a clear photo of the person you want on camera on the Template &amp; photo step. The video model uses it as a presenter reference; without it, the presenter may be invented.
+            Add a clear photo of the person you want on camera on the Audience &amp; template step. The video model uses it as a presenter reference; without it, the presenter may be invented.
           </AlertDescription>
         </Alert>
       )}
@@ -588,7 +588,7 @@ const handleGenerate = async () => {
         <Alert variant="destructive">
           <AlertTitle>No audience angle picked</AlertTitle>
           <AlertDescription>
-            Pick one on the Audience &amp; goal step. The strategy and the render are built around
+            Pick one on the Audience &amp; template step. The strategy and the render are built around
             it — without one the piece falls back to generic framing.
           </AlertDescription>
         </Alert>

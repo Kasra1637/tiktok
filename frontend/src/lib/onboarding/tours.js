@@ -30,47 +30,35 @@ export const TOURS = {
   // landing-enter-app-button, and it fired on every arrival. See
   // getTourIdForPath for why it is gone.
   //
-  // The data was deleted rather than left unmapped on purpose. Five steps that
-  // can never open are five steps a reader assumes are reachable, and the
+  // The data was deleted rather than left unmapped on purpose. Steps that
+  // can never open are steps a reader assumes are reachable, and the
   // "every onboarding tour step points at a real element" check would keep
   // passing on them while verifying nothing a user can see. The landing
   // testids stay on the page — they cost nothing and are what a future test on
   // the home page would hook to.
 
-  // Targets CreateVideo — the five-step studio at /create.
+  // Targets CreateVideo — the three-step studio at /create.
   create: {
     id: "create",
     label: "Create Video tour",
     steps: [
       {
         target: '[data-testid="step-pill-profile"]',
-        title: "Five steps to a finished clip",
+        title: "Three steps to a finished clip",
         body:
-          "Pick your app, lock a goal, grab a matched template and presenter photo, read your free script plan, then render Hook + Story. These step tabs are your rail — hop around freely; the plan and the render stay separate.",
+          "Pick your app, choose an angle, goal, template and presenter photo on one screen, then read your free script plan and render Hook + Story. These step tabs are your rail — hop around freely; the plan sits above the render it approves.",
       },
       {
         target: '[data-testid="step-pill-angle"]',
-        title: "Pick the angle that sells",
+        title: "Angle, goal, template, photo",
         body:
-          "An audience angle is required — it is the story your strategy and render hang on. Six goal suggestions come with it: tap Shuffle to reorder the same six for free, or Regenerate angles for brand-new material (drafts built on an angle are warned about and reported). Then pick your goal and go.",
-      },
-      {
-        target: '[data-testid="step-pill-template"]',
-        title: "Choose a format & presenter",
-        body:
-          "Tailored to your app and goal — every suggestion carries a fit score, its reasons, and its caveats. The template also sets the clip's length, so swapping it changes how long the piece runs. Add the presenter photo right below: template and photo live on the same step.",
+          "An audience angle is required — it is the story your strategy and render hang on. Six goal suggestions come with it: tap Shuffle to reorder the same six for free, or Regenerate angles for brand-new material (drafts built on an angle are warned about and reported). Pick your goal and the templates rank for it below; add the presenter photo on the same screen.",
       },
       {
         target: '[data-testid="step-pill-review"]',
-        title: "Review the words first",
+        title: "Review the words, then render",
         body:
-          "Your script plan is free and written when you reach Review with the required choices set. Edit the hook, story, and visual directions to taste. Flagged claims get fixed here — a prohibited claim blocks rendering.",
-      },
-      {
-        target: '[data-testid="step-pill-hook"]',
-        title: "Render Hook + Story",
-        body:
-          "The app-specific strategy is built here and shown before you spend anything. Read it, then render the clip from your approved plan and presenter photo. One short clip, exactly as long as its template says. No demo, no CTA, no on-screen text — this is the hook and the story only.",
+          "Your script plan is free and written when you reach Review with the required choices set. Edit the hook, story, and visual directions to taste — flagged claims get fixed here, and a prohibited claim blocks rendering. The app-specific strategy builds below the plan and the clip renders from it: one short clip, exactly as long as its template says. No demo, no CTA, no on-screen text — this is the hook and the story only.",
       },
     ],
   },
@@ -133,7 +121,7 @@ export const TOURS = {
         title: "Add the presenter photo",
         optional: true,
         body:
-          "Upload a clear photo of your on-camera person — this becomes the character reference every generated video is built from. In Create Video, you finish the upload on Template & photo.",
+          "Upload a clear photo of your on-camera person — this becomes the character reference every generated video is built from. In Create Video, you finish the upload on Audience & template.",
       },
       {
         target: '[data-testid="asset-rights-alert"]',

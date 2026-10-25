@@ -1,10 +1,10 @@
 /**
  * Matching a template's required assets against what a draft already has.
  *
- * Why this is a helper and not inline JSX: step 2 of the studio shows a
- * template's `required_assets` as badges, and step 3 is where assets get
- * attached — so without a have/missing state the founder must hold the
- * requirement in memory across steps. The comparison itself is trivial, but
+ * Why this is a helper and not inline JSX: the Audience & template step shows
+ * a template's `required_assets` as badges where assets get attached — so
+ * without a have/missing state the founder must hold the requirement in
+ * memory while picking. The comparison itself is trivial, but
  * pinning it here means the matching rule (case, whitespace, non-array
  * inputs) is asserted in scripts/check-frontend-logic.cjs instead of living
  * untested inside a render branch.
