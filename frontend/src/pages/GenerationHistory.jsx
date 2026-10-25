@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription } from "../components/ui/alert";
@@ -14,7 +14,7 @@ import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } fro
 import { FactChip, FactList } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
 import { HistoryFeedback } from "../components/HistoryFeedback";
-import { recordSignal } from "../lib/feedback";
+import { recordSignal, verdictFor } from "../lib/feedback";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -312,17 +312,14 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  * The old card spent most of its width on a 152px rail plus a context column,
  * so a page of history read as a stack of admin panels with a small video
  * attached. The clip is the thing being reviewed, so it gets the whole tile:
- * a playable render shows the video and the tab, and nothing else — no app
- * name, no status, no facts standing beside the footage. Everything the card
- * used to say at rest lives in the drawer, which also put destructive actions
- * one deliberate gesture further away without hiding them from anyone who
- * opens a render to work on it.
+ * a playable render leads with the video, then its identity and saved results.
+ * Detailed context and destructive actions remain behind the drawer.
  *
  * A row with nothing to play is the one exception, and it keeps a notice in
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
  */
-function GenerationRow({ row, onChanged, defaultExpanded = false }) {
+function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -569,6 +566,23 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
         )}
       </div>
 
+      <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
+          <StatusBadge status={row.status} />
+          <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
+        </div>
+        <p className="break-words text-sm font-semibold">
+          {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
+          <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
+          <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>
+          {row.tiktok_url && verdictFor(row.verdicts, "video") > 0 && <FactChip>Winner</FactChip>}
+        </div>
+      </div>
+
       <HistoryExpandTab
         expanded={expanded}
         onToggle={() => setExpanded((open) => !open)}
@@ -585,11 +599,7 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
           className="history-drawer"
         >
           <div className="history-body space-y-5">
-            {/* Which app this render belongs to and how it turned out used to
-                sit on the tile as a scrim over the footage. The tile is the
-                clip now, so they moved in here rather than disappearing — a
-                filtered page is still readable, and the status is still on
-                screen the moment a render is opened. */}
+            {/* Repeat identity here for long drawers scrolled past the tile. */}
             <div className="flex flex-wrap items-center gap-2">
               <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
               <StatusBadge status={row.status} />
@@ -654,7 +664,7 @@ function GenerationRow({ row, onChanged, defaultExpanded = false }) {
               <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
             )}
 
-            <HistoryFeedback row={row} signalRefs={signalRefs} />
+            <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
 
             {/* Actions, in two tiers.
 
@@ -836,28 +846,30 @@ export default function GenerationHistory() {
   // Filters mirror into ?profile=&status=&q= so a view like "failed renders
   // for this app" is a shareable link, not a re-click every visit. State
   // stays the source of truth; the URL is a mirror updated below.
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [profileFilter, setProfileFilter] = useState(() => searchParams.get("profile") || "");
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
   const [query, setQuery] = useState(() => searchParams.get("q") || "");
-  // The endpoint caps at 200 and the page first asks for 100: a history that
-  // outgrows the first page says so with a second page, not a silent cut.
-  const [limit, setLimit] = useState(100);
+  // Deep links load the same 200-row window as Analytics; other visits start
+  // with 100 and offer a second page instead of silently cutting off history.
+  const [limit, setLimit] = useState(() => location.hash.startsWith("#generation-") ? 200 : 100);
   // Sort is client-side like the hook-text search: the endpoint owns
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
   const [sort, setSort] = useState("newest");
+  const updateRow = useCallback((id, patch) => {
+    setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
+  }, []);
 
   useEffect(() => {
     const next = {};
     if (profileFilter) next.profile = profileFilter;
     if (statusFilter) next.status = statusFilter;
     if (query.trim()) next.q = query.trim();
-    setSearchParams(next, { replace: true });
-    // setSearchParams is stable; mirroring state -> URL only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileFilter, statusFilter, query]);
+    navigate({ search: new URLSearchParams(next).toString(), hash: location.hash }, { replace: true });
+  }, [profileFilter, statusFilter, query, location.hash, navigate]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1026,6 +1038,7 @@ export default function GenerationHistory() {
               key={row.id}
               row={row}
               onChanged={load}
+              onUpdated={updateRow}
               defaultExpanded={hashId !== "" && hashId === row.id}
             />
           ))}

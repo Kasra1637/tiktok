@@ -7849,16 +7849,9 @@ async def set_generation_tiktok_views(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
-    views = payload.tiktok_views
-    if views is None:
-        stored = None
-    else:
-        try:
-            stored = int(views)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Views must be a whole number of 0 or more.")
-        if isinstance(views, bool) or stored < 0 or stored > 10_000_000_000:
-            raise HTTPException(status_code=400, detail="Views must be a whole number of 0 or more.")
+    stored = payload.tiktok_views
+    if stored is not None and not 0 <= stored <= 10_000_000_000:
+        raise HTTPException(status_code=400, detail="Views must be a whole number from 0 to 10 billion.")
     await _execute(
         "UPDATE generations SET tiktok_views = ?, updated_at = ? WHERE id = ?",
         (stored, now_iso(), generation_id),

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -11,24 +11,11 @@ import { Skeleton } from "../components/ui/skeleton";
 import { FactChip } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
+import { verdictFor } from "../lib/feedback";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays } from "lucide-react";
 
-/**
- * Facts about your work, captured automatically as you go.
- *
- * Manual result logging is gone, so this page no longer answers "what did my
- * videos do" — nothing is typed in, nothing is scraped, and no per-template
- * learning reads from here. What remains is the automatic half, in three
- * shapes that all stay counts, never judgments about why:
- *
- * - Renders: the generation funnel (completed, failed, in progress, archived)
- *   and renders per week, both read straight off the generations list.
- * - Signals: factual triggers (a template swapped, a video regenerated, a
- *   clip downloaded) counted as they happened.
- * - Reasons: the founder's own fixed-code explanations, plus how many of the
- *   captured signals carry one — so a thin list reads as "unexplained"
- *   rather than "no problem".
- */
+// Compare the same saved results History displays; activity stays separate
+// from reach, and neither views nor workflow signals imply conversions.
 
 /** Same vocabulary helper History uses, so a code reads identically on both. */
 function humanize(value) {
@@ -74,7 +61,7 @@ function weekBuckets(rows) {
 }
 
 export default function Analytics() {
-  const [profiles, setProfiles] = useState([]);
+  const [profiles, setProfiles] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [generations, setGenerations] = useState(null);
@@ -95,56 +82,42 @@ export default function Analytics() {
         setProfiles(rows);
         const remembered = readCurrentAppId();
         setSelectedId(
-          rows.some((p) => p.id === remembered) ? remembered : rows[0]?.id || ""
+          rows.some((p) => p.id === remembered) ? remembered : ""
         );
       })
       .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
+        if (!cancelled) {
+          setError(getErrorMessage(err));
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const loadProfileData = useCallback(async (profileId) => {
-    if (!profileId) {
-      setFeedback(null);
-      setGenerations(null);
-      setLoading(false);
-      return;
-    }
+  useEffect(() => {
+    if (profiles === null) return;
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      // Signals only: the automatic triggers captured as the founder worked.
-      // Manual result logging is gone, so there is no ledger, no verdicts
-      // and no per-template learning left to fetch here.
-      const fb = await api.getFeedback({ brand_profile_id: profileId, limit: 500 }).catch(() => null);
+    setFeedback(null);
+    setGenerations(null);
+    const scope = selectedId ? { brand_profile_id: selectedId } : {};
+    Promise.all([
+      api.getFeedback({ ...scope, limit: 500 }),
+      api.getGenerationHistory({ ...scope, limit: 200 }),
+    ]).then(([fb, history]) => {
+      if (cancelled) return;
       setFeedback(fb);
-      // The render funnel and weekly activity read straight off the
-      // generations list — the same rows History shows, so the two pages can
-      // never disagree. A failure here hides those two cards only; the
-      // signals card below still renders from its own fetch.
-      if (typeof api.getGenerations === "function") {
-        try {
-          const g = await api.getGenerations({ brand_profile_id: profileId, limit: 200 });
-          setGenerations(g?.generations || []);
-        } catch {
-          setGenerations(null);
-        }
-      } else {
-        setGenerations(null);
-      }
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProfileData(selectedId);
-  }, [selectedId, loadProfileData]);
+      setGenerations(history.generations || []);
+    }).catch((err) => {
+      if (!cancelled) setError(getErrorMessage(err));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [selectedId, profiles]);
 
   const selectProfile = (id) => {
     setSelectedId(id);
@@ -164,14 +137,15 @@ export default function Analytics() {
       <PageHeader
         icon={TrendingUp}
         title="Analytics"
-        description="Facts about your work, captured automatically as you go."
+        description="Compare posted clips, recorded views & your own ratings."
         data-testid="analytics-header"
         actions={
-          profiles.length > 1 ? (
+          profiles?.length > 0 ? (
             <AppPicker
               profiles={profiles}
               value={selectedId}
               onChange={selectProfile}
+              allLabel="All apps"
               testId="analytics-profile-picker"
             />
           ) : null
@@ -191,8 +165,7 @@ export default function Analytics() {
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-4/5" />
         </div>
-      ) : !profiles.length ? (
-        !error && (
+      ) : error ? null : !profiles?.length && !hasAnything ? (
           <EmptyState
             icon={TrendingUp}
             title="No app yet"
@@ -203,7 +176,6 @@ export default function Analytics() {
               </Button>
             }
           />
-        )
       ) : !hasAnything ? (
         <EmptyState
           icon={Activity}
@@ -212,6 +184,14 @@ export default function Analytics() {
         />
       ) : (
         <div className="space-y-6">
+          {renders?.length > 0 && (
+            <>
+              <ClipResults generations={renders} profileId={selectedId} />
+              <p className="text-xs text-muted-foreground">
+                Showing {renders.length} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200). Activity below uses this same set.
+              </p>
+            </>
+          )}
           {renders !== null && renders.length > 0 && (
             <RenderFunnel generations={renders} profileId={selectedId} />
           )}
@@ -227,6 +207,67 @@ export default function Analytics() {
         </div>
       )}
     </PageFrame>
+  );
+}
+
+function ClipResults({ generations, profileId }) {
+  const clips = generations
+    .filter((row) => row.status === "completed" || row.status === "archived")
+    .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
+  const posted = clips.filter((row) => row.tiktok_url).length;
+  const counted = clips.filter((row) => row.tiktok_views != null).length;
+  const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
+  const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
+  return (
+    <SectionCard title="Clip results" icon={TrendingUp} description="Compare reach & your judgment before choosing another take." data-testid="analytics-results">
+      <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
+      <p className="text-xs text-muted-foreground">
+        Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
+        Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
+      </p>
+      {clips.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No finished clips to compare yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
+            <thead>
+              <tr className="border-b border-[color:var(--hairline)] text-xs text-muted-foreground">
+                {["Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {clips.map((row) => {
+                const vote = verdictFor(row.verdicts, "video");
+                return (
+                  <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
+                    <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
+                      <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
+                        {row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
+                      </Link>
+                      <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
+                    </th>
+                    <td className="py-3 pr-4 text-xs">
+                      {row.tiktok_url ? <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="text-[color:var(--brand-indigo)] hover:underline">Posted ↗</a> : "Not posted"}
+                    </td>
+                    <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs">{row.tiktok_views == null ? "Not recorded" : row.tiktok_views.toLocaleString("en-US")}</td>
+                    <td className="whitespace-nowrap py-3 pr-4 text-xs">{vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}</td>
+                    <td className="py-3 text-xs">
+                      {row.studio_project_id
+                        ? <Link to={`/create?project=${encodeURIComponent(row.studio_project_id)}`} className="text-[color:var(--brand-indigo)] hover:underline">Reuse draft</Link>
+                        : row.status === "completed"
+                          ? <Link to={`/demo-cta/${row.id}`} className="text-[color:var(--brand-indigo)] hover:underline">Style clip</Link>
+                          : <Link to={`${historyHref}#generation-${row.id}`} className="text-[color:var(--brand-indigo)] hover:underline">Review clip</Link>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+    </SectionCard>
   );
 }
 
@@ -254,7 +295,7 @@ function RenderFunnel({ generations = [], profileId = "" }) {
     <SectionCard
       title="Renders"
       icon={Clapperboard}
-      description="Every clip for this app, counted by status."
+      description="Loaded renders, counted by status."
       data-testid="analytics-funnel"
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
@@ -294,7 +335,7 @@ function RenderActivity({ generations = [] }) {
     <SectionCard
       title="Renders per week"
       icon={CalendarDays}
-      description="Clip counts by week, newest first."
+      description="Loaded render counts by week, newest first."
       data-testid="analytics-activity"
     >
       <ul className="space-y-2">

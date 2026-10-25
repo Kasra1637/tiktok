@@ -107,6 +107,29 @@ class TestTikTokViews:
             assert exc.value.status_code == 400
         assert _run(api.get_generation(generation_id, ANON)).get("tiktok_views") is None
 
+    @pytest.mark.parametrize("bad", [True, False, 1.5, 12.0, "123", "garbage"])
+    def test_http_refuses_coercion_without_changing_saved_views(self, api, bad):
+        import httpx
+
+        generation_id = _insert_generation(api)
+        _set_views(api, generation_id, 42)
+
+        async def request():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=api.app), base_url="http://test"
+            ) as client:
+                return await client.post(
+                    f"/api/generations/{generation_id}/tiktok-views",
+                    json={"tiktok_views": bad},
+                )
+
+        assert _run(request()).status_code == 422
+        assert _run(api.get_generation(generation_id, ANON))["tiktok_views"] == 42
+
+    def test_upper_boundary_is_saved(self, api):
+        generation_id = _insert_generation(api)
+        assert _set_views(api, generation_id, 10_000_000_000)["tiktok_views"] == 10_000_000_000
+
     def test_another_users_render_is_not_found(self, api):
         generation_id = _insert_generation(api)
         with pytest.raises(HTTPException) as exc:

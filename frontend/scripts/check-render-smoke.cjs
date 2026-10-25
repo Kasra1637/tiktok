@@ -5510,11 +5510,7 @@ async function runAnalyticsChecks() {
   const stub = (extra = {}) => ({
     getAppProfiles: async () => ({ profiles: [PROFILE] }),
     getFeedback: async () => SIGNALS,
-    // The page also reads the generations list for the funnel and weekly
-    // activity cards. Without this the stub leaks the real HTTP client, the
-    // mount never settles, and every empty-state check below reads the
-    // loading skeleton instead of the page.
-    getGenerations: async () => ({ generations: [] }),
+    getGenerationHistory: async () => ({ generations: [] }),
     ...extra,
   });
 
@@ -5548,6 +5544,49 @@ async function runAnalyticsChecks() {
     }
   });
 
+  await check("clip results compare reach, posted links and votes without inferring conversions", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "missing", status: "completed", segment_role: "demo_cta" },
+        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, verdicts: { video: -1 } },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "failed", status: "failed", tiktok_views: 10000 },
+      ] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const rows = [...card.querySelectorAll('tbody tr')];
+    if (rows.map(r => r.dataset.testid).join() !== "result-top,result-zero,result-missing") throw new Error("comparison order lost zero, missing or status distinction");
+    for (const copy of ["1 posted", "2 with recorded views", "2 rated", "not installs, revenue, or conversions", "different posting dates", "never a view threshold"]) {
+      if (!card.textContent.includes(copy)) throw new Error(`missing factual result/caveat: ${copy}`);
+    }
+    if (!rows[0].textContent.includes("9,000") || !rows[0].textContent.includes("Good")) throw new Error("reach/vote missing");
+    if (!rows[1].textContent.includes("Not posted") || !rows[1].textContent.includes("Not good")) throw new Error("negative vote hidden");
+    if (!rows[2].textContent.includes("Not recorded") || !rows[2].textContent.includes("Unassigned app")) throw new Error("missing data invented");
+    if (!card.querySelector('a[href="/create?project=draft1"]') || !card.querySelector('a[href$="#generation-top"]')) throw new Error("reuse/review link lost provenance");
+  });
+
+  await check("Analytics scopes result requests and shows failures rather than empty success", async (ctx) => {
+    const calls = [];
+    const Analytics = load("pages/Analytics.jsx").default;
+    await withApi(stub({
+      getGenerationHistory: async (params) => {
+        calls.push(params);
+        if (params.brand_profile_id) throw new Error("Results could not load");
+        return { generations: [{ id: "unassigned", status: "completed" }] };
+      },
+    }), async () => {
+      await mount(Analytics)(ctx);
+      const picker = ctx.container.querySelector('[data-testid="analytics-profile-picker"]');
+      await selectOption(ctx, picker, "");
+      if (!ctx.container.querySelector('[data-testid="result-unassigned"]')) throw new Error("All apps dropped standalone results");
+      await selectOption(ctx, picker, "p1");
+      expectText(ctx, "Results could not load");
+      if (ctx.text().includes("Nothing captured yet") || ctx.container.querySelector('[data-testid="result-unassigned"]')) throw new Error("failed scope displayed empty or stale results");
+      if (!calls.some(p => p.brand_profile_id === "p1" && p.limit === 200)) throw new Error("app scope not sent");
+    });
+  });
+
   await check("automatic signals render as counts, never as judgments", async (ctx) => {
     await mountAnalytics(ctx);
     const card = ctx.container.querySelector('[data-testid="analytics-signals"]');
@@ -5572,6 +5611,7 @@ async function runAnalyticsChecks() {
       {
         getAppProfiles: async () => ({ profiles: [] }),
         getFeedback: async () => null,
+        getGenerationHistory: async () => ({ generations: [] }),
       },
       async () => {
         await mount(Analytics, {})(ctx);
@@ -5596,7 +5636,7 @@ async function runAnalyticsChecks() {
         feedback: [],
         summary: { total: 0, top_signals: [], top_reasons: [] },
       }),
-      getGenerations: async () => ({
+      getGenerationHistory: async () => ({
         generations: [
           { id: "g1", status: "completed", created_at: dayAgo },
           { id: "g2", status: "completed", created_at: dayAgo },
@@ -5643,7 +5683,7 @@ async function runAnalyticsChecks() {
         feedback: [],
         summary: { total: 0, top_signals: [], top_reasons: [] },
       }),
-      getGenerations: async () => ({
+      getGenerationHistory: async () => ({
         generations: [
           { id: "g1", status: "completed", created_at: justAfter },
           { id: "g2", status: "completed", created_at: justBefore },
@@ -9320,7 +9360,7 @@ async function runDemoCtaChecks() {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
-        { ...COMPLETED, id: "dense-1", brand_name: "Journal", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
+        { ...COMPLETED, id: "dense-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
         { ...COMPLETED, id: "dense-2", brand_name: "Journal", hook_line: "A second render." },
       ] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
@@ -9333,9 +9373,7 @@ async function runDemoCtaChecks() {
       const expand = first.querySelector('[data-testid="history-expand"]');
       if (!expand) throw new Error("a collapsed tile has no expand control to reach its details");
       if (expand.getAttribute("aria-expanded") !== "false") throw new Error("history tiles do not start collapsed");
-      // Collapsed means the clip and nothing else. Context and actions are what
-      // expanding is for, so finding them on the closed tile means the drawer
-      // is really a restyled card again.
+      // Identity and result facts remain visible; working controls stay in the drawer.
       if (first.querySelector('[data-testid="history-context"]')) {
         throw new Error("the collapsed tile already shows the demo context");
       }
@@ -9344,16 +9382,9 @@ async function runDemoCtaChecks() {
           throw new Error(`the collapsed tile already exposes ${label}`);
         }
       }
-      // "Only the video" is the entire point of the layout, so it is asserted
-      // literally rather than by sampling a few labels: strip the expand tab's
-      // own text and a playable tile has none left. An app name, a status or a
-      // duration creeping back onto the tile is exactly what this catches.
-      const residue = first.textContent.replace(expand.textContent, "").trim();
-      if (residue) {
-        throw new Error(
-          "a collapsed tile shows more than the clip and its expand tab: " +
-            JSON.stringify(residue.slice(0, 80))
-        );
+      const summary = first.querySelector('[data-testid="history-summary"]');
+      for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
+        if (!summary?.textContent.includes(text)) throw new Error(`collapsed identity/result missing: ${text}`);
       }
       await clickEl(ctx, expand, "expand a history tile");
       const opened = ctx.container.querySelector('[data-testid="history-card"]');
@@ -9388,6 +9419,52 @@ async function runDemoCtaChecks() {
       if (ranked.join() !== "generation-v-top,generation-v-old,generation-v-none") {
         throw new Error(`most-viewed did not rank counted rows first: ${ranked.join()}`);
       }
+    });
+  });
+
+  await check("History saves update collapsed facts, votes and view order without reloading", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    let fetches = 0;
+    const first = { ...COMPLETED, id: "sync-low", tiktok_url: "https://www.tiktok.com/@founder/video/123", tiktok_views: 10 };
+    await withApi({
+      getGenerationHistory: async () => { fetches++; return { generations: [first, { ...COMPLETED, id: "sync-high", tiktok_views: 100 }] }; },
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      getGeneration: async () => first,
+      setTikTokViews: async (_id, count) => {
+        if (count === 1201) throw new Error("Views could not save");
+        return { tiktok_views: count };
+      },
+      setTikTokLink: async (_id, link) => ({ tiktok_url: link || null }),
+      recordFeedback: async () => ({}),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const card = () => ctx.container.querySelector('#generation-sync-low');
+      const get = (id) => card().querySelector(`[data-testid="${id}"]`);
+      await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
+      await clickEl(ctx, get("history-expand"));
+      const input = get("history-tiktok-views-input-sync-low");
+      for (const invalid of ["1,2", "1.5", "true", "10000000001"]) {
+        await typeInto(ctx, input, invalid);
+        await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
+        if (!card().querySelector('[role="alert"]')) throw new Error(`bad views accepted: ${invalid}`);
+        if (!get("history-summary").textContent.includes("10 views")) throw new Error("invalid save changed tile");
+      }
+      await typeInto(ctx, input, "1,200");
+      await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
+      if (ctx.container.querySelector('article').id !== "generation-sync-low") throw new Error("saving views did not immediately re-sort");
+      await typeInto(ctx, input, "1201");
+      await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
+      expectText(ctx, "Views could not save");
+      if (!get("history-summary").textContent.includes("1,200 views")) throw new Error("failed save changed confirmed list state");
+      await clickEl(ctx, get("history-video-feedback-sync-low-thumb-up"));
+      if (!get("history-summary").textContent.includes("Winner")) throw new Error("saved vote did not update list");
+      await clickEl(ctx, get("history-tiktok-clear-sync-low"));
+      if (!get("history-summary").textContent.includes("Not posted") || get("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
+      await typeInto(ctx, get("history-tiktok-input-sync-low"), first.tiktok_url);
+      await clickEl(ctx, get("history-tiktok-save-sync-low"));
+      await clickEl(ctx, get("history-expand"));
+      if (!get("history-summary").textContent.includes("1,200 views") || !get("history-summary").textContent.includes("Winner")) throw new Error("collapsed summary lost saved result");
+      if (fetches !== 1) throw new Error("result save reloaded the page instead of synchronizing rows");
     });
   });
 
@@ -9532,18 +9609,28 @@ async function runDemoCtaChecks() {
     // nothing to land on and the named render sits below the fold, closed.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     global.__SMOKE_HASH = "#generation-deep-1";
+    const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    global.__SMOKE_NAVIGATIONS = [];
     try {
       await withApi(
         {
-          getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "deep-1" }] }),
+          getGenerationHistory: async ({ limit }) => {
+            if (limit !== 200) throw new Error("deep link cannot reach Analytics' full result window");
+            return { generations: [{ ...COMPLETED, id: "deep-1" }] };
+          },
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            },
+        },
         async () => {
           await mount(GenerationHistory)(ctx);
+          const destinations = global.__SMOKE_NAVIGATIONS.filter((_, i) => i % 2 === 0);
+          if (!destinations.length || destinations.some((to) => to.hash !== "#generation-deep-1")) {
+            throw new Error("filter URL synchronization erased the clip anchor");
+          }
         }
       );
     } finally {
       global.__SMOKE_HASH = "";
+      global.__SMOKE_NAVIGATIONS = previousNavigations;
     }
     const tab = ctx.container.querySelector('[data-testid="history-expand"]');
     if (!tab || tab.getAttribute("aria-expanded") !== "true") {

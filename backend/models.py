@@ -2,7 +2,7 @@
 import json
 from datetime import datetime, timezone
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 
 def now_iso() -> str:
@@ -457,7 +457,7 @@ class TikTokViewsRequest(BaseModel):
     video and pastes it here. None clears it. Out-of-range values are
     refused at the endpoint, not coerced, so a typo never becomes data.
     """
-    tiktok_views: Optional[int] = None
+    tiktok_views: Optional[StrictInt] = None
 
 
 class FeedbackRequest(BaseModel):

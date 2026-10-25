@@ -273,9 +273,16 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="analytics-profile-picker"], [data-testid="analytics-header"]',
-        title: "Results per app, verdicts per choice",
+        title: "Compare saved results",
         body:
-          "Numbers follow the app profile — what works depends on the app. Switch apps here. Your thumbs on goals, templates, plans, and scripts feed every verdict you see; real calls, not guesses.",
+          "Choose an app or All apps, including unassigned exports. Compare recorded views, posted status, and your own render votes. Views describe reach, not installs or conversions.",
+      },
+      {
+        target: '[data-testid="analytics-results"]',
+        title: "Choose another take",
+        optional: true,
+        body:
+          "Recorded views sort highest first; missing counts stay last. Review the clip in History or reuse its existing draft. Compare your judgment alongside reach; a high count does not prove conversion or cause.",
       },
       {
         target: '[data-testid="analytics-funnel"]',

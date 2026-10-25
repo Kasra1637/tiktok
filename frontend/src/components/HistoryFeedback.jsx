@@ -26,7 +26,7 @@ import { verdictFor } from "../lib/feedback";
  */
 const PART_COMPONENTS = ["goal", "template", "plan", "script"];
 
-export function HistoryFeedback({ row, signalRefs }) {
+export function HistoryFeedback({ row, signalRefs, onUpdated }) {
   const [voteOverrides, setVoteOverrides] = useState({});
   const [freshVerdicts, setFreshVerdicts] = useState(null);
   useEffect(() => {
@@ -57,12 +57,12 @@ export function HistoryFeedback({ row, signalRefs }) {
   const [savingViews, setSavingViews] = useState(false);
   const [viewsError, setViewsError] = useState(null);
   const saveViews = useCallback(async () => {
-    const text = String(views).trim().replace(/,/g, "");
-    if (!/^\d+$/.test(text)) {
+    const text = String(views).trim();
+    if (!/^(\d+|\d{1,3}(,\d{3})+)$/.test(text)) {
       setViewsError("Views must be a whole number of 0 or more.");
       return;
     }
-    const count = Number(text);
+    const count = Number(text.replace(/,/g, ""));
     if (count > 10000000000) {
       setViewsError("That count is too large to be a TikTok view count.");
       return;
@@ -73,12 +73,13 @@ export function HistoryFeedback({ row, signalRefs }) {
       const updated = await api.setTikTokViews(row.id, count);
       setSavedViews(updated.tiktok_views ?? null);
       setViews(updated.tiktok_views ?? "");
+      onUpdated?.(row.id, { tiktok_views: updated.tiktok_views ?? null });
     } catch (err) {
       setViewsError(getErrorMessage(err));
     } finally {
       setSavingViews(false);
     }
-  }, [row.id, views]);
+  }, [row.id, views, onUpdated]);
   const saveLink = useCallback(async () => {
     setSavingLink(true);
     setLinkError(null);
@@ -86,12 +87,13 @@ export function HistoryFeedback({ row, signalRefs }) {
       const updated = await api.setTikTokLink(row.id, link.trim());
       setSavedLink(updated.tiktok_url || null);
       setLink(updated.tiktok_url || "");
+      onUpdated?.(row.id, { tiktok_url: updated.tiktok_url || null });
     } catch (err) {
       setLinkError(getErrorMessage(err));
     } finally {
       setSavingLink(false);
     }
-  }, [row.id, link]);
+  }, [row.id, link, onUpdated]);
   const clearLink = useCallback(async () => {
     setSavingLink(true);
     setLinkError(null);
@@ -99,15 +101,17 @@ export function HistoryFeedback({ row, signalRefs }) {
       await api.setTikTokLink(row.id, "");
       setSavedLink(null);
       setLink("");
+      onUpdated?.(row.id, { tiktok_url: null });
     } catch (err) {
       setLinkError(getErrorMessage(err));
     } finally {
       setSavingLink(false);
     }
-  }, [row.id]);
-  const rememberVote = useCallback((component, verdict) => {
+  }, [row.id, onUpdated]);
+  const rememberVote = (component, verdict) => {
     setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
-  }, []);
+    onUpdated?.(row.id, { verdicts: { ...savedVerdicts, ...voteOverrides, [component]: verdict } });
+  };
   // Rated parts stay visible while the disclosure is collapsed: the summary
   // names how many of the four carry a vote, so a founder sees at a glance
   // whether this render's parts were ever judged. Reads from the same
