@@ -5615,6 +5615,31 @@ async function runAnalyticsChecks() {
     });
   });
 
+  await check("Analytics fetch failure shows an honest error with retry, not empty data", async (ctx) => {
+    let fail = true;
+    const failingHistory = async () => {
+      if (fail) throw new Error("Results could not load");
+      return { generations: [{ id: "recovered", status: "completed", hook_line: "Recovered clip" }] };
+    };
+    await mountAnalytics(ctx, { getGenerationHistory: failingHistory });
+    expectText(ctx, "Results could not load", "failed fetch shows no honest error");
+    if (ctx.text().includes("Nothing captured yet") || ctx.container.querySelector('[data-testid="analytics-results"]')) {
+      throw new Error("failed fetch rendered as empty or stale success");
+    }
+    const retry = ctx.container.querySelector('[data-testid="analytics-retry"]');
+    if (!retry) throw new Error("failed fetch offers no retry");
+    fail = false;
+    await withApi(stub({ getGenerationHistory: failingHistory }), async () => {
+      await clickEl(ctx, retry, "retry the failed Analytics fetch");
+    });
+    if (!ctx.container.querySelector('[data-testid="result-recovered"]')) {
+      throw new Error("retry did not recover the results");
+    }
+    if (ctx.container.querySelector('[data-testid="analytics-retry"]')) {
+      throw new Error("retry control lingers after success");
+    }
+  });
+
   await check("Analytics acknowledges saved votes even without renders or automatic signals", async (ctx) => {
     await mountAnalytics(ctx, {
       getFeedback: async () => ({ feedback: [{ event: "thumb_up", step: "goal" }], summary: { total: 1, by_event: { thumb_up: 1 }, top_signals: [], top_reasons: [] } }),

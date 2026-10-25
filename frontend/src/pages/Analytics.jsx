@@ -67,6 +67,7 @@ export default function Analytics() {
   const [generations, setGenerations] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   // The profile list first, because it decides what everything else is scoped
   // to. A remembered selection is only honoured when it still names a profile
@@ -94,7 +95,7 @@ export default function Analytics() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryVersion]);
 
   useEffect(() => {
     if (profiles === null) return;
@@ -117,7 +118,7 @@ export default function Analytics() {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [selectedId, profiles]);
+  }, [selectedId, profiles, retryVersion]);
 
   const selectProfile = (id) => {
     setSelectedId(id);
@@ -156,7 +157,17 @@ export default function Analytics() {
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{error}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setRetryVersion((v) => v + 1)}
+              data-testid="analytics-retry"
+            >
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
