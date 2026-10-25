@@ -33,6 +33,16 @@ export function useOnboarding() {
 }
 
 /**
+ * The nullable twin: pages and cards that are also mounted outside the
+ * provider (the render-smoke suite mounts components bare) read tours when
+ * there is a provider and degrade to plain links when there is not, instead
+ * of crashing the whole page on a missing context.
+ */
+export function useOptionalOnboarding() {
+  return useContext(OnboardingContext);
+}
+
+/**
  * App-wide onboarding tour controller.
  *
  * Wraps the routed app (must live inside <BrowserRouter> since it reads the

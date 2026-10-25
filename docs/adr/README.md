@@ -47,3 +47,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0028](0028-per-clip-presentation.md) | Each sequence clip picks its own floating/hand/real presentation | accepted |
 | [0029](0029-second-clip-group-and-look.md) | Second clip gets its own gated group and its own background/motion/scene | accepted |
 | [0026](0026-fresh-opening-message-batches.md) | Opening text consumes twenty app-grounded suggestions instead of saved preset indices | accepted |
+| [0030](0030-per-clip-audio-mutes.md) | Each sequence clip mutes its own audio in preview and export | accepted |
+| [0031](0031-first-run-checklist.md) | First-run checklist carries the founder across pages with their tours | accepted |

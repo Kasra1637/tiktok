@@ -143,7 +143,9 @@ export default function TourOverlay() {
       if (el) {
         resolved = true;
         clearTimers();
-        el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
+        // Optional-chained: jsdom and some embedded webviews have no
+        // scrollIntoView, and a missing scroll must never strand the tour.
+        el.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
         // Let the smooth scroll settle a beat before measuring final position.
         setTimeout(() => {
           if (!mountedRef.current) return;

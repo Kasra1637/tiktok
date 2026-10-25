@@ -917,6 +917,8 @@ const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
 const DemoCtaStudio = load("pages/DemoCtaStudio.jsx").default;
+const { FirstRunChecklist } = load("components/onboarding/FirstRunChecklist.jsx");
+const { OnboardingProvider } = load("components/onboarding/OnboardingProvider.jsx");
 
 // The shipped order, in the order the founder walks it. Asserted as a whole
 // sequence rather than a set: the point of the reorder is that the free, claim-
@@ -1840,9 +1842,10 @@ async function main() {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     // This is the sentence that makes the product honest. Without it the
     // download looks like a finished video, which is precisely what it is not:
-    // the middle is built to stop where the presenter reaches for their phone.
-    expectText(ctx, "Attach your own demo", "the founder's own demo is not described");
-    expectText(ctx, "add your own call to action", "the founder's own close is not described");
+    // the file is the hook and the middle, and the demo plus close are the
+    // founder's next step in Demo + CTA.
+    expectText(ctx, "This is the hook and the middle", "the file's scope is not described");
+    expectText(ctx, "add your demo and call to action", "the founder's own close is not described");
   });
 
   // Burned-in captions are gone: no text appears on the finished video, so
@@ -1853,7 +1856,7 @@ async function main() {
     expectAbsent(ctx, "the on-screen text you wrote on Review", "the caption source is still stated");
     expectAbsent(ctx, "Add captions", "the compose control is still offered");
     expectAbsent(ctx, "Download captioned", "the captioned download is still offered");
-    expectText(ctx, "add your own call to action", "the founder's own close is not described");
+    expectText(ctx, "add your demo and call to action", "the founder's own close is not described");
   });
 
   // Words that do not fit are not spoken, and the gate refuses the render — so
@@ -3807,6 +3810,55 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (pill.getAttribute("aria-label") !== "App Profile: done") {
       throw new Error(`the profile pill announces the app: ${pill.getAttribute("aria-label")}`);
+    }
+  });
+
+  // First-run wayfinding is step zero: Create, then Demo + CTA, then Export.
+  // Each step is a door to its page plus that page's existing tour — the card
+  // teaches the path, the tours teach the pages. It shows until the first
+  // export saves or the founder dismisses it, never again after either.
+  await check("first-run checklist carries the founder across pages with their tours", async (ctx) => {
+    dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+    dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
+    // The create tour's first step spotlights the wizard's profile pill, so the
+    // mount carries that anchor: without a target the overlay correctly keeps
+    // searching instead of rendering, and there would be nothing to assert.
+    const WithProvider = () => React.createElement(OnboardingProvider, null, React.createElement(React.Fragment, null,
+      React.createElement(FirstRunChecklist, null),
+      React.createElement("span", { "data-testid": "step-pill-profile" })));
+    try {
+      await mount(WithProvider, {})(ctx);
+      for (const key of ["create", "demo-cta", "export"]) {
+        if (!ctx.container.querySelector(`[data-testid="first-run-step-${key}"]`)) throw new Error(`first-run step missing: ${key}`);
+      }
+      const goCreate = ctx.container.querySelector('[data-testid="first-run-go-create"]');
+      if (!goCreate || goCreate.getAttribute("href") !== "/create") throw new Error("first-run create step does not link to /create");
+      const goStyle = ctx.container.querySelector('[data-testid="first-run-go-demo-cta"]');
+      if (!goStyle || goStyle.getAttribute("href") !== "/demo-cta") throw new Error("first-run style step does not link to /demo-cta");
+      // Each step offers its page's tour rather than re-explaining it. jsdom
+      // lays nothing out, so every rect is zero and the overlay would keep
+      // searching for a visible box forever — the anchor gets a box here so
+      // the open path is what gets exercised. The overlay settles ~260ms
+      // after its target resolves, so the wait is real time inside act.
+      ctx.container.querySelector('[data-testid="step-pill-profile"]').getBoundingClientRect = () => ({
+        x: 100, y: 100, top: 100, left: 100, width: 200, height: 40, bottom: 140, right: 300,
+      });
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-tour-create"]'), "no create tour shortcut");
+      await act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+      // The overlay portals to document.body, so it is never inside the mount container.
+      const overlay = () => dom.window.document.querySelector('[data-testid="onboarding-tour-overlay"]');
+      if (!overlay()) throw new Error("first-run tour button did not open the create tour");
+      await clickEl(ctx, dom.window.document.querySelector('[data-testid="onboarding-tour-close-button"]'), "no tour close");
+      // Dismiss retires the card without claiming an export.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="first-run-dismiss"]'), "no dismiss control");
+      if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("dismiss did not hide the first-run checklist");
+      // A saved export retires it too: remount with the done flag set.
+      dom.window.localStorage.setItem("hookforge_first_export_done.v1", "1");
+      await mount(WithProvider, {})(ctx);
+      if (ctx.container.querySelector('[data-testid="first-run-checklist"]')) throw new Error("a saved export did not retire the first-run checklist");
+    } finally {
+      dom.window.localStorage.removeItem("hookforge_first_export_done.v1");
+      dom.window.localStorage.removeItem("hookforge_first_run_dismissed.v1");
     }
   });
 
@@ -9120,6 +9172,10 @@ async function runDemoCtaChecks() {
       if (draws[0] !== base || draws.includes(overlay)) throw new Error("base preview still composites the added clip");
       if (!overlay.paused || overlay.loop) throw new Error("added clip loops or plays over the base");
       if (ctx.container.querySelector('[data-testid="append-overlays"]').checked) throw new Error("added-clip overlays must default off");
+      if (ctx.container.querySelector('[data-testid="append-audio-mute"]').checked) throw new Error("added-clip mute must default off");
+      await click('[data-testid="append-audio-mute"]');
+      if (!ctx.container.querySelector('[data-testid="append-audio-mute"]').checked) throw new Error("added-clip mute did not take");
+      await click('[data-testid="append-audio-mute"]');
       const seek = ctx.container.querySelector('[aria-label="Seek"]');
       if (Number(seek.getAttribute("aria-valuemax")) !== 16) throw new Error("timeline did not sum both 8s clips");
       await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
@@ -9179,6 +9235,11 @@ async function runDemoCtaChecks() {
       // Source & Look closed when Second clip opened (single-open
       // accordion), so reopen it for the base style picker.
       await click('[data-testid="demo-cta-source"] button');
+      if (!ctx.container.querySelector('[data-testid="base-audio-mute"]')) throw new Error("base mute toggle missing from Source & Look");
+      if (ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute must default off");
+      await click('[data-testid="base-audio-mute"]');
+      if (!ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute did not take");
+      await click('[data-testid="base-audio-mute"]');
       await click('[data-testid="view-mode-hand"]');
       handCalls.length = 0;
       await click('[data-testid="demo-cta-export"]');
