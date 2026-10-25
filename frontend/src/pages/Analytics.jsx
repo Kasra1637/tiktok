@@ -131,6 +131,29 @@ export default function Analytics() {
   const signals = feedback?.summary?.top_signals || [];
   const reasons = feedback?.summary?.top_reasons || [];
   const renders = Array.isArray(generations) ? generations : null;
+  // The recommendation's draft, verified against the live project list so a
+  // deleted draft can never be linked. Null means unverified or unnecessary:
+  // the link then stays exactly what it was before verification existed.
+  const [draftIds, setDraftIds] = useState(null);
+  const takePick = (renders || [])
+    .filter(isTakeCandidate)
+    .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))[0] || null;
+  const takeDraftId = takePick?.studio_project_id || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    setDraftIds(null);
+    if (!takeDraftId) return undefined;
+    api.getStudioProjects(selectedId ? { brand_profile_id: selectedId } : {})
+      .then((d) => {
+        if (!cancelled) setDraftIds(new Set((d.projects || []).map((p) => p.id)));
+      })
+      .catch(() => {
+        // Unknown, not absent: failing open keeps the previous behavior.
+        if (!cancelled) setDraftIds(null);
+      });
+    return () => { cancelled = true; };
+  }, [selectedId, profiles, retryVersion, takeDraftId]);
   const hasFeedback = (feedback?.summary?.total || 0) > 0 || (feedback?.feedback?.length || 0) > 0;
   const hasAnything = hasFeedback || signals.length > 0 || reasons.length > 0 || (renders?.length || 0) > 0;
 
@@ -203,7 +226,7 @@ export default function Analytics() {
         <div className="space-y-6">
           {renders?.length > 0 && (
             <>
-              <ClipResults generations={renders} profileId={selectedId} />
+              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} />
               <p className="text-xs text-muted-foreground">
                 Showing {renders.length} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200). Activity below uses this same set.
               </p>
@@ -240,13 +263,32 @@ function clipName(row) {
   return row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`;
 }
 
-function nextTakeFor(row, historyHref) {
-  if (row.studio_project_id) return { label: "Reuse draft", to: `/create?project=${encodeURIComponent(row.studio_project_id)}` };
+/**
+ * The one row the ledger earns the right to advise on: finished, posted,
+ * counted, and rated Good by the founder. Archived clips are shelved on
+ * purpose, so they stay comparison and never become the suggestion.
+ */
+function isTakeCandidate(row) {
+  return (
+    row.status === "completed" &&
+    row.tiktok_url &&
+    row.tiktok_views != null &&
+    verdictFor(row.verdicts, "video") > 0
+  );
+}
+
+function nextTakeFor(row, historyHref, draftIds) {
+  // A draft verified gone falls through to the row's own next step instead
+  // of linking a project that no longer resolves. Unverified stays Reuse
+  // draft: what the page linked before verification existed.
+  if (row.studio_project_id && (!draftIds || draftIds.has(row.studio_project_id))) {
+    return { label: "Reuse draft", to: `/create?project=${encodeURIComponent(row.studio_project_id)}` };
+  }
   if (row.status === "completed") return { label: "Style clip", to: `/demo-cta/${row.id}` };
   return { label: "Review clip", to: `${historyHref}#generation-${row.id}` };
 }
 
-function ClipResults({ generations, profileId }) {
+function ClipResults({ generations, profileId, pick, draftIds }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
     .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
@@ -254,11 +296,7 @@ function ClipResults({ generations, profileId }) {
   const counted = clips.filter((row) => row.tiktok_views != null).length;
   const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
   const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
-  // The one recommendation the ledger earns: highest recorded reach among
-  // clips the founder rated Good and actually posted. Anything less —
-  // unrated, unposted, uncounted — stays comparison, never advice.
-  const pick = clips.filter((row) => row.tiktok_url && row.tiktok_views != null && verdictFor(row.verdicts, "video") > 0)[0] || null;
-  const pickNext = pick ? nextTakeFor(pick, historyHref) : null;
+  const pickNext = pick ? nextTakeFor(pick, historyHref, draftIds) : null;
   return (
     <SectionCard title="Clip results" icon={TrendingUp} description="Compare reach & your judgment before choosing another take." data-testid="analytics-results">
       <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
@@ -290,7 +328,7 @@ function ClipResults({ generations, profileId }) {
             <tbody>
               {clips.map((row) => {
                 const vote = verdictFor(row.verdicts, "video");
-                const next = nextTakeFor(row, historyHref);
+                const next = nextTakeFor(row, historyHref, draftIds);
                 return (
                   <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
                     <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">

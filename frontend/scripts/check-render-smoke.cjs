@@ -5603,6 +5603,7 @@ async function runAnalyticsChecks() {
     getAppProfiles: async () => ({ profiles: [PROFILE] }),
     getFeedback: async () => SIGNALS,
     getGenerationHistory: async () => ({ generations: [] }),
+    getStudioProjects: async () => ({ projects: [] }),
     ...extra,
   });
 
@@ -5646,6 +5647,7 @@ async function runAnalyticsChecks() {
         { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, verdicts: { video: 1 } },
         { id: "failed", status: "failed", tiktok_views: 30000 },
       ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
     });
     const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
     if (!pick) throw new Error("no next-take recommendation rendered");
@@ -5671,6 +5673,86 @@ async function runAnalyticsChecks() {
     }
   });
 
+  await check("Analytics skips archived clips when recommending the next take", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        // Highest reach on the shelf: shelved means set aside, so it stays
+        // comparison and never becomes advice.
+        { id: "vault", status: "archived", hook_line: "Shelved winner", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/7", verdicts: { video: 1 }, studio_project_id: "draft0" },
+        { id: "live", status: "completed", hook_line: "Live Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/8", verdicts: { video: 1 }, studio_project_id: "draft2" },
+      ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft0" }, { id: "draft2" }] }),
+    });
+    await act(async () => {});
+    const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
+    if (!pick) throw new Error("no next-take recommendation rendered");
+    if (!/Live Good/.test(pick.textContent || "")) {
+      throw new Error("the recommendation picked a shelved clip");
+    }
+    const action = pick.querySelector("a");
+    if (!/\/create\?project=draft2$/.test(action?.getAttribute("href") || "")) {
+      throw new Error(`the recommendation reuses the wrong draft: ${action?.getAttribute("href")}`);
+    }
+  });
+
+  await check("Analytics recommends from the selected app only", async (ctx) => {
+    global.localStorage.setItem("vocolens.currentAppProfileId", "p1");
+    try {
+      await mountAnalytics(ctx, {
+        getAppProfiles: async () => ({ profiles: [PROFILE, { id: "p2", brand_name: "Second", status: "approved" }] }),
+        getGenerationHistory: async (params = {}) => ({ generations: params.brand_profile_id === "p2" ? [
+          { id: "p2top", status: "completed", hook_line: "Other app hit", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/2", verdicts: { video: 1 }, studio_project_id: "draftP2" },
+        ] : [
+          { id: "p1top", status: "completed", hook_line: "This app Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", verdicts: { video: 1 }, studio_project_id: "draftP1" },
+        ] }),
+        getStudioProjects: async () => ({ projects: [{ id: "draftP1" }, { id: "draftP2" }] }),
+      });
+      await act(async () => {});
+      const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
+      if (!pick) throw new Error("no next-take recommendation rendered");
+      if (!/This app Good/.test(pick.textContent || "")) {
+        throw new Error("the recommendation crossed into another app");
+      }
+    } finally {
+      global.localStorage.removeItem("vocolens.currentAppProfileId");
+    }
+  });
+
+  await check("Analytics never links a deleted draft from the recommendation", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "ghost" },
+      ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "something-else" }] }),
+    });
+    await act(async () => {});
+    const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
+    if (!pick) throw new Error("no next-take recommendation rendered");
+    const href = pick.querySelector("a")?.getAttribute("href") || "";
+    if (/project=ghost/.test(href)) {
+      throw new Error(`the recommendation links a deleted draft: ${href}`);
+    }
+    if (!/\/demo-cta\/top$/.test(href)) {
+      throw new Error(`the deleted draft falls back to the wrong action: ${href}`);
+    }
+  });
+
+  await check("Analytics keeps Reuse draft when draft verification fails", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+      ] }),
+      getStudioProjects: async () => { throw new Error("offline"); },
+    });
+    await act(async () => {});
+    const pick = ctx.container.querySelector('[data-testid="analytics-next-take"]');
+    if (!pick) throw new Error("no next-take recommendation rendered");
+    const href = pick.querySelector("a")?.getAttribute("href") || "";
+    if (!/\/create\?project=draft1$/.test(href)) {
+      throw new Error(`an unverifiable draft should fail open to Reuse draft: ${href}`);
+    }
+  });
+
   await check("clip results compare reach, posted links and votes without inferring conversions", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
@@ -5679,6 +5761,7 @@ async function runAnalyticsChecks() {
         { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
         { id: "failed", status: "failed", tiktok_views: 10000 },
       ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
     });
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
