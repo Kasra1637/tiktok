@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { GroupLabel } from "./SectionCard";
-import { Clapperboard, Play, RotateCcw, Check, Film } from "lucide-react";
+import { Play, RotateCcw, Check, Film } from "lucide-react";
 
 /**
  * Hypothetical processing demo — NOT a render.
@@ -19,10 +19,8 @@ import { Clapperboard, Play, RotateCcw, Check, Film } from "lucide-react";
  */
 const STAGES = [
   { key: "lock", label: "Locking your approved script" },
-  { key: "strategy", label: "Building the app-specific strategy" },
-  { key: "hook", label: "Rendering the hook (first 3 seconds)" },
-  { key: "story", label: "Rendering the story (the middle)" },
-  { key: "stitch", label: "Stitching one single-pass clip" },
+  { key: "render", label: "Rendering hook + story in one pass" },
+  { key: "stitch", label: "Stitching one clip" },
 ];
 
 function prefersReducedMotion() {
@@ -78,9 +76,6 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
         ? Math.round(((stageIndex + 1) / (STAGES.length + 1)) * 100)
         : 0;
 
-  const hookSeconds = 3;
-  const storySeconds = Math.max(Number(pieceSeconds) - hookSeconds, 1);
-  const hookShare = (hookSeconds / Number(pieceSeconds)) * 100;
 
   return (
     <div
@@ -94,8 +89,7 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground">
-        A front-end preview of processing &amp; the result layout. Nothing
-        renders, nothing is billed, no file is produced.
+        A front-end preview only. Nothing renders, nothing is billed.
       </p>
 
       {phase === "idle" && (
@@ -199,31 +193,9 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
           </div>
 
           <div className="space-y-3">
-              <div className="space-y-1.5">
-                <p className="text-xs font-semibold">Single-pass timeline</p>
-                <div
-                  className="flex h-3 w-full overflow-hidden rounded-full border border-[color:var(--hairline)]"
-                  aria-hidden="true"
-                >
-                  <div
-                    className="h-full bg-[color:var(--brand-indigo)]"
-                    style={{ width: `${hookShare}%` }}
-                  />
-                  <div
-                    className="h-full bg-[color:var(--indigo-25)]"
-                    style={{ width: `${100 - hookShare}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Hook 0–3s · Story 3–{pieceSeconds}s · one file, ends where viewers reach for
-                  their phones.
-                </p>
-              </div>
-
               <ul className="space-y-1.5">
                 {[
-                  "Hook & middle in one clip, ready to review",
-                  "Your script played back word for word",
+                  "Hook & middle in one clip",
                   "Demo footage & CTA stay yours to attach",
                 ].map((line, i) => (
                   <li
@@ -236,14 +208,6 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
                   </li>
                 ))}
               </ul>
-
-              <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
-                <GroupLabel icon={Clapperboard}>What you have &amp; what is left</GroupLabel>
-                <p className="text-xs text-muted-foreground">
-                  Hypothetically: the hook &amp; the middle. Still yours — the filmed demo,
-                  the closing CTA, &amp; on-screen text.
-                </p>
-              </div>
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={start} data-testid="hypothetical-replay">

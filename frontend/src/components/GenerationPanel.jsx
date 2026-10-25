@@ -720,41 +720,16 @@ const handleGenerate = async () => {
                 }}
                 testId="video-feedback"
               />
-              {/* What they got, and what is still theirs to do. The old copy here
-                  promised a call to action on an end card, which made this file
-                  look finished. It is not: the middle deliberately ends where
-                  the presenter would reach for their phone, so the demo and the
-                  close are both outside it. */}
-              <div className="space-y-1 border-t border-[color:var(--hairline)] pt-3">
-                <GroupLabel icon={Clapperboard}>What you have &amp; what is left</GroupLabel>
-                {/* "No text appears on screen — nothing is published for you"
-                    is gone: the pre-render summary above already says the piece
-                    carries no on-screen text, and the page-level note is the
-                    one place that says nothing posts itself. This block's job is
-                    the next step, and that is what it keeps. */}
-                <p className="text-xs text-muted-foreground">
-                  This file is the hook and the middle, ending where viewers reach for their
-                  phones. Attach your own demo next, then add your own call to action.
-                </p>
-              </div>
-
               {/* The native next step. The download above is the finish line for
                   anyone who does not want it: this panel adds nothing to what
                   they already have, changes no gate, and takes nothing away. It
-                  answers a question the copy above already raises — "attach your
-                  own demo next" — by opening the native editor for this exact
-                  render, in this app, rather than leaving the founder to find
-                  it elsewhere.
-
-                  It used to be an indigo box, which made a fourth frame inside
-                  the panel and put the emphasis on the container rather than on
-                  the thing to press. The eyebrow and the coral button carry it
-                  now. */}
+                  opens the native editor for this exact render, in this app,
+                  rather than leaving the founder to find it elsewhere. */}
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
                 <p className="text-xs text-muted-foreground">
-                  Use this video as is, or open it in Demo + CTA to add your demo in a phone
-                  mockup and your call to action. Exports save beside the original in History.
+                  This is the hook and the middle. Use it as is, or open it in Demo + CTA
+                  to add your demo and call to action — exports save beside the original.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="accent" size="sm" asChild>
