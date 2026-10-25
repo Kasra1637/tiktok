@@ -119,21 +119,15 @@ export function FirstRunChecklist() {
             data-testid={`first-run-step-${step.key}`}
             className={`flex items-center gap-3 rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-2.5${ping === step.key ? " first-run-ping" : ""}`}
           >
-            <span
-              aria-hidden="true"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--indigo-35)] font-mono text-xs font-semibold text-[color:var(--brand-indigo)]"
-            >
-              {i + 1}
-            </span>
-            {/* The whole bar is the door: text and chevron share one link so
-                a click anywhere on the row (not just the 32px chevron)
-                navigates. Hover answers with the same indigo wash the five
-                Demo + CTA group headers use — one hover language, not two.
-                The tour shortcut stays a separate button beside it — a button
-                inside a link is invalid markup and would make "show me
-                around" navigate away instead. Already on that page (row 1,
-                since this card lives on /create), the link would be a no-op,
-                so the row plays its "you are here" pulse instead. */}
+            {/* The whole bar is the door: badge, text and chevron share one
+                link so a click anywhere on the row navigates. Hover answers
+                with the same indigo wash the five Demo + CTA group headers
+                use — one hover language, not two. The tour shortcut stays a
+                separate button beside it — a button inside a link is invalid
+                markup and would make "show me around" navigate away
+                instead. Already on that page (row 1, since this card lives
+                on /create), the link would be a no-op, so the row plays its
+                "you are here" pulse instead. */}
             <Link
               to={step.to}
               aria-label={pathname === step.to ? `You are already on ${step.title}` : `Go to ${step.title}`}
@@ -150,6 +144,12 @@ export function FirstRunChecklist() {
                 pingRow(step.key);
               }}
             >
+              <span
+                aria-hidden="true"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--indigo-35)] font-mono text-xs font-semibold text-[color:var(--brand-indigo)]"
+              >
+                {i + 1}
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{step.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">{step.body}</span>
