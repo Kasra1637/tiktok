@@ -46,19 +46,19 @@ export const TOURS = {
         target: '[data-testid="step-pill-profile"]',
         title: "Three steps to a finished clip",
         body:
-          "Pick your app, choose an angle, goal, template and presenter photo on one screen, then read your free script plan and render Hook + Story. These step tabs are your rail — hop around freely; the plan sits above the render it approves.",
+          "Pick your app, angle, goal, template and presenter photo on one screen, then read your free script plan and render Hook + Story. Hop between steps freely — the plan sits above the render it approves.",
       },
       {
         target: '[data-testid="step-pill-angle"]',
         title: "Angle, goal, template, photo",
         body:
-          "An audience angle is required — it is the story your strategy and render hang on. Six goal suggestions come with it: tap Shuffle to reorder the same six for free, or Regenerate angles for brand-new material (drafts built on an angle are warned about and reported). Pick your goal and the templates rank for it below; add the presenter photo on the same screen.",
+          "An audience angle is required — everything hangs on it. Six goal suggestions come with it: Shuffle reorders the same six free, Regenerate makes new ones. Templates rank for your goal below; add the photo here too.",
       },
       {
         target: '[data-testid="step-pill-review"]',
         title: "Review the words, then render",
         body:
-          "Your script plan is free and written when you reach Review with the required choices set. Edit the hook, story, and visual directions to taste — flagged claims get fixed here, and a prohibited claim blocks rendering. The app-specific strategy builds below the plan and the clip renders from it: one short clip, exactly as long as its template says. No demo, no CTA, no on-screen text — this is the hook and the story only.",
+          "Your script plan is free, written once the required choices are set. Edit hook, story and visuals here — a prohibited claim blocks rendering until fixed. The clip renders at its template's length: hook and story only.",
       },
     ],
   },

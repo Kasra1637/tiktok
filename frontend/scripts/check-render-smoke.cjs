@@ -5824,6 +5824,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (missing.length) throw new Error(missing.join("\n        "));
   });
 
+  // Spotlight copy stays short enough to read at a glance: the tooltip card
+  // is 320px wide, so a body past ~220 characters walls the founder with
+  // text over the thing they are meant to look at. Every step body —
+  // spotlight or centered summary — shares the cap.
+  await check("every onboarding tour step body is 220 characters or fewer", async () => {
+    const { TOURS } = load("lib/onboarding/tours.js");
+    const long = [];
+    for (const [tourId, tour] of Object.entries(TOURS)) {
+      for (const step of tour.steps) {
+        if ((step.body || "").length > 220) {
+          long.push(`${tourId} / ${step.title}: ${step.body.length} chars`);
+        }
+      }
+    }
+    if (long.length) throw new Error(long.join("\n        "));
+  });
+
   // The path-to-tour map has to name tours that exist, or the provider bails
   // before opening anything while still having marked the tour seen. Deleted
   // routes (/discover, /analysis/*, /bookmarks) must map to null — a stale
