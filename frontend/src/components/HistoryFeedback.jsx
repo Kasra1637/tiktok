@@ -9,8 +9,9 @@ import { api, getErrorMessage } from "../lib/api";
 import { verdictFor } from "../lib/feedback";
 
 /**
- * Everything about one render's votes: the primary render vote plus the
- * optional per-part ratings behind their disclosure.
+ * Everything about one render's vote: the primary render vote, the posted
+ * link, and the pasted-back views. Per-part ratings were removed: one vote
+ * on the clip as a whole is the judgment that counts.
  *
  * One owner for all vote state in the drawer. `voteOverrides` holds a
  * just-cast vote ahead of the next fetch; `freshVerdicts` is the server
@@ -24,8 +25,6 @@ import { verdictFor } from "../lib/feedback";
  * confirmed re-arrives through that refetch, which is what restores the
  * highlight after a collapse without depending on the list reloading.
  */
-const PART_COMPONENTS = ["goal", "template", "plan", "script"];
-
 export function HistoryFeedback({ row, signalRefs, onUpdated }) {
   const [voteOverrides, setVoteOverrides] = useState({});
   const [freshVerdicts, setFreshVerdicts] = useState(null);
@@ -114,13 +113,6 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
     setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
     onUpdated?.(row.id, { verdicts: { ...savedVerdicts, ...voteOverrides, [component]: verdict } });
   };
-  // Rated parts stay visible while the disclosure is collapsed: the summary
-  // names how many of the four carry a vote, so a founder sees at a glance
-  // whether this render's parts were ever judged. Reads from the same
-  // override-then-saved rule as the thumbs, so a just-cast vote counts
-  // before the next fetch and a saved one survives a refresh.
-  const partsRatedCount = PART_COMPONENTS.filter((c) => thumbValue(c) !== 0).length;
-
   return (
     <div className="history-vote-block space-y-3 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
       <GroupLabel icon={Clapperboard}>Rate this render</GroupLabel>
@@ -249,68 +241,6 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
           </div>
         )}
       </div>
-      <details data-testid={`history-parts-feedback-${row.id}`} className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
-        <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-          Rate the parts (optional) — goal, template, plan, script
-          {partsRatedCount > 0 ? (
-            <span className="text-foreground/80"> · {partsRatedCount} of 4 rated</span>
-          ) : null}
-        </summary>
-        <p className="pb-2 text-xs text-muted-foreground">
-          Only if one part specifically helped or hurt. Each part&apos;s votes steer only the step that makes it, never the render vote above.
-        </p>
-        <div className="ml-2 space-y-2 border-l-2 border-[color:var(--hairline)]">
-      <ComponentThumbs
-        component="goal"
-        question="Content goal"
-        hint="Shapes future goal suggestions for this app."
-        resetKey={`${row.id}:goal`}
-        initialValue={thumbValue("goal")}
-        onVoted={rememberVote}
-        refs={{
-          ...signalRefs,
-          detail: `objective=${row.objective || ""};kind=${row.angle_kind || ""}`,
-        }}
-        testId={`history-goal-feedback-${row.id}`}
-      />
-      <ComponentThumbs
-        component="template"
-        question="Hook template"
-        hint="Reorders and reshapes future template suggestions."
-        resetKey={`${row.id}:template`}
-        initialValue={thumbValue("template")}
-        onVoted={rememberVote}
-        refs={signalRefs}
-        testId={`history-template-feedback-${row.id}`}
-      />
-      <ComponentThumbs
-        component="plan"
-        question="Script plan"
-        hint="Steers future script plans for this app."
-        resetKey={`${row.id}:plan`}
-        initialValue={thumbValue("plan")}
-        onVoted={rememberVote}
-        refs={{
-          ...signalRefs,
-          detail: `plan v${Number(row.script_version) || 0}`,
-        }}
-        testId={`history-plan-feedback-${row.id}`}
-      />
-      <ComponentThumbs
-        component="script"
-        question="Spoken script"
-        hint="Guides future spoken scripts for this app."
-        resetKey={`${row.id}:script`}
-        initialValue={thumbValue("script")}
-        onVoted={rememberVote}
-        refs={{
-          ...signalRefs,
-          detail: `strategy v${Number(row.strategy_version) || 0}`,
-        }}
-        testId={`history-script-feedback-${row.id}`}
-      />
-        </div>
-      </details>
     </div>
   );
 }

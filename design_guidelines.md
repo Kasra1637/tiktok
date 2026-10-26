@@ -171,7 +171,7 @@ card is `.inset-panel`.
 | Field / detail row | label + control | none | 14px semibold label |
 
 **Record disclosures share one shape.** A collapsed section inside a record
-(History part ratings, post copy, plan context) is a native `<details>`: a
+(History post copy, plan context) is a native `<details>`: a
 `rounded-xl` hairline border, a `text-xs` muted `summary` naming its
 contents, no JS open state. Same bar as a Disclosure row, boxed.
 

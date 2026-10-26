@@ -11564,8 +11564,9 @@ async function runDemoCtaChecks() {
     }
   });
 
+  // One vote per render: the primary video vote only, no per-part ratings.
   await check(
-    "History offers one primary video vote with optional part ratings",
+    "History offers one primary video vote and no part ratings",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -11599,41 +11600,24 @@ async function runDemoCtaChecks() {
               throw new Error("the primary vote does not ask about the render as a whole");
             }
             if (!/h-11/.test(videoUp.className)) {
-              throw new Error("the primary video vote is not larger than the part votes");
+              throw new Error("the primary video vote lost its size");
             }
-            const goalUp = ctx.container.querySelector(
-              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
-            );
-            if (!goalUp || !/h-9/.test(goalUp.className)) {
-              throw new Error("per-part votes are not subordinate in size to the video vote");
-            }
-            const parts = ctx.container.querySelector(
+            if (ctx.container.querySelector(
               `[data-testid="history-parts-feedback-${COMPLETED.id}"]`
-            );
-            if (!parts || parts.tagName !== "DETAILS") {
-              throw new Error("per-part votes are not demoted into an optional disclosure");
+            )) {
+              throw new Error("per-part ratings are still on the render");
             }
-            if (parts.open) {
-              throw new Error("per-part votes must start collapsed so they cannot be confused with the video vote");
-            }
-            await clickEl(ctx, parts.querySelector("summary"), "open the optional part ratings");
-            if (!parts.open) {
-              throw new Error("clicking the disclosure summary did not expand the part ratings");
-            }
-            for (const part of ["video", "goal", "template", "plan", "script"]) {
-              const up = ctx.container.querySelector(
+            for (const part of ["goal", "template", "plan", "script"]) {
+              if (ctx.container.querySelector(
                 `[data-testid="history-${part}-feedback-${COMPLETED.id}-thumb-up"]`
-              );
-              if (!up) {
-                throw new Error(`History is missing thumbs-up for ${part}`);
+              )) {
+                throw new Error(`History still offers a thumbs-up for ${part}`);
               }
-              await clickEl(ctx, up, `click ${part} thumbs-up`);
             }
+            await clickEl(ctx, videoUp, "click video thumbs-up");
             const recorded = global.__SMOKE_THUMBS.map((t) => `${t.step}:${t.verdict}`);
-            for (const expected of ["video:1", "goal:1", "template:1", "plan:1", "script:1"]) {
-              if (!recorded.includes(expected)) {
-                throw new Error(`Expected ${expected} in recorded thumbs, got ${recorded.join(", ")}`);
-              }
+            if (recorded.join(",") !== "video:1") {
+              throw new Error(`voting should file exactly video:1, got ${recorded.join(",")}`);
             }
           }
         );
@@ -11660,29 +11644,28 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
-                  verdicts: { video: 1, goal: -1 },
+                  verdicts: { video: 1 },
                 },
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getGeneration: async () => ({ verdicts: { video: 1, goal: -1 } }),
+            getGeneration: async () => ({ verdicts: { video: 1 } }),
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             const up = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
             );
-            const down = ctx.container.querySelector(
-              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
-            );
-            if (!up || !down) {
-              throw new Error("History is missing the saved thumb controls");
+            if (!up) {
+              throw new Error("History is missing the saved video vote");
             }
             if (up.getAttribute("aria-pressed") !== "true") {
               throw new Error("a saved thumbs-up on the video is not highlighted");
             }
-            if (down.getAttribute("aria-pressed") !== "true") {
-              throw new Error("a saved thumbs-down on the goal is not highlighted");
+            if (ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
+            )) {
+              throw new Error("a removed part vote still renders beside the video vote");
             }
             if ((global.__SMOKE_THUMBS || []).length !== 0) {
               throw new Error("restoring highlights recorded votes that were never cast");
@@ -11695,11 +11678,11 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // A rated part must be visible without opening the disclosure, and the
-  // pressed thumb must carry more than a hairline: the collapsed summary
-  // names the rated count while each chosen thumb keeps its fill.
+  // Per-part ratings are gone: even a render with saved part verdicts shows
+  // no disclosure and no part thumbs, while the video vote keeps its
+  // unmistakable selected state. Old part rows stay stored server-side.
   await check(
-    "History names rated parts on the disclosure with a clear selected state",
+    "History carries no per-part disclosure and keeps the video highlight",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -11721,31 +11704,29 @@ async function runDemoCtaChecks() {
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            const summary = ctx.container.querySelector(
-              `[data-testid="history-parts-feedback-${COMPLETED.id}"] summary`
-            );
-            if (!summary || !summary.textContent.includes("2 of 4 rated")) {
-              throw new Error("the disclosure does not name the rated part count");
+            if (ctx.container.querySelector(
+              `[data-testid="history-parts-feedback-${COMPLETED.id}"]`
+            )) {
+              throw new Error("the per-part disclosure is still on the render");
             }
-            const goalDown = ctx.container.querySelector(
-              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
-            );
-            const planUp = ctx.container.querySelector(
-              `[data-testid="history-plan-feedback-${COMPLETED.id}-thumb-up"]`
-            );
-            const templateUp = ctx.container.querySelector(
-              `[data-testid="history-template-feedback-${COMPLETED.id}-thumb-up"]`
-            );
-            if (!goalDown || !planUp || !templateUp) {
-              throw new Error("History is missing the part thumb controls");
+            if (ctx.container.textContent.includes("Rate the parts")) {
+              throw new Error("the per-part ratings copy is still on the render");
             }
-            for (const [el, name] of [[goalDown, "goal thumbs-down"], [planUp, "plan thumbs-up"]]) {
-              if (el.getAttribute("aria-pressed") !== "true" || !el.classList.contains("thumb-selected")) {
-                throw new Error(`a saved vote on ${name} is not unmistakably selected`);
+            for (const part of ["goal", "template", "plan", "script"]) {
+              if (ctx.container.querySelector(
+                `[data-testid="history-${part}-feedback-${COMPLETED.id}-thumb-up"]`
+              )) {
+                throw new Error(`a ${part} part vote is still on the render`);
               }
             }
-            if (templateUp.getAttribute("aria-pressed") === "true" || templateUp.classList.contains("thumb-selected")) {
-              throw new Error("an unrated part renders as selected");
+            const up = ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            );
+            if (!up) {
+              throw new Error("History lost the primary video vote with the parts");
+            }
+            if (up.getAttribute("aria-pressed") !== "true" || !up.classList.contains("thumb-selected")) {
+              throw new Error("a saved video thumbs-up is not unmistakably selected");
             }
             const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
             if (!css.includes(".thumb-pair .thumb-selected")) {
@@ -11841,7 +11822,7 @@ async function runDemoCtaChecks() {
         duration: 10,
         verdicts: { video: 1 },
       };
-      const fresh = { ...row, verdicts: { video: -1, goal: 1 } };
+      const fresh = { ...row, verdicts: { video: -1 } };
       try {
         await withApi(
           {
@@ -11855,23 +11836,16 @@ async function runDemoCtaChecks() {
             const down = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
             );
-            const goalUp = ctx.container.querySelector(
-              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
-            );
-            if (!down || !goalUp) {
-              throw new Error("History is missing the revalidated thumb controls");
+            if (!down) {
+              throw new Error("History is missing the revalidated video vote");
             }
             if (down.getAttribute("aria-pressed") !== "true" || !down.classList.contains("thumb-selected")) {
               throw new Error("the drawer kept the stale list vote instead of the fresh server vote");
             }
-            if (goalUp.getAttribute("aria-pressed") !== "true") {
-              throw new Error("a fresh saved part vote is not highlighted");
-            }
-            const summary = ctx.container.querySelector(
-              `[data-testid="history-parts-feedback-${COMPLETED.id}"] summary`
-            );
-            if (!summary || !summary.textContent.includes("1 of 4 rated")) {
-              throw new Error("the revalidated part vote is not counted on the collapsed disclosure");
+            if (ctx.container.querySelector(
+              `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
+            )) {
+              throw new Error("a removed part vote reappeared on revalidation");
             }
             if ((global.__SMOKE_THUMBS || []).length !== 0) {
               throw new Error("revalidating votes recorded votes that were never cast");
