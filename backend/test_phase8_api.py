@@ -212,11 +212,13 @@ class TestApproveAppProfile:
 class TestFeedbackCatalog:
     def test_catalog_lists_events_with_reasons(self, api):
         catalog = _run(api.feedback_catalog())
-        assert len(catalog["events"]) == 6
+        assert len(catalog["events"]) == 7
         for event in catalog["events"]:
             # Thumbs verdicts are standalone: the component is the context, so
-            # they carry no reason vocabulary by design.
-            if event["key"] in ("thumb_up", "thumb_down"):
+            # they carry no reason vocabulary by design. Plan opens are a pure
+            # reuse count beside them: the plan thumb already says whether the
+            # plan was good, so the open carries no reason vocabulary either.
+            if event["key"] in ("thumb_up", "thumb_down", "plan_opened"):
                 assert event["reasons"] == []
             else:
                 assert event["reasons"], event["key"]
@@ -467,6 +469,13 @@ class TestRecordSignal:
         created = _run(api.record_feedback(
             FeedbackRequest(event="video_downloaded", signal="downloaded"), ANON))
         assert created["signal"] == "downloaded"
+        assert created["reason"] == ""
+
+    def test_opening_a_plan_records_a_reuse_signal(self, api):
+        from models import FeedbackRequest
+        created = _run(api.record_feedback(
+            FeedbackRequest(event="plan_opened", signal="open_plan"), ANON))
+        assert created["signal"] == "open_plan"
         assert created["reason"] == ""
 
     def test_a_signal_and_a_reason_can_travel_together(self, api):

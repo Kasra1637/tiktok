@@ -431,6 +431,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                     >
                       <Link
                         to={`/create?project=${row.studio_project_id}`}
+                        onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
                         title={isWinnerRow(row)
                           ? "Open this winner's plan in Create Video for another take like this"
                           : "Open this plan in Create Video for another take \u2014 your recorded thumbs steer the next plan"}

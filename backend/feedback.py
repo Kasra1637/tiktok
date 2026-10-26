@@ -36,6 +36,7 @@ EVENTS = (
     "script_edited",
     "video_regenerated",
     "video_downloaded",
+    "plan_opened",
     "thumb_up",
     "thumb_down",
 )
@@ -72,6 +73,7 @@ SIGNALS = {
     "script_edited_light": "script_edited",
     "regenerated": "video_regenerated",
     "downloaded": "video_downloaded",
+    "open_plan": "plan_opened",
 }
 
 # A heavy script edit is judged by a character-count diff. The threshold is

@@ -767,7 +767,13 @@ function load(relPath) {
       // the shipped implementation, evaluated above, because it decides which
       // thumb renders pressed on a revisited render.
       return {
-        recordSignal: () => {},
+        // recordSignal mirrors recordThumb: the stub records the funnel
+        // event so a check can assert a branch fired it, then calls through
+        // to the real module so the shipped send path stays in the loop.
+        recordSignal: async (event, signal, refs) => {
+          (global.__SMOKE_SIGNALS = global.__SMOKE_SIGNALS || []).push({ event, signal, refs });
+          return load("lib/feedback.js").recordSignal(event, signal, refs);
+        },
         recordThumb: async (step, verdict, refs) => {
           (global.__SMOKE_THUMBS = global.__SMOKE_THUMBS || []).push({ step, verdict, refs });
           return load("lib/feedback.js").recordThumb(step, verdict, refs);
@@ -12034,6 +12040,45 @@ async function runDemoCtaChecks() {
           }
         }
       );
+    }
+  );
+  // Opening a plan is the reuse the hook-learning loop never saw: the click
+  // already reopened the draft, but nothing recorded that the founder reused
+  // a plan, so reuse stayed invisible beside the votes and downloads.
+  await check(
+    "History records opening a render plan as a reuse signal",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      global.__SMOKE_SIGNALS = [];
+      try {
+        await withApi(
+          {
+            getGenerationHistory: async () => ({
+              generations: [{ ...COMPLETED, id: "gen-plan", studio_project_id: "pd1", brand_name: "Test App", duration: 10 }],
+            }),
+            getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            getStudioProjects: async () => ({ projects: [{ id: "pd1" }] }),
+          },
+          async () => {
+            await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+            await act(async () => {});
+            const entry = ctx.container.querySelector('[data-testid="history-variation-gen-plan"]');
+            if (!entry) throw new Error("no Open plan entry to record a signal from");
+            await clickEl(ctx, entry, "click the Open plan entry");
+            const hit = (global.__SMOKE_SIGNALS || []).find(
+              (s) => s.event === "plan_opened" && s.signal === "open_plan"
+            );
+            if (!hit) {
+              throw new Error("opening a plan recorded no plan_opened signal");
+            }
+            if (hit.refs?.generation_id !== "gen-plan") {
+              throw new Error("the plan signal is not attributed to its render");
+            }
+          }
+        );
+      } finally {
+        global.__SMOKE_SIGNALS = [];
+      }
     }
   );
 await check(
