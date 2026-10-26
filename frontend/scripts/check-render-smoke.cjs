@@ -6255,9 +6255,10 @@ async function runAnalyticsChecks() {
     if (!voteIcon) throw new Error("the vote has no icon beside its label");
   });
 
-  // A long leaderboard buries the cards below it: past ten rows the table
-  // collapses behind a show-all control, and short lists stay fully open.
-  await check("a long clip leaderboard collapses behind show all", async (ctx) => {
+  // A long leaderboard buries the cards below it: the card opens on its top
+  // three rows and the rest sit behind a show-all control. Short lists stay
+  // fully open, and the whole card collapses to its header.
+  await check("a long clip leaderboard opens on three rows behind show all", async (ctx) => {
     const many = Array.from({ length: 12 }, (_, i) => ({
       id: `clip-${i}`,
       status: "completed",
@@ -6271,7 +6272,7 @@ async function runAnalyticsChecks() {
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
     const rows = () => [...card.querySelectorAll('tbody tr')];
-    if (rows().length !== 10) throw new Error(`expected the top 10 rows, found ${rows().length}`);
+    if (rows().length !== 3) throw new Error(`expected the top 3 rows, found ${rows().length}`);
     const more = card.querySelector('[data-testid="analytics-results-show-more"]');
     if (!more) throw new Error("no show-all control on a long leaderboard");
     if (!/Show all 12/.test(more.textContent || "")) throw new Error("the show-all control does not say how many rows it holds");
@@ -6280,7 +6281,42 @@ async function runAnalyticsChecks() {
     const less = card.querySelector('[data-testid="analytics-results-show-more"]');
     if (!less || !/Show less/.test(less.textContent || "")) throw new Error("no show-less control after expanding");
     await clickEl(ctx, less, "collapse the leaderboard");
-    if (rows().length !== 10) throw new Error("collapsing did not return to the top 10");
+    if (rows().length !== 3) throw new Error("collapsing did not return to the top 3");
+  });
+
+  // The section itself collapses: the header and the one-line counts stay,
+  // the ledger goes. The toggle names its panel only while it is open, so a
+  // collapsed button never points at an element that is not there.
+  await check("clip results collapse to their header and reopen", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "one", status: "completed", hook_line: "One", tiktok_views: 40 },
+        { id: "two", status: "completed", hook_line: "Two", tiktok_views: 30 },
+      ] }),
+      getStudioProjects: async () => ({ projects: [] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const toggle = card.querySelector('[data-testid="analytics-results-toggle"]');
+    if (!toggle) throw new Error("clip results has no collapse control");
+    if (toggle.getAttribute("aria-expanded") !== "true") {
+      throw new Error("clip results does not start expanded, so the top rows are hidden");
+    }
+    await clickEl(ctx, toggle, "collapse clip results");
+    if (card.querySelectorAll("tbody tr").length) {
+      throw new Error("collapsing clip results left its rows on the page");
+    }
+    if (!card.textContent.includes("0 posted")) {
+      throw new Error("collapsing clip results hid its own count line");
+    }
+    const collapsed = card.querySelector('[data-testid="analytics-results-toggle"]');
+    if (collapsed.getAttribute("aria-expanded") !== "false" || collapsed.getAttribute("aria-controls")) {
+      throw new Error("the collapsed control still claims an expanded panel");
+    }
+    await clickEl(ctx, collapsed, "reopen clip results");
+    if (card.querySelectorAll("tbody tr").length !== 2) {
+      throw new Error("reopening clip results did not bring its rows back");
+    }
   });
 
   await check("a short clip leaderboard needs no show-all control", async (ctx) => {
@@ -6467,6 +6503,48 @@ async function runAnalyticsChecks() {
     }
     if (ctx.text().includes("Nothing captured yet")) {
       throw new Error("renders exist but the page still claims nothing was captured");
+    }
+  });
+
+  // Each status is a disclosure: the count is the summary and the renders
+  // behind it are the content, so the funnel is browsable instead of a dead
+  // tally. The first status with rows opens on arrival.
+  await check("a render status opens the clips behind its count", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "completed", hook_line: "Completed clip", created_at: dayAgo },
+          { id: "g2", status: "failed", hook_line: "Failed clip", created_at: dayAgo },
+        ],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
+    if (!card) throw new Error("the render funnel is not on the page");
+    const completed = card.querySelector('[data-testid="analytics-status-toggle-completed"]');
+    if (!completed) throw new Error("a filled status has no disclosure");
+    if (completed.getAttribute("aria-expanded") !== "true") {
+      throw new Error("the first status with rows does not open on arrival");
+    }
+    if (!card.textContent.includes("Completed clip")) {
+      throw new Error("an open status does not name the render behind it");
+    }
+    const failed = card.querySelector('[data-testid="analytics-status-toggle-failed"]');
+    if (!failed) throw new Error("the failed status has no disclosure");
+    if (failed.getAttribute("aria-expanded") !== "false" || failed.getAttribute("aria-controls")) {
+      throw new Error("a closed status still claims an expanded panel");
+    }
+    await clickEl(ctx, failed, "open the failed status");
+    const opened = card.querySelector('[data-testid="analytics-status-toggle-failed"]');
+    if (opened.getAttribute("aria-expanded") !== "true") {
+      throw new Error("opening a status did not expand it");
+    }
+    const link = [...card.querySelectorAll('a')].find((a) => /#generation-g2$/.test(a.getAttribute("href") || ""));
+    if (!link || !/Failed clip/.test(link.textContent || "")) {
+      throw new Error("an open status does not link its render to its History row");
     }
   });
 

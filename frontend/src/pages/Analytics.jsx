@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -14,7 +14,7 @@ import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
-import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus } from "lucide-react";
+import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown, ChevronRight } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
 // from reach, and neither views nor workflow signals imply conversions.
@@ -244,15 +244,27 @@ function clipName(row) {
   return row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`;
 }
 
-// A long leaderboard buries the cards below it: past ten rows the table
-// shows the top 10 behind a show-all control, and short lists stay open.
-const LEADERBOARD_PAGE_SIZE = 10;
+// Three rows is the card's opening glance: the ranked top of the list under
+// its own count line. Ten rows pushed the cards below out of view and read as
+// a spreadsheet rather than a comparison; the rest stay one click away.
+const LEADERBOARD_PAGE_SIZE = 3;
+
+/** A short, local date for the renders inside a status group. */
+function shortDate(value) {
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function ClipResults({ generations, profileId, pick, draftIds }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
     .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
   const [expanded, setExpanded] = useState(false);
+  // The card opens on its first three rows: enough to show the ranking and
+  // the scale between them, with the full ledger a deliberate second step.
+  const [open, setOpen] = useState(true);
+  const panelId = useId();
   const visible = expanded ? clips : clips.slice(0, LEADERBOARD_PAGE_SIZE);
   const posted = clips.filter((row) => row.tiktok_url).length;
   const counted = clips.filter((row) => row.tiktok_views != null).length;
@@ -265,147 +277,247 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
   const maxViews = Math.max(0, ...clips.map((row) => row.tiktok_views ?? 0));
   const barWidth = (views) => `${views > 0 && maxViews > 0 ? Math.max(6, Math.round((views / maxViews) * 100)) : views === 0 ? 6 : 0}%`;
   return (
-    <SectionCard title="Clip results" icon={TrendingUp} description="Compare reach & your judgment before choosing another take." data-testid="analytics-results">
+    <SectionCard
+      title="Clip results"
+      icon={TrendingUp}
+      description="Compare reach & your judgment before choosing another take."
+      data-testid="analytics-results"
+      actions={
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+          onClick={() => setOpen((current) => !current)}
+          data-testid="analytics-results-toggle"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          />
+          <span>{open ? "Collapse" : "Expand"}</span>
+        </Button>
+      }
+    >
       <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
-      <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
-        <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-          Why these numbers
-        </summary>
-        <div className="space-y-2 pb-2 text-xs text-muted-foreground">
-          <p>
-            Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
-            Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
-          </p>
-          <p>Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
-        </div>
-      </details>
-      {pick && pickNext && (
-        <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
-          <p className="text-base font-semibold">Suggested next take: {clipName(pick)}</p>
-          <p className="text-xs text-muted-foreground">
-            Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
-            Past reach does not promise the next take repeats it.{" "}
-            <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
-          </p>
-        </div>
-      )}
-      {clips.length === 0 ? (
-        <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
-            <thead>
-              <tr className="border-b border-[color:var(--hairline)] text-xs text-muted-foreground">
-                {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row, index) => {
-                const vote = verdictFor(row.verdicts, "video");
-                const next = nextTakeFor(row, historyHref, draftIds);
-                const winner = isWinnerRow(row);
-                return (
-                  <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
-                    <td data-testid={`result-rank-${row.id}`} className="py-3 pr-4 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />}
-                        <span className="font-mono">{index + 1}</span>
-                      </span>
-                    </td>
-                    <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
-                      <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
-                        {clipName(row)}
-                      </Link>
-                      <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
-                    </th>
-                    <td className="py-3 pr-4 text-xs">
-                      {row.tiktok_url ? <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="text-[color:var(--brand-indigo)] hover:underline">Posted ↗</a> : "Not posted"}
-                    </td>
-                    <td className="py-3 pr-4 text-xs">
-                      {row.tiktok_views == null ? (
-                        "Not recorded"
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-20 shrink-0 overflow-hidden rounded-full bg-[color:var(--hairline)]" aria-hidden="true">
-                            <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)]" style={{ width: barWidth(row.tiktok_views) }} />
-                          </span>
-                          <span className="whitespace-nowrap font-mono">{row.tiktok_views.toLocaleString("en-US")}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap py-3 pr-4 text-xs">
-                      <span className="inline-flex items-center gap-1.5">
-                        {vote > 0 ? (
-                          <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
-                        ) : vote < 0 ? (
-                          <ThumbsDown aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                        {vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}
-                      </span>
-                    </td>
-                    <td className="py-3 text-xs">
-                      <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
-                    </td>
+      {open && (
+        <div id={panelId} className="space-y-5">
+          <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
+            <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+              Why these numbers
+            </summary>
+            <div className="space-y-2 pb-2 text-xs text-muted-foreground">
+              <p>
+                Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
+                Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
+              </p>
+              <p>Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+            </div>
+          </details>
+          {pick && pickNext && (
+            <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
+              <p className="text-base font-semibold">Suggested next take: {clipName(pick)}</p>
+              <p className="text-xs text-muted-foreground">
+                Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
+                Past reach does not promise the next take repeats it.{" "}
+                <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
+              </p>
+            </div>
+          )}
+          {clips.length === 0 ? (
+            <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
+                <thead>
+                  <tr className="border-b border-[color:var(--hairline)] text-xs text-muted-foreground">
+                    {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {clips.length > LEADERBOARD_PAGE_SIZE && (
-        <div className="flex justify-center pt-1">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setExpanded((open) => !open)}
-            data-testid="analytics-results-show-more"
-          >
-            {expanded ? "Show less" : `Show all ${clips.length}`}
-          </Button>
+                </thead>
+                <tbody>
+                  {visible.map((row, index) => {
+                    const vote = verdictFor(row.verdicts, "video");
+                    const next = nextTakeFor(row, historyHref, draftIds);
+                    const winner = isWinnerRow(row);
+                    return (
+                      <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
+                        <td data-testid={`result-rank-${row.id}`} className="py-3 pr-4 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />}
+                            <span className="font-mono">{index + 1}</span>
+                          </span>
+                        </td>
+                        <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
+                          <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
+                            {clipName(row)}
+                          </Link>
+                          <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
+                        </th>
+                        <td className="py-3 pr-4 text-xs">
+                          {row.tiktok_url ? <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="text-[color:var(--brand-indigo)] hover:underline">Posted ↗</a> : "Not posted"}
+                        </td>
+                        <td className="py-3 pr-4 text-xs">
+                          {row.tiktok_views == null ? (
+                            "Not recorded"
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <span className="h-2 w-20 shrink-0 overflow-hidden rounded-full bg-[color:var(--hairline)]" aria-hidden="true">
+                                <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)]" style={{ width: barWidth(row.tiktok_views) }} />
+                              </span>
+                              <span className="whitespace-nowrap font-mono">{row.tiktok_views.toLocaleString("en-US")}</span>
+                            </span>
+                          )}
+                        </td>
+                        <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap py-3 pr-4 text-xs">
+                          <span className="inline-flex items-center gap-1.5">
+                            {vote > 0 ? (
+                              <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
+                            ) : vote < 0 ? (
+                              <ThumbsDown aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            {vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}
+                          </span>
+                        </td>
+                        <td className="py-3 text-xs">
+                          <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {clips.length > LEADERBOARD_PAGE_SIZE && (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setExpanded((current) => !current)}
+                aria-expanded={expanded}
+                data-testid="analytics-results-show-more"
+              >
+                {expanded ? "Show less" : `Show all ${clips.length}`}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </SectionCard>
   );
 }
 
+/** One render inside a status group: its identity and landing day, both
+ * linking to the History row that owns it. */
+function StatusRenderRow({ row, historyHref }) {
+  const date = shortDate(row.created_at);
+  return (
+    <li className="flex items-baseline justify-between gap-3">
+      <Link
+        to={`${historyHref}#generation-${row.id}`}
+        className="min-w-0 truncate text-[color:var(--brand-indigo)] hover:underline"
+      >
+        {clipName(row)}
+      </Link>
+      {date && <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{date}</span>}
+    </li>
+  );
+}
+
+// How many renders a status shows before pointing at History for the rest.
+const STATUS_LIST_LIMIT = 6;
+
 /**
- * The render funnel: every generation for this app, counted by status.
+ * The render funnel: every generation for this app, counted by status and
+ * openable to the renders behind each count.
  *
  * Same rows History shows, so the counts here and the rows there can never
- * disagree. Archived renders keep their own row rather than folding into
+ * disagree. Archived renders keep their own group rather than folding into
  * completed — an archived clip was finished, but it is not on the shelf
  * anymore, and merging the two would overstate what is usable.
+ *
+ * The first status with rows opens on arrival: a count you can expand is only
+ * worth reading if the expansion is visible, and one group open keeps the card
+ * shorter than the four lists it stands for.
  */
 function RenderFunnel({ generations = [], profileId = "" }) {
-  const completed = generations.filter((g) => g?.status === "completed").length;
-  const failed = generations.filter((g) => g?.status === "failed").length;
-  const archived = generations.filter((g) => g?.status === "archived").length;
-  const inProgress = generations.length - completed - failed - archived;
-  const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
-  const rows = [
-    { label: "Completed", count: completed },
-    { label: "Failed", count: failed },
-    { label: "In progress", count: inProgress },
-    { label: "Archived", count: archived },
+  const byStatus = {
+    completed: generations.filter((g) => g?.status === "completed"),
+    failed: generations.filter((g) => g?.status === "failed"),
+    archived: generations.filter((g) => g?.status === "archived"),
+    active: generations.filter((g) => !["completed", "failed", "archived"].includes(g?.status)),
+  };
+  const groups = [
+    { key: "completed", label: "Completed" },
+    { key: "failed", label: "Failed" },
+    { key: "active", label: "In progress" },
+    { key: "archived", label: "Archived" },
   ];
+  const [openStatus, setOpenStatus] = useState(
+    () => groups.find((group) => byStatus[group.key].length)?.key || null
+  );
+  const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
   return (
     <SectionCard
       title="Renders"
       icon={Clapperboard}
-      description="Loaded renders, counted by status."
+      description="Open a status to see the renders behind it."
       data-testid="analytics-funnel"
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
-        {rows.map((r) => (
-          <li key={r.label} className="flex items-center justify-between gap-4 py-2 text-sm">
-            <span className="min-w-0 truncate text-muted-foreground">{r.label}</span>
-            <FactChip>{r.count}</FactChip>
-          </li>
-        ))}
+        {groups.map((group) => {
+          const rows = byStatus[group.key];
+          if (!rows.length) {
+            return (
+              <li key={group.key} data-testid={`analytics-status-${group.key}`} className="flex items-center justify-between gap-4 py-2 text-sm">
+                <span className="min-w-0 truncate text-muted-foreground">{group.label}</span>
+                <FactChip>0</FactChip>
+              </li>
+            );
+          }
+          const isOpen = openStatus === group.key;
+          const panelId = `analytics-status-panel-${group.key}`;
+          const shown = rows.slice(0, STATUS_LIST_LIMIT);
+          return (
+            <li key={group.key} data-testid={`analytics-status-${group.key}`}>
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={isOpen ? panelId : undefined}
+                onClick={() => setOpenStatus((current) => (current === group.key ? null : group.key))}
+                data-testid={`analytics-status-toggle-${group.key}`}
+                className="focus-ring flex w-full items-center justify-between gap-4 rounded-xl py-2 text-left text-sm transition-colors hover:text-foreground"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <ChevronRight
+                    aria-hidden="true"
+                    className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
+                  />
+                  <span className="truncate text-muted-foreground">{group.label}</span>
+                </span>
+                <FactChip>{rows.length}</FactChip>
+              </button>
+              {isOpen && (
+                <div id={panelId} className="space-y-2 pb-3 pl-6">
+                  <ul className="space-y-1 text-xs">
+                    {shown.map((row) => <StatusRenderRow key={row.id} row={row} historyHref={historyHref} />)}
+                  </ul>
+                  {rows.length > shown.length && (
+                    <Link
+                      to={historyHref}
+                      className="inline-block text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                    >
+                      +{rows.length - shown.length} more in History
+                    </Link>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <p className="pt-2 text-xs text-muted-foreground">
         {generations.length} total ·{" "}
@@ -426,12 +538,15 @@ function RenderFunnel({ generations = [], profileId = "" }) {
  * Renders per week: clip counts in Monday-start buckets, newest first.
  *
  * Bars are scaled to the busiest week shown, so a quiet week reads quiet
- * without a single render ever disappearing into a zero axis.
+ * without a single render ever disappearing into a zero axis. Each bar sits
+ * in a hairline well, the same inset the app uses for a recessed surface: the
+ * column height is the data, the well is the scale it is read against.
  */
 function RenderActivity({ generations = [] }) {
   const buckets = weekBuckets(generations);
   if (!buckets.length) return null;
   const max = Math.max(...buckets.map((b) => b.count));
+  const shown = buckets.reduce((sum, b) => sum + b.count, 0);
   return (
     <SectionCard
       title="Renders per week"
@@ -439,14 +554,21 @@ function RenderActivity({ generations = [] }) {
       description="Loaded render counts by week, newest first."
       data-testid="analytics-activity"
     >
-      <ul className="flex items-end gap-4">
+      <ul className="flex items-end gap-3 sm:gap-4">
         {buckets.map((b) => (
-          <li key={b.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+          <li
+            key={b.key}
+            title={`${b.label}: ${b.count} ${b.count === 1 ? "render" : "renders"}`}
+            className="flex min-w-0 flex-1 flex-col items-center gap-2"
+          >
             <FactChip>{b.count}</FactChip>
-            <span className="flex h-24 w-full max-w-20 items-end justify-center" aria-hidden="true">
+            <span
+              className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/25"
+              aria-hidden="true"
+            >
               <span
                 data-testid="activity-bar"
-                className="w-full rounded-t-md bg-[color:var(--accent)]"
+                className="block w-full rounded-t-md bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
                 style={{ height: `${max ? Math.max(6, Math.round((b.count / max) * 100)) : 0}%` }}
               />
             </span>
@@ -454,6 +576,9 @@ function RenderActivity({ generations = [] }) {
           </li>
         ))}
       </ul>
+      <p className="text-xs text-muted-foreground">
+        {shown} {shown === 1 ? "render" : "renders"} across the {buckets.length} {buckets.length === 1 ? "week" : "weeks"} shown.
+      </p>
     </SectionCard>
   );
 }
@@ -504,38 +629,49 @@ function SignalCounts({ summary, events = [], profileId = "" }) {
       description="Captured automatically as you worked."
       data-testid="analytics-signals"
     >
-      <ul className="relative ml-2 space-y-1 border-l-2 border-[color:var(--hairline)] pl-6">
-        {signals.map((s) => {
-          const genId = latestGenBySignal[s.signal];
-          const href = genId
-            ? `/history?profile=${encodeURIComponent(profileId)}#generation-${genId}`
-            : (profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history");
-          const Icon = signalIcon(s.signal);
-          return (
-            <li key={s.signal} className="relative flex items-center justify-between gap-4 py-2 text-sm">
-              <span
-                data-testid={`analytics-signal-icon-${s.signal}`}
-                aria-hidden="true"
-                className="absolute -left-6 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+      <div className="relative">
+        {/* One continuous rail behind the markers, so the list reads as a
+            timeline rather than four indented rows with floating dots. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-3 left-[11px] w-px bg-[color:var(--hairline)]"
+        />
+        <ul className="space-y-0.5">
+          {signals.map((s) => {
+            const genId = latestGenBySignal[s.signal];
+            const href = genId
+              ? `/history?profile=${encodeURIComponent(profileId)}#generation-${genId}`
+              : (profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history");
+            const Icon = signalIcon(s.signal);
+            return (
+              <li
+                key={s.signal}
+                className="relative flex items-center justify-between gap-4 rounded-xl py-2 pl-9 pr-1 transition-colors hover:bg-secondary/20"
               >
-                <Icon aria-hidden="true" className="h-2.5 w-2.5 text-[color:var(--brand-indigo)]" />
-              </span>
-              <span className="min-w-0 truncate text-muted-foreground">{humanize(s.signal)}</span>
-              <span className="flex shrink-0 items-center gap-2">
-                <FactChip>{s.count}</FactChip>
-                <Link
-                  to={href}
-                  data-testid={`analytics-signal-${s.signal}`}
-                  title={genId ? "Open the latest render behind this signal" : "Open this app in History"}
-                  className="shrink-0 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                <span
+                  data-testid={`analytics-signal-icon-${s.signal}`}
+                  aria-hidden="true"
+                  className="absolute left-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                 >
-                  {genId ? "View render" : "View in History"}
-                </Link>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+                  <Icon aria-hidden="true" className="h-3 w-3 text-[color:var(--brand-indigo)]" />
+                </span>
+                <span className="min-w-0 truncate text-sm text-foreground">{humanize(s.signal)}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <FactChip>{s.count}</FactChip>
+                  <Link
+                    to={href}
+                    data-testid={`analytics-signal-${s.signal}`}
+                    title={genId ? "Open the latest render behind this signal" : "Open this app in History"}
+                    className="shrink-0 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                  >
+                    {genId ? "View render" : "View in History"}
+                  </Link>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </SectionCard>
   );
 }

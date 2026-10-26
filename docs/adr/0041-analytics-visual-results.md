@@ -1,6 +1,6 @@
 # 0041 — Analytics results go visual: leaderboard, bars, timeline
 
-- **Status:** accepted
+- **Status:** partially superseded by 0046 (three-row opening, collapsible card, status disclosures)
 - **Date:** 2026-10-26
 - **Anchors:** `frontend/src/pages/Analytics.jsx` (`ClipResults` leaderboard, `RenderActivity` bar chart, `SignalCounts` timeline); smoke checks "clip results render a visual leaderboard with scaled view bars", "renders per week renders scaled bars", "what happened renders signals as a visual timeline"
 

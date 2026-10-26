@@ -57,9 +57,10 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0037](0037-history-pair-aware-band.md) | History band lands after the open pair via a list-owned portal slot | superseded by 0039 (attached cards, no expand) |
 | [0039](0039-history-attached-cards.md) | History rows are one attached card, no expand step | partially superseded by 0040 (record disclosures) |
 | [0040](0040-history-record-disclosures.md) | History record tucks post copy and plan context behind disclosures | accepted |
-| [0041](0041-analytics-visual-results.md) | Analytics results go visual: leaderboard, bars, timeline | accepted |
+| [0041](0041-analytics-visual-results.md) | Analytics results go visual: leaderboard, bars, timeline | partially superseded by 0046 (three-row opening, collapsible card, status disclosures) |
 | [0042](0042-history-drops-part-ratings.md) | History drops per-part ratings; one vote per render | accepted |
 | [0043](0043-history-single-source-identity.md) | History identity lives once, under the clip | accepted |
 | [0044](0044-post-kit-caption-spec.md) | Post-kit captions are short, user-voiced, and tailored | accepted |
 | [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |
 | [0045](0045-demo-cta-clip-start-point.md) | Demo + CTA clips carry a start point; the head is trimmed, the tail is not | accepted |
+| [0046](0046-analytics-status-disclosures.md) | Analytics opens on three results; render statuses open their clips | accepted |
