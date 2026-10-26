@@ -59,4 +59,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0040](0040-history-record-disclosures.md) | History record tucks post copy and plan context behind disclosures | accepted |
 | [0041](0041-analytics-visual-results.md) | Analytics results go visual: leaderboard, bars, timeline | accepted |
 | [0042](0042-history-drops-part-ratings.md) | History drops per-part ratings; one vote per render | accepted |
+| [0043](0043-history-single-source-identity.md) | History identity lives once, under the clip | accepted |
 | [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |

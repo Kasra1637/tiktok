@@ -10764,6 +10764,9 @@ async function runDemoCtaChecks() {
       for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
         if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
       }
+      // Identity lives once under the clip: the record beside it must not repeat the headline.
+      const panelText = panel.textContent || "";
+      if (panelText.includes("Find your next thought.")) throw new Error("the record repeats the clip headline instead of keeping one copy under the video");
     });
   });
 

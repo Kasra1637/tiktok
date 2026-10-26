@@ -32,7 +32,6 @@ import {
   Smartphone,
   CopyPlus,
   Target,
-  Briefcase,
   Clapperboard,
 } from "lucide-react";
 
@@ -325,17 +324,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
         >
           <div className="history-body">
             <div className="min-w-0 space-y-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
-                <StatusBadge status={row.status} />
-              </div>
-
-              {row.hook_line && (
-                <p className="break-words text-base leading-relaxed text-foreground/90">
-                  &ldquo;{sentenceCase(row.hook_line)}&rdquo;
-                </p>
-              )}
-
+              {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
               <FactList>
                 {row.model && <FactChip>{row.model}</FactChip>}
                 {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
@@ -343,9 +332,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
                 {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
                 <FactChip>script v{row.script_version}</FactChip>
-                {formatRenderDate(row.created_at) ? (
-                  <FactChip>{formatRenderDate(row.created_at)}</FactChip>
-                ) : null}
               </FactList>
 
               {row.post_kit && (
