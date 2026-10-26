@@ -52,6 +52,7 @@ import {
   OVERLAY_ANIMS,
   TEXT_STYLES,
   CTA_TIMING_PRESETS,
+  clipWindow,
   formatTime,
   resolveCtaWindow,
   resolveStoryWindow,
@@ -307,6 +308,43 @@ function ControlSlider({ label, value, min, max, step, onChange, testId, format 
         step={step}
         onValueChange={([next]) => onChange(next)}
       />
+    </div>
+  );
+}
+
+/**
+ * "Starts at" for one clip: a slider for a rough pass, a playhead button for
+ * the frame someone actually picked, and a readout of the time the file opens
+ * on. It only appears once a clip is probed, because a start point before the
+ * duration is known would be a number with nothing to clamp against.
+ */
+function StartAtControl({ clipLabel, value, maxStart, onChange, onUsePlayhead, playheadReady, testId }) {
+  return (
+    <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <FieldLabel>Starts at</FieldLabel>
+        <span className="font-mono text-xs tabular-nums text-foreground" data-testid={`${testId}-value`}>
+          {formatTime(value)}
+        </span>
+      </div>
+      <Slider
+        data-testid={testId}
+        value={[value]}
+        min={0}
+        max={Math.max(0.1, maxStart)}
+        step={0.1}
+        onValueChange={([next]) => onChange(next)}
+        aria-label={`${clipLabel} start point`}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">Preview and export open on this frame.</p>
+        <span className="flex items-center gap-3">
+          <Chip onClick={onUsePlayhead} disabled={!playheadReady || maxStart <= 0} testId={`${testId}-playhead`}>
+            Use playhead
+          </Chip>
+          <ResetButton onClick={() => onChange(0)} testId={`${testId}-reset`}>Full clip</ResetButton>
+        </span>
+      </div>
     </div>
   );
 }
@@ -622,6 +660,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [sourceReplaced, setSourceReplaced] = useState(false);
   const [loadingSource, setLoadingSource] = useState(true);
   const [videoMeta, setVideoMeta] = useState(null);
+  // Where each clip's used run begins. One number per clip, read through
+  // clipWindow everywhere so the preview, the overlay windows and the export
+  // can never disagree about which frame the clip opens on.
+  const [baseStart, setBaseStart] = useState(0);
+  const [appendStart, setAppendStart] = useState(0);
+  const baseWindow = clipWindow(videoMeta?.d, baseStart);
+  const baseDuration = baseWindow.duration;
   // Fixed frame: Samsung Galaxy S24 Ultra. The picker is gone by design —
   // one frame, no choice — so this is state only so the painters keep
   // reading it like any other value.
@@ -692,7 +737,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   } = useOverlayTaste({
     overlayScope,
     videoUrl,
-    clipDuration: videoMeta?.d,
+    clipDuration: baseDuration,
     recording,
     onCtaHeadline: setCtaHeadline,
   });
@@ -702,7 +747,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [storyTiming, setStoryTiming] = useState({ start: 0, end: null });
   const [storyOffsetY, setStoryOffsetY] = useState(0);
   const storyWindow = resolveStoryWindow({
-    clipDuration: videoMeta?.d ?? 0,
+    clipDuration: baseDuration,
     hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode,
     ...storyTiming,
   });
@@ -712,7 +757,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   }, [storyStart, storyEnd, storyAvailable]);
   const selectCtaTimingPreset = (presetId) => {
     setCtaTimingMode(presetId);
-    const dur = videoMeta?.d || 0;
+    const dur = baseDuration;
     if (presetId === "last2") {
       setCtaDuration(2);
     } else if (presetId === "last3") {
@@ -736,6 +781,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // export decodes both sources on the same joined timeline.
   const [appendUrl, setAppendUrl] = useState(null);
   const [appendMeta, setAppendMeta] = useState(null);
+  const appendWindow = clipWindow(appendMeta?.d, appendStart);
+  const appendDuration = appendWindow.duration;
   const [appendMode, setAppendMode] = useState("realistic");
   // The added clip keeps its own look: background, motion and hand scene
   // start from the same defaults as the base but diverge independently.
@@ -774,6 +821,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     paintFrameRef, kickPreviewRef, isExportingRef, activeVideoRef,
   } = usePreviewLoop({
     device, preset, mockupStretchY, scale, videoMeta, bg, anim,
+    baseStart, appendStart,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
@@ -805,6 +853,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
+    baseStart, appendStart,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -928,6 +977,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // here (not just on load) keeps a stale duration from the previous clip
     // from holding Export enabled for a file that may never play.
     setVideoMeta(null);
+    setBaseStart(0);
     setResult(null);
     editingZoomRef.current = false;
     clearZoomKeyframes();
@@ -970,6 +1020,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       resultObjectUrlRef.current = null;
     }
     setVideoMeta(null);
+    setBaseStart(0);
     setResult(null);
     editingZoomRef.current = false;
     clearZoomKeyframes();
@@ -1056,6 +1107,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const url = URL.createObjectURL(file);
     appendObjectUrlRef.current = url;
     setAppendMeta(null);
+    setAppendStart(0);
     setAppendUrl(url);
     setAppendName(file.name || "added clip");
   };
@@ -1066,6 +1118,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     appendObjectUrlRef.current = null;
     setAppendUrl(null);
     setAppendMeta(null);
+    setAppendStart(0);
     setAppendName("");
     setAppendError(null);
   };
@@ -1130,13 +1183,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     kickPreviewRef.current?.();
   };
 
-  const isAppendTime = (time) => !!appendMeta && time >= (videoMeta?.d ?? 0);
+  const isAppendTime = (time) => !!appendMeta && time >= baseDuration;
   const modeAt = (time) => (isAppendTime(time) ? appendMode : viewMode);
   const handleCaptureZoomLock = () => {
-    const video = videoRef.current;
-    if (!video || !videoMeta || isExportingRef.current) return;
+    if (!videoRef.current || !videoMeta || isExportingRef.current) return;
     if (isAppendTime(currentTime) && appendMode === "realistic") return;
-    const time = video.currentTime;
+    // Locks are keyed to the timeline, so a start point does not move a lock
+    // someone set on a frame that is still in the cut. The media element's own
+    // clock is the exact frame; the scrubber state trails it during playback.
+    const active = activeVideoRef.current || videoRef.current;
+    const inAppend = !!active && active === appendVideoRef.current;
+    const time = active
+      ? Math.max(0, active.currentTime - (inAppend ? appendStart : baseStart) + (inAppend ? baseDuration : 0))
+      : currentTime;
     const snapshot = editingZoomRef.current ? liveZoomRef.current : zoomValuesAt(time);
     captureZoomKeyframe(time, snapshot);
     editingZoomRef.current = false;
@@ -1152,6 +1211,52 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const handleClearZoomKeyframes = () => {
     editingZoomRef.current = false;
     clearZoomKeyframes();
+  };
+
+  /**
+   * Set where a clip's used run begins.
+   *
+   * Changing the start point rewinds the preview onto the new first frame. The
+   * number claims what the file opens on, so leaving the playhead on footage the
+   * export would skip would make the preview a lie about its own output.
+   */
+  const applyClipStart = (clip, next) => {
+    if (isExportingRef.current) return;
+    const isBase = clip === "base";
+    const run = clipWindow(isBase ? videoMeta?.d : appendMeta?.d, next);
+    (isBase ? setBaseStart : setAppendStart)(run.start);
+    cancelScopedReplay();
+    const base = videoRef.current;
+    const added = appendVideoRef.current;
+    base?.pause();
+    added?.pause();
+    setIsPlaying(false);
+    if (isBase) {
+      // The base owns the playhead again: leaving the added clip active here
+      // would paint its last frame while the base sat seeked behind it.
+      if (base) {
+        activeVideoRef.current = base;
+        base.currentTime = run.start;
+      }
+      setCurrentTime(0);
+    } else if (added) {
+      // The second clip starts after the base's trimmed run, so park its own
+      // playhead there instead of leaving the scrubber on the base.
+      activeVideoRef.current = added;
+      added.currentTime = run.start;
+      setCurrentTime(baseDuration);
+    }
+  };
+
+  /** Take the start point from the frame under the playhead, for that clip. */
+  const startFromPlayhead = (clip) => {
+    if (clip === "base") {
+      if (isAppendTime(currentTime)) return;
+      applyClipStart("base", baseStart + Math.max(0, currentTime));
+      return;
+    }
+    if (!isAppendTime(currentTime)) return;
+    applyClipStart("append", appendStart + Math.max(0, currentTime - baseDuration));
   };
 
 
@@ -1171,7 +1276,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     const cy = (e.clientY - rect.top) * scaleY;
 
     const vt = currentTime;
-    const dur = videoMeta?.d ?? 0;
+    const dur = baseDuration;
     const hookWindow = hookDuration + 0.28;
     const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode) + 0.4;
     const hookVisible = hookEnabled && vt <= hookWindow;
@@ -1247,7 +1352,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
       : { phoneScale: Math.max(RANGES.scale.min, Math.min(RANGES.scale.max, +(values.phoneScale - e.deltaY * 0.0015).toFixed(3))) });
   };
 
-  const duration = (videoMeta?.d ?? 0) + (appendMeta?.d ?? 0);
+  const duration = baseDuration + appendDuration;
   const interval = tickInterval(duration);
   const ticks = [];
   if (duration > 0) {
@@ -1357,7 +1462,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="secondary">Hook + Story</Badge>
-                {videoMeta && <span className="text-muted-foreground">{videoMeta.w}x{videoMeta.h} • {videoMeta.d.toFixed(1)}s</span>}
+                {videoMeta && <span className="text-muted-foreground">{videoMeta.w}x{videoMeta.h} • {baseDuration.toFixed(1)}s{baseStart > 0 ? " used" : ""}</span>}
               </div>
               {loadingSource && (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1399,6 +1504,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <p className="text-xs text-muted-foreground">
               Source replaced; export stays under this Hook + Story.
             </p>
+          )}
+          {videoMeta && baseWindow.maxStart > 0 && (
+            <StartAtControl
+              testId="base-start-slider"
+              clipLabel="Base clip"
+              value={baseStart}
+              maxStart={baseWindow.maxStart}
+              onChange={(next) => applyClipStart("base", next)}
+              onUsePlayhead={() => startFromPlayhead("base")}
+              playheadReady={!isAppendTime(currentTime)}
+            />
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
@@ -1540,7 +1656,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             {appendName && (
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={appendName} data-testid="append-file-name">
                 {appendName}
-                {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendMeta.d.toFixed(1)}s` : ""}
+                {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendDuration.toFixed(1)}s${appendStart > 0 ? " used" : ""}` : ""}
               </span>
             )}
             {appendUrl && (
@@ -1559,6 +1675,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           </div>
           {appendError && <p role="alert" className="text-xs text-destructive">{appendError}</p>}
           {appendUrl && !appendMeta && !appendError && <p role="status" className="text-xs text-muted-foreground">Loading added clip…</p>}
+          {appendMeta && appendWindow.maxStart > 0 && (
+            <StartAtControl
+              testId="append-start-slider"
+              clipLabel="Second clip"
+              value={appendStart}
+              maxStart={appendWindow.maxStart}
+              onChange={(next) => applyClipStart("append", next)}
+              onUsePlayhead={() => startFromPlayhead("append")}
+              playheadReady={isAppendTime(currentTime)}
+            />
+          )}
           {appendUrl && (
             <StylePicker
               label="Second clip style"

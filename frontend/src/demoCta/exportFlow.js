@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from "mediabunny";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
-import { buildExportFilename, sniffRecordingContainer } from "./constants";
+import { buildExportFilename, clipWindow, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
@@ -78,6 +78,7 @@ export function useExportFlow(settings) {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
+    baseStart = 0, appendStart = 0,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -159,12 +160,17 @@ export function useExportFlow(settings) {
       const { blob, duration, audioSegments } = await exportTikTok({
         source: await response.blob(), appendSource: appendBlob, canvas, signal: controller.signal,
         baseMuted: !!baseMuted, appendMuted: !!appendMuted,
+        baseStart, appendStart,
         drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
         onProgress: setProgress,
       });
       const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
       if (sniffRecordingContainer(head) !== "mp4") throw new Error("The encoder did not produce a valid MP4. Export again in Chrome or Edge.");
-      const expectedDuration = appendBlob ? videoMeta.d + appendMeta.d : duration;
+      // Trimmed clips encode only their used run, so the probe must expect
+      // that run — not the source lengths the file was cut from.
+      const expectedDuration = appendBlob
+        ? clipWindow(videoMeta.d, baseStart).duration + clipWindow(appendMeta.d, appendStart).duration
+        : duration;
       await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : []);
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);

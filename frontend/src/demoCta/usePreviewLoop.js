@@ -6,6 +6,7 @@ import {
   DEVICES,
   PRESETS,
   resolveCtaWindow,
+  clipWindow,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, drawStoryOverlay } from "./overlays";
 import { drawHandView } from "./handView";
@@ -25,6 +26,7 @@ import { getEffectiveZoom } from "./zoom";
 export function usePreviewLoop(settings) {
   const {
     device, preset, mockupStretchY, scale, videoMeta, bg, anim,
+    baseStart = 0, appendStart = 0,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
@@ -50,12 +52,32 @@ export function usePreviewLoop(settings) {
 
   const videoRef = useRef(null);
   const activeVideoRef = useRef(null);
+  // A start point moves the clip's own clock: overlays, windows and zoom locks
+  // are timed from the first used frame, and the export decodes from that same
+  // frame. Both lengths below are the used run, never the source length.
+  const baseWindow = clipWindow(videoMeta?.d, baseStart);
+  const appendWindow = clipWindow(appendMeta?.d, appendStart);
+  const baseDuration = baseWindow.duration;
+  const appendDuration = appendWindow.duration;
   const sequence = !!appendMeta;
   const sequenceRef = useRef(null);
-  sequenceRef.current = { enabled: sequence, baseDuration: videoMeta?.d || 0, appendDuration: appendMeta?.d || 0 };
+  sequenceRef.current = {
+    enabled: sequence,
+    baseDuration,
+    appendDuration,
+    baseStart: baseWindow.start,
+    appendStart: appendWindow.start,
+  };
   const activeVideo = useCallback(() => activeVideoRef.current || videoRef.current, []);
-  const timelineTime = useCallback((video) => (video?.currentTime || 0) +
-    (video && video === appendVideoRef?.current ? sequenceRef.current.baseDuration : 0), [appendVideoRef]);
+  // Media time → timeline time. The base opens on its in point, so a timeline
+  // position is the offset from the first used frame rather than from frame 0.
+  const timelineTime = useCallback((video) => {
+    if (!video) return 0;
+    const config = sequenceRef.current;
+    const added = video === appendVideoRef?.current;
+    const local = (video.currentTime || 0) - (added ? config.appendStart : config.baseStart);
+    return Math.max(0, local + (added ? config.baseDuration : 0));
+  }, [appendVideoRef]);
   // Scoped replay: hook/CTA style tweaks (accent, face, entrance, size)
   // restart playback inside that overlay's window only, then park at the
   // window end — never playing past it into the middle of the clip. The
@@ -144,7 +166,7 @@ export function usePreviewLoop(settings) {
   const startScopedPreview = useCallback((kind) => {
     if (isExportingRef.current) return;
     const video = videoRef.current;
-    const dur = videoMeta?.d ?? 0;
+    const dur = baseDuration;
     if (!video || !(dur > 0)) return;
     let start;
     let end;
@@ -166,14 +188,14 @@ export function usePreviewLoop(settings) {
     scopedReplayRef.current = { end };
     video.loop = false;
     try {
-      video.currentTime = start;
+      video.currentTime = start + baseStart;
     } catch {
       // A seekable clip always accepts this; a transient failure leaves the
       // playhead where it is and the window guard still parks on time.
     }
     setCurrentTime(start);
     video.play().then(() => setIsPlaying(true)).catch(() => {});
-  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
+  }, [baseDuration, baseStart, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
 
   // Continuous sliders fire dozens of changes per drag; restarting the
   // window on every tick would yank the playhead under the founder's hand.
@@ -181,7 +203,7 @@ export function usePreviewLoop(settings) {
   // let it run — otherwise restart it like a discrete pick.
   const ensureScopedPreview = useCallback((kind) => {
     const video = videoRef.current;
-    const dur = videoMeta?.d ?? 0;
+    const dur = baseDuration;
     if (!video || !(dur > 0)) return;
     let start;
     let end;
@@ -198,14 +220,14 @@ export function usePreviewLoop(settings) {
       return;
     }
     if (!(end > start)) return;
-    const t = video.currentTime;
+    const t = timelineTime(video);
     if (!video.paused && t >= start - 0.05 && t < end) {
       scopedReplayRef.current = { end };
       video.loop = false;
       return;
     }
     startScopedPreview(kind);
-  }, [videoMeta, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview]);
+  }, [baseDuration, baseStart, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview, timelineTime]);
 
   // Stable so the Space shortcut below subscribes once: it closes over the
   // video ref and a state setter only, so an empty dep array is complete.
@@ -221,14 +243,14 @@ export function usePreviewLoop(settings) {
       if (video.ended) {
         const base = videoRef.current;
         activeVideoRef.current = base;
-        base.currentTime = 0;
+        base.currentTime = baseStart;
         base.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       } else video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } else {
       video.pause();
       setIsPlaying(false);
     }
-  }, [cancelScopedReplay, activeVideo]);
+  }, [cancelScopedReplay, activeVideo, baseStart]);
 
   const togglePreviewMuted = useCallback(() => {
     const video = videoRef.current;
@@ -291,7 +313,11 @@ export function usePreviewLoop(settings) {
     const playing = previous && !previous.paused;
     if (previous !== next) previous?.pause();
     activeVideoRef.current = next;
-    next.currentTime = next === video ? time : Math.min(config.appendDuration, time - config.baseDuration);
+    // Both directions add the segment's own in point, so a timeline position
+    // lands on the media frame the export uses for that same position.
+    next.currentTime = next === video
+      ? config.baseStart + Math.max(0, time)
+      : config.appendStart + Math.min(config.appendDuration, Math.max(0, time - config.baseDuration));
     if (playing && next.paused) next.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     setCurrentTime(time);
     // No paint here: the `seeked` event repaints once the seek lands, so a
@@ -325,8 +351,10 @@ export function usePreviewLoop(settings) {
   // from the last edit. A paused draft stays visible until Lock or transport.
   useEffect(() => {
     if (editingZoomRef.current || isExportingRef.current) return;
-    showZoomValues(zoomValuesAt(videoRef.current?.currentTime ?? currentTime));
-  }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt]);
+    // Locks are keyed to the timeline, not to media time: with a start point
+    // the base's own clock runs ahead of the frame the lock was set on.
+    showZoomValues(zoomValuesAt(activeVideo() ? timelineTime(activeVideo()) : currentTime));
+  }, [currentTime, isPlaying, zoomKeyframes, showZoomValues, zoomValuesAt, activeVideo, timelineTime]);
 
   // Only one segment plays at a time. No looping, mixing or retiming at the cut.
   useEffect(() => {
@@ -336,17 +364,17 @@ export function usePreviewLoop(settings) {
     added?.pause();
     activeVideoRef.current = base;
     base.loop = !sequence;
-    setCurrentTime(base.currentTime || 0);
+    setCurrentTime(timelineTime(base));
     setIsPlaying(!base.paused);
     const advance = () => {
       if (!sequence || scopedReplayRef.current || isExportingRef.current) return;
       activeVideoRef.current = added;
-      added.currentTime = 0;
-      setCurrentTime(videoMeta.d);
+      added.currentTime = appendStart;
+      setCurrentTime(baseDuration);
       added.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     };
     const finish = () => {
-      setCurrentTime((videoMeta?.d || 0) + (appendMeta?.d || 0));
+      setCurrentTime(baseDuration + appendDuration);
       setIsPlaying(false);
     };
     base.addEventListener("ended", advance);
@@ -356,7 +384,7 @@ export function usePreviewLoop(settings) {
       added?.removeEventListener("ended", finish);
       added?.pause();
     };
-  }, [appendUrl, appendMeta, videoMeta, viewMode, sequence, appendVideoRef]);
+  }, [appendUrl, appendMeta, videoMeta, appendStart, baseDuration, appendDuration, timelineTime, viewMode, sequence, appendVideoRef]);
 
   // Preview loop
   useEffect(() => {
@@ -381,7 +409,7 @@ export function usePreviewLoop(settings) {
     canvas.width = cw;
     canvas.height = ch;
 
-    const drawOverlays = (ctx, vt, dur = videoMeta.d || 0) => {
+    const drawOverlays = (ctx, vt, dur = baseDuration) => {
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
       if (hookEnabled) {
@@ -445,7 +473,7 @@ export function usePreviewLoop(settings) {
       if (mode === "hand" && video) {
         const t = vt;
         drawHandView(ctx, cw, ch, frame, lookEnv, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
-        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
+        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
         return;
       }
 
@@ -467,7 +495,7 @@ export function usePreviewLoop(settings) {
             ctx.drawImage(frame, (cw - box.dw) / 2 + (segment ? 0 : ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segment ? 0 : ez.vOffY / 100) * maxOffY, box.dw, box.dh);
           }
         }
-        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
+        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
         return;
       }
 
@@ -794,7 +822,7 @@ export function usePreviewLoop(settings) {
         const y = (ch - drawH) / 2;
         drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
-      if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - videoMeta.d : vt, segment ? appendMeta.d : videoMeta.d);
+      if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
     };
     paintFrameRef.current = paintFrame;
     // On-demand preview. A paused clip with settled settings paints the same
@@ -809,6 +837,15 @@ export function usePreviewLoop(settings) {
       if (isExportingRef.current) return;
       const v = activeVideo();
       const playing = !!v && !v.paused;
+      // A looping base wraps to frame 0, which sits before the start point. Park
+      // it back on the in point before the skipped run is painted; the seek
+      // marks the next frame dirty.
+      if (playing && v === videoRef.current && v.currentTime < baseStart - 0.02) {
+        v.currentTime = baseStart;
+        dirtyRef.current = true;
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
       if (playing) editingZoomRef.current = false;
       if (playing || dirtyRef.current) {
         dirtyRef.current = false;
@@ -818,12 +855,12 @@ export function usePreviewLoop(settings) {
       // pausing here lands the scrubber on the exact window frame, and the
       // loop restore below hands free transport back for the next press.
       const scoped = scopedReplayRef.current;
-      if (playing && scoped && v && v.currentTime >= scoped.end - 0.08) {
+      if (playing && scoped && v && timelineTime(v) >= scoped.end - 0.08) {
         scopedReplayRef.current = null;
         v.pause();
         v.loop = !sequence;
         setIsPlaying(false);
-        setCurrentTime(v.currentTime);
+        setCurrentTime(timelineTime(v));
         return;
       }
       if (playing) rafRef.current = requestAnimationFrame(draw);
@@ -872,7 +909,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseDuration, appendDuration, timelineTime]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,

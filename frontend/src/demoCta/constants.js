@@ -279,6 +279,27 @@ export const RANGES = {
 
 export const BASE_PHONE_H = 1800;
 
+// Shortest run a clip may keep after its start point. Hook, story and end card
+// all need a window, and a clip trimmed to nothing exports a broken file.
+export const MIN_CLIP_SECONDS = 0.5;
+
+/**
+ * Where one clip's usable run starts, and how much of it is left.
+ *
+ * A start point is a single number, but four things depend on it: the preview's
+ * timeline mapping, the export's decode origin, the overlay windows and the
+ * scrubber length. They all read this instead of subtracting the offset in
+ * their own place, so a clip can never be previewed from one frame and encoded
+ * from another. `maxStart` is what a start control may offer, which is the
+ * source length minus the shortest run we are willing to export.
+ */
+export function clipWindow(duration, start = 0, minRemaining = MIN_CLIP_SECONDS) {
+  const source = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const maxStart = source > 0 ? Math.max(0, source - Math.max(0, minRemaining)) : 0;
+  const offset = Math.min(Math.max(0, Number(start) || 0), maxStart);
+  return { start: offset, duration: Math.max(0, source - offset), maxStart };
+}
+
 /**
  * Identify a recorded container from its first bytes, so a corrupt or
  * truncated file is caught before it becomes a download link.

@@ -1077,6 +1077,9 @@ const previewHookSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCt
 // across both files, while scrub/focus-ring rows below keep reading the
 // editor through previewSrc.
 const previewSrc = editorSrc + previewHookSrc;
+check("each Demo + CTA clip carries its own start control",
+  ["base-start-slider", "append-start-slider"].every((testId) => editorSrc.includes(`testId="${testId}"`)),
+  "a clip has no start control, so its opening frame cannot be chosen");
 const brokenPreviewWiring = PREVIEW_WIRING_ROWS
   .filter(([, re, kind]) => (kind === "absent") === re.test(previewSrc))
   .map(([name]) => name);
@@ -1157,6 +1160,32 @@ check("resolveCtaWindow anchors last2, last3, and full clip to loaded duration",
   DC.resolveCtaWindow(2, 12, "full") === 12 &&
   DC.resolveCtaWindow(4, 6, "custom") === 6 * 0.45,
   "resolveCtaWindow miscomputed anchored window");
+
+// A clip start point is one number that the preview, the overlay windows and
+// the encoder all read. These pin the clamp: never negative, never past the
+// shortest run the editor is willing to export, and never inverted.
+check("a clip start point trims the head and keeps a usable run", (() => {
+  const full = DC.clipWindow(12, 0);
+  const mid = DC.clipWindow(12, 3.5);
+  const past = DC.clipWindow(12, 99);
+  const negative = DC.clipWindow(12, -4);
+  const unknown = DC.clipWindow(undefined, 2);
+  return full.start === 0 && full.duration === 12 &&
+    full.maxStart === 12 - DC.MIN_CLIP_SECONDS &&
+    mid.start === 3.5 && mid.duration === 8.5 &&
+    past.start === full.maxStart && Math.abs(past.duration - DC.MIN_CLIP_SECONDS) < 1e-9 &&
+    negative.start === 0 && negative.duration === 12 &&
+    unknown.duration === 0 && unknown.maxStart === 0;
+})(), "clipWindow dropped the minimum run or ran past the source");
+
+// The export has to open on the same frame the preview does: decoding starts
+// at the segment's own start point, never at frame 0 of the file.
+const EXPORT_SRC = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "exportTikTok.js"), "utf8");
+check("the export decodes from each clip's start point",
+  EXPORT_SRC.includes("clipWindow(full, index ? appendStart : baseStart)") &&
+  EXPORT_SRC.includes("const origin = first + run.start;") &&
+  EXPORT_SRC.includes("const length = run.duration;"),
+  "exportTikTok encodes frame 0 of the file instead of the clip's start point");
 
 check("Story timing clamps to the enabled hook and CTA windows", (() => {
   const config = { clipDuration: 12, hookEnabled: true, hookDuration: 2, ctaEnabled: true, ctaDuration: 3, ctaTimingMode: "last3" };

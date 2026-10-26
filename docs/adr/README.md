@@ -62,3 +62,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0043](0043-history-single-source-identity.md) | History identity lives once, under the clip | accepted |
 | [0044](0044-post-kit-caption-spec.md) | Post-kit captions are short, user-voiced, and tailored | accepted |
 | [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |
+| [0045](0045-demo-cta-clip-start-point.md) | Demo + CTA clips carry a start point; the head is trimmed, the tail is not | accepted |

@@ -2,6 +2,7 @@ import {
   ALL_FORMATS, AudioSample, AudioSampleSink, AudioSampleSource, BlobSource, BufferTarget,
   CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo,
 } from "mediabunny";
+import { clipWindow } from "./constants";
 
 export const TIKTOK_EXPORT = Object.freeze({
   width: 1080, height: 1920, fps: 30, videoBitrate: 8_000_000, audioBitrate: 192_000,
@@ -58,8 +59,10 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
 }
 
 /** Decode pinned sources, base then optional upload, on one 30 fps timeline.
- * A muted segment keeps its video length; only its audio is left out. */
-export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false }) {
+ * A muted segment keeps its video length; only its audio is left out.
+ * Each clip's start point is where decoding begins, so the file opens on the
+ * frame the preview shows — never on footage the founder skipped. */
+export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0 }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -84,9 +87,13 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       const track = await input.getPrimaryVideoTrack();
       const label = index ? "added clip" : "source clip";
       if (!track || !await track.canDecode()) throw new Error(`The ${label} cannot be decoded. Upload a playable MP4 or WebM video.`);
-      const origin = Math.max(0, await track.getFirstTimestamp());
-      const length = (await track.computeDuration()) - origin;
-      if (!Number.isFinite(length) || length <= 0) throw new Error(`The ${label} has no playable duration. Upload another video.`);
+      const first = Math.max(0, await track.getFirstTimestamp());
+      const full = (await track.computeDuration()) - first;
+      if (!Number.isFinite(full) || full <= 0) throw new Error(`The ${label} has no playable duration. Upload another video.`);
+      const run = clipWindow(full, index ? appendStart : baseStart);
+      if (!(run.duration > 0)) throw new Error(`The ${label} has nothing left after its start point. Move the start point earlier.`);
+      const origin = first + run.start;
+      const length = run.duration;
       const audioTrack = await input.getPrimaryAudioTrack();
       if (audioTrack && (!await audioTrack.canDecode() || !await canEncodeAudio("aac", { sampleRate: 48000, numberOfChannels: 2, bitrate: audioBitrate }))) {
         throw new Error("This browser cannot preserve this clip's audio in TikTok MP4. Use a current Chrome or Edge browser; audio will not be silently removed.");
