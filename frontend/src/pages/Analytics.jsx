@@ -8,7 +8,7 @@ import { SectionCard } from "../components/SectionCard";
 import { AppPicker } from "../components/AppPicker";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/ui/skeleton";
-import { FactChip } from "../components/FactChip";
+import { FactChip, FactList } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
@@ -176,7 +176,7 @@ export default function Analytics() {
       )}
 
       {loading ? (
-        <div className="surface space-y-4 rounded-2xl" aria-label="Loading analytics" data-testid="analytics-loading">
+        <div className="surface space-y-4" aria-label="Loading analytics" data-testid="analytics-loading">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-4/5" />
@@ -208,9 +208,6 @@ export default function Analytics() {
           {renders?.length > 0 && (
             <>
               <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} />
-              <p className="text-xs text-muted-foreground">
-                Showing {renders.length} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200). Activity below uses this same set.
-              </p>
             </>
           )}
           {renders !== null && renders.length > 0 && (
@@ -299,12 +296,17 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
         </Button>
       }
     >
-      <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
+      <FactList aria-label="Clip totals">
+        <FactChip>{posted} posted</FactChip>
+        <FactChip>{counted} with recorded views</FactChip>
+        <FactChip>{rated} rated</FactChip>
+      </FactList>
       {open && (
         <div id={panelId} className="space-y-5">
-          <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
-            <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-              Why these numbers
+          <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <span>Why these numbers</span>
+              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
             </summary>
             <div className="space-y-2 pb-2 text-xs text-muted-foreground">
               <p>
@@ -315,24 +317,29 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
             </div>
           </details>
           {pick && pickNext && (
-            <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
-              <p className="text-base font-semibold">Suggested next take: {clipName(pick)}</p>
+            <div data-testid="analytics-next-take" className="flex items-start gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-4 py-3">
+              <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)]">
+                <ThumbsUp aria-hidden="true" className="h-3 w-3 text-[color:var(--brand-indigo)]" />
+              </span>
+              <div className="min-w-0 space-y-1">
+              <p className="text-sm font-semibold text-foreground">Suggested next take: {clipName(pick)}</p>
               <p className="text-xs text-muted-foreground">
                 Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
                 Past reach does not promise the next take repeats it.{" "}
                 <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
               </p>
+              </div>
             </div>
           )}
           {clips.length === 0 ? (
             <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-[color:var(--hairline)] bg-secondary/10">
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
                 <thead>
-                  <tr className="border-b border-[color:var(--hairline)] text-xs text-muted-foreground">
-                    {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
+                  <tr className="bg-secondary/20 text-xs text-muted-foreground">
+                    {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -341,36 +348,46 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                     const next = nextTakeFor(row, historyHref, draftIds);
                     const winner = isWinnerRow(row);
                     return (
-                      <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
-                        <td data-testid={`result-rank-${row.id}`} className="py-3 pr-4 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />}
-                            <span className="font-mono">{index + 1}</span>
+                      <tr key={row.id} data-testid={`result-${row.id}`} className="border-t border-[color:var(--hairline)] align-top transition-colors first:border-t-0 hover:bg-secondary/20">
+                        <td data-testid={`result-rank-${row.id}`} className="px-3 py-3 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--hairline-strong)] bg-secondary/40 font-mono tabular-nums">{index + 1}</span>
+                            {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />}
                           </span>
                         </td>
-                        <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
+                        <th scope="row" className="min-w-[180px] px-3 py-3 font-normal">
                           <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
                             {clipName(row)}
                           </Link>
                           <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
                         </th>
-                        <td className="py-3 pr-4 text-xs">
-                          {row.tiktok_url ? <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="text-[color:var(--brand-indigo)] hover:underline">Posted ↗</a> : "Not posted"}
+                        <td className="whitespace-nowrap px-3 py-3 text-xs">
+                          {row.tiktok_url ? (
+                            <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[color:var(--brand-indigo)] hover:underline">
+                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
+                              Posted ↗
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                              Not posted
+                            </span>
+                          )}
                         </td>
-                        <td className="py-3 pr-4 text-xs">
+                        <td className="px-3 py-3 text-xs">
                           {row.tiktok_views == null ? (
                             "Not recorded"
                           ) : (
                             <span className="flex items-center gap-2">
-                              <span className="h-2 w-20 shrink-0 overflow-hidden rounded-full bg-[color:var(--hairline)]" aria-hidden="true">
-                                <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)]" style={{ width: barWidth(row.tiktok_views) }} />
+                              <span className="h-2 w-24 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
+                                <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]" style={{ width: barWidth(row.tiktok_views) }} />
                               </span>
-                              <span className="whitespace-nowrap font-mono">{row.tiktok_views.toLocaleString("en-US")}</span>
+                              <span className="whitespace-nowrap font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}</span>
                             </span>
                           )}
                         </td>
-                        <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap py-3 pr-4 text-xs">
-                          <span className="inline-flex items-center gap-1.5">
+                        <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap px-3 py-3 text-xs">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${vote > 0 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : "border-[color:var(--hairline)] bg-secondary/20 text-muted-foreground"}`}>
                             {vote > 0 ? (
                               <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
                             ) : vote < 0 ? (
@@ -381,8 +398,8 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                             {vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}
                           </span>
                         </td>
-                        <td className="py-3 text-xs">
-                          <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
+                        <td className="px-3 py-3 text-xs">
+                          <Link to={next.to} className="whitespace-nowrap text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
                         </td>
                       </tr>
                     );
@@ -404,6 +421,9 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
               </Button>
             </div>
           )}
+          <p className="border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
+            Showing {generations.length} most recent renders{profileId ? " for this app" : " across all apps, including unassigned exports"} (up to 200). Activity below uses this same set.
+          </p>
         </div>
       )}
     </SectionCard>
@@ -415,10 +435,10 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
 function StatusRenderRow({ row, historyHref }) {
   const date = shortDate(row.created_at);
   return (
-    <li className="flex items-baseline justify-between gap-3">
+    <li className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary/20">
       <Link
         to={`${historyHref}#generation-${row.id}`}
-        className="min-w-0 truncate text-[color:var(--brand-indigo)] hover:underline"
+        className="min-w-0 truncate text-sm text-[color:var(--brand-indigo)] hover:underline"
       >
         {clipName(row)}
       </Link>
@@ -472,7 +492,7 @@ function RenderFunnel({ generations = [], profileId = "" }) {
           const rows = byStatus[group.key];
           if (!rows.length) {
             return (
-              <li key={group.key} data-testid={`analytics-status-${group.key}`} className="flex items-center justify-between gap-4 py-2 text-sm">
+              <li key={group.key} data-testid={`analytics-status-${group.key}`} className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm">
                 <span className="min-w-0 truncate text-muted-foreground">{group.label}</span>
                 <FactChip>0</FactChip>
               </li>
@@ -489,26 +509,27 @@ function RenderFunnel({ generations = [], profileId = "" }) {
                 aria-controls={isOpen ? panelId : undefined}
                 onClick={() => setOpenStatus((current) => (current === group.key ? null : group.key))}
                 data-testid={`analytics-status-toggle-${group.key}`}
-                className="focus-ring flex w-full items-center justify-between gap-4 rounded-xl py-2 text-left text-sm transition-colors hover:text-foreground"
+                className="focus-ring flex w-full items-center justify-between gap-4 rounded-xl px-2 py-2 text-left text-sm transition-colors hover:bg-secondary/20 hover:text-foreground"
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  <ChevronRight
-                    aria-hidden="true"
-                    className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
-                  />
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--hairline)] bg-secondary/30">
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
+                    />
+                  </span>
                   <span className="truncate text-muted-foreground">{group.label}</span>
                 </span>
                 <FactChip>{rows.length}</FactChip>
               </button>
               {isOpen && (
-                <div id={panelId} className="space-y-2 pb-3 pl-6">
-                  <ul className="space-y-1 text-xs">
+                <div id={panelId} className="ml-3 space-y-1 border-l border-[color:var(--hairline)] py-1 pl-3">
+                  <ul className="space-y-0.5 text-xs">
                     {shown.map((row) => <StatusRenderRow key={row.id} row={row} historyHref={historyHref} />)}
                   </ul>
                   {rows.length > shown.length && (
                     <Link
                       to={historyHref}
-                      className="inline-block text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                      className="inline-block px-2 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
                     >
                       +{rows.length - shown.length} more in History
                     </Link>
@@ -519,8 +540,8 @@ function RenderFunnel({ generations = [], profileId = "" }) {
           );
         })}
       </ul>
-      <p className="pt-2 text-xs text-muted-foreground">
-        {generations.length} total ·{" "}
+      <p className="flex items-center justify-between gap-4 border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
+        <span>{generations.length} total</span>
         <Link
           to={historyHref}
           data-testid="analytics-funnel-history"
@@ -556,16 +577,16 @@ function RenderActivity({ generations = [] }) {
     >
       <ul className="flex items-end gap-3 sm:gap-4">
         {buckets.map((b) => (
-          <li
-            key={b.key}
-            title={`${b.label}: ${b.count} ${b.count === 1 ? "render" : "renders"}`}
-            className="flex min-w-0 flex-1 flex-col items-center gap-2"
+        <li
+          key={b.key}
+          title={`${b.label}: ${b.count} ${b.count === 1 ? "render" : "renders"}`}
+          className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+        >
+          <FactChip className={b.count === max ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : undefined}>{b.count}</FactChip>
+          <span
+            className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/25 transition-colors group-hover:border-[color:var(--hairline-strong)]"
+            aria-hidden="true"
           >
-            <FactChip>{b.count}</FactChip>
-            <span
-              className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/25"
-              aria-hidden="true"
-            >
               <span
                 data-testid="activity-bar"
                 className="block w-full rounded-t-md bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
@@ -644,15 +665,15 @@ function SignalCounts({ summary, events = [], profileId = "" }) {
               : (profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history");
             const Icon = signalIcon(s.signal);
             return (
-              <li
-                key={s.signal}
-                className="relative flex items-center justify-between gap-4 rounded-xl py-2 pl-9 pr-1 transition-colors hover:bg-secondary/20"
+            <li
+              key={s.signal}
+              className="relative flex items-center justify-between gap-4 rounded-xl py-2.5 pl-10 pr-2 transition-colors hover:bg-secondary/20"
+            >
+              <span
+                data-testid={`analytics-signal-icon-${s.signal}`}
+                aria-hidden="true"
+                className="absolute left-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
               >
-                <span
-                  data-testid={`analytics-signal-icon-${s.signal}`}
-                  aria-hidden="true"
-                  className="absolute left-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                >
                   <Icon aria-hidden="true" className="h-3 w-3 text-[color:var(--brand-indigo)]" />
                 </span>
                 <span className="min-w-0 truncate text-sm text-foreground">{humanize(s.signal)}</span>
@@ -698,7 +719,7 @@ function SignalReasons({ summary }) {
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
         {reasons.map((r) => (
-          <li key={r.reason} className="flex items-center justify-between gap-4 py-2 text-sm">
+          <li key={r.reason} className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-secondary/20">
             <span className="min-w-0 truncate text-muted-foreground">{humanize(r.reason)}</span>
             <FactChip>{r.count}</FactChip>
           </li>
