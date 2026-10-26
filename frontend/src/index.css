@@ -632,8 +632,10 @@ h1,
     -webkit-user-select: none;
 }
 
-/* Two useful-width cards instead of a single 1,200px row with a small player
-   stranded at one end. Stack until both columns have enough reading room. */
+/* Contact sheet: one column on phones, two on tablets, three on wide PCs.
+   Three narrow tiles beat two very wide ones — a 9:16 clip stays the same
+   size and only the dead stage beside it shrinks. Stack until each step up
+   has enough reading room for the clip plus its drawer. */
 .history-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -784,10 +786,20 @@ h1,
     .history-body {
         padding: 24px 24px 28px;
     }
+    .history-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 @media (min-width: 1200px) {
     .history-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    /* Three-up tiles are narrower, so the preview steps back down a little:
+       the clip keeps its presence while every collapsed tile stays even and
+       the sheet reads denser instead of taller. */
+    .history-card {
+        --history-preview-h: 300px;
+        --history-stage-pad: 20px;
     }
 }
 

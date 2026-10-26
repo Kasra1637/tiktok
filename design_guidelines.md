@@ -269,13 +269,14 @@ belongs to. Every step sits in the one `.surface-step` card, and every aside in 
 
 ### History density
 
-History is a contact sheet: a two-column grid of tiles from 1200px viewport
-width, one column below it, with 16px gutters and top-aligned cards (no
-equal-height stretching). A tile that has a clip to play is the clip and one
-expand tab — a full-bleed stage with a contained video (260px, 340px from
-768px) and nothing else on it: no app name, no status, no facts beside the
-footage. A row with nothing to play is the one exception and keeps a notice in
-place of the video, because a blank tile explains nothing.
+History is a contact sheet: one column on phones, two columns from 768px,
+three columns from 1200px viewport width, with 16px gutters and top-aligned
+cards (no equal-height stretching). A tile that has a clip to play is the clip
+and one expand tab — a full-bleed stage with a contained video (260px, 340px
+from 768px, 300px at the three-up step so narrower tiles stay even) and
+nothing else on it: no app name, no status, no facts beside the footage. A row
+with nothing to play is the one exception and keeps a notice in place of the
+video, because a blank tile explains nothing.
 
 Everything else — the app name, the status, the hook, the facts, the audience,
 the demo brief, and every action — lives in the drawer under the tab, so a

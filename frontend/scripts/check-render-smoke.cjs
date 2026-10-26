@@ -10610,6 +10610,22 @@ async function runDemoCtaChecks() {
     });
   });
 
+  await check("History grid goes 1-up, 2-up, then 3-up with a shorter wide preview", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.history-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("history phones lost the single-column grid");
+    }
+    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-grid\s*\{[\s\S]*?repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
+      throw new Error("history tablets lost the two-up middle step");
+    }
+    if (!/@media\s*\(min-width:\s*1200px\)[\s\S]*?\.history-grid\s*\{[\s\S]*?repeat\(3,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
+      throw new Error("history PCs lost the three-up contact sheet");
+    }
+    if (!/@media\s*\(min-width:\s*1200px\)[\s\S]*?--history-preview-h:\s*300px/.test(css)) {
+      throw new Error("history wide tiles did not step the preview height back down");
+    }
+  });
+
   await check("history sorts most-viewed above uncounted renders", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
