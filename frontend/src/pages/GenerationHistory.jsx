@@ -514,12 +514,12 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
       </div>
 
       <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="history-summary-id flex flex-wrap items-center gap-2 text-xs">
           <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
           <StatusBadge status={row.status} />
           <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
         </div>
-        <p className="break-words text-base font-semibold">
+        <p className="history-summary-hook break-words text-base font-semibold">
           {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
         </p>
         <div className="history-summary-meta flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

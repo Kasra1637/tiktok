@@ -10718,6 +10718,34 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("collapsed tiles reserve the headline and identity heights", async (ctx) => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const hook = css.match(/\.history-summary-hook\s*\{[^}]*\}/);
+    if (!hook) throw new Error("the tile headline lost its height reservation");
+    if (!/min-height\s*:\s*2\.75rem/.test(hook[0])) {
+      throw new Error("the headline reservation does not cover the two-line hook wrap");
+    }
+    const ident = css.match(/\.history-summary-id\s*\{[^}]*\}/);
+    if (!ident) throw new Error("the tile identity lost its height reservation");
+    if (!/min-height\s*:\s*3rem/.test(ident[0])) {
+      throw new Error("the identity reservation does not cover the wrapped date line");
+    }
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "tall-1" }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const card = ctx.container.querySelector('[data-testid="history-card"]');
+      if (!card.querySelector(".history-summary-hook")) {
+        throw new Error("the tile headline is not wearing its reservation class");
+      }
+      if (!card.querySelector(".history-summary-id")) {
+        throw new Error("the tile identity is not wearing its reservation class");
+      }
+    });
+  });
+
   await check("the detail band stacks narrow and splits wide", async () => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     if (!/\.history-detail-cols\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {

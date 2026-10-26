@@ -288,9 +288,12 @@ opened. The band portals into a list-owned slot after the whole open pair
 collapsed tile the same flat height while one is open, failed renders included,
 and what keeps the pair together instead of dropping the partner below the band. The preview and the stage padding are custom properties on
 `.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
-keeps every collapsed tile the same height as each other, and the identity
-meta reserves its wrapped two-line height (`.history-summary-meta`) so a
-longer vote never makes its tile taller than its neighbor. One band at a
+keeps every collapsed tile the same height as each other, and each summary
+row reserves its wrapped height — the headline two lines
+(`.history-summary-hook`), the identity two lines (`.history-summary-id`),
+the meta two lines (`.history-summary-meta`) — so a longer hook, app name,
+or vote never makes its tile taller than its neighbor. Nothing truncates to
+buy the uniformity; the full hook lives in the band quote. One band at a
 time: opening a tile closes the band elsewhere. Inside the band, facts read
 on the left and votes plus actions work on the right from 768px
 (`.history-detail-cols`); narrow bands stack in the same order. Opening

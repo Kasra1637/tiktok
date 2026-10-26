@@ -781,6 +781,23 @@ h1,
 .history-summary-meta {
     min-height: 2.5rem;
 }
+/* The tile identity row reserves the same treatment: a long app name wraps
+ * the date onto a second line while a short one fits one, and without the
+ * reservation the long tile measures a line taller. Two text-xs lines plus
+ * the row gap (gap-2), same pattern as the headline and the meta. */
+.history-summary-id {
+    min-height: 3rem;
+}
+/* The tile headline reserves its own wrapped height for the same reason: a
+ * long hook wraps to two lines while the neighbor's short hook fits one,
+ * and without the reservation the long tile measures a line taller. Two
+ * text-base lines at snug leading (2 x 1.375rem): the hook is never
+ * truncated — the full line lives in the band quote — the short tile just
+ * carries the same empty space the wrapped one fills. */
+.history-summary-hook {
+    line-height: 1.375;
+    min-height: 2.75rem;
+}
 /* The band's interior: one stacked column on narrow bands, facts beside
  * actions once the band is wide enough to hold both with room to work. */
 .history-detail-cols {
