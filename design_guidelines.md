@@ -275,9 +275,11 @@ the right (stacked on phones, video beside content from 900px via
 `.history-row-grid`), with 16px gutters and top-aligned cards. No expand
 step — the video, identity, facts, votes and actions are all visible
 together, so a record can never read as a separate section or stretch a
-neighbor. A card that has a clip to play leads with a full-bleed stage and a
-contained video (320px, 340px once side by side), then its identity summary
-beneath the footage. A card with nothing to play keeps a notice in place of
+neighbor. A card that has a clip to play leads with a full-bleed stage and
+its identity summary beneath the footage: stacked, the clip is a contained
+320px video; side by side it fills its 280–320px column edge to edge
+(width-driven 9:16 box, 16px stage padding) instead of floating centered
+in a fixed-height box. A card with nothing to play keeps a notice in place of
 the video, because a blank card explains nothing.
 
 The record beside the clip holds the app name, status, hook, facts,

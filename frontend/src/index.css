@@ -654,9 +654,15 @@ h1,
  * owns facts, post copy, votes and actions. The card itself is `flush`
  * (zero padding) and each band brings its own gutter.
  *
- * The preview height and the stage's own padding are declared together as
- * custom properties, because the stage's flat height is the tallest thing it
- * can hold.
+ * Stacked (phones), the preview keeps a fixed height so a 9:16 clip stays
+ * modest. Side by side, the clip fills its column edge to edge instead:
+ * width-driven with a 9:16 box (TikTok is the only output size), because a
+ * fixed-height contained box left ~80px of dark stage on each side of a
+ * 190px-wide clip.
+ *
+ * The stacked preview height and padding are declared together as custom
+ * properties, because the stage's flat height is the tallest thing it can
+ * hold in that mode.
  */
 .history-card {
     --history-preview-h: 320px;
@@ -719,27 +725,29 @@ h1,
 }
 @media (min-width: 900px) {
     .history-row-grid {
-        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+        grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
     }
     .history-media {
         border-bottom: none;
         border-right: 1px solid var(--hairline);
     }
-    .history-card {
-        --history-preview-h: 340px;
-        --history-stage-pad: 24px;
+    .history-stage {
+        --history-stage-pad: 16px;
+        /* No fixed box beside the record: the stage hugs the clip. */
+        min-height: 0;
+        padding: var(--history-stage-pad);
+    }
+    .history-preview {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 9 / 16;
+        /* Bounds freak metadata, not the common case: a 320px column fills
+           to ~570px, so this cap almost never bites. Letterboxing inside the
+           black frame on a near-black stage is invisible when it does. */
+        max-height: 560px;
     }
     .history-body {
         padding: 24px 24px 28px;
-    }
-}
-@media (min-width: 1200px) {
-    /* Pairs are wide, so the preview steps back down a little: the clip
-       keeps its presence while every collapsed tile stays even and the
-       sheet reads denser instead of taller. */
-    .history-card {
-        --history-preview-h: 300px;
-        --history-stage-pad: 20px;
     }
 }
 

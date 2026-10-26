@@ -10689,8 +10689,14 @@ async function runDemoCtaChecks() {
     if (!/\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
       throw new Error("the card lost its stacked narrow layout");
     }
-    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?minmax\(300px,\s*380px\)/.test(css)) {
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?minmax\(280px,\s*320px\)/.test(css)) {
       throw new Error("the wide card does not lay video beside its record");
+    }
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-preview\s*\{[\s\S]*?width:\s*100%[\s\S]*?aspect-ratio:\s*9\s*\/\s*16/.test(css)) {
+      throw new Error("the wide clip does not fill its column; the fixed-height box leaves dead stage beside it");
+    }
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-stage\s*\{[\s\S]*?min-height:\s*0/.test(css)) {
+      throw new Error("the wide stage keeps its fixed box instead of hugging the clip");
     }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
