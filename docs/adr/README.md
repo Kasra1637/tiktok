@@ -26,7 +26,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0006](0006-retire-grok-video-model.md) | Retire Grok Imagine Video 1.5 Lite (`input_references` unsupported) | accepted |
 | [0007](0007-overlay-font-motion-options.md) | Caption/CTA overlays get selectable fonts, animations, and size | accepted |
 | [0008](0008-hook-boundary-lean-in.md) | The hook-boundary transition is a face-anchored lean-in on a committed beat | accepted |
-| [0009](0009-history-tiles-expand-on-demand.md) | History tiles open on demand: the clip first, the record behind a tab | partially superseded by 0033 (tile identity & results) |
+| [0009](0009-history-tiles-expand-on-demand.md) | History tiles open on demand: the clip first, the record behind a tab | partially superseded by 0033 (tile identity & results) and 0035 (full-width band) |
 | [0010](0010-no-warm-button-fills.md) | No warm fills on buttons: coral and red move out of the surface | partially superseded by 0011 (Demo + CTA wears accent) |
 | [0011](0011-history-onward-wears-accent.md) | History's onward Demo + CTA wears accent, not brand | accepted |
 | [0012](0012-timestamped-tiktok-export.md) | Timestamped, frame-by-frame encoding delivers one TikTok MP4 without real-time capture drift | accepted |
@@ -52,3 +52,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0032](0032-history-tiktok-link-and-winner.md) | A TikTok link marks a render posted; thumbs up plus link is the winner | accepted |
 | [0033](0033-clip-results-comparison.md) | Compare saved clip reach and votes; keep History summaries synchronized | accepted |
 | [0034](0034-history-snapshot-synchronization.md) | History owns confirmed snapshots; URL filters and current requests prevent stale handoffs | accepted |
+| [0035](0035-history-detail-band.md) | Open History detail is a full-width band; one band at a time | accepted |

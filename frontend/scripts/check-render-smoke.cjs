@@ -10603,9 +10603,51 @@ async function runDemoCtaChecks() {
       if (opened.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
         throw new Error("the expand control does not report the drawer it opened");
       }
-      if (!opened.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
+      // The detail left the card: it renders as the full-width band after it.
+      const panel = ctx.container.querySelector('[data-testid="history-detail-panel"]');
+      if (!panel) throw new Error("expanding a tile opened no detail band");
+      if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
       for (const label of ["Download", "Delete", "Demo + CTA"]) {
-        if (!opened.textContent.includes(label)) throw new Error(`History lost ${label}`);
+        if (!panel.textContent.includes(label)) throw new Error(`History lost ${label}`);
+      }
+    });
+  });
+
+  await check("expanded History detail is a full-width band after its card", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "band-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
+        { ...COMPLETED, id: "band-2", brand_name: "Journal", hook_line: "A second render." },
+      ] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+      const first = grid.querySelector('[data-testid="history-card"]');
+      await clickEl(ctx, first.querySelector('[data-testid="history-expand"]'), "expand a history tile");
+      const panel = grid.querySelector(':scope > [data-testid="history-detail-panel"]');
+      if (!panel) throw new Error("the expanded detail is not a direct grid item");
+      if (panel.previousElementSibling !== first) {
+        throw new Error("the detail band does not sit directly after its card");
+      }
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      if (!/\.history-detail-panel\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/.test(css)) {
+        throw new Error("the detail band does not span the full grid width");
+      }
+      const second = grid.querySelectorAll('[data-testid="history-card"]')[1];
+      if (second.querySelector('[data-testid="history-context"]') || second.textContent.includes("Download")) {
+        throw new Error("opening one tile leaked detail content into its neighbor");
+      }
+      if (!panel.querySelector('[data-testid="history-context"]')) throw new Error("the band lost the render context");
+      // One open at a time: opening the neighbor moves the band, it never
+      // stacks a second one.
+      await clickEl(ctx, second.querySelector('[data-testid="history-expand"]'), "expand the neighbor tile");
+      const panels = grid.querySelectorAll(':scope > [data-testid="history-detail-panel"]');
+      if (panels.length !== 1) throw new Error(`expected one detail band, found ${panels.length}`);
+      if (panels[0].previousElementSibling !== second) throw new Error("the band did not follow the newly opened card");
+      if (first.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
+        throw new Error("the previous tile stayed open beside the new band");
       }
     });
   });
@@ -10667,31 +10709,35 @@ async function runDemoCtaChecks() {
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const card = () => ctx.container.querySelector('#generation-sync-low');
-      const get = (id) => card().querySelector(`[data-testid="${id}"]`);
+      const panel = () => ctx.container.querySelector('[data-testid="history-detail-panel"]');
+      // The tab and the identity summary live on the tile; every working
+      // control lives in the full-width band after it.
+      const onCard = (id) => card().querySelector(`[data-testid="${id}"]`);
+      const inPanel = (id) => panel().querySelector(`[data-testid="${id}"]`);
       await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
-      await clickEl(ctx, get("history-expand"));
-      const input = get("history-tiktok-views-input-sync-low");
+      await clickEl(ctx, onCard("history-expand"));
+      const input = inPanel("history-tiktok-views-input-sync-low");
       for (const invalid of ["1,2", "1.5", "true", "10000000001"]) {
         await typeInto(ctx, input, invalid);
-        await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
-        if (!card().querySelector('[role="alert"]')) throw new Error(`bad views accepted: ${invalid}`);
-        if (!get("history-summary").textContent.includes("10 views")) throw new Error("invalid save changed tile");
+        await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
+        if (!panel().querySelector('[role="alert"]')) throw new Error(`bad views accepted: ${invalid}`);
+        if (!onCard("history-summary").textContent.includes("10 views")) throw new Error("invalid save changed tile");
       }
       await typeInto(ctx, input, "1,200");
-      await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
+      await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
       if (ctx.container.querySelector('article').id !== "generation-sync-low") throw new Error("saving views did not immediately re-sort");
       await typeInto(ctx, input, "1201");
-      await clickEl(ctx, get("history-tiktok-views-save-sync-low"));
+      await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
       expectText(ctx, "Views could not save");
-      if (!get("history-summary").textContent.includes("1,200 views")) throw new Error("failed save changed confirmed list state");
-      await clickEl(ctx, get("history-video-feedback-sync-low-thumb-up"));
-      if (!get("history-summary").textContent.includes("Winner")) throw new Error("saved vote did not update list");
-      await clickEl(ctx, get("history-tiktok-clear-sync-low"));
-      if (!get("history-summary").textContent.includes("Not posted") || get("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
-      await typeInto(ctx, get("history-tiktok-input-sync-low"), first.tiktok_url);
-      await clickEl(ctx, get("history-tiktok-save-sync-low"));
-      await clickEl(ctx, get("history-expand"));
-      if (!get("history-summary").textContent.includes("1,200 views") || !get("history-summary").textContent.includes("Winner")) throw new Error("collapsed summary lost saved result");
+      if (!onCard("history-summary").textContent.includes("1,200 views")) throw new Error("failed save changed confirmed list state");
+      await clickEl(ctx, inPanel("history-video-feedback-sync-low-thumb-up"));
+      if (!onCard("history-summary").textContent.includes("Winner")) throw new Error("saved vote did not update list");
+      await clickEl(ctx, inPanel("history-tiktok-clear-sync-low"));
+      if (!onCard("history-summary").textContent.includes("Not posted") || onCard("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
+      await typeInto(ctx, inPanel("history-tiktok-input-sync-low"), first.tiktok_url);
+      await clickEl(ctx, inPanel("history-tiktok-save-sync-low"));
+      await clickEl(ctx, onCard("history-expand"));
+      if (!onCard("history-summary").textContent.includes("1,200 views") || !onCard("history-summary").textContent.includes("Winner")) throw new Error("collapsed summary lost saved result");
       if (fetches !== 1) throw new Error("result save reloaded the page instead of synchronizing rows");
     });
   });
@@ -11924,7 +11970,10 @@ async function runDemoCtaChecks() {
           if (group.textContent.includes("Delete")) {
             throw new Error("Delete is back in the primary action row beside Download");
           }
-          if (!card.textContent.includes("Delete")) {
+          // Delete lives in the detail band after the card now, still on the
+          // finished clip but apart from the primary action row.
+          const band = ctx.container.querySelector('[data-testid="history-detail-panel"]');
+          if (!band?.textContent.includes("Delete")) {
             throw new Error("History lost Delete on a finished clip");
           }
         }

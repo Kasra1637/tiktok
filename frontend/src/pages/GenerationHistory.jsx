@@ -181,31 +181,35 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
 }
 
 /**
- * One render, as a tile: the clip, then a drawer.
+ * One render, as a tile: the clip, then — as a separate full-width grid item
+ * — its detail band.
  *
  * The old card spent most of its width on a 152px rail plus a context column,
  * so a page of history read as a stack of admin panels with a small video
  * attached. The clip is the thing being reviewed, so it gets the whole tile:
  * a playable render leads with the video, then its identity and saved results.
- * Detailed context and destructive actions remain behind the drawer.
+ * Detailed context and destructive actions live in the band below the row,
+ * so opening one tile never stretches its neighbors and every collapsed tile
+ * stays the same flat height.
  *
  * A row with nothing to play is the one exception, and it keeps a notice in
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
+ *
+ * Open state lives in the list (one band at a time); the row only renders
+ * its card and, when open, the band directly after it. The fragment's two
+ * children are both grid items, which is what puts the band on its own full
+ * row instead of inside the card.
  */
-function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, draftIds = null }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  useEffect(() => {
-    if (defaultExpanded) setExpanded(true);
-  }, [defaultExpanded]);
+function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, deepLinked = false, draftIds = null }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
   // cursor where the next action is instead of having to remember the link
-  // step and find the field inside the drawer. Scoped to the deep-linked
+  // step and find the field inside the band. Scoped to the deep-linked
   // row and the awaiting state only: a manual expand never steals focus,
   // and a row that already has its link keeps focus where it was.
-  const linkAwaiting = defaultExpanded && !row.tiktok_url;
+  const linkAwaiting = expanded && deepLinked && !row.tiktok_url;
   useEffect(() => {
     if (!linkAwaiting || !expanded) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
@@ -229,40 +233,46 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
   const expandTabId = `generation-expand-${row.id}`;
   const wasExpanded = useRef(false);
 
-  // Shared close for the footer button and Esc, so focus and scroll settle
-  // in one place instead of diverging per trigger.
-  const collapseRow = useCallback(() => {
-    setExpanded(false);
-  }, []);
-
-  // Esc closes the open drawer. The listener lives only while expanded so a
+  // Esc closes the open band. The listener lives only while expanded so a
   // closed row never steals Esc from other UI.
   useEffect(() => {
     if (!expanded) return;
     const onKey = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        collapseRow();
+        onToggle();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, collapseRow]);
+  }, [expanded, onToggle]);
 
   // Closing from the footer (which unmounts) or Esc must not drop focus to
   // <body> or leave the card stranded mid-list. Return focus to the tab and
-  // bring the card back into view — instant under reduced motion.
+  // bring the card back into view — instant under reduced motion. Skipped
+  // when this row closed because another one opened: focus already belongs
+  // to that row's tab and yanking it back here would fight the new band.
   useEffect(() => {
     if (wasExpanded.current && !expanded) {
-      document.getElementById(expandTabId)?.focus?.({ preventScroll: true });
-      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-      document.getElementById(`generation-${row.id}`)?.scrollIntoView?.({
-        block: "nearest",
-        behavior: reduce ? "auto" : "smooth",
-      });
+      const active = document.activeElement;
+      const card = document.getElementById(`generation-${row.id}`);
+      const panel = document.getElementById(drawerId);
+      const focusIsOurs =
+        !active ||
+        active === document.body ||
+        card?.contains(active) ||
+        panel?.contains(active);
+      if (focusIsOurs) {
+        document.getElementById(expandTabId)?.focus?.({ preventScroll: true });
+        const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+        card?.scrollIntoView?.({
+          block: "nearest",
+          behavior: reduce ? "auto" : "smooth",
+        });
+      }
     }
     wasExpanded.current = expanded;
-  }, [expanded, expandTabId, row.id]);
+  }, [expanded, expandTabId, row.id, drawerId]);
 
 
   // The copy the browser can actually fetch, chosen by the same rule every
@@ -408,6 +418,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
   }
 
   return (
+    <>
     <article
       id={`generation-${row.id}`}
       className="surface surface-flush history-card min-w-0 scroll-mt-6"
@@ -473,18 +484,23 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
 
       <HistoryExpandTab
         expanded={expanded}
-        onToggle={() => setExpanded((open) => !open)}
+        onToggle={onToggle}
         controls={drawerId}
         testId="history-expand"
         id={expandTabId}
       />
+    </article>
 
+      {/* The detail band: a sibling grid item, not card content. It lands on
+          the row below this card and spans every column, so the collapsed
+          tiles around it keep their flat contact-sheet height. */}
       {expanded && (
         <div
           id={drawerId}
           role="region"
           aria-label="Render details"
-          className="history-drawer"
+          data-testid="history-detail-panel"
+          className="surface surface-flush history-detail-panel history-drawer min-w-0 scroll-mt-6"
         >
           <div className="history-body space-y-5">
             {/* Repeat identity here for long drawers scrolled past the tile. */}
@@ -695,7 +711,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
               )}
             </div>
 
-            {/* Footer close: the drawer can run long (script + prompt +
+            {/* Footer close: the band can run long (script + prompt +
                 actions), so the top Expand/Collapse tab is a scroll away once
                 the user reaches the bottom. Same state, same word, quiet
                 treatment so it never competes with Download / Demo + CTA. */}
@@ -704,7 +720,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
                 variant="ghost"
                 size="sm"
                 className="w-full"
-                onClick={collapseRow}
+                onClick={onToggle}
                 aria-controls={drawerId}
                 aria-label="Collapse this render"
                 title="Collapse this render"
@@ -717,7 +733,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
         </div>
       )}
 
-    </article>
+    </>
   );
 }
 
@@ -751,6 +767,14 @@ export default function GenerationHistory() {
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
   const [sort, setSort] = useState("newest");
+  // One detail band at a time: the open row's id, or null. A #generation-
+  // deep link names the open row; the tab, Esc, and the footer close flip it.
+  // Open state lives here (not in the row) so opening one tile closes the
+  // band elsewhere instead of stacking a second full-width row.
+  const [openId, setOpenId] = useState(null);
+  const toggleRow = useCallback((id) => {
+    setOpenId((cur) => (cur === id ? null : id));
+  }, []);
   const updateRow = useCallback((id, patch) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
   }, []);
@@ -856,6 +880,11 @@ export default function GenerationHistory() {
   const hashId = (location.hash || "").startsWith("#generation-")
     ? location.hash.slice("#generation-".length)
     : "";
+  // A new anchor names a new open row. User closes stick: this only ever
+  // opens, and only when the named row is not already the open one.
+  useEffect(() => {
+    if (hashId) setOpenId((cur) => (cur === hashId ? cur : hashId));
+  }, [hashId]);
   // The deep link names a render, not a page: when the row sits past the
   // render window, jump the pager to its page first. Setting an unchanged
   // page is a React no-op, so this settles instead of looping.
@@ -997,7 +1026,9 @@ export default function GenerationHistory() {
               row={row}
               onChanged={load}
               onUpdated={updateRow}
-              defaultExpanded={hashId !== "" && hashId === row.id}
+              expanded={openId === row.id}
+              onToggle={() => toggleRow(row.id)}
+              deepLinked={hashId !== "" && hashId === row.id}
               draftIds={draftIds}
             />
           ))}

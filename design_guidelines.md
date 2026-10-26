@@ -279,17 +279,21 @@ with nothing to play is the one exception and keeps a notice in place of the
 video, because a blank tile explains nothing.
 
 Everything else — the app name, the status, the hook, the facts, the audience,
-the demo brief, and every action — lives in the drawer under the tab, so a
-closed tile carries no chrome and nothing reachable by keyboard that nobody
-opened. The preview and the stage padding are custom properties on
-`.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
-keeps every collapsed tile the same flat height, failed renders included.
+the demo brief, and every action — lives in the detail band, so a closed tile
+carries no chrome and nothing reachable by keyboard that nobody opened. The
+band is a grid item after its card spanning every column (`grid-column: 1 /
+-1`), which is what keeps every collapsed tile the same flat height while one
+is open, failed renders included. The preview and the stage padding are custom
+properties on `.history-card` (`--history-preview-h`, `--history-stage-pad`),
+which is what keeps every collapsed tile the same height as each other. One
+band at a time: opening a tile closes the band elsewhere.
 
 The tab is one control with three ways in: click, Enter/Space, and a drag
 toward the open direction that follows the pointer and commits past 60% of
 `DRAG_COMMIT_PX` (56px, in `pages/GenerationHistory.jsx`). Touch dragging is
 restricted to the grip (`touch-action: none`) so the rest of the tab stays a
-click surface a phone can scroll past.
+click surface a phone can scroll past. Closing because another tile opened
+leaves focus on the new tab; every other close returns focus to the tab.
 
 Inside the drawer, actions are grouped by consequence rather than by kind:
 Download and Demo + CTA are the wide pair, Retry render joins them on a failed

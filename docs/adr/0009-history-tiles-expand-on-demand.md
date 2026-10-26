@@ -1,6 +1,6 @@
 # 0009 — History tiles open on demand: the clip first, the record behind a tab
 
-- **Status:** partially superseded by 0033 (collapsed tiles now show identity & saved result facts)
+- **Status:** partially superseded by 0033 (collapsed tiles now show identity & saved result facts) and 0035 (detail is a full-width band; tiles are exclusive)
 - **Date:** 2026-10-16
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx:44` (drag constants),
   `:183` (`HistoryExpandTab`), `:493` (the tab in the card), `frontend/src/index.css:656`
@@ -30,6 +30,10 @@ audience, demo brief, the paper trail, and every action live in the drawer the
 tab opens. A render with nothing to play is the one exception and keeps a notice
 where the video would be, because a blank tile explains nothing.
 
+> 0035 moved the drawer out of the card: the open row renders a full-width
+> band directly after it, and only one band is open at a time. The tab,
+> Esc, footer close, and focus behavior below are unchanged.
+
 The tab is one control with three ways in — click, Enter/Space, and a drag
 toward the open direction that follows the pointer and commits past 60% of
 `DRAG_COMMIT_PX` (56px). The drag arms only after 4px of travel so a shaky press
@@ -41,7 +45,8 @@ Inside the drawer, actions are grouped by consequence rather than by kind:
 Download and Demo + CTA are the wide pair, `Retry render` joins them on a failed
 row, and Details and Delete sit on a quieter line beneath. Delete is never in the
 row that saves the file. The card's border turns to the indigo hairline while a
-tile is open, and tiles are not exclusive — two renders can be compared open.
+tile is open. (Tiles were not exclusive — two renders could be compared open —
+until 0035 made the band single-open so bands never stack.)
 
 ## Alternatives rejected
 

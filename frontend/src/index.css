@@ -760,6 +760,14 @@ h1,
 .history-drawer {
     animation: history-drawer-in 220ms cubic-bezier(0.33, 1, 0.68, 1) both;
 }
+/* The open tile's detail band: a grid item in its own right, placed directly
+ * after its card and spanning every column. The collapsed tiles keep their
+ * flat contact-sheet height because the band grows on a row of its own
+ * instead of inside one of them. */
+.history-detail-panel {
+    grid-column: 1 / -1;
+    overflow: hidden;
+}
 .history-body {
     padding: 20px;
 }
