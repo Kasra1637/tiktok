@@ -100,15 +100,16 @@ one of ten named entrances computed from video time only, so the recording
 matches the preview; size is a 70–130% multiplier that cannot leave the TikTok
 safe area. See ADR 0007.
 
-### Type scale: 3 Sizes × 2 Weights (12px floor)
+### Type scale: 4 Sizes × 2 Weights (12px floor)
 
 **Minimum type size is 12px (`text-xs`). No exceptions.** The audience is
 mobile-heavy and `--muted-foreground` is already a mid-contrast gray; below 12px
 it stops clearing WCAG AA.
 
-The workspace shell uses **3 font sizes** and **2 font weights** only (marketing `Landing` and `LegalPage` retain their own editorial scales):
+The workspace shell uses **4 font sizes** and **2 font weights** only (marketing `Landing` and `LegalPage` retain their own editorial scales):
 
-- **3 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints), `text-sm` (14px — body copy, inputs, buttons, `.section-heading`, card titles, dialog titles, `EmptyState` heading, sidebar wordmark), and `text-2xl` (24px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-base`, `text-lg`, `text-xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components.
+- **4 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints, wizard subtitles), `text-sm` (14px — buttons, form labels, uppercase kickers like `.section-heading`, picker rows, dense data tables, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components.
+- Inputs sit at 16px because iOS Safari auto-zooms on focus below 16px; the `h-8` filter pills are the one exception and hold at 14px semibold so the chip stays compact.
 - **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) in workspace pages or components.
 - **Ampersands in headings & labels:** Workspace headings, titles, labels, and button copy use `&` instead of `and` (e.g., `Visual & audio direction`, `Choose a template & add your photo`, `What you have & what is left`).
 - `.eyebrow` — uppercase tracked-out label, `0.75rem`/600. Don't override its size.

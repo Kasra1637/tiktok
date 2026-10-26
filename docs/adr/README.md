@@ -55,3 +55,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0035](0035-history-detail-band.md) | Open History detail is a full-width band; one band at a time | partially superseded by 0036 (band spans a pair row) |
 | [0036](0036-history-pair-rows.md) | History pairs two videos per row; band spans beneath its pair | partially superseded by 0037 (band lands after the open pair) |
 | [0037](0037-history-pair-aware-band.md) | History band lands after the open pair via a list-owned portal slot | accepted |
+| [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |
