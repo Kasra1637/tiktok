@@ -281,9 +281,11 @@ blank tile explains nothing.
 Everything else — the app name, the status, the hook, the facts, the audience,
 the demo brief, and every action — lives in the detail band below its pair, so
 a closed tile carries no chrome and nothing reachable by keyboard that nobody
-opened. The band is a grid item after its card spanning both pair columns
-(`grid-column: 1 / -1`), which is what keeps every collapsed tile the same flat
-height while one is open, failed renders included. The preview and the stage padding are custom properties on
+opened. The band portals into a list-owned slot after the whole open pair
+(after the card on phones) spanning both pair columns
+(`.history-detail-slot`, `grid-column: 1 / -1`), which is what keeps every
+collapsed tile the same flat height while one is open, failed renders included,
+and what keeps the pair together instead of dropping the partner below the band. The preview and the stage padding are custom properties on
 `.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
 keeps every collapsed tile the same height as each other, and the identity
 meta reserves its wrapped two-line height (`.history-summary-meta`) so a

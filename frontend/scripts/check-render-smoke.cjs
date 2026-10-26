@@ -10626,14 +10626,19 @@ async function runDemoCtaChecks() {
       const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
       const first = grid.querySelector('[data-testid="history-card"]');
       await clickEl(ctx, first.querySelector('[data-testid="history-expand"]'), "expand a history tile");
-      const panel = grid.querySelector(':scope > [data-testid="history-detail-panel"]');
-      if (!panel) throw new Error("the expanded detail is not a direct pair item");
-      if (panel.previousElementSibling !== first) {
-        throw new Error("the detail band does not sit directly after its card");
+      // The band portals into a list-owned slot: the slot is the direct grid
+      // item, the panel renders inside it. (Phones here: jsdom lays one
+      // column, so the slot sits directly after the open card.)
+      const slot = grid.querySelector(':scope > [data-testid="history-detail-slot"]');
+      if (!slot) throw new Error("the expanded detail opened no grid slot");
+      if (slot.previousElementSibling !== first) {
+        throw new Error("the detail slot does not sit directly after its card");
       }
+      const panel = slot.querySelector('[data-testid="history-detail-panel"]');
+      if (!panel) throw new Error("the open row never portaled its band into the slot");
       const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-      if (!/\.history-detail-panel\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/.test(css)) {
-        throw new Error("the detail band does not span the full grid width");
+      if (!/\.history-detail-slot\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/.test(css)) {
+        throw new Error("the detail slot does not span the full grid width");
       }
       const second = grid.querySelectorAll('[data-testid="history-card"]')[1];
       if (second.querySelector('[data-testid="history-context"]') || second.textContent.includes("Download")) {
@@ -10645,11 +10650,61 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, second.querySelector('[data-testid="history-expand"]'), "expand the neighbor tile");
       const panels = grid.querySelectorAll('[data-testid="history-detail-panel"]');
       if (panels.length !== 1) throw new Error(`expected one detail band, found ${panels.length}`);
-      if (panels[0].previousElementSibling !== second) throw new Error("the band did not follow the newly opened card");
+      const moved = grid.querySelector(':scope > [data-testid="history-detail-slot"]');
+      if (moved.previousElementSibling !== second) throw new Error("the band did not follow the newly opened card");
       if (first.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
         throw new Error("the previous tile stayed open beside the new band");
       }
     });
+  });
+
+  await check("opening the first tile of a pair lands the band after the pair", async (ctx) => {
+    // Wide grid: stub the same 768px step the CSS lays pairs at, so the slot
+    // sits after the whole pair instead of splitting it.
+    const win = dom.window;
+    const prevMatch = win.matchMedia;
+    win.matchMedia = (query) => ({
+      matches: query === "(min-width: 768px)",
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+    });
+    try {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "wide-1" },
+          { ...COMPLETED, id: "wide-2" },
+          { ...COMPLETED, id: "wide-3" },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(GenerationHistory)(ctx);
+        const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+        const cards = () => grid.querySelectorAll(':scope > [data-testid="history-card"]');
+        const slot = () => grid.querySelector(':scope > [data-testid="history-detail-slot"]');
+        await clickEl(ctx, cards()[0].querySelector('[data-testid="history-expand"]'), "expand the first tile of a pair");
+        if (!slot()) throw new Error("expanding the first tile opened no grid slot");
+        if (slot().previousElementSibling !== cards()[1]) {
+          throw new Error("the band split the open pair instead of landing below it");
+        }
+        if (!slot().querySelector('[data-testid="history-detail-panel"]')) {
+          throw new Error("the open row never portaled its band into the pair slot");
+        }
+        // The pair's second tile keeps the same slot below the pair.
+        await clickEl(ctx, cards()[1].querySelector('[data-testid="history-expand"]'), "expand the pair's second tile");
+        if (slot().previousElementSibling !== cards()[1]) {
+          throw new Error("expanding the second tile moved the band out from under the pair");
+        }
+        if (grid.querySelectorAll('[data-testid="history-detail-panel"]').length !== 1) {
+          throw new Error("more than one band is open");
+        }
+      });
+    } finally {
+      if (prevMatch) win.matchMedia = prevMatch; else delete win.matchMedia;
+    }
   });
 
   await check("collapsed tiles reserve the wrapped meta height", async () => {

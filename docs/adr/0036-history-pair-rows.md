@@ -1,6 +1,6 @@
 # 0036 — History pairs two videos per row
 
-- **Status:** accepted
+- **Status:** partially superseded by 0037 (band lands after the open pair, not the open card)
 - **Date:** 2026-10-26
 - **Partially supersedes:** 0035 (band spanned the responsive grid, not a pair)
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (flat `paged.map`,

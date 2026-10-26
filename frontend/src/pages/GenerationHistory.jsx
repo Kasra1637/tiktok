@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -72,6 +73,30 @@ function formatRenderDate(value) {
   const t = Date.parse(value);
   if (Number.isNaN(t)) return "";
   return new Date(t).toLocaleString();
+}
+
+/**
+ * True while the history grid lays pairs — the same 768px step the grid CSS
+ * uses. The detail band's position depends on it: right after its card on
+ * phones, after the pair's second tile once two share a row, so opening the
+ * first tile of a pair never drops its neighbor onto a later row with an
+ * empty slot beside the band.
+ */
+function useHistoryPairLayout() {
+  const [paired, setPaired] = useState(() => Boolean(window.matchMedia?.("(min-width: 768px)")?.matches));
+  useEffect(() => {
+    const query = window.matchMedia?.("(min-width: 768px)");
+    if (!query) return undefined;
+    const update = () => setPaired(query.matches);
+    update();
+    if (typeof query.addEventListener === "function") query.addEventListener("change", update);
+    else if (typeof query.addListener === "function") query.addListener(update);
+    return () => {
+      if (typeof query.removeEventListener === "function") query.removeEventListener("change", update);
+      else if (typeof query.removeListener === "function") query.removeListener(update);
+    };
+  }, []);
+  return paired;
 }
 
 /**
@@ -196,12 +221,14 @@ function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
  * place of the video: a blank tile explains nothing, and each of those four
  * states has its own repair.
  *
- * Open state lives in the list (one band at a time); the row only renders
- * its card and, when open, the band directly after it. The fragment's two
- * children are both grid items, which is what puts the band on its own full
- * row instead of inside the card.
+ * Open state lives in the list (one band at a time), and the list also owns
+ * the band's grid slot: it hands the open row the element to render into, so
+ * the band can sit after the whole pair on wide grids (after the card on
+ * phones) without reordering any card. The row portals its detail into that
+ * slot, keeping every action, its state, and the editors with the row that
+ * owns them.
  */
-function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, deepLinked = false, draftIds = null }) {
+function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, deepLinked = false, draftIds = null, detailHost = null }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -211,9 +238,9 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   // and a row that already has its link keeps focus where it was.
   const linkAwaiting = expanded && deepLinked && !row.tiktok_url;
   useEffect(() => {
-    if (!linkAwaiting || !expanded) return;
+    if (!linkAwaiting || !expanded || !detailHost) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
-  }, [linkAwaiting, expanded, row.id]);
+  }, [linkAwaiting, expanded, row.id, detailHost]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -277,9 +304,12 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   // Opening brings the band into view, but only when it needs it: if the
   // whole band already fits on screen, `nearest` is a no-op and the page
   // stays exactly where the founder put it. Scrolling never moves focus,
-  // so the focus contract above is untouched.
+  // so the focus contract above is untouched. The host is a dependency (and
+  // a guard) because the detail contents arrive in it a commit after the
+  // open itself — the same render that flips `expanded` has not portal'd
+  // anything yet.
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded || !detailHost) return;
     const panel = document.getElementById(drawerId);
     const rect = panel?.getBoundingClientRect?.();
     if (panel && rect && rect.bottom > window.innerHeight) {
@@ -289,7 +319,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
         behavior: reduce ? "auto" : "smooth",
       });
     }
-  }, [expanded, drawerId]);
+  }, [expanded, detailHost, drawerId]);
 
 
   // The copy the browser can actually fetch, chosen by the same rule every
@@ -508,10 +538,12 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
       />
     </article>
 
-      {/* The detail band: a sibling grid item, not card content. It lands on
-          the row below this card and spans every column, so the collapsed
-          tiles around it keep their flat contact-sheet height. */}
-      {expanded && (
+      {/* The detail band: portaled into the list-owned slot, not card
+          content. The slot lands on the row below the open pair (below the
+          card on phones) and spans every column, so the collapsed tiles keep
+          their flat contact-sheet height. Nothing renders until the list
+          hands over the slot: the open commit has not attached it yet. */}
+      {expanded && detailHost ? createPortal((
         <div
           id={drawerId}
           role="region"
@@ -757,7 +789,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
           </div>
           </div>
         </div>
-      )}
+      ), detailHost) : null}
 
     </>
   );
@@ -801,6 +833,15 @@ export default function GenerationHistory() {
   const toggleRow = useCallback((id) => {
     setOpenId((cur) => (cur === id ? null : id));
   }, []);
+  // Pair-aware band placement reads the same 768px step the grid CSS lays
+  // pairs at. The open band's slot sits after the whole pair on wide grids
+  // (after the card on phones), so opening the first tile of a pair never
+  // drops its partner onto a later row.
+  const paired = useHistoryPairLayout();
+  // The list owns the band's grid slot and hands it to the open row to
+  // portal into. A callback ref (not an id query) so the slot survives
+  // reordering without re-querying the DOM.
+  const [detailHost, setDetailHost] = useState(null);
   const updateRow = useCallback((id, patch) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
   }, []);
@@ -883,6 +924,13 @@ export default function GenerationHistory() {
   const pageCount = Math.max(1, Math.ceil(ordered.length / HISTORY_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = ordered.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
+  // The open band's slot: after the whole pair when two share a row, after
+  // the card itself on phones or when the open tile is the pair's second
+  // (or a lone trailing tile). -1 while nothing is open renders no slot.
+  const openIndex = paged.findIndex((row) => row.id === openId);
+  const detailSlotIndex = openIndex < 0
+    ? -1
+    : (paired && openIndex % 2 === 0 && openIndex + 1 < paged.length ? openIndex + 1 : openIndex);
   // Turning the page swaps the rows above the fold, so bring the list back
   // into view instead of stranding the founder at its bottom. The pager
   // buttons survive the turn, so the activating control keeps focus.
@@ -1051,17 +1099,26 @@ export default function GenerationHistory() {
               every tile whenever sorting or filtering regroups them, dropping
               focus and typed input mid-edit. Stable row keys let React reorder
               without remounting. */}
-          {paged.map((row) => (
-            <GenerationRow
-              key={row.id}
-              row={row}
-              onChanged={load}
-              onUpdated={updateRow}
-              expanded={openId === row.id}
-              onToggle={() => toggleRow(row.id)}
-              deepLinked={hashId !== "" && hashId === row.id}
-              draftIds={draftIds}
-            />
+          {paged.map((row, index) => (
+            <Fragment key={row.id}>
+              <GenerationRow
+                row={row}
+                onChanged={load}
+                onUpdated={updateRow}
+                expanded={openId === row.id}
+                onToggle={() => toggleRow(row.id)}
+                deepLinked={hashId !== "" && hashId === row.id}
+                draftIds={draftIds}
+                detailHost={row.id === openId ? detailHost : null}
+              />
+              {index === detailSlotIndex && (
+                <div
+                  ref={setDetailHost}
+                  data-testid="history-detail-slot"
+                  className="col-span-full min-w-0"
+                />
+              )}
+            </Fragment>
           ))}
           {rows.length >= limit && limit < 200 && (
             <div className="col-span-full flex justify-center pt-2">

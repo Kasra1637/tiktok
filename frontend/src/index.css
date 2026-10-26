@@ -762,12 +762,15 @@ h1,
 .history-drawer {
     animation: history-drawer-in 220ms cubic-bezier(0.33, 1, 0.68, 1) both;
 }
-/* The open tile's detail band: a grid item in its own right, placed directly
- * after its card and spanning every column. The collapsed tiles keep their
- * flat contact-sheet height because the band grows on a row of its own
- * instead of inside one of them. */
-.history-detail-panel {
+/* The open tile's detail band: the list owns its grid slot, placed after the
+ * whole pair on wide grids (after the card on phones) and spanning every
+ * column; the open row portals the band into that slot. The collapsed tiles
+ * keep their flat contact-sheet height because the band grows on a row of
+ * its own instead of inside one of them. */
+.history-detail-slot {
     grid-column: 1 / -1;
+}
+.history-detail-panel {
     overflow: hidden;
 }
 /* The collapsed tile's identity meta reserves the wrapped height, so a tile
