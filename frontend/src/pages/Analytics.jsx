@@ -244,10 +244,16 @@ function clipName(row) {
   return row.hook_line || `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`;
 }
 
+// A long leaderboard buries the cards below it: past ten rows the table
+// shows the top 10 behind a show-all control, and short lists stay open.
+const LEADERBOARD_PAGE_SIZE = 10;
+
 function ClipResults({ generations, profileId, pick, draftIds }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
     .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? clips : clips.slice(0, LEADERBOARD_PAGE_SIZE);
   const posted = clips.filter((row) => row.tiktok_url).length;
   const counted = clips.filter((row) => row.tiktok_views != null).length;
   const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
@@ -295,7 +301,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
               </tr>
             </thead>
             <tbody>
-              {clips.map((row, index) => {
+              {visible.map((row, index) => {
                 const vote = verdictFor(row.verdicts, "video");
                 const next = nextTakeFor(row, historyHref, draftIds);
                 const winner = isWinnerRow(row);
@@ -348,6 +354,18 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {clips.length > LEADERBOARD_PAGE_SIZE && (
+        <div className="flex justify-center pt-1">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setExpanded((open) => !open)}
+            data-testid="analytics-results-show-more"
+          >
+            {expanded ? "Show less" : `Show all ${clips.length}`}
+          </Button>
         </div>
       )}
     </SectionCard>

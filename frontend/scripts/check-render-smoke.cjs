@@ -6255,6 +6255,49 @@ async function runAnalyticsChecks() {
     if (!voteIcon) throw new Error("the vote has no icon beside its label");
   });
 
+  // A long leaderboard buries the cards below it: past ten rows the table
+  // collapses behind a show-all control, and short lists stay fully open.
+  await check("a long clip leaderboard collapses behind show all", async (ctx) => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      id: `clip-${i}`,
+      status: "completed",
+      hook_line: `Clip ${i}`,
+      tiktok_views: 1200 - i * 100,
+    }));
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: many }),
+      getStudioProjects: async () => ({ projects: [] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const rows = () => [...card.querySelectorAll('tbody tr')];
+    if (rows().length !== 10) throw new Error(`expected the top 10 rows, found ${rows().length}`);
+    const more = card.querySelector('[data-testid="analytics-results-show-more"]');
+    if (!more) throw new Error("no show-all control on a long leaderboard");
+    if (!/Show all 12/.test(more.textContent || "")) throw new Error("the show-all control does not say how many rows it holds");
+    await clickEl(ctx, more, "show the whole leaderboard");
+    if (rows().length !== 12) throw new Error("showing all did not reveal every row");
+    const less = card.querySelector('[data-testid="analytics-results-show-more"]');
+    if (!less || !/Show less/.test(less.textContent || "")) throw new Error("no show-less control after expanding");
+    await clickEl(ctx, less, "collapse the leaderboard");
+    if (rows().length !== 10) throw new Error("collapsing did not return to the top 10");
+  });
+
+  await check("a short clip leaderboard needs no show-all control", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "solo", status: "completed", hook_line: "Only clip", tiktok_views: 5 },
+      ] }),
+      getStudioProjects: async () => ({ projects: [] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    if (card.querySelector('[data-testid="analytics-results-show-more"]')) {
+      throw new Error("a short leaderboard carries a pointless show-all control");
+    }
+    if (!card.querySelector('[data-testid="result-solo"]')) throw new Error("the short list lost its row");
+  });
+
   // Renders per week reads as a bar chart: one scaled column per week,
   // newest first, with the count on the column.
   await check("renders per week renders scaled bars", async (ctx) => {
