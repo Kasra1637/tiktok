@@ -10627,7 +10627,7 @@ async function runDemoCtaChecks() {
       const first = grid.querySelector('[data-testid="history-card"]');
       await clickEl(ctx, first.querySelector('[data-testid="history-expand"]'), "expand a history tile");
       const panel = grid.querySelector(':scope > [data-testid="history-detail-panel"]');
-      if (!panel) throw new Error("the expanded detail is not a direct grid item");
+      if (!panel) throw new Error("the expanded detail is not a direct pair item");
       if (panel.previousElementSibling !== first) {
         throw new Error("the detail band does not sit directly after its card");
       }
@@ -10643,7 +10643,7 @@ async function runDemoCtaChecks() {
       // One open at a time: opening the neighbor moves the band, it never
       // stacks a second one.
       await clickEl(ctx, second.querySelector('[data-testid="history-expand"]'), "expand the neighbor tile");
-      const panels = grid.querySelectorAll(':scope > [data-testid="history-detail-panel"]');
+      const panels = grid.querySelectorAll('[data-testid="history-detail-panel"]');
       if (panels.length !== 1) throw new Error(`expected one detail band, found ${panels.length}`);
       if (panels[0].previousElementSibling !== second) throw new Error("the band did not follow the newly opened card");
       if (first.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
@@ -10703,20 +10703,38 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History grid goes 1-up, 2-up, then 3-up with a shorter wide preview", async () => {
+  await check("History pairs two tiles per row, stacked on phones", async (ctx) => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!/\.history-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
-      throw new Error("history phones lost the single-column grid");
+    const base = css.match(/\.history-grid\s*\{[^}]*\}/);
+    if (!base || !/grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(base[0])) {
+      throw new Error("history phones lost the single-column list");
     }
-    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-grid\s*\{[\s\S]*?repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
-      throw new Error("history tablets lost the two-up middle step");
+    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-grid\s*\{[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
+      throw new Error("history lost the two-up pair row");
     }
-    if (!/@media\s*\(min-width:\s*1200px\)[\s\S]*?\.history-grid\s*\{[\s\S]*?repeat\(3,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
-      throw new Error("history PCs lost the three-up contact sheet");
+    if (/\.history-grid\s*\{[^}]*repeat\(3,/.test(css)) {
+      throw new Error("the list grid still squeezes three tiles per row");
     }
-    if (!/@media\s*\(min-width:\s*1200px\)[\s\S]*?--history-preview-h:\s*300px/.test(css)) {
-      throw new Error("history wide tiles did not step the preview height back down");
-    }
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "pair-1" },
+        { ...COMPLETED, id: "pair-2" },
+        { ...COMPLETED, id: "pair-3" },
+      ] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+      // Tiles pair up through the grid itself — no wrapper divs, so sorting
+      // and filtering reorder rows without remounting them mid-edit.
+      if (grid.querySelector('[data-testid="history-pair"]')) {
+        throw new Error("tiles are wrapped in pair divs instead of pairing through the grid");
+      }
+      if (grid.querySelectorAll(':scope > [data-testid="history-card"]').length !== 3) {
+        throw new Error("tiles are not flat grid items");
+      }
+    });
   });
 
   await check("history sorts most-viewed above uncounted renders", async (ctx) => {

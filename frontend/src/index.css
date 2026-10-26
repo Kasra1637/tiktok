@@ -632,10 +632,12 @@ h1,
     -webkit-user-select: none;
 }
 
-/* Contact sheet: one column on phones, two on tablets, three on wide PCs.
-   Three narrow tiles beat two very wide ones — a 9:16 clip stays the same
-   size and only the dead stage beside it shrinks. Stack until each step up
-   has enough reading room for the clip plus its drawer. */
+/* Contact sheet of pair rows: one column on phones, two tiles per row from
+   768px. Two wide tiles beat three narrow ones — each video container is
+   wide enough that the open band below the pair reads as part of the row
+   instead of a tower of chrome beside stubby clips. Tiles pair up through
+   the grid itself (no wrapper divs), so sorting and filtering reorder
+   without remounting rows mid-edit. */
 .history-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -814,17 +816,15 @@ h1,
     .history-body {
         padding: 24px 24px 28px;
     }
+    /* Room for the pair side by side; below this tiles stack. */
     .history-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 @media (min-width: 1200px) {
-    .history-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    /* Three-up tiles are narrower, so the preview steps back down a little:
-       the clip keeps its presence while every collapsed tile stays even and
-       the sheet reads denser instead of taller. */
+    /* Pairs are wide, so the preview steps back down a little: the clip
+       keeps its presence while every collapsed tile stays even and the
+       sheet reads denser instead of taller. */
     .history-card {
         --history-preview-h: 300px;
         --history-stage-pad: 20px;

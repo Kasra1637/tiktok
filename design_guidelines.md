@@ -269,19 +269,21 @@ belongs to. Every step sits in the one `.surface-step` card, and every aside in 
 
 ### History density
 
-History is a contact sheet: one column on phones, two columns from 768px,
-three columns from 1200px viewport width, with 16px gutters and top-aligned
-cards (no equal-height stretching). A tile that has a clip to play is the clip
-and one expand tab — a full-bleed stage with a contained video (260px, 340px
-from 768px, 300px at the three-up step so narrower tiles stay even) and
-nothing else on it: no app name, no status, no facts beside the footage. A row
-with nothing to play is the one exception and keeps a notice in place of the
-video, because a blank tile explains nothing.
+History is a contact sheet of pair rows: each row pairs two tiles side by
+side from 768px, stacked on phones, with 16px gutters and top-aligned cards
+(no equal-height stretching). A tile that has a clip to play is the clip and
+one expand tab — a full-bleed stage with a contained video (260px, 340px from
+768px, 300px on wide pairs so tiles stay even) and nothing else on it: no
+app name, no status, no facts beside the footage. A row with nothing to play
+is the one exception and keeps a notice in place of the video, because a
+blank tile explains nothing.
 
 Everything else — the app name, the status, the hook, the facts, the audience,
-the demo brief, and every action — lives in the detail band, so a closed tile
-carries no chrome and nothing reachable by keyboard that nobody opened. The
-band is a grid item after its card spanning every column (`grid-column: 1 / -1`), which is what keeps every collapsed tile the same flat height while one is open, failed renders included. The preview and the stage padding are custom properties on
+the demo brief, and every action — lives in the detail band below its pair, so
+a closed tile carries no chrome and nothing reachable by keyboard that nobody
+opened. The band is a grid item after its card spanning both pair columns
+(`grid-column: 1 / -1`), which is what keeps every collapsed tile the same flat
+height while one is open, failed renders included. The preview and the stage padding are custom properties on
 `.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
 keeps every collapsed tile the same height as each other, and the identity
 meta reserves its wrapped two-line height (`.history-summary-meta`) so a

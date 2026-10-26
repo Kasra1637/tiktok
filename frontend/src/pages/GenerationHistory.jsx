@@ -1046,6 +1046,11 @@ export default function GenerationHistory() {
               No renders match “{query.trim()}”. Clear the search to see everything.
             </p>
           )}
+          {/* Flat tiles: the grid pairs them into rows of two (stacked on
+              phones). No pair wrappers — grouping rows in divs would remount
+              every tile whenever sorting or filtering regroups them, dropping
+              focus and typed input mid-edit. Stable row keys let React reorder
+              without remounting. */}
           {paged.map((row) => (
             <GenerationRow
               key={row.id}

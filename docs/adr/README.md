@@ -52,4 +52,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0032](0032-history-tiktok-link-and-winner.md) | A TikTok link marks a render posted; thumbs up plus link is the winner | accepted |
 | [0033](0033-clip-results-comparison.md) | Compare saved clip reach and votes; keep History summaries synchronized | accepted |
 | [0034](0034-history-snapshot-synchronization.md) | History owns confirmed snapshots; URL filters and current requests prevent stale handoffs | accepted |
-| [0035](0035-history-detail-band.md) | Open History detail is a full-width band; one band at a time | accepted |
+| [0035](0035-history-detail-band.md) | Open History detail is a full-width band; one band at a time | partially superseded by 0036 (band spans a pair row) |
+| [0036](0036-history-pair-rows.md) | History pairs two videos per row; band spans beneath its pair | accepted |
