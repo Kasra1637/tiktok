@@ -432,21 +432,19 @@ body {
 
 /* Demo + CTA sticky-column geometry.
  *
- * On desktop the page is exactly one viewport tall (DemoCtaStudio's
- * `lg:h-[calc(100vh-4rem)]`) and the grid takes the flex leftover below the
- * header, so no viewport cap is guessed any more: both columns fill the
- * grid height and scroll inside their own boxes, and the page itself can
- * never overflow — no page-level scrollbar beside a studio that fits.
- * The right column holds the frame, plus the player bar once a clip is
- * loaded. The frame gets everything left over.
+ * The page scrolls end to end, so each column caps below the header
+ * (`lg:max-h-[calc(100vh-15rem)]` in JSX: main padding, header, grid gap,
+ * sticky offset, with room to spare) and scrolls inside its own slim bar
+ * when taller. The right column holds the frame, plus the player bar once
+ * a clip is loaded. The frame gets everything left over.
  *
  * `--demo-cta-frame-w` expresses that. The width is derived from the height
  * budget rather than a percentage of the column, so the 9:16 ratio is never
  * distorted and the frame never leaves dead space beside it. The column is a
  * fixed 740px at xl, so this width is normally bounded by height, not by the
- * track. The 12rem below approximates the page chrome (main padding, grid
- * gap, header) so the frame spends roughly the column's real height; any
- * remainder is absorbed by the column's own slim scroll, never the page.
+ * track. The 15rem below budgets the same page chrome as the column caps
+ * with room to spare, so the frame spends roughly the column's real height;
+ * any remainder is absorbed by the column's own slim scroll.
  *
  * `--demo-cta-chrome` is the height the frame does NOT get. Only the player bar
  * is real content now: the caption row went away when "Live preview" moved
@@ -482,7 +480,7 @@ body {
 }
 @media (min-width: 1024px) {
     .demo-cta-column {
-        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 12rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
+        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 15rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
     }
     /* Width comes from the column height budget, so the 9:16 ratio is exact and
        the frame is centred by its own margin rather than by a grid track. */

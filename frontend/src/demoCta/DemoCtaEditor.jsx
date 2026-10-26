@@ -1291,11 +1291,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // that column and the video scrolled away with the page. Sticky has to be on
   // the COLUMN, and the settings column has to own the scrolling.
   //
-  // The grid is flex-1 min-h-0 inside DemoCtaStudio's fixed-height page,
-  // so it takes exactly the leftover below the header and can never grow
-  // the page: both columns scroll inside their own boxes, and the preview
-  // stays put no matter how long the panel gets. No viewport cap is guessed
-  // here any more — the header keeps whatever height it needs.
+  // The page scrolls end to end, so each column caps below the header and
+  // scrolls inside its own box when taller — the preview stays beside the
+  // panel no matter how long the panel gets. The 15rem cap budgets the page
+  // chrome above the grid (main padding, header, gaps, sticky offset) with
+  // room to spare: overestimating only scrolls a column sooner, while
+  // underestimating would grow a page scrollbar beside a studio that fits.
   const settingsRef = useRef(null);
   const appendNotReady = !!appendUrl && !appendMeta;
 
@@ -1303,14 +1304,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     // Radix tooltips need a provider ancestor; the app has none, and the
     // transport buttons are the first tooltips on this page.
     <TooltipProvider delayDuration={200}>
-    <div className="grid items-start gap-6 lg:min-h-0 lg:flex-1 lg:items-stretch lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
       <div className="relative min-w-0">
         {/* Own scroll container, own slim scrollbar, and enough right padding that a
             6px bar never sits over a card edge. */}
         <div
           ref={settingsRef}
           inert={recording ? true : undefined}
-          className="demo-cta-panel-scroll space-y-3 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
+          className="demo-cta-panel-scroll space-y-3 lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-2.5"
         >
         {/* The file input lives outside the collapsible section content on
             purpose. The preview frame's Upload button drives it by ref from
@@ -2008,7 +2009,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           the stylesheet whether the player bar is in the column, because its
           104px comes out of the frame's height budget when it is. */}
       <div
-        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
         
