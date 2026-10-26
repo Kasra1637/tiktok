@@ -1217,6 +1217,52 @@ async function main() {
     );
   });
 
+  await check("Create Video confirms an arriving plan and lets it be dismissed", async (ctx) => {
+    // History's Open plan (and Analytics' next take) lands here with
+    // ?project= and an intact plan. The banner says so once — without it,
+    // the founder lands on Review with no idea this is their render's plan
+    // rather than a blank draft.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await act(async () => {});
+      await act(async () => {});
+      const banner = () => ctx.container.querySelector('[data-testid="create-plan-banner"]');
+      if (!banner()) throw new Error("a plan deep link lands with no arrival confirmation");
+      if (!banner().textContent.includes("Plan loaded")) {
+        throw new Error("the arrival banner does not say the plan loaded");
+      }
+      await clickEl(ctx, banner().querySelector('button[aria-label="Dismiss plan notice"]'), "dismiss the plan notice");
+      if (banner()) throw new Error("dismissing the plan notice leaves it on screen");
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("Create Video confirms no plan for a plan-less draft link", async (ctx) => {
+    // A ?project= link can also name a draft with no plan yet (it opens on
+    // the angle step). Confirming a plan that was never loaded would be a
+    // lie, so the banner stays off.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await act(async () => {});
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="create-plan-banner"]')) {
+            throw new Error("a plan-less draft confirms a plan it never loaded");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("Review without a goal asks for it instead of spinning forever", async (ctx) => {
     // Pills allow reaching Review before a goal exists (or opening a draft
     // whose objective is empty). The auto effect cannot fire without one, so

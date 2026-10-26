@@ -40,7 +40,7 @@ import {
 } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -1090,6 +1090,12 @@ export default function CreateVideo() {
   // refuses to re-fire the same selection-set on its own. Cleared whenever a
   // new attempt starts.
   const [planFailed, setPlanFailed] = useState(false);
+  // Confirm-on-arrival: a ?project= link that lands with an intact plan
+  // (script_version > 0) says so once, so the founder knows the Review step
+  // below is their render's plan and not a blank draft. Dismissible, and
+  // re-armed only by a new project link — editing within the wizard never
+  // brings it back.
+  const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
 
   const [selectedProfileId, setSelectedProfileId] = useState(params.get("profile") || "");
   const [angleId, setAngleId] = useState(params.get("angle") || "");
@@ -1144,6 +1150,9 @@ export default function CreateVideo() {
   // founder back to step 1 mid-flow).
   const projectParam = params.get("project") || "";
   const profileParam = params.get("profile") || "";
+  useEffect(() => {
+    setPlanBannerDismissed(false);
+  }, [projectParam]);
 
   // Goal options come from the template facets, not the angle: a failure
   // here empties a required picker with no reason, so it names itself and
@@ -3213,6 +3222,23 @@ setObjective("");
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {projectParam && (project?.script_version || 0) > 0 && !planBannerDismissed && (
+        <Alert data-testid="create-plan-banner">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-2">
+            <span>Plan loaded — change one thing, or generate again.</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPlanBannerDismissed(true)}
+              aria-label="Dismiss plan notice"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
