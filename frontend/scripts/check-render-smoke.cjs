@@ -6678,10 +6678,12 @@ async function runIconChecks() {
     }
   });
 
-  await check("workspace enforces 3 sizes x 2 weights", async () => {
-    // Workspace pages and shared components use only text-xs / text-sm / text-2xl
-    // and font-normal / font-semibold (Landing, Features, the Marketing chrome
-    // they share, and LegalPage retain their own marketing and document scales).
+  await check("workspace enforces 4 sizes x 2 weights", async () => {
+    // Workspace pages and shared components use only text-xs (12 labels/meta)
+    // / text-sm (14 controls/labels) / text-base (16 body, inputs, titles) /
+    // text-3xl (30 page H1 + auth wordmark) and font-normal / font-semibold
+    // (Landing, Features, the Marketing chrome they share, and LegalPage
+    // retain their own marketing and document scales).
     const bad = [];
     function collectSrc(dir, out = []) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -6695,7 +6697,7 @@ async function runIconChecks() {
       if (abs.endsWith("Landing.jsx") || abs.endsWith("Features.jsx") || abs.endsWith("Marketing.jsx") || abs.endsWith("LegalPage.jsx")) continue;
       const src = fs.readFileSync(abs, "utf8");
       for (const m of src.matchAll(
-        /\b(?:md:|sm:|lg:)?text-(?:base|lg|xl|3xl|4xl|5xl|\[[^\]]+\])\b|\bfont-(?:light|medium|bold|extrabold)\b/g
+        /\b(?:md:|sm:|lg:)?text-(?:lg|xl|2xl|4xl|5xl|\[[^\]]+\])\b|\bfont-(?:light|medium|bold|extrabold)\b/g
       )) {
         bad.push(`${path.relative(SRC, abs)}: ${m[0]}`);
       }

@@ -19,4 +19,4 @@
  * (AppPicker): h-8, rounded-full, a chip beside a heading, not a field.
  */
 export const CONTROL_CLASS =
-  "input-well h-10 w-full rounded-xl border border-[color:var(--hairline)] px-3 text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50";
+  "input-well h-10 w-full rounded-xl border border-[color:var(--hairline)] px-3 text-base text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50";

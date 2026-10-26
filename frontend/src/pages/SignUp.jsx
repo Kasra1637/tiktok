@@ -19,7 +19,7 @@ export default function SignUp() {
               <Sparkles className="h-5 w-5" />
               <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/25 to-transparent" />
             </span>
-            <span className="font-display text-2xl font-semibold tracking-tight">HookForge</span>
+            <span className="font-display text-3xl font-semibold tracking-tight">HookForge</span>
           </Link>
           <p className="text-sm text-muted-foreground">Create your account to get started.</p>
         </div>

@@ -3,7 +3,7 @@ import { cn } from "../lib/utils";
 
 /** The pill dropdown used in page headers and filter bars. */
 export const PILL_SELECT_CLASS =
-  "pill-studio h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-xs font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
+  "pill-studio h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
 
 /**
  * Which app a page is showing. One picker for every sidebar page, so the
