@@ -262,7 +262,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
       </p>
       {pick && pickNext && (
         <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
-          <p className="text-sm font-semibold">Suggested next take: {clipName(pick)}</p>
+          <p className="text-base font-semibold">Suggested next take: {clipName(pick)}</p>
           <p className="text-xs text-muted-foreground">
             Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
             Past reach does not promise the next take repeats it.{" "}

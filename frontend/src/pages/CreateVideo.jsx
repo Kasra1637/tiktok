@@ -182,7 +182,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{r.template.name}</span>
+        <span className="text-base font-semibold">{r.template.name}</span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="text-xs">
             {r.suggested_duration}s
@@ -333,7 +333,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
           <ImageIcon className="h-3.5 w-3.5" /> Add your photo
         </Button>
       )}
-      <p className="text-sm font-semibold">
+      <p className="text-base font-semibold">
         This template needs a character reference before it can generate
       </p>
       <p className="text-xs text-muted-foreground" data-subtitle="">
@@ -2197,7 +2197,7 @@ setObjective("");
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">
+                  <p className="text-base font-semibold">
                     {describeUnapprovedCount(unapproved.length)}
                   </p>
                   {unapproved.length > 3 ? (

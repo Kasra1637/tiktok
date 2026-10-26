@@ -57,7 +57,7 @@ function TemplatesMockup() {
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold">{t.name}</span>
+              <span className="text-base font-semibold">{t.name}</span>
               <span className="font-mono text-xs font-semibold text-[color:var(--brand-indigo)]">{t.fit}</span>
             </div>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

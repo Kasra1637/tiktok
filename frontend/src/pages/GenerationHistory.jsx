@@ -506,7 +506,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
           <div className="history-stage-empty">
             <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-semibold">{stageNotice?.title}</p>
+              <p className="text-base font-semibold">{stageNotice?.title}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
             </div>
           </div>
@@ -519,7 +519,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
           <StatusBadge status={row.status} />
           <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
         </div>
-        <p className="break-words text-sm font-semibold">
+        <p className="break-words text-base font-semibold">
           {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
         </p>
         <div className="history-summary-meta flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

@@ -97,7 +97,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
   const name = attachment.label || String(attachment.asset_id || "").slice(0, 8);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-5">
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{name}</span>
+      <span className="min-w-0 flex-1 truncate text-base font-semibold">{name}</span>
       <span className="shrink-0 text-xs text-muted-foreground">Used for the whole video</span>
       {onDetach && (
         <Button
@@ -157,7 +157,7 @@ function AssetRow({
         <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold">
+            <span className="truncate text-base font-semibold">
               {asset.label || asset.name || humanize(asset.kind)}
             </span>
             {asset.status === "archived" && (

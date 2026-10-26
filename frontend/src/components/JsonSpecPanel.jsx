@@ -25,7 +25,7 @@ export function JsonSpecPanel({ spec }) {
               <Braces className="h-4 w-4" />
             </span>
             <span className="min-w-0">
-              <span className="font-display block truncate text-sm font-semibold">Generation Spec</span>
+              <span className="font-display block truncate text-base font-semibold">Generation Spec</span>
               <span className="block truncate text-xs text-muted-foreground">
                 For the future video-gen API
               </span>

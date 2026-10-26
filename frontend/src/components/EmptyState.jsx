@@ -31,7 +31,7 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
               <IconTile icon={icon} size="empty" />
             </motion.span>
           )}
-          <Heading className="font-display text-sm font-semibold tracking-tight">{title}</Heading>
+          <Heading className="font-display text-base font-semibold tracking-tight">{title}</Heading>
           {description && (
             <p className="max-w-md text-base leading-relaxed text-muted-foreground">{description}</p>
           )}
