@@ -1,6 +1,6 @@
 # 0035 — History detail is a full-width band below its row
 
-- **Status:** accepted
+- **Status:** superseded by 0039 (attached cards, no expand)
 - **Date:** 2026-10-26
 - **Partially supersedes:** 0009 (drawer-in-card, non-exclusive tiles)
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (`openId`, `toggleRow`,

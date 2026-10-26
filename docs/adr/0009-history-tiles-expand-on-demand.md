@@ -1,6 +1,6 @@
 # 0009 — History tiles open on demand: the clip first, the record behind a tab
 
-- **Status:** partially superseded by 0033 (collapsed tiles now show identity & saved result facts) and 0035 (detail is a full-width band; tiles are exclusive)
+- **Status:** superseded by 0039 (attached cards, no expand)
 - **Date:** 2026-10-16
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx:44` (drag constants),
   `:183` (`HistoryExpandTab`), `:493` (the tab in the card), `frontend/src/index.css:656`

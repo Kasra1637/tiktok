@@ -270,47 +270,27 @@ belongs to. Every step sits in the one `.surface-step` card, and every aside in 
 
 ### History density
 
-History is a contact sheet of pair rows: each row pairs two tiles side by
-side from 768px, stacked on phones, with 16px gutters and top-aligned cards
-(no equal-height stretching). A tile that has a clip to play is the clip and
-one expand tab — a full-bleed stage with a contained video (260px, 340px from
-768px, 300px on wide pairs so tiles stay even) and nothing else on it: no
-app name, no status, no facts beside the footage. A row with nothing to play
-is the one exception and keeps a notice in place of the video, because a
-blank tile explains nothing.
+History is one attached card per render: the clip on the left, its record on
+the right (stacked on phones, video beside content from 900px via
+`.history-row-grid`), with 16px gutters and top-aligned cards. No expand
+step — the video, identity, facts, votes and actions are all visible
+together, so a record can never read as a separate section or stretch a
+neighbor. A card that has a clip to play leads with a full-bleed stage and a
+contained video (320px, 340px once side by side), then its identity summary
+beneath the footage. A card with nothing to play keeps a notice in place of
+the video, because a blank card explains nothing.
 
-Everything else — the app name, the status, the hook, the facts, the audience,
-the demo brief, and every action — lives in the detail band below its pair, so
-a closed tile carries no chrome and nothing reachable by keyboard that nobody
-opened. The band portals into a list-owned slot after the whole open pair
-(after the card on phones) spanning both pair columns
-(`.history-detail-slot`, `grid-column: 1 / -1`), which is what keeps every
-collapsed tile the same flat height while one is open, failed renders included,
-and what keeps the pair together instead of dropping the partner below the band. The preview and the stage padding are custom properties on
-`.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
-keeps every collapsed tile the same height as each other, and each summary
-row reserves its wrapped height — the headline two lines
-(`.history-summary-hook`), the identity two lines (`.history-summary-id`),
-the meta two lines (`.history-summary-meta`) — so a longer hook, app name,
-or vote never makes its tile taller than its neighbor. Nothing truncates to
-buy the uniformity; the full hook lives in the band quote. One band at a
-time: opening a tile closes the band elsewhere. Inside the band, facts read
-on the left and votes plus actions work on the right from 768px
-(`.history-detail-cols`); narrow bands stack in the same order. Opening
-scrolls the band into view only when it lands below the fold.
+The record beside the clip holds the app name, status, hook, facts,
+audience, demo brief, votes and every action. Deep links scroll to the named
+card and, when it still awaits its TikTok link, focus that input. The
+preview and the stage padding are custom properties on `.history-card`
+(`--history-preview-h`, `--history-stage-pad`).
 
-The tab is one control with three ways in: click, Enter/Space, and a drag
-toward the open direction that follows the pointer and commits past 60% of
-`DRAG_COMMIT_PX` (56px, in `pages/GenerationHistory.jsx`). Touch dragging is
-restricted to the grip (`touch-action: none`) so the rest of the tab stays a
-click surface a phone can scroll past. Closing because another tile opened
-leaves focus on the new tab; every other close returns focus to the tab.
-
-Inside the drawer, actions are grouped by consequence rather than by kind:
+Inside the record, actions are grouped by consequence rather than by kind:
 Download and Demo + CTA are the wide pair, Retry render joins them on a failed
-row, and Details and Delete sit on the quieter line beneath — Delete is never
-beside the button that saves the same file. Related-render links are capped at
-two per tile.
+row, and Delete sits on the quieter line beneath — Delete is never beside
+the button that saves the same file. Related-render links are capped at two
+per card.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.

@@ -632,12 +632,14 @@ h1,
     -webkit-user-select: none;
 }
 
-/* Contact sheet of pair rows: one column on phones, two tiles per row from
-   768px. Two wide tiles beat three narrow ones — each video container is
-   wide enough that the open band below the pair reads as part of the row
-   instead of a tower of chrome beside stubby clips. Tiles pair up through
-   the grid itself (no wrapper divs), so sorting and filtering reorder
-   without remounting rows mid-edit. */
+/* History rows: one attached card per render — clip left, record right.
+ *
+ * No expand step: the video, identity, facts, votes and actions are all
+ * visible together inside the same card, so a record can never read as a
+ * separate section or stretch a neighbor. One column of cards on every
+ * breakpoint; the side-by-side split lives inside the card (stacked on
+ * phones, video beside content from 900px).
+ */
 .history-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -645,25 +647,34 @@ h1,
     gap: 1rem;
 }
 
-/* History tiles: the clip is the content.
+/* History rows: the clip beside its record.
  *
- * A card opens with the render on a dark stage and one tab beneath it; the
- * facts, the prompt and every action live in the drawer that tab opens. That
- * is what lets the preview own the card — the old 152px rail plus a context
- * column turned a page of finished clips into a stack of admin panels with a
- * small video attached.
- *
- * The stage is full-bleed inside the card, so the card itself is `flush`
+ * The stage keeps the dark spotlight and contained video; the media column
+ * owns the stage plus the identity summary beneath it. The detail column
+ * owns facts, post copy, votes and actions. The card itself is `flush`
  * (zero padding) and each band brings its own gutter.
  *
  * The preview height and the stage's own padding are declared together as
  * custom properties, because the stage's flat height is the tallest thing it
- * can hold. Written as literals in two rules they drift, and the flat height is
- * what keeps a row of tiles even when one render failed and has no frame. */
+ * can hold.
+ */
 .history-card {
-    --history-preview-h: 260px;
+    --history-preview-h: 320px;
     --history-stage-pad: 20px;
     overflow: hidden;
+}
+.history-row-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+.history-media {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-bottom: 1px solid var(--hairline);
+}
+.history-detail {
+    min-width: 0;
 }
 .history-stage {
     position: relative;
@@ -697,148 +708,29 @@ h1,
     border-radius: 0.75rem;
     background-color: hsl(var(--secondary) / 0.25);
 }
-/* The one control a collapsed tile shows.
- *
- * A button, not a div with a role: click, Space and Enter are free, and the
- * drag is layered on top of the same target. The progress rule at its bottom
- * edge is the drag's feedback — it fills as the pointer travels, so the gesture
- * has a length the eye can follow before anything opens. */
-.history-tab {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    overflow: hidden;
-    padding: 11px 16px;
-    border-top: 1px solid var(--hairline);
-    background-color: hsl(var(--secondary) / 0.18);
-    color: hsl(var(--muted-foreground));
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    text-align: left;
-    transition: background-color 180ms ease, color 180ms ease;
-}
-.history-tab:hover,
-.history-tab:focus-visible,
-.history-tab[data-dragging="true"] {
-    background-color: hsl(var(--secondary) / 0.32);
-    color: hsl(var(--foreground));
-}
-.history-tab-grip {
-    color: hsl(var(--muted-foreground) / 0.7);
-    cursor: grab;
-    /* Only the grip owns the vertical gesture. On touch, a full-width drag
-       strip at the bottom of every card would fight page scrolling; the tab
-       itself stays a plain click surface. */
-    touch-action: none;
-}
-.history-tab[data-dragging="true"] .history-tab-grip {
-    cursor: grabbing;
-}
-.history-tab-lead {
-    position: absolute;
-    inset: auto 0 0 0;
-    height: 2px;
-    transform-origin: left center;
-    background-color: hsl(var(--primary));
-    transition: transform 140ms ease;
-}
-@media (prefers-reduced-motion: reduce) {
-    .history-tab-lead {
-        transition: none;
-    }
-}
-/* The drawer is a plain disclosure, not a measured one.
- *
- * A height:auto animation needs the card's geometry read back mid-flight,
- * which is exactly the kind of layout dance that fights the grid it lives in.
- * The card grows to its real height and the drawer's own contents slide in;
- * that reads as opening the same panel at a fraction of the cost. Motion is
- * dropped entirely under `prefers-reduced-motion`, per the app's rule for
- * entrances. */
-.history-drawer {
-    animation: history-drawer-in 220ms cubic-bezier(0.33, 1, 0.68, 1) both;
-}
-/* The open tile's detail band: the list owns its grid slot, placed after the
- * whole pair on wide grids (after the card on phones) and spanning every
- * column; the open row portals the band into that slot. The collapsed tiles
- * keep their flat contact-sheet height because the band grows on a row of
- * its own instead of inside one of them. */
-.history-detail-slot {
-    grid-column: 1 / -1;
-}
-.history-detail-panel {
-    overflow: hidden;
-}
-/* The collapsed tile's identity meta reserves the wrapped height, so a tile
- * whose vote text fits one line measures exactly the same as one whose
- * longer vote wraps to two. Two text-xs lines (1rem each) plus the row gap
- * (gap-2): text is never truncated and no control is ever clipped — the
- * short tile just carries the same empty space the wrapped one fills. */
-.history-summary-meta {
-    min-height: 2.5rem;
-}
-/* The tile identity row reserves the same treatment: a long app name wraps
- * the date onto a second line while a short one fits one, and without the
- * reservation the long tile measures a line taller. Two text-xs lines plus
- * the row gap (gap-2), same pattern as the headline and the meta. */
-.history-summary-id {
-    min-height: 3rem;
-}
-/* The tile headline reserves its own wrapped height for the same reason: a
- * long hook wraps to two lines while the neighbor's short hook fits one,
- * and without the reservation the long tile measures a line taller. Two
- * text-base lines at snug leading (2 x 1.375rem): the hook is never
- * truncated — the full line lives in the band quote — the short tile just
- * carries the same empty space the wrapped one fills. */
-.history-summary-hook {
-    line-height: 1.375;
-    min-height: 2.75rem;
-}
-/* The band's interior: one stacked column on narrow bands, facts beside
- * actions once the band is wide enough to hold both with room to work. */
-.history-detail-cols {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-}
-@media (min-width: 768px) {
-    .history-detail-cols {
-        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    }
-}
+/* The row body: facts, post copy, votes and actions. */
 .history-body {
     padding: 20px;
 }
-@keyframes history-drawer-in {
-    from {
-        opacity: 0;
-        transform: translateY(-6px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+/* Back-compat aliases: retired tab/drawer selectors. Kept so no stale
+ * selector silently matches nothing; new code uses .history-detail. */
+.history-detail-panel {
+    overflow: hidden;
 }
-@media (prefers-reduced-motion: reduce) {
-    .history-drawer {
-        animation: none;
+@media (min-width: 900px) {
+    .history-row-grid {
+        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
     }
-}
-@media (min-width: 768px) {
+    .history-media {
+        border-bottom: none;
+        border-right: 1px solid var(--hairline);
+    }
     .history-card {
         --history-preview-h: 340px;
         --history-stage-pad: 24px;
     }
     .history-body {
         padding: 24px 24px 28px;
-    }
-    /* Room for the pair side by side; below this tiles stack. */
-    .history-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 @media (min-width: 1200px) {

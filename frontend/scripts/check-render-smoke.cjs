@@ -10570,7 +10570,7 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History opens as a clip and expands to its context and actions", async (ctx) => {
+  await check("History shows each render as one attached card with clip beside its record", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
@@ -10582,40 +10582,28 @@ async function runDemoCtaChecks() {
       await mount(GenerationHistory)(ctx);
       const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
       if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 2) throw new Error("history cards are not in the responsive grid");
-      const first = grid.querySelector('[data-testid="history-card"]');
-      if (!first.querySelector("video.history-preview")) throw new Error("compact preview missing");
-      const expand = first.querySelector('[data-testid="history-expand"]');
-      if (!expand) throw new Error("a collapsed tile has no expand control to reach its details");
-      if (expand.getAttribute("aria-expanded") !== "false") throw new Error("history tiles do not start collapsed");
-      // Identity and result facts remain visible; working controls stay in the drawer.
-      if (first.querySelector('[data-testid="history-context"]')) {
-        throw new Error("the collapsed tile already shows the demo context");
+      if (ctx.container.querySelector('[data-testid="history-expand"]')) {
+        throw new Error("a card still exposes an expand control; records are always visible now");
       }
+      const first = grid.querySelector('[data-testid="history-card"]');
+      if (!first.querySelector("video.history-preview")) throw new Error("attached preview missing");
+      const row = first.querySelector(".history-row-grid");
+      if (!row) throw new Error("the card does not lay video beside its record");
+      const panel = first.querySelector('[data-testid="history-detail-panel"]');
+      if (!panel) throw new Error("the card shows no record beside its clip");
+      if (!first.contains(panel)) throw new Error("the record is not attached inside its card");
+      if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
       for (const label of ["Download", "Delete", "Demo + CTA"]) {
-        if (first.textContent.includes(label)) {
-          throw new Error(`the collapsed tile already exposes ${label}`);
-        }
+        if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
       }
       const summary = first.querySelector('[data-testid="history-summary"]');
       for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
-        if (!summary?.textContent.includes(text)) throw new Error(`collapsed identity/result missing: ${text}`);
-      }
-      await clickEl(ctx, expand, "expand a history tile");
-      const opened = ctx.container.querySelector('[data-testid="history-card"]');
-      if (opened.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
-        throw new Error("the expand control does not report the drawer it opened");
-      }
-      // The detail left the card: it renders as the full-width band after it.
-      const panel = ctx.container.querySelector('[data-testid="history-detail-panel"]');
-      if (!panel) throw new Error("expanding a tile opened no detail band");
-      if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
-      for (const label of ["Download", "Delete", "Demo + CTA"]) {
-        if (!panel.textContent.includes(label)) throw new Error(`History lost ${label}`);
+        if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
       }
     });
   });
 
-  await check("expanded History detail is a full-width band after its card", async (ctx) => {
+  await check("History rows never render as a separate detail section", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
@@ -10626,179 +10614,37 @@ async function runDemoCtaChecks() {
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-      const first = grid.querySelector('[data-testid="history-card"]');
-      await clickEl(ctx, first.querySelector('[data-testid="history-expand"]'), "expand a history tile");
-      // The band portals into a list-owned slot: the slot is the direct grid
-      // item, the panel renders inside it. (Phones here: jsdom lays one
-      // column, so the slot sits directly after the open card.)
-      const slot = grid.querySelector(':scope > [data-testid="history-detail-slot"]');
-      if (!slot) throw new Error("the expanded detail opened no grid slot");
-      if (slot.previousElementSibling !== first) {
-        throw new Error("the detail slot does not sit directly after its card");
+      if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
+        throw new Error("the record renders as a separate grid section instead of inside its card");
       }
-      const panel = slot.querySelector('[data-testid="history-detail-panel"]');
-      if (!panel) throw new Error("the open row never portaled its band into the slot");
-      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-      if (!/\.history-detail-slot\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/.test(css)) {
-        throw new Error("the detail slot does not span the full grid width");
+      const cards = grid.querySelectorAll(':scope > [data-testid="history-card"]');
+      if (cards.length !== 2) throw new Error("records are not flat cards in the list");
+      for (const card of cards) {
+        if (!card.querySelector(':scope .history-row-grid > [data-testid="history-detail-panel"]')) {
+          throw new Error("a card does not carry its record attached beside its clip");
+        }
       }
-      const second = grid.querySelectorAll('[data-testid="history-card"]')[1];
-      if (second.querySelector('[data-testid="history-context"]') || second.textContent.includes("Download")) {
-        throw new Error("opening one tile leaked detail content into its neighbor");
-      }
-      if (!panel.querySelector('[data-testid="history-context"]')) throw new Error("the band lost the render context");
-      // One open at a time: opening the neighbor moves the band, it never
-      // stacks a second one.
-      await clickEl(ctx, second.querySelector('[data-testid="history-expand"]'), "expand the neighbor tile");
-      const panels = grid.querySelectorAll('[data-testid="history-detail-panel"]');
-      if (panels.length !== 1) throw new Error(`expected one detail band, found ${panels.length}`);
-      const moved = grid.querySelector(':scope > [data-testid="history-detail-slot"]');
-      if (moved.previousElementSibling !== second) throw new Error("the band did not follow the newly opened card");
-      if (first.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
-        throw new Error("the previous tile stayed open beside the new band");
+      const second = cards[1];
+      if (!second.querySelector('[data-testid="history-context"]') && !second.textContent.includes("Download")) {
+        throw new Error("the neighbor card lost its own record");
       }
     });
   });
 
-  await check("opening the first tile of a pair lands the band after the pair", async (ctx) => {
-    // Wide grid: stub the same 768px step the CSS lays pairs at, so the slot
-    // sits after the whole pair instead of splitting it.
-    const win = dom.window;
-    const prevMatch = win.matchMedia;
-    win.matchMedia = (query) => ({
-      matches: query === "(min-width: 768px)",
-      media: query,
-      addEventListener() {},
-      removeEventListener() {},
-      addListener() {},
-      removeListener() {},
-    });
-    try {
-      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-      await withApi({
-        getGenerationHistory: async () => ({ generations: [
-          { ...COMPLETED, id: "wide-1" },
-          { ...COMPLETED, id: "wide-2" },
-          { ...COMPLETED, id: "wide-3" },
-        ] }),
-        getAppProfiles: async () => ({ profiles: [PROFILE] }),
-      }, async () => {
-        await mount(GenerationHistory)(ctx);
-        const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-        const cards = () => grid.querySelectorAll(':scope > [data-testid="history-card"]');
-        const slot = () => grid.querySelector(':scope > [data-testid="history-detail-slot"]');
-        await clickEl(ctx, cards()[0].querySelector('[data-testid="history-expand"]'), "expand the first tile of a pair");
-        if (!slot()) throw new Error("expanding the first tile opened no grid slot");
-        if (slot().previousElementSibling !== cards()[1]) {
-          throw new Error("the band split the open pair instead of landing below it");
-        }
-        if (!slot().querySelector('[data-testid="history-detail-panel"]')) {
-          throw new Error("the open row never portaled its band into the pair slot");
-        }
-        // The pair's second tile keeps the same slot below the pair.
-        await clickEl(ctx, cards()[1].querySelector('[data-testid="history-expand"]'), "expand the pair's second tile");
-        if (slot().previousElementSibling !== cards()[1]) {
-          throw new Error("expanding the second tile moved the band out from under the pair");
-        }
-        if (grid.querySelectorAll('[data-testid="history-detail-panel"]').length !== 1) {
-          throw new Error("more than one band is open");
-        }
-      });
-    } finally {
-      if (prevMatch) win.matchMedia = prevMatch; else delete win.matchMedia;
-    }
-  });
-
-  await check("collapsed tiles reserve the wrapped meta height", async () => {
-    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    const rule = css.match(/\.history-summary-meta\s*\{[^}]*\}/);
-    if (!rule) throw new Error("the summary meta lost its height reservation");
-    if (!/min-height\s*:\s*2\.5rem/.test(rule[0])) {
-      throw new Error("the meta reservation does not cover the two-line vote wrap");
-    }
-  });
-
-  await check("collapsed tiles reserve the headline and identity heights", async (ctx) => {
-    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    const hook = css.match(/\.history-summary-hook\s*\{[^}]*\}/);
-    if (!hook) throw new Error("the tile headline lost its height reservation");
-    if (!/min-height\s*:\s*2\.75rem/.test(hook[0])) {
-      throw new Error("the headline reservation does not cover the two-line hook wrap");
-    }
-    const ident = css.match(/\.history-summary-id\s*\{[^}]*\}/);
-    if (!ident) throw new Error("the tile identity lost its height reservation");
-    if (!/min-height\s*:\s*3rem/.test(ident[0])) {
-      throw new Error("the identity reservation does not cover the wrapped date line");
-    }
-    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "tall-1" }] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    }, async () => {
-      await mount(GenerationHistory)(ctx);
-      const card = ctx.container.querySelector('[data-testid="history-card"]');
-      if (!card.querySelector(".history-summary-hook")) {
-        throw new Error("the tile headline is not wearing its reservation class");
-      }
-      if (!card.querySelector(".history-summary-id")) {
-        throw new Error("the tile identity is not wearing its reservation class");
-      }
-    });
-  });
-
-  await check("the detail band stacks narrow and splits wide", async () => {
-    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!/\.history-detail-cols\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
-      throw new Error("the narrow band lost its single stacked column");
-    }
-    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-detail-cols\s*\{[\s\S]*?1\.15fr/.test(css)) {
-      throw new Error("the wide band does not lay facts beside actions");
-    }
-  });
-
-  await check("opening a band below the fold scrolls it into view", async (ctx) => {
-    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "fold-1" }] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    }, async () => {
-      await mount(GenerationHistory)(ctx);
-      // jsdom has no layout: every rect sits at the origin, so the band
-      // always reads as visible. Simulate below-the-fold instead.
-      const proto = dom.window.Element.prototype;
-      const origRect = proto.getBoundingClientRect;
-      const seen = [];
-      proto.getBoundingClientRect = function () {
-        if (this.dataset?.testid === "history-detail-panel") {
-          return { top: 4000, bottom: 5000, left: 0, right: 100, width: 100, height: 1000, x: 0, y: 4000, toJSON() {} };
-        }
-        return origRect.call(this);
-      };
-      const had = Object.prototype.hasOwnProperty.call(proto, "scrollIntoView");
-      const prev = proto.scrollIntoView;
-      proto.scrollIntoView = function () { seen.push(this); };
-      try {
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "expand the tile");
-      } finally {
-        proto.getBoundingClientRect = origRect;
-        if (had) proto.scrollIntoView = prev; else delete proto.scrollIntoView;
-      }
-      const panel = ctx.container.querySelector('[data-testid="history-detail-panel"]');
-      if (!seen.includes(panel)) throw new Error("a band opening below the fold did not scroll into view");
-    });
-  });
-
-  await check("History pairs two tiles per row, stacked on phones", async (ctx) => {
+  await check("History lays one card per row and splits video from record wide", async (ctx) => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const base = css.match(/\.history-grid\s*\{[^}]*\}/);
     if (!base || !/grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(base[0])) {
       throw new Error("history phones lost the single-column list");
     }
-    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-grid\s*\{[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
-      throw new Error("history lost the two-up pair row");
+    if (/\.history-grid\s*\{[^}]*repeat\(2,/.test(css) || /\.history-grid\s*\{[^}]*repeat\(3,/.test(css)) {
+      throw new Error("the list grid still pairs cards side by side");
     }
-    if (/\.history-grid\s*\{[^}]*repeat\(3,/.test(css)) {
-      throw new Error("the list grid still squeezes three tiles per row");
+    if (!/\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("the card lost its stacked narrow layout");
+    }
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?minmax\(300px,\s*380px\)/.test(css)) {
+      throw new Error("the wide card does not lay video beside its record");
     }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
@@ -10811,13 +10657,11 @@ async function runDemoCtaChecks() {
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-      // Tiles pair up through the grid itself — no wrapper divs, so sorting
-      // and filtering reorder rows without remounting them mid-edit.
       if (grid.querySelector('[data-testid="history-pair"]')) {
-        throw new Error("tiles are wrapped in pair divs instead of pairing through the grid");
+        throw new Error("cards are wrapped in pair divs instead of one card per row");
       }
       if (grid.querySelectorAll(':scope > [data-testid="history-card"]').length !== 3) {
-        throw new Error("tiles are not flat grid items");
+        throw new Error("cards are not flat list items");
       }
     });
   });
@@ -10846,7 +10690,7 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History saves update collapsed facts, votes and view order without reloading", async (ctx) => {
+  await check("History saves update attached facts, votes and view order without reloading", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     let fetches = 0;
     const first = { ...COMPLETED, id: "sync-low", tiktok_url: "https://www.tiktok.com/@founder/video/123", tiktok_views: 10 };
@@ -10863,13 +10707,12 @@ async function runDemoCtaChecks() {
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const card = () => ctx.container.querySelector('#generation-sync-low');
-      const panel = () => ctx.container.querySelector('[data-testid="history-detail-panel"]');
-      // The tab and the identity summary live on the tile; every working
-      // control lives in the full-width band after it.
+      const panel = () => card().querySelector('[data-testid="history-detail-panel"]');
+      // Identity summary and working controls live together in the one
+      // attached card: no expand step between reading and acting.
       const onCard = (id) => card().querySelector(`[data-testid="${id}"]`);
       const inPanel = (id) => panel().querySelector(`[data-testid="${id}"]`);
       await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
-      await clickEl(ctx, onCard("history-expand"));
       const input = inPanel("history-tiktok-views-input-sync-low");
       for (const invalid of ["1,2", "1.5", "true", "10000000001"]) {
         await typeInto(ctx, input, invalid);
@@ -10890,8 +10733,7 @@ async function runDemoCtaChecks() {
       if (!onCard("history-summary").textContent.includes("Not posted") || onCard("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
       await typeInto(ctx, inPanel("history-tiktok-input-sync-low"), first.tiktok_url);
       await clickEl(ctx, inPanel("history-tiktok-save-sync-low"));
-      await clickEl(ctx, onCard("history-expand"));
-      if (!onCard("history-summary").textContent.includes("1,200 views") || !onCard("history-summary").textContent.includes("Winner")) throw new Error("collapsed summary lost saved result");
+      if (!onCard("history-summary").textContent.includes("1,200 views") || !onCard("history-summary").textContent.includes("Winner")) throw new Error("attached summary lost saved result");
       if (fetches !== 1) throw new Error("result save reloaded the page instead of synchronizing rows");
     });
   });
@@ -10986,7 +10828,7 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History honors same-page query navigation and opens a new clip anchor", async (ctx) => {
+  await check("History honors same-page query navigation and scrolls to a new clip anchor", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const oldParams = global.__SMOKE_PARAMS;
     const oldHash = global.__SMOKE_HASH;
@@ -11003,16 +10845,16 @@ async function runDemoCtaChecks() {
         await mount(History)(ctx);
         if (ctx.container.querySelector('[data-testid="history-search"]').value !== "") throw new Error("old search hid linked clip");
         if (ctx.container.querySelector('#history-status-filter').value !== "completed") throw new Error("URL status ignored");
-        const tab = ctx.container.querySelector('#generation-anchor-two [data-testid="history-expand"]');
-        if (tab?.getAttribute('aria-expanded') !== 'true') throw new Error("same-page clip anchor stayed closed");
+        if (!ctx.container.querySelector('#generation-anchor-two [data-testid="history-detail-panel"]')) throw new Error("same-page clip anchor has no attached record");
+        if (ctx.container.querySelector('[data-testid="history-expand"]')) throw new Error("an expand control survived the attached layout");
         global.__SMOKE_HASH = "#generation-anchor-one";
         await mount(History)(ctx);
-        if (ctx.container.querySelector('#generation-anchor-one [data-testid="history-expand"]')?.getAttribute('aria-expanded') !== 'true') throw new Error("new hash on mounted row stayed closed");
+        if (!ctx.container.querySelector('#generation-anchor-one [data-testid="history-detail-panel"]')) throw new Error("new hash on mounted row has no attached record");
       });
     } finally { global.__SMOKE_PARAMS = oldParams; global.__SMOKE_HASH = oldHash; }
   });
 
-  await check("History keeps regenerated post copy across drawer reopen", async (ctx) => {
+  await check("History keeps regenerated post copy in its attached record", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const oldKit = { caption: "Old frozen caption", hashtags: ["#old"] };
     const freshKit = { caption: "Fresh confirmed caption", hashtags: ["#fresh"] };
@@ -11022,13 +10864,8 @@ async function runDemoCtaChecks() {
       regeneratePostKit: async () => ({ post_kit: freshKit }),
     }, async () => {
       await mount(History)(ctx);
-      const tab = () => ctx.container.querySelector('[data-testid="history-expand"]');
-      await clickEl(ctx, tab());
       await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
-      expectText(ctx, freshKit.caption, "regenerated copy did not land in the drawer");
-      await clickEl(ctx, tab());
-      await clickEl(ctx, tab());
-      expectText(ctx, freshKit.caption, "reopening the drawer restored stale copy");
+      expectText(ctx, freshKit.caption, "regenerated copy did not land in the attached record");
       expectAbsent(ctx, oldKit.caption);
     });
   });
@@ -11072,58 +10909,22 @@ async function runDemoCtaChecks() {
     });
   });
 
-  // The tab is two gestures in one control. The click path is covered above;
-  // this covers the drag, because a tab that only answers clicks is a button
-  // with a grip icon drawn on it — and the drag is what a bottom sheet trained
-  // people to try.
-  await check("History's expand tab opens on a drag, not only a click", async (ctx) => {
+  await check("History exposes no expand control to drag or click", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "drag-1" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
-      const tab = ctx.container.querySelector('[data-testid="history-expand"]');
-      if (!tab) throw new Error("no expand tab to drag");
-      const send = async (type, clientY) => {
-        await act(async () => {
-          tab.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, clientY }));
-        });
-      };
-
-      await send("pointerdown", 400);
-      await send("pointermove", 384);
-      if (tab.getAttribute("data-dragging") !== "true") {
-        throw new Error("a dragged tab does not report the drag, so the gesture has no feedback");
+      if (ctx.container.querySelector('[data-testid="history-expand"]')) {
+        throw new Error("an expand tab survived the attached layout");
       }
-      await send("pointerup", 384);
-      if (tab.getAttribute("aria-expanded") !== "false") {
-        throw new Error(
-          "a 16px wobble opened the drawer: the click that a shaky press produces " +
-            "would be spent on a gesture nobody meant"
-        );
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      if (/\.history-tab\s*\{/.test(css)) {
+        throw new Error("the retired expand tab still has styles");
       }
-
-      await send("pointerdown", 400);
-      await send("pointermove", 320);
-      // A real drag ends in a click in the same task, so both go in one act, in
-      // that order. A click arriving later is a separate interaction and is
-      // rightly allowed through.
-      await act(async () => {
-        tab.dispatchEvent(new dom.window.MouseEvent("pointerup", { bubbles: true, clientY: 320 }));
-        tab.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-      });
-      if (tab.getAttribute("aria-expanded") !== "true") {
-        throw new Error(
-          "an 80px drag up did not open the drawer, so the tab is a click-only " +
-            "button with a grip painted on it"
-        );
-      }
-
-      await clickEl(ctx, tab, "close the drawer");
-      if (tab.getAttribute("aria-expanded") !== "false") {
-        throw new Error("the expand tab cannot close the drawer it opened");
-      }
+      const panel = ctx.container.querySelector('[data-testid="history-detail-panel"]');
+      if (!panel) throw new Error("the attached record is missing, so there is nothing to drag open");
     });
   });
 
@@ -11266,8 +11067,8 @@ async function runDemoCtaChecks() {
     if (!card) {
       throw new Error("the deep-linked row is on another page and the pager never jumped to it");
     }
-    if (card.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
-      throw new Error("the deep-linked row mounted but stayed closed");
+    if (!card.querySelector('[data-testid="history-detail-panel"]')) {
+      throw new Error("the deep-linked row mounted without its attached record");
     }
     const current = ctx.container.querySelector('[data-testid="history-pager"] [aria-current="page"]');
     if (!current || current.textContent.trim() !== "3") {
@@ -11373,7 +11174,7 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History's open drawer answers Escape", async (ctx) => {
+  await check("History records stay visible with no drawer to Escape from", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi(
       {
@@ -11382,21 +11183,20 @@ async function runDemoCtaChecks() {
       },
       async () => {
         await mount(GenerationHistory)(ctx);
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
-        if (ctx.container.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
-          throw new Error("the drawer did not open");
+        if (ctx.container.querySelector('[data-testid="history-expand"]')) {
+          throw new Error("an expand control survived the attached layout");
         }
         await act(async () => {
           dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         });
-        if (ctx.container.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
-          throw new Error("Escape leaves the drawer open, stranding keyboard users");
+        if (!ctx.container.querySelector('[data-testid="history-detail-panel"]')) {
+          throw new Error("Escape hid the attached record it should never close");
         }
       }
     );
   });
 
-  await check("History opens the render a #generation- link names", async (ctx) => {
+  await check("History scrolls to the render a #generation- link names", async (ctx) => {
     // Analytics "View render" links land here with a hash, but the rows only
     // arrive after the fetch — so the browser's native anchor scroll has
     // nothing to land on and the named render sits below the fold, closed.
@@ -11425,9 +11225,9 @@ async function runDemoCtaChecks() {
       global.__SMOKE_HASH = "";
       global.__SMOKE_NAVIGATIONS = previousNavigations;
     }
-    const tab = ctx.container.querySelector('[data-testid="history-expand"]');
-    if (!tab || tab.getAttribute("aria-expanded") !== "true") {
-      throw new Error("the deep-linked render is not opened on arrival");
+    const card = ctx.container.querySelector("#generation-deep-1");
+    if (!card || !card.querySelector('[data-testid="history-detail-panel"]')) {
+      throw new Error("the deep-linked render has no attached record on arrival");
     }
   });
 
@@ -11455,9 +11255,9 @@ async function runDemoCtaChecks() {
       global.__SMOKE_HASH = "";
     }
     const input = ctx.container.querySelector('[data-testid="history-tiktok-input-link-wait"]');
-    if (!input) throw new Error("the deep-linked row opened with no TikTok link field");
+    if (!input) throw new Error("the deep-linked row has no TikTok link field");
     if (dom.window.document.activeElement !== input) {
-      throw new Error("the deep link opened the row but left the awaiting TikTok link unfocused");
+      throw new Error("the deep link landed on the row but left the awaiting TikTok link unfocused");
     }
   });
 
@@ -11480,9 +11280,9 @@ async function runDemoCtaChecks() {
     } finally {
       global.__SMOKE_HASH = "";
     }
-    const tab = ctx.container.querySelector('#generation-link-have [data-testid="history-expand"]');
-    if (!tab || tab.getAttribute("aria-expanded") !== "true") {
-      throw new Error("the deep-linked posted row is not opened on arrival");
+    const postedCard = ctx.container.querySelector('#generation-link-have [data-testid="history-detail-panel"]');
+    if (!postedCard) {
+      throw new Error("the deep-linked posted row has no attached record on arrival");
     }
     if (dom.window.document.activeElement !== dom.window.document.body) {
       throw new Error("landing on a posted row moved focus without an awaiting link");
@@ -11616,11 +11416,6 @@ async function runDemoCtaChecks() {
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             const videoUp = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
             );
@@ -11701,11 +11496,6 @@ async function runDemoCtaChecks() {
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             const up = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
             );
@@ -11736,7 +11526,7 @@ async function runDemoCtaChecks() {
   // pressed thumb must carry more than a hairline: the collapsed summary
   // names the rated count while each chosen thumb keeps its fill.
   await check(
-    "History names rated parts on the collapsed disclosure with a clear selected state",
+    "History names rated parts on the disclosure with a clear selected state",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -11758,16 +11548,11 @@ async function runDemoCtaChecks() {
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             const summary = ctx.container.querySelector(
               `[data-testid="history-parts-feedback-${COMPLETED.id}"] summary`
             );
             if (!summary || !summary.textContent.includes("2 of 4 rated")) {
-              throw new Error("the collapsed disclosure does not name the rated part count");
+              throw new Error("the disclosure does not name the rated part count");
             }
             const goalDown = ctx.container.querySelector(
               `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
@@ -11838,11 +11623,6 @@ async function runDemoCtaChecks() {
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             const up = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
             );
@@ -11898,11 +11678,6 @@ async function runDemoCtaChecks() {
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             await act(async () => {});
             const down = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
@@ -11961,11 +11736,6 @@ async function runDemoCtaChecks() {
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            await clickEl(
-              ctx,
-              ctx.container.querySelector('[data-testid="history-expand"]'),
-              "expand the render tile"
-            );
             await act(async () => {});
             const up = ctx.container.querySelector(
               `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
@@ -11999,11 +11769,6 @@ async function runDemoCtaChecks() {
             },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the render tile"
-          );
           const entry = [...ctx.container.querySelectorAll("a")].find(
             (a) => (a.textContent || "").trim() === "Demo + CTA"
           );
@@ -12031,11 +11796,6 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the render tile"
-          );
           const entry = [...ctx.container.querySelectorAll("a")].find(
             (a) => (a.textContent || "").trim() === "Demo + CTA"
           );
@@ -12067,11 +11827,6 @@ async function runDemoCtaChecks() {
           // A failed row has no clip, so its actions live in the drawer like
           // every other tile's. Open it, then look for the control that keeps a
           // dead render from sitting in history forever.
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the failed tile"
-          );
           const del = [...ctx.container.querySelectorAll("button")].find(
             (b) => (b.textContent || "").trim() === "Delete"
           );
@@ -12105,11 +11860,6 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           const card = ctx.container.querySelector('[data-testid="history-card"]');
-          await clickEl(
-            ctx,
-            card.querySelector('[data-testid="history-expand"]'),
-            "expand the action test tile"
-          );
           const group = ctx.container.querySelector('[role="group"][aria-label="Work with this render"]');
           if (!group) {
             throw new Error("the Work with this render action group is gone");
@@ -12148,11 +11898,6 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the render tile"
-          );
           // The duplicate/variation endpoints were retired, so the entry is a
           // deep link into the draft project, not a new endpoint call: the
           // plan arrives intact and the recorded thumbs steer the next plan.
@@ -12187,11 +11932,6 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the winner tile"
-          );
           await act(async () => {});
           const entry = [...ctx.container.querySelectorAll("a")].find(
             (a) => (a.textContent || "").trim() === "Another take like this"
@@ -12221,11 +11961,6 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the winner tile"
-          );
           await act(async () => {});
           const dead = [...ctx.container.querySelectorAll("a")].find((a) =>
             (a.getAttribute("href") || "").includes("project=ghost")
@@ -12282,11 +12017,6 @@ await check(
               `the player is not using the signed durable copy the API handed it: ${src}`
             );
           }
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the durable copy tile"
-          );
           const download = [...ctx.container.querySelectorAll("a[download]")].find((a) =>
             (a.textContent || "").trim() === "Download"
           );
@@ -12339,11 +12069,6 @@ await check(
           }
           // The repair lives in the drawer. Open it the way a founder would,
           // so the check covers the path that actually offers the button.
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="history-expand"]'),
-            "expand the missing-copy tile"
-          );
           const download = [...ctx.container.querySelectorAll("a")].find((a) =>
             (a.textContent || "").includes("Download video")
           );
@@ -12375,11 +12100,6 @@ await check(
       getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh }),
     }, async () => {
       await mount(GenerationHistory, {})(ctx);
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="history-expand"]'),
-        "expand the retry tile"
-      );
       await act(async () => ctx.container.querySelector("video").dispatchEvent(new dom.window.Event("error")));
       expectText(ctx, "Retry durable save");
       expectAbsent(ctx, "Download it to view.", "a failed source is not a guaranteed download");
@@ -12401,11 +12121,6 @@ await check(
       retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },
     }, async () => {
       await mount(GenerationHistory, {})(ctx);
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="history-expand"]'),
-        "expand the lost-copy tile"
-      );
       await clickEl(ctx, ctx.container.querySelector('[data-testid="retry-storage-lost"]'), "retry lost video");
       expectText(ctx, "Re-upload your export", "recovery error must be visible");
       if (ctx.container.querySelector("video")) throw new Error("failed recovery cannot mount a player");
@@ -12427,11 +12142,6 @@ await check(
       if (card.textContent.includes("Caption 1")) {
         throw new Error("the collapsed tile leaks the post kit");
       }
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="history-expand"]'),
-        "expand the kit tile"
-      );
       assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "History");
     });
   });
@@ -12443,11 +12153,6 @@ await check(
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="history-expand"]'),
-        "expand the pre-kit tile"
-      );
       if (ctx.container.querySelector('[data-testid="post-kit"]')) {
         throw new Error("a pre-kit render invents post copy in History");
       }

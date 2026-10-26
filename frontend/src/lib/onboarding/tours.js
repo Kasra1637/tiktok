@@ -241,17 +241,17 @@ export const TOURS = {
       },
       {
         target: '[data-testid="history-list"]',
-        title: "Each tile is the clip",
+        title: "Each card is clip plus record",
         optional: true,
         body:
-          "Tiles show the app, hook or clip ID, status, date, posted status, recorded views, and your vote. Play a finished clip here; open its drawer for downloads, Demo + CTA, and votes.",
+          "Cards show the clip beside its record: app, hook, status, facts, votes, downloads and Demo + CTA are all visible together. Play a finished clip here; read the facts before you publish.",
       },
       {
-        target: '[data-testid="history-expand"]',
-        title: "Expand a render for its details",
+        target: '[data-testid="history-detail-panel"]',
+        title: "Work the record beside the clip",
         optional: true,
         body:
-          "Click the tab at the bottom of a tile — or drag it up — to open the render's facts, its download and Demo + CTA. Read the facts before you publish."
+          "The record beside each clip holds its facts, post copy, votes, download and Demo + CTA. Nothing hides behind a tab."
       },
       {
         // Centered summary: with no rows both tile steps skip, so a fresh

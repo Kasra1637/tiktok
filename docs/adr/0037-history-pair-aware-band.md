@@ -1,6 +1,6 @@
 # 0037 — History band lands after the open pair, not the open card
 
-- **Status:** accepted
+- **Status:** superseded by 0039 (attached cards, no expand)
 - **Date:** 2026-10-26
 - **Partially supersedes:** 0036 (band sat directly after its card at any width)
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (`useHistoryPairLayout`,

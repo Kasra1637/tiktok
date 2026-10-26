@@ -1,5 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -29,26 +28,14 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronLeft,
-  ChevronUp,
   Film,
   Smartphone,
   CopyPlus,
   Target,
   Briefcase,
   Clapperboard,
-  GripHorizontal,
 } from "lucide-react";
 
-/**
- * How far the tab has to travel before a drag counts as an expand.
- *
- * Short enough that one thumb-flick opens the card, long enough that a shaky
- * click — a few pixels of drift while the button is being pressed — still
- * resolves to the click it looked like. The commit threshold is a fraction of
- * it so the tab follows the pointer and then finishes the gesture.
- */
-const DRAG_COMMIT_PX = 56;
-const DRAG_COMMIT_RATIO = 0.6;
 /**
  * Rows per History page. The fetch window (100, then 200 via show-more) is
  * bytes; this is DOM. One page of heavy tiles — a video element, poster
@@ -76,159 +63,21 @@ function formatRenderDate(value) {
 }
 
 /**
- * True while the history grid lays pairs — the same 768px step the grid CSS
- * uses. The detail band's position depends on it: right after its card on
- * phones, after the pair's second tile once two share a row, so opening the
- * first tile of a pair never drops its neighbor onto a later row with an
- * empty slot beside the band.
- */
-function useHistoryPairLayout() {
-  const [paired, setPaired] = useState(() => Boolean(window.matchMedia?.("(min-width: 768px)")?.matches));
-  useEffect(() => {
-    const query = window.matchMedia?.("(min-width: 768px)");
-    if (!query) return undefined;
-    const update = () => setPaired(query.matches);
-    update();
-    if (typeof query.addEventListener === "function") query.addEventListener("change", update);
-    else if (typeof query.addListener === "function") query.addListener(update);
-    return () => {
-      if (typeof query.removeEventListener === "function") query.removeEventListener("change", update);
-      else if (typeof query.removeListener === "function") query.removeListener(update);
-    };
-  }, []);
-  return paired;
-}
-
-/**
- * The one control a history tile shows below its clip.
- *
- * The grid is a contact sheet: the clip is the content and everything else is
- * one gesture away. A plain "expand" button would be honest but small; a tab
- * that also responds to a drag is the affordance a bottom sheet trained people
- * to look for, and it costs one element. Both gestures end in the same
- * `onToggle`:
- *
- * - Click/Space/Enter toggles, through the native button.
- * - Dragging the tab toward the open direction tracks the pointer (the tab
- *   rises a couple of pixels and a progress rule fills), and releasing past
- *   the threshold toggles. Releasing short of it snaps back, which is what
- *   makes the gesture feel like a sheet rather than a second, hidden button.
- *
- * The drag arms only after 4px of travel, so the click that a normal press
- * produces is not swallowed by a phantom gesture, and a pointerup that ends a
- * real drag suppresses exactly one click. Touch dragging is restricted to the
- * grip in CSS (`touch-action: none`), because a full-width drag strip at the
- * bottom of every card would fight page scrolling on a phone.
- */
-function HistoryExpandTab({ expanded, onToggle, controls, testId, id }) {
-  const [lead, setLead] = useState(0);
-  const drag = useRef({ startY: null, moved: false });
-  const suppressClick = useRef(false);
-
-  const beginDrag = (event) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    drag.current = { startY: event.clientY, moved: false };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const moveDrag = (event) => {
-    if (drag.current.startY === null) return;
-    const dy = event.clientY - drag.current.startY;
-    if (Math.abs(dy) > 4) drag.current.moved = true;
-    // Opening pulls the tab up; closing pulls it back down. Both are measured
-    // as "away from the card", so one formula serves either state.
-    const opening = expanded ? dy : -dy;
-    setLead(Math.max(0, Math.min(1, opening / DRAG_COMMIT_PX)));
-  };
-
-  const endDrag = (event) => {
-    if (drag.current.startY === null) return;
-    const dy = event.clientY - drag.current.startY;
-    const moved = drag.current.moved;
-    drag.current = { startY: null, moved: false };
-    setLead(0);
-    if (!moved) return;
-    suppressClick.current = true;
-    // The click this pointerup produces comes before the timeout, so only a
-    // gesture that ends without one leaves the guard set — and the timeout
-    // clears it before the next real press can be mistaken for it.
-    window.setTimeout(() => { suppressClick.current = false; }, 0);
-    const opening = expanded ? dy : -dy;
-    if (opening >= DRAG_COMMIT_PX * DRAG_COMMIT_RATIO) onToggle();
-  };
-
-  const cancelDrag = () => {
-    drag.current = { startY: null, moved: false };
-    setLead(0);
-  };
-
-  const handleClick = () => {
-    if (suppressClick.current) {
-      suppressClick.current = false;
-      return;
-    }
-    onToggle();
-  };
-
-  return (
-    <button
-      type="button"
-      id={id}
-      className="history-tab"
-      aria-expanded={expanded}
-      aria-controls={controls}
-      data-dragging={lead > 0 ? "true" : "false"}
-      data-testid={testId}
-      onClick={handleClick}
-      onPointerDown={beginDrag}
-      onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={cancelDrag}
-      title={
-        expanded
-          ? "Click, or drag down, to close this render"
-          : "Click, or drag up, to see this render's prompt, facts, and actions"
-      }
-    >
-      <GripHorizontal aria-hidden="true" className="history-tab-grip h-3.5 w-3.5" />
-      <span className="history-tab-label">
-        {lead >= DRAG_COMMIT_RATIO
-          ? expanded ? "Release to close" : "Release to open"
-          : expanded ? "Collapse" : "Expand"}
-      </span>
-      <ChevronDown
-        aria-hidden="true"
-        className={`ml-auto h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
-      />
-      <span aria-hidden="true" className="history-tab-lead" style={{ transform: `scaleX(${lead})` }} />
-    </button>
-  );
-}
-
-/**
- * One render, as a tile: the clip, then — as a separate full-width grid item
+ * One render, as one attached card: the clip, then — as a separate full-width grid item
  * — its detail band.
  *
  * The old card spent most of its width on a 152px rail plus a context column,
  * so a page of history read as a stack of admin panels with a small video
- * attached. The clip is the thing being reviewed, so it gets the whole tile:
- * a playable render leads with the video, then its identity and saved results.
- * Detailed context and destructive actions live in the band below the row,
- * so opening one tile never stretches its neighbors and every collapsed tile
- * stays the same flat height.
+ * attached. The clip is the thing being reviewed, so it leads:
+ * a playable render shows the video, then its identity and saved results.
+ * Detailed context and destructive actions live in the record beside it.
  *
  * A row with nothing to play is the one exception, and it keeps a notice in
- * place of the video: a blank tile explains nothing, and each of those four
- * states has its own repair.
- *
- * Open state lives in the list (one band at a time), and the list also owns
- * the band's grid slot: it hands the open row the element to render into, so
- * the band can sit after the whole pair on wide grids (after the card on
- * phones) without reordering any card. The row portals its detail into that
- * slot, keeping every action, its state, and the editors with the row that
- * owns them.
+ * place of the video: a blank card explains nothing, and each of those four
+ * states has its own repair. Every action, its state, and the editors live
+ * with the row that owns them.
  */
-function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, deepLinked = false, draftIds = null, detailHost = null }) {
+function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -236,11 +85,11 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   // step and find the field inside the band. Scoped to the deep-linked
   // row and the awaiting state only: a manual expand never steals focus,
   // and a row that already has its link keeps focus where it was.
-  const linkAwaiting = expanded && deepLinked && !row.tiktok_url;
+  const linkAwaiting = deepLinked && !row.tiktok_url;
   useEffect(() => {
-    if (!linkAwaiting || !expanded || !detailHost) return;
+    if (!linkAwaiting) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
-  }, [linkAwaiting, expanded, row.id, detailHost]);
+  }, [linkAwaiting, row.id]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -256,70 +105,10 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   // render unfinished, not a failed action, so it must not read as one.
   const [strandedNote, setStrandedNote] = useState(null);
 
-  const drawerId = `generation-detail-${row.id}`;
-  const expandTabId = `generation-expand-${row.id}`;
-  const wasExpanded = useRef(false);
+  const detailId = `generation-detail-${row.id}`;
 
-  // Esc closes the open band. The listener lives only while expanded so a
-  // closed row never steals Esc from other UI.
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (event) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onToggle();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, onToggle]);
 
-  // Closing from the footer (which unmounts) or Esc must not drop focus to
-  // <body> or leave the card stranded mid-list. Return focus to the tab and
-  // bring the card back into view — instant under reduced motion. Skipped
-  // when this row closed because another one opened: focus already belongs
-  // to that row's tab and yanking it back here would fight the new band.
-  useEffect(() => {
-    if (wasExpanded.current && !expanded) {
-      const active = document.activeElement;
-      const card = document.getElementById(`generation-${row.id}`);
-      const panel = document.getElementById(drawerId);
-      const focusIsOurs =
-        !active ||
-        active === document.body ||
-        card?.contains(active) ||
-        panel?.contains(active);
-      if (focusIsOurs) {
-        document.getElementById(expandTabId)?.focus?.({ preventScroll: true });
-        const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-        card?.scrollIntoView?.({
-          block: "nearest",
-          behavior: reduce ? "auto" : "smooth",
-        });
-      }
-    }
-    wasExpanded.current = expanded;
-  }, [expanded, expandTabId, row.id, drawerId]);
 
-  // Opening brings the band into view, but only when it needs it: if the
-  // whole band already fits on screen, `nearest` is a no-op and the page
-  // stays exactly where the founder put it. Scrolling never moves focus,
-  // so the focus contract above is untouched. The host is a dependency (and
-  // a guard) because the detail contents arrive in it a commit after the
-  // open itself — the same render that flips `expanded` has not portal'd
-  // anything yet.
-  useEffect(() => {
-    if (!expanded || !detailHost) return;
-    const panel = document.getElementById(drawerId);
-    const rect = panel?.getBoundingClientRect?.();
-    if (panel && rect && rect.bottom > window.innerHeight) {
-      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-      panel.scrollIntoView?.({
-        block: "nearest",
-        behavior: reduce ? "auto" : "smooth",
-      });
-    }
-  }, [expanded, detailHost, drawerId]);
 
 
   // The copy the browser can actually fetch, chosen by the same rule every
@@ -334,14 +123,14 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   // (it comes from a retry that returned a signed playback path), so it is
   // reused as-is; otherwise a signed path is spliced for the download route.
   const saveUrl = recoveredUrl || downloadMediaUrl(row);
-  // Poster thumbnail: a tiny JPEG served as an image, so the tile shows a
+  // Poster thumbnail: a tiny JPEG served as an image, so the card shows a
   // frame instantly without fetching video bytes. Missing poster (old rows,
   // generation in flight) simply omits the attribute and the <video> behaves
   // as before — a 404 poster must never break playback.
   const posterUrl = row.poster_url ? mediaUrl(row.poster_url) : null;
   const hasClip = row.status === "completed" && Boolean(downloadUrl);
-  // A finished render with no fetchable copy still gets a tile: the stage has
-  // to say the copy is missing and the drawer offers the repair, which is the
+  // A finished render with no fetchable copy still gets a card: the stage has
+  // to say the copy is missing and the record offers the repair, which is the
   // only way a clip like that becomes playable again.
   //
   // A row stranded in `generating` gets one too. Those are not in-flight
@@ -465,333 +254,249 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
   }
 
   return (
-    <>
     <article
       id={`generation-${row.id}`}
-      className="surface surface-flush history-card min-w-0 scroll-mt-6"
+      className="surface surface-flush history-card history-row min-w-0 scroll-mt-6"
       data-testid="history-card"
-      data-expanded={expanded ? "true" : "false"}
     >
-      <div className="history-stage">
-        {downloadUrl && !previewBroken ? (
-          <video
-            key={`${row.id}-${playerVersion}`}
-            src={downloadUrl}
-            controls
-            playsInline
-            // Poster first: the thumbnail is a tiny JPEG image, so the tile
-            // shows a frame without fetching video bytes. preload="none"
-            // means the clip itself loads only on Play — previously
-            // "metadata" fired a ranged video request per row on page load,
-            // which is what left some thumbnails blank on slow/expired
-            // sources. A missing poster simply omits the attribute.
-            preload="none"
-            poster={posterUrl || undefined}
-            onLoadedData={() => {
-              if (checkingRecovery) {
-                setCheckingRecovery(false);
-                toast.success(recoveryStorageError
-                  ? "Video recovered locally. Download it now to keep a copy."
-                  : "Video recovered and ready to play.");
-              }
-            }}
-            onError={() => {
-              setPreviewBroken(true);
-              setCheckingRecovery(false);
-            }}
-            className="history-preview"
-            // Contain the complete frame, never crop the creator's footage.
-          />
-        ) : (
-          <div className="history-stage-empty">
-            <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 space-y-1">
-              <p className="text-base font-semibold">{stageNotice?.title}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
+      <div className="history-row-grid">
+        <div className="history-media min-w-0">
+          <div className="history-stage">
+            {downloadUrl && !previewBroken ? (
+              <video
+                key={`${row.id}-${playerVersion}`}
+                src={downloadUrl}
+                controls
+                playsInline
+                // Poster first: the thumbnail is a tiny JPEG image, so the card
+                // shows a frame without fetching video bytes. preload="none"
+                // means the clip itself loads only on Play.
+                preload="none"
+                poster={posterUrl || undefined}
+                onLoadedData={() => {
+                  if (checkingRecovery) {
+                    setCheckingRecovery(false);
+                    toast.success(recoveryStorageError
+                      ? "Video recovered locally. Download it now to keep a copy."
+                      : "Video recovered and ready to play.");
+                  }
+                }}
+                onError={() => {
+                  setPreviewBroken(true);
+                  setCheckingRecovery(false);
+                }}
+                className="history-preview"
+                // Contain the complete frame, never crop the creator's footage.
+              />
+            ) : (
+              <div className="history-stage-empty">
+                <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-base font-semibold">{stageNotice?.title}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
+              <StatusBadge status={row.status} />
+              <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
+            </div>
+            <p className="break-words text-base font-semibold">
+              {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
+              <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
+              <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
-        <div className="history-summary-id flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
-          <StatusBadge status={row.status} />
-          <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
         </div>
-        <p className="history-summary-hook break-words text-base font-semibold">
-          {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
-        </p>
-        <div className="history-summary-meta flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
-          <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
-          <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
-        </div>
-      </div>
 
-      <HistoryExpandTab
-        expanded={expanded}
-        onToggle={onToggle}
-        controls={drawerId}
-        testId="history-expand"
-        id={expandTabId}
-      />
-    </article>
-
-      {/* The detail band: portaled into the list-owned slot, not card
-          content. The slot lands on the row below the open pair (below the
-          card on phones) and spans every column, so the collapsed tiles keep
-          their flat contact-sheet height. Nothing renders until the list
-          hands over the slot: the open commit has not attached it yet. */}
-      {expanded && detailHost ? createPortal((
         <div
-          id={drawerId}
+          id={detailId}
           role="region"
           aria-label="Render details"
           data-testid="history-detail-panel"
-          className="surface surface-flush history-detail-panel history-drawer min-w-0 scroll-mt-6"
+          className="history-detail min-w-0"
         >
           <div className="history-body">
-          {/* Two columns on wide bands, one stacked column on narrow: facts
-              and context read on the left, votes and actions work on the
-              right. Narrow stacking preserves the old top-to-bottom order. */}
-          <div className="history-detail-cols">
             <div className="min-w-0 space-y-5">
-            {/* Repeat identity here for long drawers scrolled past the tile. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
-              <StatusBadge status={row.status} />
-            </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
+                <StatusBadge status={row.status} />
+              </div>
 
-            {row.hook_line && (
-              <p className="break-words text-base leading-relaxed text-foreground/90">
-                &ldquo;{sentenceCase(row.hook_line)}&rdquo;
-              </p>
-            )}
+              {row.hook_line && (
+                <p className="break-words text-base leading-relaxed text-foreground/90">
+                  &ldquo;{sentenceCase(row.hook_line)}&rdquo;
+                </p>
+              )}
 
-            {/* One treatment for every fact about the render.
+              <FactList>
+                {row.model && <FactChip>{row.model}</FactChip>}
+                {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
+                {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
+                {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
+                {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
+                <FactChip>script v{row.script_version}</FactChip>
+                {formatRenderDate(row.created_at) ? (
+                  <FactChip>{formatRenderDate(row.created_at)}</FactChip>
+                ) : null}
+              </FactList>
 
-                These were three: four badges opposite the title, a run-on
-                "a · b · c · date" sentence, and a separate meta row. A sentence
-                of dots is not scannable — you cannot find one fact in it
-                without reading it all — and two treatments for the same kind of
-                information meant the card never looked settled. Chips also let
-                the row go quiet when facts are missing instead of leaving a
-                dangling separator. */}
-            <FactList>
-              {row.model && <FactChip>{row.model}</FactChip>}
-              {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
-              {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
-              {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
-              {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
-              <FactChip>script v{row.script_version}</FactChip>
-              {formatRenderDate(row.created_at) ? (
-                <FactChip>{formatRenderDate(row.created_at)}</FactChip>
-              ) : null}
-            </FactList>
+              {row.post_kit && (
+                <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
+                  <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
+                </div>
+              )}
 
-            {/* Frozen post copy for this render; pre-kit rows show nothing. */}
-            {row.post_kit && (
+              {(row.audience || row.demo_brief) && (
+                <div className="inset-panel space-y-3" data-testid="history-context">
+                  {row.audience && (
+                    <div className="space-y-1">
+                      <GroupLabel icon={Target}>Audience</GroupLabel>
+                      <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
+                    </div>
+                  )}
+                  {row.demo_brief && (
+                    <div className="space-y-1">
+                      <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
+                      <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              {checkingRecovery && (
+                <p className="text-xs text-muted-foreground" role="status">Checking recovered video\u2026</p>
+              )}
+              {strandedNote && (
+                <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
+              )}
+
+              <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
+
               <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-                <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
-              </div>
-            )}
-
-            {(row.audience || row.demo_brief) && (
-              <div className="inset-panel space-y-3" data-testid="history-context">
-                {row.audience && (
-                  <div className="space-y-1">
-                    <GroupLabel icon={Target}>Audience</GroupLabel>
-                    <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
-                  </div>
-                )}
-                {row.demo_brief && (
-                  <div className="space-y-1">
-                    <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
-                    <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            </div>
-            <div className="min-w-0 space-y-5">
-            {error && <p className="text-xs text-destructive">{error}</p>}
-            {checkingRecovery && (
-              <p className="text-xs text-muted-foreground" role="status">Checking recovered video…</p>
-            )}
-            {strandedNote && (
-              <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
-            )}
-
-            <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
-
-            {/* Actions, in two tiers.
-
-                The clip is what this row is for, so Download and Demo + CTA are
-                the wide, legible pair; Delete sits on a quieter line beneath them. The old layout scattered these across
-                a rail, a tile group, and a failed-row bar, so "delete" and
-                "download" were one mistaken click apart in a 240px column.
-                Grouping by consequence instead: get the file, take it onward,
-                then act on the record.
-
-                Download points at downloadMediaUrl, the same-origin route that
-                forces a save. The playback href was cross-origin whenever the
-                durable copy was in R2, and browsers ignore `download` there, so
-                the button opened a tab instead of saving the file. */}
-            <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-              <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
-              <div
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Work with this render"
-                data-testid="history-actions"
-              >
-                {saveUrl && (
-                  <Button variant="secondary" asChild className="min-w-[150px] flex-1">
-                    <a
-                      href={saveUrl}
-                      download
-                      onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Work with this render"
+                  data-testid="history-actions"
+                >
+                  {saveUrl && (
+                    <Button variant="secondary" asChild className="min-w-[150px] flex-1">
+                      <a
+                        href={saveUrl}
+                        download
+                        onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                      >
+                        <Download className="h-4 w-4" /> Download
+                      </a>
+                    </Button>
+                  )}
+                  {hasClip && (
+                    <Button
+                      variant="accent"
+                      asChild
+                      data-testid={`demo-cta-history-${row.id}`}
+                      className="min-w-[150px] flex-1"
                     >
-                      <Download className="h-4 w-4" /> Download
-                    </a>
-                  </Button>
-                )}
-                {/* The onward action wears the acting colour (accent/indigo),
-                    never the retired warm fill — ADR 0011. */}
-                {hasClip && (
+                      <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
+                        <Smartphone className="h-4 w-4" /> Demo + CTA
+                      </Link>
+                    </Button>
+                  )}
+                  {row.status === "failed" && row.retryable && (
+                    <Button
+                      variant="accent"
+                      disabled={busy}
+                      onClick={() => act(() => api.retryGeneration(row.id))}
+                      className="min-w-[150px] flex-1"
+                    >
+                      <RotateCcw className="h-4 w-4" /> Retry render
+                    </Button>
+                  )}
+                  {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
+                    <Button
+                      variant="secondary"
+                      asChild
+                      data-testid={`history-variation-${row.id}`}
+                      className="min-w-[150px] flex-1"
+                    >
+                      <Link
+                        to={`/create?project=${row.studio_project_id}`}
+                        title={isWinnerRow(row)
+                          ? "Open this winner's plan in Create Video for another take like this"
+                          : "Open this plan in Create Video for another take \u2014 your recorded thumbs steer the next plan"}
+                      >
+                        <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "New variation"}
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button
-                    variant="accent"
-                    asChild
-                    data-testid={`demo-cta-history-${row.id}`}
-                    className="min-w-[150px] flex-1"
-                  >
-                    <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
-                      <Smartphone className="h-4 w-4" /> Demo + CTA
-                    </Link>
-                  </Button>
-                )}
-                {row.status === "failed" && row.retryable && (
-                  <Button
-                    variant="accent"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
                     disabled={busy}
-                    onClick={() => act(() => api.retryGeneration(row.id))}
-                    className="min-w-[150px] flex-1"
+                    onClick={() => act(() => api.deleteGeneration(row.id))}
+                    data-testid={`history-delete-${row.id}`}
+                    title="Remove this render from history"
                   >
-                    <RotateCcw className="h-4 w-4" /> Retry render
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
                   </Button>
-                )}
-                {/* The thumbs-only results loop: the recorded per-component
-                    verdicts already steer the next plan server-side, so a new
-                    take needs no new endpoint — the retired duplicate/variation
-                    routes are gone. Reopening this generation's draft project
-                    in the studio is the variation: the plan arrives intact and
-                    the next render is a fresh generation. */}
-                {/* Winners name the take: the thumbs plus the posted link are
-                    the loop's proof, so the onward entry says what it reuses.
-                    A draft verified gone offers nothing — no dead link, and no
-                    fallback that duplicates the Demo + CTA button above. An
-                    unverified list fails open to the draft, as before. */}
-                {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
+                </div>
+
+                {stuckGenerating && (
                   <Button
                     variant="secondary"
-                    asChild
-                    data-testid={`history-variation-${row.id}`}
-                    className="min-w-[150px] flex-1"
+                    size="sm"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={handleRecheckStranded}
+                    data-testid={`recheck-stranded-${row.id}`}
+                    title="Ask the provider whether this render finished, and fetch it if it did"
                   >
-                    <Link
-                      to={`/create?project=${row.studio_project_id}`}
-                      title={isWinnerRow(row)
-                        ? "Open this winner's plan in Create Video for another take like this"
-                        : "Open this plan in Create Video for another take — your recorded thumbs steer the next plan"}
-                    >
-                      <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "New variation"}
-                    </Link>
+                    {busy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
+                    Check again
+                  </Button>
+                )}
+                {canRepair && !stuckGenerating && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={handleRetryStorage}
+                    data-testid={`retry-storage-${row.id}`}
+                    title="Re-fetch the finished render and save a durable copy, so it plays here"
+                  >
+                    {busy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
+                    Retry durable save
                   </Button>
                 )}
               </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {/* Delete acts on the record, not the picture, so it lives with
-                    the quiet actions and is tinted destructive: spelled out,
-                    never parked next to the button that saves the same file. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-destructive"
-                  disabled={busy}
-                  onClick={() => act(() => api.deleteGeneration(row.id))}
-                  data-testid={`history-delete-${row.id}`}
-                  title="Remove this render from history"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
-                </Button>
-              </div>
-
-              {stuckGenerating && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={handleRecheckStranded}
-                  data-testid={`recheck-stranded-${row.id}`}
-                  title="Ask the provider whether this render finished, and fetch it if it did"
-                >
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  )}
-                  Check again
-                </Button>
-              )}
-              {canRepair && !stuckGenerating && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={handleRetryStorage}
-                  data-testid={`retry-storage-${row.id}`}
-                  title="Re-fetch the finished render and save a durable copy, so it plays here"
-                >
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  )}
-                  Retry durable save
-                </Button>
-              )}
             </div>
-
-            {/* Footer close: the band can run long (script + prompt +
-                actions), so the top Expand/Collapse tab is a scroll away once
-                the user reaches the bottom. Same state, same word, quiet
-                treatment so it never competes with Download / Demo + CTA. */}
-            <div className="border-t border-[color:var(--hairline)] pt-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full"
-                onClick={onToggle}
-                aria-controls={drawerId}
-                aria-label="Collapse this render"
-                title="Collapse this render"
-                data-testid={`history-collapse-${row.id}`}
-              >
-                <ChevronUp className="h-3.5 w-3.5" /> Collapse
-              </Button>
-            </div>
-            </div>
-          </div>
           </div>
         </div>
-      ), detailHost) : null}
-
-    </>
+      </div>
+    </article>
   );
 }
 
@@ -825,23 +530,6 @@ export default function GenerationHistory() {
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
   const [sort, setSort] = useState("newest");
-  // One detail band at a time: the open row's id, or null. A #generation-
-  // deep link names the open row; the tab, Esc, and the footer close flip it.
-  // Open state lives here (not in the row) so opening one tile closes the
-  // band elsewhere instead of stacking a second full-width row.
-  const [openId, setOpenId] = useState(null);
-  const toggleRow = useCallback((id) => {
-    setOpenId((cur) => (cur === id ? null : id));
-  }, []);
-  // Pair-aware band placement reads the same 768px step the grid CSS lays
-  // pairs at. The open band's slot sits after the whole pair on wide grids
-  // (after the card on phones), so opening the first tile of a pair never
-  // drops its partner onto a later row.
-  const paired = useHistoryPairLayout();
-  // The list owns the band's grid slot and hands it to the open row to
-  // portal into. A callback ref (not an id query) so the slot survives
-  // reordering without re-querying the DOM.
-  const [detailHost, setDetailHost] = useState(null);
   const updateRow = useCallback((id, patch) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
   }, []);
@@ -924,13 +612,6 @@ export default function GenerationHistory() {
   const pageCount = Math.max(1, Math.ceil(ordered.length / HISTORY_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = ordered.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
-  // The open band's slot: after the whole pair when two share a row, after
-  // the card itself on phones or when the open tile is the pair's second
-  // (or a lone trailing tile). -1 while nothing is open renders no slot.
-  const openIndex = paged.findIndex((row) => row.id === openId);
-  const detailSlotIndex = openIndex < 0
-    ? -1
-    : (paired && openIndex % 2 === 0 && openIndex + 1 < paged.length ? openIndex + 1 : openIndex);
   // Turning the page swaps the rows above the fold, so bring the list back
   // into view instead of stranding the founder at its bottom. The pager
   // buttons survive the turn, so the activating control keeps focus.
@@ -949,16 +630,12 @@ export default function GenerationHistory() {
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
   // has nothing to land on. Settle it here once rows exist: bring the card
-  // into view and open its drawer, so the link names a render that is
+  // into view, so the link names a render that is
   // actually shown rather than a card somewhere below the fold.
   const hashId = (location.hash || "").startsWith("#generation-")
     ? location.hash.slice("#generation-".length)
     : "";
-  // A new anchor names a new open row. User closes stick: this only ever
-  // opens, and only when the named row is not already the open one.
-  useEffect(() => {
-    if (hashId) setOpenId((cur) => (cur === hashId ? cur : hashId));
-  }, [hashId]);
+  // A new anchor names the row to scroll to.
   // The deep link names a render, not a page: when the row sits past the
   // render window, jump the pager to its page first. Setting an unchanged
   // page is a React no-op, so this settles instead of looping.
@@ -1055,8 +732,8 @@ export default function GenerationHistory() {
         /* Mirrors the real tile rather than a centered spinner: a bare spinner on
            a page whose cards are stacked means the layout jumps the moment data
            lands, which is the same flash the studio loader was changed to
-           remove. The skeleton is the stage plus the expand tab, because that
-           is all a collapsed card is. */
+           remove. The skeleton is the media column plus the record, because
+           that is all an attached card is. */
         <div className="space-y-4" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
             <div key={i} className="surface surface-flush history-card min-w-0">
@@ -1094,31 +771,20 @@ export default function GenerationHistory() {
               No renders match “{query.trim()}”. Clear the search to see everything.
             </p>
           )}
-          {/* Flat tiles: the grid pairs them into rows of two (stacked on
+          {/* One card per render: cards stack in one column on every
               phones). No pair wrappers — grouping rows in divs would remount
               every tile whenever sorting or filtering regroups them, dropping
               focus and typed input mid-edit. Stable row keys let React reorder
               without remounting. */}
-          {paged.map((row, index) => (
-            <Fragment key={row.id}>
-              <GenerationRow
-                row={row}
-                onChanged={load}
-                onUpdated={updateRow}
-                expanded={openId === row.id}
-                onToggle={() => toggleRow(row.id)}
-                deepLinked={hashId !== "" && hashId === row.id}
-                draftIds={draftIds}
-                detailHost={row.id === openId ? detailHost : null}
-              />
-              {index === detailSlotIndex && (
-                <div
-                  ref={setDetailHost}
-                  data-testid="history-detail-slot"
-                  className="col-span-full min-w-0"
-                />
-              )}
-            </Fragment>
+          {paged.map((row) => (
+            <GenerationRow
+              key={row.id}
+              row={row}
+              onChanged={load}
+              onUpdated={updateRow}
+              deepLinked={hashId !== "" && hashId === row.id}
+              draftIds={draftIds}
+            />
           ))}
           {rows.length >= limit && limit < 200 && (
             <div className="col-span-full flex justify-center pt-2">
