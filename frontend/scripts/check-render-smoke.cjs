@@ -11599,8 +11599,11 @@ async function runDemoCtaChecks() {
             if (!videoUp) {
               throw new Error("History is missing the primary video vote");
             }
-            if (!ctx.container.textContent.includes("Did this render land?")) {
-              throw new Error("the primary vote does not ask about the render as a whole");
+            if (!ctx.container.textContent.includes("Rate this render")) {
+              throw new Error("the primary vote lost its Rate this render heading");
+            }
+            if (ctx.container.textContent.includes("Did this render land?")) {
+              throw new Error("the retired Did this render land? heading is back in the vote box");
             }
             if (!/h-11/.test(videoUp.className)) {
               throw new Error("the primary video vote lost its size");

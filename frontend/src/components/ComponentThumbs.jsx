@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { GroupLabel } from "./SectionCard";
 import { ThumbPair } from "./ThumbPair";
 import { recordThumb } from "../lib/feedback";
 
@@ -19,6 +20,7 @@ export function ComponentThumbs({
   refs,
   question,
   hint,
+  icon: Icon = null,
   resetKey = "",
   initialValue = 0,
   onVoted,
@@ -82,7 +84,7 @@ export function ComponentThumbs({
       data-testid={testId}
     >
       <div className="min-w-0 space-y-0.5">
-        <span className="eyebrow block">{question}</span>
+        {Icon ? <GroupLabel icon={Icon}>{question}</GroupLabel> : <span className="eyebrow block">{question}</span>}
         <p className="text-xs text-muted-foreground" aria-live="polite">
           {saved === "saved"
             ? "Rating saved — it informs future suggestions, not proof of performance."

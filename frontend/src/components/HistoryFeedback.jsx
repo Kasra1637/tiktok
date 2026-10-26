@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Clapperboard, ExternalLink, Eye, Link2, Loader2, X } from "lucide-react";
 import { ComponentThumbs } from "./ComponentThumbs";
-import { GroupLabel } from "./SectionCard";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -115,10 +114,10 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
   };
   return (
     <div className="history-vote-block space-y-3 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
-      <GroupLabel icon={Clapperboard}>Rate this render</GroupLabel>
       <ComponentThumbs
         component="video"
-        question="Did this render land?"
+        icon={Clapperboard}
+        question="Rate this render"
         hint="One vote on the clip as a whole — the vote that counts most."
         size="default"
         resetKey={row.id}
