@@ -1031,6 +1031,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     },
   });
 
+  // A clip load closes the History panel: the toggle lives only in the empty
+  // frame, so a panel left open across an upload would strand with no toggle
+  // to dismiss it. Attach already closes via the hook; this covers the file
+  // input path.
+  useEffect(() => {
+    if (videoUrl) setHistoryOpen(false);
+  }, [videoUrl]);
+
   const invalidateSequence = () => {
     if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
     resultObjectUrlRef.current = null;
@@ -2070,26 +2078,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             )}
         </div>
 
-        {/* The History door lives where the clip lands: inside the empty frame
-            before anything is loaded, below the frame once a clip is — so the
-            empty state offers one choice (upload or library) and a loaded base
-            can still be swapped. One toggle, one testid, one panel; only its
-            address changes with the frame. */}
+        {/* The History door lives only in the empty frame: upload or History,
+            one choice where the clip lands. Once a clip is loaded the button
+            is gone — a loaded base is swapped via Remove, which returns to
+            the empty frame and its History door. The panel stays mounted so
+            the in-frame toggle has somewhere to open; a clip load closes it
+            (see the effect below) so it can never strand open with no toggle
+            to dismiss it. */}
         <div className="space-y-2" data-testid="demo-cta-history-source">
-          {videoUrl && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-10 w-full"
-            onClick={() => setHistoryOpen((v) => !v)}
-            aria-expanded={historyOpen}
-            aria-controls={historyOpen ? historyPanelId : undefined}
-            data-testid="history-source-toggle"
-          >
-            {historyOpen ? "Hide History" : "Choose from History"}
-          </Button>
-          )}
           {historyOpen && (
             <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
               {historyError && <p className="text-xs text-destructive">{historyError}</p>}

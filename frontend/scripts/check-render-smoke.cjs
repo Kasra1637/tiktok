@@ -10442,6 +10442,12 @@ async function runDemoCtaChecks() {
       Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
       await click('[data-testid="view-mode-realistic"]');
       global.fetch = async () => ({ ok: true, blob: async () => new Blob(["clip"], { type: "video/mp4" }) });
+      // No History toggle beside a loaded clip: swap via Remove, which
+      // returns to the empty frame and its in-frame History door.
+      if (ctx.container.querySelector('[data-testid="history-source-toggle"]')) {
+        throw new Error("a History toggle sits beside a loaded clip — swap goes through Remove");
+      }
+      await click('[data-testid="demo-cta-remove-source"]');
       await withApi({ getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "composite-base", brand_name: "History base" }] }) }, async () => {
         await click('[data-testid="history-source-toggle"]');
         await click('[data-testid="history-source-attach-composite-base"]');
