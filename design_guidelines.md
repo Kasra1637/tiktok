@@ -170,6 +170,11 @@ card is `.inset-panel`.
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
 | Field / detail row | label + control | none | 14px semibold label |
 
+**Record disclosures share one shape.** A collapsed section inside a record
+(History part ratings, post copy, plan context) is a native `<details>`: a
+`rounded-xl` hairline border, a `text-xs` muted `summary` naming its
+contents, no JS open state. Same bar as a Disclosure row, boxed.
+
 **Every topic-page subtitle fits a 54-60 character budget.** The line under the
 page title is the first thing read on a page and it is read at a glance: one
 sentence naming what the page is for. The six topic pages — App Profile,

@@ -349,26 +349,36 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
               </FactList>
 
               {row.post_kit && (
-                <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-                  <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
-                </div>
+                <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5" data-testid={`history-post-copy-${row.id}`}>
+                  <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                    Post copy
+                  </summary>
+                  <div className="pb-2">
+                    <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
+                  </div>
+                </details>
               )}
 
               {(row.audience || row.demo_brief) && (
-                <div className="inset-panel space-y-3" data-testid="history-context">
-                  {row.audience && (
-                    <div className="space-y-1">
-                      <GroupLabel icon={Target}>Audience</GroupLabel>
-                      <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
-                    </div>
-                  )}
-                  {row.demo_brief && (
-                    <div className="space-y-1">
-                      <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
-                      <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
-                    </div>
-                  )}
-                </div>
+                <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5" data-testid="history-context">
+                  <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                    Plan context
+                  </summary>
+                  <div className="inset-panel space-y-3">
+                    {row.audience && (
+                      <div className="space-y-1">
+                        <GroupLabel icon={Target}>Audience</GroupLabel>
+                        <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
+                      </div>
+                    )}
+                    {row.demo_brief && (
+                      <div className="space-y-1">
+                        <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
+                        <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
+                      </div>
+                    )}
+                  </div>
+                </details>
               )}
 
               {error && <p className="text-xs text-destructive">{error}</p>}

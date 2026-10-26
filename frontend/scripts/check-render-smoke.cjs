@@ -12230,8 +12230,8 @@ await check(
     });
   });
 
-  // History owns the kit: the drawer and the details modal read the same
-  // frozen object the output moment showed, and a pre-kit row shows nothing.
+  // History owns the kit: the attached record reads the same frozen object
+  // the output moment showed, and a pre-kit row shows nothing.
   await check("History shows the frozen post kit with copy buttons", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
@@ -12239,15 +12239,70 @@ await check(
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
-      // Collapsed means the clip and nothing else: the kit lives in the
-      // drawer, so finding it on the closed tile means it leaked out.
+      // The frozen kit is one caption: "Caption 1" anywhere on the card
+      // means the retired three-caption layout leaked back in.
       const card = ctx.container.querySelector('[data-testid="history-card"]');
       if (card.textContent.includes("Caption 1")) {
-        throw new Error("the collapsed tile leaks the post kit");
+        throw new Error("the attached record leaks the retired caption layout");
       }
       assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "History");
     });
   });
+
+  // The record reads denser than the clip it belongs to: post copy and plan
+  // context start collapsed behind named disclosures, and open on demand.
+  await check(
+    "History tucks post copy and plan context behind disclosures",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{
+              ...COMPLETED,
+              id: "fold-1",
+              post_kit: POST_KIT,
+              audience: "Night scrollers",
+              demo_brief: "Film the dock.",
+            }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory)(ctx);
+          const copy = ctx.container.querySelector('[data-testid="history-post-copy-fold-1"]');
+          if (!copy || copy.tagName !== "DETAILS") {
+            throw new Error("post copy is not behind a disclosure");
+          }
+          if (copy.open) {
+            throw new Error("post copy starts expanded");
+          }
+          if (!/Post copy/.test(copy.querySelector("summary")?.textContent || "")) {
+            throw new Error("the post-copy disclosure does not name its contents");
+          }
+          const context = ctx.container.querySelector('[data-testid="history-context"]');
+          if (!context || context.tagName !== "DETAILS") {
+            throw new Error("plan context is not behind a disclosure");
+          }
+          if (context.open) {
+            throw new Error("plan context starts expanded");
+          }
+          if (!/Plan context/.test(context.querySelector("summary")?.textContent || "")) {
+            throw new Error("the plan-context disclosure does not name its contents");
+          }
+          await clickEl(ctx, copy.querySelector("summary"), "open the post-copy disclosure");
+          if (!copy.open) {
+            throw new Error("the post-copy disclosure did not open");
+          }
+          assertFrozenKit(copy.querySelector('[data-testid="post-kit"]'), "disclosed History");
+          await clickEl(ctx, context.querySelector("summary"), "open the plan-context disclosure");
+          if (!context.open || !context.textContent.includes("Film the dock.")) {
+            throw new Error("the plan-context disclosure hides the demo brief");
+          }
+        }
+      );
+    }
+  );
 
   await check("History shows no post copy for a render without a kit", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
