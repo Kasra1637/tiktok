@@ -1,5 +1,6 @@
-# CI: every pull request and every push to main must pass the backend suite
-# before it merges or deploys:
+# CI: every pull request and every push to main that touches the backend
+# (or this workflow) must pass the backend suite before it merges or
+# deploys. Frontend-only pushes skip it: they burn no pytest minutes.
 #
 #   backend pytest  — `python -m pytest backend/ -q -p no:cacheprovider`
 #
@@ -16,8 +17,14 @@ name: ci
 
 on:
   pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
   push:
     branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
 
 concurrency:
   group: ci-${{ github.ref }}
