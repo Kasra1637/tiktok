@@ -2258,14 +2258,32 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     if not hook or not script:
         raise RuntimeError("Post kit needs the render's approved hook and script.")
 
+    def _bits(*names):
+        out = []
+        for name in names:
+            val = profile.get(name)
+            items = val if isinstance(val, list) else [val]
+            out.extend(str(v).strip() for v in items if str(v or "").strip())
+        return out
+
+    audience_bits = _bits("target_audience", "ideal_customer_profile")
+    feature_bits = _bits("core_features")
+    moment_bits = _bits("primary_use_cases", "usage_moments")
     context = {
         "app_name": profile.get("brand_name") or "(unnamed app)",
         "description": profile.get("brand_description") or "(unstated)",
-        "audience": profile.get("target_audience") or "(unstated)",
+        "app_category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "audience": audience_bits or "(unstated)",
         "voice": profile.get("tone_voice") or "(unstated)",
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "features": feature_bits or "(unstated)",
+        "use_moments": moment_bits or "(unstated)",
         "hook_line": hook,
         "script": script,
         "call_to_action": cta or "(none)",
+        "plan_objective": (project or {}).get("objective") or "(unstated)",
+        "plan_audience": (project or {}).get("audience") or "(unstated)",
+        "demo_brief": (project or {}).get("demo_brief") or "(none)",
         "approved_claims": _list("claims_approved"),
         "banned_claims": _list("claims_banned"),
     }
@@ -2274,6 +2292,9 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "You write TikTok post copy for a mobile app's finished clip. Every "
         "word must be grounded in the render material and profile facts "
         "below — restate, compress, and rephrase them, never add to them. "
+        "The caption is written AS an everyday user of the app, never as its "
+        "founder or marketer: first-person or plain observation, no "
+        "promotional language, no founder voice, no marketer voice. "
         "Never state a price, plan name, trial term, follower count, ranking, "
         "or outcome the inputs do not state. Never promise guaranteed results "
         "or invent testimonials. Respond with STRICT JSON only, no markdown "
@@ -2283,14 +2304,19 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         f"RENDER MATERIAL:\n{json.dumps(context, indent=2)}\n\n"
         "Write the post kit for THIS clip only. Return ONLY a JSON object:\n"
         "{\n"
-        '  "caption": ["one TikTok caption under 50 words: open with the hook idea in the "\n'
-        '    viewer\u2019s words, then state what the app does plainly, then end with "\n'
+        '  "caption": ["one TikTok caption, 50 to 80 characters total including "\n'
+        '    the final \u2018?\u2019: write AS an everyday user of the app in the "\n'
+        '    clip\u2019s situation (first person or plain observation, never "\n'
+        '    promotional, never founder or marketer voice), name what the app "\n'
+        '    did for you using the profile facts and plan above, then end with "\n'
         '    a short question — the caption\u2019s final character must be \u2018?\u2019"],\n'
         '  "hashtags": ["4 to 7 tags, #AppName first, then niche and functional tags"],\n'
         '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
         "}\n"
-        "Rules: use ONLY the hook, script, CTA, and profile facts above. No "
-        "banned claim may appear. No guaranteed outcomes. Return ONLY valid JSON."
+        "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
+        "Caption must be 50 to 80 characters including the final \u2018?\u2019. No "
+        "banned claim may appear. No guaranteed outcomes. No promotional or "
+        "founder voice. Return ONLY valid JSON."
     )
     parsed = await _chat_json(
         system_message=system_message,
@@ -2305,7 +2331,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
 
     # The schema guarantees a string; anything else fails loudly below
     # instead of being coerced into copy.
-    caption = str(parsed.get("caption") or "").strip()[:300]
+    caption = str(parsed.get("caption") or "").strip()
     raw_tags = parsed.get("hashtags")
     if isinstance(raw_tags, str):
         raw_tags = raw_tags.split()
@@ -2315,6 +2341,10 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         raise RuntimeError("Post kit response was missing caption, hashtags, or cover text.")
     if not caption.endswith("?"):
         raise RuntimeError("Post kit caption must end with its question.")
+    if not 50 <= len(caption) <= 80:
+        raise RuntimeError(
+            f"Post kit caption must be 50 to 80 characters, got {len(caption)}."
+        )
 
     # Grounded means verifiable: a banned claim or a guarantee in post copy
     # is a bug, not a nuance — the render gate holds the video to this, so

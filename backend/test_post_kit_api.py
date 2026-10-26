@@ -404,3 +404,41 @@ class TestPostKitCaptionGuards:
         project, profile = self._materials()
         with pytest.raises(RuntimeError, match="banned claim"):
             _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_caption_outside_length_window_is_loud(self, api, monkeypatch):
+        for caption in (
+            "Timer on, pages done. What worked?",  # 34 chars: too short
+            "Stop writing empty pages with one timed start — "
+            "a focus timer that starts in one tap. "
+            "What stalls your first sentence?",  # over 100 chars: too long
+        ):
+            async def fake_chat(**kwargs):
+                return {
+                    "caption": caption,
+                    "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                    "cover_text": "Stop writing empty pages",
+                }
+
+            monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+            project, profile = self._materials()
+            with pytest.raises(RuntimeError, match="50 to 80"):
+                _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_caption_prompt_demands_user_voice_and_length(self, api, monkeypatch):
+        seen = {}
+
+        async def fake_chat(**kwargs):
+            seen.update(kwargs)
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        _run(api.ai_service.generate_post_kit(project, profile))
+        brief = str(seen.get("system_message", "")) + str(seen.get("prompt", ""))
+        assert "50 to 80" in brief
+        assert "everyday user" in brief
+        assert "founder" in brief

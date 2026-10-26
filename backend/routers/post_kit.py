@@ -85,7 +85,7 @@ async def _load_post_kit_materials(generation_row: dict, user_id: str):
     project = None
     if generation_row.get("studio_project_id"):
         project = await _fetch_one(
-            "SELECT hook_line, script, cta FROM studio_projects WHERE id = ? AND user_id = ?",
+            "SELECT hook_line, script, cta, objective, audience, demo_brief FROM studio_projects WHERE id = ? AND user_id = ?",
             (generation_row["studio_project_id"], user_id),
         )
     profile = None
