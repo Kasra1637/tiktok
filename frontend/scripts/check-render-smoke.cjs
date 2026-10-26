@@ -6230,6 +6230,75 @@ async function runAnalyticsChecks() {
     if (!card.querySelector('a[href="/create?project=draft1"]') || !card.querySelector('a[href$="#generation-top"]')) throw new Error("reuse/review link lost provenance");
   });
 
+  // Plan 1 (leaderboard + bars + timeline): clip results read as a ranked
+  // visual comparison, not a text table — every row carries its rank and a
+  // view bar scaled to the highest recorded count.
+  await check("clip results render a visual leaderboard with scaled view bars", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "mid", status: "completed", hook_line: "Middle", tiktok_views: 3000, verdicts: {} },
+        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, verdicts: { video: -1 } },
+      ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const rank = card.querySelector('[data-testid="result-rank-top"]');
+    if (!rank || !/\b1\b/.test(rank.textContent || "")) throw new Error("the top clip carries no rank");
+    const topBar = card.querySelector('[data-testid="result-views-bar-top"]');
+    const midBar = card.querySelector('[data-testid="result-views-bar-mid"]');
+    if (!topBar || !midBar) throw new Error("view bars missing from the leaderboard");
+    if (topBar.style.width !== "100%") throw new Error(`the top view bar is not full width: ${topBar.style.width}`);
+    if (midBar.style.width !== "33%") throw new Error(`the mid view bar does not scale to the top: ${midBar.style.width}`);
+    const voteIcon = card.querySelector('[data-testid="result-vote-top"] svg');
+    if (!voteIcon) throw new Error("the vote has no icon beside its label");
+  });
+
+  // Renders per week reads as a bar chart: one scaled column per week,
+  // newest first, with the count on the column.
+  await check("renders per week renders scaled bars", async (ctx) => {
+    const thisMondayMidnight = new Date();
+    thisMondayMidnight.setDate(
+      thisMondayMidnight.getDate() - ((thisMondayMidnight.getDay() + 6) % 7)
+    );
+    thisMondayMidnight.setHours(0, 0, 0, 0);
+    const thisWeek = new Date(thisMondayMidnight.getTime() + 60000).toISOString();
+    const lastWeek = new Date(thisMondayMidnight.getTime() - 6 * 86400000).toISOString();
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "completed", created_at: thisWeek },
+          { id: "g2", status: "completed", created_at: thisWeek },
+          { id: "g3", status: "completed", created_at: lastWeek },
+        ],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
+    if (!card) throw new Error("the weekly activity card is not on the page");
+    const bars = [...card.querySelectorAll('[data-testid="activity-bar"]')];
+    if (bars.length !== 2) throw new Error(`expected 2 weekly bars, found ${bars.length}`);
+    if (bars[0].style.height !== "100%") throw new Error(`the busiest week is not full height: ${bars[0].style.height}`);
+    if (bars[1].style.height !== "50%") throw new Error(`the quieter week does not scale: ${bars[1].style.height}`);
+  });
+
+  // What happened reads as a timeline: one icon marker per signal, counts
+  // and History links untouched.
+  await check("what happened renders signals as a visual timeline", async (ctx) => {
+    await mountAnalytics(ctx);
+    const card = ctx.container.querySelector('[data-testid="analytics-signals"]');
+    if (!card) throw new Error("the signals card is not on the page");
+    const marker = card.querySelector('[data-testid="analytics-signal-icon-template_changed"] svg');
+    if (!marker) throw new Error("the signal timeline has no icon marker");
+    if (!card.querySelector('[data-testid="analytics-signal-template_changed"]')) {
+      throw new Error("the timeline lost the signal History link");
+    }
+  });
+
   await check("Analytics scopes result requests and shows failures rather than empty success", async (ctx) => {
     const calls = [];
     const Analytics = load("pages/Analytics.jsx").default;

@@ -57,4 +57,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0037](0037-history-pair-aware-band.md) | History band lands after the open pair via a list-owned portal slot | superseded by 0039 (attached cards, no expand) |
 | [0039](0039-history-attached-cards.md) | History rows are one attached card, no expand step | partially superseded by 0040 (record disclosures) |
 | [0040](0040-history-record-disclosures.md) | History record tucks post copy and plan context behind disclosures | accepted |
+| [0041](0041-analytics-visual-results.md) | Analytics results go visual: leaderboard, bars, timeline | accepted |
 | [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |

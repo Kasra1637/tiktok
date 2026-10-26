@@ -12,9 +12,9 @@ import { FactChip } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
-import { nextTakeFor, pickNextTake } from "../lib/nextTake";
+import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
-import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays } from "lucide-react";
+import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
 // from reach, and neither views nor workflow signals imply conversions.
@@ -253,13 +253,26 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
   const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
   const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
   const pickNext = pick ? nextTakeFor(pick, historyHref, draftIds) : null;
+  // Bars scale to the highest recorded count, so the leader reads full and
+  // every other clip reads relative to it. A recorded zero still earns a
+  // sliver; an unrecorded count earns no bar and no guess.
+  const maxViews = Math.max(0, ...clips.map((row) => row.tiktok_views ?? 0));
+  const barWidth = (views) => `${views > 0 && maxViews > 0 ? Math.max(6, Math.round((views / maxViews) * 100)) : views === 0 ? 6 : 0}%`;
   return (
     <SectionCard title="Clip results" icon={TrendingUp} description="Compare reach & your judgment before choosing another take." data-testid="analytics-results">
       <p className="text-xs text-muted-foreground">{posted} posted · {counted} with recorded views · {rated} rated</p>
-      <p className="text-xs text-muted-foreground">
-        Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
-        Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
-      </p>
+      <details className="rounded-xl border border-[color:var(--hairline)] px-3 py-1.5">
+        <summary className="cursor-pointer list-none py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+          Why these numbers
+        </summary>
+        <div className="space-y-2 pb-2 text-xs text-muted-foreground">
+          <p>
+            Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
+            Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
+          </p>
+          <p>Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+        </div>
+      </details>
       {pick && pickNext && (
         <div data-testid="analytics-next-take" className="rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-3 py-2">
           <p className="text-base font-semibold">Suggested next take: {clipName(pick)}</p>
@@ -278,15 +291,22 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
             <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
             <thead>
               <tr className="border-b border-[color:var(--hairline)] text-xs text-muted-foreground">
-                {["Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
+                {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="py-2 pr-4 font-semibold">{label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {clips.map((row) => {
+              {clips.map((row, index) => {
                 const vote = verdictFor(row.verdicts, "video");
                 const next = nextTakeFor(row, historyHref, draftIds);
+                const winner = isWinnerRow(row);
                 return (
                   <tr key={row.id} data-testid={`result-${row.id}`} className="border-b border-[color:var(--hairline)] align-top">
+                    <td data-testid={`result-rank-${row.id}`} className="py-3 pr-4 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />}
+                        <span className="font-mono">{index + 1}</span>
+                      </span>
+                    </td>
                     <th scope="row" className="min-w-[180px] py-3 pr-4 font-normal">
                       <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
                         {clipName(row)}
@@ -296,8 +316,30 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                     <td className="py-3 pr-4 text-xs">
                       {row.tiktok_url ? <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="text-[color:var(--brand-indigo)] hover:underline">Posted ↗</a> : "Not posted"}
                     </td>
-                    <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs">{row.tiktok_views == null ? "Not recorded" : row.tiktok_views.toLocaleString("en-US")}</td>
-                    <td className="whitespace-nowrap py-3 pr-4 text-xs">{vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}</td>
+                    <td className="py-3 pr-4 text-xs">
+                      {row.tiktok_views == null ? (
+                        "Not recorded"
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-20 shrink-0 overflow-hidden rounded-full bg-[color:var(--hairline)]" aria-hidden="true">
+                            <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)]" style={{ width: barWidth(row.tiktok_views) }} />
+                          </span>
+                          <span className="whitespace-nowrap font-mono">{row.tiktok_views.toLocaleString("en-US")}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap py-3 pr-4 text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        {vote > 0 ? (
+                          <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
+                        ) : vote < 0 ? (
+                          <ThumbsDown aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                        {vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}
+                      </span>
+                    </td>
                     <td className="py-3 text-xs">
                       <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
                     </td>
@@ -308,7 +350,6 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
           </table>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
     </SectionCard>
   );
 }
@@ -380,17 +421,18 @@ function RenderActivity({ generations = [] }) {
       description="Loaded render counts by week, newest first."
       data-testid="analytics-activity"
     >
-      <ul className="space-y-2">
+      <ul className="flex items-end gap-4">
         {buckets.map((b) => (
-          <li key={b.key} className="flex items-center gap-3 text-sm">
-            <span className="w-28 shrink-0 truncate text-muted-foreground">{b.label}</span>
-            <span className="flex h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[color:var(--hairline)]" aria-hidden="true">
+          <li key={b.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+            <FactChip>{b.count}</FactChip>
+            <span className="flex h-24 w-full max-w-20 items-end justify-center" aria-hidden="true">
               <span
-                className="rounded-full bg-[color:var(--accent)]"
-                style={{ width: `${max ? Math.max(6, Math.round((b.count / max) * 100)) : 0}%` }}
+                data-testid="activity-bar"
+                className="w-full rounded-t-md bg-[color:var(--accent)]"
+                style={{ height: `${max ? Math.max(6, Math.round((b.count / max) * 100)) : 0}%` }}
               />
             </span>
-            <FactChip>{b.count}</FactChip>
+            <span className="w-full truncate text-center text-xs text-muted-foreground">{b.label}</span>
           </li>
         ))}
       </ul>
@@ -406,6 +448,25 @@ function RenderActivity({ generations = [] }) {
  * why, and pairing them with a reason would be inventing one, so this card
  * stays a count list.
  */
+/** One icon per automatic trigger, so the timeline reads at a glance. */
+function signalIcon(signal) {
+  switch (signal) {
+    case "template_changed":
+      return LayoutTemplate;
+    case "script_edited_heavy":
+    case "script_edited_light":
+      return PenLine;
+    case "regenerated":
+      return RotateCcw;
+    case "downloaded":
+      return Download;
+    case "open_plan":
+      return CopyPlus;
+    default:
+      return Activity;
+  }
+}
+
 function SignalCounts({ summary, events = [], profileId = "" }) {
   const signals = summary?.top_signals || [];
   if (!signals.length) return null;
@@ -425,14 +486,22 @@ function SignalCounts({ summary, events = [], profileId = "" }) {
       description="Captured automatically as you worked."
       data-testid="analytics-signals"
     >
-      <ul className="divide-y divide-[color:var(--hairline)]">
+      <ul className="relative ml-2 space-y-1 border-l-2 border-[color:var(--hairline)] pl-6">
         {signals.map((s) => {
           const genId = latestGenBySignal[s.signal];
           const href = genId
             ? `/history?profile=${encodeURIComponent(profileId)}#generation-${genId}`
             : (profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history");
+          const Icon = signalIcon(s.signal);
           return (
-            <li key={s.signal} className="flex items-center justify-between gap-4 py-2 text-sm">
+            <li key={s.signal} className="relative flex items-center justify-between gap-4 py-2 text-sm">
+              <span
+                data-testid={`analytics-signal-icon-${s.signal}`}
+                aria-hidden="true"
+                className="absolute -left-6 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+              >
+                <Icon aria-hidden="true" className="h-2.5 w-2.5 text-[color:var(--brand-indigo)]" />
+              </span>
               <span className="min-w-0 truncate text-muted-foreground">{humanize(s.signal)}</span>
               <span className="flex shrink-0 items-center gap-2">
                 <FactChip>{s.count}</FactChip>
