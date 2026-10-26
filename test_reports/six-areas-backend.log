@@ -1,0 +1,47 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 66%]
+....................................                                     [100%]
+============================== warnings summary ===============================
+..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+test_tiktok_link_api.py::TestTikTokLink::test_unset_link_reads_as_not_posted_everywhere
+test_phase8_api.py::TestRecordFeedback::test_records_a_valid_pair
+test_tiktok_views_api.py::TestTikTokViews::test_unset_views_read_as_null_everywhere
+test_phase8_api.py::TestMp4CompletenessCheck::test_a_complete_file_passes
+test_post_kit_api.py::TestPostKitCaptionGuards::test_happy_path_returns_single_caption
+test_phase8_api.py::TestGenerationVerdicts::test_history_detail_and_list_carry_saved_verdicts
+test_post_kit_api.py::TestPostKitSingleCaption::test_regenerate_replaces_the_saved_kit
+test_post_kit_api.py::TestPostKitFrozenOnCompletion::test_completed_render_persists_and_returns_its_kit
+test_phase8_api.py::TestLibraryDraftGating::test_unpublished_drafts_are_excluded_from_recommendations
+  C:\Users\kasra\Documents\tiktok\backend\server.py:8677: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+test_tiktok_link_api.py::TestTikTokLink::test_unset_link_reads_as_not_posted_everywhere
+test_phase8_api.py::TestRecordFeedback::test_records_a_valid_pair
+test_tiktok_views_api.py::TestTikTokViews::test_unset_views_read_as_null_everywhere
+test_phase8_api.py::TestMp4CompletenessCheck::test_a_complete_file_passes
+test_post_kit_api.py::TestPostKitCaptionGuards::test_happy_path_returns_single_caption
+test_phase8_api.py::TestGenerationVerdicts::test_history_detail_and_list_carry_saved_verdicts
+test_post_kit_api.py::TestPostKitSingleCaption::test_regenerate_replaces_the_saved_kit
+test_post_kit_api.py::TestPostKitFrozenOnCompletion::test_completed_render_persists_and_returns_its_kit
+test_phase8_api.py::TestLibraryDraftGating::test_unpublished_drafts_are_excluded_from_recommendations
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+108 passed, 20 warnings in 42.00s

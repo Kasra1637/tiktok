@@ -1,0 +1,335 @@
+======================================================================
+frontend/src/lib/videoLength.js
+======================================================================
+
+DEFAULT_DURATION - the fallback, not a user choice
+  [PASS] it is 15s
+  [PASS] the fallback is inside the only eligible model's single pass
+  [PASS] the fallback is also inside a longer model's single pass
+  [PASS] it is a real number, not a string the template math would swallow
+
+DEFAULT_DURATION - the old helper it replaced is really gone
+  [PASS] resolveExtendLock is no longer exported
+  [PASS] plannedCoverage is no longer exported
+  [PASS] readExtendIntent is no longer exported
+  [PASS] highestSegmentIndex is no longer exported
+
+----------------------------------------------------------------------
+The hook is a boundary, not a clip
+----------------------------------------------------------------------
+
+clampHookSeconds - the boundary the backend will actually use
+  [PASS] 3s is left alone
+  [PASS] 2s is left alone
+  [PASS] 4s is left alone
+  [PASS] 5s is pulled down to the ceiling
+  [PASS] 9s is pulled down to the ceiling, not refused
+  [PASS] 1s is pulled up to the floor
+  [PASS] a negative length becomes 0, which means 'follow the template'
+  [PASS] 0 stays 0 rather than becoming the floor
+  [PASS] a missing value is 0, not NaN
+  [PASS] null is 0, not NaN
+  [PASS] garbage is 0, not NaN
+  [PASS] a legacy string integer still clamps
+  [PASS] a 2.6s boundary rounds to a whole second
+  [PASS] the floor and ceiling are the numbers the server uses
+  [PASS] the default boundary is inside the range
+
+----------------------------------------------------------------------
+The length is computed, so it is read rather than chosen
+----------------------------------------------------------------------
+
+readPieceSeconds - the project's own number wins
+  [PASS] a project at 10s reads 10s
+  [PASS] a project at 15s reads 15s even against a 12s template
+  [PASS] with no project the template's declared length is used
+  [PASS] with neither, the library default is used
+  [PASS] a project with no length yet falls through to the template
+  [PASS] a template with no declared length falls through to the default
+  [PASS] a null project and a null template are safe
+  [PASS] no arguments at all is safe
+  [PASS] a string length is coerced, not concatenated
+  [PASS] garbage lengths never reach the copy
+  [PASS] a length of null still yields a positive number
+  [PASS] a length of 0 still yields a positive number
+  [PASS] a length of -5 still yields a positive number
+  [PASS] a length of "x" still yields a positive number
+  [PASS] a length of undefined still yields a positive number
+  [PASS] a length of null still yields a positive number
+
+----------------------------------------------------------------------
+The replacement for the extend lock
+----------------------------------------------------------------------
+
+singlePassCeiling - read off the model, never assumed
+  [PASS] 15s on MiniMax
+  [PASS] 30s on a longer model
+  [PASS] an unknown capability is 0, not a hard-coded 15
+  [PASS] a missing capability is 0
+  [PASS] a non-numeric ceiling is 0
+  [PASS] a zero or negative ceiling is 0
+
+exceedsSinglePass - the refusal the endpoint will make
+  [PASS] 10s on MiniMax fits
+  [PASS] 15s on MiniMax is exactly the ceiling and still fits
+  [PASS] 16s on MiniMax does not fit
+  [PASS] 30s on MiniMax does not fit
+  [PASS] 30s on a 30s model fits
+  [PASS] 31s on a 30s model does not
+  [PASS] 8s is one render on the only eligible model
+  [PASS] 10s is one render on the only eligible model
+  [PASS] 12s is one render on the only eligible model
+  [PASS] 15s is one render on the only eligible model
+  [PASS] an unknown ceiling never blocks a render
+  [PASS] garbage against an unknown ceiling never blocks
+  [PASS] a zero length never trips the guard
+  [PASS] a negative length never trips the guard
+
+----------------------------------------------------------------------
+Two sections, in render order
+----------------------------------------------------------------------
+
+sectionSplit - the two numbers the founder is shown
+  [PASS] a 10s piece with a 3s hook splits 3 / 7
+  [PASS] the two sections always add up to the piece
+  [PASS] a boundary longer than the piece never yields a negative middle
+  [PASS] a boundary longer than the piece is itself pulled back to it
+  [PASS] a zero boundary leaves the whole piece as middle
+  [PASS] a piece with no boundary is all middle, not NaN
+  [PASS] a missing piece is all zeroes, never NaN
+  [PASS] garbage on both sides is all zeroes, never NaN
+  [PASS] [10, 3] survives a JSON round trip
+  [PASS] [8, 2] survives a JSON round trip
+  [PASS] [15, 4] survives a JSON round trip
+  [PASS] [8, 12] survives a JSON round trip
+  [PASS] [10, 0] survives a JSON round trip
+
+----------------------------------------------------------------------
+plannedSections - the two the render actually produces
+----------------------------------------------------------------------
+  [PASS] a well-formed strategy shows two sections
+  [PASS] the first is the hook
+  [PASS] the second is the middle
+  [PASS] the seconds survive
+  [PASS] the goal, script and action survive
+  [PASS] the roles come from position, not from the model
+  [PASS] an old eight-beat strategy is shown as two sections
+  [PASS] no retired role survives
+  [PASS] a legacy 'cta' goal is not rendered as a close of its own
+  [PASS] the two sections take the first two beats, in order
+  [PASS] no strategy at all still renders two rows
+  [PASS] a null strategy still renders two rows
+  [PASS] no arguments at all still renders two rows
+  [PASS] a non-array segments value is safe
+  [PASS] a shorter list is padded, not truncated to one
+  [PASS] the padded middle is empty rather than undefined
+  [PASS] a missing middle is present with zero seconds
+  [PASS] a non-dict beat does not throw
+  [PASS] missing seconds are 0, not NaN
+  [PASS] garbage seconds are 0, not NaN
+  [PASS] every section is index-labelled in render order
+
+======================================================================
+frontend/src/lib/profileSelection.js
+======================================================================
+
+partitionProfiles - nothing may be dropped
+  [PASS] every profile lands in exactly one bucket
+  [PASS] approved holds only approved
+  [PASS] unapproved holds none of the approved
+  [PASS] both approved profiles are selectable
+  [PASS] the two drafts are reported, not hidden
+  [PASS] a profile never appears in both buckets
+
+isProfileSelectable - the gate itself stays strict
+  [PASS] approved is selectable
+  [PASS] status "draft" is NOT selectable
+  [PASS] status "metadata_ready" is NOT selectable
+  [PASS] status "pending" is NOT selectable
+  [PASS] status "" is NOT selectable
+  [PASS] status null is NOT selectable
+  [PASS] status undefined is NOT selectable
+  [PASS] status "Approved" is NOT selectable
+  [PASS] a missing profile is not selectable
+  [PASS] gate and partition never disagree
+
+describeUnapprovedCount - the count a founder reads
+  [PASS] zero says nothing
+  [PASS] one is singular
+  [PASS] three is plural
+  [PASS] a nonsense count says nothing
+
+profileLabel - never a blank row
+  [PASS] a real name is used
+  [PASS] a missing name is not blank
+  [PASS] a whitespace name is not blank
+  [PASS] a null profile is not blank
+
+describeEmptySelection - names the profiles that are waiting
+  [PASS] with none waiting it says what to do next
+  [PASS] with one waiting it names it
+  [PASS] with one waiting it counts correctly
+  [PASS] with several waiting it names them all
+  [PASS] with several waiting it does not claim an approved app is waiting
+  [PASS] the empty state agrees with the partition
+
+resolveActiveProfileId - explicit sources win, in order
+  [PASS] the studio's prop is never overridden by a default
+  [PASS] a route param beats a remembered default
+  [PASS] ?profile= beats a remembered default
+  [PASS] the prop beats the param
+  [PASS] an explicit id is trusted while profiles are still loading
+
+resolveActiveProfileId - remembered, but only if it still exists
+  [PASS] a remembered id that still exists is used
+  [PASS] a remembered id that is gone is ignored, not used
+  [PASS] whitespace is not treated as an id
+  [PASS] a remembered id with whitespace still matches
+
+resolveActiveProfileId - never empty while an app exists
+  [PASS] the newest approved is the default
+  [PASS] newest means position 0, as the API ordered it
+  [PASS] one unapproved app is still usable, not a dead end
+  [PASS] a mixture prefers approved over a draft
+  [PASS] no profiles resolves to empty, which shows the editor link
+  [PASS] a missing profiles array is safe
+  [PASS] a non-array profiles value is safe
+  [PASS] no arguments at all is safe
+
+======================================================================
+frontend/src/lib/authRecovery.js
+======================================================================
+
+shouldRetryWithFreshToken - exactly one retry, only for 401
+  [PASS] a first-time 401 retries
+  [PASS] an already-retried 401 does not loop
+  [PASS] status 400 never retries
+  [PASS] status 403 never retries
+  [PASS] status 404 never retries
+  [PASS] status 500 never retries
+  [PASS] status null never retries
+  [PASS] status undefined never retries
+  [PASS] no arguments never retries
+
+shouldForceSignIn - dead session goes to sign-in, nothing else does
+  [PASS] dead session with credentials goes to sign-in
+  [PASS] a credential-less 401 never redirects (public page, backend problem)
+  [PASS] no-auth mode never redirects (no sign-in exists to go to)
+  [PASS] already on /sign-in never redirects (reload loop)
+  [PASS] already on /sign-up never redirects
+  [PASS] a sub-path of sign-in counts as the auth page
+  [PASS] no arguments never redirects
+  [PASS] a missing pathname is not an auth page
+
+======================================================================
+frontend/src/lib/templateRequirements.js
+======================================================================
+
+requiredAssetStatus - the draft's kinds decide, nothing else
+  [PASS] matching ignores case and whitespace
+  [PASS] template order is preserved
+  [PASS] an attached asset with no kind never matches
+  [PASS] a blank requirement is named but never met
+  [PASS] non-array required is safe
+  [PASS] non-array attached is safe
+  [PASS] no arguments is safe
+
+allRequiredAssetsAttached - the jump link's condition
+  [PASS] all attached
+  [PASS] one missing
+  [PASS] no requirements is vacuously complete
+  [PASS] no attachments meets nothing
+
+blocking requirements - only a missing face stops generation
+  [PASS] an attached reference never blocks
+  [PASS] a missing reference does block
+  [PASS] the blocker is the face even among retired kinds
+  [PASS] matching is still case-insensitive when blocking
+  [PASS] nothing required means nothing blocks
+  [PASS] a blank requirement never blocks
+  [PASS] a non-array requirement never blocks
+  [PASS] no keyframes means live sliders during preview
+  [PASS] no keyframes means live sliders during export
+  [PASS] before the first keyframe preview and export share default framing
+  [PASS] before the first keyframe the export uses defaults
+  [PASS] between keyframes the active lock applies
+  [PASS] the second lock takes over at its timestamp
+  [PASS] past the last keyframe the preview keeps the last lock
+  [PASS] past the last keyframe the export keeps the last lock
+  [PASS] a paused draft can preview the next zoom after an existing lock
+  [PASS] export ignores an uncommitted preview draft
+  [PASS] multiple hand and phone locks replay zoom-in and zoom-out at exact boundaries
+  [PASS] a near-duplicate timestamp updates the lock in place
+  [PASS] a distinct timestamp appends a lock
+  [PASS] sorting never mutates the input
+  [PASS] removing a lock keeps the rest
+  [PASS] tick intervals follow duration
+  [PASS] time formats as m:ss.d
+  [PASS] export filenames stay neutral and unbranded
+  [PASS] export filenames carry no superseded app branding
+  [PASS] export filenames sanitize hostile parts
+  [PASS] TikTok is the only output size and transparency is unavailable
+  [PASS] an mp4 recording opens with an ftyp box
+  [PASS] a webm recording opens with the EBML header
+  [PASS] a truncated header sniffs as nothing, not as a guess
+  [PASS] the device catalog survived the port
+  [PASS] the preset catalog survived the port
+  [PASS] backgrounds, animations, environments and accents survived the port
+  [PASS] the animation catalog holds nine motions, without Aurora or the six retired in ADR 0018
+  [PASS] defaults match the standalone app
+  [PASS] slider ranges match the standalone app
+  [PASS] a tour nobody has opened is not seen
+  [PASS] marking a tour seen persists it and is idempotent
+  [PASS] a seen tour survives a reload through storage
+  [PASS] seen state is per tour, so one page does not suppress another
+  [PASS] corrupt or unexpected stored state reads as nothing seen
+  [PASS] storage that throws still lets the tour be treated as unseen, then seen
+  [PASS] fill stretches to the screen box instead of behaving like cover
+  [PASS] fill is genuinely different from cover for a mismatched aspect
+  [PASS] cover fills the screen and contain shows the whole clip
+  [PASS] only contain leaves the screen uncovered
+  [PASS] an unknown fit mode falls back to cover rather than breaking
+  [PASS] zoom applies in every mode, and below 1 re-opens a gap in cover
+  [PASS] missing dimensions produce no box rather than NaN geometry
+  [PASS] a nonsense zoom is treated as 1 rather than blanking the screen
+  [PASS] a handler's own detail is preferred over anything generic
+  [PASS] a bodyless 502 is reported as a restart, not as a raw status
+  [PASS] a bodyless 502 from an error with no data at all is still named
+  [PASS] other statuses keep their own message
+  [PASS] nothing usable falls back to a generic line
+  [PASS] a lowercase opening sentence is capitalized
+  [PASS] a second sentence after a full stop is capitalized too
+  [PASS] text that is already correct is returned untouched
+  [PASS] a leading email is never touched -- a broken mailto is worse than a lowercase letter
+  [PASS] a leading bare domain is left alone rather than link-broken
+  [PASS] a value that does not open with a letter is out of scope
+  [PASS] a brand name with an internal capital keeps its own spelling
+  [PASS] empty, null and undefined are empty strings, not crashes
+  [PASS] the trimmed variant strips leading and trailing whitespace
+======================================================================
+frontend/src/demoCta/overlays.js + constants.js
+======================================================================
+  [PASS] nine overlay fonts with unique ids, Anton first, Sora retired
+  [PASS] every overlay font file exists under public/fonts with an @font-face rule
+  [PASS] eighteen overlay animations with unique ids, punch and rise present
+  [PASS] every new overlay entrance is deterministic and shared-channel (hook and end card agree)
+  [PASS] overlay motion is a pure function of its arguments (deterministic)
+  [PASS] overlay motion reads no wall-clock
+  [PASS] punch at t=0 starts overscaled and invisible
+  [PASS] unknown animation ids fall back to punch
+  [PASS] rise at rest matches the legacy fade-plus-lift exactly
+  [PASS] steady has no entrance and typewriter reveals progressively
+  [PASS] overlay size range is 70-130%
+  [PASS] overlay defaults preserve the long-standing look
+  [PASS] three overlay text styles with signature default and fallback
+  [PASS] the paused preview paints on demand with no parked per-frame work
+  [PASS] the scrub strip is keyboard-operable with visible focus
+  [PASS] checkOverlaySafety passes default centered hook and end card
+  [PASS] checkOverlaySafety flags right-rail, bottom-strip, and small-scale issues
+  [PASS] resolveCtaWindow anchors last2, last3, and full clip to loaded duration
+  [PASS] Story timing clamps to the enabled hook and CTA windows
+  [PASS] Story paints only inside its window using hook styling and local video time
+  [PASS] CTA variants and builtin look presets are populated
+
+======================================================================
+All frontend length/section logic behaves correctly.

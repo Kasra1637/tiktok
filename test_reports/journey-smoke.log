@@ -1,0 +1,298 @@
+Mounting every wizard step and panel...
+  [PASS] no source file leaks JSX comment text into the page
+  [PASS] the photo upload lives on the merged choosing step, not its own
+  [PASS] the wizard lands on its ?step= and mirrors it back
+  [PASS] retired ?step= keys land on their merged steps
+  [PASS] the presenter photo section waits for the audience angles
+  [PASS] no step offers time-range or audio controls for an asset
+  [PASS] the plan is written before a character photo is attached
+  [PASS] the plan is generated from the step that reviews it
+  [PASS] Review without a goal asks for it instead of spinning forever
+  [PASS] a failed plan offers retry instead of spinning forever
+  [PASS] GenerationPanel mounts
+  [PASS] GenerationPanel mounts with no project
+  [PASS] GenerationPanel shows the completed generation
+  [PASS] GenerationPanel blocks generation before the project is ready
+  [PASS] GenerationPanel refuses a ready project with no photograph
+  [PASS] GenerationPanel is silent about the photo once one is attached
+  [PASS] render waits for saved edits and model loading has a real retry
+  [PASS] GenerationPanel refuses a project with no angle picked
+  [PASS] GenerationPanel blocks a render after the angle changes
+  [PASS] the resolution toggle appears only for models that offer a choice
+  [PASS] no resolution toggle renders for a model with no choice
+  [PASS] the chosen resolution reaches the render request
+  [PASS] switching models resets the resolution choice
+  [PASS] GenerationPanel explains an un-ready project that already rendered
+  [PASS] a storage failure is loud, offers the retry, and clears on success
+  [PASS] a transient poll failure neither stops the loop nor raises the banner
+  [PASS] GenerationPanel blocks generation while a claim is prohibited
+  [PASS] the strategy review presents the two sections and what they are
+  [PASS] the strategy review shows what the viewer ends up with
+  [PASS] a strategy with no outcome fields renders no outcome block
+  [PASS] the strategy panel requires an angle before building
+  [PASS] an angle change after the build marks the strategy stale
+  [PASS] the strategy review shows the hook boundary from the plan
+  [PASS] the strategy review shows what is said in each section
+  [PASS] the strategy review warns when approved words do not fit the middle
+  [PASS] the strategy review renders no render or chain control
+  [PASS] the strategy review mounts with no strategy
+  [PASS] the strategy review names a blocking claim
+  [PASS] the strategy review warns when no character reference is attached
+  [PASS] GenerationPanel offers no second render, approval or join
+  [PASS] GenerationPanel disables Generate when length exceeds single pass
+  [PASS] GenerationPanel tells the founder the demo and the close are theirs
+  [PASS] GenerationPanel promises no on-screen text
+  [PASS] GenerationPanel disables Generate while words do not fit
+  [PASS] no source file builds a request for a deleted endpoint
+  [PASS] no mounted path calls a deleted endpoint
+  [PASS] wizard renders step: App Profile
+  [PASS] wizard renders step: Audience & template
+  [PASS] wizard renders step: Review & submit
+  [PASS] wizard arrows walk the steps in order
+  [PASS] no render control appears before the plan step
+  [PASS] Review & submit holds the render controls once a plan exists
+  [PASS] generating is blocked until a strategy is built and read
+  [PASS] an existing strategy is not rebuilt when generating
+  [PASS] generating another video asks first, and a no renders nothing
+  [PASS] a strategy build narrates liveness, then clears it
+  [PASS] a failed strategy build leaves nothing generated and says so
+  [PASS] the stale-plan warning matches the server and blocks the click
+  [PASS] rebuilding a stale strategy asks first
+  [PASS] rebuilding a current strategy does not interrupt
+  [PASS] Review & submit refuses to run without an approved plan
+  [PASS] wizard deep-links to a drafted project and lands on the right step
+  [PASS] the read-only shot timeline says so, and says when it is stale
+  [PASS] Review states the length and offers no way to change it
+  [PASS] Review offers no caption editor
+  [PASS] Review shows both spoken counts against their targets
+  [PASS] Review shows the spoken partition without offering a manual trim
+  [PASS] Review reports a script that was trimmed on arrival
+  [PASS] Review shows the server's words, not a stale local copy
+  [PASS] Review offers no manual mark-ready control
+  [PASS] the Review re-read never downgrades a ready project
+  [PASS] Review never overwrites unsaved edits with a refetch
+  [PASS] a double-tapped Regenerate starts one plan generation, not two
+  [PASS] the fourth thumbs-down states the cap instead of generating
+  [PASS] plan and template thumbs are recorded under their own component
+  [PASS] no step in the wizard offers a length control
+  [PASS] the Review step states the piece's length, read-only
+  [PASS] the Audience step offers to generate missing angles
+  [PASS] landing on angles shows Generate, not the list or Regenerate
+  [PASS] a stale angle pick still lands gated
+  [PASS] angle generation counts up in flight, then cascades rows in
+  [PASS] Review & submit redirects angle-less founders instead of generating
+  [PASS] a failed angle generation is named and stays retryable
+  [PASS] every length the studio offers is a single render
+  [PASS] the studio never offers a call to action or a product demo
+  [PASS] the top recommendation is preselected when the founder has not chosen
+  [PASS] every fit reason and limitation is on the card, with no toggle to hide them
+  [PASS] a card with no reasons or limitations shows neither block
+  [PASS] a one-reason card shows the verdict with no detail list
+  [PASS] the merged step refuses to rank anything without an objective
+  [PASS] no objective is silently reported as done on the progress pills
+  [PASS] an unknown angle kind provides six fallback goals without all-goals controls
+  [PASS] the progress pill for the app does not echo the app name
+  [PASS] goal options wait until the founder picks an audience angle
+  [PASS] six goals are tailored when an angle is selected without an all-goals control
+  [PASS] changing an angle reranks goals without changing a chosen goal
+  [PASS] the picked audience angle shows the fields the strategy uses
+  [PASS] angle rows show only their kind icon and caps title
+  [PASS] angle rows carry the check mark
+  [PASS] goal cards carry the angle kind's counts without reordering
+  [PASS] formatVerdicts prints counts and stays silent on empty evidence
+  [PASS] angle copy carries no trailing period
+  [PASS] goal cards show objective-level counts alongside angle-kind counts
+  [PASS] objective evidence does not reorder the goal list
+  [PASS] shuffle advances the six goal suggestions on every press
+  [PASS] goal shuffle counts up in flight, then cascades cards in
+  [PASS] regenerate angles shows six fresh options and keeps goals
+  [PASS] the page reserves the scrollbar gutter across steps
+  [PASS] formatVerdicts prints counts and stays silent on empty evidence
+  [PASS] Review with a goal but no angle waits for a real angle before planning
+  [PASS] Review sends a missing profile back to its step on one red button
+  [PASS] Review shows only the gap actually missing, never two firsts
+  [PASS] Review & submit's angle gap asks once, with one shared control
+  [PASS] every step spaces its gate hint from the red button the same
+  [PASS] no angle is silently reported as done on the progress pills
+  [PASS] progress ticks mean done, not merely being to the left
+  [PASS] a plan with unsaved edits is not reported as reviewed
+  [PASS] reloading recommendations never replaces a hand-picked template
+  [PASS] wizard surfaces the tailored-template error instead of failing silently
+  [PASS] wizard requests tailored templates for the chosen objective
+  [PASS] pre-made templates stay hidden until the tailored set is ready
+  [PASS] template tailoring counts up in flight, then cascades cards in
+  [PASS] no project write sends a length or an extend intent
+
+Mounting the landing page...
+[HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+  [PASS] Landing mounts
+  [PASS] Landing claims nothing the product cannot keep
+  [PASS] Landing separates generated stories from real footage and editor overlays
+  [PASS] Landing headings, workflow, and navigation have real destinations
+  [PASS] Landing actions work in signed-out mode
+  [PASS] Landing actions work in signed-in mode
+  [PASS] Landing actions work in no-auth mode
+  [PASS] Features showcases six highlights with working nav
+  [PASS] every onboarding tour step points at a real element
+  [PASS] every routable path maps to a tour that exists
+  [PASS] deleted routes map to no tour
+  [PASS] every live work page maps to a tour (and auth/legal pages do not)
+  [PASS] the problem/solution bullets are length-matched
+
+Mounting the App Profile detail page...
+  [PASS] a profile cannot be deleted without typing its name
+  [PASS] deleting a profile calls the endpoint and leaves the page
+  [PASS] a refused delete keeps the dialog open and shows why
+  [PASS] an unnamed profile still has to be confirmed
+  [PASS] the delete warning names what is lost (0 drafts, 0 angles)
+  [PASS] the delete warning names what is lost (1 drafts, 0 angles)
+  [PASS] the delete warning names what is lost (3 drafts, 2 angles)
+  [PASS] the profile page carries no angles or drafts section
+  [PASS] Profile Detail headings use the Content Angles tokens
+
+Checking the App Profile research actions...
+  [PASS] refresh from sources stages a pending proposal
+  [PASS] approving the pending proposal applies it
+  [PASS] research into a new draft forks from the store listing
+  [PASS] research into a new draft stays hidden without a store listing
+
+Checking the sidebar navigation model...
+  [PASS] App Profile leads the sidebar, and nothing still calls it "Your app"
+
+Checking the icon system...
+  [PASS] no page imports a lucide icon it never renders
+  [PASS] a size=sm button never carries a 16px icon
+  [PASS] every profile card and group bar opens with its own icon
+  [PASS] section cards share the profile's unboxed muted heading
+  [PASS] app chrome never takes a text caret
+  [PASS] an eyebrow icon is always 12px
+  [PASS] icon-bearing group labels use GroupLabel
+  [PASS] no small section headings
+  [PASS] workspace enforces 3 sizes x 2 weights
+  [PASS] buttons share the studio specular bevel and soft sweep with static text and icons
+  [PASS] no button paints coral or red, and the destructive fill stays dark
+  [PASS] pills, pickable cards, inputs, icon tiles, and alerts share the studio material system
+  [PASS] no block doubles its parent's spacing with mt-*
+
+Mounting the Analytics results ledger...
+  [PASS] Analytics mounts and shows the header for the selected app
+  [PASS] clip results compare reach, posted links and votes without inferring conversions
+  [PASS] Analytics scopes result requests and shows failures rather than empty success
+  [PASS] automatic signals render as counts, never as judgments
+  [PASS] no signals yet says so instead of showing an empty card
+  [PASS] no app at all points at the profile editor
+  [PASS] the render funnel counts every clip by status
+  [PASS] renders per week buckets clips into Monday-start weeks
+  [PASS] reasons list the founder's own codes with an explained count
+
+Checking the App Profile review actions...
+  [PASS] profile next action approves a manual draft before opening its scoped studio
+  [PASS] save and approve sit in the research row once research has generated the profile
+  [PASS] an approved profile's row is two short controls, and the menu carries the re-runs
+  [PASS] a hand-typed profile keeps a Save even though it gets no research-row actions
+  [PASS] with no profile the details stay hidden and only research is offered
+  [PASS] research reveals the details card for the draft it just created
+
+Checking the native Product Demo + CTA editor...
+  [PASS] a finished render offers the native Demo + CTA editor
+  [PASS] the studio's own download is untouched by the native entry
+  [PASS] a finished render restores its saved video thumb without a new vote
+  [PASS] the studio download never points at raw cloud storage
+  [PASS] a finished render shows its frozen post kit at the output moment
+  [PASS] a render without a kit shows no post copy at the output moment
+  [PASS] an old three-caption kit still shows its first caption
+  [PASS] regenerate replaces the saved copy only when clicked
+  [PASS] a failed regenerate keeps the current copy and says so
+  [PASS] no popup, opener or cross-origin message contract remains in the studio
+  [PASS] Demo + CTA works on its own, without a Hook + Story
+  [PASS] every topic page subtitle fits the masthead budget
+  [PASS] every wizard subtitle fits the shared size and length budget
+  [PASS] the preview column is pinned, and the settings column is what scrolls
+  [PASS] which settings groups are open is remembered across visits
+  [PASS] the frame upload still reaches its file input with Source & Look closed
+  [PASS] Public Sans and Sora are gone from both overlay font lists
+  [PASS] an overlay entrance, size or face change keeps the playhead
+[HookForge] Export failed: export Zoom export callback verified
+  [PASS] multiple hand zoom locks preview new edits and replay zoom-in/out
+[HookForge] Export failed: export Zoom export callback verified
+  [PASS] multiple floating zoom locks preview new edits and replay zoom-in/out
+  [PASS] paused preview paints on demand: zero frames idle, one per change and seek
+  [PASS] a hook tweak replays the hook and a CTA tweak replays the end card
+  [PASS] the loaded player row fits narrow columns without horizontal overflow
+  [PASS] the scrubber slider seeks from the keyboard
+  [PASS] the export action sits after the preview in the pinned column
+  [PASS] Space toggles preview playback outside text entry
+  [PASS] the player stacks scrubber, one control row, then export
+  [PASS] unavailable editor sources offer recovery, retry and an upload exit
+  [PASS] the editor opens a finished render only from its durable, fetchable copy
+  [PASS] the preview and the export button are chromeless and share one width
+  [PASS] swatches are fixed size and animation uses the app's chip
+  [PASS] the settings panel scrolls on a slim bar that never overlaps a card
+  [PASS] short viewports scroll the column instead of shrinking the frame
+  [PASS] an old stored open-groups value cannot open two groups
+  [PASS] the empty frame offers a real upload control
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (C:\Users\kasra\Documents\tiktok\frontend\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at navigateFetch (C:\Users\kasra\Documents\tiktok\frontend\node_modules\jsdom\lib\jsdom\living\window\navigation.js:76:3)
+    at exports.navigate (C:\Users\kasra\Documents\tiktok\frontend\node_modules\jsdom\lib\jsdom\living\window\navigation.js:54:3)
+    at Timeout._onTimeout (C:\Users\kasra\Documents\tiktok\frontend\node_modules\jsdom\lib\jsdom\living\nodes\HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7) undefined
+  [PASS] no Output group: the TikTok spec lives on the Export action and result
+  [PASS] MP4 duration and decoding validation precede download and History
+  [PASS] Story text keeps its message and clamps timing when CTA settings change
+  [PASS] Font & Animation close each other in Hook Text and End Card CTA
+  [PASS] group titles and slider labels read correctly
+  [PASS] finished looks save only after clip review in End Card CTA and remain reusable
+  [PASS] Demo + CTA offers S/M/L size presets, safe-area guard, copy flipper, timing presets, and named looks
+  [PASS] Demo + CTA offers Real Video with a History render picker
+[HookForge] Export failed: export Sequence callback verified
+[HookForge] Export failed: export Sequence callback verified
+[HookForge] Export failed: export Sequence callback verified
+[HookForge] Export failed: export export did not switch to the added frame
+[HookForge] Export failed: export export lost base footage or its overlays
+  [PASS] Real Video sequences History then upload with a presentation per clip
+  [PASS] History opens as a clip and expands to its context and actions
+  [PASS] history sorts most-viewed above uncounted renders
+  [PASS] History saves update collapsed facts, votes and view order without reloading
+  [PASS] History's expand tab opens on a drag, not only a click
+  [PASS] History's subtitle renders within the masthead budget
+  [PASS] History pages past the first hundred renders
+  [PASS] History's details modal answers Escape
+  [PASS] History opens the render a #generation- link names
+  [PASS] Asset Library searches its photos by name
+  [PASS] app chrome offers a skip link to the content
+  [PASS] History offers one primary video vote with optional part ratings
+  [PASS] History restores saved thumb highlights without recording new votes
+  [PASS] History names rated parts on the collapsed disclosure with a clear selected state
+  [PASS] History moves the highlight immediately when a saved vote is changed
+  [PASS] History refetches a render's votes when its drawer opens
+  [PASS] History keeps the list votes when the vote refetch fails
+  [PASS] History offers Demo + CTA on a finished clip
+  [PASS] History does not offer Demo + CTA on a clip that is not finished
+  [PASS] History offers Delete on a failed clip
+  [PASS] History keeps save and onward actions together and Delete apart from them
+  [PASS] History offers a New variation entry into the studio draft
+  [PASS] History plays the durable copy the API signed, not a stripped path
+  [PASS] History never plays the provider's temporary link
+  [PASS] History retries its recovered source and waits for actual decoding
+  [PASS] History surfaces recovery failure instead of claiming success
+  [PASS] History shows the frozen post kit with copy buttons
+  [PASS] History shows no post copy for a render without a kit
+  [PASS] History's details modal shows the same frozen kit
+  [PASS] the Demo + CTA export shows the inherited frozen kit
+  [PASS] a finished export puts itself in view
+  [PASS] export reads source audio samples independently of preview mute
+  [PASS] both phone renderers share one fit, and neither paints a black void
+
+All 254 render smoke checks pass.

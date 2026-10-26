@@ -1,0 +1,76 @@
+CLERK_JWKS_URL is not set. Authentication is DISABLED — every request is treated as user 'anonymous'. Set CLERK_JWKS_URL to your Clerk instance's JWKS endpoint to enable per-user data isolation.
+INFO:     Started server process [11388]
+INFO:     Waiting for application startup.
+2026-10-24 01:36:32,683 - server - INFO - Migration: dropped retired feed-cache table trending_videos
+2026-10-24 01:36:32,683 - server - INFO - Migration: dropped retired feed-cache table trending_cache_meta
+2026-10-24 01:36:32,683 - server - INFO - Migration: dropped retired feed-cache table niche_cache_meta
+2026-10-24 01:36:32,683 - server - INFO - Migration: dropped retired feed-cache table curated_videos
+2026-10-24 01:36:32,699 - server - INFO - Database backend: local SQLite at C:\Users\kasra\Documents\tiktok\backend\storage\hookforge.db. User data (profiles, projects, generations) will NOT survive a redeploy or restart. (fine for local dev)
+2026-10-24 01:36:32,700 - server - WARNING - OPENROUTER_API_KEY is not set. The app will run, but AI features (hook analysis, face swap, video generation) will return 503 until it is set.
+2026-10-24 01:36:33,080 - httpx - INFO - HTTP Request: GET https://openrouter.ai/api/v1/videos/models "HTTP/1.1 200 OK"
+2026-10-24 01:36:33,082 - provider_capabilities - WARNING - Video provider catalog disagrees with OpenRouter on 1 point(s). Each one means a render can fail after the founder has committed to it:
+2026-10-24 01:36:33,082 - provider_capabilities - WARNING -   heygen-video-1 (heygen/heygen-video-1): OpenRouter now allows provider passthrough (prompt_enhancement). The studio sends none, so if any is required this model will refuse every render.
+2026-10-24 01:36:33,360 - httpx - INFO - HTTP Request: GET https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints "HTTP/1.1 200 OK"
+2026-10-24 01:36:33,362 - ai_service - INFO - Temperature for anthropic/claude-haiku-5.5: not declared (10 endpoint(s)).
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8002 (Press CTRL+C to quit)
+2026-10-24 01:36:50,218 - hookforge.requests - INFO - request method=GET path=/api/health status=200 request_id=6a94e682d92e duration_ms=10.9
+INFO:     127.0.0.1:61749 - "GET /api/health HTTP/1.1" 200 OK
+2026-10-24 01:36:51,925 - hookforge.requests - INFO - request method=POST path=/api/demo-cta/opening-messages status=503 request_id=992408e40b4d duration_ms=5.3
+INFO:     127.0.0.1:57133 - "POST /api/demo-cta/opening-messages HTTP/1.1" 503 Service Unavailable
+2026-10-24 01:41:13,760 - hookforge.requests - INFO - request method=GET path=/api/health status=200 request_id=ec4c59e28c73 duration_ms=8.1
+INFO:     127.0.0.1:52082 - "GET /api/health HTTP/1.1" 200 OK
+2026-10-24 01:51:12,631 - hookforge.requests - INFO - request method=GET path=/api/app-profiles status=200 request_id=f2a1c62fa99a duration_ms=3.6
+INFO:     127.0.0.1:49473 - "GET /api/app-profiles HTTP/1.1" 200 OK
+2026-10-24 01:51:12,637 - hookforge.requests - INFO - request method=GET path=/api/app-profiles status=200 request_id=7e523b6a3b84 duration_ms=4.3
+INFO:     127.0.0.1:49473 - "GET /api/app-profiles HTTP/1.1" 200 OK
+2026-10-24 01:51:12,658 - hookforge.requests - INFO - request method=GET path=/api/app-profiles/067c3d62-f96e-4d08-baff-e51f2d29f1c1/assets status=200 request_id=0e1d5188ba04 duration_ms=11.3
+INFO:     127.0.0.1:49473 - "GET /api/app-profiles/067c3d62-f96e-4d08-baff-e51f2d29f1c1/assets HTTP/1.1" 200 OK
+2026-10-24 01:51:12,684 - hookforge.requests - INFO - request method=GET path=/api/media/assets/9b0ab819-afc2-468a-91e5-93db4c2c9f6d status=200 request_id=914a9bf0f9bb duration_ms=7.6
+INFO:     127.0.0.1:49474 - "GET /api/media/assets/9b0ab819-afc2-468a-91e5-93db4c2c9f6d?exp=1792875072&sig=689a99e2901fb706531fe4001c7b1f24f6ce685553eea21da14328493569fff1 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,293 - hookforge.requests - INFO - request method=GET path=/api/history/generations status=200 request_id=e8da06b471e2 duration_ms=8.2
+INFO:     127.0.0.1:49473 - "GET /api/history/generations?limit=100 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,302 - hookforge.requests - INFO - request method=GET path=/api/media/posters/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922.jpg status=200 request_id=14d4d72f932b duration_ms=1.6
+INFO:     127.0.0.1:49474 - "GET /api/media/posters/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922.jpg?exp=1792875074&sig=bb50d7f6bfe44d0d57e0ce4a6164a022b428eefb135c339a2e70f21832e1cf9d HTTP/1.1" 200 OK
+2026-10-24 01:51:14,308 - hookforge.requests - INFO - request method=GET path=/api/media/posters/f9deb9fc-cc51-4752-a88b-bae5a3f99bdd.jpg status=200 request_id=f21a812933b6 duration_ms=5.5
+2026-10-24 01:51:14,310 - hookforge.requests - INFO - request method=GET path=/api/history/generations status=200 request_id=fb202c51ba51 duration_ms=14.1
+INFO:     127.0.0.1:49476 - "GET /api/media/posters/f9deb9fc-cc51-4752-a88b-bae5a3f99bdd.jpg?exp=1792875074&sig=bff76421f56e1c10db330d926482c6fb256d768ccd79e98cc75ec5839d13ea76 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49473 - "GET /api/history/generations?limit=100 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,311 - hookforge.requests - INFO - request method=GET path=/api/media/posters/cddbf885-3af3-407b-9c3e-7e4bd494f908.jpg status=200 request_id=d243e80768a3 duration_ms=6.1
+INFO:     127.0.0.1:49477 - "GET /api/media/posters/cddbf885-3af3-407b-9c3e-7e4bd494f908.jpg?exp=1792875074&sig=d7fd7cf2e054221c27ba3bdf70c92114ca3d698e48a5541d0170d1ea86e1ddf2 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,316 - hookforge.requests - INFO - request method=GET path=/api/app-profiles status=200 request_id=1069dfe02886 duration_ms=31.7
+2026-10-24 01:51:14,317 - hookforge.requests - INFO - request method=GET path=/api/media/posters/91288c04-6056-4ece-a059-aeab676e4e9c.jpg status=200 request_id=8d60a470d485 duration_ms=4.1
+INFO:     127.0.0.1:49475 - "GET /api/app-profiles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49474 - "GET /api/media/posters/91288c04-6056-4ece-a059-aeab676e4e9c.jpg?exp=1792875074&sig=bcba778160c36db079448edb37798706a05a591e178e962e4cf780e83df8db2d HTTP/1.1" 200 OK
+2026-10-24 01:51:14,321 - hookforge.requests - INFO - request method=GET path=/api/media/posters/4731b31d-9168-4e37-bf28-bd3024645774.jpg status=200 request_id=0400bccc5407 duration_ms=6.0
+INFO:     127.0.0.1:49478 - "GET /api/media/posters/4731b31d-9168-4e37-bf28-bd3024645774.jpg?exp=1792875074&sig=c3af013658dad24f359481e730d3f5fd1dc5c5cee3aa3aca58aea6795b9183d7 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,326 - hookforge.requests - INFO - request method=GET path=/api/media/posters/40410005-03bf-4a88-a5c1-457a0dc09663.jpg status=200 request_id=82624af37cb6 duration_ms=7.0
+INFO:     127.0.0.1:49476 - "GET /api/media/posters/40410005-03bf-4a88-a5c1-457a0dc09663.jpg?exp=1792875074&sig=c27cba80786add1a45d0c33dc5cc6cd1de9fbe8f003466b1a0f4c60f9fe9410a HTTP/1.1" 200 OK
+2026-10-24 01:51:14,328 - hookforge.requests - INFO - request method=GET path=/api/media/posters/de6f990b-5ab4-4aa9-99f0-aac177055f4c.jpg status=200 request_id=daafa1c33f34 duration_ms=5.1
+INFO:     127.0.0.1:49477 - "GET /api/media/posters/de6f990b-5ab4-4aa9-99f0-aac177055f4c.jpg?exp=1792875074&sig=91a5fc3418819ebe31dd6842d97f2454f7106c46e54df62a9586369a68158d2f HTTP/1.1" 200 OK
+2026-10-24 01:51:14,329 - hookforge.requests - INFO - request method=GET path=/api/media/posters/4cff5313-39a2-4b79-8b50-0603fd78964e.jpg status=200 request_id=2333a69a30e4 duration_ms=4.5
+INFO:     127.0.0.1:49479 - "GET /api/media/posters/4cff5313-39a2-4b79-8b50-0603fd78964e.jpg?exp=1792875074&sig=b00d18c25c2df60eb7ca2a59e60868bbc92f2dd828929dc6e87b989a37abd36e HTTP/1.1" 200 OK
+2026-10-24 01:51:14,334 - hookforge.requests - INFO - request method=GET path=/api/app-profiles status=200 request_id=1cbcedf9638c duration_ms=13.4
+2026-10-24 01:51:14,334 - hookforge.requests - INFO - request method=GET path=/api/media/posters/0f7027b9-431e-4e15-8c7b-18ecb527e580.jpg status=200 request_id=83dbdb179113 duration_ms=4.2
+INFO:     127.0.0.1:49473 - "GET /api/app-profiles HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49474 - "GET /api/media/posters/0f7027b9-431e-4e15-8c7b-18ecb527e580.jpg?exp=1792875074&sig=cc9d181c21837380a26f0af5f774b85548e8fb902b6cd16761c09590f586eb96 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,341 - hookforge.requests - INFO - request method=GET path=/api/media/posters/fad09ef2-5d1e-406f-8e63-444514fc81db.jpg status=200 request_id=b8c54b527844 duration_ms=9.5
+INFO:     127.0.0.1:49478 - "GET /api/media/posters/fad09ef2-5d1e-406f-8e63-444514fc81db.jpg?exp=1792875074&sig=73fe511395157ba21b527a01f1a8ec21ab806e78fe42d29b7572ad3b17458551 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,345 - hookforge.requests - INFO - request method=GET path=/api/media/posters/71e5182a-e7d6-491d-83d7-2165c268a57d.jpg status=200 request_id=42b04f64152a duration_ms=8.2
+INFO:     127.0.0.1:49476 - "GET /api/media/posters/71e5182a-e7d6-491d-83d7-2165c268a57d.jpg?exp=1792875074&sig=ab74671be9c255aa7cdb08654563d9709b1913653f6f5de892340e6d0582d6f0 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,348 - hookforge.requests - INFO - request method=GET path=/api/media/posters/b892204a-b4d6-4b1b-a0d8-3c2b9f8acbf7.jpg status=200 request_id=3a21a57e1477 duration_ms=5.9
+INFO:     127.0.0.1:49477 - "GET /api/media/posters/b892204a-b4d6-4b1b-a0d8-3c2b9f8acbf7.jpg?exp=1792875074&sig=ad737b042db128e31caedbb1ccebca8c1f150a931ab672541fb593bf278fc611 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,350 - hookforge.requests - INFO - request method=GET path=/api/media/posters/5ce9592c-8cf5-4719-b2f4-3cb0840faf2f.jpg status=200 request_id=397102c1ba55 duration_ms=5.9
+INFO:     127.0.0.1:49479 - "GET /api/media/posters/5ce9592c-8cf5-4719-b2f4-3cb0840faf2f.jpg?exp=1792875074&sig=9ea1a066ccdae1af8ecaeb32930f48f8f3a50271c60ff577714b90b890ef95f2 HTTP/1.1" 200 OK
+2026-10-24 01:51:14,352 - hookforge.requests - INFO - request method=GET path=/api/media/posters/483d37d4-c04b-486f-ae3b-a79bfda84c67.jpg status=200 request_id=cbdb7b78ab90 duration_ms=5.4
+INFO:     127.0.0.1:49480 - "GET /api/media/posters/483d37d4-c04b-486f-ae3b-a79bfda84c67.jpg?exp=1792875074&sig=576308318be68c91462c54eac5f7e56b33948e4742b0e8743cc2d82d315a8a35 HTTP/1.1" 200 OK
+2026-10-24 01:51:16,415 - hookforge.requests - INFO - request method=GET path=/api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 status=200 request_id=208bbfb4fc03 duration_ms=6.5
+INFO:     127.0.0.1:49473 - "GET /api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 HTTP/1.1" 200 OK
+2026-10-24 01:51:16,424 - hookforge.requests - INFO - request method=GET path=/api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 status=200 request_id=30bb013a62a8 duration_ms=7.6
+INFO:     127.0.0.1:49473 - "GET /api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 HTTP/1.1" 200 OK
+2026-10-24 01:51:18,835 - hookforge.requests - INFO - request method=GET path=/api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 status=200 request_id=c0e6d236bb92 duration_ms=8.6
+INFO:     127.0.0.1:49473 - "GET /api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 HTTP/1.1" 200 OK
+2026-10-24 01:51:18,843 - hookforge.requests - INFO - request method=GET path=/api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 status=200 request_id=7704ed2ac16c duration_ms=6.4
+INFO:     127.0.0.1:49473 - "GET /api/generations/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922 HTTP/1.1" 200 OK
+2026-10-24 01:51:18,892 - hookforge.requests - INFO - request method=GET path=/api/media/videos/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922.mp4 status=200 request_id=12d4659fd6b4 duration_ms=37.7
+INFO:     127.0.0.1:49473 - "GET /api/media/videos/b9a6b10e-a1f5-427a-9d01-ec68f2bf9922.mp4?exp=1792875078&sig=63502e7637dda9803738674bd0a07f6f0ba3469edc4c552c617d88ea3e1db1e3 HTTP/1.1" 200 OK

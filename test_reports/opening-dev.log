@@ -1,0 +1,687 @@
+yarn run v1.22.22
+$ craco start
+Attempting to bind to HOST environment variable: 127.0.0.1
+If this was unintentional, check that you haven't mistakenly set it in your shell.
+Learn more here: https://cra.link/advanced-config
+
+(node:21284) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Starting the development server...
+
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 964:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 964:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 964:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 964:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 965:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 783:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 965:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 781:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 963:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 781:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 963:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', and 'videoRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array                                                                                                                           react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                              react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                              react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                                react-hooks/exhaustive-deps
+  Line 348:6:  React Hook useEffect has unnecessary dependencies: 'overlayUrl' and 'overlayVideoRef'. Either exclude them or remove the dependency array. Outer scope values like 'overlayUrl' aren't valid dependencies because mutating them doesn't re-render the component  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array                                                                                                                           react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                              react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                              react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                                                                                                                                                react-hooks/exhaustive-deps
+  Line 348:6:  React Hook useEffect has unnecessary dependencies: 'overlayUrl' and 'overlayVideoRef'. Either exclude them or remove the dependency array. Outer scope values like 'overlayUrl' aren't valid dependencies because mutating them doesn't re-render the component  react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\demoCta\DemoCtaEditor.jsx
+  Line 780:6:  React Hook useEffect has a missing dependency: 'clearExportErrors'. Either include it or remove the dependency array                                                                             react-hooks/exhaustive-deps
+  Line 962:6:  React Hook useEffect has missing dependencies: 'appendUrl', 'setCurrentTime', 'setIsPlaying', 'setPreviewMuted', 'videoRef', and 'viewMode'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+src\demoCta\usePreviewLoop.js
+  Line 137:6:  React Hook useEffect has missing dependencies: 'appendVideoRef' and 'timelineTime'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  Line 175:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 242:6:  React Hook useCallback has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  Line 246:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  Line 346:6:  React Hook useEffect has a missing dependency: 'appendVideoRef'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+
+src\pages\CreateVideo.jsx
+  Line 899:6:   React Hook useEffect has a missing dependency: 'phases.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1345:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  Line 1397:6:  React Hook useCallback has a missing dependency: 'adoptAngles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

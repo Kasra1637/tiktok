@@ -1,0 +1,185 @@
+bringing up nodes...
+bringing up nodes...
+
+...FFF.F...F..                                                           [100%]
+================================== FAILURES ===================================
+_ TestTikTokLink.test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://not-tiktok.com/video/123] _
+[gw0] win32 -- Python 3.12.10 C:\Users\kasra\AppData\Local\Programs\Python\Python312\python.exe
+
+self = <test_tiktok_link_api.TestTikTokLink object at 0x000001EC5DCEE030>
+api = <module 'server' from 'C:\\Users\\kasra\\Documents\\tiktok\\backend\\server.py'>
+bad = 'https://not-tiktok.com/video/123'
+
+    @pytest.mark.parametrize("bad", [
+        "https://not-tiktok.com/video/123",
+        "https://tiktok.com.example.org/video/123",
+        "https://tiktok.com@example.org/video/123",
+        "https://example.org/?next=tiktok.com",
+        "https://user@www.tiktok.com/video/123",
+    ])
+    def test_lookalikes_and_userinfo_cannot_mark_a_render_posted(self, api, bad):
+        generation_id = _insert_generation(api)
+        _set_link(api, generation_id, LINK)
+>       with pytest.raises(HTTPException) as exc:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+backend\test_tiktok_link_api.py:111: Failed
+_ TestTikTokLink.test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://tiktok.com.example.org/video/123] _
+[gw0] win32 -- Python 3.12.10 C:\Users\kasra\AppData\Local\Programs\Python\Python312\python.exe
+
+self = <test_tiktok_link_api.TestTikTokLink object at 0x000001EC5DCEE300>
+api = <module 'server' from 'C:\\Users\\kasra\\Documents\\tiktok\\backend\\server.py'>
+bad = 'https://tiktok.com.example.org/video/123'
+
+    @pytest.mark.parametrize("bad", [
+        "https://not-tiktok.com/video/123",
+        "https://tiktok.com.example.org/video/123",
+        "https://tiktok.com@example.org/video/123",
+        "https://example.org/?next=tiktok.com",
+        "https://user@www.tiktok.com/video/123",
+    ])
+    def test_lookalikes_and_userinfo_cannot_mark_a_render_posted(self, api, bad):
+        generation_id = _insert_generation(api)
+        _set_link(api, generation_id, LINK)
+>       with pytest.raises(HTTPException) as exc:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+backend\test_tiktok_link_api.py:111: Failed
+_ TestTikTokLink.test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://tiktok.com@example.org/video/123] _
+[gw0] win32 -- Python 3.12.10 C:\Users\kasra\AppData\Local\Programs\Python\Python312\python.exe
+
+self = <test_tiktok_link_api.TestTikTokLink object at 0x000001EC5DCEE390>
+api = <module 'server' from 'C:\\Users\\kasra\\Documents\\tiktok\\backend\\server.py'>
+bad = 'https://tiktok.com@example.org/video/123'
+
+    @pytest.mark.parametrize("bad", [
+        "https://not-tiktok.com/video/123",
+        "https://tiktok.com.example.org/video/123",
+        "https://tiktok.com@example.org/video/123",
+        "https://example.org/?next=tiktok.com",
+        "https://user@www.tiktok.com/video/123",
+    ])
+    def test_lookalikes_and_userinfo_cannot_mark_a_render_posted(self, api, bad):
+        generation_id = _insert_generation(api)
+        _set_link(api, generation_id, LINK)
+>       with pytest.raises(HTTPException) as exc:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+backend\test_tiktok_link_api.py:111: Failed
+_ TestTikTokLink.test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://user@www.tiktok.com/video/123] _
+[gw0] win32 -- Python 3.12.10 C:\Users\kasra\AppData\Local\Programs\Python\Python312\python.exe
+
+self = <test_tiktok_link_api.TestTikTokLink object at 0x000001EC5DCEE4B0>
+api = <module 'server' from 'C:\\Users\\kasra\\Documents\\tiktok\\backend\\server.py'>
+bad = 'https://user@www.tiktok.com/video/123'
+
+    @pytest.mark.parametrize("bad", [
+        "https://not-tiktok.com/video/123",
+        "https://tiktok.com.example.org/video/123",
+        "https://tiktok.com@example.org/video/123",
+        "https://example.org/?next=tiktok.com",
+        "https://user@www.tiktok.com/video/123",
+    ])
+    def test_lookalikes_and_userinfo_cannot_mark_a_render_posted(self, api, bad):
+        generation_id = _insert_generation(api)
+        _set_link(api, generation_id, LINK)
+>       with pytest.raises(HTTPException) as exc:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+backend\test_tiktok_link_api.py:111: Failed
+_ TestTikTokLink.test_real_tiktok_hosts_remain_supported[https://TIKTOK.COM/@founder/video/123] _
+[gw0] win32 -- Python 3.12.10 C:\Users\kasra\AppData\Local\Programs\Python\Python312\python.exe
+
+self = <test_tiktok_link_api.TestTikTokLink object at 0x000001EC5DCEEA80>
+api = <module 'server' from 'C:\\Users\\kasra\\Documents\\tiktok\\backend\\server.py'>
+link = 'https://TIKTOK.COM/@founder/video/123'
+
+    @pytest.mark.parametrize("link", [
+        LINK, "https://vm.tiktok.com/ABC123/", "https://vt.tiktok.com/ABC123/",
+        "https://TIKTOK.COM/@founder/video/123",
+    ])
+    def test_real_tiktok_hosts_remain_supported(self, api, link):
+        generation_id = _insert_generation(api)
+>       assert _set_link(api, generation_id, link)["tiktok_url"] == link
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+backend\test_tiktok_link_api.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backend\test_tiktok_link_api.py:72: in _set_link
+    return _run(api.set_generation_tiktok_link(
+backend\test_tiktok_link_api.py:53: in _run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+..\..\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+..\..\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+generation_id = '861bd092-28eb-4552-8da3-0548a6aca631'
+payload = TikTokLinkRequest(tiktok_url='https://TIKTOK.COM/@founder/video/123')
+user_id = 'anonymous'
+
+    @api_router.post("/generations/{generation_id}/tiktok-link")
+    async def set_generation_tiktok_link(
+        generation_id: str, payload: TikTokLinkRequest, user_id: str = Depends(get_current_user_id)
+    ):
+        row = await _fetch_one(
+            "SELECT id FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Generation not found")
+        link = (payload.tiktok_url or "").strip()
+        if link:
+            if len(link) > 500:
+                raise HTTPException(status_code=400, detail="That link is too long to be a TikTok URL.")
+            try:
+                parts = urlsplit(link)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="That is not a TikTok link. Paste the video's tiktok.com URL.")
+            if parts.scheme not in ("http", "https") or "tiktok.com" not in (parts.netloc or ""):
+>               raise HTTPException(status_code=400, detail="That is not a TikTok link. Paste the video's tiktok.com URL.")
+E               fastapi.exceptions.HTTPException: 400: That is not a TikTok link. Paste the video's tiktok.com URL.
+
+backend\server.py:7833: HTTPException
+============================== warnings summary ===============================
+..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+test_tiktok_link_api.py::TestTikTokLink::test_unset_link_reads_as_not_posted_everywhere
+  C:\Users\kasra\Documents\tiktok\backend\server.py:8674: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+test_tiktok_link_api.py::TestTikTokLink::test_unset_link_reads_as_not_posted_everywhere
+  C:\Users\kasra\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend\test_tiktok_link_api.py::TestTikTokLink::test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://not-tiktok.com/video/123]
+FAILED backend\test_tiktok_link_api.py::TestTikTokLink::test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://tiktok.com.example.org/video/123]
+FAILED backend\test_tiktok_link_api.py::TestTikTokLink::test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://tiktok.com@example.org/video/123]
+FAILED backend\test_tiktok_link_api.py::TestTikTokLink::test_lookalikes_and_userinfo_cannot_mark_a_render_posted[https://user@www.tiktok.com/video/123]
+FAILED backend\test_tiktok_link_api.py::TestTikTokLink::test_real_tiktok_hosts_remain_supported[https://TIKTOK.COM/@founder/video/123]
+5 failed, 9 passed, 4 warnings in 3.03s

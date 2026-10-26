@@ -1,0 +1,148 @@
+yarn run v1.22.22
+$ craco test --watchAll=false --runInBand
+PASS src/demoCta/exportTikTok.test.js
+PASS src/demoCta/useHistorySource.test.js
+  ● Console
+
+    console.warn
+      [HookForge] Clerk is not configured, running in no-auth mode.
+        Sign-in/sign-up are disabled and all data is stored under the shared
+        "anonymous" user.
+      
+        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+        time (CRA inlines it into the bundle):
+          • Local:  add it to frontend/.env then restart/rebuild
+          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+          • Render: add it as an Environment Variable, then redeploy
+      
+        Get the key from https://dashboard.clerk.com -> API Keys.
+
+    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
+     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
+    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
+     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
+     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
+
+      at Object.<anonymous> (src/lib/clerk.js:34:11)
+      at Object.<anonymous> (src/lib/api.js:2:1)
+      at src/demoCta/useHistorySource.test.js:10:23
+      at Object.<anonymous> (src/demoCta/useHistorySource.test.js:3:1)
+
+PASS src/lib/copyClipboard.test.js
+PASS src/demoCta/sourceChangeClearsHistory.test.js
+PASS src/demoCta/useOpeningMessages.test.js
+PASS src/lib/feedback.test.js
+  ● Console
+
+    console.warn
+      [HookForge] Clerk is not configured, running in no-auth mode.
+        Sign-in/sign-up are disabled and all data is stored under the shared
+        "anonymous" user.
+      
+        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+        time (CRA inlines it into the bundle):
+          • Local:  add it to frontend/.env then restart/rebuild
+          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+          • Render: add it as an Environment Variable, then redeploy
+      
+        Get the key from https://dashboard.clerk.com -> API Keys.
+
+    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
+     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
+    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
+     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
+     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
+
+      at Object.<anonymous> (src/lib/clerk.js:34:11)
+      at Object.<anonymous> (src/lib/api.js:2:1)
+      at Object.<anonymous> (src/lib/feedback.js:19:1)
+      at Object.<anonymous> (src/lib/feedback.test.js:1:1)
+
+PASS src/demoCta/exportFlow.test.js
+PASS src/demoCta/exportFailureNote.test.js
+PASS src/demoCta/surpriseVariants.test.js
+PASS src/demoCta/useExportErrors.test.js
+  ● Console
+
+    console.warn
+      [HookForge] Export failed: encode The encoder failed.
+
+    [0m [90m 23 |[39m     [90m// The log half of the surfacing: banners show the current failure, the[39m
+     [90m 24 |[39m     [90m// console keeps which stage failed and when for a bug report.[39m
+    [31m[1m>[22m[39m[90m 25 |[39m     console[33m.[39mwarn([32m"[HookForge] Export failed:"[39m[33m,[39m entry[33m.[39mstage[33m,[39m entry[33m.[39mmessage)[33m;[39m
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 26 |[39m     setExportErrors((prev) [33m=>[39m [[33m...[39mprev[33m.[39mslice([33m-[39m[35m9[39m)[33m,[39m entry])[33m;[39m
+     [90m 27 |[39m     [36mreturn[39m entry[33m;[39m
+     [90m 28 |[39m   }[33m,[39m [])[33m;[39m[0m
+
+      at Object.recordExportError (src/demoCta/useExportErrors.js:25:13)
+      at src/demoCta/useExportErrors.test.js:55:26
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:1081:22)
+      at Object.<anonymous> (src/demoCta/useExportErrors.test.js:54:12)
+
+    console.warn
+      [HookForge] Export failed: save No.
+
+    [0m [90m 23 |[39m     [90m// The log half of the surfacing: banners show the current failure, the[39m
+     [90m 24 |[39m     [90m// console keeps which stage failed and when for a bug report.[39m
+    [31m[1m>[22m[39m[90m 25 |[39m     console[33m.[39mwarn([32m"[HookForge] Export failed:"[39m[33m,[39m entry[33m.[39mstage[33m,[39m entry[33m.[39mmessage)[33m;[39m
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 26 |[39m     setExportErrors((prev) [33m=>[39m [[33m...[39mprev[33m.[39mslice([33m-[39m[35m9[39m)[33m,[39m entry])[33m;[39m
+     [90m 27 |[39m     [36mreturn[39m entry[33m;[39m
+     [90m 28 |[39m   }[33m,[39m [])[33m;[39m[0m
+
+      at Object.recordExportError (src/demoCta/useExportErrors.js:25:13)
+      at src/demoCta/useExportErrors.test.js:68:18
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:1081:22)
+      at Object.<anonymous> (src/demoCta/useExportErrors.test.js:67:12)
+
+    console.warn
+      [HookForge] Export failed: export The export failed.
+
+    [0m [90m 23 |[39m     [90m// The log half of the surfacing: banners show the current failure, the[39m
+     [90m 24 |[39m     [90m// console keeps which stage failed and when for a bug report.[39m
+    [31m[1m>[22m[39m[90m 25 |[39m     console[33m.[39mwarn([32m"[HookForge] Export failed:"[39m[33m,[39m entry[33m.[39mstage[33m,[39m entry[33m.[39mmessage)[33m;[39m
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 26 |[39m     setExportErrors((prev) [33m=>[39m [[33m...[39mprev[33m.[39mslice([33m-[39m[35m9[39m)[33m,[39m entry])[33m;[39m
+     [90m 27 |[39m     [36mreturn[39m entry[33m;[39m
+     [90m 28 |[39m   }[33m,[39m [])[33m;[39m[0m
+
+      at Object.recordExportError (src/demoCta/useExportErrors.js:25:13)
+      at src/demoCta/useExportErrors.test.js:69:18
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:1081:22)
+      at Object.<anonymous> (src/demoCta/useExportErrors.test.js:67:12)
+
+    console.warn
+      [HookForge] Export failed: save No.
+
+    [0m [90m 23 |[39m     [90m// The log half of the surfacing: banners show the current failure, the[39m
+     [90m 24 |[39m     [90m// console keeps which stage failed and when for a bug report.[39m
+    [31m[1m>[22m[39m[90m 25 |[39m     console[33m.[39mwarn([32m"[HookForge] Export failed:"[39m[33m,[39m entry[33m.[39mstage[33m,[39m entry[33m.[39mmessage)[33m;[39m
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 26 |[39m     setExportErrors((prev) [33m=>[39m [[33m...[39mprev[33m.[39mslice([33m-[39m[35m9[39m)[33m,[39m entry])[33m;[39m
+     [90m 27 |[39m     [36mreturn[39m entry[33m;[39m
+     [90m 28 |[39m   }[33m,[39m [])[33m;[39m[0m
+
+      at Object.recordExportError (src/demoCta/useExportErrors.js:25:13)
+      at src/demoCta/useExportErrors.test.js:81:18
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:1081:22)
+      at Object.<anonymous> (src/demoCta/useExportErrors.test.js:80:12)
+
+PASS src/lib/hookTemplateCategories.test.js
+PASS src/lib/templateRequirements.test.js
+PASS src/lib/profileSelection.test.js
+PASS src/lib/videoLength.test.js
+PASS src/lib/angleSubtitle.test.js
+PASS src/lib/errorMessage.test.js
+PASS src/lib/copyCase.test.js
+
+Test Suites: 17 passed, 17 total
+Tests:       104 passed, 104 total
+Snapshots:   0 total
+Time:        2.401 s
+Ran all test suites.
+Done in 3.35s.

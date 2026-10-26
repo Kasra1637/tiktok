@@ -1,0 +1,226 @@
+network route ✓ Done
+network route ✓ Done
+network route ✓ Done
+network route ✓ Done
+network route ✓ Done
+network route ✓ Done
+network route ✓ Done
+open http://127.0.0.1:3001/history ✓ HookForge | AI app-promo video studio
+  http://127.0.0.1:3001/history
+eval (() => { const open = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(method, url, ...args) { return open.call(this, method, String(url).replace("http://localhost:8000/api", location.origin + "/api"), ...args); }; })() null
+click a[href="/analytics"] ✓ Done
+click a[href="/history"] ✓ Done
+wait [data-testid="history-card"] ✓ Done
+snapshot -i - generic "Skip to contentHookForgeApp ProfileResearch, review, approveDemo + CTAStyle clips, join, exportCreat" [ref=e181] clickable [onclick]
+  - link "Skip to content" [ref=e183]
+  - link "HookForge" [ref=e184]
+  - button "Collapse sidebar" [ref=e185]
+  - navigation "Main" [ref=e186]
+    - link "App Profile Research, review, approve" [ref=e193]
+    - link "Demo + CTA Style clips, join, export" [ref=e194]
+    - link "Create Video Plan, review, render" [ref=e195]
+    - link "Asset Library Presenter photos by app" [ref=e196]
+    - link "History Renders, exports, results" [ref=e197]
+    - link "Analytics Results, verdicts, learnings" [ref=e198]
+  - button "Show me around" [ref=e187]
+  - heading "Generation History" [level=1, ref=e188]
+  - combobox "Filter by app" [expanded=false, ref=e189]: All apps
+    - option "All apps" [selected, ref=e201]
+    - option "Browser Fixture" [ref=e202]
+  - searchbox "Search by hook text" [ref=e190]
+  - combobox "Filter by status" [expanded=false, ref=e191]: All statuses
+    - option "All statuses" [selected, ref=e203]
+    - option "Completed" [ref=e204]
+    - option "Failed" [ref=e205]
+    - option "Generating" [ref=e206]
+    - option "Submitted" [ref=e207]
+    - option "Archived" [ref=e208]
+  - combobox "Sort history" [expanded=false, ref=e192]: Newest first
+    - option "Newest first" [selected, ref=e209]
+    - option "Most viewed" [ref=e210]
+  - button "EXPAND" [expanded=false, ref=e199]
+  - button "EXPAND" [expanded=false, ref=e200]
+  - region "Notifications alt+T" [ref=e182]
+fill [data-testid="history-search"] ✓ Done
+get url http://127.0.0.1:3001/history?q=Second
+eval JSON.stringify([...document.querySelectorAll("article")].map(e=>e.id)) "[\"generation-browser-two\"]"
+press Control+a ✓ Done
+press Backspace ✓ Done
+click #generation-browser-one [data-testid="history-expand"] ✓ Done
+click [data-testid="postkit-regenerate"] ✓ Done
+eval JSON.stringify(document.body.innerText.includes("Confirmed regenerated caption?")) "true"
+click #generation-browser-one [data-testid="history-expand"] ✓ Done
+click #generation-browser-one [data-testid="history-expand"] ✓ Done
+eval JSON.stringify(document.body.innerText.includes("Confirmed regenerated caption?")) "true"
+click [data-testid="postkit-copy-all"] ✓ Done
+eval JSON.stringify(document.querySelector("[data-testid=postkit-copy-all]").innerText.includes("Copied")) "true"
+fill [data-testid="history-tiktok-input-browser-one"] ✓ Done
+click [data-testid="history-tiktok-save-browser-one"] ✓ Done
+fill [data-testid="history-tiktok-views-input-browser-one"] ✓ Done
+click [data-testid="history-tiktok-views-save-browser-one"] ✓ Done
+select [data-testid="history-sort"] ✓ Done
+eval JSON.stringify(document.querySelector("article").id) "\"generation-browser-one\""
+eval JSON.stringify(document.querySelector("#generation-browser-one [data-testid=history-summary]").innerText) "\"Browser Fixture\\nCompleted\\n10/25/2026, 1:10:16 AM\\n\\nBrowser verified opening\\n\\nPosted\\n1,200 views\\nNot rated\""
+click [data-testid="history-video-feedback-browser-one-thumb-up"] ✓ Done
+eval JSON.stringify(document.querySelector("#generation-browser-one [data-testid=history-summary]").innerText) "\"Browser Fixture\\nCompleted\\n10/25/2026, 1:10:16 AM\\n\\nBrowser verified opening\\n\\nPosted\\n1,200 views\\nYour vote: Good\\nWinner\""
+snapshot -i - generic "Skip to contentHookForgeApp ProfileResearch, review, approveDemo + CTAStyle clips, join, exportCreat" [ref=e181] clickable [onclick]
+  - link "Skip to content" [ref=e183]
+  - link "HookForge" [ref=e184]
+  - button "Collapse sidebar" [ref=e185]
+  - navigation "Main" [ref=e186]
+    - link "App Profile Research, review, approve" [ref=e193]
+    - link "Demo + CTA Style clips, join, export" [ref=e194]
+    - link "Create Video Plan, review, render" [ref=e195]
+    - link "Asset Library Presenter photos by app" [ref=e196]
+    - link "History Renders, exports, results" [ref=e197]
+    - link "Analytics Results, verdicts, learnings" [ref=e198]
+  - button "Show me around" [ref=e187]
+  - heading "Generation History" [level=1, ref=e188]
+  - combobox "Filter by app" [expanded=false, ref=e189]: All apps
+    - option "All apps" [selected, ref=e201]
+    - option "Browser Fixture" [ref=e202]
+  - searchbox "Search by hook text" [ref=e190]
+  - combobox "Filter by status" [expanded=false, ref=e191]: All statuses
+    - option "All statuses" [selected, ref=e203]
+    - option "Completed" [ref=e204]
+    - option "Failed" [ref=e205]
+    - option "Generating" [ref=e206]
+    - option "Submitted" [ref=e207]
+    - option "Archived" [ref=e208]
+  - combobox "Sort history" [expanded=false, ref=e192]: Most viewed
+    - option "Newest first" [ref=e209]
+    - option "Most viewed" [selected, ref=e210]
+  - button "COLLAPSE" [expanded=true, ref=e211]
+  - region "Render details" [ref=e212]
+    - button "Regenerate" [ref=e213]
+    - button "Copy all" [ref=e214]
+    - button "Copy" [ref=e215]
+    - button "Copy" [ref=e216]
+    - button "Copy" [ref=e217]
+    - button "Good" [ref=e218]
+    - button "Not good" [ref=e219]
+    - link "Open live video" [ref=e220]
+    - button "Remove" [ref=e221]
+    - textbox "Views on the posted TikTok" [ref=e222]: 1200
+    - button "Save views" [ref=e223]
+    - link "New variation" [ref=e227]
+    - button "Details" [ref=e224]
+    - button "Delete" [ref=e225]
+    - button "Retry durable save" [ref=e226]
+    - button "Collapse this render" [ref=e228]
+  - button "EXPAND" [expanded=false, ref=e200]
+  - region "Notifications alt+T" [ref=e182]
+click a[href="/analytics"] ✓ Done
+wait [data-testid="analytics-results"] ✓ Done
+eval JSON.stringify(document.querySelector("[data-testid=analytics-results]").innerText) "\"CLIP RESULTS\\n\\nCompare reach & your judgment before choosing another take.\\n\\n0 posted · 2 with recorded views · 0 rated\\n\\nViews are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison. Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.\\n\\nSaved clips, highest recorded views first; missing counts last.\\nClip\\tPosted\\tViews\\tYour vote\\tNext take\\nSecond opening\\nBrowser Fixture\\n\\tNot posted\\t90\\tNot rated\\tReuse draft\\nBrowser verified opening\\nBrowser Fixture\\n\\tNot posted\\t12\\tNot rated\\tReuse draft\\n\\nCompare a high-reach clip you rated Good with the others, then reuse its draft to test another take. Record or update results in History.\""
+click a[href="/history#generation-browser-one"] ✓ Done
+wait #generation-browser-one ✓ Done
+eval JSON.stringify(document.querySelector("#generation-browser-one [data-testid=history-expand]").getAttribute("aria-expanded")) "\"true\""
+snapshot -i - generic "Skip to contentHookForgeApp ProfileResearch, review, approveDemo + CTAStyle clips, join, exportCreat" [ref=e181] clickable [onclick]
+  - link "Skip to content" [ref=e183]
+  - link "HookForge" [ref=e184]
+  - button "Collapse sidebar" [ref=e185]
+  - navigation "Main" [ref=e186]
+    - link "App Profile Research, review, approve" [ref=e193]
+    - link "Demo + CTA Style clips, join, export" [ref=e194]
+    - link "Create Video Plan, review, render" [ref=e195]
+    - link "Asset Library Presenter photos by app" [ref=e196]
+    - link "History Renders, exports, results" [ref=e197]
+    - link "Analytics Results, verdicts, learnings" [ref=e198]
+  - button "Show me around" [ref=e187]
+  - heading "Generation History" [level=1, ref=e229]
+  - combobox "Filter by app" [expanded=false, ref=e230]: All apps
+    - option "All apps" [selected, ref=e237]
+    - option "Browser Fixture" [ref=e238]
+  - searchbox "Search by hook text" [ref=e231]
+  - combobox "Filter by status" [expanded=false, ref=e232]: All statuses
+    - option "All statuses" [selected, ref=e239]
+    - option "Completed" [ref=e240]
+    - option "Failed" [ref=e241]
+    - option "Generating" [ref=e242]
+    - option "Submitted" [ref=e243]
+    - option "Archived" [ref=e244]
+  - combobox "Sort history" [expanded=false, ref=e233]: Newest first
+    - option "Newest first" [selected, ref=e245]
+    - option "Most viewed" [ref=e246]
+  - button "COLLAPSE" [expanded=true, ref=e234]
+  - region "Render details" [ref=e235]
+    - button "Regenerate" [ref=e247]
+    - button "Copy all" [ref=e248]
+    - button "Copy" [ref=e249]
+    - button "Copy" [ref=e250]
+    - button "Copy" [ref=e251]
+    - button "Good" [ref=e252]
+    - button "Not good" [ref=e253]
+    - textbox "TikTok link for this render" [ref=e254]
+    - button "Save link" [disabled, ref=e255]
+    - link "New variation" [ref=e259]
+    - button "Details" [ref=e256]
+    - button "Delete" [ref=e257]
+    - button "Retry durable save" [ref=e258]
+    - button "Collapse this render" [ref=e260]
+  - button "EXPAND" [expanded=false, ref=e236]
+  - region "Notifications alt+T" [ref=e182]
+errors 
+console [info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] [HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] [HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] [HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] [HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[warning] [HookForge] Clerk is not configured, running in no-auth mode.
+  Sign-in/sign-up are disabled and all data is stored under the shared
+  "anonymous" user.
+
+  To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+  time (CRA inlines it into the bundle):
+    • Local:  add it to frontend/.env then restart/rebuild
+    • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+    • Render: add it as an Environment Variable, then redeploy
+
+  Get the key from https://dashboard.clerk.com -> API Keys.
+network unroute ✓ Done
+PASS: live search/URL, drawer regeneration, copy, posted link, views/re-sort, vote/winner, Analytics comparison and review deep link. API responses intercepted; no real data mutated.
