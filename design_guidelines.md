@@ -281,12 +281,15 @@ video, because a blank tile explains nothing.
 Everything else — the app name, the status, the hook, the facts, the audience,
 the demo brief, and every action — lives in the detail band, so a closed tile
 carries no chrome and nothing reachable by keyboard that nobody opened. The
-band is a grid item after its card spanning every column (`grid-column: 1 /
--1`), which is what keeps every collapsed tile the same flat height while one
-is open, failed renders included. The preview and the stage padding are custom
-properties on `.history-card` (`--history-preview-h`, `--history-stage-pad`),
-which is what keeps every collapsed tile the same height as each other. One
-band at a time: opening a tile closes the band elsewhere.
+band is a grid item after its card spanning every column (`grid-column: 1 / -1`), which is what keeps every collapsed tile the same flat height while one is open, failed renders included. The preview and the stage padding are custom properties on
+`.history-card` (`--history-preview-h`, `--history-stage-pad`), which is what
+keeps every collapsed tile the same height as each other, and the identity
+meta reserves its wrapped two-line height (`.history-summary-meta`) so a
+longer vote never makes its tile taller than its neighbor. One band at a
+time: opening a tile closes the band elsewhere. Inside the band, facts read
+on the left and votes plus actions work on the right from 768px
+(`.history-detail-cols`); narrow bands stack in the same order. Opening
+scrolls the band into view only when it lands below the fold.
 
 The tab is one control with three ways in: click, Enter/Space, and a drag
 toward the open direction that follows the pointer and commits past 60% of

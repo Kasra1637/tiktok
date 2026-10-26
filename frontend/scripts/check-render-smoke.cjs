@@ -10652,6 +10652,57 @@ async function runDemoCtaChecks() {
     });
   });
 
+  await check("collapsed tiles reserve the wrapped meta height", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const rule = css.match(/\.history-summary-meta\s*\{[^}]*\}/);
+    if (!rule) throw new Error("the summary meta lost its height reservation");
+    if (!/min-height\s*:\s*2\.5rem/.test(rule[0])) {
+      throw new Error("the meta reservation does not cover the two-line vote wrap");
+    }
+  });
+
+  await check("the detail band stacks narrow and splits wide", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.history-detail-cols\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("the narrow band lost its single stacked column");
+    }
+    if (!/@media\s*\(min-width:\s*768px\)[\s\S]*?\.history-detail-cols\s*\{[\s\S]*?1\.15fr/.test(css)) {
+      throw new Error("the wide band does not lay facts beside actions");
+    }
+  });
+
+  await check("opening a band below the fold scrolls it into view", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "fold-1" }] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+      // jsdom has no layout: every rect sits at the origin, so the band
+      // always reads as visible. Simulate below-the-fold instead.
+      const proto = dom.window.Element.prototype;
+      const origRect = proto.getBoundingClientRect;
+      const seen = [];
+      proto.getBoundingClientRect = function () {
+        if (this.dataset?.testid === "history-detail-panel") {
+          return { top: 4000, bottom: 5000, left: 0, right: 100, width: 100, height: 1000, x: 0, y: 4000, toJSON() {} };
+        }
+        return origRect.call(this);
+      };
+      const had = Object.prototype.hasOwnProperty.call(proto, "scrollIntoView");
+      const prev = proto.scrollIntoView;
+      proto.scrollIntoView = function () { seen.push(this); };
+      try {
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "expand the tile");
+      } finally {
+        proto.getBoundingClientRect = origRect;
+        if (had) proto.scrollIntoView = prev; else delete proto.scrollIntoView;
+      }
+      const panel = ctx.container.querySelector('[data-testid="history-detail-panel"]');
+      if (!seen.includes(panel)) throw new Error("a band opening below the fold did not scroll into view");
+    });
+  });
+
   await check("History grid goes 1-up, 2-up, then 3-up with a shorter wide preview", async () => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     if (!/\.history-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {

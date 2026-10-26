@@ -768,6 +768,26 @@ h1,
     grid-column: 1 / -1;
     overflow: hidden;
 }
+/* The collapsed tile's identity meta reserves the wrapped height, so a tile
+ * whose vote text fits one line measures exactly the same as one whose
+ * longer vote wraps to two. Two text-xs lines (1rem each) plus the row gap
+ * (gap-2): text is never truncated and no control is ever clipped — the
+ * short tile just carries the same empty space the wrapped one fills. */
+.history-summary-meta {
+    min-height: 2.5rem;
+}
+/* The band's interior: one stacked column on narrow bands, facts beside
+ * actions once the band is wide enough to hold both with room to work. */
+.history-detail-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+}
+@media (min-width: 768px) {
+    .history-detail-cols {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    }
+}
 .history-body {
     padding: 20px;
 }

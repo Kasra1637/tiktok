@@ -274,6 +274,23 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
     wasExpanded.current = expanded;
   }, [expanded, expandTabId, row.id, drawerId]);
 
+  // Opening brings the band into view, but only when it needs it: if the
+  // whole band already fits on screen, `nearest` is a no-op and the page
+  // stays exactly where the founder put it. Scrolling never moves focus,
+  // so the focus contract above is untouched.
+  useEffect(() => {
+    if (!expanded) return;
+    const panel = document.getElementById(drawerId);
+    const rect = panel?.getBoundingClientRect?.();
+    if (panel && rect && rect.bottom > window.innerHeight) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      panel.scrollIntoView?.({
+        block: "nearest",
+        behavior: reduce ? "auto" : "smooth",
+      });
+    }
+  }, [expanded, drawerId]);
+
 
   // The copy the browser can actually fetch, chosen by the same rule every
   // other screen uses (see durableMediaUrl): the durable upload, or the signed
@@ -475,7 +492,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
         <p className="break-words text-sm font-semibold">
           {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} · ${row.id.slice(0, 8)}`}
         </p>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="history-summary-meta flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
           <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
           <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
@@ -502,7 +519,12 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
           data-testid="history-detail-panel"
           className="surface surface-flush history-detail-panel history-drawer min-w-0 scroll-mt-6"
         >
-          <div className="history-body space-y-5">
+          <div className="history-body">
+          {/* Two columns on wide bands, one stacked column on narrow: facts
+              and context read on the left, votes and actions work on the
+              right. Narrow stacking preserves the old top-to-bottom order. */}
+          <div className="history-detail-cols">
+            <div className="min-w-0 space-y-5">
             {/* Repeat identity here for long drawers scrolled past the tile. */}
             <div className="flex flex-wrap items-center gap-2">
               <GroupLabel icon={Briefcase}>{row.brand_name || "Unassigned app"}</GroupLabel>
@@ -560,6 +582,8 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
               </div>
             )}
 
+            </div>
+            <div className="min-w-0 space-y-5">
             {error && <p className="text-xs text-destructive">{error}</p>}
             {checkingRecovery && (
               <p className="text-xs text-muted-foreground" role="status">Checking recovered video…</p>
@@ -729,6 +753,8 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
                 <ChevronUp className="h-3.5 w-3.5" /> Collapse
               </Button>
             </div>
+            </div>
+          </div>
           </div>
         </div>
       )}
