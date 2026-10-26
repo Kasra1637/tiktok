@@ -68,6 +68,7 @@ import { useExportFlow } from "./exportFlow";
 import { ExportFailureNote } from "./ExportFailureNote";
 import { sourceErrorMessage, useHistorySource } from "./useHistorySource";
 import { useOpeningMessages } from "./useOpeningMessages";
+import { TRANSITIONS } from "./transitions";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
 
@@ -194,6 +195,39 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
             }`}
           >
             {label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The joint transition between the base and added clips. One picker, read
+ * by the shared painter, so the preview and the export move identically.
+ * Hard cut first: it is the long-standing behavior, and nothing already
+ * made changes by picking a transition it never asked for.
+ */
+function TransitionPicker({ value, onChange }) {
+  return (
+    <>
+      <SubLabel>Transition between clips</SubLabel>
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" role="group" aria-label="Transition between clips">
+        {TRANSITIONS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            aria-pressed={value === t.id}
+            title={t.description}
+            data-testid={`transition-${t.id}`}
+            className={`focus-ring h-8 rounded-lg px-1 text-xs font-semibold transition duration-150 ${
+              value === t.id
+                ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
+                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            }`}
+          >
+            {t.label}
           </button>
         ))}
       </div>
@@ -792,6 +826,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
   const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
   const [appendOverlays, setAppendOverlays] = useState(false);
+  // The joint transition: hard cut until the founder picks a trend. Read by
+  // the shared painter, so preview and export can never disagree about it.
+  const [transition, setTransition] = useState(DEFAULTS.transition);
   // Per-clip audio: each segment mutes independently in preview and
   // export. Export keeps the segment's video length and writes silence
   // for a muted clip, so the join never shifts.
@@ -826,6 +863,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
+    transition,
     baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
@@ -1216,9 +1254,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   /**
    * Set where a clip's used run begins.
    *
-   * Changing the start point rewinds the preview onto the new first frame. The
-   * number claims what the file opens on, so leaving the playhead on footage the
-   * export would skip would make the preview a lie about its own output.
+   * Changing the start point seeks the picked clip to its new first frame
+   * and plays from there. The number claims what the file opens on, so the
+   * founder sees the opening in motion while dragging — a parked frame
+   * cannot show whether the cut lands clean, and leaving the playhead on
+   * footage the export would skip would make the preview a lie about its
+   * own output.
    */
   const applyClipStart = (clip, next) => {
     if (isExportingRef.current) return;
@@ -1228,22 +1269,27 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     cancelScopedReplay();
     const base = videoRef.current;
     const added = appendVideoRef.current;
-    base?.pause();
-    added?.pause();
-    setIsPlaying(false);
+    // The picked clip plays; the other parks. A scoped replay would yank
+    // the playhead back into an overlay window, so it stays cancelled and
+    // the run plays out — across the cut for the base, to the end for the
+    // second clip — exactly like the transport would.
     if (isBase) {
       // The base owns the playhead again: leaving the added clip active here
       // would paint its last frame while the base sat seeked behind it.
+      added?.pause();
       if (base) {
         activeVideoRef.current = base;
         base.currentTime = run.start;
+        base.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       }
       setCurrentTime(0);
     } else if (added) {
       // The second clip starts after the base's trimmed run, so park its own
       // playhead there instead of leaving the scrubber on the base.
+      base?.pause();
       activeVideoRef.current = added;
       added.currentTime = run.start;
+      added.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       setCurrentTime(baseDuration);
     }
   };
@@ -1694,6 +1740,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               prefix="append-mode-"
             />
           )}
+          {appendMeta && (
+            <TransitionPicker
+              value={transition}
+              onChange={(id) => { invalidateSequence(); setTransition(id); }}
+            />
+          )}
           {appendMeta && appendMode === "hand" && (
             <EnvGrid value={appendEnv} onChange={setAppendEnv} prefix="append-" />
           )}
@@ -1704,18 +1756,18 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             </>
           )}
           {appendUrl && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
-                onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
-              Apply text and overlays to the second clip too
-            </label>
-          )}
-          {appendUrl && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={appendMuted} data-testid="append-audio-mute"
-                onChange={(event) => { invalidateSequence(); setAppendMuted(event.target.checked); }} />
-              Mute added clip audio in preview and export
-            </label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
+                <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
+                  onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
+                Overlays on both clips
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
+                <input type="checkbox" checked={appendMuted} data-testid="append-audio-mute"
+                  onChange={(event) => { invalidateSequence(); setAppendMuted(event.target.checked); }} />
+                Mute second clip · preview + export
+              </label>
+            </div>
           )}
         </EditorSection>
         )}

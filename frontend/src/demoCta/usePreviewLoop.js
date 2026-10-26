@@ -9,6 +9,7 @@ import {
   clipWindow,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, drawStoryOverlay } from "./overlays";
+import { transitionAt, easeInOut, hash01 } from "./transitions";
 import { drawHandView } from "./handView";
 import { fitVideoToScreen } from "./fit";
 import { getEffectiveZoom } from "./zoom";
@@ -31,6 +32,7 @@ export function usePreviewLoop(settings) {
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
+    transition = "none",
     baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
@@ -439,6 +441,83 @@ export function usePreviewLoop(settings) {
       }
     };
 
+    // Joint transition between the base and added clips: a post-effect on
+    // the painted frame, so every look (realistic, hand, floating) carries
+    // the same motion and the export — which calls this same painter per
+    // decoded frame — records exactly the preview frame. A pure function of
+    // timeline time, like the overlay entrances.
+    let jointScratch = null;
+    const paintJointTransition = (target, vt) => {
+      if (!sequence) return;
+      const t = transitionAt(vt, baseDuration, appendDuration, transition);
+      if (!t.active) return;
+      const ctx = target.getContext("2d");
+      const w = target.width;
+      const h = target.height;
+      if (!jointScratch) jointScratch = document.createElement("canvas");
+      if (jointScratch.width !== w || jointScratch.height !== h) {
+        jointScratch.width = w;
+        jointScratch.height = h;
+      }
+      const sctx = jointScratch.getContext("2d");
+      sctx.clearRect(0, 0, w, h);
+      sctx.drawImage(target, 0, 0);
+      // Peak energy exactly at the cut: 0 on the window edges, 1 at the join.
+      const q = t.side === "out" ? easeInOut(t.progress * 2) : easeInOut((1 - t.progress) * 2);
+      const frameIdx = Math.round(vt * 30);
+      ctx.save();
+      if (transition === "whip") {
+        const dx = q * w;
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(jointScratch, dx, 0, w, h);
+        ctx.drawImage(jointScratch, dx - w, 0, w, h);
+        ctx.fillStyle = `rgba(255, 255, 255, ${(q * 0.16).toFixed(3)})`;
+        for (let i = 0; i < 12; i += 1) {
+          ctx.fillRect(0, hash01(frameIdx * 7 + i * 13) * h, w, 2);
+        }
+      } else if (transition === "zoom") {
+        const s = 1 + q * 0.35;
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(jointScratch, (w - w * s) / 2, (h - h * s) / 2, w * s, h * s);
+        ctx.fillStyle = `rgba(255, 255, 255, ${(Math.sin(t.progress * Math.PI) * 0.28).toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h);
+      } else if (transition === "spin") {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, w, h);
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(q * 0.5);
+        const s = 1 + q * 0.25;
+        ctx.drawImage(jointScratch, (-w * s) / 2, (-h * s) / 2, w * s, h * s);
+      } else if (transition === "glitch") {
+        const slices = 10;
+        const sh = h / slices;
+        for (let i = 0; i < slices; i += 1) {
+          const off = (hash01(frameIdx * 13 + i) - 0.5) * q * w * 0.15;
+          if (off) ctx.drawImage(jointScratch, 0, i * sh, w, sh + 1, off, i * sh, w, sh + 1);
+        }
+        if (hash01(frameIdx * 3) > 1 - q * 0.5) {
+          ctx.fillStyle = overlayAccent || "#c8ff2e";
+          ctx.globalAlpha = 0.12;
+          ctx.fillRect(0, 0, w, h);
+          ctx.globalAlpha = 1;
+        }
+      } else if (transition === "swipe") {
+        // A panel sweeps in and back out, fully covering the join at the cut.
+        const half = t.progress < 0.5 ? t.progress * 2 : (1 - t.progress) * 2;
+        const edgeX = (-0.05 + easeInOut(half) * 1.1) * w;
+        const dx = (t.side === "out" ? -t.progress : 1 - t.progress) * w * 0.12;
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(jointScratch, dx, 0, w, h);
+        if (edgeX > 0) {
+          ctx.fillStyle = "#0b0b10";
+          ctx.fillRect(0, 0, Math.min(edgeX, w), h);
+          ctx.fillStyle = overlayAccent || "#c8ff2e";
+          ctx.fillRect(Math.max(0, edgeX - 10), 0, 10, h);
+        }
+      }
+      ctx.restore();
+    };
+
     // Preview and export call this exact painter with an explicit media timestamp.
     // The fourth argument identifies the base or added segment.
     const paintFrame = (target, vt, frame, segment = 0) => {
@@ -474,6 +553,7 @@ export function usePreviewLoop(settings) {
         const t = vt;
         drawHandView(ctx, cw, ch, frame, lookEnv, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
         if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+        paintJointTransition(target, vt);
         return;
       }
 
@@ -496,6 +576,7 @@ export function usePreviewLoop(settings) {
           }
         }
         if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+        paintJointTransition(target, vt);
         return;
       }
 
@@ -823,6 +904,7 @@ export function usePreviewLoop(settings) {
         drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
       if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+      paintJointTransition(target, vt);
     };
     paintFrameRef.current = paintFrame;
     // On-demand preview. A paused clip with settled settings paints the same
@@ -909,7 +991,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseDuration, appendDuration, timelineTime]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseDuration, appendDuration, timelineTime, transition]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,

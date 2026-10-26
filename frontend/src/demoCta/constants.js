@@ -236,6 +236,7 @@ export const DEFAULTS = {
   videoOffsetX: 0,
   videoOffsetY: 0,
   viewMode: "floating",
+  transition: "none",
   envBg: "living_room",
   handZoom: 1,
   handPanX: 0,
