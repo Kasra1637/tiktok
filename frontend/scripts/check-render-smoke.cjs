@@ -8052,9 +8052,15 @@ async function runDemoCtaChecks() {
     if (!section.textContent.includes("Stop writing empty pages")) {
       throw new Error(`post cover text missing at ${site}`);
     }
-    for (const id of ["postkit-copy-all", "postkit-copy-caption-0", "postkit-copy-hashtags", "postkit-copy-cover"]) {
-      if (!section.querySelector(`[data-testid="${id}"]`)) {
-        throw new Error(`post copy button missing at ${site}: ${id}`);
+    // One copy action for the whole kit. Per-field Copy buttons duplicated
+    // the same clipboard write three more times beside fields that are
+    // already selectable, so they are gone and stay gone.
+    if (!section.querySelector('[data-testid="postkit-copy-all"]')) {
+      throw new Error(`post copy-all button missing at ${site}`);
+    }
+    for (const id of ["postkit-copy-caption-0", "postkit-copy-hashtags", "postkit-copy-cover"]) {
+      if (section.querySelector(`[data-testid="${id}"]`)) {
+        throw new Error(`per-field copy button leaked at ${site}: ${id}`);
       }
     }
   }

@@ -21,6 +21,10 @@ import { api, getErrorMessage } from "../lib/api";
  * Regeneration is explicit: it only runs when the founder clicks Regenerate,
  * and a failure keeps the current copy on screen with the error instead of
  * replacing it.
+ *
+ * Copy is one action for the whole kit. The three fields are selectable text,
+ * so a Copy button beside each one only repeated the same clipboard write
+ * three more times beside the label it sat next to.
  */
 export function PostKitSection({ postKit: initialKit, generationId, onUpdated }) {
   const { copiedKey, copy } = useCopyButton();
@@ -92,8 +96,8 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Written for this clip when it finished, from its approved hook. Paste
-        the caption with the hashtags when you publish.
+        Written for this clip when it finished, from its approved hook. Copy
+        all pastes the caption and its hashtags in one go.
       </p>
       {regenError && (
         <p className="text-xs text-destructive" role="alert" data-testid="postkit-regenerate-error">
@@ -101,55 +105,44 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         </p>
       )}
 
-      {caption && (
-        <div className="inset-panel space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="eyebrow">Caption</span>
-            <CopyButton
-              testId="postkit-copy-caption-0"
-              copied={copiedKey === "caption-0"}
-              onCopy={() => copy("caption-0", String(caption), "Caption")}
-            />
+      {/* One panel, three labelled rows divided by hairlines: the copy reads as
+          a single spec sheet instead of three stacked boxes that each carried
+          their own redundant Copy button. */}
+      <dl
+        className="inset-panel divide-y divide-[color:var(--hairline)]"
+        data-testid="post-kit-fields"
+      >
+        {caption && (
+          <div className="post-kit-row">
+            <dt className="eyebrow sm:pt-1">Caption</dt>
+            <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
+              {String(caption)}
+            </dd>
           </div>
-          <p className="break-words text-base leading-relaxed text-foreground/90">
-            {String(caption)}
-          </p>
-        </div>
-      )}
+        )}
 
-      {hashtags.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="eyebrow">Hashtags</span>
-            <CopyButton
-              testId="postkit-copy-hashtags"
-              copied={copiedKey === "hashtags"}
-              onCopy={() => copy("hashtags", hashtags.join(" "), "Hashtags")}
-            />
+        {hashtags.length > 0 && (
+          <div className="post-kit-row">
+            <dt className="eyebrow sm:pt-0.5">Hashtags</dt>
+            <dd className="min-w-0">
+              <FactList>
+                {hashtags.map((tag, i) => (
+                  <FactChip key={`${tag}-${i}`}>{String(tag)}</FactChip>
+                ))}
+              </FactList>
+            </dd>
           </div>
-          <FactList>
-            {hashtags.map((tag, i) => (
-              <FactChip key={`${tag}-${i}`}>{String(tag)}</FactChip>
-            ))}
-          </FactList>
-        </div>
-      )}
+        )}
 
-      {coverText && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="eyebrow">Cover text</span>
-            <CopyButton
-              testId="postkit-copy-cover"
-              copied={copiedKey === "cover"}
-              onCopy={() => copy("cover", coverText, "Cover text")}
-            />
+        {coverText && (
+          <div className="post-kit-row">
+            <dt className="eyebrow sm:pt-1.5">Cover text</dt>
+            <dd className="min-w-0">
+              <span className="post-kit-cover">&ldquo;{coverText}&rdquo;</span>
+            </dd>
           </div>
-          <p className="break-words text-base font-semibold leading-relaxed text-foreground/90">
-            &ldquo;{coverText}&rdquo;
-          </p>
-        </div>
-      )}
+        )}
+      </dl>
     </div>
   );
 }
