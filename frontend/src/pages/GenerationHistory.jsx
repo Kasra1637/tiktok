@@ -8,7 +8,7 @@ import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
-import { GroupLabel, SectionHeading } from "../components/SectionCard";
+import { GroupLabel } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
@@ -30,8 +30,6 @@ import {
   ChevronLeft,
   ChevronUp,
   Film,
-  Info,
-  X,
   Smartphone,
   CopyPlus,
   Target,
@@ -74,153 +72,6 @@ function formatRenderDate(value) {
   const t = Date.parse(value);
   if (Number.isNaN(t)) return "";
   return new Date(t).toLocaleString();
-}
-
-function DetailRow({ label, children }) {
-  if (children === null || children === undefined || children === "") return null;
-  return (
-    <div className="space-y-1">
-      <span className="eyebrow block">{label}</span>
-      <div className="text-sm leading-[22px] text-foreground/90">{children}</div>
-    </div>
-  );
-}
-
-/**
- * Everything about one render that the history row deliberately leaves out.
- *
- * The list stays light on purpose, but "why does this video look like this"
- * is answerable only from the prompt and the script it was built from.
- * Those two together are the audit trail for a claim in a published video,
- * so they belong one click away rather than only in the database.
- */
-function GenerationDetails({ generationId, onClose, postKit, onUpdated }) {
-  const [detail, setDetail] = useState(null);
-  const [error, setError] = useState(null);
-  const closeRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getGeneration(generationId)
-      .then((d) => { if (!cancelled) setDetail(d); })
-      .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); });
-    return () => { cancelled = true; };
-  }, [generationId]);
-
-  // Esc closes, matching the row drawer below. Focus lands on Close when the
-  // modal opens so keyboard users start inside it instead of behind it, and
-  // returns to the invoking control on unmount so focus is never dropped.
-  const prevFocusRef = useRef(null);
-  useEffect(() => {
-    if (!prevFocusRef.current) {
-      prevFocusRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    }
-    closeRef.current?.focus?.();
-    return () => {
-      prevFocusRef.current?.focus?.();
-      prevFocusRef.current = null;
-    };
-  }, []);
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Generation details"
-      onClick={onClose}
-    >
-      <div
-        className="surface my-8 w-full max-w-2xl space-y-4 rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <SectionHeading icon={Film}>Generation details</SectionHeading>
-          <Button ref={closeRef} variant="ghost" size="sm" onClick={onClose} aria-label="Close details">
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {!detail && !error && (
-          <div className="space-y-2" aria-label="Loading details">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        )}
-
-        {detail && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <DetailRow label="Model">{detail.model}</DetailRow>
-              <DetailRow label="Status">{humanize(detail.status)}</DetailRow>
-              <DetailRow label="Script version">v{detail.script_version}</DetailRow>
-              <DetailRow label="Template version">v{detail.template_version}</DetailRow>
-              <DetailRow label="Attempt">{detail.attempt}</DetailRow>
-              <DetailRow label="Objective">
-                {detail.objective ? humanize(detail.objective) : null}
-              </DetailRow>
-            </div>
-
-            {detail.hook_line && (
-              <DetailRow label="Hook">{sentenceCase(detail.hook_line)}</DetailRow>
-            )}
-
-            {detail.script && (
-              <DetailRow label="Script as generated">
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl bg-secondary/40 p-4 text-sm">
-                  {sentenceCase(detail.script)}
-                </pre>
-              </DetailRow>
-            )}
-
-            {/* Same frozen kit as the drawer, read off the detail endpoint. */}
-            {detail.post_kit && (
-              <PostKitSection
-                postKit={postKit ?? detail.post_kit}
-                generationId={detail.id || generationId}
-                onUpdated={(kit) => onUpdated?.(generationId, { post_kit: kit })}
-              />
-            )}
-
-            {detail.prompt_used && (
-              <DetailRow label="Exact prompt sent to the model">
-                <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-secondary/40 p-4 text-xs">
-                  {detail.prompt_used}
-                </pre>
-              </DetailRow>
-            )}
-
-            {detail.safety_report && (
-              <DetailRow label="Claim check at generation time">
-                <span className="text-muted-foreground">
-                  {detail.safety_report.passed ? "Passed" : "Failed"}
-                  {detail.safety_summary ? ` — ${detail.safety_summary}` : ""}
-                </span>
-              </DetailRow>
-            )}
-
-            {detail.error && (
-              <DetailRow label="Recorded error">
-                <span className="text-destructive">{detail.error}</span>
-              </DetailRow>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -361,7 +212,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
   }, [linkAwaiting, expanded, row.id]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
+
   // Set when the clip cannot be played inline, so the row can say so instead of
   // leaving a player that looks loaded and does nothing.
   const [previewBroken, setPreviewBroken] = useState(false);
@@ -385,7 +236,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
   }, []);
 
   // Esc closes the open drawer. The listener lives only while expanded so a
-  // closed row never steals Esc from the Details modal or other UI.
+  // closed row never steals Esc from other UI.
   useEffect(() => {
     if (!expanded) return;
     const onKey = (event) => {
@@ -706,8 +557,7 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
             {/* Actions, in two tiers.
 
                 The clip is what this row is for, so Download and Demo + CTA are
-                the wide, legible pair; Delete and the paper trail sit on a
-                quieter line beneath them. The old layout scattered these across
+                the wide, legible pair; Delete sits on a quieter line beneath them. The old layout scattered these across
                 a rail, a tile group, and a failed-row bar, so "delete" and
                 "download" were one mistaken click apart in a 240px column.
                 Grouping by consequence instead: get the file, take it onward,
@@ -791,14 +641,6 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowDetails(true)}
-                  data-testid="generation-details-button"
-                >
-                  <Info className="h-3.5 w-3.5" /> Details
-                </Button>
                 {/* Delete acts on the record, not the picture, so it lives with
                     the quiet actions and is tinted destructive: spelled out,
                     never parked next to the button that saves the same file. */}
@@ -875,9 +717,6 @@ function GenerationRow({ row, onChanged, onUpdated, defaultExpanded = false, dra
         </div>
       )}
 
-      {showDetails && (
-        <GenerationDetails generationId={row.id} postKit={row.post_kit} onUpdated={onUpdated} onClose={() => setShowDetails(false)} />
-      )}
     </article>
   );
 }

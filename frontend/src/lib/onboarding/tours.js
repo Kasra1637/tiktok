@@ -244,14 +244,14 @@ export const TOURS = {
         title: "Each tile is the clip",
         optional: true,
         body:
-          "Tiles show the app, hook or clip ID, status, date, posted status, recorded views, and your vote. Play a finished clip here; open its drawer for working controls and the paper trail.",
+          "Tiles show the app, hook or clip ID, status, date, posted status, recorded views, and your vote. Play a finished clip here; open its drawer for downloads, Demo + CTA, and votes.",
       },
       {
         target: '[data-testid="history-expand"]',
         title: "Expand a render for its details",
         optional: true,
         body:
-          "Click the tab at the bottom of a tile — or drag it up — to open the render's facts, its download and Demo + CTA, and Details: the generation prompt and the claim-check saved with it. Read them before you publish."
+          "Click the tab at the bottom of a tile — or drag it up — to open the render's facts, its download and Demo + CTA. Read the facts before you publish."
       },
       {
         // Centered summary: with no rows both tile steps skip, so a fresh

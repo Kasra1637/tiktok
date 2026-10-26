@@ -10589,7 +10589,7 @@ async function runDemoCtaChecks() {
       if (first.querySelector('[data-testid="history-context"]')) {
         throw new Error("the collapsed tile already shows the demo context");
       }
-      for (const label of ["Download", "Delete", "Details", "Demo + CTA"]) {
+      for (const label of ["Download", "Delete", "Demo + CTA"]) {
         if (first.textContent.includes(label)) {
           throw new Error(`the collapsed tile already exposes ${label}`);
         }
@@ -10604,7 +10604,7 @@ async function runDemoCtaChecks() {
         throw new Error("the expand control does not report the drawer it opened");
       }
       if (!opened.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
-      for (const label of ["Download", "Delete", "Details", "Demo + CTA"]) {
+      for (const label of ["Download", "Delete", "Demo + CTA"]) {
         if (!opened.textContent.includes(label)) throw new Error(`History lost ${label}`);
       }
     });
@@ -10796,31 +10796,23 @@ async function runDemoCtaChecks() {
     } finally { global.__SMOKE_PARAMS = oldParams; global.__SMOKE_HASH = oldHash; }
   });
 
-  await check("History retains regenerated post copy across drawer and Details handoffs", async (ctx) => {
+  await check("History keeps regenerated post copy across drawer reopen", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const oldKit = { caption: "Old frozen caption", hashtags: ["#old"] };
     const freshKit = { caption: "Fresh confirmed caption", hashtags: ["#fresh"] };
-    const detailKit = { caption: "Confirmed from Details", hashtags: ["#details"] };
-    let savedKit = oldKit;
     await withApi({
       getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-sync", post_kit: oldKit }] }),
-      getGeneration: async () => ({ ...COMPLETED, id: "kit-sync", post_kit: savedKit }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
-      regeneratePostKit: async () => ({ post_kit: (savedKit = savedKit === oldKit ? freshKit : detailKit) }),
+      regeneratePostKit: async () => ({ post_kit: freshKit }),
     }, async () => {
       await mount(History)(ctx);
       const tab = () => ctx.container.querySelector('[data-testid="history-expand"]');
       await clickEl(ctx, tab());
       await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
+      expectText(ctx, freshKit.caption, "regenerated copy did not land in the drawer");
       await clickEl(ctx, tab());
       await clickEl(ctx, tab());
       expectText(ctx, freshKit.caption, "reopening the drawer restored stale copy");
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="generation-details-button"]'));
-      const dialog = ctx.container.querySelector('[role="dialog"]');
-      await clickEl(ctx, dialog.querySelector('[data-testid="postkit-regenerate"]'));
-      await clickEl(ctx, dialog.querySelector('[aria-label="Close details"]'));
-      expectText(ctx, detailKit.caption);
-      expectAbsent(ctx, freshKit.caption);
       expectAbsent(ctx, oldKit.caption);
     });
   });
@@ -11165,29 +11157,24 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History's details modal answers Escape", async (ctx) => {
+  await check("History's open drawer answers Escape", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi(
       {
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "esc-1" }] }),
-        getGeneration: async () => ({ ...COMPLETED, id: "esc-1", model: "minimax" }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
-        },
+      },
       async () => {
         await mount(GenerationHistory)(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
-        await clickEl(
-          ctx,
-          ctx.container.querySelector('[data-testid="generation-details-button"]'),
-          "open generation details"
-        );
-        const dialog = ctx.container.querySelector('[role="dialog"]');
-        if (!dialog) throw new Error("the details modal did not open");
+        if (ctx.container.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "true") {
+          throw new Error("the drawer did not open");
+        }
         await act(async () => {
-          dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         });
-        if (ctx.container.querySelector('[role="dialog"]')) {
-          throw new Error("Escape leaves the details modal open, stranding keyboard users");
+        if (ctx.container.querySelector('[data-testid="history-expand"]').getAttribute("aria-expanded") !== "false") {
+          throw new Error("Escape leaves the drawer open, stranding keyboard users");
         }
       }
     );
@@ -12246,29 +12233,6 @@ await check(
         throw new Error("a pre-kit render invents post copy in History");
       }
     });
-  });
-
-  await check("History's details modal shows the same frozen kit", async (ctx) => {
-    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi(
-      {
-        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kitmodal-1", post_kit: POST_KIT }] }),
-        getGeneration: async () => ({ ...COMPLETED, id: "kitmodal-1", post_kit: POST_KIT }),
-        getAppProfiles: async () => ({ profiles: [PROFILE] }),
-        },
-      async () => {
-        await mount(GenerationHistory)(ctx);
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-expand"]'), "open the drawer");
-        await clickEl(
-          ctx,
-          ctx.container.querySelector('[data-testid="generation-details-button"]'),
-          "open generation details"
-        );
-        const dialog = ctx.container.querySelector('[role="dialog"]');
-        if (!dialog) throw new Error("the details modal did not open");
-        assertFrozenKit(dialog.querySelector('[data-testid="post-kit"]'), "details modal");
-      }
-    );
   });
 
   // The export card reads the parent's frozen kit off the save response —
