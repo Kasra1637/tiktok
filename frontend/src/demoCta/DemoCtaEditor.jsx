@@ -1524,7 +1524,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             "before" was the second upload button nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
-          <p className="text-xs text-muted-foreground">The full base plays first, then this upload, each with its own audio. Export length covers both clips, and each clip keeps its own style.</p>
+          <p className="text-xs text-muted-foreground">Base first, then this clip — each keeps its own audio and style. One export covers both.</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
