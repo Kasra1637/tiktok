@@ -435,11 +435,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                           ? "Open this winner's plan in Create Video for another take like this"
                           : "Open this plan in Create Video for another take \u2014 your recorded thumbs steer the next plan"}
                       >
-                        <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "New variation"}
+                        <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Open plan"}
                       </Link>
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Reopens this render's plan in Create Video — change one thing or regenerate as-is.
+                </p>
 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button

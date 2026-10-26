@@ -11886,7 +11886,7 @@ async function runDemoCtaChecks() {
   );
 
   await check(
-    "History offers a New variation entry into the studio draft",
+    "History offers an Open plan entry into the studio draft",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -11902,13 +11902,16 @@ async function runDemoCtaChecks() {
           // deep link into the draft project, not a new endpoint call: the
           // plan arrives intact and the recorded thumbs steer the next plan.
           const entry = [...ctx.container.querySelectorAll("a")].find(
-            (a) => (a.textContent || "").trim() === "New variation"
+            (a) => (a.textContent || "").trim() === "Open plan"
           );
           if (!entry) {
             throw new Error(
-              "History has no New variation entry on a finished clip. Without " +
+              "History has no Open plan entry on a finished clip. Without " +
                 "it, recorded thumbs have no path into the next draft."
             );
+          }
+          if (!ctx.container.textContent.includes("Reopens this render's plan")) {
+            throw new Error("the plan entry does not say it reopens the render's plan");
           }
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=proj-9")) {
