@@ -795,6 +795,8 @@ async def init_db():
                 -- founder pastes them back. Manual until any TikTok API;
                 -- most-viewed sorts first in History.
                 tiktok_views INTEGER,
+                -- When the founder pasted the count back, NULL until set.
+                tiktok_views_at TEXT,
                 -- Set once the founder approves this segment. Only approved
                 -- segments are used as continuity anchors and included in the
                 -- assembled video.
@@ -1223,6 +1225,9 @@ async def init_db():
             # Pasted-back view counts. Additive: pre-column rows read as
             # NULL, which renders as uncounted and sorts after counted rows.
             ("generations", "tiktok_views", "INTEGER"),
+            # Recorded-at timestamp for pasted-back views. Additive:
+            # pre-column rows read as NULL, which renders as no date.
+            ("generations", "tiktok_views_at", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -5516,6 +5521,7 @@ def _public_generation(row: dict) -> dict:
     out["tiktok_url"] = (row.get("tiktok_url") or "").strip() or None
     views = row.get("tiktok_views")
     out["tiktok_views"] = int(views) if views is not None else None
+    out["tiktok_views_at"] = row.get("tiktok_views_at")
     out.pop("prompt_used", None)
     # Stored unsigned so a row never holds a signature that outlives its own
     # expiry; signed fresh on every read. video_url and r2_url are both stored
@@ -7855,9 +7861,10 @@ async def set_generation_tiktok_views(
     stored = payload.tiktok_views
     if stored is not None and not 0 <= stored <= 10_000_000_000:
         raise HTTPException(status_code=400, detail="Views must be a whole number from 0 to 10 billion.")
+    stamped = now_iso()
     await _execute(
-        "UPDATE generations SET tiktok_views = ?, updated_at = ? WHERE id = ?",
-        (stored, now_iso(), generation_id),
+        "UPDATE generations SET tiktok_views = ?, tiktok_views_at = ?, updated_at = ? WHERE id = ?",
+        (stored, stamped if stored is not None else None, stamped, generation_id),
     )
     return await _with_verdicts(_public_generation_detail(
         await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
@@ -8454,7 +8461,7 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   g.post_kit, g.tiktok_url, g.tiktok_views,
+                   g.post_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
                    p.strategy_version, ca.kind AS angle_kind
             FROM generations g
@@ -8486,6 +8493,7 @@ async def generation_history(
         entry["tiktok_url"] = (entry.get("tiktok_url") or "").strip() or None
         views = entry.get("tiktok_views")
         entry["tiktok_views"] = int(views) if views is not None else None
+        entry["tiktok_views_at"] = entry.get("tiktok_views_at")
         entry["composition"] = None
         out.append(entry)
     await _with_verdicts(out, user_id)

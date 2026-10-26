@@ -77,18 +77,23 @@ class TestTikTokViews:
     def test_unset_views_read_as_null_everywhere(self, api):
         generation_id = _insert_generation(api)
         assert _run(api.get_generation(generation_id, ANON)).get("tiktok_views") is None
+        assert _run(api.get_generation(generation_id, ANON)).get("tiktok_views_at") is None
         history = _run(api.generation_history(user_id=ANON))["generations"]
         row = next(g for g in history if g["id"] == generation_id)
         assert row.get("tiktok_views") is None
+        assert row.get("tiktok_views_at") is None
 
     def test_setting_views_round_trips_everywhere(self, api):
         generation_id = _insert_generation(api)
         updated = _set_views(api, generation_id, 12400)
         assert updated.get("tiktok_views") == 12400
+        assert updated.get("tiktok_views_at")
         assert _run(api.get_generation(generation_id, ANON)).get("tiktok_views") == 12400
+        assert _run(api.get_generation(generation_id, ANON)).get("tiktok_views_at") == updated.get("tiktok_views_at")
         history = _run(api.generation_history(user_id=ANON))["generations"]
         row = next(g for g in history if g["id"] == generation_id)
         assert row.get("tiktok_views") == 12400
+        assert row.get("tiktok_views_at") == updated.get("tiktok_views_at")
 
     def test_zero_is_a_count_not_a_clear(self, api):
         generation_id = _insert_generation(api)
@@ -97,7 +102,9 @@ class TestTikTokViews:
     def test_none_clears_the_count(self, api):
         generation_id = _insert_generation(api)
         _set_views(api, generation_id, 12400)
-        assert _set_views(api, generation_id, None).get("tiktok_views") is None
+        cleared = _set_views(api, generation_id, None)
+        assert cleared.get("tiktok_views") is None
+        assert cleared.get("tiktok_views_at") is None
 
     def test_negative_and_absurd_counts_are_refused_not_stored(self, api):
         generation_id = _insert_generation(api)

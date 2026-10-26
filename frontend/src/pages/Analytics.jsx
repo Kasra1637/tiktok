@@ -205,6 +205,9 @@ export default function Analytics() {
         />
       ) : (
         <div className="space-y-6">
+          <p data-testid="analytics-scope" className="text-xs text-muted-foreground">
+            Showing {renders?.length ?? 0} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200) and up to 500 saved events. Activity and feedback below use this same set.
+          </p>
           {renders?.length > 0 && (
             <>
               <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} />
@@ -223,13 +226,13 @@ export default function Analytics() {
             </p>
           )}
           {hasFeedback && (
-            <p className="text-xs text-muted-foreground">Feedback below uses up to 500 most recent saved events{selectedId ? " for this app" : " across all apps"}. Repeated ratings are events, not unique clips or measured outcomes.</p>
+            <p className="text-xs text-muted-foreground">Repeated ratings are events, not unique clips or measured outcomes.</p>
           )}
           {signals.length > 0 && (
             <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
           )}
           {reasons.length > 0 && (
-            <SignalReasons summary={feedback.summary} />
+            <SignalReasons summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
           )}
         </div>
       )}
@@ -382,7 +385,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                               <span className="h-2 w-24 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
                                 <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]" style={{ width: barWidth(row.tiktok_views) }} />
                               </span>
-                              <span className="whitespace-nowrap font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}</span>
+                              <span className="whitespace-nowrap font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
                             </span>
                           )}
                         </td>
@@ -422,7 +425,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
             </div>
           )}
           <p className="border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
-            Showing {generations.length} most recent renders{profileId ? " for this app" : " across all apps, including unassigned exports"} (up to 200). Activity below uses this same set.
+            Ranked by recorded views; missing counts sort last.
           </p>
         </div>
       )}
@@ -488,16 +491,8 @@ function RenderFunnel({ generations = [], profileId = "" }) {
       data-testid="analytics-funnel"
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
-        {groups.map((group) => {
+        {groups.filter((group) => byStatus[group.key].length).map((group) => {
           const rows = byStatus[group.key];
-          if (!rows.length) {
-            return (
-              <li key={group.key} data-testid={`analytics-status-${group.key}`} className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm">
-                <span className="min-w-0 truncate text-muted-foreground">{group.label}</span>
-                <FactChip>0</FactChip>
-              </li>
-            );
-          }
           const isOpen = openStatus === group.key;
           const panelId = `analytics-status-panel-${group.key}`;
           const shown = rows.slice(0, STATUS_LIST_LIMIT);
@@ -539,6 +534,12 @@ function RenderFunnel({ generations = [], profileId = "" }) {
             </li>
           );
         })}
+        {groups.some((group) => !byStatus[group.key].length) && (
+          <li data-testid="analytics-status-empty" className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm">
+            <span className="min-w-0 truncate text-muted-foreground">{groups.filter((group) => !byStatus[group.key].length).map((group) => group.label).join(" · ")} — nothing here</span>
+            <FactChip>0</FactChip>
+          </li>
+        )}
       </ul>
       <p className="flex items-center justify-between gap-4 border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
         <span>{generations.length} total</span>
@@ -598,7 +599,7 @@ function RenderActivity({ generations = [] }) {
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">
-        {shown} {shown === 1 ? "render" : "renders"} across the {buckets.length} {buckets.length === 1 ? "week" : "weeks"} shown.
+        Same {generations.length} {generations.length === 1 ? "render" : "renders"} as above, in the {buckets.length} {buckets.length === 1 ? "week" : "weeks"} shown.
       </p>
     </SectionCard>
   );
@@ -705,11 +706,18 @@ function SignalCounts({ summary, events = [], profileId = "" }) {
  * line is what keeps a thin list honest: rework that nobody explained is a
  * different problem from a specific, repeatable complaint.
  */
-function SignalReasons({ summary }) {
+function SignalReasons({ summary, events = [], profileId = "" }) {
   const reasons = summary?.top_reasons || [];
   if (!reasons.length) return null;
   const explained = summary?.explained ?? reasons.reduce((n, r) => n + (r.count || 0), 0);
   const total = summary?.total ?? 0;
+  const latestGenByReason = {};
+  for (const row of events) {
+    const code = row?.reason;
+    const gen = row?.generation_id;
+    if (code && gen && !latestGenByReason[code]) latestGenByReason[code] = gen;
+  }
+  const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
   return (
     <SectionCard
       title="Reasons you gave"
@@ -718,12 +726,26 @@ function SignalReasons({ summary }) {
       data-testid="analytics-reasons"
     >
       <ul className="divide-y divide-[color:var(--hairline)]">
-        {reasons.map((r) => (
-          <li key={r.reason} className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-secondary/20">
-            <span className="min-w-0 truncate text-muted-foreground">{humanize(r.reason)}</span>
-            <FactChip>{r.count}</FactChip>
-          </li>
-        ))}
+        {reasons.map((r) => {
+          const genId = latestGenByReason[r.reason];
+          const href = genId ? `${historyHref}#generation-${genId}` : historyHref;
+          return (
+            <li key={r.reason} className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-secondary/20">
+              <span className="min-w-0 truncate text-muted-foreground">{humanize(r.reason)}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <FactChip>{r.count}</FactChip>
+                <Link
+                  to={href}
+                  data-testid={`analytics-reason-${r.reason}`}
+                  title={genId ? "Open the latest render behind this reason" : "Open this app in History"}
+                  className="shrink-0 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
+                >
+                  {genId ? "View render" : "View in History"}
+                </Link>
+              </span>
+            </li>
+          );
+        })}
       </ul>
       {total > 0 && (
         <p className="pt-2 text-xs text-muted-foreground">

@@ -6611,6 +6611,100 @@ async function runAnalyticsChecks() {
       "a thin reasons list is not readable as unexplained"
     );
   });
+
+  await check("analytics states its loaded set once above the cards", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "completed", hook_line: "One", created_at: dayAgo },
+          { id: "g2", status: "completed", hook_line: "Two", created_at: dayAgo },
+        ],
+      }),
+    });
+    const scope = ctx.container.querySelector('[data-testid="analytics-scope"]');
+    if (!scope) throw new Error("no single scope line above the analytics cards");
+    if (!/same set/i.test(scope.textContent || "")) {
+      throw new Error("the scope line does not name the shared loaded set");
+    }
+    const results = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (results && /Activity below uses this same set/.test(results.textContent || "")) {
+      throw new Error("the results card still repeats the scope footer");
+    }
+    const activity = ctx.container.querySelector('[data-testid="analytics-activity"]');
+    if (activity && /across the \d+ weeks? shown/.test(activity.textContent || "")) {
+      throw new Error("the weekly card still repeats its own set footer");
+    }
+  });
+
+  await check("empty render statuses collapse to one shared line", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "completed", hook_line: "Only clip", created_at: dayAgo },
+        ],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
+    if (!card) throw new Error("the render funnel is not on the page");
+    const shared = card.querySelector('[data-testid="analytics-status-empty"]');
+    if (!shared) throw new Error("empty statuses have no shared collapsed line");
+    for (const label of ["Failed", "In progress", "Archived"]) {
+      if (!shared.textContent.includes(label)) {
+        throw new Error(`the shared empty line does not name "${label}"`);
+      }
+    }
+    for (const key of ["failed", "active", "archived"]) {
+      if (card.querySelector(`[data-testid="analytics-status-${key}"]`)) {
+        throw new Error(`empty status "${key}" still renders its own row`);
+      }
+    }
+  });
+
+  await check("clip views carry their recorded date, never a bare count", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_views_at: dayAgo, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+      ] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const cell = card.querySelector('[data-testid="result-top"]');
+    if (!cell) throw new Error("the top clip row is missing");
+    if (!/Recorded/i.test(cell.textContent || "")) {
+      throw new Error("the recorded views count shows no recorded date");
+    }
+  });
+
+  await check("reasons link back to the history rows behind them", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [{ event: "regenerate", reason: "hook_weak", generation_id: "g9" }],
+        summary: {
+          total: 1,
+          top_signals: [],
+          top_reasons: [{ reason: "hook_weak", count: 1 }],
+          explained: 1,
+        },
+      }),
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g9", status: "completed", hook_line: "Ninth clip", created_at: dayAgo },
+        ],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-reasons"]');
+    if (!card) throw new Error("the reasons card is not on the page");
+    const link = card.querySelector('[data-testid="analytics-reason-hook_weak"]');
+    if (!link) throw new Error("a reason has no history link behind it");
+    if (!/#generation-g9$/.test(link.getAttribute("href") || "")) {
+      throw new Error(`the reason links to the wrong history row: ${link.getAttribute("href")}`);
+    }
+  });
 }
 
 /**

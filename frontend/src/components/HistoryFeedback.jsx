@@ -73,7 +73,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
       const updated = await api.setTikTokViews(row.id, count);
       setSavedViews(updated.tiktok_views ?? null);
       setViews(updated.tiktok_views ?? "");
-      onUpdated?.(row.id, { tiktok_views: updated.tiktok_views ?? null });
+      onUpdated?.(row.id, { tiktok_views: updated.tiktok_views ?? null, tiktok_views_at: updated.tiktok_views_at ?? null });
     } catch (err) {
       setViewsError(getErrorMessage(err));
     } finally {
