@@ -220,7 +220,7 @@ export default function Analytics() {
             <RenderActivity generations={renders} />
           )}
           {hasFeedback && !signals.length && !reasons.length && !renders?.length && (
-            <p className="text-sm text-muted-foreground" role="status">
+            <p className="text-base text-muted-foreground" role="status">
               Feedback is saved. No renders or automatic workflow signals are in this loaded set yet.
               Ratings inform future suggestions; they are not conversions or proof that a clip works.
             </p>
@@ -271,7 +271,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
         </div>
       )}
       {clips.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No finished clips to compare yet.</p>
+        <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

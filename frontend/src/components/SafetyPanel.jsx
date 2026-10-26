@@ -53,7 +53,7 @@ export function SafetyPanel({ report, summary }) {
       {blocking.length > 0 && (
         <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
           <GroupLabel icon={Ban} className="text-destructive">Never use — found in this script</GroupLabel>
-          <ul className="mt-2 space-y-2 text-sm">
+          <ul className="mt-2 space-y-2 text-base">
             {blocking.map((b, i) => (
               <li key={i}>
                 <span className="font-semibold">&ldquo;{b.claim}&rdquo;</span>
@@ -67,7 +67,7 @@ export function SafetyPanel({ report, summary }) {
       {warnings.length > 0 && (
         <div className="inset-panel inset-panel-strong">
           <GroupLabel icon={ShieldAlert}>Risk warnings</GroupLabel>
-          <ul className="mt-2 space-y-2 text-sm">
+          <ul className="mt-2 space-y-2 text-base">
             {warnings.map((w, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-semibold">&ldquo;{w.claim}&rdquo;</span>
@@ -87,7 +87,7 @@ export function SafetyPanel({ report, summary }) {
           <p className="mt-1 text-xs text-muted-foreground">
             The generator reported using these, but they do not appear in the text.
           </p>
-          <ul className="mt-2 space-y-1 text-sm">
+          <ul className="mt-2 space-y-1 text-base">
             {undeclared.map((c, i) => (
               <li key={i}>{c}</li>
             ))}
@@ -98,7 +98,7 @@ export function SafetyPanel({ report, summary }) {
       {unverified.length > 0 && (
         <div className="inset-panel inset-panel-strong">
           <GroupLabel icon={ShieldCheck}>Needs verification</GroupLabel>
-          <ul className="mt-2 space-y-1 text-sm">
+          <ul className="mt-2 space-y-1 text-base">
             {unverified.map((u, i) => (
               <li key={i}>{u.claim}</li>
             ))}
@@ -115,7 +115,7 @@ export function SafetyPanel({ report, summary }) {
             ))}
           </div>
         ) : (
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-base text-muted-foreground">
             None of your approved claims appear in this script.
           </p>
         )}

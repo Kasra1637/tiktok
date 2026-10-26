@@ -208,7 +208,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
         </span>
       </div>
       {outcome && (
-        <p className="mt-1 text-sm text-foreground/90" data-testid="template-outcome">
+        <p className="mt-1 text-base text-foreground/90" data-testid="template-outcome">
           {outcome}
         </p>
       )}
@@ -225,7 +225,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
               tick the step pills use for "positive", so it reads as the reason
               rather than one of several. */}
           <p
-            className="flex items-start gap-1.5 text-sm text-foreground"
+            className="flex items-start gap-1.5 text-base text-foreground"
             data-testid="template-fit-verdict"
           >
             <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
@@ -505,7 +505,7 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
       data-testid="review-revisions"
     >
       <span className="eyebrow block">Revisions &amp; consequences</span>
-      <p className="text-sm" data-testid="revisions-status">
+      <p className="text-base" data-testid="revisions-status">
         {status}
       </p>
       {clipError && clipLoaded && (
@@ -712,7 +712,7 @@ function AngleSelector({
                 {details.map((row) => (
                   <div key={row.label} className="min-w-0">
                     <dt className="eyebrow">{row.label}</dt>
-                    <dd className="mt-1 text-sm leading-[22px] text-foreground/90">
+                    <dd className="mt-1 text-base leading-[22px] text-foreground/90">
                       {row.value}
                     </dd>
                   </div>
@@ -2339,7 +2339,7 @@ setObjective("");
             )}
             {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
               <div className="inset-panel">
-                <p className="text-sm">No templates recommended for this app yet.</p>
+                <p className="text-base">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {recError
                     ? `Ranking failed (${recError}).`
@@ -2371,7 +2371,7 @@ setObjective("");
             )}
 
             {template && (
-              <div className="inset-panel text-sm">
+              <div className="inset-panel text-base">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{template.name}</span>
                   <Badge variant="secondary" className="text-xs">
@@ -2394,7 +2394,7 @@ setObjective("");
                 {typeof template.outcome === "string" && template.outcome.trim() && (
                   /* Tailored templates are model-written, so this line can open
                      lowercase next to the hand-written copy above it. */
-                  <p className="mt-1 text-sm text-foreground/90">{sentenceCase(template.outcome.trim())}</p>
+                  <p className="mt-1 text-base text-foreground/90">{sentenceCase(template.outcome.trim())}</p>
                 )}
                 <p className="mt-1 text-xs text-muted-foreground">{sentenceCase(template.opening_structure)}</p>
                 <TemplateShape template={template} />
@@ -2471,7 +2471,7 @@ setObjective("");
                 </p>
               ) : !project ? (
                 <>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     Preparing the video draft for your photo…
                   </p>
                   <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
@@ -2557,7 +2557,7 @@ setObjective("");
               <Sparkles className="h-4 w-4" />
               Try again
             </Button>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
             <p className="text-xs text-muted-foreground" data-subtitle="">
@@ -2709,7 +2709,7 @@ setObjective("");
             {typeof template?.outcome === "string" && template.outcome.trim() && (
               <div className="inset-panel">
                 <GroupLabel icon={Target}>What this is aiming to leave them with</GroupLabel>
-                <p className="mt-1 text-sm">{sentenceCase(template.outcome.trim())}</p>
+                <p className="mt-1 text-base">{sentenceCase(template.outcome.trim())}</p>
                 <p className="mt-1 text-xs text-muted-foreground" data-subtitle="">
                   The outcome this template is built for, in their terms.
                 </p>
@@ -2731,7 +2731,7 @@ setObjective("");
                 that reads as the studio losing words. */}
             {project?.plan_trim?.dropped_chars > 0 && (
               <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-5" data-testid="plan-trimmed-note">
-                <p className="text-sm">
+                <p className="text-base">
                   I shortened your script by {project.plan_trim.dropped_chars} characters so it
                   fits the {project.plan_trim.middle_seconds}-second middle
                   {project.plan_trim.budget
@@ -2812,7 +2812,7 @@ setObjective("");
             {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
               <div className="inset-panel space-y-4" data-testid="spoken-partition">
                 <GroupLabel icon={FileText}>What the middle will say</GroupLabel>
-                <p className="text-sm">{sentenceCase(project.spoken_middle)}</p>
+                <p className="text-base">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
                     of the script here. The kept words are no longer always a
                     prefix of the script — an over-long middle gives up the
@@ -2885,7 +2885,7 @@ setObjective("");
                   <GroupLabel icon={ListChecks}>Shot timeline</GroupLabel>
                   <Badge variant="outline" className="text-xs">read-only</Badge>
                 </summary>
-                <div className="mt-2 space-y-2 text-sm">
+                <div className="mt-2 space-y-2 text-base">
                   {editValue("beat_timeline", []).map((b, i) => (
                     <div key={i} className="flex gap-2">
                       <Badge variant="secondary" className="shrink-0 text-xs">
@@ -2912,7 +2912,7 @@ setObjective("");
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-4">
                 <span className="text-sm font-semibold">Length of the generated piece</span>
-                <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-sm">
+                <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-base">
                   {pieceSeconds} seconds
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -3031,7 +3031,7 @@ setObjective("");
                     {firstGap.label}
                   </Button>
                 )}
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   {!profileId
                     ? "Pick an approved App Profile on the first step to continue."
                     : "Pick a template on the Audience & template step to continue."}
@@ -3044,7 +3044,7 @@ setObjective("");
               />
             ) : !project ? (
               <div className="inset-panel">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Preparing the video draft for your photo…
                 </p>
                 <Button

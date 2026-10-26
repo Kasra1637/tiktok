@@ -28,7 +28,7 @@ function ProfileMockup() {
         {["What it does, in your words", "Who it is for", "Proof moment"].map((line) => (
           <li key={line} className="inset-panel flex items-center gap-2.5">
             <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-            <span className="text-sm text-muted-foreground">{line}</span>
+            <span className="text-base text-muted-foreground">{line}</span>
           </li>
         ))}
       </ul>
@@ -76,9 +76,9 @@ function ScriptMockup() {
     <div className="surface" aria-hidden="true">
       <span className="eyebrow">Script plan</span>
       <div className="mt-4 space-y-2.5">
-        <p className="inset-panel text-sm leading-relaxed">Hook: the line your presenter says first.</p>
-        <p className="inset-panel text-sm leading-relaxed text-muted-foreground">Story: three beats, your words.</p>
-        <p className="inset-panel flex items-start gap-2 text-sm leading-relaxed">
+        <p className="inset-panel text-base leading-relaxed">Hook: the line your presenter says first.</p>
+        <p className="inset-panel text-base leading-relaxed text-muted-foreground">Story: three beats, your words.</p>
+        <p className="inset-panel flex items-start gap-2 text-base leading-relaxed">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-coral)]" />
           <span className="text-muted-foreground">One claim flagged — reword before rendering.</span>
         </p>

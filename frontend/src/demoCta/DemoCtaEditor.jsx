@@ -102,10 +102,10 @@ const VIDEO_FIT_HINTS = {
 };
 
 const INPUT_CLASS =
-  "h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-1 text-sm shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
+  "h-10 w-full rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-1 text-base shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
 
 const TEXTAREA_CLASS =
-  "w-full resize-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-2 text-sm leading-snug shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
+  "w-full resize-none rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3.5 py-2 text-base leading-snug shadow-[var(--shadow-xs)] transition-colors placeholder:text-muted-foreground hover:border-[color:var(--hairline-strong)] focus-visible:border-[color:var(--indigo-35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-15)]";
 
 /**
  * Overlay font id → canvas font stack. Unknown ids fall back to the first

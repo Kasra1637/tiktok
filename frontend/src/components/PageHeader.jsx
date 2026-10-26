@@ -29,7 +29,7 @@ export function PageHeader({ icon, eyebrow, title, description, actions, align =
         </div>
         {description && (
           <p
-            className={`mt-2 text-sm leading-relaxed text-muted-foreground ${
+            className={`mt-2 text-base leading-relaxed text-muted-foreground ${
               centered ? "max-w-xl" : "max-w-2xl"
             }`}
           >

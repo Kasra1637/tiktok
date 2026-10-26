@@ -54,7 +54,7 @@ export function SectionCard({
           {title && (
             <div className="min-w-0 space-y-1">
               <SectionHeading as={Heading} icon={icon}>{title}</SectionHeading>
-              {description && <p className="text-sm text-muted-foreground">{description}</p>}
+              {description && <p className="text-base text-muted-foreground">{description}</p>}
             </div>
           )}
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

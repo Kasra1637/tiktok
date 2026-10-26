@@ -431,7 +431,7 @@ const handleGenerate = async () => {
         </Alert>
       )}
       {!ready && !noPhoto && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-base text-muted-foreground">
           Review and save your script plan first. A saved plan is checked before rendering.
         </p>
       )}
@@ -589,12 +589,12 @@ const handleGenerate = async () => {
       </Button>
 
       {hasUnsavedEdits && (
-        <p role="status" className="text-sm text-muted-foreground" data-testid="render-unsaved-edits">
+        <p role="status" className="text-base text-muted-foreground" data-testid="render-unsaved-edits">
           Save edits in the script plan above before rendering. The video uses the saved plan, not your unsaved text.
         </p>
       )}
       {!models && (
-        <div role={modelError ? "alert" : "status"} className="space-y-2 text-sm text-muted-foreground" data-testid="render-model-status">
+        <div role={modelError ? "alert" : "status"} className="space-y-2 text-base text-muted-foreground" data-testid="render-model-status">
           <p>{modelError ? `Video models could not load: ${modelError}` : "Loading video models before rendering…"}</p>
           {modelError && (
             <Button variant="secondary" size="sm" onClick={() => setModelRetry((value) => value + 1)}>
@@ -604,7 +604,7 @@ const handleGenerate = async () => {
         </div>
       )}
       {tooLong && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-base text-muted-foreground">
           Choose a model above that supports {pieceSeconds}s, or pick a shorter template on Audience &amp; template and regenerate the plan.
         </p>
       )}
@@ -619,7 +619,7 @@ const handleGenerate = async () => {
       )}
 
       {!strategyReady && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-base text-muted-foreground">
           {angleStale
             ? "The audience angle changed after this strategy was built. Rebuild it for the angle now picked, then render."
             : staleStrategy
@@ -637,7 +637,7 @@ const handleGenerate = async () => {
       />
 
       {generation && (
-        <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-sm">
+        <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-base">
           <div className="flex flex-wrap items-center gap-2">
             {generation.model && <Badge variant="outline" className="text-xs">{generation.model}</Badge>}
             {generation.duration && (

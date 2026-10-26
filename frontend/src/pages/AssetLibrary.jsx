@@ -349,7 +349,7 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
         </div>
       )}
       {listed.length === 0 ? (
-        <p className="text-sm text-muted-foreground" role="status">
+        <p className="text-base text-muted-foreground" role="status">
           No assets match “{query.trim()}”. Clear the search to see everything.
         </p>
       ) : (
@@ -988,7 +988,7 @@ export default function AssetLibrary({
         // into. On the standalone route the equivalent line earns its place —
         // it says what the photo is for — so that branch stays.
         embedded ? null : (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             No photos yet. In Create Video, an uploaded photo attaches to your draft and guides its presenter.
           </p>
         )

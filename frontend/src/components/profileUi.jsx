@@ -83,7 +83,7 @@ export function ProfileField({ label, value }) {
       {label ? <GroupLabel as="h4">{label}</GroupLabel> : null}
       <p
         className={cn(
-          "whitespace-pre-wrap text-sm leading-[22px] text-foreground/90",
+          "whitespace-pre-wrap text-base leading-[22px] text-foreground/90",
           label && "mt-1"
         )}
       >
@@ -147,7 +147,7 @@ export function InfoListBlock({ label, items, tone = "default" }) {
   return (
     <div className={cn("rounded-xl border p-4", toneClass)}>
       <GroupLabel>{label}</GroupLabel>
-      <ul className="mt-2 space-y-2 text-sm leading-[22px] text-foreground/90">
+      <ul className="mt-2 space-y-2 text-base leading-[22px] text-foreground/90">
         {items.map((item, i) => (
           <li key={i} className="flex gap-3">
             <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--brand-indigo)]" />

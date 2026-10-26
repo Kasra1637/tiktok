@@ -564,7 +564,7 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
             </div>
 
             {row.hook_line && (
-              <p className="break-words text-sm leading-relaxed text-foreground/90">
+              <p className="break-words text-base leading-relaxed text-foreground/90">
                 &ldquo;{sentenceCase(row.hook_line)}&rdquo;
               </p>
             )}
@@ -602,13 +602,13 @@ function GenerationRow({ row, onChanged, onUpdated, expanded = false, onToggle, 
                 {row.audience && (
                   <div className="space-y-1">
                     <GroupLabel icon={Target}>Audience</GroupLabel>
-                    <p className="break-words text-sm leading-relaxed text-muted-foreground">{row.audience}</p>
+                    <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
                   </div>
                 )}
                 {row.demo_brief && (
                   <div className="space-y-1">
                     <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
-                    <p className="break-words text-sm leading-relaxed text-muted-foreground">{row.demo_brief}</p>
+                    <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
                   </div>
                 )}
               </div>

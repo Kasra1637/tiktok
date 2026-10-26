@@ -111,7 +111,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
               onCopy={() => copy("caption-0", String(caption), "Caption")}
             />
           </div>
-          <p className="break-words text-sm leading-relaxed text-foreground/90">
+          <p className="break-words text-base leading-relaxed text-foreground/90">
             {String(caption)}
           </p>
         </div>
@@ -145,7 +145,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
               onCopy={() => copy("cover", coverText, "Cover text")}
             />
           </div>
-          <p className="break-words text-sm font-semibold leading-relaxed text-foreground/90">
+          <p className="break-words text-base font-semibold leading-relaxed text-foreground/90">
             &ldquo;{coverText}&rdquo;
           </p>
         </div>
