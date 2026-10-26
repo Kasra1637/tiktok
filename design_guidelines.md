@@ -278,8 +278,8 @@ together, so a record can never read as a separate section or stretch a
 neighbor. A card that has a clip to play leads with a full-bleed stage and
 its identity summary beneath the footage: stacked, the clip is a contained
 320px video; side by side it fills its 280–320px column edge to edge
-(width-driven 9:16 box, 16px stage padding) instead of floating centered
-in a fixed-height box. A card with nothing to play keeps a notice in place of
+(width-driven 9:16 box on a transparent stage, 12px padding) instead of
+floating centered in a fixed-height box. A card with nothing to play keeps a notice in place of
 the video, because a blank card explains nothing.
 
 The record beside the clip holds the app name, status, hook, facts,

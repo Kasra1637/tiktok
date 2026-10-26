@@ -732,10 +732,13 @@ h1,
         border-right: 1px solid var(--hairline);
     }
     .history-stage {
-        --history-stage-pad: 16px;
-        /* No fixed box beside the record: the stage hugs the clip. */
+        --history-stage-pad: 12px;
+        /* No fixed box and no second background beside the record: the
+           stage hugs the clip and the clip mounts straight on the card
+           surface, so nothing reads as dead space around it. */
         min-height: 0;
         padding: var(--history-stage-pad);
+        background: transparent;
     }
     .history-preview {
         width: 100%;

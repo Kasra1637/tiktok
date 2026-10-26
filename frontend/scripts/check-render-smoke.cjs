@@ -10698,6 +10698,9 @@ async function runDemoCtaChecks() {
     if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-stage\s*\{[\s\S]*?min-height:\s*0/.test(css)) {
       throw new Error("the wide stage keeps its fixed box instead of hugging the clip");
     }
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-stage\s*\{[\s\S]*?background:\s*transparent/.test(css)) {
+      throw new Error("the wide stage keeps its own slab instead of mounting the clip on the card");
+    }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
