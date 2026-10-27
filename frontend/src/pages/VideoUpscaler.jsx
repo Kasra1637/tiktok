@@ -10,7 +10,7 @@ import { formatDims } from "../upscale/sizing";
 import { useUpscaler } from "../upscale/useUpscaler";
 
 /**
- * Video Upscaler: upload a sub-4K clip or picture, enhance it, preview, download.
+ * Video Upscaler: upload a sub-4K clip, enhance it, preview, download.
  *
  * Presentation only — the upload/probe/enhance state machine lives in
  * useUpscaler, and the encode pipeline in upscale/enhanceVideo. Everything
@@ -30,7 +30,7 @@ export function VideoUpscaler() {
       <PageHeader
         icon={WandSparkles}
         title="Video Upscaler"
-        description="Bring a soft sub-4K clip or picture up to 4K: sharper edges, richer colour, same audio."
+        description="Bring a soft sub-4K clip up to 4K: sharper edges, richer colour, same audio."
       />
 
       {error && (
@@ -43,7 +43,7 @@ export function VideoUpscaler() {
       <SectionCard
         title="Your clip"
         icon={Upload}
-        description="MP4, WebM, PNG or JPEG, under 4K on its shorter side. Everything is enhanced on this device — nothing is uploaded."
+        description="MP4 or WebM, under 4K on its shorter side. Everything is enhanced on this device — nothing is uploaded."
         actions={
           (status === "ready" || status === "done") && (
             <Button variant="secondary" size="sm" onClick={resetSelection}>
@@ -59,14 +59,14 @@ export function VideoUpscaler() {
           >
             <Upload className="h-6 w-6 text-muted-foreground" />
             <span className="font-display text-base font-semibold tracking-tight">
-              {status === "probing" ? "Reading your file…" : "Choose a video or picture to upscale"}
+              {status === "probing" ? "Reading your file…" : "Choose a video to upscale"}
             </span>
             <span className="text-sm text-muted-foreground">
-              {fileName || "MP4, WebM, PNG or JPEG — videos up to 5 minutes"}
+              {fileName || "MP4 or WebM — videos up to 5 minutes"}
             </span>
             <input
               type="file"
-              accept="video/mp4,video/webm,video/quicktime,image/png,image/jpeg,image/webp"
+              accept="video/mp4,video/webm,video/quicktime"
               className="sr-only"
               data-testid="upscaler-file-input"
               disabled={status === "probing"}
@@ -78,46 +78,28 @@ export function VideoUpscaler() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <GroupLabel>Original · {formatDims(sourceMeta.width, sourceMeta.height)}</GroupLabel>
-                {sourceMeta.kind === "image" ? (
-                  <img
-                    src={sourceUrl}
-                    alt="Original upload"
-                    className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black object-contain"
-                    data-testid="upscaler-original-video"
-                  />
-                ) : (
-                  <video
-                    src={sourceUrl}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black"
-                    data-testid="upscaler-original-video"
-                  />
-                )}
+                <video
+                  src={sourceUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black"
+                  data-testid="upscaler-original-video"
+                />
               </div>
               <div className="space-y-2">
                 <GroupLabel>
                   {result ? `Enhanced · ${formatDims(result.width, result.height)}` : "Enhanced"}
                 </GroupLabel>
                 {result ? (
-                  result.kind === "image" ? (
-                    <img
-                      src={result.url}
-                      alt="Enhanced result"
-                      className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black object-contain"
-                      data-testid="upscaler-enhanced-video"
-                    />
-                  ) : (
-                    <video
-                      src={result.url}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black"
-                      data-testid="upscaler-enhanced-video"
-                    />
-                  )
+                  <video
+                    src={result.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="aspect-video w-full rounded-xl border border-[color:var(--hairline)] bg-black"
+                    data-testid="upscaler-enhanced-video"
+                  />
                 ) : enhancing ? (
                   <Skeleton className="aspect-video w-full rounded-xl" aria-label="Enhancing your video" />
                 ) : (
@@ -156,7 +138,7 @@ export function VideoUpscaler() {
                     <Button variant="accent" asChild>
                       <a href={result.url} download={downloadName} data-testid="upscaler-download">
                         <Download className="h-4 w-4" />
-                        {result.kind === "image" ? "Download enhanced picture" : "Download enhanced video"}
+                        Download enhanced video
                       </a>
                     </Button>
                     <Button variant="secondary" onClick={handleEnhance}>

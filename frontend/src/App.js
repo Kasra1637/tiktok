@@ -112,7 +112,7 @@ function App() {
                         <Route path="/demo-cta" element={editorElement} />
                         <Route path="/demo-cta/:generationId" element={editorElement} />
                         <Route path="/brand" element={<BrandSetup />} />
-                        {/* Standalone client-side upscaler: sub-1080p in, 1080p out. */}
+                        {/* Standalone client-side upscaler: sub-4K video in, 4K MP4 out. */}
                         <Route path="/upscale" element={(
                           <Suspense fallback={<EditorLoading />}>
                             <VideoUpscaler />
