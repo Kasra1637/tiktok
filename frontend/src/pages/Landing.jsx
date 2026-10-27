@@ -297,7 +297,7 @@ export default function Landing() {
           </UnauthedOnly>
 
           <div
-            className="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground lg:justify-start"
+            className="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground lg:justify-start"
             style={{ animationDelay: "220ms" }}
           >
             <span className="inline-flex items-center gap-1.5">

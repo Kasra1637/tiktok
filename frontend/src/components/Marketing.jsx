@@ -209,11 +209,11 @@ export function MarketingFooter({ productLinks, tagline = true }) {
 
         <div className="pt-10">
           <div className="flex flex-col items-center justify-between gap-3 border-t border-border/50 pt-6 sm:flex-row">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} HookForge. Built for mobile-app founders and marketers.
             </p>
             {tagline && (
-              <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <p className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Wand2 className="h-3 w-3 text-[color:var(--brand-indigo)]" /> Your message. Your final say.
               </p>
             )}

@@ -181,7 +181,7 @@ function Field({ label, hint, children }) {
     <div className="space-y-2">
       <GroupLabel as="label">{label}</GroupLabel>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -532,7 +532,7 @@ export default function BrandSetup() {
               />
             )}
             {profilesError && (
-              <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+              <span role="alert" className="flex items-center gap-1 text-sm text-destructive">
                 {profilesError}{" "}
                 <button type="button" className="underline" onClick={refreshProfilesList} data-testid="profiles-retry">
                   Try again

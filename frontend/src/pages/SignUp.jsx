@@ -27,13 +27,13 @@ export default function SignUp() {
         {!isClerkConfigured ? (
           <div className="surface-solid w-full max-w-[400px] rounded-2xl text-center">
             <p className="font-display text-sm font-semibold">Authentication isn&apos;t configured</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Set <code className="font-mono">REACT_APP_CLERK_PUBLISHABLE_KEY</code> at build time.
               This enables sign up; until then, the app runs without accounts.
             </p>
             <Link
               to="/"
-              className="mt-4 inline-flex text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
+              className="mt-4 inline-flex text-sm font-semibold text-[color:var(--brand-indigo)] hover:underline"
             >
               Continue to the app
             </Link>

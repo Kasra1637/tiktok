@@ -199,7 +199,7 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
         <span className="min-w-0 flex-1">
           <SectionHeading as="span" icon={Icon}>{label}</SectionHeading>
           {summary ? (
-            <span className="mt-1 block truncate pl-7 text-xs leading-[18px] text-muted-foreground">
+            <span className="mt-1 block truncate pl-7 text-sm leading-[20px] text-muted-foreground">
               {summary}
             </span>
           ) : null}
@@ -254,7 +254,7 @@ export function StatementCard({ title, rows, spanFull }) {
           <div aria-hidden="true" className="h-px bg-[color:var(--hairline)]" />
           <div className="space-y-2">
             {rows.filter(Boolean).map((row, i) => (
-              <p key={i} className="text-xs leading-[18px] text-muted-foreground">
+              <p key={i} className="text-sm leading-[20px] text-muted-foreground">
                 {sentenceCase(row)}
               </p>
             ))}

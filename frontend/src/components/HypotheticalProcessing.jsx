@@ -89,7 +89,7 @@ export function HypotheticalProcessing({ pieceSeconds = 12, modelName = "" }) {
           No video is generated
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         A front-end preview only. Nothing renders, nothing is billed.
       </p>
 

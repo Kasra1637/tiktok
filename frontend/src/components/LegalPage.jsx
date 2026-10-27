@@ -70,7 +70,7 @@ export function LegalSection({ number, title, children }) {
 
 /** Sub-heading inside a clause. */
 export function LegalSubheading({ children }) {
-  return <h3 className="text-xs font-semibold text-foreground">{children}</h3>;
+  return <h3 className="text-sm font-semibold text-foreground">{children}</h3>;
 }
 
 /** Bulleted list with brand-colored markers. */

@@ -14,8 +14,8 @@ import { cn } from "../lib/utils";
  * is not the thing's identity. "grok-imagine-video" and "10s" are facts about a
  * video. Which app it is for, and whether it worked, are not — those get the
  * display face and a status badge.
- *
- * `text-xs` and not smaller. The project's floor is 12px, and small muted text
+ *  * `text-xs` and not smaller. Chips are chrome, not reading copy: they hold
+   * the 12px token while body copy sits at 14px and up, and small muted text
  * is exactly what falls below AA contrast beneath it.
  */
 export function FactChip({ children, className }) {

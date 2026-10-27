@@ -95,12 +95,12 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
           />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         Written for this clip when it finished, from its approved hook. Copy
         all pastes the caption and its hashtags in one go.
       </p>
       {regenError && (
-        <p className="text-xs text-destructive" role="alert" data-testid="postkit-regenerate-error">
+        <p className="text-sm text-destructive" role="alert" data-testid="postkit-regenerate-error">
           {regenError}
         </p>
       )}

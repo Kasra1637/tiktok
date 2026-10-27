@@ -13,7 +13,7 @@ export function Disclosure({
   summary,
   children,
   detailsClassName = "group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5",
-  summaryClassName = "flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden",
+  summaryClassName = "flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden",
 }) {
   return (
     <details className={detailsClassName} data-testid={testId}>

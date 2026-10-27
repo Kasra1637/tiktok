@@ -85,7 +85,7 @@ export function ComponentThumbs({
     >
       <div className="min-w-0 space-y-0.5">
         {Icon ? <GroupLabel icon={Icon}>{question}</GroupLabel> : <span className="eyebrow block">{question}</span>}
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="text-sm text-muted-foreground" aria-live="polite">
           {saved === "saved"
             ? "Rating saved — it informs future suggestions, not proof of performance."
             : saved === "failed"

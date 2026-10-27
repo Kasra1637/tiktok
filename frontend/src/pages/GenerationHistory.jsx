@@ -303,7 +303,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 space-y-1">
         <p className="text-base font-semibold">{stageNotice?.title}</p>
-        <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
       </div>
     </div>
   );
@@ -422,7 +422,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30"
                       data-testid={`history-post-copy-${row.id}`}
                     >
-                      <summary onClick={togglePanel("post")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <summary onClick={togglePanel("post")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Post copy</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
@@ -439,7 +439,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30"
                       data-testid="history-context"
                     >
-                      <summary onClick={togglePanel("context")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <summary onClick={togglePanel("context")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <Target aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Plan context</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
@@ -463,12 +463,12 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 </div>
               )}
 
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
               {checkingRecovery && (
-                <p className="text-xs text-muted-foreground" role="status">Checking recovered video\u2026</p>
+                <p className="text-sm text-muted-foreground" role="status">Checking recovered video\u2026</p>
               )}
               {strandedNote && (
-                <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
+                <p className="text-sm text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
               {(retryRenderButton || recheckButton || retryStorageButton) && (
@@ -527,7 +527,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Reopens this render's plan in Create Video — change one thing or regenerate as-is.
                 </p>
 
@@ -800,7 +800,7 @@ export default function GenerationHistory() {
             </select>
         </div>
         {profilesError && (
-          <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+          <span role="alert" className="flex items-center gap-1 text-sm text-destructive">
             {profilesError}{" "}
             <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">Try again</button>
           </span>
@@ -908,12 +908,12 @@ export default function GenerationHistory() {
       ) : (
         <div className="history-grid" data-testid="history-list" ref={listRef}>
           {copyVisible.length > 1 && (
-            <p className="col-span-full text-xs text-muted-foreground">
+            <p className="col-span-full text-sm text-muted-foreground">
               {copyVisible.length} results · {completed} completed · {failed} failed
             </p>
           )}
           {copyVisible.length === 0 && rows.length > 0 && (
-            <p className="col-span-full text-xs text-muted-foreground" role="status">
+            <p className="col-span-full text-sm text-muted-foreground" role="status">
               {query.trim()
                 ? <>No renders match “{query.trim()}”. Clear the search to see everything.</>
                 : <>No renders match this filter. Clear the filters to see everything.</>}
@@ -1013,7 +1013,7 @@ export default function GenerationHistory() {
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>
-          <span className="ml-2 text-xs text-muted-foreground" data-testid="history-page-status">
+          <span className="ml-2 text-sm text-muted-foreground" data-testid="history-page-status">
             Page {safePage} of {pageCount}
           </span>
         </nav>

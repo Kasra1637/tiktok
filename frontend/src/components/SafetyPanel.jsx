@@ -84,7 +84,7 @@ export function SafetyPanel({ report, summary }) {
       {undeclared.length > 0 && (
         <div className="inset-panel inset-panel-strong">
           <GroupLabel icon={HelpCircle}>Declared but not in the script</GroupLabel>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             The generator reported using these, but they do not appear in the text.
           </p>
           <ul className="mt-2 space-y-1 text-base">
@@ -122,7 +122,7 @@ export function SafetyPanel({ report, summary }) {
       </div>
 
       {sources.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Grounded in: {sources.map((s) => s.replace(/_/g, " ")).join(", ")}.
         </p>
       )}

@@ -144,7 +144,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 target="_blank"
                 rel="noreferrer"
                 data-testid={`history-live-link-${row.id}`}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--brand-indigo)] hover:underline"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--brand-indigo)] hover:underline"
               >
                 Open live video <ExternalLink className="h-3 w-3" />
               </a>
@@ -191,9 +191,9 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
             </>
           )}
         </div>
-        {linkError && <p role="alert" className="text-xs text-destructive">{linkError}</p>}
+        {linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}
         {!savedLink && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Marks this render posted. Only a thumbs up plus a link counts as a winner.
           </p>
         )}
@@ -202,7 +202,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
             <div className="flex flex-wrap items-center gap-2">
               <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               {savedViews != null && (
-                <span className="text-xs font-semibold" data-testid={`history-tiktok-views-count-${row.id}`}>
+                <span className="text-sm font-semibold" data-testid={`history-tiktok-views-count-${row.id}`}>
                   {Number(savedViews).toLocaleString("en-US")} views
                 </span>
               )}
@@ -231,9 +231,9 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 {savingViews ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save views"}
               </Button>
             </div>
-            {viewsError && <p role="alert" className="text-xs text-destructive">{viewsError}</p>}
+            {viewsError && <p role="alert" className="text-sm text-destructive">{viewsError}</p>}
             {savedViews == null && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Read the count off TikTok and paste it back — most-viewed renders sort first.
               </p>
             )}

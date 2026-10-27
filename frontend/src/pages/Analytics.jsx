@@ -205,7 +205,7 @@ export default function Analytics() {
         />
       ) : (
         <div className="space-y-6">
-          <p data-testid="analytics-scope" className="text-xs text-muted-foreground">
+          <p data-testid="analytics-scope" className="text-sm text-muted-foreground">
             Showing {renders?.length ?? 0} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200) and up to 500 saved events. Activity and feedback below use this same set.
           </p>
           {renders?.length > 0 && (
@@ -226,7 +226,7 @@ export default function Analytics() {
             </p>
           )}
           {hasFeedback && (
-            <p className="text-xs text-muted-foreground">Repeated ratings are events, not unique clips or measured outcomes.</p>
+            <p className="text-sm text-muted-foreground">Repeated ratings are events, not unique clips or measured outcomes.</p>
           )}
           {signals.length > 0 && (
             <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
@@ -307,11 +307,11 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
       {open && (
         <div id={panelId} className="space-y-5">
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)]">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
               <span>Why these numbers</span>
               <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
             </summary>
-            <div className="space-y-2 pb-2 text-xs text-muted-foreground">
+            <div className="space-y-2 pb-2 text-sm text-muted-foreground">
               <p>
                 Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
                 Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
@@ -326,7 +326,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
               </span>
               <div className="min-w-0 space-y-1">
               <p className="text-sm font-semibold text-foreground">Suggested next take: {clipName(pick)}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
                 Past reach does not promise the next take repeats it.{" "}
                 <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
@@ -424,7 +424,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
               </Button>
             </div>
           )}
-          <p className="border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
+          <p className="border-t border-[color:var(--hairline)] pt-3 text-sm text-muted-foreground">
             Ranked by recorded views; missing counts sort last.
           </p>
         </div>
@@ -541,7 +541,7 @@ function RenderFunnel({ generations = [], profileId = "" }) {
           </li>
         )}
       </ul>
-      <p className="flex items-center justify-between gap-4 border-t border-[color:var(--hairline)] pt-3 text-xs text-muted-foreground">
+      <p className="flex items-center justify-between gap-4 border-t border-[color:var(--hairline)] pt-3 text-sm text-muted-foreground">
         <span>{generations.length} total</span>
         <Link
           to={historyHref}
@@ -598,7 +598,7 @@ function RenderActivity({ generations = [] }) {
           </li>
         ))}
       </ul>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         Same {generations.length} {generations.length === 1 ? "render" : "renders"} as above, in the {buckets.length} {buckets.length === 1 ? "week" : "weeks"} shown.
       </p>
     </SectionCard>
@@ -748,7 +748,7 @@ function SignalReasons({ summary, events = [], profileId = "" }) {
         })}
       </ul>
       {total > 0 && (
-        <p className="pt-2 text-xs text-muted-foreground">
+        <p className="pt-2 text-sm text-muted-foreground">
           {explained} of {total} signals explained.
         </p>
       )}

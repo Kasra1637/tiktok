@@ -67,7 +67,7 @@ function ClaimPanel({ profile }) {
           below already names, said again one line above it — and this group's
           bar counts what is to review as well. It also read "Needs review · 0"
           on a profile with nothing to check. The tiers are the headings. */}
-      <p className="text-xs leading-[18px] text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
+      <p className="text-sm leading-[20px] text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
       <InfoListBlock label="Approved — safe to use" items={approved} tone="approved" />
       <InfoListBlock label="Needs review — verify first" items={review} tone="review" />
       <InfoListBlock label="Never use" items={banned} tone="banned" />
@@ -785,7 +785,7 @@ return (
               provider call log is kept.
             </DialogDescription>
             {countsError && (
-              <p className="mt-2 text-xs text-destructive" data-testid="delete-counts-warning">
+              <p className="mt-2 text-sm text-destructive" data-testid="delete-counts-warning">
                 Could not load the full list ({countsError}) — delete still
                 removes everything built on this app.{" "}
                 <button type="button" className="underline" onClick={() => load({ background: true })} data-testid="delete-counts-retry">

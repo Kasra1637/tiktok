@@ -60,10 +60,10 @@ function TemplatesMockup() {
               <span className="text-base font-semibold">{t.name}</span>
               <span className="font-mono text-xs font-semibold text-[color:var(--brand-indigo)]">{t.fit}</span>
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
               {t.picked ? "Fits a demo-first story." : "Strong hook, needs your proof."}
             </p>
-            <p className="mt-1.5 text-xs text-muted-foreground">Caveat: needs a clear photo.</p>
+            <p className="mt-1.5 text-sm text-muted-foreground">Caveat: needs a clear photo.</p>
           </div>
         ))}
       </div>
@@ -97,7 +97,7 @@ function RenderMockup() {
         <div className="mx-auto mt-3 flex h-24 w-14 items-end justify-center rounded-lg border border-[color:var(--hairline)] bg-[color:var(--indigo-6)]">
           <Star className="mb-3 h-4 w-4 text-[color:var(--brand-indigo)]" />
         </div>
-        <p className="mt-3 text-center text-xs text-muted-foreground">One clip: hook + story</p>
+        <p className="mt-3 text-center text-sm text-muted-foreground">One clip: hook + story</p>
       </div>
     </div>
   );
@@ -122,7 +122,7 @@ function OutcomesMockup() {
             <span>Posted</span>
             <span>Your vote: Good</span>
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">Logged by hand, not synced — your verdict decides the next draft.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">Logged by hand, not synced — your verdict decides the next draft.</p>
         </div>
       </div>
     </div>
@@ -150,7 +150,7 @@ function DemoMockup() {
               />
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">Framing, zoom, hook text, end card.</p>
+          <p className="text-sm text-muted-foreground">Framing, zoom, hook text, end card.</p>
         </div>
       </div>
     </div>

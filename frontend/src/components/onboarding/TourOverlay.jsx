@@ -346,7 +346,7 @@ export default function TourOverlay() {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">{currentStep.body}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{currentStep.body}</p>
 
           <div className="flex items-center justify-between mt-3.5">
             <div className="flex items-center gap-1" data-testid="onboarding-tour-progress">

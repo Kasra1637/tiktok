@@ -102,13 +102,17 @@ safe area. See ADR 0007.
 
 ### Type scale: 4 Sizes × 2 Weights (12px floor)
 
-**Minimum type size is 12px (`text-xs`). No exceptions.** The audience is
-mobile-heavy and `--muted-foreground` is already a mid-contrast gray; below 12px
-it stops clearing WCAG AA.
+**Reading text never sits at 12px.** The audience is mobile-heavy and
+`--muted-foreground` is already a mid-contrast gray; hints, statuses, errors,
+and descriptions read at 14px (`text-sm`) and up. `text-xs` (12px) is reserved
+for non-reading chrome — badges, chips, pills, `sm` buttons, tooltips,
+eyebrows, dropdown items, dense table cells, tabular readouts, on-media
+overlays, and legal fine print — plus the wizard subtitles, which the
+render-smoke suite pins to `text-xs`.
 
 The workspace shell uses **4 font sizes** and **2 font weights** only. The marketing pages (`Landing`, `Features`, the shared `Marketing` chrome, `LegalPage`) share the same 2 weights and the same `xs`/`sm`/`base` body sizes, plus the display ladder `text-2xl`–`text-6xl` for editorial headings:
 
-- **4 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints, wizard subtitles), `text-sm` (14px — buttons, form labels, uppercase kickers like `.section-heading`, picker rows, dense data tables, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components. Marketing pages follow the same rule — `text-base` is the largest body size everywhere — with `text-2xl`/`3xl`/`4xl`/`5xl`/`6xl` reserved for editorial headings (pinned by the marketing display-scale smoke check).
+- **4 sizes:** `text-xs` (12px — chrome only, never reading copy: badges, chips, pills, `sm` buttons, tooltips, `.eyebrow`, dropdown items, dense table cells, mono readouts, on-media overlays, wizard subtitles), `text-sm` (14px — buttons, form labels, hints, statuses, errors, descriptions, uppercase kickers like `.section-heading`, picker rows, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components. Marketing pages follow the same rule — `text-base` is the largest body size everywhere — with `text-2xl`/`3xl`/`4xl`/`5xl`/`6xl` reserved for editorial headings (pinned by the marketing display-scale smoke check).
 - Inputs sit at 16px because iOS Safari auto-zooms on focus below 16px; the `h-8` filter pills are the one exception and hold at 14px semibold so the chip stays compact.
 - **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) anywhere — Space Grotesk semibold with tight tracking carries display headings without a heavier cut.
 - **Ampersands in headings & labels:** Workspace headings, titles, labels, and button copy use `&` instead of `and` (e.g., `Visual & audio direction`, `Choose a template & add your photo`, `What you have & what is left`).

@@ -537,23 +537,23 @@ const handleGenerate = async () => {
         data-testid="render-summary"
       >
         <GroupLabel icon={Info}>Before you render</GroupLabel>
-        <p className="text-xs text-muted-foreground" data-testid="render-summary-model">
+        <p className="text-sm text-muted-foreground" data-testid="render-summary-model">
           Model: {models ? (capability?.name || selectedModel || models.default || "unknown") : "loading…"}
         </p>
-        <p className="text-xs text-muted-foreground" data-testid="render-summary-duration">
+        <p className="text-sm text-muted-foreground" data-testid="render-summary-duration">
           Duration: {pieceSeconds}s in one render
           {models && capability && tooLong
             ? ` — exceeds ${capability.name}'s single-pass ceiling (${ceiling}s); the endpoint will refuse this render`
             : ""}
         </p>
-        <p className="text-xs text-muted-foreground" data-testid="render-summary-resolution">
+        <p className="text-sm text-muted-foreground" data-testid="render-summary-resolution">
           Resolution: {models
             ? (selectedResolution
                 ? `${selectedResolution}`
                 : `${capability?.resolution || "default"} (default)`)
             : "loading…"}
         </p>
-        <p className="text-xs text-muted-foreground" data-testid="render-summary-cost">
+        <p className="text-sm text-muted-foreground" data-testid="render-summary-cost">
           {(() => {
             const perSecond = Number(
               capability?.price_per_second ??
@@ -566,7 +566,7 @@ const handleGenerate = async () => {
             return "Cost estimate unavailable";
           })()}
         </p>
-        <p className="text-xs text-muted-foreground" data-testid="render-summary-scope">
+        <p className="text-sm text-muted-foreground" data-testid="render-summary-scope">
           Produces Hook + Story only: the hook and the middle, ending where viewers
           reach for their phones. Does not include your filmed product demo, closing
           CTA, or on-screen text.
@@ -689,7 +689,7 @@ const handleGenerate = async () => {
                   cannot stream (an expired provider link), and the download is
                   the way through either way. */}
               {previewBroken ? (
-                <p className="w-full max-w-[280px] rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-xs text-muted-foreground">
+                <p className="w-full max-w-[280px] rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-sm text-muted-foreground">
                   Preview unavailable — download it to view.
                 </p>
               ) : (
@@ -758,7 +758,7 @@ const handleGenerate = async () => {
                     </Link>
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   This is the hook and the middle. Use it as is, or open it in Demo + CTA
                   to add your demo and call to action — exports save beside the original.
                 </p>
@@ -768,13 +768,13 @@ const handleGenerate = async () => {
 
           {generation.status === "failed" && (
             <div className="space-y-2">
-              <p className="text-xs text-destructive break-words whitespace-pre-wrap">{generation.error}</p>
+              <p className="text-sm text-destructive break-words whitespace-pre-wrap">{generation.error}</p>
               {generation.retryable ? (
                 <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy}>
                   <RotateCcw className="h-3.5 w-3.5" /> Render it again
                 </Button>
               ) : (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   This failure is not retryable — change the script or model and generate again.
                 </p>
               )}

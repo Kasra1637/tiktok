@@ -214,7 +214,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
         </p>
       )}
       {example && (
-        <p className="mt-1 text-xs text-foreground/80">
+        <p className="mt-1 text-sm text-foreground/80">
           <span className="text-muted-foreground">Sounds like: </span>
           &ldquo;{example}&rdquo;
         </p>
@@ -239,7 +239,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
               {detail.map((reason, i) => (
                 <li
                   key={`r-${i + 1}`}
-                  className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+                  className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
                 >
                   <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
                   <span>{sentenceCase(reason)}</span>
@@ -254,7 +254,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           {limits.map((limitation, i) => (
             <li
               key={`l-${i}`}
-              className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+              className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
             >
               <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
               <span>{sentenceCase(limitation)}</span>
@@ -302,11 +302,11 @@ function TemplateShape({ template }) {
   const middle = middleStructure(template);
   return (
     <div className="mt-2 space-y-1">
-      <p className="text-xs">
+      <p className="text-sm">
         <span className="font-semibold">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
         {split.middleSeconds}s middle.
       </p>
-      {middle && <p className="text-xs text-muted-foreground">{sentenceCase(middle)}</p>}
+      {middle && <p className="text-sm text-muted-foreground">{sentenceCase(middle)}</p>}
     </div>
   );
 }
@@ -585,7 +585,7 @@ function AngleSelector({
     };
   }, [generating]);
   const progressLine = generating ? (
-    <p className="text-xs text-muted-foreground" role="status" data-testid="angles-progress">
+    <p className="text-sm text-muted-foreground" role="status" data-testid="angles-progress">
       Reading angle {genCount} of 6…
     </p>
   ) : null;
@@ -832,7 +832,7 @@ function AngleGoalPicker({
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {featured.length > 0
             ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
             : `Goal suggestions for “${angle.label}” are unavailable. Try reloading the page.`}{" "}
@@ -840,7 +840,7 @@ function AngleGoalPicker({
         </p>
       </div>
       {regenerating && (
-        <p className="text-xs text-muted-foreground" role="status" data-testid="goals-progress">
+        <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
           Shuffling goal {shuffleCount} of {shuffleTotal}…
         </p>
       )}
@@ -869,14 +869,14 @@ function AngleGoalPicker({
                 {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
               </span>
               {outcomes?.[goal] && (
-                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
                   {sentenceCase(outcomes[goal])}
                 </span>
               )}
               {fitReasons?.[goal] && (
                 <span
                   data-testid={`goal-fit-${goal}`}
-                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
                 >
                   {sentenceCase(fitReasons[goal])}
                 </span>
@@ -887,7 +887,7 @@ function AngleGoalPicker({
               {formatVerdicts(angle?.evidence) && (
                 <span
                   data-testid={`goal-angle-evidence-${goal}`}
-                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(angle.evidence)} at this angle kind
                 </span>
@@ -898,7 +898,7 @@ function AngleGoalPicker({
               {formatVerdicts(objectiveEvidence?.[goal]) && (
                 <span
                   data-testid={`goal-objective-evidence-${goal}`}
-                  className="mt-1 block text-xs leading-relaxed text-muted-foreground"
+                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
                 >
                   {formatVerdicts(objectiveEvidence[goal])} for this goal
                 </span>
@@ -909,7 +909,7 @@ function AngleGoalPicker({
         })}
       </div>
       {outsideRecommendation && (
-        <p className="text-xs text-muted-foreground" data-testid="goal-outside-recommendations">
+        <p className="text-sm text-muted-foreground" data-testid="goal-outside-recommendations">
           Your current goal, {humanize(value)}, is outside these six suggestions. It stays selected unless you choose a suggested goal.
         </p>
       )}
@@ -2201,7 +2201,7 @@ setObjective("");
                       <span className="font-display text-sm font-semibold">{p.brand_name}</span>
                       {profileId === p.id && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {p.app_category || p.niche || "Category not set"}
                     </p>
                   </button>
@@ -2220,15 +2220,15 @@ setObjective("");
                   </p>
                   {unapproved.length > 3 ? (
                     <details className="mt-0.5">
-                      <summary className="cursor-pointer text-xs text-muted-foreground">
+                      <summary className="cursor-pointer text-sm text-muted-foreground">
                         Show all {unapproved.length} apps
                       </summary>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {unapproved.map(profileLabel).join(", ")}
                       </p>
                     </details>
                   ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
@@ -2283,7 +2283,7 @@ setObjective("");
                 the angle panel happened. */}
             <div className={angle ? "inset-panel" : "hidden"}>
               {angle && facetsError && (
-                <p className="text-xs text-destructive" role="alert">
+                <p className="text-sm text-destructive" role="alert">
                   {facetsError}{" "}
                   <button type="button" className="underline" onClick={loadFacets} data-testid="goal-options-retry">
                     Try again
@@ -2324,7 +2324,7 @@ setObjective("");
                 below it. No step change between choosing and seeing what the
                 choice ranks. */}
             {!objective && angle && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Pick a goal above — the templates below rank for it.
               </p>
             )}
@@ -2332,11 +2332,11 @@ setObjective("");
               <div className="flex flex-wrap items-center gap-2">
                 {tailoring ? (
                   <>
-                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Tailoring templates for this goal…
                     </p>
-                    <p className="text-xs text-muted-foreground" role="status" data-testid="templates-progress">
+                    <p className="text-sm text-muted-foreground" role="status" data-testid="templates-progress">
                       Reading template {tailorCount} of {tailorTotal}…
                     </p>
                   </>
@@ -2353,12 +2353,12 @@ setObjective("");
               </div>
             )}
             {tailorError && !tailoring && (
-              <p className="text-xs text-muted-foreground">{tailorError}</p>
+              <p className="text-sm text-muted-foreground">{tailorError}</p>
             )}
             {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
               <div className="inset-panel">
                 <p className="text-base">No templates recommended for this app yet.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {recError
                     ? `Ranking failed (${recError}).`
                     : "Nothing ranked for this profile and goal."}
@@ -2414,7 +2414,7 @@ setObjective("");
                      lowercase next to the hand-written copy above it. */
                   <p className="mt-1 text-base text-foreground/90">{sentenceCase(template.outcome.trim())}</p>
                 )}
-                <p className="mt-1 text-xs text-muted-foreground">{sentenceCase(template.opening_structure)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{sentenceCase(template.opening_structure)}</p>
                 <TemplateShape template={template} />
                 {/* The requirement is stated in one line rather than as a
                     checklist. It was a fourth place the same photograph was
@@ -2595,7 +2595,7 @@ setObjective("");
                 {loading && !busy ? "Loading your draft…" : "Generating your plan…"}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {loading && !busy
                 ? "Picking up where you left off."
                 : <PlanPhaseLine />}
@@ -2686,7 +2686,7 @@ setObjective("");
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Regenerate plan
                 </Button>
-                <p className="text-xs text-muted-foreground" data-testid="plan-version-status">
+                <p className="text-sm text-muted-foreground" data-testid="plan-version-status">
                   Plan v{project.script_version}
                   {(project.hook_line || project.script)
                     ? " · generated ✓"
@@ -2803,7 +2803,7 @@ setObjective("");
                 summaryClassName="flex cursor-pointer flex-wrap items-center gap-2"
                 summary={<GroupLabel icon={Ruler}>Script fit details</GroupLabel>}
               >
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Character counts and what the middle speaks. If Generate is disabled over words that do not fit, the reason is in here.
                 </p>
               {hasSpokenCounts(project) && (
@@ -2819,7 +2819,7 @@ setObjective("");
                   const ceiling = Number(line.ceiling) || 0;
                   const overCeiling = line.verdict === "over_ceiling";
                   return (
-                    <p key={key} className="text-xs text-muted-foreground">
+                    <p key={key} className="text-sm text-muted-foreground">
                       <span className="font-semibold">{label}: </span>
                       {chars} characters{target ? `, aiming for about ${target}` : ""}
                       {overCeiling
@@ -2830,7 +2830,7 @@ setObjective("");
                     </p>
                   );
                 })}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {project.spoken_check.story?.coherent
                     ? "The hook names the problem and the script closes it."
                     : "The two lines should read as one thought: the hook naming the problem this viewer has, the script answering it."}
@@ -2848,7 +2848,7 @@ setObjective("");
                     resolves the hook — so a browser slice would name words that
                     are in fact spoken and miss the ones that are not. */}
                 {(Number(project?.spoken_overflow?.dropped_chars) || 0) > 0 ? (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {project.spoken_overflow.dropped_chars} characters of the script are past the
                     middle&apos;s spoken budget and are not spoken. Regenerate the plan to have it
                     rewritten to fit, or shorten the script above and rebuild the strategy.
@@ -2925,7 +2925,7 @@ setObjective("");
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground">
                   {hasEdits
                     ? "This still describes the plan as generated. Edit the script above and regenerate to bring it back in line."
                     : "Written by the plan to fit this length. Regenerate the plan to rewrite it."}
@@ -2945,7 +2945,7 @@ setObjective("");
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-base">
                   {pieceSeconds} seconds
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {project?.script_version
                     ? "The timeline is written to this length. Pick a different template to change it."
                     : "Set by the hook template you pick."}
@@ -2995,7 +2995,7 @@ setObjective("");
                   missing photograph), the render button below states that real
                   reason instead of sitting disabled behind this control. */}
               {project?.status === "ready_for_generation" && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Ready for generation.
                 </p>

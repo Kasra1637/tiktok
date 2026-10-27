@@ -7027,8 +7027,10 @@ async function runIconChecks() {
     // Landing, Features, the Marketing chrome they share, and LegalPage use
     // the same weights (normal/semibold) and body sizes (xs/sm/base) as the
     // workspace, plus the display ladder 2xl-6xl for editorial headings.
-    // text-lg/xl fold into base and arbitrary text sizes are gone — color
-    // utilities like text-[color:...] are not sizes and are not matched.
+    // Reading text sits at sm and up; xs is chrome only (chips, badges, mono
+    // readouts, dense tables). text-lg/xl fold into base and arbitrary text
+    // sizes are gone — color utilities like text-[color:...] are not sizes
+    // and are not matched.
     const marketing = [
       "pages/Landing.jsx",
       "pages/Features.jsx",
@@ -7052,8 +7054,9 @@ async function runIconChecks() {
   });
 
   await check("workspace enforces 4 sizes x 2 weights", async () => {
-    // Workspace pages and shared components use only text-xs (12 labels/meta)
-    // / text-sm (14 controls/labels) / text-base (16 body, inputs, titles) /
+    // Workspace pages and shared components use only text-xs (12 chrome:
+    // badges, pills, subtitles, dense tables) / text-sm (14 controls, labels,
+    // hints, statuses, descriptions) / text-base (16 body, inputs, titles) /
     // text-3xl (30 page H1 + auth wordmark) and font-normal / font-semibold
     // (Landing, Features, the Marketing chrome they share, and LegalPage
     // are covered by the marketing display-scale check above).

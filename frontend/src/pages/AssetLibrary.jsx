@@ -98,7 +98,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-5">
       <span className="min-w-0 flex-1 truncate text-base font-semibold">{name}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">Used for the whole video</span>
+      <span className="shrink-0 text-sm text-muted-foreground">Used for the whole video</span>
       {onDetach && (
         <Button
           variant="ghost"
@@ -185,9 +185,9 @@ function AssetRow({
               </Badge>
             )}
           </div>
-          {asset.notes && <p className="mt-0.5 text-xs text-muted-foreground">{asset.notes}</p>}
+          {asset.notes && <p className="mt-0.5 text-sm text-muted-foreground">{asset.notes}</p>}
           {uploadWarning && (
-            <p className="mt-0.5 text-xs text-muted-foreground" role="status">
+            <p className="mt-0.5 text-sm text-muted-foreground" role="status">
               {uploadWarning}
             </p>
           )}
@@ -292,13 +292,13 @@ function AssetRow({
         />
       )}
       {isRetired && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Retired kind — uploads went face-only. Archive or delete it to clean up;
           it can no longer be attached to a project.
         </p>
       )}
       {attachable && !usable && !attached && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {asset.status !== "active"
             ? "Restore this asset before attaching it."
             : "Confirm rights before attaching this asset to a project."}
@@ -342,7 +342,7 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
             className={PILL_SELECT_CLASS}
           />
           {q && (
-            <span className="text-xs text-muted-foreground" role="status">
+            <span className="text-sm text-muted-foreground" role="status">
               {listed.length} of {assets.length} match “{query.trim()}”
             </span>
           )}
@@ -374,7 +374,7 @@ function UsageHistory({ uses }) {
   }
   const names = uses.map((u) => u.name).filter(Boolean);
   return (
-    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+    <p className="mt-0.5 truncate text-sm text-muted-foreground">
       Used in {uses.length} project{uses.length === 1 ? "" : "s"}
       {names.length > 0 ? ` · ${names.join(", ")}` : ""}
     </p>
@@ -752,7 +752,7 @@ export default function AssetLibrary({
                   </Button>
                 )}
                 {waiting && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Approval is needed before a video can be generated, not before
                     you can upload visuals.
                   </p>
@@ -790,7 +790,7 @@ export default function AssetLibrary({
                 />
               )}
               {profilesError && (
-                <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+                <span role="alert" className="flex items-center gap-1 text-sm text-destructive">
                   {profilesError}{" "}
                   <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">
                     Try again
@@ -803,7 +803,7 @@ export default function AssetLibrary({
                   approved" is precisely what someone checking for a missing
                   app needs to be able to see. */}
               {activeProfile && (
-                <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   {profiles.length === 1 && <span>Assets for {profileLabel(activeProfile)}</span>}
                   {activeProfile.status === "approved" ? (
                     <Badge variant="outline" className="text-xs">Approved</Badge>
@@ -858,7 +858,7 @@ export default function AssetLibrary({
         </div>
         {/* Rights sit with the upload action; enforcement stays visible on the rows. */}
         <p
-          className="flex items-center gap-2 text-xs text-muted-foreground"
+          className="flex items-center gap-2 text-sm text-muted-foreground"
           data-testid="asset-rights-alert"
         >
           <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
@@ -945,7 +945,7 @@ export default function AssetLibrary({
       {/* The count heads the list it counts, not the upload card. */}
       {!embedded && !loading && !error && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground" role="status">
+          <span className="text-sm text-muted-foreground" role="status">
             {assets.length} asset{assets.length === 1 ? "" : "s"}
           </span>
           <Button

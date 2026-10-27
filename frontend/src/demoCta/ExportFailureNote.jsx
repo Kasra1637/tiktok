@@ -16,7 +16,7 @@ export function ExportFailureNote({ entry }) {
       ? "Your video is still above — Download it, then try Save again or a shorter clip."
       : "Try the export again in Chrome or Edge.";
   return (
-    <span className="mt-1 block text-xs opacity-80">
+    <span className="mt-1 block text-sm opacity-80">
       Failed during {entry.stage}{when ? ` · ${when}` : ""}. {next}
     </span>
   );

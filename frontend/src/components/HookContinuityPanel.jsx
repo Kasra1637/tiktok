@@ -95,13 +95,13 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
       <div className="space-y-0.5">
         <GroupLabel icon={Icon}>{title}</GroupLabel>
         {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       <dl className="space-y-2">
         {filled.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-xs font-semibold text-muted-foreground">
+            <dt className="text-sm font-semibold text-muted-foreground">
               {strategyLabel(label)}
             </dt>
             <dd className="mt-0.5 text-base leading-snug">{sentenceCase(String(value))}</dd>
@@ -139,7 +139,7 @@ function StrategyBuildLine() {
     return () => clearInterval(timer);
   }, []);
   return (
-    <p className="text-xs text-muted-foreground" role="status" data-testid="strategy-progress">
+    <p className="text-sm text-muted-foreground" role="status" data-testid="strategy-progress">
       Building your strategy{".".repeat(dots)}
     </p>
   );
@@ -154,7 +154,7 @@ function SectionRow({ section }) {
         <span className="font-semibold capitalize">{section.role}</span>
         <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
       </div>
-      <p className="text-xs text-muted-foreground">{SECTION_COPY[section.role]}</p>
+      <p className="text-sm text-muted-foreground">{SECTION_COPY[section.role]}</p>
       {goal && <p className="text-base">{goal}</p>}
       {section.action && (
         <p className="text-base text-muted-foreground">What they do: {sentenceCase(section.action)}</p>
@@ -293,7 +293,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           studio creates the Hook + Story clip only..."), which is where the
           app's "nothing is published for you" note lives. A fourth copy in the
           strategy header said nothing the other three had not. */}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         This strategy guides the Hook + Story render.
       </p>
 
@@ -390,12 +390,12 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             with `busy`, so an error can never strand it. */}
         {busy && <StrategyBuildLine />}
         {needsAngle && (
-          <p className="text-xs text-muted-foreground" data-testid="strategy-needs-angle">
+          <p className="text-sm text-muted-foreground" data-testid="strategy-needs-angle">
             Pick an audience angle on the Audience &amp; template step first — the strategy is built around it.
           </p>
         )}
         {!hasStrategy && !needsAngle && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Text only. It fixes the concept, the words and the locked scene so
             the one render is about this app rather than a generic take with a
             name in it.
@@ -418,9 +418,9 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 <li key={role} className="space-y-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold capitalize">{role}</span>
-                    <span className="text-xs text-muted-foreground">{SECTION_COPY[role]}</span>
+                    <span className="text-sm text-muted-foreground">{SECTION_COPY[role]}</span>
                   </span>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {role === "hook"
                       ? "The opening concept and the words, from the plan you approved."
                       : "What the presenter does next, ending where you would reach for your phone."}
@@ -431,11 +431,11 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </div>
           <div className="space-y-1">
             <GroupLabel icon={MapPin}>The scene</GroupLabel>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             One scene and delivery style for both the hook and story, guided by your Review choices. This is generated footage, not a recording of your app.
           </p>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Built automatically once the saved plan is ready. If the build fails, use the button above to retry, then read the strategy before rendering. This step creates text, not video.
           </p>
         </div>
@@ -454,7 +454,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 thing they cannot. `strategy.hook_line` still exists on the
                 strategy and still reaches the render prompt — this is the
                 duplicate display that was removed, not the field. */}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               What is said is the hook line you saved above, spoken as written.
             </p>
           </div>
@@ -529,7 +529,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             {/* The "no demo, no closing card" restatement is gone: the list
                 above already ends where the founder's demo takes over, and the
                 panel below the render names the demo and the close as theirs. */}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               That is the whole generated piece, in one render.
             </p>
             {/* Words that do not fit are not spoken. The middle's seconds hold a
