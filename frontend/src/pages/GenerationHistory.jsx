@@ -90,7 +90,7 @@ function formatRenderDate(value) {
  * states has its own repair. Every action, its state, and the editors live
  * with the row that owns them.
  */
-function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null }) {
+function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null, compact = false }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -99,10 +99,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   // row and the awaiting state only: a manual expand never steals focus,
   // and a row that already has its link keeps focus where it was.
   const linkAwaiting = deepLinked && !row.tiktok_url;
+  const [secondaryOpen, setSecondaryOpen] = useState(linkAwaiting);
   useEffect(() => {
-    if (!linkAwaiting) return;
+    if (compact && linkAwaiting) setSecondaryOpen(true);
+  }, [compact, linkAwaiting]);
+  useEffect(() => {
+    if (!linkAwaiting || (compact && !secondaryOpen)) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
-  }, [linkAwaiting, row.id]);
+  }, [compact, linkAwaiting, row.id, secondaryOpen]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -274,15 +278,45 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
     };
   }
 
+  const retryRenderButton = row.status === "failed" && row.retryable && (
+    <Button variant="accent" disabled={busy} onClick={() => act(() => api.retryGeneration(row.id))} className="min-w-[150px] flex-1">
+      <RotateCcw className="h-4 w-4" /> Retry render
+    </Button>
+  );
+  const recheckButton = stuckGenerating && (
+    <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRecheckStranded}
+      data-testid={`recheck-stranded-${row.id}`} title="Ask the provider whether this render finished, and fetch it if it did">
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+      Check again
+    </Button>
+  );
+  const retryStorageButton = canRepair && !stuckGenerating && (
+    <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRetryStorage}
+      data-testid={`retry-storage-${row.id}`} title="Re-fetch the finished render and save a durable copy, so it plays here">
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+      Retry durable save
+    </Button>
+  );
+  const compactNotice = compact && (!downloadUrl || previewBroken);
+  const notice = (
+    <div className="history-stage-empty">
+      <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 space-y-1">
+        <p className="text-base font-semibold">{stageNotice?.title}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
+      </div>
+    </div>
+  );
+
   return (
     <article
       id={`generation-${row.id}`}
-      className="surface surface-flush history-card history-row min-w-0 scroll-mt-6"
+      className={`surface surface-flush history-card history-row min-w-0 scroll-mt-6${compact ? " history-card-compact" : ""}`}
       data-testid="history-card"
     >
       <div className="history-row-grid">
         <div className="history-media min-w-0">
-          <div className="history-stage">
+          {!compactNotice && <div className="history-stage">
             {downloadUrl && !previewBroken ? (
               <video
                 key={`${row.id}-${playerVersion}`}
@@ -310,18 +344,12 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 // Contain the complete frame, never crop the creator's footage.
               />
             ) : (
-              <div className="history-stage-empty">
-                <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 space-y-1">
-                  <p className="text-base font-semibold">{stageNotice?.title}</p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">{stageNotice?.body}</p>
-                </div>
-              </div>
+              notice
             )}
-          </div>
+          </div>}
 
           <div
-            className="flex gap-2 border-t border-[color:var(--hairline)] px-3 py-2"
+            className={`flex gap-2 border-t border-[color:var(--hairline)] py-2 ${compact ? "px-2" : "px-3"}`}
             data-testid="history-media-actions"
           >
             {saveUrl && (
@@ -338,14 +366,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
             <Button
               variant="ghost"
               size="sm"
-              className="shrink-0 text-muted-foreground hover:text-destructive"
+              className={`shrink-0 text-muted-foreground hover:text-destructive${compact ? " h-11 w-11 px-2" : ""}`}
               disabled={busy}
               onClick={() => act(() => api.deleteGeneration(row.id))}
               data-testid={`history-delete-${row.id}`}
               title="Remove this render from history"
               aria-label="Delete this render"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
+              <Trash2 className="h-3.5 w-3.5" /> <span className={compact ? "sr-only" : undefined}>Delete</span>
             </Button>
           </div>
 
@@ -384,6 +412,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
         >
           <div className="history-body">
             <div className="min-w-0 space-y-5">
+              {compactNotice && notice}
               {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
               {(row.post_kit || row.audience || row.demo_brief) && (
                 <div className="grid grid-cols-1 items-start gap-2">
@@ -442,6 +471,21 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
+              {compact && (retryRenderButton || recheckButton || retryStorageButton) && (
+                <div className="flex flex-wrap gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
+              )}
+              {compact && (
+                <button
+                  type="button"
+                  className="history-compact-toggle w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-sm font-semibold hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-expanded={secondaryOpen}
+                  aria-controls={`${detailId}-secondary`}
+                  onClick={() => setSecondaryOpen((open) => !open)}
+                >
+                  Results &amp; actions <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${secondaryOpen ? "rotate-180" : ""}`} />
+                </button>
+              )}
+              <div id={`${detailId}-secondary`} className={compact ? "history-compact-secondary space-y-5" : "space-y-5"} data-expanded={compact ? secondaryOpen : undefined}>
               <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
 
               <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
@@ -464,16 +508,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       </Link>
                     </Button>
                   )}
-                  {row.status === "failed" && row.retryable && (
-                    <Button
-                      variant="accent"
-                      disabled={busy}
-                      onClick={() => act(() => api.retryGeneration(row.id))}
-                      className="min-w-[150px] flex-1"
-                    >
-                      <RotateCcw className="h-4 w-4" /> Retry render
-                    </Button>
-                  )}
+                  {!compact && retryRenderButton}
                   {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
                     <Button
                       variant="secondary"
@@ -497,42 +532,9 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   Reopens this render's plan in Create Video — change one thing or regenerate as-is.
                 </p>
 
-                {stuckGenerating && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    disabled={busy}
-                    onClick={handleRecheckStranded}
-                    data-testid={`recheck-stranded-${row.id}`}
-                    title="Ask the provider whether this render finished, and fetch it if it did"
-                  >
-                    {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    )}
-                    Check again
-                  </Button>
-                )}
-                {canRepair && !stuckGenerating && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    disabled={busy}
-                    onClick={handleRetryStorage}
-                    data-testid={`retry-storage-${row.id}`}
-                    title="Re-fetch the finished render and save a durable copy, so it plays here"
-                  >
-                    {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    )}
-                    Retry durable save
-                  </Button>
-                )}
+                {!compact && recheckButton}
+                {!compact && retryStorageButton}
+              </div>
               </div>
             </div>
           </div>
@@ -687,6 +689,7 @@ export default function GenerationHistory() {
     <GenerationRow
       key={row.id}
       row={row}
+      compact={copyFilter === "without"}
       onChanged={load}
       onUpdated={updateRow}
       deepLinked={hashId !== "" && hashId === row.id}
@@ -921,8 +924,8 @@ export default function GenerationHistory() {
           )}
           {/* Two page sections, never mixed: renders carrying post copy or
               plan context stack under one heading, renders carrying neither
-              under another. One card per render, one column on every phone;
-              stable row keys let React reorder without remounting, so sorting
+              under another. Without-copy cards pair on wide screens and
+              remain single-column on phones; stable row keys let React reorder without remounting, so sorting
               or filtering never drops focus and typed input mid-edit. */}
           {copyFilter === "with" && pagedWith.length > 0 && (
             <section
@@ -955,7 +958,9 @@ export default function GenerationHistory() {
                   Clips with no saved copy or context yet.
                 </p>
               </div>
-              {pagedWithout.map(renderRow)}
+              <div className="history-compact-grid">
+                {pagedWithout.map(renderRow)}
+              </div>
             </section>
           )}
           {rows.length >= limit && limit < 200 && (

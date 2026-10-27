@@ -1,6 +1,6 @@
 # 0039 — History rows are one attached card, no expand step
 
-- **Status:** partially superseded by 0040 (post copy and plan context collapse inside the record)
+- **Status:** partially superseded by 0040 (post copy and plan context collapse inside the record) and 0051 (compact grid for renders without either)
 - **Date:** 2026-10-26
 - **Supersedes:** 0009 (drawer in card), 0035 (full-width band), 0036 (pair rows), 0037 (pair-aware band)
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (`GenerationRow` attached card, `.history-row-grid`); `frontend/src/index.css` (`.history-grid` single column, `.history-row-grid` 900px split)

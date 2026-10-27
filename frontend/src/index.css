@@ -802,6 +802,70 @@ h1,
     }
 }
 
+/* Without-copy records are shorter: pair them only where the available
+ * viewport leaves enough room for each record. Grid rows stretch to the
+ * tallest card, while long content and repair messages can still grow. */
+.history-compact-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 1rem;
+}
+.history-card-compact {
+    container-type: inline-size;
+}
+.history-card-compact .history-row-grid {
+    height: 100%;
+    grid-template-columns: minmax(0, 1fr);
+}
+.history-card-compact .history-media {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+}
+.history-card-compact .history-stage {
+    min-height: 264px;
+    padding: 12px;
+}
+.history-card-compact .history-preview {
+    width: 135px;
+    max-width: 100%;
+    height: 240px;
+    max-height: none;
+    aspect-ratio: 9 / 16;
+    object-fit: contain;
+}
+.history-card-compact .history-body {
+    padding: 20px;
+}
+.history-compact-toggle {
+    display: flex;
+}
+.history-compact-secondary[data-expanded="false"] {
+    display: none;
+}
+@media (min-width: 768px) {
+    .history-compact-toggle {
+        display: none;
+    }
+    .history-compact-secondary[data-expanded="false"] {
+        display: block;
+    }
+}
+@container (min-width: 520px) {
+    .history-card-compact .history-row-grid {
+        grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+    }
+    .history-card-compact .history-media {
+        border-right: 1px solid var(--hairline);
+        border-bottom: 0;
+    }
+}
+@media (min-width: 1200px) {
+    .history-compact-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 /* ---------- Brand accents ---------- */
 .glow-indigo {
     box-shadow: var(--glow-indigo);

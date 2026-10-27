@@ -12791,6 +12791,132 @@ await check(
     }
   });
 
+  await check("History uses compact aligned cards only without copy or context", async (ctx) => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.history-compact-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css) ||
+        !/@media\s*\(min-width:\s*1200px\)[\s\S]*?\.history-compact-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
+      throw new Error("the without-copy grid must be one column on narrow screens and two on wide screens");
+    }
+    if (!/\.history-card-compact\s+\.history-preview\s*\{[^}]*height:\s*240px[^}]*object-fit:\s*contain/.test(css) ||
+        !/\.history-card-compact\s+\.history-row-grid\s*\{[^}]*height:\s*100%/.test(css)) {
+      throw new Error("compact cards need equally sized contained previews and stretched rows");
+    }
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "compact-1" },
+          { ...COMPLETED, id: "compact-2" },
+          { ...COMPLETED, id: "regular-1", audience: "Night scrollers" },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const grid = ctx.container.querySelector('[data-testid="history-section-without"] .history-compact-grid');
+        const cards = grid && grid.querySelectorAll('[data-testid="history-card"].history-card-compact');
+        if (!cards || cards.length !== 2 || [...cards].some((card) => !card.querySelector("video") || !card.querySelector('[data-testid="history-media-actions"]') || !card.querySelector('[data-testid="history-detail-panel"]'))) {
+          throw new Error("the without-copy grid must keep each video, actions and record attached");
+        }
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const regular = ctx.container.querySelector('#generation-regular-1');
+        if (!regular || regular.classList.contains("history-card-compact") || ctx.container.querySelector(".history-compact-grid")) {
+          throw new Error("compact layout must not affect the with-copy section");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  await check("History compact cards keep download readable and notices in the record", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "compact-playable" },
+          { ...COMPLETED, id: "compact-missing", video_url: null, playback_url: null, r2_url: null },
+          { ...COMPLETED, id: "compact-failed", status: "failed", video_url: null, playback_url: null, r2_url: null, error: "Provider error" },
+          { ...COMPLETED, id: "regular-missing", video_url: null, playback_url: null, r2_url: null, audience: "Night scrollers" },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const playable = ctx.container.querySelector('#generation-compact-playable');
+        const actions = playable.querySelector('[data-testid="history-media-actions"]');
+        const remove = actions.querySelector('button[aria-label="Delete this render"]');
+        if (!actions.querySelector('a[download]') || !remove?.querySelector('.sr-only') || !remove.classList.contains('px-2')) {
+          throw new Error("compact download needs room beside an accessible icon-only delete button");
+        }
+        for (const [id, message] of [["compact-missing", "No durable copy"], ["compact-failed", "Provider error"]]) {
+          const card = ctx.container.querySelector(`#generation-${id}`);
+          const details = card.querySelector('[data-testid="history-detail-panel"]');
+          if (!details.textContent.includes(message) || card.querySelector('.history-media .history-stage-empty')) {
+            throw new Error(`the ${id} notice must be readable in the wide record`);
+          }
+        }
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const regular = ctx.container.querySelector('#generation-regular-missing');
+        if (!regular.querySelector('.history-media .history-stage-empty')) {
+          throw new Error("the regular card's notice must remain in the video stage");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  await check("History compact mobile details open without hiding repair actions", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    const previousHash = global.__SMOKE_HASH;
+    try {
+      global.__SMOKE_PARAMS = "?copy=without";
+      global.__SMOKE_HASH = "";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "mobile-playable" },
+          { ...COMPLETED, id: "mobile-missing", video_url: null, playback_url: null, r2_url: null },
+          { ...COMPLETED, id: "mobile-failed", status: "failed", retryable: true, video_url: null, playback_url: null, r2_url: null },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const card = ctx.container.querySelector('#generation-mobile-playable');
+        const toggle = card.querySelector('button[aria-controls][aria-expanded="false"]');
+        const trash = card.querySelector('[aria-label="Delete this render"]');
+        if (!toggle || !toggle.textContent.includes("Results & actions") || !trash.classList.contains("h-11") || !trash.classList.contains("w-11")) {
+          throw new Error("compact mobile cards need a collapsed results disclosure and a 44px trash target");
+        }
+        const content = card.querySelector(`#${toggle.getAttribute('aria-controls')}`);
+        if (!content || content.dataset.expanded !== "false" || !card.querySelector('a[download]')) {
+          throw new Error("video actions must stay visible outside collapsed secondary details");
+        }
+        await clickEl(ctx, toggle);
+        if (toggle.getAttribute("aria-expanded") !== "true" || content.dataset.expanded !== "true" || !content.querySelector('[data-testid="history-feedback-mobile-playable"]')) {
+          throw new Error("the results disclosure must open the row's feedback and actions");
+        }
+        for (const [id, selector] of [["mobile-missing", '[data-testid="retry-storage-mobile-missing"]'], ["mobile-failed", 'button']]) {
+          const repairCard = ctx.container.querySelector(`#generation-${id}`);
+          const repair = id === "mobile-failed" ? [...repairCard.querySelectorAll(selector)].find((b) => b.textContent.includes("Retry render")) : repairCard.querySelector(selector);
+          if (!repair || repair.closest('.history-compact-secondary')) throw new Error(`${id} repair action is hidden behind secondary details`);
+        }
+        global.__SMOKE_HASH = "#generation-mobile-playable";
+        await mount(History)(ctx);
+        const linked = ctx.container.querySelector('#generation-mobile-playable');
+        if (linked.querySelector('button[aria-controls]')?.getAttribute('aria-expanded') !== 'true') throw new Error("a deep link must reveal its awaiting TikTok input");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_HASH = previousHash;
+    }
+  });
+
   await check("History shows no post copy for a render without a kit", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({

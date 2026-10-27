@@ -55,7 +55,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0035](0035-history-detail-band.md) | Open History detail is a full-width band; one band at a time | partially superseded by 0036 (band spans a pair row) |
 | [0036](0036-history-pair-rows.md) | History pairs two videos per row; band spans beneath its pair | partially superseded by 0037 (band lands after the open pair) |
 | [0037](0037-history-pair-aware-band.md) | History band lands after the open pair via a list-owned portal slot | superseded by 0039 (attached cards, no expand) |
-| [0039](0039-history-attached-cards.md) | History rows are one attached card, no expand step | partially superseded by 0040 (record disclosures) |
+| [0039](0039-history-attached-cards.md) | History rows are one attached card, no expand step | partially superseded by 0040 (record disclosures) and 0051 (compact without-copy cards) |
 | [0040](0040-history-record-disclosures.md) | History record tucks post copy and plan context behind disclosures | accepted |
 | [0041](0041-analytics-visual-results.md) | Analytics results go visual: leaderboard, bars, timeline | partially superseded by 0046 (three-row opening, collapsible card, status disclosures) |
 | [0042](0042-history-drops-part-ratings.md) | History drops per-part ratings; one vote per render | accepted |
@@ -68,3 +68,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0048](0048-clip-joint-transitions.md) | Five joint transitions between the two clips | partially superseded by 0049 (swipe replaced by flash + fade) |
 | [0049](0049-flash-fade-replace-swipe.md) | Flash and fade replace swipe in the joint-transition catalog | superseded by 0050 (hard cut, flash, fade leave; four trends, one row) |
 | [0050](0050-four-trend-transition-row.md) | Four motion trends in one transition row; whip is the default | accepted |
+| [0051](0051-history-compact-without-copy.md) | Without-copy History cards use a compact responsive grid | accepted |
