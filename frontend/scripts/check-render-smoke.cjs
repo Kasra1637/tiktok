@@ -11018,7 +11018,10 @@ async function runDemoCtaChecks() {
       if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
         throw new Error("the record renders as a separate grid section instead of inside its card");
       }
-      const cards = grid.querySelectorAll(':scope > [data-testid="history-card"]');
+      // Cards live inside the with/without copy sections, so the flatness
+      // that matters is one article per render with no pair wrappers
+      // regrouping them — not whether the card is a direct grid child.
+      const cards = grid.querySelectorAll('[data-testid="history-card"]');
       if (cards.length !== 2) throw new Error("records are not flat cards in the list");
       for (const card of cards) {
         if (!card.querySelector(':scope .history-row-grid > [data-testid="history-detail-panel"]')) {
@@ -11070,7 +11073,7 @@ async function runDemoCtaChecks() {
       if (grid.querySelector('[data-testid="history-pair"]')) {
         throw new Error("cards are wrapped in pair divs instead of one card per row");
       }
-      if (grid.querySelectorAll(':scope > [data-testid="history-card"]').length !== 3) {
+      if (grid.querySelectorAll('[data-testid="history-card"]').length !== 3) {
         throw new Error("cards are not flat list items");
       }
     });
@@ -12648,6 +12651,75 @@ await check(
       );
     }
   );
+
+  // Renders carrying post copy or plan context stack under one heading and
+  // renders carrying neither under another, so the two kinds are never mixed
+  // in one run — and the founder can narrow to either side on demand.
+  await check("History separates renders with and without post copy and plan context", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const withCopy = {
+      ...COMPLETED,
+      id: "sec-with",
+      post_kit: { caption: "A caption.", hashtags: ["#tag"], cover_text: "Cover" },
+      audience: "Night scrollers",
+    };
+    const generations = [withCopy, { ...COMPLETED, id: "sec-without" }];
+    const previousParams = global.__SMOKE_PARAMS;
+    const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    global.__SMOKE_NAVIGATIONS = [];
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "";
+        await mount(GenerationHistory)(ctx);
+        const withSection = ctx.container.querySelector('[data-testid="history-section-with"]');
+        const withoutSection = ctx.container.querySelector('[data-testid="history-section-without"]');
+        if (!withSection || !withoutSection) {
+          throw new Error("History lost a copy/context section");
+        }
+        if (!withSection.querySelector("#generation-sec-with") || withSection.querySelector("#generation-sec-without")) {
+          throw new Error("the with-copy section does not hold exactly the copy-carrying card");
+        }
+        if (!withoutSection.querySelector("#generation-sec-without") || withoutSection.querySelector("#generation-sec-with")) {
+          throw new Error("the without-copy section does not hold exactly the copy-less card");
+        }
+        if (!(withSection.compareDocumentPosition(withoutSection) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the with-copy section is not above the without-copy section");
+        }
+        // The filter control is URL-owned: picking a side navigates the
+        // copy param, so back/forward agree with the section on screen.
+        const filter = ctx.container.querySelector('#history-copy-filter');
+        if (!filter) throw new Error("History lost the copy/context filter");
+        await selectOption(ctx, filter, "with");
+        const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
+        if (!went.some((search) => new URLSearchParams(search).get("copy") === "with")) {
+          throw new Error(`the copy filter did not navigate the copy param: ${JSON.stringify(went)}`);
+        }
+        // Narrowing to one side shows only its section.
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        if (!ctx.container.querySelector('[data-testid="history-section-with"]')) {
+          throw new Error("the copy filter lost the with-copy section");
+        }
+        if (ctx.container.querySelector('[data-testid="history-section-without"]')) {
+          throw new Error("the copy filter left the without-copy section mounted");
+        }
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        if (!ctx.container.querySelector('[data-testid="history-section-without"]')) {
+          throw new Error("the copy filter lost the without-copy section");
+        }
+        if (ctx.container.querySelector('[data-testid="history-section-with"]')) {
+          throw new Error("the copy filter left the with-copy section mounted");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_NAVIGATIONS = previousNavigations;
+    }
+  });
 
   await check("History shows no post copy for a render without a kit", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;

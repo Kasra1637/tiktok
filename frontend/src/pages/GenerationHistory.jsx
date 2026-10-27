@@ -52,6 +52,16 @@ function humanize(value) {
 }
 
 /**
+ * Whether a render carries anything for the copy/context section: a frozen
+ * post kit, an audience, or a demo brief. Rows with none of these render no
+ * disclosures, so the list can separate the two kinds instead of mixing
+ * cards with copy beside cards without any.
+ */
+function hasCopyContext(row) {
+  return Boolean(row.post_kit || row.audience || row.demo_brief);
+}
+
+/**
  * A render timestamp that never reads "Invalid Date".
  *
  * Old rows can carry a created_at the browser cannot parse; the previous code
@@ -555,6 +565,10 @@ export default function GenerationHistory() {
   const profileFilter = searchParams.get("profile") || "";
   const statusFilter = searchParams.get("status") || "";
   const query = searchParams.get("q") || "";
+  // Availability of post copy & plan context, URL-owned like the other
+  // filters so back/forward agree: "" shows both sections, "with" only
+  // cards carrying copy or context, "without" only cards carrying neither.
+  const copyFilter = searchParams.get("copy") || "";
   const setFilter = (name, value) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(name, value);
@@ -642,11 +656,22 @@ export default function GenerationHistory() {
     );
   })();
 
-  const completed = visible.filter((r) => r.status === "completed").length;
-  const failed = visible.filter((r) => r.status === "failed").length;
+  // The copy/context filter narrows after the hook-text search: both are
+  // client-side presentation over the same fetched window.
+  const copyVisible = !copyFilter
+    ? visible
+    : copyFilter === "with"
+      ? visible.filter(hasCopyContext)
+      : visible.filter((row) => !hasCopyContext(row));
+  const completed = copyVisible.filter((r) => r.status === "completed").length;
+  const failed = copyVisible.filter((r) => r.status === "failed").length;
   const ordered = sort === "views"
-    ? [...visible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
-    : visible;
+    ? [...copyVisible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
+    : copyVisible;
+  // Window counts behind the two section headings: the pager below owns how
+  // many cards mount, the headings own how many each side holds in full.
+  const orderedWith = ordered.filter(hasCopyContext);
+  const orderedWithout = ordered.filter((row) => !hasCopyContext(row));
   // The render window over the loaded rows: at most one page mounts. The
   // fetch window above still owns how many rows arrive; this owns how many
   // are in the DOM. Clamped, never empty-headed: a shrink lands on page 1
@@ -654,6 +679,20 @@ export default function GenerationHistory() {
   const pageCount = Math.max(1, Math.ceil(ordered.length / HISTORY_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = ordered.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
+  // The current page split the same way as the window: each section mounts
+  // only its own cards, so the two kinds are never mixed in one run.
+  const pagedWith = paged.filter(hasCopyContext);
+  const pagedWithout = paged.filter((row) => !hasCopyContext(row));
+  const renderRow = (row) => (
+    <GenerationRow
+      key={row.id}
+      row={row}
+      onChanged={load}
+      onUpdated={updateRow}
+      deepLinked={hashId !== "" && hashId === row.id}
+      draftIds={draftIds}
+    />
+  );
   // Turning the page swaps the rows above the fold, so bring the list back
   // into view instead of stranding the founder at its bottom. The pager
   // buttons survive the turn, so the activating control keeps focus.
@@ -667,7 +706,7 @@ export default function GenerationHistory() {
   // reset stay mounted, so focus is already somewhere sensible.
   useEffect(() => {
     setPage(1);
-  }, [profileFilter, statusFilter, query, sort, limit]);
+  }, [profileFilter, statusFilter, query, sort, limit, copyFilter]);
 
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
@@ -741,6 +780,20 @@ export default function GenerationHistory() {
               {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
                 <option key={s} value={s}>{humanize(s)}</option>
               ))}
+            </select>
+            <label className="sr-only" htmlFor="history-sort">Sort history</label>
+            <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
+            <select
+              id="history-copy-filter"
+              value={copyFilter}
+              onChange={(e) => setFilter("copy", e.target.value)}
+              aria-label="Filter by post copy and plan context"
+              data-testid="history-copy-filter"
+              className={PILL_SELECT_CLASS}
+            >
+              <option value="">All renders</option>
+              <option value="with">With post copy & context</option>
+              <option value="without">Without post copy & context</option>
             </select>
             <label className="sr-only" htmlFor="history-sort">Sort history</label>
             <select
@@ -855,31 +908,47 @@ export default function GenerationHistory() {
         />
       ) : (
         <div className="history-grid" data-testid="history-list" ref={listRef}>
-          {visible.length > 1 && (
+          {copyVisible.length > 1 && (
             <p className="col-span-full text-xs text-muted-foreground">
-              {visible.length} results · {completed} completed · {failed} failed
+              {copyVisible.length} results · {completed} completed · {failed} failed
             </p>
           )}
-          {visible.length === 0 && rows.length > 0 && (
+          {copyVisible.length === 0 && rows.length > 0 && (
             <p className="col-span-full text-xs text-muted-foreground" role="status">
-              No renders match “{query.trim()}”. Clear the search to see everything.
+              {query.trim()
+                ? <>No renders match “{query.trim()}”. Clear the search to see everything.</>
+                : <>No renders match this filter. Clear the filters to see everything.</>}
             </p>
           )}
-          {/* One card per render: cards stack in one column on every
-              phones). No pair wrappers — grouping rows in divs would remount
-              every tile whenever sorting or filtering regroups them, dropping
-              focus and typed input mid-edit. Stable row keys let React reorder
-              without remounting. */}
-          {paged.map((row) => (
-            <GenerationRow
-              key={row.id}
-              row={row}
-              onChanged={load}
-              onUpdated={updateRow}
-              deepLinked={hashId !== "" && hashId === row.id}
-              draftIds={draftIds}
-            />
-          ))}
+          {/* Two page sections, never mixed: renders carrying post copy or
+              plan context stack under one heading, renders carrying neither
+              under another. One card per render, one column on every phone;
+              stable row keys let React reorder without remounting, so sorting
+              or filtering never drops focus and typed input mid-edit. */}
+          {(!copyFilter || copyFilter === "with") && pagedWith.length > 0 && (
+            <section
+              aria-label="Renders with post copy and plan context"
+              data-testid="history-section-with"
+              className="col-span-full space-y-4"
+            >
+              <GroupLabel icon={MessageSquareText}>
+                With post copy & plan context · {orderedWith.length}
+              </GroupLabel>
+              {pagedWith.map(renderRow)}
+            </section>
+          )}
+          {(!copyFilter || copyFilter === "without") && pagedWithout.length > 0 && (
+            <section
+              aria-label="Renders without post copy and plan context"
+              data-testid="history-section-without"
+              className="col-span-full space-y-4"
+            >
+              <GroupLabel icon={Film}>
+                Without post copy & context · {orderedWithout.length}
+              </GroupLabel>
+              {pagedWithout.map(renderRow)}
+            </section>
+          )}
           {rows.length >= limit && limit < 200 && (
             <div className="col-span-full flex justify-center pt-2">
               <Button
