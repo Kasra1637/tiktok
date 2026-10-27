@@ -2656,6 +2656,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving…</span>
                 ) : null}
               </div>
+              {/* One honest readback, not a verdict: the hook window is the
+                  one measurable on this card that decides the opening, so the
+                  founder leaves knowing what it carries. An aim, never a
+                  promise — the page cannot know what performs. */}
+              <p className="text-xs text-muted-foreground" data-testid="export-hook-signal">
+                {hookEnabled
+                  ? `Hook holds the first ${(duration > 0 ? Math.min(hookDuration, duration * 0.45) : hookDuration).toFixed(1)}s — aim the payoff inside 2s.`
+                  : "No hook text — the opening frame carries no on-screen line."}
+              </p>
               <video key={result.url} src={result.url} controls loop playsInline preload="auto" className="w-full rounded-xl border border-[color:var(--hairline)] bg-black" />
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" asChild>

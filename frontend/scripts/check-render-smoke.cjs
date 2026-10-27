@@ -10276,6 +10276,24 @@ async function runDemoCtaChecks() {
     }
   });
 
+  // The export result reads back the one measurable that decides the
+  // opening: how long the hook holds. A number the page already owns,
+  // never a judgment it cannot defend.
+  await check("the export result reads back the hook window", async () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+      "utf8"
+    );
+    for (const marker of ['data-testid="export-hook-signal"', "Hook holds the first"]) {
+      if (!src.includes(marker)) {
+        throw new Error(
+          `the export result does not read back the hook window: ${marker}. ` +
+            "The founder leaves without knowing what the opening carries."
+        );
+      }
+    }
+  });
+
   await check(
     "the empty frame offers a real upload control",
     async (ctx) => {
