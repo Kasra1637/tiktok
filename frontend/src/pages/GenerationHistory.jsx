@@ -303,6 +303,15 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
           </div>
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
+            {/* Spec facts first: model, length, objective and versions read as pills right under the clip, ahead of identity and results. */}
+            <FactList>
+              {row.model && <FactChip>{row.model}</FactChip>}
+              {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
+              {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
+              {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
+              {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
+              <FactChip>script v{row.script_version}</FactChip>
+            </FactList>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
               <StatusBadge status={row.status} />
@@ -329,15 +338,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
           <div className="history-body">
             <div className="min-w-0 space-y-5">
               {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
-              <FactList>
-                {row.model && <FactChip>{row.model}</FactChip>}
-                {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
-                {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
-                {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
-                {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
-                <FactChip>script v{row.script_version}</FactChip>
-              </FactList>
-
               {(row.post_kit || row.audience || row.demo_brief) && (
                 <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
                   {row.post_kit && (
