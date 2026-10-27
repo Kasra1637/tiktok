@@ -5689,15 +5689,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!/lazy\(\(\)\s*=>\s*import\(["']\.\/pages\/DemoCtaStudio["']\)/.test(src.replace(/\s+/g, ""))) {
       throw new Error("the editor route is not route-split out of the landing chunk");
     }
+    if (/import\s+VideoUpscaler\s+from/.test(src)) {
+      throw new Error("App still statically imports the upscaler, dragging mediabunny into the landing payload");
+    }
+    if (!/lazy\(\(\)\s*=>\s*import\(["']\.\/pages\/VideoUpscaler["']\)/.test(src.replace(/\s+/g, ""))) {
+      throw new Error("the upscaler route is not route-split out of the landing chunk");
+    }
     if (!src.includes("Suspense")) {
       throw new Error("the split editor route has no Suspense boundary");
     }
-    // mediabunny may only be reachable through the editor chunk: anything
-    // outside demoCta/ importing it lands back in the landing payload.
-    // Comments are stripped first, so a comment naming the dependency (like
-    // this one) cannot trip the pin — only a real import can.
+    // mediabunny may only be reachable through route-split chunks: the editor
+    // (demoCta/) and the upscaler (upscale/, lazy-loaded on /upscale like the
+    // editor is on /demo-cta). Anything else importing it lands back in the
+    // landing payload. Comments are stripped first, so a comment naming the
+    // dependency (like this one) cannot trip the pin — only a real import can.
+    const chunkDirs = [`${path.sep}demoCta${path.sep}`, `${path.sep}upscale${path.sep}`];
     const leaking = sourceFiles()
-      .filter((abs) => !abs.includes(`${path.sep}demoCta${path.sep}`) && !/\.test\.jsx?$/.test(abs))
+      .filter((abs) => !chunkDirs.some((dir) => abs.includes(dir)) && !/\.test\.jsx?$/.test(abs))
       .filter((abs) => stripComments(fs.readFileSync(abs, "utf8")).includes("mediabunny"))
       .map((abs) => path.relative(SRC, abs));
     if (leaking.length) {
@@ -6753,6 +6761,9 @@ async function runSidebarNavChecks() {
       const expected = [
         "/brand",
         "/demo-cta",
+        // The upscaler sits with the editor: both work on footage the
+        // founder already has, needing no profile or render first.
+        "/upscale",
         "/create",
         "/assets",
         "/history",
