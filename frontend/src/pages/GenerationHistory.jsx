@@ -566,9 +566,11 @@ export default function GenerationHistory() {
   const statusFilter = searchParams.get("status") || "";
   const query = searchParams.get("q") || "";
   // Availability of post copy & plan context, URL-owned like the other
-  // filters so back/forward agree: "" shows both sections, "with" only
-  // cards carrying copy or context, "without" only cards carrying neither.
-  const copyFilter = searchParams.get("copy") || "";
+  // filters so back/forward agree. The two sides never share the screen:
+  // "with" shows only cards carrying copy or context, "without" only
+  // cards carrying neither. Anything else (including a missing param)
+  // reads as "with", the section that leads the page.
+  const copyFilter = searchParams.get("copy") === "without" ? "without" : "with";
   const setFilter = (name, value) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(name, value);
@@ -658,11 +660,9 @@ export default function GenerationHistory() {
 
   // The copy/context filter narrows after the hook-text search: both are
   // client-side presentation over the same fetched window.
-  const copyVisible = !copyFilter
-    ? visible
-    : copyFilter === "with"
-      ? visible.filter(hasCopyContext)
-      : visible.filter((row) => !hasCopyContext(row));
+  const copyVisible = copyFilter === "without"
+    ? visible.filter((row) => !hasCopyContext(row))
+    : visible.filter(hasCopyContext);
   const completed = copyVisible.filter((r) => r.status === "completed").length;
   const failed = copyVisible.filter((r) => r.status === "failed").length;
   const ordered = sort === "views"
@@ -791,7 +791,6 @@ export default function GenerationHistory() {
               data-testid="history-copy-filter"
               className={PILL_SELECT_CLASS}
             >
-              <option value="">All renders</option>
               <option value="with">With post copy & context</option>
               <option value="without">Without post copy & context</option>
             </select>
@@ -925,7 +924,7 @@ export default function GenerationHistory() {
               under another. One card per render, one column on every phone;
               stable row keys let React reorder without remounting, so sorting
               or filtering never drops focus and typed input mid-edit. */}
-          {(!copyFilter || copyFilter === "with") && pagedWith.length > 0 && (
+          {copyFilter === "with" && pagedWith.length > 0 && (
             <section
               aria-label="Renders with post copy and plan context"
               data-testid="history-section-with"
@@ -942,7 +941,7 @@ export default function GenerationHistory() {
               {pagedWith.map(renderRow)}
             </section>
           )}
-          {(!copyFilter || copyFilter === "without") && pagedWithout.length > 0 && (
+          {copyFilter === "without" && pagedWithout.length > 0 && (
             <section
               aria-label="Renders without post copy and plan context"
               data-testid="history-section-without"

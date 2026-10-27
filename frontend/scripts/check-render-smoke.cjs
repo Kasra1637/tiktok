@@ -570,6 +570,12 @@ const cache = new Map();
 // A cached URLSearchParams per query string, so `useSearchParams()` is stable
 // across renders. CreateVideo's mount effect depends on `params`, so handing it
 // a new object each call spins the effect in an endless fetch loop.
+//
+// History's copy filter defaults to the copy-carrying side, so History
+// fixtures carry an audience (and so read on the default side) unless the
+// check is about the without-copy side or the filter itself — which opt
+// into ?copy=without explicitly. A fixture with no copy or context would
+// mount an empty list and pass absence assertions vacuously.
 const searchParamCache = new Map();
 function searchParams() {
   const query = global.__SMOKE_PARAMS || "";
@@ -819,6 +825,8 @@ const roots = [];
  * crash in GenerationPanel "passed" this file.
  */
 async function check(label, fn) {
+  const only = process.env.SMOKE_ONLY || "";
+  if (only && !label.includes(only)) return;
   checks += 1;
   const container = dom.window.document.createElement("div");
   dom.window.document.body.appendChild(container);
@@ -10782,8 +10790,8 @@ async function runDemoCtaChecks() {
     await withApi(
       {
         getGenerationHistory: async () => ({ generations: [
-          { ...COMPLETED, id: "hist-1", brand_name: "Journal", duration: 10 },
-          { ...COMPLETED, id: "hist-2", status: "failed", video_url: null, playback_url: null, r2_url: null },
+          { ...COMPLETED, id: "hist-1", brand_name: "Journal", duration: 10, audience: "Night scrollers" },
+          { ...COMPLETED, id: "hist-2", status: "failed", video_url: null, playback_url: null, r2_url: null, audience: "Night scrollers" },
         ] }),
       },
       async () => {
@@ -10843,7 +10851,7 @@ async function runDemoCtaChecks() {
         throw new Error("a History toggle sits beside a loaded clip — swap goes through Remove");
       }
       await click('[data-testid="demo-cta-remove-source"]');
-      await withApi({ getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "composite-base", brand_name: "History base" }] }) }, async () => {
+      await withApi({ getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "composite-base", brand_name: "History base", audience: "Night scrollers" }] }) }, async () => {
         await click('[data-testid="history-source-toggle"]');
         await click('[data-testid="history-source-attach-composite-base"]');
       });
@@ -10970,69 +10978,94 @@ async function runDemoCtaChecks() {
 
   await check("History shows each render as one attached card with clip beside its record", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [
-        { ...COMPLETED, id: "dense-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
-        { ...COMPLETED, id: "dense-2", brand_name: "Journal", hook_line: "A second render." },
-      ] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    }, async () => {
-      await mount(GenerationHistory)(ctx);
-      const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-      if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 2) throw new Error("history cards are not in the responsive grid");
-      if (ctx.container.querySelector('[data-testid="history-expand"]')) {
-        throw new Error("a card still exposes an expand control; records are always visible now");
-      }
-      const first = grid.querySelector('[data-testid="history-card"]');
-      if (!first.querySelector("video.history-preview")) throw new Error("attached preview missing");
-      const row = first.querySelector(".history-row-grid");
-      if (!row) throw new Error("the card does not lay video beside its record");
-      const panel = first.querySelector('[data-testid="history-detail-panel"]');
-      if (!panel) throw new Error("the card shows no record beside its clip");
-      if (!first.contains(panel)) throw new Error("the record is not attached inside its card");
-      if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
-      for (const label of ["Download", "Delete", "Demo + CTA"]) {
-        if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
-      }
-      const summary = first.querySelector('[data-testid="history-summary"]');
-      for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
-        if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
-      }
-      // Identity lives once under the clip: the record beside it must not repeat the headline.
-      const panelText = panel.textContent || "";
-      if (panelText.includes("Find your next thought.")) throw new Error("the record repeats the clip headline instead of keeping one copy under the video");
-    });
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "dense-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
+          { ...COMPLETED, id: "dense-2", brand_name: "Journal", hook_line: "A second render." },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        // The copy-carrying card reads on the with-copy side.
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+        if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 1) throw new Error("history cards are not in the responsive grid");
+        if (ctx.container.querySelector('[data-testid="history-expand"]')) {
+          throw new Error("a card still exposes an expand control; records are always visible now");
+        }
+        const first = grid.querySelector('[data-testid="history-card"]');
+        if (!first.querySelector("video.history-preview")) throw new Error("attached preview missing");
+        const row = first.querySelector(".history-row-grid");
+        if (!row) throw new Error("the card does not lay video beside its record");
+        const panel = first.querySelector('[data-testid="history-detail-panel"]');
+        if (!panel) throw new Error("the card shows no record beside its clip");
+        if (!first.contains(panel)) throw new Error("the record is not attached inside its card");
+        if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
+        for (const label of ["Download", "Delete", "Demo + CTA"]) {
+          if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
+        }
+        const summary = first.querySelector('[data-testid="history-summary"]');
+        for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
+          if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
+        }
+        // Identity lives once under the clip: the record beside it must not repeat the headline.
+        const panelText = panel.textContent || "";
+        if (panelText.includes("Find your next thought.")) throw new Error("the record repeats the clip headline instead of keeping one copy under the video");
+        // The copy-less neighbor reads on the without-copy side, attached the same way.
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const neighbor = ctx.container.querySelector('[data-testid="history-card"]');
+        if (!neighbor?.querySelector("video.history-preview")) throw new Error("the neighbor card lost its attached preview");
+        if (!neighbor.textContent.includes("A second render.")) throw new Error("the neighbor card lost its own record");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
   });
 
   await check("History rows never render as a separate detail section", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [
-        { ...COMPLETED, id: "band-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
-        { ...COMPLETED, id: "band-2", brand_name: "Journal", hook_line: "A second render." },
-      ] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    }, async () => {
-      await mount(GenerationHistory)(ctx);
-      const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-      if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
-        throw new Error("the record renders as a separate grid section instead of inside its card");
-      }
-      // Cards live inside the with/without copy sections, so the flatness
-      // that matters is one article per render with no pair wrappers
-      // regrouping them — not whether the card is a direct grid child.
-      const cards = grid.querySelectorAll('[data-testid="history-card"]');
-      if (cards.length !== 2) throw new Error("records are not flat cards in the list");
-      for (const card of cards) {
-        if (!card.querySelector(':scope .history-row-grid > [data-testid="history-detail-panel"]')) {
-          throw new Error("a card does not carry its record attached beside its clip");
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "band-1", brand_name: "Journal", hook_line: "Find your next thought.", audience: "People reflecting after work", demo_brief: "Record the emotion suggestions." },
+          { ...COMPLETED, id: "band-2", brand_name: "Journal", hook_line: "A second render." },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        // Each copy side reads on its own: one attached card per render, no
+        // pair wrappers regrouping them, the record inside its card.
+        for (const [side, id, owns] of [
+          ["?copy=with", "band-1", "history-context"],
+          ["?copy=without", "band-2", "Download"],
+        ]) {
+          global.__SMOKE_PARAMS = side;
+          await mount(GenerationHistory)(ctx);
+          const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+          if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
+            throw new Error("the record renders as a separate grid section instead of inside its card");
+          }
+          const cards = grid.querySelectorAll('[data-testid="history-card"]');
+          if (cards.length !== 1 || cards[0].getAttribute("id") !== `generation-${id}`) {
+            throw new Error(`the ${side} side does not hold exactly its own card`);
+          }
+          const card = cards[0];
+          if (!card.querySelector(':scope .history-row-grid > [data-testid="history-detail-panel"]')) {
+            throw new Error("a card does not carry its record attached beside its clip");
+          }
+          if (owns === "history-context") {
+            if (!card.querySelector('[data-testid="history-context"]')) throw new Error("the neighbor card lost its own record");
+          } else if (!card.textContent.includes("Download")) {
+            throw new Error("the neighbor card lost its own record");
+          }
         }
-      }
-      const second = cards[1];
-      if (!second.querySelector('[data-testid="history-context"]') && !second.textContent.includes("Download")) {
-        throw new Error("the neighbor card lost its own record");
-      }
-    });
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
   });
 
   await check("History lays one card per row and splits video from record wide", async (ctx) => {
@@ -11062,9 +11095,9 @@ async function runDemoCtaChecks() {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
-        { ...COMPLETED, id: "pair-1" },
-        { ...COMPLETED, id: "pair-2" },
-        { ...COMPLETED, id: "pair-3" },
+        { ...COMPLETED, id: "pair-1", audience: "Night scrollers" },
+        { ...COMPLETED, id: "pair-2", audience: "Night scrollers" },
+        { ...COMPLETED, id: "pair-3", audience: "Night scrollers" },
       ] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
@@ -11083,9 +11116,9 @@ async function runDemoCtaChecks() {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
       getGenerationHistory: async () => ({ generations: [
-        { ...COMPLETED, id: "v-old", tiktok_views: 10 },
-        { ...COMPLETED, id: "v-top", tiktok_views: 9000 },
-        { ...COMPLETED, id: "v-none" },
+        { ...COMPLETED, id: "v-old", tiktok_views: 10, audience: "Night scrollers" },
+        { ...COMPLETED, id: "v-top", tiktok_views: 9000, audience: "Night scrollers" },
+        { ...COMPLETED, id: "v-none", audience: "Night scrollers" },
       ] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
@@ -11106,9 +11139,9 @@ async function runDemoCtaChecks() {
   await check("History saves update attached facts, votes and view order without reloading", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     let fetches = 0;
-    const first = { ...COMPLETED, id: "sync-low", tiktok_url: "https://www.tiktok.com/@founder/video/123", tiktok_views: 10 };
+    const first = { ...COMPLETED, id: "sync-low", tiktok_url: "https://www.tiktok.com/@founder/video/123", tiktok_views: 10, audience: "Night scrollers" };
     await withApi({
-      getGenerationHistory: async () => { fetches++; return { generations: [first, { ...COMPLETED, id: "sync-high", tiktok_views: 100 }] }; },
+      getGenerationHistory: async () => { fetches++; return { generations: [first, { ...COMPLETED, id: "sync-high", tiktok_views: 100, audience: "Night scrollers" }] }; },
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
       getGeneration: async () => first,
       setTikTokViews: async (_id, count) => {
@@ -11163,12 +11196,12 @@ async function runDemoCtaChecks() {
       try {
       await mount(History)(ctx);
       await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "failed");
-      await act(async () => pending[1].resolve({ generations: [{ ...COMPLETED, id: "latest", status: "failed" }] }));
-      await act(async () => pending[0].resolve({ generations: [{ ...COMPLETED, id: "stale" }] }));
+      await act(async () => pending[1].resolve({ generations: [{ ...COMPLETED, id: "latest", status: "failed", audience: "Night scrollers" }] }));
+      await act(async () => pending[0].resolve({ generations: [{ ...COMPLETED, id: "stale", audience: "Night scrollers" }] }));
       if (!ctx.container.querySelector('#generation-latest') || ctx.container.querySelector('#generation-stale')) throw new Error("older request overwrote current filter");
       await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "completed");
       await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "archived");
-      await act(async () => pending[3].resolve({ generations: [{ ...COMPLETED, id: "archived", status: "archived" }] }));
+      await act(async () => pending[3].resolve({ generations: [{ ...COMPLETED, id: "archived", status: "archived", audience: "Night scrollers" }] }));
       await act(async () => pending[2].reject(new Error("stale request failed")));
       expectAbsent(ctx, "stale request failed");
       if (!ctx.container.querySelector('#generation-archived')) throw new Error("stale failure hid current results");
@@ -11182,7 +11215,7 @@ async function runDemoCtaChecks() {
     await withApi({
       getGenerationHistory: async () => {
         if (fail) throw new Error("History unavailable");
-        return { generations: [{ ...COMPLETED, id: "recovered" }] };
+        return { generations: [{ ...COMPLETED, id: "recovered", audience: "Night scrollers" }] };
       },
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
@@ -11230,7 +11263,7 @@ async function runDemoCtaChecks() {
   await check("History keeps the saved vote when its refresh fails", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "vote-1", verdicts: { video: 1 } }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "vote-1", verdicts: { video: 1 }, audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
       getGeneration: async () => { throw new Error("Vote refresh unavailable"); },
     }, async () => {
@@ -11253,7 +11286,7 @@ async function runDemoCtaChecks() {
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
         await mount(History)(ctx);
-        global.__SMOKE_PARAMS = "profile=p1&status=completed";
+        global.__SMOKE_PARAMS = "profile=p1&status=completed&copy=without";
         global.__SMOKE_HASH = "#generation-anchor-two";
         await mount(History)(ctx);
         if (ctx.container.querySelector('[data-testid="history-search"]').value !== "") throw new Error("old search hid linked clip");
@@ -11271,16 +11304,22 @@ async function runDemoCtaChecks() {
     const History = load("pages/GenerationHistory.jsx").default;
     const oldKit = { caption: "Old frozen caption", hashtags: ["#old"] };
     const freshKit = { caption: "Fresh confirmed caption", hashtags: ["#fresh"] };
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-sync", post_kit: oldKit }] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-      regeneratePostKit: async () => ({ post_kit: freshKit }),
-    }, async () => {
-      await mount(History)(ctx);
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
-      expectText(ctx, freshKit.caption, "regenerated copy did not land in the attached record");
-      expectAbsent(ctx, oldKit.caption);
-    });
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-sync", post_kit: oldKit }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        regeneratePostKit: async () => ({ post_kit: freshKit }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(History)(ctx);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
+        expectText(ctx, freshKit.caption, "regenerated copy did not land in the attached record");
+        expectAbsent(ctx, oldKit.caption);
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
   });
 
   await check("ratings serialize saves and ignore a response for a replaced item", async (ctx) => {
@@ -11325,7 +11364,7 @@ async function runDemoCtaChecks() {
   await check("History exposes no expand control to drag or click", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "drag-1" }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "drag-1", audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
@@ -11367,7 +11406,7 @@ async function runDemoCtaChecks() {
   await check("History pages past the first hundred renders", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const seen = [];
-    const rows = Array.from({ length: 101 }, (_, i) => ({ ...COMPLETED, id: `page-${i}` }));
+    const rows = Array.from({ length: 101 }, (_, i) => ({ ...COMPLETED, id: `page-${i}`, audience: "Night scrollers" }));
     await withApi(
       {
         getGenerationHistory: async (params) => {
@@ -11398,7 +11437,7 @@ async function runDemoCtaChecks() {
     // poster logic, and feedback hooks each. The render window is one page;
     // the fetch stays one call and the rest is navigation, not DOM.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const rows = Array.from({ length: 200 }, (_, i) => ({ ...COMPLETED, id: `scale-${i}` }));
+    const rows = Array.from({ length: 200 }, (_, i) => ({ ...COMPLETED, id: `scale-${i}`, audience: "Night scrollers" }));
     let fetches = 0;
     const t0 = Date.now();
     await withApi(
@@ -11426,7 +11465,7 @@ async function runDemoCtaChecks() {
 
   await check("History pages through loaded rows without refetching", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}`, audience: "Night scrollers" }));
     let fetches = 0;
     await withApi(
       {
@@ -11461,7 +11500,7 @@ async function runDemoCtaChecks() {
     // render window, the pager has to jump to its page before the existing
     // open-and-scroll can reach it.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}`, audience: "Night scrollers" }));
     global.__SMOKE_HASH = "#generation-pg-100";
     try {
       await withApi(
@@ -11494,7 +11533,7 @@ async function runDemoCtaChecks() {
     // keypress is still there to keep focus — a turn that rebuilds the
     // pager drops focus to <body> and strands keyboard users.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}`, audience: "Night scrollers" }));
     await withApi(
       {
         getGenerationHistory: async () => ({ generations: rows }),
@@ -11526,6 +11565,7 @@ async function runDemoCtaChecks() {
       ...COMPLETED,
       id: `f-${i}`,
       hook_line: i < 10 ? "plumber fixes the sink" : `render number ${i}`,
+      audience: "Night scrollers",
     }));
     const oldParams = global.__SMOKE_PARAMS;
     global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(History)); };
@@ -11561,7 +11601,7 @@ async function runDemoCtaChecks() {
     // watches who it is called on. A turn that leaves the scroll wherever it
     // was strands the founder at the bottom of a list that just changed above.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}` }));
+    const rows = Array.from({ length: 120 }, (_, i) => ({ ...COMPLETED, id: `pg-${i}`, audience: "Night scrollers" }));
     const seen = [];
     const proto = dom.window.Element.prototype;
     const had = Object.prototype.hasOwnProperty.call(proto, "scrollIntoView");
@@ -11591,7 +11631,7 @@ async function runDemoCtaChecks() {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi(
       {
-        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "esc-1" }] }),
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "esc-1", audience: "Night scrollers" }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       },
       async () => {
@@ -11622,7 +11662,7 @@ async function runDemoCtaChecks() {
         {
           getGenerationHistory: async ({ limit }) => {
             if (limit !== 200) throw new Error("deep link cannot reach Analytics' full result window");
-            return { generations: [{ ...COMPLETED, id: "deep-1" }] };
+            return { generations: [{ ...COMPLETED, id: "deep-1", audience: "Night scrollers" }] };
           },
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
@@ -11651,8 +11691,8 @@ async function runDemoCtaChecks() {
     // when the named row is still awaiting its TikTok link, focus lands in
     // that input; when the row already has one, focus stays where it was.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const awaiting = { ...COMPLETED, id: "link-wait", tiktok_url: null, tiktok_views: null };
-    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10 };
+    const awaiting = { ...COMPLETED, id: "link-wait", tiktok_url: null, tiktok_views: null, audience: "Night scrollers" };
+    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10, audience: "Night scrollers" };
     global.__SMOKE_HASH = "#generation-link-wait";
     try {
       await withApi(
@@ -11678,7 +11718,7 @@ async function runDemoCtaChecks() {
     // The focus-follows-link rule is for the awaiting state only: landing on
     // a row that already has its link must not yank focus anywhere.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10 };
+    const posted = { ...COMPLETED, id: "link-have", tiktok_url: "https://www.tiktok.com/@founder/video/1", tiktok_views: 10, audience: "Night scrollers" };
     global.__SMOKE_HASH = "#generation-link-have";
     try {
       await withApi(
@@ -11819,6 +11859,7 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
+                  audience: "Night scrollers",
                   objective: "demonstrate_feature",
                   angle_kind: "problem_solution",
                   script_version: 2,
@@ -11887,6 +11928,7 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
+                  audience: "Night scrollers",
                   verdicts: { video: 1 },
                 },
               ],
@@ -11938,6 +11980,7 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
+                  audience: "Night scrollers",
                   verdicts: { video: 1, goal: -1, plan: 1 },
                 },
               ],
@@ -12011,6 +12054,7 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
+                  audience: "Night scrollers",
                   verdicts: { video: 1 },
                 },
               ],
@@ -12063,6 +12107,7 @@ async function runDemoCtaChecks() {
         ...COMPLETED,
         brand_name: "Test App",
         duration: 10,
+        audience: "Night scrollers",
         verdicts: { video: 1 },
       };
       const fresh = { ...row, verdicts: { video: -1 } };
@@ -12117,6 +12162,7 @@ async function runDemoCtaChecks() {
                   ...COMPLETED,
                   brand_name: "Test App",
                   duration: 10,
+                  audience: "Night scrollers",
                   verdicts: { video: 1 },
                 },
               ],
@@ -12151,7 +12197,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, brand_name: "Test App", duration: 10 }],
+            generations: [{ ...COMPLETED, brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           // A completed row mounts the variations panel's data fetch, which the
@@ -12180,7 +12226,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom" }],
+            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom", audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
@@ -12207,7 +12253,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom" }],
+            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom", audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           deleteGeneration: async (id) => { deleted = id; return { deleted: id }; },
@@ -12243,7 +12289,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed" }],
+            generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed", audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
@@ -12290,7 +12336,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-vary", studio_project_id: "proj-9", brand_name: "Test App", duration: 10 }],
+            generations: [{ ...COMPLETED, id: "gen-vary", studio_project_id: "proj-9", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
@@ -12326,7 +12372,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-win", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "wd1", brand_name: "Test App", duration: 10 }],
+            generations: [{ ...COMPLETED, id: "gen-win", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "wd1", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           getStudioProjects: async () => ({ projects: [{ id: "wd1" }] }),
@@ -12355,7 +12401,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-ghost", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "ghost", brand_name: "Test App", duration: 10 }],
+            generations: [{ ...COMPLETED, id: "gen-ghost", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "ghost", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           getStudioProjects: async () => ({ projects: [{ id: "something-else" }] }),
@@ -12391,7 +12437,7 @@ async function runDemoCtaChecks() {
         await withApi(
           {
             getGenerationHistory: async () => ({
-              generations: [{ ...COMPLETED, id: "gen-plan", studio_project_id: "pd1", brand_name: "Test App", duration: 10 }],
+              generations: [{ ...COMPLETED, id: "gen-plan", studio_project_id: "pd1", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
             getStudioProjects: async () => ({ projects: [{ id: "pd1" }] }),
@@ -12434,6 +12480,7 @@ await check(
               {
                 ...COMPLETED,
                 id: "gen-durable",
+                audience: "Night scrollers",
                 video_url: "https://openrouter.invalid/temporary.mp4",
                 r2_url: "https://account.r2.cloudflarestorage.com/private/clip.mp4",
                 playback_url: signed,
@@ -12488,6 +12535,7 @@ await check(
               {
                 ...COMPLETED,
                 id: "gen-provider-only",
+                audience: "Night scrollers",
                 video_url: "https://openrouter.invalid/temporary.mp4",
                 r2_url: null,
                 // No fetchable copy at all: the server mints no playback URL
@@ -12534,10 +12582,10 @@ await check(
     const fresh = "/api/media/videos/retry.mp4?sig=fresh";
     const calls = [];
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "retry", playback_url: initial }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "retry", playback_url: initial, audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [] }),
       retryGenerationStorage: async (id) => { calls.push(id); return { playback_url: fresh }; },
-      getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh }),
+      getGeneration: async () => ({ ...COMPLETED, id: "retry", playback_url: fresh, audience: "Night scrollers" }),
     }, async () => {
       await mount(GenerationHistory, {})(ctx);
       await act(async () => ctx.container.querySelector("video").dispatchEvent(new dom.window.Event("error")));
@@ -12556,7 +12604,7 @@ await check(
   await check("History surfaces recovery failure instead of claiming success", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null, playback_url: null }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "lost", video_url: null, r2_url: null, playback_url: null, audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [] }),
       retryGenerationStorage: async () => { throw new Error("No remaining cloud or local copy. Re-upload your export."); },
     }, async () => {
@@ -12571,11 +12619,14 @@ await check(
   // the output moment showed, and a pre-kit row shows nothing.
   await check("History shows the frozen post kit with copy buttons", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
-    await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-1", post_kit: POST_KIT }] }),
-      getAppProfiles: async () => ({ profiles: [PROFILE] }),
-    }, async () => {
-      await mount(GenerationHistory)(ctx);
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-1", post_kit: POST_KIT }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
       // The frozen kit is one caption: "Caption 1" anywhere on the card
       // means the retired three-caption layout leaked back in.
       const card = ctx.container.querySelector('[data-testid="history-card"]');
@@ -12583,7 +12634,10 @@ await check(
         throw new Error("the attached record leaks the retired caption layout");
       }
       assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "History");
-    });
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
   });
 
   // The record stacks post copy above plan context in one column: post copy
@@ -12607,8 +12661,11 @@ await check(
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
         async () => {
-          await mount(GenerationHistory)(ctx);
-          const copy = ctx.container.querySelector('[data-testid="history-post-copy-fold-1"]');
+          const previousParams = global.__SMOKE_PARAMS;
+          global.__SMOKE_PARAMS = "?copy=with";
+          try {
+            await mount(GenerationHistory)(ctx);
+            const copy = ctx.container.querySelector('[data-testid="history-post-copy-fold-1"]');
           if (!copy || copy.tagName !== "DETAILS") {
             throw new Error("post copy is not behind a disclosure");
           }
@@ -12647,15 +12704,19 @@ await check(
           if (context.open) {
             throw new Error("reopening post copy left plan context expanded");
           }
+          } finally {
+            global.__SMOKE_PARAMS = previousParams;
+          }
         }
       );
     }
   );
 
   // Renders carrying post copy or plan context stack under one heading and
-  // renders carrying neither under another, so the two kinds are never mixed
-  // in one run — and the founder can narrow to either side on demand.
-  await check("History separates renders with and without post copy and plan context", async (ctx) => {
+  // renders carrying neither under another, and the two sides never share
+  // the screen: the copy filter shows one side at a time, leading with the
+  // copy-carrying section.
+  await check("History shows one copy section at a time", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const withCopy = {
       ...COMPLETED,
@@ -12674,34 +12735,26 @@ await check(
       }, async () => {
         global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
+        // The page leads with the copy-carrying side; the other side is
+        // off-screen until the filter asks for it.
         const withSection = ctx.container.querySelector('[data-testid="history-section-with"]');
-        const withoutSection = ctx.container.querySelector('[data-testid="history-section-without"]');
-        if (!withSection || !withoutSection) {
-          throw new Error("History lost a copy/context section");
+        if (!withSection) {
+          throw new Error("History lost the copy-carrying section");
         }
         if (!withSection.querySelector("#generation-sec-with") || withSection.querySelector("#generation-sec-without")) {
           throw new Error("the with-copy section does not hold exactly the copy-carrying card");
         }
-        if (!withoutSection.querySelector("#generation-sec-without") || withoutSection.querySelector("#generation-sec-with")) {
-          throw new Error("the without-copy section does not hold exactly the copy-less card");
-        }
-        if (!(withSection.compareDocumentPosition(withoutSection) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-          throw new Error("the with-copy section is not above the without-copy section");
+        if (ctx.container.querySelector('[data-testid="history-section-without"]')) {
+          throw new Error("both copy sections share the screen");
         }
         // Page-level sections carry the shared section heading plus a
         // one-line explainer — not a bare in-card group label — and the
         // count names the window total so a paged list never reads short.
-        for (const [testId, explainer] of [
-          ["history-section-with", "saved caption"],
-          ["history-section-without", "no saved copy"],
-        ]) {
-          const section = ctx.container.querySelector(`[data-testid="${testId}"]`);
-          if (!section.querySelector("h2.section-heading")) {
-            throw new Error(`${testId} lost the shared section heading`);
-          }
-          if (!section.textContent.includes(explainer) || !section.textContent.includes("total")) {
-            throw new Error(`${testId} lost its explainer or window-total count`);
-          }
+        if (!withSection.querySelector("h2.section-heading")) {
+          throw new Error("history-section-with lost the shared section heading");
+        }
+        if (!withSection.textContent.includes("saved caption") || !withSection.textContent.includes("total")) {
+          throw new Error("history-section-with lost its explainer or window-total count");
         }
         // The filter control is URL-owned: picking a side navigates the
         // copy param, so back/forward agree with the section on screen.
@@ -12712,19 +12765,21 @@ await check(
         if (!went.some((search) => new URLSearchParams(search).get("copy") === "with")) {
           throw new Error(`the copy filter did not navigate the copy param: ${JSON.stringify(went)}`);
         }
-        // Narrowing to one side shows only its section.
-        global.__SMOKE_PARAMS = "?copy=with";
-        await mount(GenerationHistory)(ctx);
-        if (!ctx.container.querySelector('[data-testid="history-section-with"]')) {
-          throw new Error("the copy filter lost the with-copy section");
-        }
-        if (ctx.container.querySelector('[data-testid="history-section-without"]')) {
-          throw new Error("the copy filter left the without-copy section mounted");
-        }
+        // Asking for the other side swaps the screen to it alone.
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
-        if (!ctx.container.querySelector('[data-testid="history-section-without"]')) {
+        const withoutSection = ctx.container.querySelector('[data-testid="history-section-without"]');
+        if (!withoutSection) {
           throw new Error("the copy filter lost the without-copy section");
+        }
+        if (!withoutSection.querySelector("#generation-sec-without") || withoutSection.querySelector("#generation-sec-with")) {
+          throw new Error("the without-copy section does not hold exactly the copy-less card");
+        }
+        if (!withoutSection.querySelector("h2.section-heading")) {
+          throw new Error("history-section-without lost the shared section heading");
+        }
+        if (!withoutSection.textContent.includes("no saved copy") || !withoutSection.textContent.includes("total")) {
+          throw new Error("history-section-without lost its explainer or window-total count");
         }
         if (ctx.container.querySelector('[data-testid="history-section-with"]')) {
           throw new Error("the copy filter left the with-copy section mounted");
@@ -12739,7 +12794,7 @@ await check(
   await check("History shows no post copy for a render without a kit", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "nokit-1" }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "nokit-1", audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
     }, async () => {
       await mount(GenerationHistory)(ctx);
