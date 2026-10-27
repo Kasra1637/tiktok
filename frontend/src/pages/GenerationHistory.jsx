@@ -8,7 +8,7 @@ import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
-import { GroupLabel } from "../components/SectionCard";
+import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
@@ -931,9 +931,14 @@ export default function GenerationHistory() {
               data-testid="history-section-with"
               className="col-span-full space-y-4"
             >
-              <GroupLabel icon={MessageSquareText}>
-                With post copy & plan context · {orderedWith.length}
-              </GroupLabel>
+              <div className="space-y-1">
+                <SectionHeading as="h2" icon={MessageSquareText}>
+                  With post copy & plan context · {orderedWith.length} total
+                </SectionHeading>
+                <p className="text-sm text-muted-foreground">
+                  Clips with a saved caption, audience, or demo brief attached.
+                </p>
+              </div>
               {pagedWith.map(renderRow)}
             </section>
           )}
@@ -943,9 +948,14 @@ export default function GenerationHistory() {
               data-testid="history-section-without"
               className="col-span-full space-y-4"
             >
-              <GroupLabel icon={Film}>
-                Without post copy & context · {orderedWithout.length}
-              </GroupLabel>
+              <div className="space-y-1">
+                <SectionHeading as="h2" icon={Film}>
+                  Without post copy & context · {orderedWithout.length} total
+                </SectionHeading>
+                <p className="text-sm text-muted-foreground">
+                  Clips with no saved copy or context yet.
+                </p>
+              </div>
               {pagedWithout.map(renderRow)}
             </section>
           )}

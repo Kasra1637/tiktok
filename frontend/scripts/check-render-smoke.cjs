@@ -12688,6 +12688,21 @@ await check(
         if (!(withSection.compareDocumentPosition(withoutSection) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
           throw new Error("the with-copy section is not above the without-copy section");
         }
+        // Page-level sections carry the shared section heading plus a
+        // one-line explainer — not a bare in-card group label — and the
+        // count names the window total so a paged list never reads short.
+        for (const [testId, explainer] of [
+          ["history-section-with", "saved caption"],
+          ["history-section-without", "no saved copy"],
+        ]) {
+          const section = ctx.container.querySelector(`[data-testid="${testId}"]`);
+          if (!section.querySelector("h2.section-heading")) {
+            throw new Error(`${testId} lost the shared section heading`);
+          }
+          if (!section.textContent.includes(explainer) || !section.textContent.includes("total")) {
+            throw new Error(`${testId} lost its explainer or window-total count`);
+          }
+        }
         // The filter control is URL-owned: picking a side navigates the
         // copy param, so back/forward agree with the section on screen.
         const filter = ctx.container.querySelector('#history-copy-filter');
