@@ -19,7 +19,8 @@ export const TRANSITIONS = [
   { id: "zoom", label: "Zoom punch", duration: 0.3, description: "Punches in, flashes through the cut." },
   { id: "spin", label: "Spin", duration: 0.45, description: "Twirls into the next clip." },
   { id: "glitch", label: "Glitch", duration: 0.25, description: "Slices shift and flicker." },
-  { id: "swipe", label: "Swipe", duration: 0.4, description: "A panel sweeps the old clip away." },
+  { id: "flash", label: "Flash", duration: 0.3, description: "White strobe through the cut." },
+  { id: "fade", label: "Fade", duration: 0.35, description: "Dips to black through the cut." },
 ];
 
 export const TRANSITION_IDS = TRANSITIONS.map((t) => t.id);

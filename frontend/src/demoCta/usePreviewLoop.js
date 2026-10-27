@@ -531,19 +531,14 @@ export function usePreviewLoop(settings) {
           ctx.fillRect(0, 0, w, h);
           ctx.globalAlpha = 1;
         }
-      } else if (transition === "swipe") {
-        // A panel sweeps in and back out, fully covering the join at the cut.
-        const half = t.progress < 0.5 ? t.progress * 2 : (1 - t.progress) * 2;
-        const edgeX = (-0.05 + easeInOut(half) * 1.1) * w;
-        const dx = (t.side === "out" ? -t.progress : 1 - t.progress) * w * 0.12;
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(jointScratch, dx, 0, w, h);
-        if (edgeX > 0) {
-          ctx.fillStyle = "#0b0b10";
-          ctx.fillRect(0, 0, Math.min(edgeX, w), h);
-          ctx.fillStyle = overlayAccent || "#c8ff2e";
-          ctx.fillRect(Math.max(0, edgeX - 10), 0, 10, h);
-        }
+      } else if (transition === "flash") {
+        // A white strobe peaking at the cut; the frame beneath never moves.
+        ctx.fillStyle = `rgba(255, 255, 255, ${(Math.sin(t.progress * Math.PI) * 0.85).toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h);
+      } else if (transition === "fade") {
+        // A dip to black peaking at the cut; the frame beneath never moves.
+        ctx.fillStyle = `rgba(0, 0, 0, ${(Math.sin(t.progress * Math.PI) * 0.95).toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h);
       }
       ctx.restore();
     };

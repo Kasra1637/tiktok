@@ -65,4 +65,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0045](0045-demo-cta-clip-start-point.md) | Demo + CTA clips carry a start point; the head is trimmed, the tail is not | accepted |
 | [0046](0046-analytics-status-disclosures.md) | Analytics opens on three results; render statuses open their clips | accepted |
 | [0047](0047-analytics-loaded-set-and-recorded-dates.md) | Analytics states its loaded set once; views carry recorded dates | accepted |
-| [0048](0048-clip-joint-transitions.md) | Five joint transitions between the two clips | accepted |
+| [0048](0048-clip-joint-transitions.md) | Five joint transitions between the two clips | partially superseded by 0049 (swipe replaced by flash + fade) |
+| [0049](0049-flash-fade-replace-swipe.md) | Flash and fade replace swipe in the joint-transition catalog | accepted |

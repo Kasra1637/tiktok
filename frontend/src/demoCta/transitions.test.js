@@ -1,9 +1,9 @@
 import { TRANSITIONS, TRANSITION_IDS, transitionAt, hash01 } from "./transitions";
 
 describe("clip transitions", () => {
-  test("the catalog holds five trends plus a hard cut", () => {
-    expect(TRANSITION_IDS).toEqual(["none", "whip", "zoom", "spin", "glitch", "swipe"]);
-    expect(TRANSITIONS).toHaveLength(6);
+  test("the catalog holds six trends plus a hard cut", () => {
+    expect(TRANSITION_IDS).toEqual(["none", "whip", "zoom", "spin", "glitch", "flash", "fade"]);
+    expect(TRANSITIONS).toHaveLength(7);
   });
 
   test("every trend lasts a TikTok beat, never a linger", () => {
