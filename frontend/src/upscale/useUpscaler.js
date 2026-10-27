@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { enhanceVideo } from "./enhanceVideo";
-import { probeVideo } from "./probe";
 import { formatDims, upscaleTarget } from "./sizing";
 
 /**
@@ -129,4 +128,30 @@ export function useUpscaler() {
     downloadName, enhancing: status === "enhancing",
     handleFile, handleEnhance, handleCancel, resetSelection,
   };
+}
+
+/**
+ * Read dimensions and duration without decoding: a metadata-only probe, so
+ * an ineligible file is refused before any heavy work starts. Lives here
+ * (not in its own module) because the hook is its only caller and already
+ * owns every other DOM handle and object URL in this flow.
+ */
+function probeVideo(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    const done = (fn) => () => {
+      URL.revokeObjectURL(url);
+      fn();
+    };
+    video.onloadedmetadata = done(() => resolve({
+      width: video.videoWidth,
+      height: video.videoHeight,
+      duration: video.duration,
+    }));
+    video.onerror = done(() => reject(new Error("This file could not be read as a video. Upload a playable MP4 or WebM video.")));
+    video.src = url;
+  });
 }

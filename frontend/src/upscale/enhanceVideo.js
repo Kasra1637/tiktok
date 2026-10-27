@@ -95,10 +95,9 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
         if (!decoded) throw new Error(`The video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
         scratchCtx.filter = ENHANCE_FILTER;
         scratchCtx.drawImage(decoded.canvas, 0, 0, target.width, target.height);
-        scratchCtx.filter = "none";
-        ctx.filter = "none";
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
+        // No state resets: a fresh 2d context already starts at filter none,
+        // source-over, alpha 1, and save/restore below preserves exactly that
+        // across frames — while scratchCtx always sets its filter first.
         ctx.drawImage(scratch, 0, 0);
         ctx.save();
         ctx.globalCompositeOperation = "overlay";
