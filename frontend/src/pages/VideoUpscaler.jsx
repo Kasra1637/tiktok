@@ -15,8 +15,8 @@ import { useUpscaler } from "../upscale/useUpscaler";
  * Presentation only — the upload/probe/enhance state machine lives in
  * useUpscaler, and the encode pipeline in upscale/enhanceVideo. Everything
  * runs in the browser: decode each frame, paint it enlarged with
- * high-quality smoothing plus a clarity pass, and encode AVC MP4 with the
- * audio carried over (pictures encode to PNG stills). No server round-trip,
+ * high-quality smoothing while preserving original colour and shadow detail,
+ * and encode AVC MP4 with the audio carried over. No server round-trip,
  * no new backend.
  */
 export function VideoUpscaler() {
@@ -30,7 +30,7 @@ export function VideoUpscaler() {
       <PageHeader
         icon={WandSparkles}
         title="Video Upscaler"
-        description="Bring a soft sub-4K clip up to 4K: sharper edges, richer colour, same audio."
+        description="Bring a sub-4K clip up to 4K: sharper edges, true-to-original colour, same audio."
       />
 
       {error && (

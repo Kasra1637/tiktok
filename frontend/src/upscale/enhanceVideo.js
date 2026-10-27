@@ -5,15 +5,44 @@ import {
 import { UPSCALE, upscaleTarget } from "./sizing";
 import { passthroughSegmentAudio } from "./audio";
 
-const ENHANCE_FILTER = "contrast(1.07) saturate(1.15) brightness(1.01)";
+const UNSHARP_SVG_ID = "hookforge-upscale-unsharp";
+const UNSHARP_FILTER = `url(#${UNSHARP_SVG_ID})`;
 
-// Clarity pass: a softly blurred copy of the upscaled frame, composited back
-// over itself in overlay blend, lifts local contrast (edges, texture) without
-// moving a single pixel — geometry cannot drift, and with no denoise pass
-// there is nothing to wax over fine detail. Alpha stays low so flat areas
-// keep no halo.
-const CLARITY_ALPHA = 0.3;
-const CLARITY_BLUR_PX = 2;
+/**
+ * Ensure a tone-neutral 3x3 unsharp-mask SVG convolution filter exists in the
+ * document. Because the kernel weights (0, -0.2, 0, -0.2, 1.8, -0.2, 0, -0.2, 0)
+ * sum to exactly 1.0 in sRGB, flat regions, shadow levels, and overall color
+ * tone remain 100% unchanged while only high-frequency edges are crisped.
+ */
+function ensureUnsharpSvgFilter() {
+  if (typeof document === "undefined" || !document.body) return false;
+  if (document.getElementById(UNSHARP_SVG_ID)) return true;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.position = "absolute";
+  svg.style.width = "0";
+  svg.style.height = "0";
+  svg.style.pointerEvents = "none";
+  const defs = document.createElementNS(ns, "defs");
+  const filter = document.createElementNS(ns, "filter");
+  filter.setAttribute("id", UNSHARP_SVG_ID);
+  filter.setAttribute("color-interpolation-filters", "sRGB");
+  const matrix = document.createElementNS(ns, "feConvolveMatrix");
+  matrix.setAttribute("order", "3 3");
+  matrix.setAttribute("kernelMatrix", "0 -0.2 0 -0.2 1.8 -0.2 0 -0.2 0");
+  matrix.setAttribute("divisor", "1");
+  matrix.setAttribute("bias", "0");
+  matrix.setAttribute("edgeMode", "duplicate");
+  matrix.setAttribute("preserveAlpha", "true");
+  filter.appendChild(matrix);
+  defs.appendChild(filter);
+  svg.appendChild(defs);
+  document.body.appendChild(svg);
+  return true;
+}
 
 function throwCancelled(signal) {
   if (signal?.aborted) throw signal.reason || new DOMException("Enhancement cancelled.", "AbortError");
@@ -23,10 +52,10 @@ function throwCancelled(signal) {
  * Enhance one sub-4K clip: upscale to the 4K target, then MP4.
  *
  * Decoding is per-frame through CanvasSink and every frame is painted with
- * high-quality smoothing plus a light contrast/saturation lift before it
- * reaches the AVC encoder, so the output genuinely looks crisper and more
- * vivid than the source rather than a larger copy of the same blur. Audio
- * is carried over untouched (resampled to AAC), never dropped or stretched.
+ * high-quality bicubic smoothing plus a tone-neutral zero-DC unsharp convolution
+ * kernel before it reaches the AVC encoder, sharpening high-frequency edges
+ * while preserving the source video's exact color tone and shadow levels.
+ * Audio is carried over untouched (resampled to AAC), never dropped or stretched.
  */
 export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, duration, onProgress, signal }) {
   throwCancelled(signal);
@@ -69,15 +98,8 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    // Scratch holds the upscaled base so the clarity pass never reads from
-    // the canvas it is painting to (self-drawImage snapshot semantics differ
-    // across browsers; a scratch copy is unambiguous everywhere).
-    const scratch = document.createElement("canvas");
-    scratch.width = target.width;
-    scratch.height = target.height;
-    const scratchCtx = scratch.getContext("2d");
-    scratchCtx.imageSmoothingEnabled = true;
-    scratchCtx.imageSmoothingQuality = "high";
+    const hasUnsharp = ensureUnsharpSvgFilter();
+    ctx.filter = hasUnsharp ? UNSHARP_FILTER : "none";
     output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
     const videoSource = new CanvasSource(canvas, videoConfig);
     output.addVideoTrack(videoSource, { frameRate: fps });
@@ -93,18 +115,7 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
       for await (const decoded of new CanvasSink(track, { poolSize: 2 }).canvasesAtTimestamps(timestamps())) {
         throwCancelled(signal);
         if (!decoded) throw new Error(`The video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
-        scratchCtx.filter = ENHANCE_FILTER;
-        scratchCtx.drawImage(decoded.canvas, 0, 0, target.width, target.height);
-        // No state resets: a fresh 2d context already starts at filter none,
-        // source-over, alpha 1, and save/restore below preserves exactly that
-        // across frames — while scratchCtx always sets its filter first.
-        ctx.drawImage(scratch, 0, 0);
-        ctx.save();
-        ctx.globalCompositeOperation = "overlay";
-        ctx.globalAlpha = CLARITY_ALPHA;
-        ctx.filter = `blur(${CLARITY_BLUR_PX}px)`;
-        ctx.drawImage(scratch, 0, 0);
-        ctx.restore();
+        ctx.drawImage(decoded.canvas, 0, 0, target.width, target.height);
         await videoSource.add(frame / fps, Math.min(1 / fps, duration - frame / fps));
         frame++;
         onProgress?.(frame / frameCount);
