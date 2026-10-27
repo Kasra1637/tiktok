@@ -204,14 +204,15 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
 /**
  * The joint transition between the base and added clips. One picker, read
  * by the shared painter, so the preview and the export move identically.
- * Hard cut first: it is the long-standing behavior, and nothing already
- * made changes by picking a transition it never asked for.
+ * Four motion trends in one row; the saved pick survives reduced motion
+ * (when everything parks as cuts), so the motion returns if the setting
+ * changes.
  */
 function TransitionPicker({ value, onChange }) {
   return (
     <>
       <SubLabel>Transition between clips</SubLabel>
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" role="group" aria-label="Transition between clips">
+      <div className="grid grid-cols-4 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" role="group" aria-label="Transition between clips">
         {TRANSITIONS.map((t) => (
           <button
             key={t.id}
@@ -825,7 +826,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
   const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
   const [appendOverlays, setAppendOverlays] = useState(false);
-  // The joint transition: hard cut until the founder picks a trend. Read by
+  // The joint transition: whip pan until the founder picks a trend. Read by
   // the shared painter, so preview and export can never disagree about it.
   // The pick is kept even under reduced motion (when strobes park as cuts),
   // so the motion returns if the setting changes.

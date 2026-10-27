@@ -1,6 +1,6 @@
 # 0049 — Flash and fade replace swipe in the joint-transition catalog
 
-- **Status:** accepted
+- **Status:** superseded by 0050
 - **Date:** 2026-10-26
 - **Anchors:** `frontend/src/demoCta/transitions.js` (`TRANSITIONS`), `frontend/src/demoCta/usePreviewLoop.js` (`paintJointTransition` flash/fade branches); jest `frontend/src/demoCta/transitions.test.js` (catalog ids)
 

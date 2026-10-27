@@ -66,4 +66,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0046](0046-analytics-status-disclosures.md) | Analytics opens on three results; render statuses open their clips | accepted |
 | [0047](0047-analytics-loaded-set-and-recorded-dates.md) | Analytics states its loaded set once; views carry recorded dates | accepted |
 | [0048](0048-clip-joint-transitions.md) | Five joint transitions between the two clips | partially superseded by 0049 (swipe replaced by flash + fade) |
-| [0049](0049-flash-fade-replace-swipe.md) | Flash and fade replace swipe in the joint-transition catalog | accepted |
+| [0049](0049-flash-fade-replace-swipe.md) | Flash and fade replace swipe in the joint-transition catalog | superseded by 0050 (hard cut, flash, fade leave; four trends, one row) |
+| [0050](0050-four-trend-transition-row.md) | Four motion trends in one transition row; whip is the default | accepted |

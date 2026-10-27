@@ -531,14 +531,6 @@ export function usePreviewLoop(settings) {
           ctx.fillRect(0, 0, w, h);
           ctx.globalAlpha = 1;
         }
-      } else if (transition === "flash") {
-        // A white strobe peaking at the cut; the frame beneath never moves.
-        ctx.fillStyle = `rgba(255, 255, 255, ${(Math.sin(t.progress * Math.PI) * 0.85).toFixed(3)})`;
-        ctx.fillRect(0, 0, w, h);
-      } else if (transition === "fade") {
-        // A dip to black peaking at the cut; the frame beneath never moves.
-        ctx.fillStyle = `rgba(0, 0, 0, ${(Math.sin(t.progress * Math.PI) * 0.95).toFixed(3)})`;
-        ctx.fillRect(0, 0, w, h);
       }
       ctx.restore();
     };

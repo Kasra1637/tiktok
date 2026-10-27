@@ -1,20 +1,22 @@
 import { TRANSITIONS, TRANSITION_IDS, transitionAt, effectiveTransition, hash01 } from "./transitions";
 
 describe("clip transitions", () => {
-  test("the catalog holds six trends plus a hard cut", () => {
-    expect(TRANSITION_IDS).toEqual(["none", "whip", "zoom", "spin", "glitch", "flash", "fade"]);
-    expect(TRANSITIONS).toHaveLength(7);
+  test("the catalog holds four TikTok trends, nothing else", () => {
+    expect(TRANSITION_IDS).toEqual(["whip", "zoom", "spin", "glitch"]);
+    expect(TRANSITIONS).toHaveLength(4);
   });
 
   test("every trend lasts a TikTok beat, never a linger", () => {
-    for (const t of TRANSITIONS.filter((t) => t.id !== "none")) {
+    for (const t of TRANSITIONS) {
       expect(t.duration).toBeGreaterThanOrEqual(0.2);
       expect(t.duration).toBeLessThanOrEqual(0.5);
     }
   });
 
-  test("a hard cut is never a transition window", () => {
+  test("a retired or unknown id is never a transition window", () => {
     expect(transitionAt(5, 5, 5, "none").active).toBe(false);
+    expect(transitionAt(5, 5, 5, "flash").active).toBe(false);
+    expect(transitionAt(5, 5, 5, "fade").active).toBe(false);
     expect(transitionAt(5, 5, 5, "bogus").active).toBe(false);
   });
 
@@ -44,12 +46,10 @@ describe("clip transitions", () => {
     expect(transitionAt(0.05, 0.4, 0.4, "spin").active).toBe(false);
   });
 
-  test("reduced motion parks strobes and spins as cuts, keeps the gentle fade", () => {
-    for (const id of ["whip", "zoom", "spin", "glitch", "flash"]) {
+  test("reduced motion parks every trend as a cut", () => {
+    for (const id of ["whip", "zoom", "spin", "glitch"]) {
       expect(effectiveTransition(id, true)).toBe("none");
     }
-    expect(effectiveTransition("fade", true)).toBe("fade");
-    expect(effectiveTransition("none", true)).toBe("none");
   });
 
   test("without reduced motion every pick plays as chosen", () => {
@@ -60,7 +60,7 @@ describe("clip transitions", () => {
   });
 
   test("a reduced-motion pick leaves no transition window", () => {
-    const resolved = effectiveTransition("flash", true);
+    const resolved = effectiveTransition("glitch", true);
     expect(transitionAt(10, 10, 8, resolved).active).toBe(false);
   });
 

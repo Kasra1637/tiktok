@@ -1,7 +1,7 @@
 /**
  * Transitions between the base clip and the added second clip.
  *
- * Five TikTok-native trends, each a pure function of timeline time: the
+ * Four TikTok-native trends, each a pure function of timeline time: the
  * painter reads `transitionAt` and the export records exactly what the
  * preview showed, the same contract the overlay entrances keep (see
  * ADR 0007). No WebGL, no new dependencies — Canvas 2D transforms and
@@ -14,13 +14,10 @@
  */
 
 export const TRANSITIONS = [
-  { id: "none", label: "Hard cut", duration: 0, description: "Straight cut, no motion." },
   { id: "whip", label: "Whip pan", duration: 0.35, description: "Slings sideways with motion streaks." },
   { id: "zoom", label: "Zoom punch", duration: 0.3, description: "Punches in, flashes through the cut." },
   { id: "spin", label: "Spin", duration: 0.45, description: "Twirls into the next clip." },
   { id: "glitch", label: "Glitch", duration: 0.25, description: "Slices shift and flicker." },
-  { id: "flash", label: "Flash", duration: 0.3, description: "White strobe through the cut." },
-  { id: "fade", label: "Fade", duration: 0.35, description: "Dips to black through the cut." },
 ];
 
 export const TRANSITION_IDS = TRANSITIONS.map((t) => t.id);
@@ -70,17 +67,15 @@ export function transitionAt(vt, baseDuration, appendDuration, id) {
 }
 
 /**
- * Reduced-motion resolution: strobes, spins and pans park as cuts.
+ * Reduced-motion resolution: every trend parks as a cut.
  *
- * Cuts are the safe primitive — no animation, no luminance strobe — while
- * the fade is a slow dip to black, gentle enough to keep. Unknown ids pass
- * through so a stale saved value still resolves to no window downstream.
+ * "none" is the internal cut token, not a picker choice: no animation, no
+ * luminance strobe. Unknown ids pass through so a stale saved value (hard
+ * cut, flash, fade) still resolves to no window downstream.
  */
-const REDUCED_MOTION_SAFE = new Set(["none", "fade"]);
-
 export function effectiveTransition(id, reduceMotion) {
   if (!reduceMotion) return id;
-  return REDUCED_MOTION_SAFE.has(id) ? id : "none";
+  return "none";
 }
 
 /** Ease both halves toward the cut so the motion lands, never drifts. */
