@@ -18,4 +18,17 @@ describe("errorMessageFor", () => {
     expect(errorMessageFor({ message: "Network Error" })).toBe("Network Error");
     expect(errorMessageFor(null)).toContain("Something went wrong");
   });
+
+  test("a bodyless 413 names the Download-first remedy, not the status code", () => {
+    const message = errorMessageFor({ response: { status: 413 }, message: "Request failed with status code 413" });
+    expect(message).toContain("Download");
+    expect(message).toContain("Save again");
+    expect(message).not.toContain("413");
+  });
+
+  test("a 413 with a handler detail keeps the handler's remedy", () => {
+    expect(
+      errorMessageFor({ response: { status: 413, data: { detail: "Those parts would join past the 200 MB save ceiling. Export a shorter clip." } } })
+    ).toBe("Those parts would join past the 200 MB save ceiling. Export a shorter clip.");
+  });
 });

@@ -17,6 +17,11 @@
  *
  * A 502 that *does* carry a detail is our own handler reporting a failed
  * recovery, and that detail is the honest one, so it wins.
+ *
+ * A 413 without a detail never came from the app: Cloud Run refuses any
+ * single request over 32 MiB before it runs, so there is no JSON body to
+ * prefer. The export itself is still in the page, so the message keeps the
+ * Download-first remedy instead of reading like a broken action.
  */
 export function errorMessageFor(err) {
   const detail = err?.response?.data?.detail;
@@ -25,6 +30,13 @@ export function errorMessageFor(err) {
     return (
       "The server restarted while this was running, so nothing was saved. " +
       "Wait a moment and try again."
+    );
+  }
+  if (err?.response?.status === 413) {
+    return (
+      "This export was too large to save in one request, so nothing was filed to History. " +
+      "Download the video above so nothing is lost, then try Save again — large exports save in parts — " +
+      "or export a shorter clip."
     );
   }
   return err?.message || "Something went wrong. Please try again.";

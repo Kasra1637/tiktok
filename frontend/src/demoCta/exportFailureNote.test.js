@@ -30,3 +30,13 @@ test("no entry renders no note", async () => {
   const text = await renderNote(null);
   expect(text).toBe("");
 });
+
+test("a failed save names the Download-first next step, never the console", async () => {
+  const text = await renderNote({
+    stage: "save",
+    message: "Request failed with status code 413",
+    at: new Date("2026-10-24T19:00:00.000Z").toISOString(),
+  });
+  expect(text).toMatch(/Download/);
+  expect(text).not.toMatch(/console log/);
+});

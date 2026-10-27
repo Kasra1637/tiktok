@@ -16,6 +16,9 @@ import { PostKitSection } from "../components/PostKitSection";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
+import { listPendingSaves } from "../demoCta/saveOutbox";
+import { PendingSaveCard } from "./PendingSaveCard";
+import { historyActionError, needsHistoryRepairRow } from "./historyRepair";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -155,14 +158,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
     setPreviewBroken(false);
   }, [downloadUrl]);
 
-  const act = async (fn) => {
+  const act = async (fn, action = "finish this") => {
     setBusy(true);
     setError(null);
     try {
       await fn();
       onChanged?.();
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(historyActionError(err, action));
     } finally {
       setBusy(false);
     }
@@ -193,7 +196,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       }
       onChanged?.();
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(historyActionError(err, "check this render"));
     } finally {
       setBusy(false);
     }
@@ -221,7 +224,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       // Keep this row mounted until loadeddata confirms the recovered file
       // actually decodes; an endpoint success alone is not playback success.
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(historyActionError(err, "recover this clip's copy"));
     } finally {
       setBusy(false);
     }
@@ -363,20 +366,20 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                         <span>Plan context</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
                       </summary>
-                      <div className="inset-panel mb-3 mt-3 space-y-3">
+                      <dl className="inset-panel mb-3 mt-3 divide-y divide-[color:var(--hairline)]">
                     {row.audience && (
-                      <div className="space-y-1">
-                        <GroupLabel icon={Target}>Audience</GroupLabel>
-                        <p className="break-words text-base leading-relaxed text-muted-foreground">{row.audience}</p>
+                      <div className="post-kit-row">
+                        <dt className="eyebrow sm:pt-1">Audience</dt>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-muted-foreground">{row.audience}</dd>
                       </div>
                     )}
                     {row.demo_brief && (
-                      <div className="space-y-1">
-                        <GroupLabel icon={Smartphone}>Your demo brief</GroupLabel>
-                        <p className="break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</p>
+                      <div className="post-kit-row">
+                        <dt className="eyebrow sm:pt-1">Your demo brief</dt>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</dd>
                       </div>
                     )}
-                      </div>
+                      </dl>
                     </details>
                   )}
                 </div>
@@ -520,6 +523,16 @@ export default function GenerationHistory() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Failed exports that created no server row: the save path files them in
+  // the outbox, and they render here as repair cards above the list — so a
+  // 413 never reads as a silently missing clip.
+  const [pendingSaves, setPendingSaves] = useState(() => listPendingSaves());
+  const refreshPending = useCallback(() => setPendingSaves(listPendingSaves()), []);
+  useEffect(() => {
+    refreshPending();
+    window.addEventListener("hookforge:pending-saves-changed", refreshPending);
+    return () => window.removeEventListener("hookforge:pending-saves-changed", refreshPending);
+  }, [refreshPending]);
   // The URL owns filters, so back/forward and same-page links cannot disagree
   // with a second local copy. Preserve the clip anchor when editing a filter.
   const [searchParams] = useSearchParams();
@@ -568,7 +581,7 @@ export default function GenerationHistory() {
       });
       if (request === loadRequest.current) setRows(data.generations || []);
     } catch (err) {
-      if (request === loadRequest.current) setError(getErrorMessage(err));
+      if (request === loadRequest.current) setError(historyActionError(err, "load History"));
     } finally {
       if (request === loadRequest.current) setLoading(false);
     }
@@ -742,6 +755,58 @@ export default function GenerationHistory() {
           </AlertDescription>
         </Alert>
       )}
+
+      {!loading && pendingSaves.length > 0 ? (
+        <div className="space-y-4" data-testid="pending-saves">
+          {pendingSaves.map((entry) => (
+            <PendingSaveCard
+              key={entry.id}
+              entry={entry}
+              onResolved={() => {
+                refreshPending();
+                load();
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {(() => {
+        if (loading || rows.length === 0) return null;
+        const needsRepair = rows.filter(needsHistoryRepairRow);
+        if (needsRepair.length === 0) return null;
+        const first = needsRepair[0];
+        const many = needsRepair.length > 1;
+        const repair = first.status === "failed"
+          ? many
+            ? "Open each card for its provider reason — then re-render from Create Video."
+            : "Open its card for the provider reason — then re-render from Create Video."
+          : first.status === "generating"
+            ? many
+              ? "Open each card and press Check again — finished renders are fetched when found."
+              : "Open its card and press Check again — the finished render is fetched when found."
+            : many
+              ? "Open each card and press Retry durable save — fresh copies are re-fetched and filed."
+              : "Open its card and press Retry durable save — a fresh copy is re-fetched and filed.";
+        return (
+          <Alert data-testid="history-attention">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              <span>
+                {needsRepair.length === 1
+                  ? "1 clip needs attention. "
+                  : `${needsRepair.length} clips need attention. `}
+                {repair}
+              </span>
+              <Button variant="secondary" size="sm" asChild>
+                <a href={`#generation-${first.id}`} data-testid="history-attention-review">
+                  Review repair <ChevronRight className="h-3.5 w-3.5" />
+                </a>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
 
       {loading ? (
         /* Mirrors the real tile rather than a centered spinner: a bare spinner on

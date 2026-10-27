@@ -6,6 +6,7 @@ import { buildExportFilename, clipWindow, sniffRecordingContainer } from "./cons
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
+import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
 
 /**
  * Load a recorded blob into a throwaway video element and confirm it has a
@@ -106,10 +107,22 @@ export function useExportFlow(settings) {
       });
       onSaved?.(savedRow);
       clearExportErrors();
+      clearPendingSavesFor({ generationId: generation?.id || null, filename: name });
       return savedRow;
     } catch (err) {
       recordExportError("save", err);
-      setSaveError(getErrorMessage(err));
+      const message = getErrorMessage(err);
+      setSaveError(message);
+      // No server row exists for this export, so History would silently miss
+      // it. File it in the pending-save outbox: History renders the repair.
+      recordFailedSave({
+        generationId: generation?.id || null,
+        filename: name,
+        size: blob?.size || 0,
+        mime: blob?.type || "video/mp4",
+        message,
+        blob,
+      });
       return null;
     } finally {
       setSaving(false);

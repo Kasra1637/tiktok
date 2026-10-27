@@ -11,9 +11,13 @@ export function ExportFailureNote({ entry }) {
   } catch {
     when = "";
   }
+  const next =
+    entry.stage === "save"
+      ? "Your video is still above — Download it, then try Save again or a shorter clip."
+      : "Try the export again in Chrome or Edge.";
   return (
     <span className="mt-1 block text-xs opacity-80">
-      Failed during {entry.stage}{when ? ` · ${when}` : ""}. Details are in the console log.
+      Failed during {entry.stage}{when ? ` · ${when}` : ""}. {next}
     </span>
   );
 }
