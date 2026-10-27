@@ -9,7 +9,6 @@ import {
   ChevronUp,
   Download,
   Film,
-  Info,
   Loader2,
   Megaphone,
   Pause,
@@ -2645,6 +2644,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                   <a
                     href={result.url}
                     download={result.name}
+                    title={result.name}
                     onClick={() => recordSignal("video_downloaded", "downloaded", {
                       brand_profile_id: generation?.brand_profile_id || "",
                       studio_project_id: generation?.studio_project_id || "",
@@ -2652,7 +2652,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                       template_id: generation?.template_id || "",
                     })}
                   >
-                    <Download className="h-3.5 w-3.5" /> Download {result.name}
+                    <Download className="h-3.5 w-3.5" /> Download
                   </a>
                 </Button>
                 {saved ? (
@@ -2669,14 +2669,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>{saveError}<ExportFailureNote entry={latestExportError} /></AlertDescription>
-                </Alert>
-              )}
-              {saved && (
-                <Alert>
-                  <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-                  <AlertDescription>
-                    {generation ? "Saved beside the original clip in History. The original is untouched and still downloadable." : "Saved as a finished export in History. Download it here, then publish it yourself."}
-                  </AlertDescription>
                 </Alert>
               )}
               {/* Inherited kit from the save response; regenerate rewrites this export's own copy. */}
