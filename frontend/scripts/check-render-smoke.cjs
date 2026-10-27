@@ -695,7 +695,7 @@ function load(relPath) {
       // every call re-runs the effect forever and the page never settles.
       return {
         __esModule: true,
-        Link: ({ children, to, ...props }) => React.createElement("a", { ...props, href: to }, children),
+        Link: ({ children, to, ...props }) => React.createElement("a", { ...props, href: typeof to === "string" ? to : `${to.pathname || ""}${to.search || ""}${to.hash || ""}` }, children),
         useNavigate: () => (...args) => {
           // Rest params, not `arguments`: arrows do not bind their own, so
           // `arguments` here would leak the requireShim spec string instead
@@ -11207,6 +11207,35 @@ async function runDemoCtaChecks() {
       if (!ctx.container.querySelector('#generation-archived')) throw new Error("stale failure hid current results");
       } finally { global.__SMOKE_ROUTE_CHANGE = null; global.__SMOKE_PARAMS = oldParams; }
     });
+  });
+
+  await check("History repair link reaches the correct filtered section", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "profile=b1&status=completed&copy=with&q=unrelated";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "needs-repair", video_url: null, playback_url: null, r2_url: null },
+          { ...COMPLETED, id: "has-copy", audience: "Night scrollers" },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const link = ctx.container.querySelector('[data-testid="history-attention-review"]');
+        const url = new URL(link.getAttribute('href'), 'http://localhost/history');
+        if (url.hash !== '#generation-needs-repair' || url.searchParams.get('copy') !== 'without' || url.searchParams.has('q') || url.searchParams.get('profile') !== 'b1' || url.searchParams.get('status') !== 'completed') {
+          throw new Error('repair navigation must select the target section and clear obstructing search while preserving server filters');
+        }
+        global.__SMOKE_PARAMS = url.search;
+        global.__SMOKE_HASH = url.hash;
+        await mount(History)(ctx);
+        if (!ctx.container.querySelector('#generation-needs-repair')) throw new Error('repair target remains hidden after navigation');
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_HASH = '';
+    }
   });
 
   await check("History names a failed rows fetch and retries it", async (ctx) => {

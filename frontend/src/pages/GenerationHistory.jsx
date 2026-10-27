@@ -840,6 +840,9 @@ export default function GenerationHistory() {
         const needsRepair = rows.filter(needsHistoryRepairRow);
         if (needsRepair.length === 0) return null;
         const first = needsRepair[0];
+        const repairParams = new URLSearchParams(searchParams);
+        repairParams.set("copy", hasCopyContext(first) ? "with" : "without");
+        repairParams.delete("q");
         const many = needsRepair.length > 1;
         const repair = first.status === "failed"
           ? many
@@ -863,9 +866,9 @@ export default function GenerationHistory() {
                 {repair}
               </span>
               <Button variant="secondary" size="sm" asChild>
-                <a href={`#generation-${first.id}`} data-testid="history-attention-review">
+                <Link to={{ search: `?${repairParams.toString()}`, hash: `#generation-${first.id}` }} data-testid="history-attention-review">
                   Review repair <ChevronRight className="h-3.5 w-3.5" />
-                </a>
+                </Link>
               </Button>
             </AlertDescription>
           </Alert>
