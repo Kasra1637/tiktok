@@ -75,10 +75,10 @@ export default function Features() {
       {/* ---------- Intro ---------- */}
       <section className="relative z-10 mx-auto max-w-6xl px-5 pb-8 pt-20 text-center sm:pt-24" data-testid="features-intro">
         <EyebrowPill className="mb-3">Features</EyebrowPill>
-        <h1 className="font-display mx-auto max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">
+        <h1 className="font-display mx-auto max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
           Everything between the idea and the clip.
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+        <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
           Six highlights, each with what it does and what it looks like. Review
           the message before you turn it into video.
         </p>
@@ -102,7 +102,7 @@ export default function Features() {
             >
               <div className={flip ? "lg:order-2" : ""}>
                 <span className="eyebrow text-[color:var(--brand-indigo)]">{row.eyebrow}</span>
-                <h2 className="font-display mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{row.title}</h2>
+                <h2 className="font-display mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{row.title}</h2>
                 <p className="mt-3 text-base leading-relaxed text-muted-foreground">{row.body}</p>
               </div>
               <div className={flip ? "lg:order-1" : ""}>

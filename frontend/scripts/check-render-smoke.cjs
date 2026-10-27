@@ -7023,12 +7023,40 @@ async function runIconChecks() {
     }
   });
 
+  await check("marketing enforces the display scale", async () => {
+    // Landing, Features, the Marketing chrome they share, and LegalPage use
+    // the same weights (normal/semibold) and body sizes (xs/sm/base) as the
+    // workspace, plus the display ladder 2xl-6xl for editorial headings.
+    // text-lg/xl fold into base and arbitrary text sizes are gone — color
+    // utilities like text-[color:...] are not sizes and are not matched.
+    const marketing = [
+      "pages/Landing.jsx",
+      "pages/Features.jsx",
+      "components/Marketing.jsx",
+      "components/LegalPage.jsx",
+    ].map((f) => path.join(SRC, f));
+    const badMarketing = [];
+    for (const abs of marketing) {
+      const src = fs.readFileSync(abs, "utf8");
+      for (const m of src.matchAll(
+        /\btext-(?:lg|xl)\b|\btext-\[(?:\d|\.)[^\]]*\]|\bfont-(?:light|medium|bold|extrabold)\b/g
+      )) {
+        badMarketing.push(`${path.relative(SRC, abs)}: ${m[0]}`);
+      }
+    }
+    if (badMarketing.length) {
+      throw new Error(
+        `off-scale font size or weight in marketing:\n        ${badMarketing.join("\n        ")}`
+      );
+    }
+  });
+
   await check("workspace enforces 4 sizes x 2 weights", async () => {
     // Workspace pages and shared components use only text-xs (12 labels/meta)
     // / text-sm (14 controls/labels) / text-base (16 body, inputs, titles) /
     // text-3xl (30 page H1 + auth wordmark) and font-normal / font-semibold
     // (Landing, Features, the Marketing chrome they share, and LegalPage
-    // retain their own marketing and document scales).
+    // are covered by the marketing display-scale check above).
     const bad = [];
     function collectSrc(dir, out = []) {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

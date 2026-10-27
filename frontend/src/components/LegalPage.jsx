@@ -17,7 +17,7 @@ export function LegalPage({ title, updated, children }) {
         <div className="mb-8 flex items-center justify-between gap-4">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--hairline)] bg-card/50 px-3 py-2 text-sm font-medium text-muted-foreground backdrop-blur-sm transition-colors hover:border-[color:var(--indigo-35)] hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--hairline)] bg-card/50 px-3 py-2 text-sm font-normal text-muted-foreground backdrop-blur-sm transition-colors hover:border-[color:var(--indigo-35)] hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to home
           </Link>
@@ -25,13 +25,13 @@ export function LegalPage({ title, updated, children }) {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white">
               <Sparkles className="h-3.5 w-3.5" />
             </span>
-            <span className="font-display text-sm font-bold tracking-tight">HookForge</span>
+            <span className="font-display text-sm font-semibold tracking-tight">HookForge</span>
           </Link>
         </div>
 
         <header className="mb-9">
           <span className="eyebrow">Legal</span>
-          <h1 className="font-display mt-1.5 text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
+          <h1 className="font-display mt-1.5 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: {updated}</p>
         </header>
 
@@ -57,8 +57,8 @@ export function LegalPage({ title, updated, children }) {
 export function LegalSection({ number, title, children }) {
   return (
     <section className="scroll-mt-8">
-      <h2 className="font-display flex items-baseline gap-2.5 text-lg font-semibold tracking-tight">
-        <span className="font-mono text-xs font-medium text-[color:var(--brand-indigo)]">
+      <h2 className="font-display flex items-baseline gap-2.5 text-base font-semibold tracking-tight">
+        <span className="font-mono text-xs font-semibold text-[color:var(--brand-indigo)]">
           {String(number).padStart(2, "0")}
         </span>
         {title}
@@ -70,7 +70,7 @@ export function LegalSection({ number, title, children }) {
 
 /** Sub-heading inside a clause. */
 export function LegalSubheading({ children }) {
-  return <h3 className="text-[13px] font-semibold text-foreground">{children}</h3>;
+  return <h3 className="text-xs font-semibold text-foreground">{children}</h3>;
 }
 
 /** Bulleted list with brand-colored markers. */

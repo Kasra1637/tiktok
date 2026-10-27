@@ -18,8 +18,9 @@ import { Button } from "./ui/button";
  * pages pass content (nav links, footer links, CTA variant) as props and
  * keep their own sections. Stateless: props in, markup out.
  *
- * Marketing type scale lives here too (editorial sizes Landing established),
- * so the workspace 3-size check exempts this file alongside the pages.
+ * Marketing shares the app weights (normal/semibold) and xs/sm/base, plus
+ * the display ladder 2xl-6xl for editorial headings — pinned by the
+ * marketing display-scale smoke check, not an exemption.
  */
 
 /**
@@ -56,7 +57,7 @@ export function MarketingHeader({ navLabel, links }) {
             <Sparkles className="h-[18px] w-[18px]" />
             <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/25 to-transparent" />
           </span>
-          <span className="font-display text-lg font-bold tracking-tight">HookForge</span>
+          <span className="font-display text-base font-semibold tracking-tight">HookForge</span>
         </Link>
 
         <nav aria-label={navLabel} className="ml-auto hidden items-center gap-1 lg:flex">
@@ -65,7 +66,7 @@ export function MarketingHeader({ navLabel, links }) {
               <Link
                 key={l.to + l.label}
                 to={l.to}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                className="rounded-lg px-3 py-2 text-sm font-normal text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
               >
                 {l.label}
               </Link>
@@ -73,7 +74,7 @@ export function MarketingHeader({ navLabel, links }) {
               <a
                 key={l.href}
                 href={l.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                className="rounded-lg px-3 py-2 text-sm font-normal text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
               >
                 {l.label}
               </a>
@@ -112,7 +113,7 @@ export function FinalCta({ testId, secondary = false }) {
             <EyebrowPill strong>
               <Zap className="h-3 w-3" /> Ready when you are
             </EyebrowPill>
-            <h2 className="font-display mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="font-display mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
               Make your next app story.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
@@ -174,7 +175,7 @@ export function MarketingFooter({ productLinks, tagline = true }) {
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] text-white">
                 <Sparkles className="h-4 w-4" />
               </span>
-              <span className="font-display text-base font-bold tracking-tight">HookForge</span>
+              <span className="font-display text-base font-semibold tracking-tight">HookForge</span>
             </div>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
               App stories grounded in your product. Generate a Hook + Story, style your

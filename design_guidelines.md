@@ -93,7 +93,7 @@ headline treatments.
 Display text carries tight tracking (`-0.02em`, `-0.03em` on `h1`/`.font-display`).
 
 Video overlay faces are canvas paint, not page type: they live outside the
-3-size workspace scale above. Ten options (Anton default + nine
+workspace type scale above. Ten options (Anton default + nine
 high-legibility text faces), each vendored as latin woff2 with an `@font-face`
 rule — a face the browser must fetch is a face the export can lose. Motion is
 one of ten named entrances computed from video time only, so the recording
@@ -106,11 +106,11 @@ safe area. See ADR 0007.
 mobile-heavy and `--muted-foreground` is already a mid-contrast gray; below 12px
 it stops clearing WCAG AA.
 
-The workspace shell uses **4 font sizes** and **2 font weights** only (marketing `Landing` and `LegalPage` retain their own editorial scales):
+The workspace shell uses **4 font sizes** and **2 font weights** only. The marketing pages (`Landing`, `Features`, the shared `Marketing` chrome, `LegalPage`) share the same 2 weights and the same `xs`/`sm`/`base` body sizes, plus the display ladder `text-2xl`–`text-6xl` for editorial headings:
 
-- **4 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints, wizard subtitles), `text-sm` (14px — buttons, form labels, uppercase kickers like `.section-heading`, picker rows, dense data tables, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components.
+- **4 sizes:** `text-xs` (12px — `.eyebrow`, badges, chips, metadata, hints, wizard subtitles), `text-sm` (14px — buttons, form labels, uppercase kickers like `.section-heading`, picker rows, dense data tables, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components. Marketing pages follow the same rule — `text-base` is the largest body size everywhere — with `text-2xl`/`3xl`/`4xl`/`5xl`/`6xl` reserved for editorial headings (pinned by the marketing display-scale smoke check).
 - Inputs sit at 16px because iOS Safari auto-zooms on focus below 16px; the `h-8` filter pills are the one exception and hold at 14px semibold so the chip stays compact.
-- **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) in workspace pages or components.
+- **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) anywhere — Space Grotesk semibold with tight tracking carries display headings without a heavier cut.
 - **Ampersands in headings & labels:** Workspace headings, titles, labels, and button copy use `&` instead of `and` (e.g., `Visual & audio direction`, `Choose a template & add your photo`, `What you have & what is left`).
 - `.eyebrow` — uppercase tracked-out label, `0.75rem`/600. Don't override its size.
 - **Do not stack an opacity modifier on small muted text.** `text-muted-foreground/70`

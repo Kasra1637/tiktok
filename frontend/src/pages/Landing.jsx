@@ -211,8 +211,8 @@ function SectionHeading({ eyebrow, title, lede, id }) {
   return (
     <div className="mx-auto mb-12 max-w-2xl scroll-mt-24 text-center" id={id}>
       {eyebrow && <EyebrowPill className="mb-3">{eyebrow}</EyebrowPill>}
-      <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{title}</h2>
-      {lede && <p className="mt-3.5 text-base leading-relaxed text-muted-foreground sm:text-lg">{lede}</p>}
+      <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h2>
+      {lede && <p className="mt-3.5 text-base leading-relaxed text-muted-foreground">{lede}</p>}
     </div>
   );
 }
@@ -234,7 +234,7 @@ export default function Landing() {
         <div className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-20 text-center sm:pt-28 lg:grid lg:grid-cols-[1.02fr_1fr] lg:items-center lg:gap-14 lg:text-left">
         <div className="min-w-0">
           <h1
-            className="animate-fade-up font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.5rem]"
+            className="animate-fade-up font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
             style={{ animationDelay: "60ms" }}
           >
             <span className="text-shine">Give your app a story</span>
@@ -243,7 +243,7 @@ export default function Landing() {
           </h1>
 
           <p
-            className="animate-fade-up mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
+            className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
             Turn your app’s features into an editable script and an AI-generated Hook + Story
@@ -369,8 +369,8 @@ export default function Landing() {
                 key={s.step}
                 className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
               >
-                <div className="relative mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-bold text-white shadow-[var(--glow-indigo)]">
-                  <span className="font-display text-lg">{s.step}</span>
+                <div className="relative mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-semibold text-white shadow-[var(--glow-indigo)]">
+                  <span className="font-display text-base">{s.step}</span>
                   <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
                 </div>
                 <h3 className="font-display text-base font-semibold">{s.label}</h3>
@@ -491,7 +491,7 @@ export default function Landing() {
                     >
                       {block.kicker}
                     </span>
-                    <h3 className="font-display mt-1 text-base font-semibold sm:text-lg">{block.title}</h3>
+                    <h3 className="font-display mt-1 text-base font-semibold">{block.title}</h3>
                     <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground sm:text-base">
                       {block.body}
                     </p>
@@ -502,7 +502,7 @@ export default function Landing() {
           })}
 
           <div className="surface rounded-2xl" data-testid="landing-questions">
-            <h3 className="font-display text-lg font-semibold">A few things worth knowing</h3>
+            <h3 className="font-display text-base font-semibold">A few things worth knowing</h3>
             <div className="mt-5 divide-y divide-border/60">
               {QUESTIONS.map((q) => (
                 <details key={q.question} className="py-4">
