@@ -3143,7 +3143,6 @@ setObjective("");
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
-        description="Pick app, angle, goal & template; review before rendering."
       />
       {/* Progress that tracks state rather than position.
           The tick used to mean "this step is to the left of the one you are on",

@@ -30,7 +30,7 @@ export function VideoUpscaler() {
       <PageHeader
         icon={WandSparkles}
         title="Video Upscaler"
-        description="Bring a sub-4K clip up to 4K: sharper edges, true-to-original colour, same audio."
+        description="Your clip's audio stays with its 4K export."
       />
 
       {error && (

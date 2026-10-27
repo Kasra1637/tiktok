@@ -740,7 +740,6 @@ export default function GenerationHistory() {
         data-testid="history-header"
         icon={HistoryIcon}
         title="Generation History"
-        description="Review every render and export, and download your clips."
       />
       <div className="history-filters space-y-2" aria-label="History filters">
         <div className="flex flex-wrap items-center gap-2">

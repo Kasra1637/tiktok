@@ -143,7 +143,7 @@ export default function Analytics() {
       <PageHeader
         icon={TrendingUp}
         title="Analytics"
-        description="Compare posted clips, recorded views & your own ratings."
+        description="Compare manually recorded views and your own ratings."
         data-testid="analytics-header"
         actions={
           profiles?.length > 0 ? (
