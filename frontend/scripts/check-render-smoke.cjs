@@ -12583,10 +12583,11 @@ await check(
     });
   });
 
-  // The record reads denser than the clip it belongs to: post copy and plan
-  // context start collapsed behind named disclosures, and open on demand.
+  // The record stacks post copy above plan context in one column: post copy
+  // starts expanded, plan context starts collapsed, and opening one closes
+  // the other.
   await check(
-    "History tucks post copy and plan context behind disclosures",
+    "History stacks post copy above plan context with one open at a time",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -12608,8 +12609,8 @@ await check(
           if (!copy || copy.tagName !== "DETAILS") {
             throw new Error("post copy is not behind a disclosure");
           }
-          if (copy.open) {
-            throw new Error("post copy starts expanded");
+          if (!copy.open) {
+            throw new Error("post copy does not start expanded");
           }
           if (!/Post copy/.test(copy.querySelector("summary")?.textContent || "")) {
             throw new Error("the post-copy disclosure does not name its contents");
@@ -12619,19 +12620,29 @@ await check(
             throw new Error("plan context is not behind a disclosure");
           }
           if (context.open) {
-            throw new Error("plan context starts expanded");
+            throw new Error("plan context starts expanded alongside post copy");
           }
           if (!/Plan context/.test(context.querySelector("summary")?.textContent || "")) {
             throw new Error("the plan-context disclosure does not name its contents");
           }
-          await clickEl(ctx, copy.querySelector("summary"), "open the post-copy disclosure");
-          if (!copy.open) {
-            throw new Error("the post-copy disclosure did not open");
-          }
           assertFrozenKit(copy.querySelector('[data-testid="post-kit"]'), "disclosed History");
+          // The panels stack in one column, post copy first.
+          if (!(copy.compareDocumentPosition(context) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+            throw new Error("post copy is not stacked above plan context");
+          }
           await clickEl(ctx, context.querySelector("summary"), "open the plan-context disclosure");
           if (!context.open || !context.textContent.includes("Film the dock.")) {
             throw new Error("the plan-context disclosure hides the demo brief");
+          }
+          if (copy.open) {
+            throw new Error("opening plan context left post copy expanded");
+          }
+          await clickEl(ctx, copy.querySelector("summary"), "open the post-copy disclosure");
+          if (!copy.open) {
+            throw new Error("the post-copy disclosure did not reopen");
+          }
+          if (context.open) {
+            throw new Error("reopening post copy left plan context expanded");
           }
         }
       );
