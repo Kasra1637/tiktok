@@ -9,6 +9,7 @@ import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { GroupLabel, SectionHeading } from "../components/SectionCard";
+import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -995,6 +996,14 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
     }
     return { step, state };
   });
+}
+
+/* One owner per half of the Script fit details disclosure. */
+function hasSpokenCounts(project) {
+  return Boolean(project?.spoken_check);
+}
+function hasSpokenPartition(project) {
+  return Boolean(project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle);
 }
 
 export default function CreateVideo() {
@@ -2787,8 +2796,18 @@ setObjective("");
                 (spoken_check), measured on the saved plan — which is the plan a
                 render validates — rather than a second arithmetic in the
                 browser that could disagree with what the render does. */}
-            {project?.spoken_check && (
-              <div className="inset-panel space-y-4" data-testid="spoken-counts">
+            {(hasSpokenCounts(project) || hasSpokenPartition(project)) && (
+              <Disclosure
+                testId="script-fit-details"
+                detailsClassName="inset-panel space-y-4"
+                summaryClassName="flex cursor-pointer flex-wrap items-center gap-2"
+                summary={<GroupLabel icon={Ruler}>Script fit details</GroupLabel>}
+              >
+                <p className="text-xs text-muted-foreground">
+                  Character counts and what the middle speaks. If Generate is disabled over words that do not fit, the reason is in here.
+                </p>
+              {hasSpokenCounts(project) && (
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-counts">
                 <GroupLabel icon={Ruler}>How the two lines measure up</GroupLabel>
                 {[
                   { key: "hook", label: "Hook line" },
@@ -2818,8 +2837,8 @@ setObjective("");
                 </p>
               </div>
             )}
-            {project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle && (
-              <div className="inset-panel space-y-4" data-testid="spoken-partition">
+            {hasSpokenPartition(project) && (
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-partition">
                 <GroupLabel icon={FileText}>What the middle will say</GroupLabel>
                 <p className="text-base">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
@@ -2840,6 +2859,8 @@ setObjective("");
                   </p>
                 )}
               </div>
+            )}
+              </Disclosure>
             )}
             {/* `cta` and `feature_emphasis` used to sit here as two editable
                 fields. Neither is writable any more and neither is returned, so

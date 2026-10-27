@@ -34,6 +34,7 @@ import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
 import { Chip } from "../components/Chip";
+import { Disclosure } from "../components/Disclosure";
 import { recordSignal } from "../lib/feedback";
 import {
   ANIMATIONS,
@@ -1586,11 +1587,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {viewMode === "hand" && (
             <EnvGrid value={envBg} onChange={setEnvBg} prefix="" />
           )}
+          {/* Floating-only: Real Video must show no background control. */}
           {viewMode === "floating" && (
-            <>
-              <BackgroundPicker value={bg} onChange={setBg} prefix="" />
-              <AnimationPicker value={anim} onChange={setAnim} prefix="" />
-            </>
+            <Disclosure
+              testId="source-style-details"
+              summary={<>Backdrop &amp; motion · <span className="text-foreground">{(BACKGROUNDS.find((b) => b.id === bg) || {}).label} · {(ANIMATIONS.find((a) => a.id === anim) || {}).label}</span></>}
+            >
+              <div className="space-y-2 pb-2 pt-1">
+                <BackgroundPicker value={bg} onChange={setBg} prefix="" />
+                <AnimationPicker value={anim} onChange={setAnim} prefix="" />
+              </div>
+            </Disclosure>
           )}
           {/* Fine-tuning discloses inside Source & Look rather than standing
               as its own group: phone size, hand framing, mockup height,
@@ -1861,7 +1868,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {/* Shared text treatment for hook, story and end card: one picker
               here, one state, all three painters. Scoped replay resets to
               the hook so the change is visible without scrubbing. */}
-          <div className="space-y-2">
+          <Disclosure testId="hook-style-disclosure" summary="Text style & accent">
+            <div className="space-y-2 pb-2 pt-1">
             <GroupLabel>Text style</GroupLabel>
             <div className="grid grid-cols-3 gap-2" role="group" aria-label="Text style">
               {TEXT_STYLES.map((s) => (
@@ -1882,6 +1890,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <p className="text-xs text-muted-foreground">Hook, story &amp; end card share this style.</p>
           </div>
           <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("hook"); }} />
+          </Disclosure>
           <AnimDisclosure
             testId="caption-anim-disclosure"
             open={openDisclosure === "caption-animation"}

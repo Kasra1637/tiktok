@@ -18,6 +18,7 @@ import PageHeader from "../components/PageHeader";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
+import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
@@ -594,19 +595,27 @@ export default function BrandSetup() {
                 data-testid="play-url-input"
               />
             </div>
-            <Input
-              value={supportUrls}
-              onChange={(e) => setSupportUrls(e.target.value)}
-              placeholder="Supporting URLs, comma-separated (optional)"
-              data-testid="support-urls-input"
-            />
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Founder notes: positioning, pricing, constraints (optional)"
-              className="min-h-[60px]"
-              data-testid="app-notes-input"
-            />
+            <Disclosure
+              summary="More context (optional)"
+              detailsClassName="group rounded-lg border border-[color:var(--hairline)] px-3 py-2"
+              summaryClassName="flex cursor-pointer items-center justify-between gap-2 text-sm text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden"
+            >
+              <div className="flex min-w-0 flex-col gap-2 pt-2">
+                <Input
+                  value={supportUrls}
+                  onChange={(e) => setSupportUrls(e.target.value)}
+                  placeholder="Supporting URLs, comma-separated (optional)"
+                  data-testid="support-urls-input"
+                />
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Founder notes: positioning, pricing, constraints (optional)"
+                  className="min-h-[60px]"
+                  data-testid="app-notes-input"
+                />
+              </div>
+            </Disclosure>
             {/* One row of short actions, not a sentence per action.
 
                 Research is the submit while no machine draft exists: it is the
