@@ -9200,6 +9200,8 @@ async function runDemoCtaChecks() {
         const lock = async () => click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "+ Lock"));
         const value = () => mode === "hand" ? paintedZoom.hZoom : paintedZoom.phoneScale;
         if (mode === "hand") await click(ctx.container.querySelector('[data-testid="view-mode-hand"]'));
+        // Fine-tuning discloses: the lock flow opens it before touching a slider.
+        await click(ctx.container.querySelector('[data-testid="fine-tune-framing"] summary'));
         await seek(0);
         await lock();
         const baseline = value();
@@ -10251,6 +10253,29 @@ async function runDemoCtaChecks() {
     }
   });
 
+  // The five groups stay, but the fast path does not wade through twelve
+  // framing sliders: fine-tuning lives inside one collapsed disclosure in
+  // Source & Look, so shoot → trim → text → export reads clean and the
+  // framing is one click away instead of a wall.
+  await check("fine-tuning hides behind Fine-tune framing until opened", async () => {
+    const src = fs.readFileSync(
+      path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
+      "utf8"
+    );
+    const tag = src.match(/<details[^>]*data-testid="fine-tune-framing"[^>]*>/);
+    if (!tag) {
+      throw new Error("no Fine-tune framing disclosure in Source & Look");
+    }
+    if (/\bopen\b/.test(tag[0])) {
+      throw new Error("the disclosure opens by default — the fast path stays buried");
+    }
+    const at = src.indexOf('data-testid="fine-tune-framing"');
+    const beforeSecond = src.indexOf('testId="demo-cta-second"');
+    if (at === -1 || beforeSecond === -1 || at > beforeSecond) {
+      throw new Error("the disclosure is not inside Source & Look (before the Second clip group)");
+    }
+  });
+
   await check(
     "the empty frame offers a real upload control",
     async (ctx) => {
@@ -10742,6 +10767,8 @@ async function runDemoCtaChecks() {
         await clickEl(ctx, mode, "select Real Video view");
         if (mode.getAttribute("aria-pressed") !== "true") throw new Error("Real Video did not take the view selection");
         // Phone-only controls leave with the phone: no scene, background or size.
+        // The disclosure opens first so the absence is real, not a closed drawer.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="fine-tune-framing"] summary'), "open fine-tune framing");
         if (ctx.container.querySelector('[data-testid="background-lavender"]')) throw new Error("background picker leaked into Real Video");
         if (ctx.container.querySelector('[data-testid="phone-size-slider"]')) throw new Error("phone size leaked into Real Video");
         if (ctx.container.querySelector('[data-testid="hand-zoom-slider"]')) throw new Error("hand controls leaked into Real Video");

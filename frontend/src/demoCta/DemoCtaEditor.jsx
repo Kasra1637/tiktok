@@ -1589,8 +1589,21 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
             <>
               <BackgroundPicker value={bg} onChange={setBg} prefix="" />
               <AnimationPicker value={anim} onChange={setAnim} prefix="" />
-              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
             </>
+          )}
+          {/* Fine-tuning discloses inside Source & Look rather than standing
+              as its own group: phone size, hand framing, mockup height,
+              screen position and crop all modify the look chosen above, and
+              the default path — shoot, trim, text, export — should not wade
+              through twelve sliders to reach the Second clip group. */}
+          <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="fine-tune-framing">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <span>Fine-tune framing</span>
+              <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+            </summary>
+            <div className="space-y-2 pb-2 pt-1">
+          {viewMode === "floating" && (
+              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           )}
           {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
@@ -1604,10 +1617,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               </ResetButton>
             </div>
           )}
-          {/* Fine-tuning lives at the bottom of Source & Look rather than in
-              its own Advanced group: mockup height, screen position and crop
-              all modify the look chosen above, and one group per concern
-              beats an extra stop for set-once sliders. */}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <SubLabel>Mockup height</SubLabel>
             <div className="flex items-center gap-2">
@@ -1680,6 +1689,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offY: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
             </div>
           )}
+            </div>
+          </details>
         </EditorSection>
 
         {/* The appended clip lives in its own group so Source & Look stays
