@@ -58,7 +58,7 @@ export function PendingSaveCard({ entry, onResolved }) {
     <Alert data-testid={`pending-save-${entry.id}`}>
       <AlertTriangle className="h-4 w-4" />
       <AlertDescription className="flex flex-col gap-2">
-        <span className="font-medium text-foreground">
+        <span className="font-semibold text-foreground">
           {entry.filename || "demo-cta.mp4"} couldn&apos;t be saved — the file is kept.
         </span>
         {entry.message ? <span className="text-muted-foreground">{entry.message}</span> : null}

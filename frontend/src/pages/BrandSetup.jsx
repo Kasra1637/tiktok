@@ -518,7 +518,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Approve this once — Create Video and Demo + CTA render from it."
+        description="Approve once — Create Video and Demo + CTA render from it."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (
