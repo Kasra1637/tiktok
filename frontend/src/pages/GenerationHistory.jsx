@@ -107,6 +107,13 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   // rendering. Distinct from `error`: this is a successful check that found the
   // render unfinished, not a failed action, so it must not read as one.
   const [strandedNote, setStrandedNote] = useState(null);
+  // Post copy and Plan context share one open slot: opening one closes the
+  // other, so the two panels never stack open and push the row long.
+  const [openPanel, setOpenPanel] = useState(null);
+  const togglePanel = (name) => (e) => {
+    e.preventDefault();
+    setOpenPanel((current) => (current === name ? null : name));
+  };
 
   const detailId = `generation-detail-${row.id}`;
 
@@ -342,10 +349,11 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
                   {row.post_kit && (
                     <details
+                      open={openPanel === "post"}
                       className={`group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30 ${row.audience || row.demo_brief ? "sm:open:col-span-2" : "sm:col-span-2"}`}
                       data-testid={`history-post-copy-${row.id}`}
                     >
-                      <summary className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <summary onClick={togglePanel("post")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Post copy</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
@@ -358,10 +366,11 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
 
                   {(row.audience || row.demo_brief) && (
                     <details
+                      open={openPanel === "context"}
                       className={`group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30 ${row.post_kit ? "sm:open:col-span-2" : "sm:col-span-2"}`}
                       data-testid="history-context"
                     >
-                      <summary className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <summary onClick={togglePanel("context")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <Target aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Plan context</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
