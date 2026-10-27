@@ -133,3 +133,9 @@ credentials.json
 # secretKeyRef entries those are plain values with no reference to protect them.
 # The committed template shape (service.yaml.template) documents the structure.
 service.yaml
+
+# Agent and scaffolding scratch (never commit)
+.commandcode/
+untitled-project/
+# Binary proof artifacts stay local; the .md/.log verdicts are the record
+test_reports/*.mp4
