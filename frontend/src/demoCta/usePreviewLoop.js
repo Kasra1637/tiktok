@@ -9,7 +9,7 @@ import {
   clipWindow,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, drawStoryOverlay } from "./overlays";
-import { transitionAt, easeInOut, hash01 } from "./transitions";
+import { transitionAt, transitionWindow, easeInOut, hash01 } from "./transitions";
 import { drawHandView } from "./handView";
 import { fitVideoToScreen } from "./fit";
 import { getEffectiveZoom } from "./zoom";
@@ -198,6 +198,36 @@ export function usePreviewLoop(settings) {
     setCurrentTime(start);
     video.play().then(() => setIsPlaying(true)).catch(() => {});
   }, [baseDuration, baseStart, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
+
+  // A transition pick replays the join, like a font pick replays its
+  // overlay window: park just before the cut and play through it, so the
+  // founder sees the motion land instead of a parked frame. Free transport
+  // (no scoped window) so the base end hands off to the added clip and the
+  // playhead runs past the cut instead of parking on it.
+  const startTransitionPreview = useCallback(() => {
+    if (isExportingRef.current) return;
+    if (!sequenceRef.current?.enabled) return;
+    const base = videoRef.current;
+    const added = appendVideoRef?.current;
+    const { baseDuration: dur, appendDuration: addDur, baseStart: bStart } = sequenceRef.current;
+    if (!base || !(dur > 0) || !(addDur > 0)) return;
+    const span = transitionWindow(dur, addDur, transition);
+    if (!span) return;
+    cancelScopedReplay();
+    added?.pause();
+    activeVideoRef.current = base;
+    base.loop = false;
+    const lead = Math.min(0.8, dur, span / 2 + 0.6);
+    const at = Math.max(0, dur - lead);
+    try {
+      base.currentTime = bStart + at;
+    } catch {
+      // A seekable clip always accepts this; a transient failure leaves the
+      // playhead where it is and normal transport still crosses the cut.
+    }
+    setCurrentTime(at);
+    base.play().then(() => setIsPlaying(true)).catch(() => {});
+  }, [transition, appendVideoRef, cancelScopedReplay]);
 
   // Continuous sliders fire dozens of changes per drag; restarting the
   // window on every tick would yank the playhead under the founder's hand.
@@ -999,7 +1029,7 @@ export function usePreviewLoop(settings) {
     previewMuted, setPreviewMuted, togglePreviewMuted,
     currentTime, setCurrentTime,
     isSeeking, setIsSeeking,
-    startScopedPreview, ensureScopedPreview,
+    startScopedPreview, ensureScopedPreview, startTransitionPreview,
     togglePlayPause, handleSeek,
     cancelScopedReplay, dirtyRef,
     showZoomValues, zoomValuesAt,

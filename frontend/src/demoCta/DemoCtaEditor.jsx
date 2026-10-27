@@ -850,7 +850,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     previewMuted, setPreviewMuted, togglePreviewMuted,
     currentTime, setCurrentTime,
     isSeeking, setIsSeeking,
-    startScopedPreview, ensureScopedPreview,
+    startScopedPreview, ensureScopedPreview, startTransitionPreview,
     togglePlayPause, handleSeek,
     cancelScopedReplay, dirtyRef,
     showZoomValues, zoomValuesAt,
@@ -1743,7 +1743,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           {appendMeta && (
             <TransitionPicker
               value={transition}
-              onChange={(id) => { invalidateSequence(); setTransition(id); }}
+              onChange={(id) => { invalidateSequence(); setTransition(id); startTransitionPreview(); }}
             />
           )}
           {appendMeta && appendMode === "hand" && (
