@@ -1,38 +1,9 @@
 import {
-  ALL_FORMATS, AudioSampleSink, AudioSampleSource, BlobSource, BufferTarget,
+  ALL_FORMATS, AudioSampleSource, BlobSource, BufferTarget,
   CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo,
 } from "mediabunny";
-
-export const UPSCALE = Object.freeze({
-  // Short side grows to 1080; the long side never passes 1920. A sub-1080p
-  // portrait phone clip (720x1280) therefore lands on 1080x1920, a 480p
-  // landscape clip on 1920x1080, and a square clip on 1080x1080.
-  targetMinSide: 1080,
-  maxSide: 1920,
-  fps: 30,
-  videoBitrate: 12_000_000,
-  audioBitrate: 192_000,
-  // Browser-side AVC encode of a very long clip ties up the tab for many
-  // minutes, so overlong files are refused loudly instead of stalling.
-  maxDurationSeconds: 300,
-});
-
-// Pure function of the source dimensions, so the sizing rule is unit
-// testable without decoding anything. Returns null when the source is not
-// eligible: already HD, or dimensions that are not usable numbers.
-export function upscaleTarget(width, height) {
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
-  const minSide = Math.min(width, height);
-  if (minSide >= UPSCALE.targetMinSide) return null;
-  const maxSide = Math.max(width, height);
-  const factor = Math.min(UPSCALE.targetMinSide / minSide, UPSCALE.maxSide / maxSide);
-  // AVC needs even dimensions; rounding can only shrink the long side cap,
-  // never grow past it by more than a pixel pair, so re-clamp after rounding.
-  const even = (n) => Math.max(2, Math.round(n / 2) * 2);
-  const scaled = { width: even(width * factor), height: even(height * factor) };
-  if (Math.max(scaled.width, scaled.height) > UPSCALE.maxSide + 2) return null;
-  return scaled;
-}
+import { UPSCALE, upscaleTarget } from "./sizing";
+import { passthroughSegmentAudio } from "./audio";
 
 const ENHANCE_FILTER = "contrast(1.07) saturate(1.15) brightness(1.01)";
 
@@ -144,20 +115,10 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
     };
     const encodeAudio = async () => {
       if (!audioSource) return;
-      for await (const sample of new AudioSampleSink(audioTrack).samples(first, first + duration)) {
-        try {
-          throwCancelled(signal);
-          const start = Math.max(0, Math.round((first - sample.timestamp) * sample.sampleRate));
-          const end = Math.min(sample.numberOfFrames, Math.round((first + duration - sample.timestamp) * sample.sampleRate));
-          if (end <= start) continue;
-          const trimmed = sample.trim(start, end);
-          try {
-            trimmed.setTimestamp(trimmed.timestamp - first);
-            await audioSource.add(trimmed);
-          } finally { trimmed.close(); }
-        } finally { sample.close(); }
-      }
-      audioSource.close();
+      await passthroughSegmentAudio({
+        audioTrack, audioSource, origin: first, duration,
+        checkCancelled: () => throwCancelled(signal),
+      });
     };
     const jobs = [encodeVideo(), encodeAudio()];
     try {
@@ -182,28 +143,4 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
       if (output && !finalized && !failed) await output.cancel();
     } finally { input.dispose(); }
   }
-}
-
-/**
- * Read dimensions and duration without decoding: a metadata-only probe, so
- * an ineligible file is refused before any heavy work starts.
- */
-export function probeVideo(blob) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.muted = true;
-    const done = (fn) => () => {
-      URL.revokeObjectURL(url);
-      fn();
-    };
-    video.onloadedmetadata = done(() => resolve({
-      width: video.videoWidth,
-      height: video.videoHeight,
-      duration: video.duration,
-    }));
-    video.onerror = done(() => reject(new Error("This file could not be read as a video. Upload a playable MP4 or WebM video.")));
-    video.src = url;
-  });
 }

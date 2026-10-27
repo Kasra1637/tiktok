@@ -3,6 +3,7 @@ import {
   CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo,
 } from "mediabunny";
 import { clipWindow } from "./constants";
+import { passthroughSegmentAudio } from "../upscale/audio";
 
 export const TIKTOK_EXPORT = Object.freeze({
   width: 1080, height: 1920, fps: 30, videoBitrate: 8_000_000, audioBitrate: 192_000,
@@ -138,19 +139,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       } else {
         const { audioTrack, origin, duration, muted } = segments[0];
         if (muted) { audioSource.close(); return; }
-        for await (const sample of new AudioSampleSink(audioTrack).samples(origin, origin + duration)) {
-          try {
-            checkCancelled();
-            const start = Math.max(0, Math.round((origin - sample.timestamp) * sample.sampleRate));
-            const end = Math.min(sample.numberOfFrames, Math.round((origin + duration - sample.timestamp) * sample.sampleRate));
-            if (end <= start) continue;
-            const trimmed = sample.trim(start, end);
-            try {
-              trimmed.setTimestamp(trimmed.timestamp - origin);
-              await audioSource.add(trimmed);
-            } finally { trimmed.close(); }
-          } finally { sample.close(); }
-        }
+        await passthroughSegmentAudio({ audioTrack, audioSource, origin, duration, checkCancelled });
       }
       audioSource.close();
     };

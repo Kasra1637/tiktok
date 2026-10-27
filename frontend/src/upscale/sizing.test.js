@@ -1,4 +1,4 @@
-import { UPSCALE, upscaleTarget } from "./enhanceVideo";
+import { UPSCALE, upscaleTarget } from "./sizing";
 
 describe("upscaleTarget", () => {
   test("a 720p portrait phone clip lands on 1080x1920", () => {
@@ -26,7 +26,7 @@ describe("upscaleTarget", () => {
 
   test("a tiny clip stays capped at the long-side ceiling", () => {
     const target = upscaleTarget(160, 120);
-    expect(Math.max(target.width, target.height)).toBeLessThanOrEqual(UPSCALE.maxSide + 2);
+    expect(Math.max(target.width, target.height)).toBeLessThanOrEqual(UPSCALE.maxSide + 1);
     expect(target.width % 2).toBe(0);
     expect(target.height % 2).toBe(0);
   });

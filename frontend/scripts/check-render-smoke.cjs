@@ -12745,11 +12745,21 @@ await check(
   );
 
   await check("export reads source audio samples independently of preview mute", async () => {
+    // The single-segment copy lives in the shared helper, not inline: what is
+    // pinned is that the export resolves its audio through that helper (never
+    // through preview playback), and that the helper itself reads source
+    // samples directly. Both files must stay off preview-playback APIs, so a
+    // muted preview can never produce a silent export from either pipeline.
     const src = fs.readFileSync(path.join(SRC, "demoCta", "exportTikTok.js"), "utf8");
-    for (const marker of ["new AudioSampleSink(audioTrack)", "sample.trim(start, end)", "trimmed.setTimestamp", "audioSource.add(trimmed)", "audio will not be silently removed"]) {
-      if (!src.includes(marker)) throw new Error(`missing direct-audio guarantee: ${marker}`);
+    const helper = fs.readFileSync(path.join(SRC, "upscale", "audio.js"), "utf8");
+    if (!src.includes('from "../upscale/audio"')) throw new Error("the export no longer resolves audio through the shared single-segment helper");
+    for (const marker of ["new AudioSampleSink(audioTrack)", "sample.trim(start, end)", "trimmed.setTimestamp", "audioSource.add(trimmed)"]) {
+      if (!helper.includes(marker)) throw new Error(`missing direct-audio guarantee in the shared helper: ${marker}`);
     }
-    if (/createMediaElementSource|captureStream|createGain/.test(src)) throw new Error("export audio depends on preview playback again");
+    if (!src.includes("audio will not be silently removed")) throw new Error("missing direct-audio guarantee: audio will not be silently removed");
+    for (const [name, text] of [["export", src], ["shared audio helper", helper]]) {
+      if (/createMediaElementSource|captureStream|createGain/.test(text)) throw new Error(`${name} audio depends on preview playback again`);
+    }
   });
 await check(
     "both phone renderers share one fit, and neither paints a black void",
