@@ -467,9 +467,9 @@ return (
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
             {/* Brand hierarchy: status badge, primary edit, research dropdown, delete */}
             {approved ? (
-              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-semibold text-green-300 transition-none">Approved</Badge>
+              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-semibold text-green-300 transition-none">Ready for video</Badge>
             ) : (
-              <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — needs review</Badge>
+              <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — blocked for video</Badge>
             )}
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>

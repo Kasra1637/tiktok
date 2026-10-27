@@ -75,7 +75,7 @@ export const TOURS = {
         target: '[data-testid="app-research-card"]',
         title: "Research, then trust but verify",
         body:
-          "Drop in your App Store or Google Play URL — support pages help. Hit Research app and a draft comes back below. It is a draft: check it against your real product before you approve anything.",
+          "Drop in your App Store or Google Play URL — support pages help. Hit Research app for video and a draft comes back below. It is a draft: check it against your real product, then approve it for video.",
       },
       {
         target: '[data-testid="brand-manual-card"]',

@@ -518,7 +518,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Research a mobile app from its store listing, then approve."
+        description="Approve this once — Create Video and Demo + CTA render from it."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (
@@ -541,9 +541,9 @@ export default function BrandSetup() {
             {brand?.id ? (
               <Badge variant={status === "approved" ? "indigo" : "secondary"} className="px-3 py-1">
                 {status === "approved" ? (
-                  <><BadgeCheck className="h-3 w-3" /> Approved{brand.version > 1 ? ` · v${brand.version}` : ""}</>
+                  <><BadgeCheck className="h-3 w-3" /> Ready for video{brand.version > 1 ? ` · v${brand.version}` : ""}</>
                 ) : (
-                  <><AlertTriangle className="h-3 w-3" /> Draft — needs review</>
+                  <><AlertTriangle className="h-3 w-3" /> Draft — blocked for video</>
                 )}
               </Badge>
             ) : null}
@@ -642,7 +642,7 @@ export default function BrandSetup() {
                   data-testid="research-app-button"
                 >
                   {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {researching ? "Researching..." : "Research app"}
+                  {researching ? "Researching..." : "Research app for video"}
                 </Button>
               )}
               {researchedProfile && (
@@ -668,7 +668,7 @@ export default function BrandSetup() {
                   data-testid="approve-profile-button"
                 >
                   {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                  {approving ? "Approving..." : "Approve profile"}
+                  {approving ? "Approving..." : "Approve for video"}
                 </Button>
               )}
               {/* Refresh from sources is offered only on an approved profile: a
