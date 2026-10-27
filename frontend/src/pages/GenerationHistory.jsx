@@ -101,12 +101,12 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   const linkAwaiting = deepLinked && !row.tiktok_url;
   const [secondaryOpen, setSecondaryOpen] = useState(linkAwaiting);
   useEffect(() => {
-    if (compact && linkAwaiting) setSecondaryOpen(true);
-  }, [compact, linkAwaiting]);
+    if (linkAwaiting) setSecondaryOpen(true);
+  }, [linkAwaiting]);
   useEffect(() => {
-    if (!linkAwaiting || (compact && !secondaryOpen)) return;
+    if (!linkAwaiting || !secondaryOpen) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
-  }, [compact, linkAwaiting, row.id, secondaryOpen]);
+  }, [linkAwaiting, row.id, secondaryOpen]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -471,10 +471,10 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 <p className="text-xs text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
-              {compact && (retryRenderButton || recheckButton || retryStorageButton) && (
+              {(retryRenderButton || recheckButton || retryStorageButton) && (
                 <div className="flex flex-wrap gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
               )}
-              {compact && (
+              {(
                 <button
                   type="button"
                   className="history-compact-toggle w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-sm font-semibold hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -485,7 +485,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   Results &amp; actions <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${secondaryOpen ? "rotate-180" : ""}`} />
                 </button>
               )}
-              <div id={`${detailId}-secondary`} className={compact ? "history-compact-secondary space-y-5" : "space-y-5"} data-expanded={compact ? secondaryOpen : undefined}>
+              <div id={`${detailId}-secondary`} className="history-compact-secondary space-y-5" data-expanded={secondaryOpen}>
               <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
 
               <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
@@ -508,7 +508,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       </Link>
                     </Button>
                   )}
-                  {!compact && retryRenderButton}
                   {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
                     <Button
                       variant="secondary"
@@ -532,8 +531,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   Reopens this render's plan in Create Video — change one thing or regenerate as-is.
                 </p>
 
-                {!compact && recheckButton}
-                {!compact && retryStorageButton}
               </div>
               </div>
             </div>
@@ -549,6 +546,7 @@ export default function GenerationHistory() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   // Failed exports that created no server row: the save path files them in
   // the outbox, and they render here as repair cards above the list — so a
   // 413 never reads as a silently missing clip.
@@ -743,33 +741,38 @@ export default function GenerationHistory() {
         icon={HistoryIcon}
         title="Generation History"
         description="Review every render and export, and download your clips."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
+      />
+      <div className="history-filters space-y-2" aria-label="History filters">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="history-search">Search by hook text</label>
+          <input
+            id="history-search"
+            type="search"
+            value={query}
+            onChange={(e) => setFilter("q", e.target.value)}
+            placeholder="Search hooks…"
+            aria-label="Search by hook text"
+            data-testid="history-search"
+            className={PILL_SELECT_CLASS}
+          />
+          <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
+          <select id="history-copy-filter" value={copyFilter} onChange={(e) => setFilter("copy", e.target.value)}
+            aria-label="Filter by post copy and plan context" data-testid="history-copy-filter" className={PILL_SELECT_CLASS}>
+            <option value="with">With post copy & context</option>
+            <option value="without">Without post copy & context</option>
+          </select>
+          <button type="button" className="history-more-filters pill-studio h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
+            aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
+            More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+        <div id="history-secondary-filters" className="history-secondary-filters flex-wrap items-center gap-2" data-expanded={moreFiltersOpen}>
             <AppPicker
               profiles={profiles}
               value={profileFilter}
               onChange={(value) => setFilter("profile", value)}
               allLabel="All apps"
               ariaLabel="Filter by app"
-            />
-            {profilesError && (
-              <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
-                {profilesError}{" "}
-                <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">
-                  Try again
-                </button>
-              </span>
-            )}
-            <label className="sr-only" htmlFor="history-search">Search by hook text</label>
-            <input
-              id="history-search"
-              type="search"
-              value={query}
-              onChange={(e) => setFilter("q", e.target.value)}
-              placeholder="Search hooks…"
-              aria-label="Search by hook text"
-              data-testid="history-search"
-              className={PILL_SELECT_CLASS}
             />
             <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
             <select
@@ -785,19 +788,6 @@ export default function GenerationHistory() {
               ))}
             </select>
             <label className="sr-only" htmlFor="history-sort">Sort history</label>
-            <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
-            <select
-              id="history-copy-filter"
-              value={copyFilter}
-              onChange={(e) => setFilter("copy", e.target.value)}
-              aria-label="Filter by post copy and plan context"
-              data-testid="history-copy-filter"
-              className={PILL_SELECT_CLASS}
-            >
-              <option value="with">With post copy & context</option>
-              <option value="without">Without post copy & context</option>
-            </select>
-            <label className="sr-only" htmlFor="history-sort">Sort history</label>
             <select
               id="history-sort"
               value={sort}
@@ -809,9 +799,14 @@ export default function GenerationHistory() {
               <option value="newest">Newest first</option>
               <option value="views">Most viewed</option>
             </select>
-          </div>
-        }
-      />
+        </div>
+        {profilesError && (
+          <span role="alert" className="flex items-center gap-1 text-xs text-destructive">
+            {profilesError}{" "}
+            <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">Try again</button>
+          </span>
+        )}
+      </div>
 
       {error && (
         <Alert variant="destructive">

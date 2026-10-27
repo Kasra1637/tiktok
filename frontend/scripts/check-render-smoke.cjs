@@ -12917,6 +12917,53 @@ await check(
     }
   });
 
+  await check("History keeps additional mobile filters accessible", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "?status=failed";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const toggle = ctx.container.querySelector('.history-more-filters');
+        const filters = ctx.container.querySelector('#history-secondary-filters');
+        if (!toggle || toggle.getAttribute('aria-expanded') !== 'false' || !toggle.textContent.includes('(active)') || filters?.dataset.expanded !== 'false') {
+          throw new Error('mobile filters must start collapsed and indicate active filters');
+        }
+        await clickEl(ctx, toggle);
+        if (toggle.getAttribute('aria-expanded') !== 'true' || filters.dataset.expanded !== 'true' || !filters.querySelector('#history-status-filter')) {
+          throw new Error('mobile filters must open to expose the current status filter');
+        }
+      });
+    } finally { global.__SMOKE_PARAMS = previousParams; }
+  });
+
+  await check("History keeps with-copy mobile results behind a disclosure", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "?copy=with";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "mobile-copy", post_kit: { caption: "A caption", hashtags: ["#tag"] }, audience: "Everyone" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const card = ctx.container.querySelector('#generation-mobile-copy');
+        const toggle = card.querySelector('button[aria-controls][aria-expanded="false"]');
+        const post = card.querySelector('[data-testid="history-post-copy-mobile-copy"]');
+        if (!toggle || !toggle.textContent.includes('Results & actions') || !post?.open || post.closest('.history-compact-secondary')) {
+          throw new Error('post copy must stay open outside the mobile results disclosure');
+        }
+        const content = card.querySelector(`#${toggle.getAttribute('aria-controls')}`);
+        if (!content?.querySelector('[data-testid="history-feedback-mobile-copy"]') || content.dataset.expanded !== 'false') throw new Error('secondary results must start collapsed on mobile');
+        await clickEl(ctx, toggle);
+        if (toggle.getAttribute('aria-expanded') !== 'true' || content.dataset.expanded !== 'true') throw new Error('secondary results do not expand');
+      });
+    } finally { global.__SMOKE_PARAMS = previousParams; }
+  });
+
   await check("History shows no post copy for a render without a kit", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi({

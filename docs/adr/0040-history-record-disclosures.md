@@ -1,6 +1,6 @@
 # 0040 — History record tucks post copy and plan context behind disclosures
 
-- **Status:** accepted
+- **Status:** partially superseded by 0052 (mobile results disclosure)
 - **Date:** 2026-10-26
 - **Partially supersedes:** 0039 (attached cards, no expand step)
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (`history-post-copy-*` and `history-context` disclosures); smoke check "History tucks post copy and plan context behind disclosures"

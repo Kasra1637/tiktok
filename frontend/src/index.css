@@ -680,6 +680,26 @@ h1,
     -webkit-user-select: none;
 }
 
+/* Keep the main search and copy filter visible on phones; the remaining
+ * filters stay available in a disclosure and are always visible on desktop. */
+.history-more-filters {
+    display: inline-block;
+}
+.history-secondary-filters {
+    display: none;
+}
+.history-secondary-filters[data-expanded="true"] {
+    display: flex;
+}
+@media (min-width: 768px) {
+    .history-more-filters {
+        display: none;
+    }
+    .history-secondary-filters {
+        display: flex;
+    }
+}
+
 /* History rows: one attached card per render — clip left, record right.
  *
  * No expand step: the video, identity, facts, votes and actions are all
