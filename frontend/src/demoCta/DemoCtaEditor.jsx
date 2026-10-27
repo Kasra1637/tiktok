@@ -827,6 +827,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   const [appendOverlays, setAppendOverlays] = useState(false);
   // The joint transition: hard cut until the founder picks a trend. Read by
   // the shared painter, so preview and export can never disagree about it.
+  // The pick is kept even under reduced motion (when strobes park as cuts),
+  // so the motion returns if the setting changes.
   const [transition, setTransition] = useState(DEFAULTS.transition);
   // Per-clip audio: each segment mutes independently in preview and
   // export. Export keeps the segment's video length and writes silence
@@ -862,7 +864,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
-    transition,
+    transition, reduceMotion,
     baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
@@ -1744,6 +1746,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               value={transition}
               onChange={(id) => { invalidateSequence(); setTransition(id); startTransitionPreview(); }}
             />
+          )}
+          {appendMeta && reduceMotion && (
+            <p className="text-xs text-muted-foreground" data-testid="transition-reduced-motion">
+              Reduced motion is on — transitions play as cuts in preview and export.
+            </p>
           )}
           {appendMeta && appendMode === "hand" && (
             <EnvGrid value={appendEnv} onChange={setAppendEnv} prefix="append-" />
