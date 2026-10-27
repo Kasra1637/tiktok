@@ -368,10 +368,9 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
  * directly), so nothing is lost by rendering them inline and truncating.
  */
 function UsageHistory({ uses }) {
+  // No zero-state line: the absence of a "Used in" line already says unused.
   if (!uses.length) {
-    return (
-      <p className="mt-0.5 text-xs text-muted-foreground">Not used in any video yet</p>
-    );
+    return null;
   }
   const names = uses.map((u) => u.name).filter(Boolean);
   return (
@@ -818,28 +817,6 @@ export default function AssetLibrary({
         />
       )}
 
-      {/* Rights. A full Alert box for one sentence made the section read as a
-          warning before it read as a photo control.
-
-          The line now leads with what the photo is FOR rather than with the
-          confirmation machinery behind it. "Upload the person you want on
-          camera" is the answer to the question the founder actually has at
-          this point in the step, and it is the one thing the upload cannot be
-          used without. The compliance half stays, and it stays first — it is
-          still a statement about what is allowed, not decoration. What was
-          dropped is the storage detail: the per-upload confirmation and the
-          per-App-Profile scoping are real and still enforced, but they read as
-          a receipt rather than as an instruction, so they now live where the
-          enforcement is visible instead: the "Rights unconfirmed" badge on an
-          unconfirmed row, and the refusal to attach one to a project. */}
-      <p
-        className="flex items-center gap-2 text-xs text-muted-foreground"
-        data-testid="asset-rights-alert"
-      >
-        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-        Upload only an image you have the right to use.
-      </p>
-
       {error && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
@@ -879,6 +856,14 @@ export default function AssetLibrary({
             {attachedAsset ? "Upload a different photo" : "Upload"}
           </Button>
         </div>
+        {/* Rights sit with the upload action; enforcement stays visible on the rows. */}
+        <p
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          data-testid="asset-rights-alert"
+        >
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
+          Upload only an image you have the right to use.
+        </p>
         <input
           ref={fileRef}
           type="file"
@@ -955,23 +940,25 @@ export default function AssetLibrary({
           </div>
         )}
 
-        {!embedded && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--hairline)] pt-4">
-            <span className="text-xs text-muted-foreground">
-              {assets.length} asset{assets.length === 1 ? "" : "s"}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIncludeArchived((v) => !v)}
-              aria-pressed={includeArchived}
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-              {includeArchived ? "Hide archived" : "Show archived"}
-            </Button>
-          </div>
-        )}
       </SectionCard>
+
+      {/* The count heads the list it counts, not the upload card. */}
+      {!embedded && !loading && !error && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground" role="status">
+            {assets.length} asset{assets.length === 1 ? "" : "s"}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIncludeArchived((v) => !v)}
+            aria-pressed={includeArchived}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            {includeArchived ? "Hide archived" : "Show archived"}
+          </Button>
+        </div>
+      )}
 
       <div data-testid="asset-list">
       {loading ? (
