@@ -455,13 +455,10 @@ return (
       <div data-testid="app-profile-header">
       <PageHeader
         icon={Briefcase}
-        /* The section, not the app. Every other masthead in the app names its
-           page — Asset Library, Demo + CTA, Generation History — and the app
-           name was the one place a page title carried the user's data instead.
-           It also read twice on screen: the back link above already says
-           "App Profile". The name still appears where it is actionable, in
-           the delete confirmation the founder has to type it. */
-        title="App Profile"
+        /* The app, not the section: the back link already says "App Profile".
+           The name also stays where it is actionable, in the delete
+           confirmation the founder has to type it. */
+        title={profile?.brand_name?.trim() || "App Profile"}
         description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
