@@ -174,6 +174,27 @@ client.interceptors.response.use(
   }
 );
 
+// Cloud Run answers any single HTTP/1 request over 32 MiB with a 413 before
+// the app runs, and a 30s+ TikTok export at 8 Mbps clears that line. Past
+// this size the save goes up in parts: every request stays far under the
+// ceiling and the server joins them, so a long export saves like a short one.
+export const DEMO_CTA_PART_BYTES = 8 * 1024 * 1024;
+const DEMO_CTA_SAVE_TIMEOUT = 300000;
+
+function newDemoCtaUploadId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export const api = {
   // Brand profile / Content Remixer
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
@@ -323,13 +344,36 @@ export const api = {
   // `generationId` is optional. With one, the export is filed beside that render
   // and inherits its lineage; without one it is saved as a standalone clip, which
   // is the bring-your-own-footage path through the editor.
-  saveDemoCtaExport: (generationId, blob, filename = "demo-cta.mp4") => {
-    const form = new FormData();
-    form.append("file", blob, filename);
+  //
+  // Past 8 MB the file goes up in 8 MB parts with a final complete call,
+  // because no single request may trip the host's 32 MB ceiling. Small
+  // exports keep the exact single-request path they always had.
+  saveDemoCtaExport: async (generationId, blob, filename = "demo-cta.mp4") => {
     const path = generationId
       ? `/generations/${generationId}/demo-cta-result`
       : "/demo-cta-result";
-    return client.post(path, form).then((r) => r.data);
+    if (blob.size <= DEMO_CTA_PART_BYTES) {
+      const form = new FormData();
+      form.append("file", blob, filename);
+      return client.post(path, form).then((r) => r.data);
+    }
+    const uploadId = newDemoCtaUploadId();
+    const total = Math.ceil(blob.size / DEMO_CTA_PART_BYTES);
+    for (let index = 0; index < total; index++) {
+      const start = index * DEMO_CTA_PART_BYTES;
+      const part = new FormData();
+      part.append("index", String(index));
+      part.append("total", String(total));
+      part.append("chunk", blob.slice(start, start + DEMO_CTA_PART_BYTES, "video/mp4"), `part-${index}.bin`);
+      await client.post(`/demo-cta-uploads/${uploadId}/parts`, part, { timeout: DEMO_CTA_SAVE_TIMEOUT });
+    }
+    return client
+      .post(
+        `/demo-cta-uploads/${uploadId}/complete`,
+        { generation_id: generationId || null, filename, total },
+        { timeout: DEMO_CTA_SAVE_TIMEOUT }
+      )
+      .then((r) => r.data);
   },
 
   // History

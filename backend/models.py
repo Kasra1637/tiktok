@@ -481,3 +481,15 @@ class FeedbackRequest(BaseModel):
     studio_project_id: Optional[str] = ""
     generation_id: Optional[str] = ""
     template_id: Optional[str] = ""
+
+
+class DemoCtaUploadCompleteRequest(BaseModel):
+    """Finish a chunked Demo + CTA save: join the staged parts."
+
+    The browser slices files past 8 MB so no single request trips the
+    host's 32 MB ceiling. `total` must match the count every part
+    declared, or the join is refused rather than guessed.
+    """
+    generation_id: Optional[str] = None
+    filename: str = "demo-cta.mp4"
+    total: int

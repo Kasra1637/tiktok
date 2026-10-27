@@ -55,6 +55,7 @@ from models import (
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     FeedbackRequest, TikTokLinkRequest, TikTokViewsRequest,
     GenerateStrategyRequest, OpeningMessagesRequest,
+    DemoCtaUploadCompleteRequest,
     APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
@@ -6169,35 +6170,87 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
 # gate.
 
 
-@api_router.post("/generations/{generation_id}/demo-cta-result", status_code=201)
-@api_router.post("/demo-cta-result", status_code=201)
-@observability.track_demo_cta_export
-async def save_demo_cta_export(
-    file: UploadFile = File(...),
-    generation_id: str | None = None,
-    user_id: str = Depends(get_current_user_id),
+# ---------------------------------------------------------------------------
+# Chunked save: one request per part, none of them near the host ceiling
+# ---------------------------------------------------------------------------
+#
+# Cloud Run answers any single HTTP/1 request over 32 MiB with a 413 before
+# the app runs, and a 30s+ TikTok export at 8 Mbps clears that line. Past
+# 8 MB the browser therefore sends the file in parts: every part stays far
+# under the ceiling, the server joins them, and the joined file takes the
+# exact same store path as a single-shot save.
+
+DEMO_CTA_PART_MAX_BYTES = 8 * 1024 * 1024  # 8 MB
+DEMO_CTA_TOTAL_MAX_BYTES = 200 * 1024 * 1024  # 200 MB ceiling, same as the asset library
+DEMO_CTA_MAX_PARTS = 64
+DEMO_CTA_PART_TTL_SECONDS = 24 * 3600  # abandoned part dirs are swept after a day
+
+
+def _demo_cta_upload_dir(upload_id: str) -> Path:
+    """Stage dir for one chunked save, resolved from a strict UUID."""
+    # GENERATED_ID_RE is the repo's one UUID rule; anything else here is a
+    # path traversal attempt, not an upload.
+    if not GENERATED_ID_RE.match(upload_id or ""):
+        raise HTTPException(
+            status_code=400,
+            detail="That upload id is not valid. Start the save again for a fresh one.",
+        )
+    return pipeline.UPLOADS_DIR / "demo-cta-parts" / upload_id
+
+
+def _demo_cta_claim_upload(upload_dir: Path, user_id: str) -> None:
+    """First part stamps the owner; every later part and the complete call must match."""
+    owner_file = upload_dir / "owner"
+    try:
+        owner = owner_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        owner = ""
+    if not owner:
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        owner_file.write_text(user_id, encoding="utf-8")
+        return
+    if owner != user_id:
+        # 404, not 403: the id is unguessable, so a mismatch means a wrong
+        # id rather than a forbidden one, and there is nothing to disclose.
+        raise HTTPException(status_code=404, detail="That upload was not found.")
+
+
+def _sweep_stale_demo_cta_parts() -> None:
+    """Best-effort removal of part dirs older than a day."""
+    # A closed tab mid-upload strands its parts; without a sweep they
+    # accumulate forever on the host.
+    base = pipeline.UPLOADS_DIR / "demo-cta-parts"
+    try:
+        children = list(base.iterdir())
+    except OSError:
+        return
+    cutoff = time.time() - DEMO_CTA_PART_TTL_SECONDS
+    for child in children:
+        try:
+            if child.is_dir() and child.stat().st_mtime < cutoff:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            continue
+
+
+async def _store_demo_cta_result(
+    *,
+    target: Path,
+    filename: str,
+    generation_id: str | None,
+    user_id: str,
     background_tasks: BackgroundTasks = None,
-):
+) -> dict:
     """
-    Save the native Product Demo + CTA export into History.
+    File one finished export into History, from bytes already on disk.
 
-    Two mounts on one handler, not two endpoints. The generation-scoped path
-    takes the finished Hook + Story as its parent, so the export appears beside
-    the original rather than replacing it — both downloads keep working and the
-    lineage is recorded. The bare path is the same save with no parent, for
-    someone who brought their own footage in through the editor rather than
-    generating a hook first.
-
-    Everything else is deliberately inherited from the parent rather than
-    invented: template, script version, model and strategy come from the render
-    this wrapped. Without one there is nothing to inherit, so those stay null —
-    the row is a real finished clip with no ancestry, which History already
-    displays without needing a parent.
-
-    Still storage, not generation: no model call, nothing upstream, and none of
-    the three spend gates. Those guard a paid render, and this is a file the
-    founder already made.
+    Both save paths end here: the single-shot endpoint after writing the
+    posted file, the chunked complete call after joining the parts. The row,
+    the probe, the R2 copy and the signed playback URL are therefore one
+    implementation, and a chunked save is indistinguishable on read from one
+    that arrived whole.
     """
+    result_id = target.stem
     parent = None
     if generation_id:
         parent = await _fetch_one(
@@ -6209,18 +6262,10 @@ async def save_demo_cta_export(
         if not parent:
             raise HTTPException(status_code=404, detail="Generation not found")
 
-    if not (file.filename or "").lower().endswith((".mp4", ".mov", ".webm")):
+    if not (filename or "").lower().endswith((".mp4", ".mov", ".webm")):
         raise HTTPException(
             status_code=400, detail="Send a video file (MP4, MOV or WebM)."
         )
-
-    result_id = str(uuid.uuid4())
-    pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-    target = pipeline.VIDEOS_DIR / f"{result_id}.mp4"
-    payload = await file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="That file was empty.")
-    target.write_bytes(payload)
 
     # Measured rather than accepted from the caller. This is the record of what
     # was actually stored, and a client-supplied number would let a wrong length
@@ -6302,6 +6347,187 @@ async def save_demo_cta_export(
         "r2_url": r2_url,
         "post_kit": _parse_post_kit(parent.get("post_kit") if parent else None),
     }
+
+
+@api_router.post("/generations/{generation_id}/demo-cta-result", status_code=201)
+@api_router.post("/demo-cta-result", status_code=201)
+@observability.track_demo_cta_export
+async def save_demo_cta_export(
+    file: UploadFile = File(...),
+    generation_id: str | None = None,
+    user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
+):
+    """
+    Save the native Product Demo + CTA export into History.
+
+    Two mounts on one handler, not two endpoints. The generation-scoped path
+    takes the finished Hook + Story as its parent, so the export appears beside
+    the original rather than replacing it — both downloads keep working and the
+    lineage is recorded. The bare path is the same save with no parent, for
+    someone who brought their own footage in through the editor rather than
+    generating a hook first.
+
+    Everything else is deliberately inherited from the parent rather than
+    invented: template, script version, model and strategy come from the render
+    this wrapped. Without one there is nothing to inherit, so those stay null —
+    the row is a real finished clip with no ancestry, which History already
+    displays without needing a parent.
+
+    Still storage, not generation: no model call, nothing upstream, and none of
+    the three spend gates. Those guard a paid render, and this is a file the
+    founder already made.
+    """
+    # Checked again inside _store_demo_cta_result; here it refuses before
+    # the bytes are read.
+    if not (file.filename or "").lower().endswith((".mp4", ".mov", ".webm")):
+        raise HTTPException(
+            status_code=400, detail="Send a video file (MP4, MOV or WebM)."
+        )
+
+    result_id = str(uuid.uuid4())
+    pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+    target = pipeline.VIDEOS_DIR / f"{result_id}.mp4"
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="That file was empty.")
+    target.write_bytes(payload)
+    return await _store_demo_cta_result(
+        target=target,
+        filename=file.filename or "",
+        generation_id=generation_id,
+        user_id=user_id,
+        background_tasks=background_tasks,
+    )
+
+
+@api_router.post("/demo-cta-uploads/{upload_id}/parts", status_code=201)
+async def save_demo_cta_part(
+    upload_id: str,
+    index: int = Form(...),
+    total: int = Form(...),
+    chunk: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Stage one part of a chunked export save.
+
+    The browser slices files past 8 MB so no single request trips the
+    host's 32 MB ceiling; parts arrive in any order and the complete call
+    joins them. Every refusal here names its remedy, because a part that
+    cannot stage must tell the uploader what to re-send.
+    """
+    upload_dir = _demo_cta_upload_dir(upload_id)
+    if not 1 <= total <= DEMO_CTA_MAX_PARTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Declare between 1 and {DEMO_CTA_MAX_PARTS} parts; got {total}.",
+        )
+    if not 0 <= index < total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Part {index} is outside the declared 0..{total - 1} range.",
+        )
+    if total * DEMO_CTA_PART_MAX_BYTES > DEMO_CTA_TOTAL_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="Those parts would join past the 200 MB save ceiling. Export a shorter clip.",
+        )
+    _demo_cta_claim_upload(upload_dir, user_id)
+    total_file = upload_dir / "total"
+    try:
+        declared = int(total_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        declared = None
+    if declared is None:
+        total_file.write_text(str(total), encoding="utf-8")
+    elif declared != total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This upload already declared {declared} parts, not {total}. Start the save again.",
+        )
+    # Streamed, not read whole: a hostile part must not be able to park
+    # arbitrary bytes in this process RAM on a 512 MB host.
+    data = bytearray()
+    while True:
+        piece = await chunk.read(1024 * 1024)
+        if not piece:
+            break
+        data += piece
+        if len(data) > DEMO_CTA_PART_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Part {index} is over 8 MB; keep every part under 8 MB so no single request trips the "
+                    "host's 32 MB ceiling."
+                ),
+            )
+    (upload_dir / f"{index:06d}.part").write_bytes(bytes(data))
+    _sweep_stale_demo_cta_parts()
+    return {"upload_id": upload_id, "index": index, "total": total, "bytes": len(data)}
+
+
+@api_router.post("/demo-cta-uploads/{upload_id}/complete", status_code=201)
+@observability.track_demo_cta_export
+async def complete_demo_cta_upload(
+    upload_id: str,
+    payload: DemoCtaUploadCompleteRequest,
+    user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
+):
+    """
+    Join a chunked upload's staged parts and file the export into History.
+
+    The join is verified before anything is stored: every declared part
+    must be present, in order, under the total ceiling. The joined file
+    then takes the exact same store path as a single-shot save.
+    """
+    upload_dir = _demo_cta_upload_dir(upload_id)
+    if not upload_dir.is_dir():
+        raise HTTPException(status_code=404, detail="That upload was not found.")
+    _demo_cta_claim_upload(upload_dir, user_id)
+    try:
+        declared = int((upload_dir / "total").read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        declared = None
+    if declared != payload.total:
+        raise HTTPException(
+            status_code=400,
+            detail="The part count changed mid-save. Send every part again under one count.",
+        )
+    missing = [i for i in range(payload.total) if not (upload_dir / f"{i:06d}.part").is_file()]
+    if missing:
+        shown = ", ".join(str(i) for i in missing[:5])
+        more = "" if len(missing) <= 5 else f" and {len(missing) - 5} more"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Part {shown}{more} of {payload.total} never arrived. Re-send the missing parts, then complete again.",
+        )
+    size = sum((upload_dir / f"{i:06d}.part").stat().st_size for i in range(payload.total))
+    if size > DEMO_CTA_TOTAL_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="The joined file is over 200 MB; saves are capped at 200 MB. Export a shorter clip.",
+        )
+    if size == 0:
+        raise HTTPException(status_code=400, detail="No video arrived in those parts.")
+    result_id = str(uuid.uuid4())
+    pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+    target = pipeline.VIDEOS_DIR / f"{result_id}.mp4"
+    with target.open("wb") as out:
+        for i in range(payload.total):
+            with (upload_dir / f"{i:06d}.part").open("rb") as part:
+                shutil.copyfileobj(part, out, length=1024 * 1024)
+    row = await _store_demo_cta_result(
+        target=target,
+        filename=payload.filename,
+        generation_id=payload.generation_id,
+        user_id=user_id,
+        background_tasks=background_tasks,
+    )
+    shutil.rmtree(upload_dir, ignore_errors=True)
+    _sweep_stale_demo_cta_parts()
+    return row
 
 
 def _safety_report_for(project: dict, profile: dict) -> dict:

@@ -46,8 +46,10 @@ def api():
     # into it on every export.
     server.pipeline.VIDEOS_DIR = Path(tmpdir) / "videos"
     server.pipeline.GENERATED_DIR = Path(tmpdir) / "generated"
+    server.pipeline.UPLOADS_DIR = Path(tmpdir) / "uploads"
     server.pipeline.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     server.pipeline.GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    server.pipeline.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
     asyncio.run(server.init_db())
     try:
@@ -393,3 +395,114 @@ class TestExistingFlowUntouched:
         download = _run(api.get_generation(gen_id, user_id=ANON))["video_url"]
         assert download.startswith("/api/media/videos/")
         assert "?" in download
+
+
+class TestChunkedUploadSave:
+    """
+    A finished export can clear the host's per-request ceiling: past 8 MB the
+    browser sends the file in parts and the server joins them, so a 30s+
+    TikTok export no longer dies with the 413 the host answers itself. The
+    single-shot endpoint is untouched -- small saves keep the exact current
+    path -- so every assertion here is about the parts protocol: order-free
+    assembly, refusal of gaps and oversize chunks, and ownership of the
+    staged bytes.
+    """
+
+    def _send_parts(self, api, upload_id, chunks, total=None, user_id=ANON):
+        total = len(chunks) if total is None else total
+        for index, data in enumerate(chunks):
+            _run(api.save_demo_cta_part(
+                upload_id=upload_id, index=index, total=total,
+                chunk=_upload(name=f"part-{index}.bin", data=data),
+                user_id=user_id))
+
+    def _complete(self, api, upload_id, filename="hookforge-demo-cta.mp4", total=3,
+                  generation_id=None, user_id=ANON):
+        from models import DemoCtaUploadCompleteRequest
+        return _run(api.complete_demo_cta_upload(
+            upload_id=upload_id,
+            payload=DemoCtaUploadCompleteRequest(
+                generation_id=generation_id, filename=filename, total=total),
+            user_id=user_id))
+
+    def _row_count(self, api):
+        return _run(api._fetch_one("SELECT COUNT(*) AS n FROM generations"))["n"]
+
+    def test_parts_assemble_in_order_even_when_sent_out_of_order(self, api):
+        upload_id = str(uuid.uuid4())
+        chunks = [b"A" * 100, b"B" * 100, b"C" * 100]
+        # Arrival order 2, 0, 1 must still join as 0, 1, 2.
+        for index in (2, 0, 1):
+            _run(api.save_demo_cta_part(
+                upload_id=upload_id, index=index, total=3,
+                chunk=_upload(name=f"part-{index}.bin", data=chunks[index]),
+                user_id=ANON))
+        result = self._complete(api, upload_id)
+        assert result["status"] == "completed"
+        stored = api.pipeline.VIDEOS_DIR / f"{result['id']}.mp4"
+        assert stored.read_bytes() == b"".join(chunks)
+
+    def test_a_parented_chunked_save_files_beside_its_render(self, api):
+        _, project, gen_id = _completed_generation(api)
+        upload_id = str(uuid.uuid4())
+        self._send_parts(api, upload_id, [b"x" * 10, b"y" * 10], total=2)
+        result = self._complete(api, upload_id, total=2, generation_id=gen_id)
+        row = _run(api._fetch_one(
+            "SELECT studio_project_id FROM generations WHERE id = ?",
+            (result["id"],)))
+        assert row["studio_project_id"] == project["id"]
+
+    def test_complete_rejects_a_missing_part_and_stores_nothing(self, api):
+        before = self._row_count(api)
+        upload_id = str(uuid.uuid4())
+        self._send_parts(api, upload_id, [b"A" * 10, b"C" * 10], total=3)
+        # Only parts 0 and 1 arrived; part 2 never did.
+        with pytest.raises(HTTPException) as err:
+            self._complete(api, upload_id)
+        assert err.value.status_code == 409
+        assert "2" in err.value.detail
+        assert self._row_count(api) == before
+
+    def test_a_part_bigger_than_the_ceiling_is_refused(self, api):
+        upload_id = str(uuid.uuid4())
+        with pytest.raises(HTTPException) as err:
+            _run(api.save_demo_cta_part(
+                upload_id=upload_id, index=0, total=1,
+                chunk=_upload(name="huge.bin",
+                              data=b"z" * (api.DEMO_CTA_PART_MAX_BYTES + 1)),
+                user_id=ANON))
+        assert err.value.status_code == 413
+
+    def test_a_non_uuid_upload_id_is_refused(self, api):
+        with pytest.raises(HTTPException) as err:
+            _run(api.save_demo_cta_part(
+                upload_id="../evil", index=0, total=1,
+                chunk=_upload(name="part-0.bin", data=b"x"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+
+    def test_parts_belong_to_the_uploader(self, api):
+        upload_id = str(uuid.uuid4())
+        self._send_parts(api, upload_id, [b"A" * 10, b"B" * 10], total=2,
+                         user_id=ANON)
+        with pytest.raises(HTTPException) as err:
+            _run(api.save_demo_cta_part(
+                upload_id=upload_id, index=0, total=2,
+                chunk=_upload(name="part-0.bin", data=b"H"),
+                user_id=OTHER))
+        assert err.value.status_code == 404
+        with pytest.raises(HTTPException) as err:
+            self._complete(api, upload_id, total=2, user_id=OTHER)
+        assert err.value.status_code == 404
+
+    def test_complete_rejects_an_unknown_upload(self, api):
+        with pytest.raises(HTTPException) as err:
+            self._complete(api, str(uuid.uuid4()))
+        assert err.value.status_code == 404
+
+    def test_complete_cleans_up_its_staged_parts(self, api):
+        upload_id = str(uuid.uuid4())
+        self._send_parts(api, upload_id, [b"A" * 10, b"B" * 10, b"C" * 10])
+        self._complete(api, upload_id)
+        staged = api.pipeline.UPLOADS_DIR / "demo-cta-parts" / upload_id
+        assert not staged.exists()
