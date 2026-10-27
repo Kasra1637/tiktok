@@ -20,7 +20,7 @@ function throwCancelled(signal) {
 }
 
 /**
- * Enhance one sub-1080p clip: upscale to the 1080p target, then MP4.
+ * Enhance one sub-4K clip: upscale to the 4K target, then MP4.
  *
  * Decoding is per-frame through CanvasSink and every frame is painted with
  * high-quality smoothing plus a light contrast/saturation lift before it
@@ -33,7 +33,7 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
   const target = upscaleTarget(sourceWidth, sourceHeight);
   if (!target) {
     throw new Error(
-      "This video is already 1080p or higher on its shorter side, so there is nothing to upscale. Pick a clip under 1080p."
+      "This video is already 4K on its shorter side, so there is nothing to upscale. Pick a clip under 4K."
     );
   }
   if (!(duration > 0) || !Number.isFinite(duration)) {
@@ -45,7 +45,7 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
     );
   }
   const { fps, videoBitrate, audioBitrate } = UPSCALE;
-  const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
+  const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640033", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
   if (!await canEncodeVideo("avc", { ...videoConfig, width: target.width, height: target.height, frameRate: fps })) {
     throw new Error("MP4 encoding is unavailable in this browser. Open this page in a current Chrome or Edge browser.");
@@ -141,5 +141,63 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
     try {
       if (output && !finalized && !failed) await output.cancel();
     } finally { input.dispose(); }
+  }
+}
+
+/**
+ * Enhance one sub-4K picture: upscale to the 4K target with the same
+ * contrast/saturation lift plus clarity pass the video frames get, then PNG.
+ *
+ * Same geometry rule as video (no pixel moves, no denoise wax), same sizing
+ * rule via upscaleTarget — so a portrait pic lands on 2160x3840 and a
+ * landscape pic on 3840x2160, matching the video equivalents.
+ */
+export async function enhanceImage({ blob, canvas, sourceWidth, sourceHeight, signal }) {
+  throwCancelled(signal);
+  const target = upscaleTarget(sourceWidth, sourceHeight);
+  if (!target) {
+    throw new Error(
+      "This picture is already 4K on its shorter side, so there is nothing to upscale. Pick a picture under 4K."
+    );
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("This file could not be read as a picture. Upload a playable PNG or JPEG picture."));
+      el.src = url;
+    });
+    throwCancelled(signal);
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    const scratch = document.createElement("canvas");
+    scratch.width = target.width;
+    scratch.height = target.height;
+    const scratchCtx = scratch.getContext("2d");
+    scratchCtx.imageSmoothingEnabled = true;
+    scratchCtx.imageSmoothingQuality = "high";
+    scratchCtx.filter = ENHANCE_FILTER;
+    scratchCtx.drawImage(img, 0, 0, target.width, target.height);
+    ctx.drawImage(scratch, 0, 0);
+    ctx.save();
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = CLARITY_ALPHA;
+    ctx.filter = `blur(${CLARITY_BLUR_PX}px)`;
+    ctx.drawImage(scratch, 0, 0);
+    ctx.restore();
+    throwCancelled(signal);
+    const out = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("This picture could not be encoded. Try another picture."))),
+        "image/png"
+      );
+    });
+    return { blob: out, width: target.width, height: target.height };
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }

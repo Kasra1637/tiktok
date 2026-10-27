@@ -1,16 +1,16 @@
 /**
  * Upscaler sizing rules: pure functions of dimensions, no DOM, no codecs.
  *
- * Short side grows to 1080; the long side never passes 1920. A sub-1080p
- * portrait phone clip (720x1280) therefore lands on 1080x1920, a 480p
- * landscape clip on 1920x1080, and a square clip on 1080x1080.
+ * Short side grows to 2160; the long side never passes 3840. A sub-4K
+ * portrait phone clip (540x960) therefore lands on 2160x3840, a 540p
+ * landscape clip on 3840x2160, and a square clip on 2160x2160.
  */
 
 export const UPSCALE = Object.freeze({
-  targetMinSide: 1080,
-  maxSide: 1920,
+  targetMinSide: 2160,
+  maxSide: 3840,
   fps: 30,
-  videoBitrate: 12_000_000,
+  videoBitrate: 32_000_000,
   audioBitrate: 192_000,
   // Browser-side AVC encode of a very long clip ties up the tab for many
   // minutes, so overlong files are refused loudly instead of stalling.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { enhanceVideo } from "./enhanceVideo";
+import { enhanceImage, enhanceVideo } from "./enhanceVideo";
 import { formatDims, upscaleTarget } from "./sizing";
 
 /**
@@ -54,34 +54,42 @@ export function useUpscaler() {
   const handleFile = useCallback(async (file) => {
     if (!file) return;
     resetSelection();
-    if (!file.type.startsWith("video/")) {
-      fail("That file is not a video. Choose an MP4 or WebM clip.");
+    if (file.size === 0) {
+      fail("That file is empty. Choose a playable video or picture file.");
       return;
     }
-    if (file.size === 0) {
-      fail("That file is empty. Choose a playable video file.");
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isVideo) {
+      fail("That file is not a video or picture. Choose an MP4, WebM, PNG or JPEG file.");
       return;
     }
     setFileName(file.name);
     setStatus("probing");
     try {
-      const meta = await probeVideo(file);
+      const meta = isImage ? await probeImage(file) : await probeVideo(file);
       if (!Number.isFinite(meta.width) || meta.width <= 0) {
-        fail("This file could not be read as a video. Upload a playable MP4 or WebM video.");
+        fail(
+          isImage
+            ? "This file could not be read as a picture. Upload a playable PNG or JPEG picture."
+            : "This file could not be read as a video. Upload a playable MP4 or WebM video."
+        );
         return;
       }
       if (!upscaleTarget(meta.width, meta.height)) {
         setStatus("idle");
         fail(
-          `This clip is already ${formatDims(meta.width, meta.height)} — HD or higher, so there is nothing to upscale. Pick a clip under 1080p.`
+          isImage
+            ? `This picture is already ${formatDims(meta.width, meta.height)} — 4K, so there is nothing to upscale. Pick a picture under 4K.`
+            : `This clip is already ${formatDims(meta.width, meta.height)} — 4K, so there is nothing to upscale. Pick a clip under 4K.`
         );
         return;
       }
-      setSourceMeta({ ...meta, blob: file });
+      setSourceMeta({ ...meta, blob: file, kind: isImage ? "image" : "video" });
       setSourceUrl(trackUrl(URL.createObjectURL(file)));
       setStatus("ready");
     } catch (err) {
-      fail(err?.message || "This file could not be read as a video. Upload a playable MP4 or WebM video.");
+      fail(err?.message || "This file could not be read. Upload a playable video or picture file.");
     }
   }, [fail, resetSelection, trackUrl]);
 
@@ -94,16 +102,27 @@ export function useUpscaler() {
     setStatus("enhancing");
     try {
       const canvas = document.createElement("canvas");
-      const enhanced = await enhanceVideo({
-        blob: sourceMeta.blob,
-        canvas,
-        sourceWidth: sourceMeta.width,
-        sourceHeight: sourceMeta.height,
-        duration: sourceMeta.duration,
-        signal: controller.signal,
-        onProgress: (fraction) => setProgress(Math.round(fraction * 100)),
-      });
-      setResult({ ...enhanced, url: trackUrl(URL.createObjectURL(enhanced.blob)) });
+      const isImage = sourceMeta.kind === "image";
+      const enhanced = isImage
+        ? await enhanceImage({
+          blob: sourceMeta.blob,
+          canvas,
+          sourceWidth: sourceMeta.width,
+          sourceHeight: sourceMeta.height,
+          signal: controller.signal,
+        })
+        : await enhanceVideo({
+          blob: sourceMeta.blob,
+          canvas,
+          sourceWidth: sourceMeta.width,
+          sourceHeight: sourceMeta.height,
+          duration: sourceMeta.duration,
+          signal: controller.signal,
+          onProgress: (fraction) => setProgress(Math.round(fraction * 100)),
+        });
+      if (isImage) setProgress(100);
+      const mime = isImage ? "image/png" : "video/mp4";
+      setResult({ ...enhanced, mime, kind: sourceMeta.kind, url: trackUrl(URL.createObjectURL(enhanced.blob)) });
       setStatus("done");
     } catch (err) {
       if (controller.signal.aborted) {
@@ -111,7 +130,7 @@ export function useUpscaler() {
         setProgress(0);
         return;
       }
-      fail(err?.message || "Enhancement failed. Try another clip.");
+      fail(err?.message || "Enhancement failed. Try another file.");
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
@@ -121,7 +140,9 @@ export function useUpscaler() {
     abortRef.current?.abort();
   }, []);
 
-  const downloadName = (fileName || "video").replace(/\.[^.]+$/, "") + "-upscaled-1080p.mp4";
+  const downloadName =
+    (fileName || "file").replace(/\.[^.]+$/, "") +
+    (sourceMeta?.kind === "image" ? "-upscaled-4k.png" : "-upscaled-4k.mp4");
 
   return {
     fileName, sourceUrl, sourceMeta, status, progress, result, error,
@@ -136,6 +157,24 @@ export function useUpscaler() {
  * (not in its own module) because the hook is its only caller and already
  * owns every other DOM handle and object URL in this flow.
  */
+// Exported as a test seam: the hook is its only caller, sizing stays pure.
+export function probeImage(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    const done = (fn) => () => {
+      URL.revokeObjectURL(url);
+      fn();
+    };
+    img.onload = done(() => resolve({
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    }));
+    img.onerror = done(() => reject(new Error("This file could not be read as a picture. Upload a playable PNG or JPEG picture.")));
+    img.src = url;
+  });
+}
+
 function probeVideo(blob) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
