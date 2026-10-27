@@ -36,6 +36,14 @@ export function upscaleTarget(width, height) {
 
 const ENHANCE_FILTER = "contrast(1.07) saturate(1.15) brightness(1.01)";
 
+// Clarity pass: a softly blurred copy of the upscaled frame, composited back
+// over itself in overlay blend, lifts local contrast (edges, texture) without
+// moving a single pixel — geometry cannot drift, and with no denoise pass
+// there is nothing to wax over fine detail. Alpha stays low so flat areas
+// keep no halo.
+const CLARITY_ALPHA = 0.3;
+const CLARITY_BLUR_PX = 2;
+
 function throwCancelled(signal) {
   if (signal?.aborted) throw signal.reason || new DOMException("Enhancement cancelled.", "AbortError");
 }
@@ -90,6 +98,15 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+    // Scratch holds the upscaled base so the clarity pass never reads from
+    // the canvas it is painting to (self-drawImage snapshot semantics differ
+    // across browsers; a scratch copy is unambiguous everywhere).
+    const scratch = document.createElement("canvas");
+    scratch.width = target.width;
+    scratch.height = target.height;
+    const scratchCtx = scratch.getContext("2d");
+    scratchCtx.imageSmoothingEnabled = true;
+    scratchCtx.imageSmoothingQuality = "high";
     output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
     const videoSource = new CanvasSource(canvas, videoConfig);
     output.addVideoTrack(videoSource, { frameRate: fps });
@@ -105,9 +122,19 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
       for await (const decoded of new CanvasSink(track, { poolSize: 2 }).canvasesAtTimestamps(timestamps())) {
         throwCancelled(signal);
         if (!decoded) throw new Error(`The video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
-        ctx.filter = ENHANCE_FILTER;
-        ctx.drawImage(decoded.canvas, 0, 0, target.width, target.height);
+        scratchCtx.filter = ENHANCE_FILTER;
+        scratchCtx.drawImage(decoded.canvas, 0, 0, target.width, target.height);
+        scratchCtx.filter = "none";
         ctx.filter = "none";
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.drawImage(scratch, 0, 0);
+        ctx.save();
+        ctx.globalCompositeOperation = "overlay";
+        ctx.globalAlpha = CLARITY_ALPHA;
+        ctx.filter = `blur(${CLARITY_BLUR_PX}px)`;
+        ctx.drawImage(scratch, 0, 0);
+        ctx.restore();
         await videoSource.add(frame / fps, Math.min(1 / fps, duration - frame / fps));
         frame++;
         onProgress?.(frame / frameCount);
