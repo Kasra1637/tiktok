@@ -309,6 +309,35 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
             )}
           </div>
 
+          <div
+            className="flex gap-2 border-t border-[color:var(--hairline)] px-3 py-2"
+            data-testid="history-media-actions"
+          >
+            {saveUrl && (
+              <Button variant="secondary" size="sm" asChild className="min-w-0 flex-1">
+                <a
+                  href={saveUrl}
+                  download
+                  onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
+                >
+                  <Download className="h-3.5 w-3.5" /> Download
+                </a>
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
+              disabled={busy}
+              onClick={() => act(() => api.deleteGeneration(row.id))}
+              data-testid={`history-delete-${row.id}`}
+              title="Remove this render from history"
+              aria-label="Delete this render"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </Button>
+          </div>
+
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
             {/* Spec facts first: model, length, objective and versions read as pills right under the clip, ahead of identity and results. */}
             <FactList>
@@ -412,17 +441,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   aria-label="Work with this render"
                   data-testid="history-actions"
                 >
-                  {saveUrl && (
-                    <Button variant="secondary" asChild className="min-w-[150px] flex-1">
-                      <a
-                        href={saveUrl}
-                        download
-                        onClick={() => recordSignal("video_downloaded", "downloaded", signalRefs)}
-                      >
-                        <Download className="h-4 w-4" /> Download
-                      </a>
-                    </Button>
-                  )}
                   {hasClip && (
                     <Button
                       variant="accent"
@@ -467,20 +485,6 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 <p className="text-xs text-muted-foreground">
                   Reopens this render's plan in Create Video — change one thing or regenerate as-is.
                 </p>
-
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive"
-                    disabled={busy}
-                    onClick={() => act(() => api.deleteGeneration(row.id))}
-                    data-testid={`history-delete-${row.id}`}
-                    title="Remove this render from history"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                  </Button>
-                </div>
 
                 {stuckGenerating && (
                   <Button

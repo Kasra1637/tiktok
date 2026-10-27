@@ -12234,7 +12234,7 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History keeps save and onward actions together and Delete apart from them",
+    "History keeps Download and Delete together below the video",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -12251,21 +12251,29 @@ async function runDemoCtaChecks() {
           if (!group) {
             throw new Error("the Work with this render action group is gone");
           }
-          for (const label of ["Download", "Demo + CTA"]) {
-            if (!group.textContent.includes(label)) {
-              throw new Error(`the action bar lost ${label}`);
+          if (!group.textContent.includes("Demo + CTA")) {
+            throw new Error("the action bar lost Demo + CTA");
+          }
+          // Download and Delete share one row directly below the video, so the
+          // clip keeps its save and remove controls together under the footage.
+          const mediaActions = card?.querySelector('[data-testid="history-media-actions"]');
+          if (!mediaActions) {
+            throw new Error("History lost the Download/Delete row below the video");
+          }
+          for (const label of ["Download", "Delete"]) {
+            if (!mediaActions.textContent.includes(label)) {
+              throw new Error(`the row below the video lost ${label}`);
             }
           }
-          // Delete destroys the file the drawer sits under. Sharing a row with
-          // Download is how the two end up one slip apart.
-          if (group.textContent.includes("Delete")) {
-            throw new Error("Delete is back in the primary action row beside Download");
+          const stage = card?.querySelector(".history-stage");
+          const summary = card?.querySelector('[data-testid="history-summary"]');
+          if (!(stage && summary &&
+            stage.compareDocumentPosition(mediaActions) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING &&
+            mediaActions.compareDocumentPosition(summary) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+            throw new Error("the Download/Delete row is not between the video and its summary");
           }
-          // Delete lives in the detail band after the card now, still on the
-          // finished clip but apart from the primary action row.
-          const band = ctx.container.querySelector('[data-testid="history-detail-panel"]');
-          if (!band?.textContent.includes("Delete")) {
-            throw new Error("History lost Delete on a finished clip");
+          if (group.textContent.includes("Download")) {
+            throw new Error("Download is still in the detail action bar instead of below the video");
           }
         }
       );
