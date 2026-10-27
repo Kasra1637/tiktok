@@ -69,6 +69,20 @@ export function transitionAt(vt, baseDuration, appendDuration, id) {
   return { active: true, side: t < baseDuration ? "out" : "in", progress, span };
 }
 
+/**
+ * Reduced-motion resolution: strobes, spins and pans park as cuts.
+ *
+ * Cuts are the safe primitive — no animation, no luminance strobe — while
+ * the fade is a slow dip to black, gentle enough to keep. Unknown ids pass
+ * through so a stale saved value still resolves to no window downstream.
+ */
+const REDUCED_MOTION_SAFE = new Set(["none", "fade"]);
+
+export function effectiveTransition(id, reduceMotion) {
+  if (!reduceMotion) return id;
+  return REDUCED_MOTION_SAFE.has(id) ? id : "none";
+}
+
 /** Ease both halves toward the cut so the motion lands, never drifts. */
 export function easeInOut(p) {
   const t = Math.min(1, Math.max(0, p));

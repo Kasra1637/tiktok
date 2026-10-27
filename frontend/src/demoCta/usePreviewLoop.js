@@ -9,7 +9,7 @@ import {
   clipWindow,
 } from "./constants";
 import { drawEndCard, drawHookOverlay, drawStoryOverlay } from "./overlays";
-import { transitionAt, transitionWindow, easeInOut, hash01 } from "./transitions";
+import { transitionAt, transitionWindow, effectiveTransition, easeInOut, hash01 } from "./transitions";
 import { drawHandView } from "./handView";
 import { fitVideoToScreen } from "./fit";
 import { getEffectiveZoom } from "./zoom";
@@ -32,7 +32,7 @@ export function usePreviewLoop(settings) {
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
-    transition = "none",
+    transition = "none", reduceMotion = false,
     baseMuted, appendMuted,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY,
@@ -479,7 +479,7 @@ export function usePreviewLoop(settings) {
     let jointScratch = null;
     const paintJointTransition = (target, vt) => {
       if (!sequence) return;
-      const t = transitionAt(vt, baseDuration, appendDuration, transition);
+      const t = transitionAt(vt, baseDuration, appendDuration, effectiveTransition(transition, reduceMotion));
       if (!t.active) return;
       const ctx = target.getContext("2d");
       const w = target.width;
@@ -1016,7 +1016,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseDuration, appendDuration, timelineTime, transition]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseDuration, appendDuration, timelineTime, transition, reduceMotion]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,
