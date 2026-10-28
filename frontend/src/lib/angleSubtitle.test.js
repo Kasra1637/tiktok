@@ -62,6 +62,18 @@ describe("goalFitScore", () => {
     expect(last.score).toBe(0);
   });
 
+  test("an angle-style two-row list scores the first row from rank and kind tally", () => {
+    const { score, basis, thin } = goalFitScore({
+      index: 0,
+      total: 2,
+      evidence: { wins: 2, flops: 1 },
+      hasFitReason: false,
+    });
+    expect(score).toBe(7);
+    expect(thin).toBe(false);
+    expect(basis).toBe("2 wins in 3 · suggested 1st of 2");
+  });
+
   test("an all-flop goal scores at the floor", () => {
     const { score } = goalFitScore({
       index: 5,

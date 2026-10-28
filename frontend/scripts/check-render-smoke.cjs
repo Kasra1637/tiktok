@@ -4403,6 +4403,36 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // The picked angle shows its fit in the same pill as goals and templates:
+  // rank in this list plus the kind's own win share, with the kind caveat in
+  // the basis. Closed rows stay name-only so the list scans by name.
+  await check("the picked angle shows its fit badge", async (ctx) => {
+    const PROVEN = { ...ANGLE, evidence: { wins: 2, flops: 1 } };
+    await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & template");
+        await passAngleGate(ctx);
+        if (ctx.container.querySelector('[data-testid^="angle-fit-score-"]')) {
+          throw new Error("a closed angle row shows a fit badge");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        const badge = ctx.container.querySelector('[data-testid="angle-fit-score-a1"]');
+        if (!badge) throw new Error("the picked angle shows no fit badge");
+        if (badge.textContent.trim() !== "Fit 7/10") {
+          throw new Error(`picked angle badge is not the shared pill: ${badge.textContent}`);
+        }
+        const basis = badge.getAttribute("title") || "";
+        if (!basis.includes("2 wins in 3") || !basis.includes("at this angle kind")) {
+          throw new Error(`picked angle badge names no kind basis: ${basis}`);
+        }
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+    });
+  });
+
   // The goal cards annotate with the picked angle kind's counts; the six stay
   // in fetched order. Evidence must never become a second ranking.
   await check("goal cards carry the angle kind's counts without reordering", async (ctx) => {
@@ -4516,7 +4546,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           // came from behind it, never a percentage, never a promise.
           const fitBadge = ctx.container.querySelector('[data-testid="goal-fit-score-address_user_problem"]');
           if (!fitBadge) throw new Error("the goal card carries no fit score");
-          if (!/^\d+\/10 fit$/.test(fitBadge.textContent.trim())) {
+          if (!/^Fit \d+\/10$/.test(fitBadge.textContent.trim())) {
             throw new Error(`fit badge does not read as a score: ${fitBadge.textContent}`);
           }
           if (fitBadge.textContent.includes("%")) {

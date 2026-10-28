@@ -12,6 +12,7 @@ import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
+import { FitBadge } from "../components/FitBadge";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { ThumbPair } from "../components/ThumbPair";
@@ -191,16 +192,13 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           {Number.isFinite(score) && (
             // The sort key on a 0–10 scale: a weighted sum of matched
             // factors, clamped server-side, comparable only between these
-            // cards. The "/10" marks the scale so a fit never reads as
-            // open-ended.
-            <Badge
-              variant="outline"
-              className="text-xs"
-              data-testid="template-fit-score"
-              title="Fit score — a weighted sum of the factors this template matched, on a 0–10 scale. Only comparable against the other templates below."
-            >
-              Fit {score}/10
-            </Badge>
+            // cards. Shared FitBadge pill so the template score reads as the
+            // same instrument as the angle and goal scores above it.
+            <FitBadge
+              score={score}
+              basis="Fit score — a weighted sum of the factors this template matched, on a 0–10 scale. Only comparable against the other templates below."
+              testId="template-fit-score"
+            />
           )}
           <Badge variant="secondary" className="text-xs">
             {formatTemplateUse(r.template.times_used)}
@@ -720,6 +718,36 @@ function AngleSelector({
                 ))}
               </dl>
             )}
+            {/* The picked angle's fit, in the same pill as goals and
+                templates. Closed rows stay name-only so the list scans by
+                name; the score lives where the angle is actually read. Rank
+                is this list's order, tally is the kind's own win share —
+                verdicts attribute through the kind, so the basis says so. */}
+            {(() => {
+              const angleVerdicts =
+                Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
+              const angleFit = goalFitScore({
+                index: i,
+                total: angles.length,
+                evidence: a.evidence,
+                hasFitReason: false,
+              });
+              return (
+                picked && (
+                  <div className="border-t border-[color:var(--hairline)] row-pad">
+                    <FitBadge
+                      score={angleFit.score}
+                      basis={
+                        angleVerdicts
+                          ? `${angleFit.basis} · at this angle kind`
+                          : angleFit.basis
+                      }
+                      testId={`angle-fit-score-${a.id}`}
+                    />
+                  </div>
+                )
+              );
+            })()}
           </div>
         );
       })}
@@ -876,13 +904,7 @@ function AngleGoalPicker({
               <span className="flex items-center justify-between gap-2 text-sm font-semibold">
                 {humanize(goal)}
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <span
-                    data-testid={`goal-fit-score-${goal}`}
-                    title={fit.basis}
-                    className="rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-                  >
-                    {fit.score}/10 fit
-                  </span>
+                  <FitBadge score={fit.score} basis={fit.basis} testId={`goal-fit-score-${goal}`} />
                   {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                 </span>
               </span>
