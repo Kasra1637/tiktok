@@ -39,9 +39,12 @@ Generated motion cannot be pinned reliably to an exact spoken word.
   the installed FFmpeg: nominally centered expressions actually zoomed from the
   top-left. The regression measures both axes, ramp and hold rather than merely
   checking command text.
-- Keep full head, chin and entire phone inside the central 88% of generated
-  footage, safe for the maximum 1.12x crop (which retains 89.29%). The phone back
-  remains visible at chest height in the final seconds through the last frame.
+- Keep full head, chin and whole phone inside the central 88% of generated
+  footage, safe for the maximum 1.12x crop (which retains 89.29%). In the final
+  1-2s she raises the phone into view as she finishes saying she found it, back
+  to camera; it stays fully visible and uncropped at chest height, with clear
+  margins and never behind hand/arm/face, through the last frame. About a metre
+  is a loose starting hint, not exact. No screen or app content is generated.
 - Camera text and the gesture cannot be budget-scaled away. Equivalent condensed
   handoff/identity/opening wording buys room on tight providers without changing
   their constraints. The condensed threshold becomes 5,000 because the enlarged

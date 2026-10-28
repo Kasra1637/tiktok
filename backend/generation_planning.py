@@ -169,7 +169,7 @@ CONDENSE_BELOW = 5000
 # and gesture, and final-phone visibility survive every provider squeeze.
 # Processing alone starts a zoom at 70% of hook_seconds and finishes 0.6s later;
 # no numeric timestamp or spoken-word sync is promised to the video model.
-FULL_PROMPT_FLOOR = 4129
+FULL_PROMPT_FLOOR = 4198
 CONDENSED_PROMPT_FLOOR = 2346
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
@@ -348,8 +348,8 @@ _CONDENSED_IDENTITY_CLOSE = (
 # This starting shot is verbatim in the strategy and every provider prompt.
 SELFIE_STARTING_SHOT = (
     "Handheld selfie-style shot, eye-level and roughly straight-on, like a creator "
-    "filming themselves with a phone. Frame from the upper chest up, full head visible "
-    "with comfortable space above it, and room at the sides for hand gestures. Natural "
+    "filming themselves with a phone about a metre away (loose hint). Frame upper chest up, "
+    "full head with headroom, room at the sides for hand gestures. Natural "
     "facial proportions, no exaggerated wide-angle distortion. Very subtle natural "
     "handheld sway."
 )
@@ -369,12 +369,22 @@ _CONDENSED_CAMERA_MOVE = (
     "gesture{gesture}; subtle, natural, eyes on lens."
 )
 
-# Fixed in both modes: keep the phone inside the central safe area of the later
-# processing crop (including 1.12x), without asking the model to zoom.
+# Fixed in both modes: the phone rises into view at the end and stays inside the
+# central safe area of the later processing crop (including 1.12x), without asking
+# the model to zoom or to show any screen content.
 _PHONE_HANDOFF_FRAMING = (
-    "In the final seconds through the last frame, "
-    "show the entire phone back at chest height; clear margins, not cut off or hidden. "
-    "Keep head/chin/phone in central 88%. No readable screen or app use."
+    "Final 1-2s: she raises the phone into view as she finishes saying she found it, "
+    "back to camera; whole phone fully visible and uncropped at chest height, clear "
+    "margins, never behind hand/arm/face, through the last frame. No screen/app use; "
+    "head/chin/phone in central 88%."
+)
+
+# Condensed twin: every constraint survives. The no-screen rule is carried by the
+# condensed handoff above, so it is not repeated here.
+_CONDENSED_PHONE_HANDOFF_FRAMING = (
+    "Final 1-2s: she raises the phone into view as she finishes, back to camera; "
+    "whole phone visible, uncropped, chest height, clear margins, never behind "
+    "hand/arm/face, through the last frame; central 88%."
 )
 
 
@@ -1422,7 +1432,7 @@ def _assemble_prompt(
     # standard immediately before the material it is a standard for.
     sections.append(SELFIE_STARTING_SHOT)
     sections.append(camera_move_section(strategy, hook_seconds, condensed))
-    sections.append(_PHONE_HANDOFF_FRAMING)
+    sections.append(_CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING)
 
     sections.append(
         "No text appears on screen at all — no captions, no titles, no labels. "

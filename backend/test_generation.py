@@ -1221,11 +1221,23 @@ class TestFinalPhoneFraming:
         assert "a slight puzzled head tilt" in prompt
         assert "same distance from the face" in prompt
         assert "Do not push in, pull back, or zoom" in prompt
-        assert "final seconds through the last frame" in prompt
-        assert "entire phone" in prompt
+        condensed = prompt_budget < gp.CONDENSE_BELOW
+        assert "Final 1-2s" in prompt
+        assert "raises the phone into view" in prompt
+        assert "back to camera" in prompt
+        assert "whole phone" in prompt
+        assert "uncropped" in prompt
         assert "clear margins" in prompt
-        assert "not cut off or hidden" in prompt
-        assert "No readable screen or app use" in prompt
+        assert "never behind hand/arm/face" in prompt
+        assert "through the last frame" in prompt
+        assert "central 88%" in prompt
+        assert "about a metre away (loose hint)" in prompt
+        if condensed:
+            assert "saying she found it" not in prompt
+        else:
+            assert "saying she found it" in prompt
+            assert "No screen/app use" in prompt
+            assert "head/chin/phone in central 88%" in prompt
         assert gp.camera_move_section(
             {"camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"}},
             3, prompt_budget < gp.CONDENSE_BELOW,
@@ -1252,10 +1264,16 @@ class TestFinalPhoneFraming:
             assert "then hold" in prompt
             assert "on the hook line" not in prompt
             assert "push in and arc" not in prompt
-            assert "final seconds through the last frame" in prompt
-            assert "entire phone" in prompt
+            assert "Final 1-2s" in prompt
+            assert "raises the phone into view" in prompt
+            assert "back to camera" in prompt
+            assert "whole phone" in prompt
+            assert "uncropped" in prompt
             assert "clear margins" in prompt
-            assert "not cut off or hidden" in prompt
+            assert "never behind hand/arm/face" in prompt
+            assert "through the last frame" in prompt
+            assert "central 88%" in prompt
+            assert "about a metre away (loose hint)" in prompt
             assert len(prompt) <= limit
 
 

@@ -779,10 +779,15 @@ class TestStrategyBudget:
         assert "same distance from the face" in prompt
         assert "Do not push in, pull back, or zoom" in prompt
         assert '"at":' not in prompt
-        assert "final seconds through the last frame" in prompt
-        assert "entire phone" in prompt
+        assert "Final 1-2s" in prompt
+        assert "raise the phone into view" in prompt
+        assert "back to camera" in prompt
+        assert "whole phone" in prompt
+        assert "uncropped" in prompt
+        assert "through the last frame" in prompt
         assert "clear margins" in prompt
-        assert "not cut off or hidden" in prompt
+        assert "never hidden" in prompt
+        assert "about a metre away (loose hint)" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt
 
