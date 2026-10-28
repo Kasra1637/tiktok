@@ -12453,8 +12453,8 @@ async function runDemoCtaChecks() {
                 "it, recorded thumbs have no path into the next draft."
             );
           }
-          if (!(entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
-            throw new Error("the plan entry does not carry its punchy subcopy inside the button");
+          if ((entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
+            throw new Error("the plan entry still carries the removed button subcopy");
           }
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=proj-9")) {
@@ -12483,8 +12483,8 @@ async function runDemoCtaChecks() {
           if (!entry || !(entry.textContent || "").includes("Another take like this")) {
             throw new Error("a winner has no Another take like this entry");
           }
-          if (!(entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
-            throw new Error("the winner entry does not carry its punchy subcopy inside the button");
+          if ((entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
+            throw new Error("the winner entry still carries the removed button subcopy");
           }
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=wd1")) {
