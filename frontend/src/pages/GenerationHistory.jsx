@@ -122,12 +122,13 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   // render unfinished, not a failed action, so it must not read as one.
   const [strandedNote, setStrandedNote] = useState(null);
   // Post copy and Plan context stack vertically and share one open slot:
-  // Post copy starts expanded, and opening one closes the other, so the two
-  // panels never stack open and push the row long.
+  // Post copy starts expanded, opening one closes the other, and the open
+  // one never collapses — exactly one panel is always expanded, so the row
+  // never shows two dead-end headers and never stacks both open long.
   const [openPanel, setOpenPanel] = useState("post");
   const togglePanel = (name) => (e) => {
     e.preventDefault();
-    setOpenPanel((current) => (current === name ? null : name));
+    setOpenPanel(name);
   };
 
   const detailId = `generation-detail-${row.id}`;
