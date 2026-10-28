@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, MessageSquareText, RotateCcw } from "lucide-react";
+import { Check, Copy, RotateCcw } from "lucide-react";
 import { Button } from "./ui/button";
 import { GroupLabel } from "./SectionCard";
 import { FactChip, FactList } from "./FactChip";
@@ -73,7 +73,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
   return (
     <div className="space-y-3" data-testid="post-kit">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <GroupLabel icon={MessageSquareText}>Caption, hashtags, cover</GroupLabel>
+        <GroupLabel>Caption, hashtags, cover</GroupLabel>
         <div className="flex flex-wrap items-center gap-2">
           {canRegenerate && (
             <Button
