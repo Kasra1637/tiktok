@@ -1937,28 +1937,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCaptionScale(val); ensureScopedPreview("hook"); }} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={captionScale} onChange={(val) => { setCaptionScale(val); startScopedPreview("hook"); }} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
             </div>
-            {!hookSafety.ok && (
-              <div
-                role="status"
-                data-testid="hook-safety-warning"
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
-              >
-                <span className="flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                  <span>{hookSafety.message}</span>
-                </span>
-                <ResetButton
-                  testId="hook-safety-fix"
-                  onClick={() => {
-                    setHookOffsetX(0);
-                    setHookOffsetY(0);
-                    if (captionScale < 0.8) setCaptionScale(1);
-                  }}
-                >
-                  Fit safe area
-                </ResetButton>
-              </div>
-            )}
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm italic text-muted-foreground">Drag hook text on preview to reposition</p>
               <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
@@ -2122,28 +2100,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
               <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCtaScale(val); ensureScopedPreview("cta"); }} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={ctaScale} onChange={(val) => { setCtaScale(val); startScopedPreview("cta"); }} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
             </div>
-            {!ctaSafety.ok && (
-            <div
-              role="status"
-              data-testid="cta-safety-warning"
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
-            >
-              <span className="flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                <span>{ctaSafety.message}</span>
-              </span>
-              <ResetButton
-                testId="cta-safety-fix"
-                onClick={() => {
-                  setCtaOffsetX(0);
-                  setCtaOffsetY(0);
-                  if (ctaScale < 0.8) setCtaScale(1);
-                }}
-              >
-                Fit safe area
-              </ResetButton>
-            </div>
-          )}
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm italic text-muted-foreground">Drag the end card up or down on the preview to reposition</p>
               <VerticalNudge label="End card position" upTestId="cta-nudge-up" downTestId="cta-nudge-down" onNudge={(dy) => setCtaOffsetY((y) => y + dy)} />
@@ -2253,6 +2209,58 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
         className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
+        {/* Text-placement warnings live here and only here: right above the
+            preview they describe, so the alert stays in view while copy is
+            dragged on the video. The Hook and End Card groups no longer
+            repeat them. */}
+        {(!hookSafety.ok || !ctaSafety.ok) && (
+          <div className="space-y-2" role="group" aria-label="Text placement warnings">
+            {!hookSafety.ok && (
+              <div
+                role="status"
+                data-testid="hook-safety-warning"
+                className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground"
+              >
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <span>{hookSafety.message}</span>
+                </span>
+                <ResetButton
+                  testId="hook-safety-fix"
+                  onClick={() => {
+                    setHookOffsetX(0);
+                    setHookOffsetY(0);
+                    if (captionScale < 0.8) setCaptionScale(1);
+                  }}
+                >
+                  Fit safe area
+                </ResetButton>
+              </div>
+            )}
+            {!ctaSafety.ok && (
+              <div
+                role="status"
+                data-testid="cta-safety-warning"
+                className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground"
+              >
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <span>{ctaSafety.message}</span>
+                </span>
+                <ResetButton
+                  testId="cta-safety-fix"
+                  onClick={() => {
+                    setCtaOffsetX(0);
+                    setCtaOffsetY(0);
+                    if (ctaScale < 0.8) setCtaScale(1);
+                  }}
+                >
+                  Fit safe area
+                </ResetButton>
+              </div>
+            )}
+          </div>
+        )}
         
         {/* A fixed 9:16 frame rather than a box that grows to the canvas.
             Portrait output filled the width of a flexible card and left black
