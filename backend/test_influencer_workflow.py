@@ -487,6 +487,14 @@ class TestAppSpecificity:
         honour both, which is how a founder's own face came back as somebody
         else's. The test asserted the opposite of what its own comment claimed,
         which is why it survived.
+
+        Camera framing went the same way for the opposite reason: the
+        per-strategy camera_angle and framing used to be asserted as PRESENT,
+        and they are now deliberately omitted from the lock. The fixed selfie
+        starting shot owns framing on every render, so emitting the strategy's
+        own metre-based fields alongside it would hand the model two framings
+        and let it pick. The lock still owns the room, light, wardrobe and
+        delivery; processing adds only its centered zoom afterwards.
         """
         prompt = self._render_prompt(
             api, monkeypatch, NURSE_APP, NURSE_PERSONA, NURSE_SCENE,
@@ -494,20 +502,52 @@ class TestAppSpecificity:
             feature="One-tap shift logging", cta="Try it free",
             hook_line="I clocked out at 11:40. Every single night.")
 
-        # Scene and delivery are plan-level and conflict with nothing.
-        for attribute in (
+        import generation_planning
+        assert generation_planning.SELFIE_STARTING_SHOT in prompt, (
+            "the fixed selfie starting shot owns framing on every render"
+        )
+        for superseded in (
             "eye-level, phone held",        # camera angle
             "medium close-up",              # framing
+        ):
+            assert superseded not in prompt, (
+                f"per-strategy framing leaks past the fixed shot: {superseded}"
+            )
+
+        # The head of the lock — place, light, background, style, position —
+        # always reaches the render. The tail (props, then movement and voice)
+        # is emitted by the lock and is what the refit amputates on a saturated
+        # default-ceiling prompt: the mandatory camera/phone instructions raised
+        # the fixed floor by ~711 characters, so the squeeze now costs the
+        # lock's last fields rather than the founder's spoken words or a
+        # prohibition. ADR 0053 records that trade deliberately; both halves of
+        # it are pinned here so the loss stays visible and bounded.
+        for attribute in (
             "corridor fluorescents",        # lighting
             "hospital staff corridor",      # environment / setting
             "grey vinyl floor",             # background
             "authentic handheld UGC",       # visual style
             "phone at chest height",        # character positioning
+        ):
+            assert attribute in prompt, f"render prompt is missing: {attribute}"
+
+        # With room, the lock emits the tail too — it is lost to the squeeze,
+        # never to the builder. This is the half that would catch a change that
+        # dropped props or delivery from the lock outright.
+        roomy = generation_planning.character_scene_lock({
+            "scene": {"props": "a phone only, no coffee cup"},
+            "performance": {
+                "movement": "holds up a phone to camera",
+                "voice_delivery": "low, quick, tired but warm",
+            },
+        })
+        assert len(roomy) <= 1100
+        for attribute in (
             "a phone only",                 # props
             "holds up a phone to camera",   # movement / action
             "low, quick, tired but warm",   # voice delivery
         ):
-            assert attribute in prompt, f"render prompt is missing: {attribute}"
+            assert attribute in roomy, f"the scene lock never emits {attribute}"
 
         # The invented appearance is not, under any wording.
         for invented in (

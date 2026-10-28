@@ -50,6 +50,19 @@ Generated motion cannot be pinned reliably to an exact spoken word.
   their constraints. The condensed threshold becomes 5,000 because the enlarged
   full camera floor cannot fit saturated 4,600-character prompts. Provider
   ceilings and sacred-script policy are unchanged.
+- Accept the prompt-budget cost of that text instead of shrinking it away. The
+  verbatim starting shot, orbit/gesture beat and final-phone rule raise the
+  measured fixed floor by about 711 characters (3,487 → 4,198 full; 2,102 →
+  2,346 condensed). A saturated strategy at the default 6,800 ceiling therefore
+  overflows the first assembly, and the refit amputates the tail it reaches last:
+  the locked scene's `props`, then `performance`. The lock's head (location,
+  background, time, light, palette, style, position), the founder's spoken words
+  and every prohibition survive, which is the order of importance this decision
+  buys. Camera ownership is product-mandated; props and delivery are descriptive.
+- A recorded prohibition is never clipped. `must_not_show` entries hold their
+  full field budget on every attempt, provider and mode — a refit that shortens
+  "a hospital corridor" to "a hospita" sends noise instead of a rule while the
+  founder believes the render was told.
 
 ## Consequences
 
@@ -60,6 +73,15 @@ Generated motion cannot be pinned reliably to an exact spoken word.
   lateral workaround, fallback model or extra generation path is introduced.
 - Pixel resampling costs processing time; the existing encode gate, output
   canvas, optional audio, timeout and soft-failure preservation stay unchanged.
+- The fixed-text budget is now nearly spent. The tightest ceiling (HeyGen 4,090)
+  clears the saturated floor by about 280 characters, down from about 509, and
+  the pin that guards it is recalibrated to 250 rather than deleted. Any further
+  fixed instruction has to be paid for by trimming existing wording: there is no
+  slack left to absorb it, and the alternative that remains is a provider 400.
+- A saturated prompt loses the lock's tail; an ordinary one does not. The
+  endpoint test pins the surviving head at the default ceiling and pins
+  props/movement/voice against a lock built with room, so a regression that drops
+  them from the builder outright still fails.
 - See [verification evidence](../../test_reports/camera-owner-split.md) for real
   clip measurements and explicit orbit/head/phone limitations.
 
