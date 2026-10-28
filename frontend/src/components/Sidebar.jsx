@@ -8,6 +8,7 @@ import {
   Clapperboard,
   WandSparkles,
   Smartphone,
+  Images,
   Briefcase,
   History as HistoryIcon,
   TrendingUp,
@@ -57,6 +58,9 @@ const NAV_ITEMS = [
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
   { to: "/upscale", label: "Video Upscaler", icon: WandSparkles, testId: "upscale-nav-link", hint: "Sharpen, enlarge, download" },
+  /* The library sits with the working pages, directly above Analytics: it holds
+     the presenter photos the renders above are generated from. */
+  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
   /* Results, last: it is the one page that only means something once the pages
      above it have produced something. Leading with it would open on an empty
      ledger for anyone still setting up. */
