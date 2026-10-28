@@ -4311,9 +4311,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   // A row is its kind's glyph and its uppercase title, and nothing else. The
   // subtitle, the kind badge and the founder verdict tally all came off the
-  // bar: three pieces of meta around a 14px title made a list you scan into a
+  // bar: three pieces of meta around the title made a list you scan into a
   // paragraph you read, and the picked row still opens onto every field. Pinned
   // on the rendered row, so any of the three drifting back is caught here.
+  // The title rides the shared eyebrow token (12px caps), not its own size.
   await check("angle rows show only their kind icon and caps title", async (ctx) => {
     const PROVEN = { ...ANGLE, id: "a9", label: "Proven opener", evidence: { wins: 3, flops: 1 } };
     // Every row, not the first: the rule is the list's, and a row that kept
@@ -4341,7 +4342,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error(`angle ${id} renders ${spans.length} text spans, expected its title alone`);
           }
           const title = spans[0];
-          if (!/uppercase/.test(title.className) || !/tracking-/.test(title.className)) {
+          if (!/uppercase|eyebrow/.test(title.className) || !/tracking-|eyebrow/.test(title.className)) {
             throw new Error(`angle ${id}'s title is off the uppercase tracked token: ${title.className}`);
           }
           if (title.textContent.trim() !== label) {

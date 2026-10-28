@@ -101,7 +101,7 @@ export default function Features() {
               className="grid scroll-mt-24 items-center gap-8 lg:grid-cols-2 lg:gap-14"
             >
               <div className={flip ? "lg:order-2" : ""}>
-                <span className="eyebrow text-[color:var(--brand-indigo)]">{row.eyebrow}</span>
+                <span className="eyebrow eyebrow-accent">{row.eyebrow}</span>
                 <h2 className="font-display mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{row.title}</h2>
                 <p className="mt-3 text-base leading-relaxed text-muted-foreground">{row.body}</p>
               </div>

@@ -31,7 +31,7 @@ import { Button } from "./ui/button";
 export function EyebrowPill({ strong = false, className, children }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-indigo)] ${
+      className={`eyebrow eyebrow-accent inline-flex items-center gap-1.5 rounded-full border px-3 py-1 ${
         strong
           ? "border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)]"
           : "border-[color:var(--hairline)] bg-[color:var(--indigo-6)]"

@@ -411,7 +411,7 @@ export default function Landing() {
               is a masked pseudo-element instead, which nothing can override. */}
           <div className="border-gradient relative rounded-2xl p-[1px]">
             <div className="surface surface-interactive shimmer-on-hover rounded-2xl">
-              <span className="eyebrow text-[color:var(--brand-indigo)]">With HookForge</span>
+              <span className="eyebrow eyebrow-accent">With HookForge</span>
               <ul className="mt-5 space-y-3.5">
                 {WEEK_WITH.map((line) => (
                   <li key={line} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">

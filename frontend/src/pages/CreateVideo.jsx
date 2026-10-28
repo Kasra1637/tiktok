@@ -704,7 +704,7 @@ function AngleSelector({
                   picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
                 }`}
               />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase leading-[22px] tracking-[0.08em] text-muted-foreground">
+              <span className="eyebrow min-w-0 flex-1 truncate leading-[22px]">
                 {sentenceCase(a.label).replace(/\.\s*$/, "")}
               </span>
               <ChevronDown

@@ -656,6 +656,14 @@ body {
     color: hsl(var(--muted-foreground));
 }
 
+/* Indigo eyebrow variant. A `text-[color:...]` utility cannot override
+   `.eyebrow`'s color: the primitive is unlayered author CSS, which beats
+   Tailwind's layered utilities regardless of order, so the utility would be
+   dead code. This variant sits beside the primitive instead. */
+.eyebrow-accent {
+    color: var(--brand-indigo);
+}
+
 /* App Profile's section bar language, shared by every workspace page.
    Body family rather than the display face; page titles keep their hierarchy. */
 .section-heading {
