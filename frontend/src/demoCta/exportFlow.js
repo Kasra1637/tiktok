@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from "mediabunny";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
-import { buildExportFilename, clipWindow, sniffRecordingContainer } from "./constants";
+import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
@@ -51,7 +51,9 @@ export async function probeRecordingPlays(blob, expectedDuration, audioSegments 
     );
     probe.preload = "auto";
     probe.onloadeddata = () => {
-      if (Number.isFinite(probe.duration) && Math.abs(probe.duration - expectedDuration) <= 0.1 &&
+      // Half a second of slack covers AAC priming/padding and browser metadata
+      // rounding; a genuinely truncated file misses by whole seconds.
+      if (Number.isFinite(probe.duration) && Math.abs(probe.duration - expectedDuration) <= 0.5 &&
           probe.videoWidth === TIKTOK_EXPORT.width && probe.videoHeight === TIKTOK_EXPORT.height) {
         cleanup();
         resolve();
@@ -179,11 +181,11 @@ export function useExportFlow(settings) {
       });
       const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
       if (sniffRecordingContainer(head) !== "mp4") throw new Error("The encoder did not produce a valid MP4. Export again in Chrome or Edge.");
-      // Trimmed clips encode only their used run, so the probe must expect
-      // that run — not the source lengths the file was cut from.
-      const expectedDuration = appendBlob
-        ? clipWindow(videoMeta.d, baseStart).duration + clipWindow(appendMeta.d, appendStart).duration
-        : duration;
+      // The probe must expect the timeline that was actually encoded — the
+      // duration exportTikTok returns — not a recompute from preview metadata
+      // (videoMeta/appendMeta), which can disagree with the export-time decode
+      // by more than the gate allows and fail a perfectly good file.
+      const expectedDuration = duration;
       await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : []);
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
