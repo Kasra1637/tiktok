@@ -269,7 +269,8 @@ def _clean_boundary(head: str) -> str:
     return head.rstrip()
 
 
-def _clip(text, limit: int, protect: bool = False, sacred: bool = False) -> str:
+def _clip(text, limit: int, protect: bool = False, sacred: bool = False,
+          absolute: bool = False) -> str:
     """
     Clip one variable prompt value to a fixed budget, stripped.
 
@@ -288,12 +289,24 @@ def _clip(text, limit: int, protect: bool = False, sacred: bool = False) -> str:
     the guarantee is that fitting the ceiling never costs the script a
     character, only the direction and template wording.
 
-    Only engaged when condensing. At a normal ceiling the scale is 1.0 and
-    every value is already whole, so this changes nothing for Hailuo.
+    `absolute` holds the full field budget on every attempt, on every provider,
+    in both modes. It is for founder-recorded prohibitions, which are short and
+    safety-relevant: a clipped prohibition is worse than none, because
+    "a hospita" reads as noise rather than as a rule while still spending the
+    characters. Unlike `sacred` it needs no provider flag, because the
+    guarantee is about the rule reaching the render, not about a particular
+    ceiling tripping the withdrawal.
+
+    `protect` and `sacred` only engage when condensing: at a normal ceiling the
+    scale is 1.0 and every value is already whole. `absolute` engages on every
+    attempt, including a full-budget refit, which is exactly the case it exists
+    for.
     """
     s = str(text or "").strip()
     scale = _PROMPT_SCALE.get()
-    if sacred and _PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get():
+    if absolute:
+        effective = int(limit)
+    elif sacred and _PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get():
         effective = int(limit)
     elif protect and _PROMPT_CONDENSED.get() and scale < 1.0 and _PROMPT_PROTECT.get():
         effective = int(limit)
@@ -472,7 +485,9 @@ def must_not_show_section(profile: dict) -> str:
         return ""
     if not items:
         return ""
-    listed = "; ".join(_clip(part, 30, protect=True) for part in items[:8])
+    # Held whole on every attempt: a refit that clips a prohibition to a stub
+    # sends noise, not a rule, while the founder believes the render was told.
+    listed = "; ".join(_clip(part, 30, absolute=True) for part in items[:8])
     return (
         "MUST NOT APPEAR — recorded on this app's profile as things a promo must never "
         f"contradict or show: {listed}. Do not depict any of them, do not imply them, and "

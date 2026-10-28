@@ -1438,8 +1438,15 @@ class TestPerProviderPromptBudget:
         at all, and the founder would get a 409 on every project with no way to
         tell which of their words was too many.
 
-        HeyGen's 4,090 is the tightest ceiling in the catalog and clears it by
-        about 1,100, which is the margin the last fix bought.
+        HeyGen's 4,090 is the tightest ceiling in the catalog. This used to pin
+        500 characters of slack; the mandatory camera-ownership text (the
+        verbatim selfie shot, the orbit/gesture beat and the final-phone rule)
+        raised the fixed floor by ~711, so the saturated floor now clears the
+        tightest ceiling by ~280. That is the documented trade in ADR 0053: the
+        camera instructions outrank descriptive wording, and every catalog
+        prompt still fits its own ceiling (pinned separately). The pin is
+        recalibrated, not removed, so a further fixed-text addition that spends
+        the remaining slack still fails here instead of at a provider 400.
         """
         kwargs = self._verbose_kwargs()
         tightest = min(
@@ -1451,10 +1458,11 @@ class TestPerProviderPromptBudget:
             "a saturated prompt fit under 2,000 characters, so the irreducible "
             "floor has moved and this margin no longer means anything"
         )
-        assert tightest >= len(prompt) + 500, (
-            f"the tightest ceiling ({tightest}) is within 500 chars of this "
-            f"builder's {len(prompt)}-character floor; a saturated strategy "
-            f"would be refused on that provider"
+        assert tightest >= len(prompt) + 250, (
+            f"the tightest ceiling ({tightest}) is within 250 chars of this "
+            f"builder's {len(prompt)}-character floor; the fixed-text budget has "
+            f"no room left, and a saturated strategy would be refused on that "
+            f"provider — trim existing fixed wording before adding more"
         )
 
     def test_the_fallback_prompt_floor_still_matches_its_constant(self):
@@ -1501,6 +1509,29 @@ class TestPerProviderPromptBudget:
                 f"{len(squeezed)} against a budget of {budget}. The final fit collapsed "
                 f"instead of squeezing."
             )
+
+    def test_a_refit_keeps_the_recorded_prohibition_whole(self):
+        """
+        A refit that clips a prohibition to a stub sends noise, not a rule.
+
+        Fixed-text growth pushed a saturated default-ceiling prompt just over
+        6,800, and the refit scaled every field down together — so the render
+        was told "a hospita" must not appear while the founder believed the
+        whole rule had reached it. The prohibition now holds its full field
+        budget on every attempt while the descriptive text absorbs the squeeze.
+        """
+        kwargs = self._verbose_kwargs()
+        kwargs["profile"] = {
+            "brand_name": "Test",
+            "must_not_show": ["a hospital corridor", "a competitor's app icon"],
+        }
+        # Full mode (above CONDENSE_BELOW) but far enough under the saturated
+        # assembly that the refit always runs: the harder-than-the-render
+        # guard above pins that assembly at or past 5,500.
+        prompt = gp.build_segment_prompt(**kwargs, prompt_budget=5200)
+        assert len(prompt) <= 5200
+        assert "a hospital corridor" in prompt
+        assert "a competitor's app icon" in prompt
 
     def test_a_hopeless_overflow_still_collapses_rather_than_looping(self):
         """
