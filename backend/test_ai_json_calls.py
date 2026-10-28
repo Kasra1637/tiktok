@@ -645,6 +645,76 @@ class TestTruncatedResearchRetriesDoubled:
         assert "valid JSON" not in str(err.value)
 
 
+class TestResearchedDescriptionIsOneLine:
+    """
+    The App Profile description is the page subtitle, read at a glance.
+
+    The research schema used to ask for 1-3 sentences, so a 196-character
+    three-sentence blurb rendered as three lines under the page title while the
+    editor labelled the same field "a one-line description". The schema now asks
+    for one sentence of 80 characters or fewer, and the reply is clipped to that
+    budget rather than trusted, because this model has already ignored the
+    length instruction once.
+    """
+
+    LONG = (
+        "Vocolens is an AI voice journal and mood tracker. Users speak their "
+        "thoughts instead of typing, and the app transcribes them, analyzes "
+        "emotions, and offers personalized reflections and mood trends over time."
+    )
+
+    def _profile(self, description):
+        import ai_service
+        list_keys = set(ai_service.APP_PROFILE_LIST_KEYS) | {
+            "outcome_statements", "viewer_objections"}
+        profile = {
+            k: ([] if k in list_keys else "x")
+            for k in ai_service.REQUIRED_APP_PROFILE_KEYS}
+        profile["brand_name"] = "Vocolens"
+        profile["brand_description"] = description
+        return profile
+
+    def test_the_prompt_asks_for_one_short_sentence(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(self._profile("x")))])
+        _run(ai_service.analyze_app_profile({"website": "text"}))
+        prompt = rec.payloads[0]["messages"][1]["content"]
+        assert "one sentence, 80 characters or fewer" in prompt
+        assert "1-3 sentence" not in prompt
+
+    def test_an_overshooting_reply_is_cut_to_the_first_sentence(self, monkeypatch):
+        import ai_service
+        _patch_client(monkeypatch, [_completion(json.dumps(self._profile(self.LONG)))])
+        result = _run(ai_service.analyze_app_profile({"website": "text"}))
+        description = result["brand_description"]
+        assert len(description) <= ai_service.APP_DESCRIPTION_MAX_CHARS
+        # The whole point: the app is still identifiable, and the restatement
+        # that used to run to three lines is gone.
+        assert description.startswith("Vocolens is an AI voice journal and mood tracker.")
+        assert "transcribes" not in description
+        assert description.endswith(".")
+
+    def test_a_long_single_sentence_ends_on_a_word_boundary(self):
+        import ai_service
+        source = (
+            "A shared household list that replaces the eleven separate chat "
+            "threads every family ends up maintaining across the week."
+        )
+        clipped = ai_service.clip_app_description(source)
+        assert len(clipped) <= ai_service.APP_DESCRIPTION_MAX_CHARS
+        assert clipped.endswith("…")
+        assert not clipped.endswith(" …")
+        # No half words: the last visible token is a whole word of the source,
+        # so the cut fell on a space rather than inside "maintaining".
+        last_word = clipped[:-1].rstrip().split()[-1]
+        assert f"{last_word} " in source
+
+    def test_a_description_inside_the_budget_is_untouched(self):
+        import ai_service
+        short = "One shared list for the whole household."
+        assert ai_service.clip_app_description(short) == short
+
+
 class TestScriptVoiceAndTarget:
     """
     The script generation rules: a natural-delivery target rather than a hard

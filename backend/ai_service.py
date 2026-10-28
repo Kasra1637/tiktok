@@ -1786,6 +1786,40 @@ async def poll_video_job(job_id: str) -> dict:
 
 
 
+# How long the App Profile's description may be, in characters.
+#
+# The description is not a blurb: the editor labels the field "a one-line
+# description of what the app does", and the detail page renders it as the page
+# subtitle, read at a glance. The research schema used to ask for 1-3
+# sentences, which is how a 196-character three-sentence answer reached a
+# masthead that has room for a line. One sentence of about 80 characters is the
+# same information minus the second and third restatement.
+APP_DESCRIPTION_MAX_CHARS = 80
+
+
+def clip_app_description(text) -> str:
+    """
+    The researched one-line description, cut to one short line.
+
+    Prefers the first sentence when it already fits inside the budget, then the
+    last word boundary that fits, with an ellipsis - the founder never gets a
+    word chopped in half. Applied to research output only: a description the
+    founder typed is their own copy and is stored as written.
+    """
+    s = " ".join(str(text or "").split())
+    if len(s) <= APP_DESCRIPTION_MAX_CHARS:
+        return s
+    for stop in (".", "!", "?"):
+        end = s.find(stop)
+        if 0 < end < APP_DESCRIPTION_MAX_CHARS:
+            return s[: end + 1]
+    head_part = s[: APP_DESCRIPTION_MAX_CHARS - 1]
+    space = head_part.rfind(" ")
+    if space >= APP_DESCRIPTION_MAX_CHARS // 2:
+        head_part = head_part[:space]
+    return head_part.rstrip(" ,;:-") + "…"
+
+
 async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
     """Research a mobile app from its public pages and draft an App Profile.
 
@@ -1825,7 +1859,7 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         "Draft the App Profile. Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "brand_name": "app name",\n'
-        '  "brand_description": "1-3 sentence description of what the app does",\n'
+        '  "brand_description": "one sentence, 80 characters or fewer: what the app does",\n'
         '  "app_category": "app category (e.g. Health & Fitness, Productivity)",\n'
         '  "niche": "same as app_category unless the positioning is narrower",\n'
         '  "platforms": ["iOS", "Android"] (only platforms evidenced by the sources),\n'
@@ -1917,6 +1951,11 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         if not isinstance(val, list):
             val = []
         result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
+
+    # The description is one short line, enforced rather than asked for twice:
+    # the schema requests it and this keeps the promise when the model
+    # overshoots.
+    result["brand_description"] = clip_app_description(result.get("brand_description"))
 
     # viewer_objections is a list of objects and is NOT in
     # APP_PROFILE_LIST_KEYS above, so its entries are still dicts by the time we
