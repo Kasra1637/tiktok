@@ -230,35 +230,46 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
             <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
             <span>{sentenceCase(verdict)}</span>
           </p>
-          {/* Supporting detail: muted, marked as a list, tighter leading. A
-              single-reason card renders the verdict alone with no list. */}
-          {detail.length > 0 && (
-            <ul className="space-y-1">
-              {detail.map((reason, i) => (
-                <li
-                  key={`r-${i + 1}`}
-                  className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
-                >
-                  <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-                  <span>{sentenceCase(reason)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
-      {limits.length > 0 && (
-        <ul className="space-y-1">
-          {limits.map((limitation, i) => (
-            <li
-              key={`l-${i}`}
-              className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
-            >
-              <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-              <span>{sentenceCase(limitation)}</span>
-            </li>
-          ))}
-        </ul>
+      {/* Supporting detail and limitations tuck into a disclosure: the card
+          leads with its verdict, and the rest opens on demand. The verdict
+          stays outside any list, and a single-reason card with no limits
+          renders no disclosure at all. */}
+      {(detail.length > 0 || limits.length > 0) && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            More on this fit
+          </summary>
+          <div className="mt-1 space-y-1">
+            {detail.length > 0 && (
+              <ul className="space-y-1">
+                {detail.map((reason, i) => (
+                  <li
+                    key={`r-${i + 1}`}
+                    className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
+                  >
+                    <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                    <span>{sentenceCase(reason)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {limits.length > 0 && (
+              <ul className="space-y-1">
+                {limits.map((limitation, i) => (
+                  <li
+                    key={`l-${i}`}
+                    className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
+                  >
+                    <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                    <span>{sentenceCase(limitation)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );
@@ -943,7 +954,12 @@ function AngleGoalPicker({
                   {sentenceCase(outcomes[goal])}
                 </span>
               )}
-              {fitReasons?.[goal] && (
+              {/* One descriptive line stays visible: the outcome when there is
+                  one, otherwise the fit reason. The fit reason behind an
+                  outcome, plus both verdict counts, tuck into a disclosure so
+                  six cards scan instead of shouting. Every testid stays in the
+                  DOM either way. */}
+              {!outcomes?.[goal] && fitReasons?.[goal] && (
                 <span
                   data-testid={`goal-fit-${goal}`}
                   className="mt-1 block text-sm leading-relaxed text-muted-foreground"
@@ -951,27 +967,46 @@ function AngleGoalPicker({
                   {sentenceCase(fitReasons[goal])}
                 </span>
               )}
-              {/* Founder verdicts for the selected angle's KIND, carried on the
-                  angle row too. Shown only as counts so one verdict never reads
-                  as a verdict on the goal itself; the six stay in fetched order. */}
-              {formatVerdicts(angle?.evidence) && (
-                <span
-                  data-testid={`goal-angle-evidence-${goal}`}
-                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
-                >
-                  {formatVerdicts(angle.evidence)} at this angle kind
-                </span>
-              )}
-              {/* Objective-level tally: wins/flops per GOAL, shared across kinds.
-                  Same counts, same styling, different axis — the goal picker is
-                  the surface where the objective axis answers "what wins here". */}
-              {formatVerdicts(objectiveEvidence?.[goal]) && (
-                <span
-                  data-testid={`goal-objective-evidence-${goal}`}
-                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
-                >
-                  {formatVerdicts(objectiveEvidence[goal])} for this goal
-                </span>
+              {(Boolean(outcomes?.[goal] && fitReasons?.[goal]) ||
+                formatVerdicts(angle?.evidence) ||
+                formatVerdicts(objectiveEvidence?.[goal])) && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                    Why this goal fits
+                  </summary>
+                  <div className="mt-1 space-y-1">
+                    {outcomes?.[goal] && fitReasons?.[goal] && (
+                      <span
+                        data-testid={`goal-fit-${goal}`}
+                        className="block text-sm leading-relaxed text-muted-foreground"
+                      >
+                        {sentenceCase(fitReasons[goal])}
+                      </span>
+                    )}
+                    {/* Founder verdicts for the selected angle's KIND, carried on the
+                        angle row too. Shown only as counts so one verdict never reads
+                        as a verdict on the goal itself; the six stay in fetched order. */}
+                    {formatVerdicts(angle?.evidence) && (
+                      <span
+                        data-testid={`goal-angle-evidence-${goal}`}
+                        className="block text-sm leading-relaxed text-muted-foreground"
+                      >
+                        {formatVerdicts(angle.evidence)} at this angle kind
+                      </span>
+                    )}
+                    {/* Objective-level tally: wins/flops per GOAL, shared across kinds.
+                        Same counts, same styling, different axis — the goal picker is
+                        the surface where the objective axis answers "what wins here". */}
+                    {formatVerdicts(objectiveEvidence?.[goal]) && (
+                      <span
+                        data-testid={`goal-objective-evidence-${goal}`}
+                        className="block text-sm leading-relaxed text-muted-foreground"
+                      >
+                        {formatVerdicts(objectiveEvidence[goal])} for this goal
+                      </span>
+                    )}
+                  </div>
+                </details>
               )}
               {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
             </button>
@@ -1389,6 +1424,9 @@ export default function CreateVideo() {
   const templateTrackRef = useRef(null);
   const scrollTemplates = (dir) => {
     templateTrackRef.current?.scrollBy({ left: dir * 340, behavior: "smooth" });
+  };
+  const scrollToSubstep = (id) => {
+    document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
   const recRequestRef = useRef(0);
 
@@ -2395,6 +2433,43 @@ setObjective("");
           title="Audience & template"
         >
           <div className="space-y-4" data-testid="audience-goal-step">
+            {/* Substep checklist: angle, goal, template and photo share one
+                screen in that order, so this names the order and jumps to
+                each. All panels stay mounted — this guides, it never hides a
+                required pick, so the founder can always scroll and see all. */}
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="audience-substeps" aria-label="What finishes this step">
+              {[
+                { key: "angle", label: "Angle", done: Boolean(angleId), target: "substep-angle" },
+                { key: "goal", label: "Goal", done: Boolean(objective), target: "substep-goal" },
+                { key: "template", label: "Template", done: Boolean(templateId), target: "substep-template" },
+                { key: "photo", label: "Photo", done: Boolean(templateId) && missingIdentity.length === 0, target: "template-photo" },
+              ].map((s, i, all) => {
+                const current = !s.done && all.slice(0, i).every((p) => p.done);
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => scrollToSubstep(s.target)}
+                    aria-label={s.done ? `${s.label}: done` : current ? `${s.label}: up next` : `${s.label}: not started`}
+                    aria-current={current ? "step" : undefined}
+                    data-testid={`audience-substep-${s.key}`}
+                    data-state={s.done ? "done" : "todo"}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                      s.done
+                        ? "border-[color:var(--indigo-35)] text-foreground"
+                        : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
+                    }`}
+                  >
+                    {s.done ? (
+                      <Check className="h-3 w-3 text-[color:var(--brand-indigo)]" aria-hidden="true" />
+                    ) : (
+                      <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border border-current opacity-60" />
+                    )}
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
             {/* No description on this shell. It carried one three times over:
                 the progress rail's own sentence above it, and the angle's hint
                 below it, both named the same instruction. The rail's sentence is
@@ -2406,6 +2481,7 @@ setObjective("");
                 step exists to prevent. Each block on this step is its own
                 bordered card so the picker and the goal list
                 read as separate organized units. */}
+            <div id="substep-angle" className="scroll-mt-4">
             <AngleSelector
               angles={angles}
               angleId={angleId}
@@ -2417,13 +2493,14 @@ setObjective("");
               onRegenerate={handleRegenerateAngles}
               notice={angleRegenNotice}
             />
+            </div>
 
             {/* The goal step is intentionally downstream of the angle. The panel
                 only exists once there is an angle to show goals for: before
                 that the picker renders just its waits marker, and wrapping an
                 empty marker in an inset-panel is how the stray empty box below
                 the angle panel happened. */}
-            <div className={angle ? "inset-panel" : "hidden"}>
+            <div id="substep-goal" className={angle ? "inset-panel scroll-mt-4" : "hidden"}>
               {angle && facetsError && (
                 <p className="text-sm text-destructive" role="alert">
                   {facetsError}{" "}
@@ -2538,7 +2615,7 @@ setObjective("");
                     </div>
                   )}
                 </div>
-                <div ref={templateTrackRef} className="filmstrip-scroll flex snap-x gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
+                <div ref={templateTrackRef} id="substep-template" className="filmstrip-scroll flex snap-x scroll-mt-4 gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
                 {visibleRecommendations.map((r, i) => (
                   <div key={r.template.id} className="w-[85%] shrink-0 snap-start sm:w-[calc(50%-6px)]">
                     <RecommendationCard
@@ -2644,7 +2721,7 @@ setObjective("");
                 same way, so it can never scroll to a section that is not
                 there. */}
             {showAngles && (
-            <div id="template-photo" className="inset-panel space-y-4">
+            <div id="template-photo" className="inset-panel scroll-mt-4 space-y-4">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-xs text-muted-foreground" data-subtitle="">
                 Upload one clear photo of the person you want on camera.
