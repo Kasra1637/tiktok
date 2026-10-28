@@ -913,7 +913,7 @@ function AngleGoalPicker({
           Shuffling goal {shuffleCount} of {shuffleTotal}…
         </p>
       )}
-      <div ref={trackRef} className="filmstrip-scroll flex snap-x gap-3 overflow-x-auto pb-1" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-browse-track">
+      <div ref={trackRef} className="filmstrip-scroll no-scrollbar flex snap-x gap-3 overflow-x-auto pb-1" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-browse-track">
         {featured.map((goal, index) => {
           const selected = value === goal;
           // 0–10 fit for this goal under the selected angle: annotates the
@@ -2615,7 +2615,7 @@ setObjective("");
                     </div>
                   )}
                 </div>
-                <div ref={templateTrackRef} id="substep-template" className="filmstrip-scroll flex snap-x scroll-mt-4 gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
+                <div ref={templateTrackRef} id="substep-template" className="filmstrip-scroll no-scrollbar flex snap-x scroll-mt-4 gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
                 {visibleRecommendations.map((r, i) => (
                   <div key={r.template.id} className="w-[85%] shrink-0 snap-start sm:w-[calc(50%-6px)]">
                     <RecommendationCard
