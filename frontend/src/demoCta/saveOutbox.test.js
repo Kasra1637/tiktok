@@ -20,9 +20,10 @@ test("a recorded failed save lists newest first with its message", () => {
 });
 
 test("a successful save clears its matching pending entry", () => {
-  const entry = recordFailedSave({ generationId: "gen-1", filename: "demo-cta.mp4", blob: new Blob(["x"]) });
+  const blob = new Blob(["x"]);
+  const entry = recordFailedSave({ generationId: "gen-1", filename: "demo-cta.mp4", blob });
   recordFailedSave({ generationId: "gen-2", filename: "other.mp4", blob: new Blob(["y"]) });
-  clearPendingSavesFor({ generationId: "gen-1", filename: "demo-cta.mp4" });
+  clearPendingSavesFor({ generationId: "gen-1", filename: "demo-cta.mp4", blob });
   expect(listPendingSaves().some((e) => e.id === entry.id)).toBe(false);
   expect(listPendingSaves()).toHaveLength(1);
 });

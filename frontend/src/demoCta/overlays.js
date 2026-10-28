@@ -5,12 +5,8 @@
  * lead-gen end card, both laid out inside TikTok's safe area (right icon rail
  * plus bottom caption strip), with vertical-only repositioning via offsets
  * (canvas drag locks to Y; steppers nudge it).
- *
- * The one deliberate carry-over worth naming: `getEndCardBounds` applies the
- * vertical offset against the canvas *width*, matching the standalone app's
- * hit-test exactly. It looks like a units bug and it is one, but the drag
- * bounds are part of the behavior contract, so it stays until both apps change
- * together.
+ * Drawing, drag bounds and safe-area checks use the same normalized offsets:
+ * X scales with canvas width, Y with canvas height.
  */
 
 export const SAFE_X = 0.09;
@@ -333,7 +329,8 @@ export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration,
   const fullLines = wrap(ctx, String(headline || "").toUpperCase(), boxW - headFont * 0.6);
   const shown = revealLines(fullLines, m.reveal01);
   const lineH = headFont * 1.14;
-  const blockH = fullLines.length * lineH + subFont * 2.6;
+  const handleText = String(handle || "").trim();
+  const blockH = fullLines.length * lineH + (handleText ? subFont * 2.6 : 0);
   const x = cw * SAFE_X + offsetX * cw + m.dxEm * headFont;
   const bottom = ch * (1 - SAFE_BOTTOM) + offsetY * ch;
   const top = bottom - blockH + m.rise01 * ch * 0.05 + m.dyEm * headFont;
@@ -375,10 +372,15 @@ export function drawEndCard(ctx, cw, ch, timeLeft, { headline, handle, duration,
     }
   });
 
+  // A blank optional handle means no chip, not placeholder text in the video.
+  if (!handleText) {
+    ctx.restore();
+    return;
+  }
+
   // Handle chip + pumping arrow pointing at the bio link.
   const chipY = top + fullLines.length * lineH + subFont * 0.9;
   ctx.font = `${subFont}px ${font}`;
-  const handleText = String(handle || "").trim() || "@yourhandle";
   const hw = ctx.measureText(handleText.toUpperCase()).width;
   const chipH = subFont * 1.9;
   ctx.fillStyle = accent;
@@ -463,7 +465,6 @@ export function getHookBounds(cw, ch, text, offsetX, offsetY, font = HOOK_FONT, 
 
 /** Returns bounding box (in canvas coords) for the end card overlay. */
 export function getEndCardBounds(cw, ch, headline, handle, offsetX, offsetY, font = HOOK_FONT, scale = 1) {
-  void handle;
   if (!String(headline || "").trim()) return null;
   const headFont = Math.round(cw * 0.082 * scale);
   const subFont = Math.round(cw * 0.046 * scale);
@@ -477,11 +478,9 @@ export function getEndCardBounds(cw, ch, headline, handle, offsetX, offsetY, fon
     lines = estimateLines(String(headline).toUpperCase(), boxW - headFont * 0.6, headFont).lines;
   }
   const lineH = headFont * 1.14;
-  const blockH = lines.length * lineH + subFont * 2.6;
+  const blockH = lines.length * lineH + (String(handle || "").trim() ? subFont * 2.6 : 0);
   const x = cw * SAFE_X + offsetX * cw;
-  // Ported exactly: the standalone app's hit-test applies the vertical offset
-  // against the canvas width here. See the module docstring.
-  const bottom = ch * (1 - SAFE_BOTTOM) + offsetY * cw;
+  const bottom = ch * (1 - SAFE_BOTTOM) + offsetY * ch;
   const top = bottom - blockH;
   return { x, y: top, w: boxW, h: blockH };
 }

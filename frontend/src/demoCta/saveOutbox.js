@@ -103,10 +103,11 @@ export function clearPendingSave(id) {
   writeStored(readStored().filter((e) => e.id !== id));
 }
 
-/** Drop entries a successful save made redundant: same file, same parent. */
-export function clearPendingSavesFor({ generationId = null, filename = "" } = {}) {
+/** Drop only retries of these exact bytes, never other edits sharing a filename. */
+export function clearPendingSavesFor({ generationId = null, filename = "", blob = null } = {}) {
+  if (!blob) return;
   const remaining = readStored().filter(
-    (e) => !(e.filename === filename && (e.generationId || null) === (generationId || null))
+    (e) => !(e.filename === filename && (e.generationId || null) === (generationId || null) && blobById.get(e.id) === blob)
   );
   if (remaining.length !== readStored().length) {
     const kept = new Set(remaining.map((e) => e.id));

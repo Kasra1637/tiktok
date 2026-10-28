@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api } from "../lib/api";
 import { probeRecordingPlays, useExportFlow } from "./exportFlow";
 import { AudioSampleSink, Input } from "mediabunny";
+import { __resetPendingSavesForTests, getPendingBlob, listPendingSaves } from "./saveOutbox";
 
 jest.mock("mediabunny", () => ({
   ALL_FORMATS: [], BlobSource: jest.fn(), Input: jest.fn(), AudioSampleSink: jest.fn(),
@@ -23,6 +24,7 @@ jest.mock("../lib/feedback", () => ({
 let warned;
 beforeEach(() => {
   jest.clearAllMocks();
+  __resetPendingSavesForTests();
   warned = jest.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -159,6 +161,29 @@ test("export gate checks AAC coverage for both joined segments and the 18s video
     expect(input.dispose).toHaveBeenCalled();
   } finally {
     spy.mockRestore(); URL.createObjectURL = oldCreate; URL.revokeObjectURL = oldRevoke;
+  }
+});
+
+test("saving a new export preserves older unsaved bytes with the same filename and parent", async () => {
+  api.saveDemoCtaExport
+    .mockRejectedValueOnce(new Error("First save failed."))
+    .mockResolvedValueOnce({ id: "saved-new" })
+    .mockResolvedValueOnce({ id: "saved-old" });
+  const oldBlob = new Blob(["old edit"], { type: "video/mp4" });
+  const newBlob = new Blob(["new edit"], { type: "video/mp4" });
+  const probe = await mountProbe(params());
+  try {
+    await act(async () => { await probe.hook().saveExport(oldBlob, "demo-cta.mp4"); });
+    const pending = listPendingSaves()[0];
+    expect(pending).toBeDefined();
+    await act(async () => { await probe.hook().saveExport(newBlob, "demo-cta.mp4"); });
+    expect(listPendingSaves().map((entry) => entry.id)).toEqual([pending.id]);
+    expect(getPendingBlob(pending.id)).toBe(oldBlob);
+    await act(async () => { await probe.hook().saveExport(oldBlob, "demo-cta.mp4"); });
+    expect(listPendingSaves()).toEqual([]);
+    expect(getPendingBlob(pending.id)).toBeNull();
+  } finally {
+    await probe.unmount();
   }
 });
 

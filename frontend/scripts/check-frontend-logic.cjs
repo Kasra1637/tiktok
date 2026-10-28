@@ -1121,6 +1121,44 @@ check("the scrub strip is keyboard-operable with visible focus",
   brokenScrubA11y.length === 0,
   brokenScrubA11y.length ? `broken: ${brokenScrubA11y.join("; ")}` : "scrub strip is a keyboard slider with focus rings");
 
+check("an empty optional CTA handle draws no placeholder chip or arrow", (() => {
+  const paint = (handle) => {
+    const calls = [];
+    const ctx = new Proxy({}, {
+      get: (_, key) => key === "measureText"
+        ? (text) => ({ width: text.length * 20 })
+        : (...args) => calls.push([key, ...args]),
+      set: () => true,
+    });
+    OV.drawEndCard(ctx, 1080, 1920, 1, { headline: "Try it now", handle, duration: 2, accent: "#c8ff2e", anim: "steady" });
+    return calls;
+  };
+  return ["", "   ", null].every((handle) => {
+    const calls = paint(handle);
+    return calls.some(([op, text]) => op === "fillText" && text === "TRY IT NOW") &&
+      !calls.some(([op, text]) => op === "fillText" && text.startsWith("@")) &&
+      !calls.some(([op]) => op === "stroke");
+  }) && paint("@founder").some(([op, text]) => op === "fillText" && text === "@FOUNDER");
+})(), "clearing the optional handle still paints a placeholder chip or arrow");
+
+check("CTA drag and safety bounds follow the painted vertical position", (() => {
+  return [[1080, 1920], [360, 640]].every(([cw, ch]) => ["@founder", ""].every((handle) => {
+    const positions = [];
+    const ctx = new Proxy({}, {
+      get: (_, key) => key === "measureText"
+        ? (text) => ({ width: text.length * 10 })
+        : (...args) => { if (key === "fillText") positions.push(args); },
+      set: () => true,
+    });
+    const initial = OV.getEndCardBounds(cw, ch, "Try it", handle, 0, 0);
+    const moved = OV.getEndCardBounds(cw, ch, "Try it", handle, 0, 0.1);
+    OV.drawEndCard(ctx, cw, ch, 1, { headline: "Try it", handle, duration: 2, accent: "#c8ff2e", offsetY: 0.1, anim: "steady" });
+    const paintedTop = positions[0][2] - Math.round(cw * 0.082) * 1.14 / 2;
+    return Math.abs(moved.y - initial.y - ch * 0.1) < 1e-6 &&
+      Math.abs(moved.y - paintedTop) < 1e-6;
+  }));
+})(), "the CTA hit target uses different vertical units than its drawing");
+
 check("checkOverlaySafety passes default centered hook and end card",
   (() => {
     const hb = OV.getHookBounds(1080, 1920, DC.DEFAULTS.hookText, 0, 0, OV.HOOK_FONT, 1);

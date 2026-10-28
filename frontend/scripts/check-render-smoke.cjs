@@ -9202,6 +9202,120 @@ async function runDemoCtaChecks() {
     return { flush, restore, loadClip, createdVideos };
   }
 
+  await check("Demo + CTA can remove and re-upload the same source file", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      // Browsers suppress change for an unchanged file selection. Model the
+      // native chooser value, which jsdom does not populate from files.
+      Object.defineProperty(input, "value", { configurable: true, writable: true, value: "C:\\fakepath\\clip.mp4" });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      if (input.value !== "") throw new Error("the source chooser retains its previous selection, so picking the same file fires no change");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-remove-source"]'), "remove source");
+      if (!ctx.container.querySelector('[data-testid="demo-cta-frame-empty"]')) throw new Error("Remove did not return to the empty frame");
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      const probe = [...clip.createdVideos].reverse().find((v) => v.onloadedmetadata);
+      await act(async () => probe.onloadedmetadata());
+      if (!ctx.container.querySelector('[data-testid="demo-cta-player"]')) throw new Error("the same file did not reload");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+    }
+  });
+
+  await check("Demo + CTA edits retire the previous export without retiring it on playback", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const encoder = load("demoCta/exportTikTok.js");
+    const originalEncode = encoder.exportTikTok;
+    const originalFetch = global.fetch;
+    const hadScroll = Object.prototype.hasOwnProperty.call(dom.window.HTMLElement.prototype, "scrollIntoView");
+    const originalScroll = dom.window.HTMLElement.prototype.scrollIntoView;
+    dom.window.HTMLElement.prototype.scrollIntoView = () => {};
+    const revoked = [];
+    URL.revokeObjectURL = (url) => revoked.push(url);
+    const blob = new Blob([new Uint8Array([0, 0, 0, 8, 102, 116, 121, 112])], { type: "video/mp4" });
+    blob.slice = () => ({ arrayBuffer: async () => new Uint8Array([0, 0, 0, 8, 102, 116, 121, 112]).buffer });
+    encoder.exportTikTok = async ({ canvas }) => {
+      canvas.width = 1080;
+      canvas.height = 1920;
+      return { blob, duration: 8, audioSegments: [] };
+    };
+    global.fetch = async () => ({ ok: true, blob: async () => blob });
+    try {
+      await withApi({ saveDemoCtaExport: async () => ({ id: "fresh-export" }) }, async () => {
+        await clip.loadClip(ctx);
+        const exportReady = async () => {
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-export"]'), "export current edit");
+          const probe = [...clip.createdVideos].reverse().find((v) => v.onloadeddata);
+          if (!probe) throw new Error("the MP4 validation gate was not reached");
+          await act(async () => probe.onloadeddata());
+          await clip.flush();
+          if (!ctx.container.querySelector('a[download]')) throw new Error("valid export did not become downloadable");
+        };
+        const group = async (id) => {
+          const button = ctx.container.querySelector(`[data-testid="${id}"] > button`);
+          if (button.getAttribute("aria-expanded") !== "true") await clickEl(ctx, button, id);
+        };
+        const mutations = [
+          async () => {
+            await group("cta-controls");
+            const field = ctx.container.querySelector('[data-testid="cta-headline-input"]');
+            await act(async () => {
+              Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(field, "A new CTA");
+              field.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+            });
+          },
+          async () => {
+            await group("demo-cta-source");
+            const slider = ctx.container.querySelector('[data-testid="base-start-slider"] [role="slider"]');
+            await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+          },
+          async () => {
+            await group("story-controls");
+            await clickEl(ctx, ctx.container.querySelector('[data-testid="story-toggle"]'), "change story overlay");
+          },
+          async () => {
+            await group("hook-controls");
+            await clickEl(ctx, ctx.container.querySelector('[data-testid="caption-fonts-disclosure"] summary'), "open hook fonts");
+            await clickEl(ctx, ctx.container.querySelector('[data-testid="caption-font-inter"]'), "change hook font");
+          },
+          async () => {
+            const canvas = ctx.container.querySelector("canvas");
+            await act(async () => canvas.dispatchEvent(new dom.window.WheelEvent("wheel", { deltaY: -20, bubbles: true, cancelable: true })));
+          },
+        ];
+        for (const mutate of mutations) {
+          await exportReady();
+          const video = ctx.container.querySelector("video");
+          video.currentTime = 1;
+          await act(async () => video.dispatchEvent(new dom.window.Event("timeupdate")));
+          if (!ctx.container.querySelector('a[download]')) throw new Error("playback alone discarded a valid export");
+          const before = revoked.length;
+          await mutate();
+          await clip.flush();
+          if (ctx.container.querySelector('a[download]') || ctx.text().includes("Export ready")) throw new Error("an edit left the old export marked ready");
+          if (!revoked.slice(before).includes("blob:fake-clip")) throw new Error("the stale export URL was not released");
+        }
+        // Transport mirrors locked framing into sliders. Those readbacks are
+        // not edits and must not discard the exported file.
+        await clickEl(ctx, ctx.container.querySelector('button[title^="Lock the current zoom"]'), "lock framing");
+        await exportReady();
+        const scrubber = ctx.container.querySelector('[data-testid="demo-cta-scrubber"] [role="slider"]');
+        await act(async () => scrubber.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+        await clip.flush();
+        if (!ctx.container.querySelector('a[download]')) throw new Error("seeking across a zoom lock discarded a valid export");
+      });
+    } finally {
+      await act(async () => ctx.root.unmount());
+      encoder.exportTikTok = originalEncode;
+      global.fetch = originalFetch;
+      if (hadScroll) dom.window.HTMLElement.prototype.scrollIntoView = originalScroll;
+      else delete dom.window.HTMLElement.prototype.scrollIntoView;
+      clip.restore();
+    }
+  });
+
   for (const mode of ["hand", "floating"]) {
     await check(`multiple ${mode} zoom locks preview new edits and replay zoom-in/out`, async (ctx) => {
       const clip = installLoadedClipStubs({ width: 1280, height: 720 });

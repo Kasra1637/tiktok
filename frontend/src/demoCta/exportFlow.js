@@ -109,7 +109,7 @@ export function useExportFlow(settings) {
       });
       onSaved?.(savedRow);
       clearExportErrors();
-      clearPendingSavesFor({ generationId: generation?.id || null, filename: name });
+      clearPendingSavesFor({ generationId: generation?.id || null, filename: name, blob });
       return savedRow;
     } catch (err) {
       recordExportError("save", err);

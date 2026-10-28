@@ -1160,14 +1160,38 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
     if (videoUrl) setHistoryOpen(false);
   }, [videoUrl]);
 
-  const invalidateSequence = () => {
+  const invalidateSequence = useCallback(() => {
     if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);
     resultObjectUrlRef.current = null;
     setResult(null);
     setSaved(null);
     setSaveError(null);
     clearExportErrors();
-  };
+  }, [clearExportErrors]);
+
+  // A download describes one exact edit, not the live preview after another
+  // change. Centralize invalidation so sliders, text, presets and canvas edits
+  // cannot leave an earlier file marked ready. With locks, transport updates
+  // the slider readbacks but not the exported framing, so use the locks alone.
+  const exportEditKey = JSON.stringify([
+    videoUrl, appendUrl, baseStart, appendStart,
+    device, preset, viewMode, appendMode, bg, anim, envBg,
+    appendBg, appendAnim, appendEnv, mockupStretchY, videoFit,
+    screenX, screenY, screenW, screenH, baseMuted, appendMuted,
+    appendOverlays, transition, reduceMotion,
+    hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
+    storyEnabled, storyText, storyStart, storyEnd, storyOffsetY,
+    ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY,
+    overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim,
+    captionScale, ctaScale, textStyle, zoomKeyframes,
+    zoomKeyframes.length ? null : [scale, videoScale, videoOffsetX, videoOffsetY, handZoom, handPanX, handPanY],
+  ]);
+  const previousExportEditRef = useRef(exportEditKey);
+  useEffect(() => {
+    if (previousExportEditRef.current === exportEditKey) return;
+    previousExportEditRef.current = exportEditKey;
+    invalidateSequence();
+  }, [exportEditKey, invalidateSequence]);
 
   const handleAppendFile = (file) => {
     if (!file) return;
@@ -1515,7 +1539,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           aria-label="Choose a video file"
           data-testid="demo-cta-file-input"
           className="sr-only"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) handleFile(file);
+          }}
         />
         {/* The added clip drives a separate input for the same reason: one input
             per source, so neither upload can clobber the other. Resetting the
