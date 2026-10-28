@@ -10362,6 +10362,65 @@ async function runDemoCtaChecks() {
     }
   );
 
+  await check("Demo + CTA shows what the plan told the founder to record", async (ctx) => {
+    // Review asks "What you record for the demo" and stores the plan's answer
+    // as `demo_brief`. The editor is where that footage is actually added, so
+    // the note has to be on this screen: a founder styling a clip was leaving
+    // for the Review step to remember what to shoot. Read-only, and outside
+    // the collapsible groups — only one is open at a time, so a note nested in
+    // one disappears the moment the founder opens another.
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const brief = "Record yourself tapping the timer once, hands only.";
+    await withApi(
+      { getGenerations: async () => ({ generations: [COMPLETED] }) },
+      async () => {
+        await mount(DemoCtaEditor, { generation: { ...COMPLETED, demo_brief: brief } })(ctx);
+        const note = ctx.container.querySelector('[data-testid="demo-cta-record-brief"]');
+        if (!note) {
+          throw new Error("the editor does not show what the plan says to record for the demo");
+        }
+        if (!note.textContent.includes("What you record for the demo")) {
+          throw new Error(
+            `the note is not labelled the way Review labels it: ${JSON.stringify(note.textContent)}`
+          );
+        }
+        if (!note.textContent.includes(brief)) {
+          throw new Error("the note does not carry the plan's own sentence");
+        }
+        if (note.closest('[data-testid="demo-cta-source"]')) {
+          throw new Error(
+            "the note sits inside a collapsible group, so opening another group hides it"
+          );
+        }
+        if (note.closest(".demo-cta-column")) {
+          throw new Error(
+            "the note sits in the preview column, where it steals height from the video"
+          );
+        }
+      }
+    );
+  });
+
+  await check("no plan note, no empty recording brief", async (ctx) => {
+    // A standalone upload has no plan behind it, and a project can carry a
+    // blank brief. An empty labelled box would read as a missing instruction,
+    // so nothing renders at all.
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    await withApi(
+      { getGenerations: async () => ({ generations: [COMPLETED] }) },
+      async () => {
+        await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+        if (ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+          throw new Error("the editor renders a recording note with no brief to show");
+        }
+        await mount(DemoCtaEditor, { generation: { ...COMPLETED, demo_brief: "   " } })(ctx);
+        if (ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+          throw new Error("a whitespace-only brief still renders a note");
+        }
+      }
+    );
+  });
+
   await check("the History source toggle lives in the preview column, not the Source settings", async (ctx) => {
     // The History render block used to sit in the Source & Look settings
     // group while the empty preview offered only a link to the /history

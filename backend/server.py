@@ -6148,8 +6148,20 @@ async def list_generations(
 
 @api_router.get("/generations/{generation_id}")
 async def get_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    # `demo_brief` rides along from the project. It is the plan's note telling
+    # the founder what to record for their own demo, and the Demo + CTA editor —
+    # the one screen where that footage is actually added — opens through this
+    # endpoint. Without it here the founder had to leave the editor and reopen
+    # Review to remember what they were told to show. The LEFT JOIN keeps the
+    # standalone case working: a row with no project (an export filed with no
+    # Hook + Story behind it, or a project deleted since) simply carries None,
+    # and the editor renders no note rather than an empty one.
     row = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+        """SELECT g.*, p.demo_brief
+             FROM generations g
+             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+            WHERE g.id = ? AND g.user_id = ?""",
+        (generation_id, user_id),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
