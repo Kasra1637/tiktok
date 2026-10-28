@@ -1,6 +1,6 @@
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
-import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle, Sparkles } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle } from "lucide-react";
 import { sentenceCase } from "../lib/copyCase";
 import { GroupLabel } from "./SectionCard";
 
@@ -107,7 +107,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       <div className="inset-panel">
-        <GroupLabel icon={Sparkles}>Verified claims used ({used.length})</GroupLabel>
+        <GroupLabel icon={ShieldCheck}>Verified claims used ({used.length})</GroupLabel>
         {used.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {used.map((c, i) => (
