@@ -25,7 +25,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0005](0005-per-provider-prompt-ceilings.md) | Each provider gets its own prompt ceiling; the spoken script is sacred on tight ones | accepted |
 | [0006](0006-retire-grok-video-model.md) | Retire Grok Imagine Video 1.5 Lite (`input_references` unsupported) | accepted |
 | [0007](0007-overlay-font-motion-options.md) | Caption/CTA overlays get selectable fonts, animations, and size | accepted |
-| [0008](0008-hook-boundary-lean-in.md) | The hook-boundary transition is a face-anchored lean-in on a committed beat | accepted |
+| [0008](0008-hook-boundary-lean-in.md) | The hook-boundary transition is a face-anchored lean-in on a committed beat | superseded by 0053 |
 | [0009](0009-history-tiles-expand-on-demand.md) | History tiles open on demand: the clip first, the record behind a tab | partially superseded by 0033 (tile identity & results) and 0035 (full-width band) |
 | [0010](0010-no-warm-button-fills.md) | No warm fills on buttons: coral and red move out of the surface | partially superseded by 0011 (Demo + CTA wears accent) |
 | [0011](0011-history-onward-wears-accent.md) | History's onward Demo + CTA wears accent, not brand | accepted |
@@ -70,3 +70,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0050](0050-four-trend-transition-row.md) | Four motion trends in one transition row; whip is the default | accepted |
 | [0051](0051-history-compact-without-copy.md) | Without-copy History cards use a compact responsive grid | accepted |
 | [0052](0052-history-mobile-results.md) | History keeps primary filters and copy visible while compacting mobile results | accepted |
+| [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | accepted |

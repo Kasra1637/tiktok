@@ -1,6 +1,6 @@
 # 0008 — The hook-boundary transition is a face-anchored lean-in, not a zoom-punch
 
-- **Status:** accepted
+- **Status:** superseded by [0053](0053-generated-orbit-centered-zoom.md)
 - **Date:** 2026-10-16
 - **Anchors:** `backend/overlays.py` (`TRANSITION_ARC`, `TRANSITION_MAGNIFICATION`,
   `crop_target`, `detect_face_center`, `move_direction_for`,

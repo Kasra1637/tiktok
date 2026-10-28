@@ -18,11 +18,8 @@ from typing import Optional
 import httpx
 
 from face_crop import crop_face_from_path
-# For the one camera constant the strategy prompt has to state: the second the
-# hook-boundary move lands on. Read from the camera module rather than restated
-# here, because this prompt and the finalize pass have to be given the identical
-# number or the lean and the reframe become two separate events.
-from overlays import camera_beat_seconds
+# Share the exact selfie starting shot with the render prompt.
+from generation_planning import SELFIE_STARTING_SHOT
 from template_library import (
     CONTENT_ANGLE_KINDS,
     HOOK_CATEGORIES,
@@ -557,16 +554,10 @@ STRATEGY_SEGMENT_JSON_SCHEMA = _strict_object({
     "action": _str_prop(),
 })
 
-# The beat the hook-boundary camera move lands on.
-#
-# `at` is NOT the model's to choose: the finalize pass reframes on an exact
-# second and the render prompt is told the same one, so the lean the model
-# performs and the reframe ffmpeg applies are a single event rather than two
-# that happen to be nearby. It is stamped by the strategy endpoint from
-# hook_seconds and read back by both. Only `gesture` is the model's, and it is
-# what makes the lean specific to this video instead of a generic push.
+# The model owns orbit direction and one short actor action, not zoom timing.
+# Processing starts zoom at 0.7 * hook_seconds, finishing about 0.6s later.
 STRATEGY_CAMERA_BEAT_JSON_SCHEMA = _strict_object({
-    "at": {"type": "number"},
+    "direction": {"type": "string", "enum": ["left", "right"]},
     "gesture": _str_prop(),
 })
 
@@ -3285,28 +3276,19 @@ def _normalize_strategy_section(raw, fields) -> dict:
 
 
 def _normalize_camera_beat(raw) -> dict:
-    """
-    Coerce the camera-move beat to {"at": float, "gesture": str}.
+    """Keep only orbit direction and a short gesture; discard legacy timing/arc.
 
-    `gesture` is the model's and is what makes the lean specific to this video:
-    a brow lift, a nod, a turn of the shoulder. It is capped hard because it is
-    interpolation into fixed prompt text, not prose the founder reads, and a
-    long one would eat HeyGen's 4,090 ceiling to say what one clause says.
-
-    `at` survives normalization but is NOT trusted. It is overwritten by the
-    strategy endpoint with the deterministic value (see
-    overlays.camera_beat_seconds) and clamped into the hook by every reader, so
-    a model inventing "at 99" costs the beat, not the render.
+    Old strategies with no direction retain a rightward orbit. Invalid explicit
+    directions fail with a next step instead of quietly changing the performance.
     """
     raw = raw if isinstance(raw, dict) else {}
-    try:
-        at = max(0.0, float(raw.get("at") or 0))
-    except (TypeError, ValueError):
-        at = 0.0
-    return {
-        "at": round(at, 3),
-        "gesture": _clean_strategy_text(raw.get("gesture"), 90),
-    }
+    direction = str(raw.get("direction") or "right").strip().lower()
+    if direction not in ("left", "right"):
+        raise ValueError("Camera orbit direction must be left or right; regenerate the strategy.")
+    gesture = " ".join(str(raw.get("gesture") or "").split())
+    if len(gesture) > 90:
+        gesture = gesture[:91].rsplit(" ", 1)[0]
+    return {"direction": direction, "gesture": gesture}
 
 
 def normalize_strategy(raw: dict) -> dict:
@@ -4382,8 +4364,8 @@ async def generate_video_strategy(
         '  "payoff_beat": "the outcome stated directly in the viewer\'s own terms (draw on the outcome_statements outcome above) -- the last thing said before the reach for the phone",\n'
         '  "differentiation_beat": "how this app differs from what the viewer would otherwise reach for",\n'
         '  "scene": {\n'
-        f'    "camera_angle": "the exact camera position and angle, e.g. eye-level handheld 1m away",\n'
-        f'    "framing": "framing and shot size, e.g. medium close-up, head and shoulders",\n'
+        f'    "camera_angle": "Use STARTING SHOT",\n'
+        f'    "framing": "Use STARTING SHOT and final-phone rule",\n'
         f'    "lighting": "light direction, quality and colour temperature",\n'
         f'    "environment": "the physical place, named concretely",\n'
         f'    "background": "what is behind them, concretely and unchanging",\n'
@@ -4404,11 +4386,8 @@ async def generate_video_strategy(
         ' "script": "words spoken in this segment", "action": "what they do in this segment"}'
         + _two_section_schema(plan_seconds)
         + '\n  ],\n'
-        + f'  "camera_beat": {{"at": {round(camera_beat_seconds(hook_seconds), 2)}, '
-        '"gesture": "the specific visible beat the BODY makes as the move lands on the hook '
-        "line finishing -- brows lifting, a nod on the last word, chin dipping as they turn "
-        "into the lean. Name what they do, never the camera move itself, never a wave, and "
-        'never anything that turns their eyes off the lens"},\n'
+        + '  "camera_beat": {"direction": "left or right", '
+        '"gesture": "short story-specific actor action (max 90 chars)"},\n'
         "}\n"
         "Rules:\n"
         + "- Every text field is a sentence that starts with a capital letter -- write "
@@ -4531,6 +4510,13 @@ async def generate_video_strategy(
         "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
         "for the app, not using it. The demo is the founder's own recording, attached after "
         "this footage, so the last frame of your video should be the moment before it.\n"
+        f"- STARTING SHOT: {SELFIE_STARTING_SHOT}\n"
+        "- When the story begins, one smooth small orbit left or right to three-quarter; "
+        "same distance from the face, then hold. Do not push in, pull back, or zoom. "
+        "Simultaneously perform that gesture; subtle, natural. "
+        "All fields agree; no timestamp or word sync.\n"
+        "- Keep head/chin/entire phone in central 88%. In the final seconds through the last frame, "
+        "show its back at chest height: clear margins, not cut off or hidden; no app use.\n"
         # proof_moment is deliberately NOT a generation input any more. It is the one moment
         # the camera must film to make the claim believable — which is the product demo, and
         # the demo is recorded by the founder. It stays on the App Profile as a brief for that

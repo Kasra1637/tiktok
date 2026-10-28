@@ -227,10 +227,9 @@ class TestCameraMoveRunsInFinalize:
     magnitude never showed on a raw clip). Fresh downloads only: re-running it
     on an already-moved canonical file would punch twice.
 
-    The boundary asserted here is the BEAT, not the hook length: the move lands
-    at 70% of the hook so it falls under the last words of the hook line rather
-    than on the same instant they land, which is what makes it read as a gesture
-    instead of a cut. A project with no hook_seconds has no beat to place it in.
+    Zoom START is 70% of hook_seconds, completing 0.6s later, not synced to a
+    spoken word or generated orbit. Saved clips are never processed twice.
+    A project with no hook_seconds has no zoom start time.
     """
 
     def _persist_with_stubs(self, api, monkeypatch, tmp_path, row, project_id="proj-move", project_hook=3):
@@ -247,8 +246,8 @@ class TestCameraMoveRunsInFinalize:
 
         calls = []
 
-        async def fake_move(path, at, direction=1):
-            calls.append((_Path(path).name, at, direction))
+        async def fake_move(path, at):
+            calls.append((_Path(path).name, at))
             return _Path(path), []
 
         monkeypatch.setattr(api, "_download_generation_video", fake_download)
@@ -268,23 +267,23 @@ class TestCameraMoveRunsInFinalize:
         stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
         return stored, error, calls
 
-    def test_move_runs_once_on_the_beat_the_strategy_committed_to(
+    def test_zoom_runs_once_at_seventy_percent_ignoring_legacy_timestamp(
         self, api, monkeypatch, tmp_path
     ):
         row = provider_row(studio_project_id="proj-move-1")
         asyncio.run(api._execute(
             "INSERT INTO studio_projects (id, hook_seconds, strategy) VALUES (?, ?, ?)",
-            ("proj-move-1", 4, json.dumps({"camera_beat": {"at": 2.8, "gesture": "a nod"}})),
+            ("proj-move-1", 4, json.dumps({"camera_beat": {"at": 1.4, "direction": "left", "gesture": "a nod"}})),
         ))
         stored, error, calls = self._persist_with_stubs(
             api, monkeypatch, tmp_path, row, project_id="proj-move-1", project_hook=None)
         assert not error
         assert stored == "https://cdn.example/saved.mp4"
-        # 0.7 * a 4s hook, and the direction this generation resolved to.
+        # 0.7 * a 4s hook; no crop-direction input and no stored time override.
         assert len(calls) == 1
         assert calls[0][0] == "dl.mp4"
         assert calls[0][1] == pytest.approx(2.8)
-        assert calls[0][2] in (1, -1)
+        assert len(calls[0]) == 2
 
     def test_a_strategy_with_no_beat_falls_back_to_the_hook(self, api, monkeypatch, tmp_path):
         row = provider_row(studio_project_id="proj-move-3")
@@ -292,7 +291,7 @@ class TestCameraMoveRunsInFinalize:
             api, monkeypatch, tmp_path, row, project_id="proj-move-3", project_hook=3)
         assert not error
         assert stored == "https://cdn.example/saved.mp4"
-        assert calls == [("dl.mp4", pytest.approx(2.1), calls[0][2])]
+        assert calls == [("dl.mp4", pytest.approx(2.1))]
 
     def test_no_move_without_a_known_boundary(self, api, monkeypatch, tmp_path):
         row = provider_row(studio_project_id="proj-move-missing")
@@ -316,7 +315,7 @@ class TestCameraMoveRunsInFinalize:
         )
         calls = []
 
-        async def fake_move(path, at, direction=1):
+        async def fake_move(path, at):
             calls.append(at)
             return _Path(path), []
 

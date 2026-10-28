@@ -21,9 +21,6 @@ stay out of frame.
 from contextvars import ContextVar
 from typing import Optional
 
-# The one camera constant a prompt has to state: the second the hook-boundary
-# move lands on. Shared with the finalize pass on purpose (see overlays).
-from overlays import camera_beat_seconds
 
 # Hard ceiling on the assembled render prompt, in characters.
 #
@@ -142,7 +139,9 @@ _PROMPT_CONDENSED: ContextVar = ContextVar("hookforge_prompt_condensed", default
 # structure that the per-section headings state again with their real jobs.
 # Merging them costs nothing in meaning and roughly halves the floor, which is
 # what buys the app-specific brief enough room to still be worth sending.
-CONDENSE_BELOW = 4500
+# The required selfie/orbit text raises the full floor; budgets near 4,600
+# need the condensed form too, rather than an over-budget full prompt.
+CONDENSE_BELOW = 5000
 
 # Measured sizes of the fixed instruction text, with no app data at all. The
 # difference between the two IS what condensing buys.
@@ -166,13 +165,12 @@ CONDENSE_BELOW = 4500
 # and it applies in both modes — a music bed under the speech is wrong at any
 # budget.
 #
-# Both rose by 311 and 150 for the one camera move: the hook-boundary lean-in is
-# fixed text on every studio render, because a move the model may or may not
-# honour is not a move. The condensed twin costs well under half as much, since
-# HeyGen's 4,090 is the only ceiling tight enough to need it and it is the
-# reason the twin exists.
-FULL_PROMPT_FLOOR = 3487
-CONDENSED_PROMPT_FLOOR = 2102
+# Camera ownership is fixed text: the verbatim selfie shot, model-only orbit
+# and gesture, and final-phone visibility survive every provider squeeze.
+# Processing alone starts a zoom at 70% of hook_seconds and finishes 0.6s later;
+# no numeric timestamp or spoken-word sync is promised to the video model.
+FULL_PROMPT_FLOOR = 4129
+CONDENSED_PROMPT_FLOOR = 2346
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -332,84 +330,76 @@ _UI_RENDERING_WARNING = (
 # the section headings that already carry the real jobs. What survives is every
 # constraint, and what it buys is the room the app-specific brief needs to still
 # be worth sending — which is the entire point of the product.
+# Equivalent shorter wording buys room for the mandatory camera instructions
+# on tight providers; identity, handoff and factual prohibitions are unchanged.
 _CONDENSED_HANDOFF = (
-    "The video ends before the product appears: the founder films their own "
-    "demo and adds their own close afterwards. Do NOT film or render the app "
-    "in use, any interface, screenshot, button, price, rating, review or "
-    "download count, logo, or on-screen text. Invent the setting, light and "
-    "props from the verified app facts; any factual claim must come from those "
-    "facts, never from invention."
+    "Founder adds demo/close later. Do NOT film the app in use or render any "
+    "interface, screenshot, button, price, rating, review/download count, logo "
+    "or text. Invent setting/light/props from verified app facts; never invent claims."
 )
 
 _CONDENSED_IDENTITY_CLOSE = (
-    "Vertical 9:16 throughout, one continuous take with no cut, no black frame "
-    "and no title card. The person on camera is the same individual in every "
-    "frame, face and hair exactly as the reference photograph, in the one "
-    "outfit this scene specifies, in the same place, under the same light."
+    "Vertical 9:16 throughout, one take: no cut, black frame or title card. Same person, "
+    "face/hair exactly as the reference photograph, in the one outfit specified, "
+    "same place, under the same light."
 )
 
-# The one camera move, as a standing instruction on every studio render.
-#
-# It has a twin in ffmpeg (see overlays.build_camera_move_command) that reframes
-# on the same second, and the two are deliberately different jobs. The model
-# performs the GESTURE — the lean, the nod, the shoulder turn — because a gesture
-# is a thing a person does and no crop can fake one. ffmpeg does the FRAMING,
-# because only it can put the move on an exact frame. Each covers what the other
-# cannot do, which is also why asking the model to travel further would only
-# double the move rather than improve it.
-#
-# The direction is deliberately unnamed: ffmpeg picks the side per generation so
-# a founder's feed does not lean identically every time, and a model told "to her
-# left" would fight it.
+# The model owns perspective and performance; processing alone owns zoom.
+# This starting shot is verbatim in the strategy and every provider prompt.
+SELFIE_STARTING_SHOT = (
+    "Handheld selfie-style shot, eye-level and roughly straight-on, like a creator "
+    "filming themselves with a phone. Frame from the upper chest up, full head visible "
+    "with comfortable space above it, and room at the sides for hand gestures. Natural "
+    "facial proportions, no exaggerated wide-angle distortion. Very subtle natural "
+    "handheld sway."
+)
+
 _CAMERA_MOVE = (
-    "THE CAMERA MOVES ONCE, at {beat}s as the hook line lands: push in and arc to one "
-    "three-quarter angle as they lean toward the lens{gesture}. One continuous move, no "
-    "cut, ON the beat rather than applied afterwards — the one stated change to the "
-    "locked angle — then hold that framing to the end. Their eyes stay on the lens."
+    "When the story begins, make one smooth, small camera orbit {direction} to a "
+    "three-quarter angle, keeping the same distance from the face, then hold that angle "
+    "to the end. Do not push in, pull back, or zoom at any point. At the same moment, "
+    "the actor makes one small story-specific action{gesture}. Keep it subtle and "
+    "natural, with eyes on the lens. No cut. Keep the full head and chin visible."
 )
 
-# The same rule for a provider whose ceiling cannot carry the full set. Every
-# constraint above survives; only the examples of how to satisfy them go.
+# The ownership rule is essential, not optional direction that can be squeezed.
 _CONDENSED_CAMERA_MOVE = (
-    "ONE camera move at {beat}s on the hook line: push in and arc to one three-quarter angle "
-    "as they lean toward the lens{gesture}, then hold. Eyes stay on the lens."
+    "When the story begins, small smooth orbit {direction} to three-quarter; same distance "
+    "from the face, then hold. Do not push in, pull back, or zoom. Simultaneous actor "
+    "gesture{gesture}; subtle, natural, eyes on lens."
+)
+
+# Fixed in both modes: keep the phone inside the central safe area of the later
+# processing crop (including 1.12x), without asking the model to zoom.
+_PHONE_HANDOFF_FRAMING = (
+    "In the final seconds through the last frame, "
+    "show the entire phone back at chest height; clear margins, not cut off or hidden. "
+    "Keep head/chin/phone in central 88%. No readable screen or app use."
 )
 
 
-def camera_move_section(strategy: dict, hook_seconds, condensed: bool = False) -> str:
+def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = False) -> str:
+    """Model-only orbit and gesture, not timestamped or synced to a spoken word.
+
+    Timing is qualitative because generation cannot guarantee frame-exact action.
+    Processing independently starts its single zoom at 70% of hook_seconds and
+    completes its eased ramp about 0.6s later. It never supplies the orbit.
     """
-    The camera-move instruction, stated against the beat the render will use.
-
-    Reads the second out of the strategy's camera_beat rather than recomputing it,
-    because the finalize pass reframes at exactly this second and the two have to
-    agree: a model that leans on the last word of the hook line while the frame
-    tightens a beat later is two events, and reads as exactly that.
-
-    `hook_seconds` is only the fallback, for a strategy that predates the field or
-    whose model left it out, and it resolves to the same number the writer would
-    have stamped.
-
-    The strategy's gesture is appended, not spliced in, so the model's own
-    phrasing reads as the detail of the lean rather than as a second, competing
-    instruction about it. The strategy prompt asks for a gesture that names what
-    HER body does -- brows lifting, a nod on the last word -- precisely so that
-    appending it cannot restate the lean this sentence already asked for.
-    """
-    strategy = strategy or {}
-    beat = strategy.get("camera_beat")
+    beat = (strategy or {}).get("camera_beat")
     beat = beat if isinstance(beat, dict) else {}
-    at = camera_beat_seconds(hook_seconds, strategy) or 3.0
-    gesture = _clip(beat.get("gesture"), 90).lstrip()
-    # Models routinely open the gesture with "as ..." because the strategy
-    # prompt's own examples do, and the clause is appended as "landing as X" --
-    # which would read "landing as as her chin dips". Stripped here rather than
-    # by forbidding it in the strategy prompt, because the example earns more
-    # than the phrasing it costs.
+    direction = str(beat.get("direction") or "right").strip().lower()
+    if direction not in ("left", "right"):
+        raise ValueError("Camera orbit direction must be left or right; regenerate the strategy.")
+    # Never budget-scale this short field: the orbit must keep its own gesture
+    # even on a provider's last-resort squeeze. Snap a long legacy value at a word.
+    gesture = " ".join(str(beat.get("gesture") or "").split())
+    if len(gesture) > 90:
+        gesture = gesture[:91].rsplit(" ", 1)[0]
     if gesture[:3].lower() == "as ":
         gesture = gesture[3:].lstrip(" ,—-")
-    clause = f", landing as {gesture}" if gesture else ""
+    clause = f": {gesture}" if gesture else " (a slight head tilt or expression shift)"
     template = _CONDENSED_CAMERA_MOVE if condensed else _CAMERA_MOVE
-    return template.format(beat=f"{at:g}", gesture=clause)
+    return template.format(direction=direction, gesture=clause)
 
 
 # How the opening plays, as a standing instruction on every studio render.
@@ -442,13 +432,10 @@ _OPENING_INTERRUPT = (
 # The same rule for a provider whose ceiling is too low for the full set. Every
 # constraint above survives; only the examples of how to satisfy them go.
 _CONDENSED_OPENING = (
-    "Opening is a pattern interrupt: the first frame is already moving \u2014 no neutral "
-    "pose, no fade, no greeting. One unmistakable beat inside the first half-second, "
-    "then two or three escalating ones, carried by the face, gaze, hands and "
-    "posture rather than by the words. Play the beats below as the physical score "
-    "for those seconds.\n"
-    "Those beats come out of this video\u2019s own situation, so the interrupt reads "
-    "as the first move of the story and leaves a question the rest answers."
+    "Opening is a pattern interrupt: the first frame is already moving; no neutral pose, fade or "
+    "greeting. One clear beat inside the first half-second, then two or three "
+    "escalating beats via face, gaze, hands and posture, not words. Follow the physical "
+    "score below. Ground beats in this video's own situation; leave a question the rest answers."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -938,15 +925,10 @@ def character_scene_lock(strategy: dict) -> str:
     decided it, instead of being left to the photograph and the model to
     reconcile.
 
-    "same camera" used to be in that list and had to go. Every finished render
-    now reframes once at the hook's camera beat (see _CAMERA_MOVE), so a lock
-    demanding an unchanging camera was contradicting the render it was supposed
-    to protect — and a model told both would either ignore the move or drift off
-    the locked angle. The lock's real job is the room, the light and the
-    wardrobe, and those are untouched by a camera move that keeps the same
-    scene. What replaces it is the more specific rule: the one stated move, and
-    no other change of angle. A move to a new angle is not a new scene, so the
-    lock still holds against the drift it exists to prevent.
+    The fixed selfie starting shot and one model-generated orbit now own camera
+    position and framing. Older camera_angle/framing fields are omitted so they
+    cannot override that instruction. The lock still owns the room, light,
+    wardrobe and props; processing adds only its centered zoom afterwards.
     """
     strategy = strategy or {}
     lines = []
@@ -959,7 +941,10 @@ def character_scene_lock(strategy: dict) -> str:
         described = [
             f"{label}: {_clip(values.get(key), 100, protect=True)}"
             for key, label in fields
-            if str(values.get(key) or "").strip()
+            # The fixed selfie instruction replaces even an older strategy's
+            # metre-based camera/framing fields, rather than contradicting them.
+            if not (section == "scene" and key in ("camera_angle", "framing"))
+            and str(values.get(key) or "").strip()
         ]
         if described:
             lines.append("\n".join(f"  {item}" for item in described))
@@ -1435,7 +1420,9 @@ def _assemble_prompt(
     # After the sections it governs and before the general look, which is where
     # the opening-interrupt directive sits for the same reason: the model reads a
     # standard immediately before the material it is a standard for.
+    sections.append(SELFIE_STARTING_SHOT)
     sections.append(camera_move_section(strategy, hook_seconds, condensed))
+    sections.append(_PHONE_HANDOFF_FRAMING)
 
     sections.append(
         "No text appears on screen at all — no captions, no titles, no labels. "

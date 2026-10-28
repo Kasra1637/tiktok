@@ -740,6 +740,92 @@ class TestCreativePlanBudget:
 
 
 class TestStrategyBudget:
+    def test_strategy_requests_selfie_orbit_and_visible_final_phone(self, monkeypatch):
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 3,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 17,
+                     "goal": "g", "script": "s", "action": "a"},
+                ],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Test"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        prompt = captured["prompt"]
+        from generation_planning import SELFIE_STARTING_SHOT
+        assert SELFIE_STARTING_SHOT in prompt
+        assert "1.1 metres" not in prompt
+        assert '"direction": "left or right"' in prompt
+        assert "when the story begins" in prompt.lower()
+        assert "same distance from the face" in prompt
+        assert "Do not push in, pull back, or zoom" in prompt
+        assert '"at":' not in prompt
+        assert "final seconds through the last frame" in prompt
+        assert "entire phone" in prompt
+        assert "clear margins" in prompt
+        assert "not cut off or hidden" in prompt
+        assert "do not show a screen" in prompt
+        assert "NEVER write a call to action" in prompt
+
+    def test_camera_beat_keeps_only_direction_and_a_short_gesture(self):
+        import ai_service
+
+        strategy = ai_service.normalize_strategy({
+            "camera_beat": {"at": 99, "direction": " LEFT ",
+                            "gesture": "a small puzzled head tilt", "arc": 0.09},
+        })
+        assert strategy["camera_beat"] == {
+            "direction": "left", "gesture": "a small puzzled head tilt",
+        }
+        assert set(ai_service.STRATEGY_CAMERA_BEAT_JSON_SCHEMA["properties"]) == {"direction", "gesture"}
+        assert ai_service.STRATEGY_CAMERA_BEAT_JSON_SCHEMA["properties"]["direction"]["enum"] == ["left", "right"]
+
+    def test_camera_gesture_is_short_without_splitting_a_word(self):
+        import ai_service
+
+        gesture = ai_service.normalize_strategy({
+            "camera_beat": {"direction": "right", "gesture": "a slight head tilt " * 20},
+        })["camera_beat"]["gesture"]
+        assert len(gesture) <= 90
+        assert ("a slight head tilt " * 20).startswith(gesture)
+        assert not gesture.endswith("ti")
+
+    @pytest.mark.parametrize("direction", ["left", "right"])
+    def test_normalization_preserves_each_orbit_direction(self, direction):
+        import ai_service
+
+        beat = ai_service.normalize_strategy({"camera_beat": {
+            "direction": direction, "gesture": "a small relieved smile",
+        }})["camera_beat"]
+        assert beat == {"direction": direction, "gesture": "a small relieved smile"}
+
+    def test_invalid_orbit_direction_names_the_next_step(self):
+        import ai_service
+
+        with pytest.raises(ValueError, match="regenerate the strategy"):
+            ai_service.normalize_strategy({"camera_beat": {
+                "direction": "up", "gesture": "a small relieved smile",
+            }})
+
     def test_strategy_uses_a_budget_that_fits_its_schema(self):
         """
         Guard the number itself. The strategy object is the largest in the

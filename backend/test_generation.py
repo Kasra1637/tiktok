@@ -1205,6 +1205,60 @@ class TestSubmitFailureIsPermanent:
         assert gp.is_recoverable_error(message) is False
 
 
+class TestFinalPhoneFraming:
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    def test_final_phone_framing_survives_full_and_condensed_prompts(self, prompt_budget):
+        prompt = gp.build_segment_prompt(
+            strategy={"scene": {"camera_angle": "Eye-level handheld 1.1 metres away."},
+                      "camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"}},
+            profile={}, template={}, duration=10, plan={"hook_seconds": 3},
+            prompt_budget=prompt_budget,
+        )
+        assert "1.1 metres" not in prompt
+        assert gp.SELFIE_STARTING_SHOT in prompt
+        assert "when the story begins" in prompt.lower()
+        assert "orbit left" in prompt
+        assert "a slight puzzled head tilt" in prompt
+        assert "same distance from the face" in prompt
+        assert "Do not push in, pull back, or zoom" in prompt
+        assert "final seconds through the last frame" in prompt
+        assert "entire phone" in prompt
+        assert "clear margins" in prompt
+        assert "not cut off or hidden" in prompt
+        assert "No readable screen or app use" in prompt
+        assert gp.camera_move_section(
+            {"camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"}},
+            3, prompt_budget < gp.CONDENSE_BELOW,
+        ) in prompt
+        assert len(prompt) <= prompt_budget
+
+    @pytest.mark.parametrize("direction", ["left", "right"])
+    def test_final_phone_framing_survives_a_saturated_strategy_at_every_ceiling(self, direction):
+        kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
+        kwargs["strategy"]["camera_beat"] = {
+            "direction": direction, "gesture": "a small relieved smile",
+        }
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key)["prompt_char_limit"]
+            prompt = gp.build_segment_prompt(
+                **kwargs, prompt_budget=limit, script_sacred=vp.script_is_sacred(key),
+            )
+            assert gp.SELFIE_STARTING_SHOT in prompt
+            assert f"orbit {direction}" in prompt
+            assert "a small relieved smile" in prompt
+            assert "Do not push in, pull back, or zoom" in prompt
+            assert "when the story begins" in prompt.lower()
+            assert "same distance from the face" in prompt
+            assert "then hold" in prompt
+            assert "on the hook line" not in prompt
+            assert "push in and arc" not in prompt
+            assert "final seconds through the last frame" in prompt
+            assert "entire phone" in prompt
+            assert "clear margins" in prompt
+            assert "not cut off or hidden" in prompt
+            assert len(prompt) <= limit
+
+
 class TestPerProviderPromptBudget:
     """
     RENDER_PROMPT_LIMIT was measured against Hailuo's 7,000-char refusal. A

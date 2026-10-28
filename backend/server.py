@@ -7399,34 +7399,25 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     f"rendered size."
                 )
 
-            # Bake the hook-boundary camera move into the canonical file, right
-            # here after the canvas resize and before the R2 upload, so the
-            # preview and the download carry it -- not just captioned
-            # composites, the only place it used to run (which is why changing
-            # its magnitude never showed on a raw clip). Fresh downloads only,
-            # like trim and rescale above: re-running it on an already-moved
-            # canonical file would punch twice. Soft by design: an unmoved clip
-            # is still a watchable video.
+            # Apply the single centered 1.10x zoom after canvas resize, before
+            # upload. Fresh downloads only: canonical clips must never zoom twice.
+            # Start at 70% of hook_seconds, ease for 0.6s, then hold to the end.
+            # The model alone generates the orbit; there is no lateral crop.
+            # Existing soft-failure behavior still preserves a watchable clip.
             try:
                 project_row = await _fetch_one(
-                    "SELECT hook_seconds, strategy FROM studio_projects WHERE id = ?",
+                    "SELECT hook_seconds FROM studio_projects WHERE id = ?",
                     (row.get("studio_project_id") or "",),
                 )
-                # The same beat the render prompt was given, read out of the
-                # strategy rather than re-derived here -- see
-                # overlays.camera_beat_seconds for why the two must not each
-                # compute their own.
+                # Only hook duration sets the processing timestamp. Legacy
+                # strategy.camera_beat.at must not override the 70% ratio.
                 move_at = overlays.camera_beat_seconds(
                     (project_row or {}).get("hook_seconds"),
-                    _project_strategy(project_row or {}),
                 )
             except (TypeError, ValueError):
                 move_at = 0.0
             if move_at > 0:
-                moved, move_warnings = await overlays.apply_camera_move(
-                    local_path, move_at,
-                    overlays.move_direction_for(generation_id),
-                )
+                moved, move_warnings = await overlays.apply_camera_move(local_path, move_at)
                 if moved:
                     local_path = moved
                 elif move_warnings:
@@ -7979,20 +7970,11 @@ async def generate_project_strategy(
             strategy, approved_plan, hook_seconds, total_duration
         )
 
-    # The camera move's beat is stamped here rather than left to the model or
-    # re-derived at finalize, because two readers that each compute "when" will
-    # eventually disagree -- and when they do, the lean the model performs and
-    # the reframe ffmpeg applies are two different events, which is precisely
-    # the post-processing read this move exists to avoid. The model contributes
-    # the gesture (already trimmed by normalize_strategy); this decides the
-    # second, and both consumers read it back.
+    # Strategy owns only the generated orbit direction and actor gesture.
+    # Zoom timing belongs to processing: start at 70% of hook_seconds and
+    # finish about 0.6s later. Never promise generated spoken-word sync.
     strategy = dict(strategy or {})
-    existing_beat = strategy.get("camera_beat")
-    existing_beat = existing_beat if isinstance(existing_beat, dict) else {}
-    strategy["camera_beat"] = {
-        **existing_beat,
-        "at": overlays.camera_beat_seconds(hook_seconds),
-    }
+    strategy["camera_beat"] = normalize_strategy(strategy)["camera_beat"]
 
     merged = dict(row)
     merged["strategy"] = strategy

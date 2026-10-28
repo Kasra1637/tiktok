@@ -13,10 +13,10 @@ anymore.
 """
 import asyncio
 import logging
+import math
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,100 +25,26 @@ logger = logging.getLogger(__name__)
 CANVAS_WIDTH = 1080
 CANVAS_HEIGHT = 1920
 
-# The hook-boundary camera move.
-#
-# One render covers the whole piece, so there is no edit point to cut at -- but a
-# piece that never changes angle reads as one static shot, and the beat where
-# the hook's line lands is where attention needs re-hooking. What is baked here
-# is a selfie lean-in: the camera pushes in AND arcs to one three-quarter angle,
-# so she grows toward the lens and settles off-axis rather than merely filling
-# the frame, and that framing then holds for the rest of the piece.
-# Time-based (t), not frame-based (n), so it lands identically at any fps.
-#
-# Done here rather than in the prompt for the same reason anything
-# frame-exact is: the model cannot be trusted with timing, and a prompt asking
-# for "a move at 1.4 seconds" drifts. ffmpeg lands it on the frame.
+# Processing owns exactly one centered zoom. The generated footage alone owns
+# the orbit and actor gesture; there is no crop-based arc or face-following pan.
+TRANSITION_MAGNIFICATION = 1.10  # Total, not an additive zoom percentage.
 TRANSITION_RAMP_SECONDS = 0.6
-
-# How much tighter the shot ends up, as a fraction of frame size. Kept small
-# because it is NOT the only cost of the move: see TRANSITION_MAGNIFICATION --
-# lateral travel is paid for in magnification, and the zoom is only the part of
-# that budget a founder perceives as a push-in.
-TRANSITION_ZOOM = 0.07
-
-# How far she travels across the frame, as a fraction of frame WIDTH.
-# Canvas-relative on purpose. This used to be a fraction of the slack the zoom
-# created, which made the reframe a rounding error: the canvas fit leaves the
-# frame exactly canvas-sized, so at the boundary there is no spare width at all
-# and every pixel of lateral travel had to be borrowed from the zoom. On a 1080
-# frame that produced 27 pixels -- 2.5% of width, invisible on a phone -- which
-# is why a piece built around this transition read as "it only zooms".
-TRANSITION_ARC = 0.09
-
-# Total magnification at the end of the ramp.
-#
-# Lateral travel is not free in a flat reframe. There are no pixels outside the
-# canvas to reveal -- no parallax, no new perspective, no way to synthesize a
-# viewpoint that was never rendered -- so a camera move is a crop, and a crop
-# can only move by sliding a window inside a larger frame. Sliding it by ARC
-# needs half the width-slack on the chosen side, which is (M-1)/2; the extra
-# ZOOM is what pays for looking tighter. M = 1 + 2*ARC + ZOOM keeps both visible
-# without silently eating one to fund the other.
-TRANSITION_MAGNIFICATION = 1 + 2 * TRANSITION_ARC + TRANSITION_ZOOM
-
-# Where her face ends up vertically, as a fraction of frame height. Just above
-# centre, which is where a person leaning into a phone camera actually lands:
-# close enough to the lens that her head breaks the top edge, still holding her
-# eyes above the horizontal centre line where they read as into-camera.
-TRANSITION_FACE_REST_Y = 0.45
-
-# A boundary needs room on both sides for the ramp. Closer to either end than
-# this, the move would start before the first frame or finish past the last
-# one, so the transition is skipped instead of rendered half. Held equal to the
-# ramp on purpose: the old 0.3 was thinner than the 0.25 ramp it was guarding,
-# and a 0.6s move needs its own length in front of it.
 TRANSITION_EDGE_MARGIN = 0.6
-
-# Where inside the hook the move lands, as a fraction of the hook's own length.
-#
-# Not the hook/middle boundary itself. A lean-in that fires exactly where the
-# hook ends is the same instant the spoken line lands, so the two read as one
-# event and the viewer registers a cut rather than a beat. Landing at 70% puts
-# the move under the last words of the hook line, on the beat, which is what
-# makes it read as her moving rather than as a filter being applied.
 CAMERA_BEAT_FRACTION = 0.7
 
 
 def camera_beat_seconds(hook_seconds, strategy: dict = None) -> float:
-    """
-    The second the camera move lands on, or 0.0 when there is no beat to land on.
+    """Zoom START time: 70% of hook_seconds, completing about 0.6s later.
 
-    Read from the strategy's `camera_beat`, which is written back with the exact
-    same number the render prompt is given, so the model is asked to perform a
-    lean at a second and ffmpeg reframes at that second rather than each
-    re-deriving it and disagreeing. A beat after the hook is not a beat in the
-    hook, so a stored value is clamped into it; a strategy saved before this
-    field existed, or one whose model omitted it, gets the fraction applied here
-    -- the identical value the writer would have stored.
-
-    This is the closest thing to "on the beat" that is honestly available. There
-    is no per-phrase speech timing in this system (beat_timeline is exactly two
-    intervals, forced), and no usable audio to find one in: two of the three
-    providers return no audio at all and the third defaults its own off, so a
-    beat has to be committed to in advance rather than detected.
+    The unused strategy argument is accepted for legacy callers, but a saved
+    camera_beat.at never overrides the ratio. The model is asked to orbit only
+    'when the story begins', not at a timestamp or on a particular spoken word.
     """
     try:
-        hook = max(0.0, float(hook_seconds or 0))
+        hook = float(hook_seconds or 0)
     except (TypeError, ValueError):
-        hook = 0.0
-    beat = (strategy or {}).get("camera_beat")
-    try:
-        at = float(beat.get("at")) if isinstance(beat, dict) else 0.0
-    except (TypeError, ValueError):
-        at = 0.0
-    if at <= 0 or at > hook:
-        at = CAMERA_BEAT_FRACTION * hook
-    return round(at, 3)
+        return 0.0
+    return round(CAMERA_BEAT_FRACTION * hook, 3) if math.isfinite(hook) and hook > 0 else 0.0
 
 
 def canvas_fit_chain(source_label: str, out_label: str) -> list:
@@ -263,155 +189,45 @@ async def rescale_to_canvas(video_path: Path, timeout: int = 600) -> tuple:
     return await asyncio.to_thread(rescale_to_canvas_sync, video_path, timeout)
 
 
-def detect_face_center(video_path: Path, at_seconds: float) -> Optional[tuple]:
-    """
-    Where her face is in one frame of the clip, as fractions of frame size.
-
-    Returns (x, y) each in 0..1, or None when no face can be found. This is the
-    pivot the camera move is built around, and it is the whole difference
-    between a move that reads as a person leaning into the lens and one that
-    reads as a crop sliding across a picture: the zoom has to grow AROUND HER,
-    not around the middle of the frame. The canvas fit guarantees the middle of
-    the frame is only the middle of the frame.
-
-    Sampled before the boundary, not after: this is where she is when the move
-    starts, which is the framing the move then has to preserve.
-
-    The detector is the same YuNet model the identity reference already uses
-    (see face_crop), vendored in this repo, so this costs no new dependency and
-    no new model file. Imported lazily because a missing model must never fail
-    a render, and because the move is skipped entirely on most boundaries.
-    """
-    source = Path(video_path)
-    if not source.is_file():
-        return None
-    try:
-        from PIL import Image
-        import numpy as np
-        from face_crop import _detect_face
-    except Exception as e:
-        logger.warning("Face pivot unavailable (%s); framing on the frame.", e)
-        return None
-
-    temp = source.with_name(f".{source.stem}_pivot_{uuid.uuid4().hex}.png")
-    try:
-        try:
-            proc = subprocess.run(
-                [
-                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                    "-threads", "1",
-                    # Seek ahead of the input so this decodes one frame rather
-                    # than everything up to the boundary.
-                    "-ss", f"{max(0.0, float(at_seconds)):.3f}",
-                    "-i", str(source),
-                    "-frames:v", "1", str(temp),
-                ],
-                capture_output=True, text=True, timeout=120,
-            )
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.warning("Pivot frame extraction failed (%s); framing on the frame.", e)
-            return None
-        if proc.returncode != 0 or not temp.exists():
-            logger.info("No pivot frame at %.2fs; framing the move on the frame.", at_seconds)
-            return None
-        try:
-            frame = np.array(Image.open(temp).convert("RGB"))
-        except Exception as e:
-            logger.warning("Pivot frame unreadable (%s); framing on the frame.", e)
-            return None
-        height, width = frame.shape[:2]
-        if width < 2 or height < 2:
-            return None
-        box = _detect_face(frame)
-        if box is None:
-            return None
-        fx, fy, fw, fh, _confidence = box
-        return (
-            min(1.0, max(0.0, (fx + fw / 2.0) / width)),
-            min(1.0, max(0.0, (fy + fh / 2.0) / height)),
-        )
-    finally:
-        temp.unlink(missing_ok=True)
-
-
-def crop_target(face_x: float, face_y: float, direction: int = 1) -> tuple:
-    """
-    The crop window's resting offset, in pixels, for a face-anchored move.
-
-    `face_x`/`face_y` are fractions of the frame. `direction` is +1 to arc so
-    she travels right across the frame, -1 for left.
-
-    Solved rather than interpolated, because what is being specified is HER
-    output position, not the window's slide: at full magnification she sits at
-    M*face and the window's centre at x + width/2, so travelling by ARC*WIDTH
-    means x = M*face_x - face_x - direction*ARC*WIDTH. Vertically the same, with
-    her face coming to rest just above centre.
-
-    Both are clamped to the slack. A subject already hard against one edge, or a
-    centre fallback, must not push the window off its own frame. ffmpeg clamps
-    too, but only after the ramp has been following a target it cannot reach,
-    which shows as the move sticking to the edge and then catching up.
-    """
-    magnification = TRANSITION_MAGNIFICATION
-    slack_x = (magnification - 1) * CANVAS_WIDTH
-    slack_y = (magnification - 1) * CANVAS_HEIGHT
-    face_px_x = face_x * CANVAS_WIDTH
-    face_px_y = face_y * CANVAS_HEIGHT
-    want_x = face_px_x * (magnification - 1) - direction * TRANSITION_ARC * CANVAS_WIDTH
-    want_y = magnification * face_px_y - TRANSITION_FACE_REST_Y * CANVAS_HEIGHT
-    return (
-        round(min(slack_x, max(0.0, want_x)), 3),
-        round(min(slack_y, max(0.0, want_y)), 3),
-    )
-
-
 def build_camera_move_command(
     source: Path,
     output_path: Path,
     at_seconds: float,
     duration: float,
-    face_x: float = 0.5,
-    face_y: float = 0.5,
-    direction: int = 1,
+    magnification: float = TRANSITION_MAGNIFICATION,
 ) -> list:
+    """Apply one straight centered zoom, starting at at_seconds.
+
+    Magnification is the TOTAL setting (1.08–1.12, default exactly 1.10), with
+    no extra scale for sideways travel. Smoothstep reaches it 0.6s after the
+    start and holds to the end. Center remains fixed; there is no pan, face
+    repositioning or synthetic orbit. One inverse-coordinate resampling keeps
+    fractional crop coordinates and the exact setting, without integer scale
+    rounding or dynamic-scale/crop reconfiguration shifting the crop origin.
+
+    The generated shot must keep head/chin/phone inside the central 88% so the
+    centered crop preserves them. Processing cannot recover already-missing
+    pixels or guarantee safe framing for arbitrary older source clips.
     """
-    ffmpeg argv that bakes the hook-boundary camera move into one clip.
-
-    A selfie lean-in over TRANSITION_RAMP_SECONDS at `at_seconds`: a push-in plus
-    a lateral arc to one three-quarter angle, pivoted on her detected face so she
-    grows toward the lens instead of the frame closing up around its own middle.
-    The framing reached is held for the rest of the piece, because a piece that
-    wobbles back to centre reads as an effect rather than as a shot that
-    changed. The render prompt asks for the same lean (see
-    generation_planning._CAMERA_MOVE), and this pass is what lands it on the
-    frame whether or not the model honoured it.
-
-    `face_x`/`face_y` place the subject in the frame as fractions; the caller
-    gets them from detect_face_center and falls back to dead centre when no face
-    is found. `direction` is +1 or -1 and picks which side she arcs to.
-
-    Time-based (t), not frame-based (n), so it lands identically at any fps.
-    Audio is copied untouched; only the picture is reframed.
-    """
+    magnification = float(magnification)
+    if not 1.08 <= magnification <= 1.12:
+        raise ValueError("Camera zoom must be a total magnification from 1.08 to 1.12.")
     cut_at = float(at_seconds)
-    crop_x, crop_y = crop_target(face_x, face_y, 1 if direction >= 0 else -1)
-    # Smoothstep, not a linear ramp. The ramp used to slide at a constant rate
-    # and stop dead, which is part of why the move read as post-processing: a
-    # real head gesture accelerates into the lean and settles out of it, and a
-    # curve with zero velocity at both ends is the cheapest way to say so.
-    ramp = f"min(max(t/{TRANSITION_RAMP_SECONDS},0),1)"
+    # Smoothstep starts with zero velocity and ends with zero velocity.
+    # Time is relative to the post-start half, not the original file clock.
+    ramp = f"min(max(T/{TRANSITION_RAMP_SECONDS},0),1)"
     ease = f"({ramp})*({ramp})*(3-2*({ramp}))"
-    grow = f"(1+{TRANSITION_MAGNIFICATION - 1:.4f}*{ease})"
+    grow = f"(1+({magnification!r}-1)*{ease})"
+    # Map every destination pixel back into a centered source window. W/H
+    # refer to each plane, so chroma follows exactly the same geometry as luma.
+    # No lateral offset, extra magnification, face anchor or integer crop step.
+    coordinates = f"(X-W/2)/{grow}+W/2,(Y-H/2)/{grow}+H/2"
     graph = ";".join([
         "[0:v]split=2[pre0][post0]",
         f"[pre0]trim=end={cut_at:.3f},setpts=PTS-STARTPTS[pre]",
         f"[post0]trim=start={cut_at:.3f},setpts=PTS-STARTPTS,"
-        f"scale=w='trunc(iw*{grow}/2)*2'"
-        f":h='trunc(ih*{grow}/2)*2'"
-        f":eval=frame,"
-        f"crop={CANVAS_WIDTH}:{CANVAS_HEIGHT}"
-        f":x='{crop_x}*{ease}'"
-        f":y='{crop_y}*{ease}'[post]",
+        f"geq=lum='lum({coordinates})':cb='cb({coordinates})'"
+        f":cr='cr({coordinates})':interpolation=bilinear[post]",
         "[pre][post]concat=n=2:v=1:a=0,format=yuv420p[outv]",
     ])
     return [
@@ -435,11 +251,10 @@ def build_camera_move_command(
 def apply_camera_move_sync(
     video_path: Path,
     at_seconds: float,
-    direction: int = 1,
     timeout: int = 600,
 ) -> tuple:
     """
-    Bake the hook-boundary camera move into one clip in place.
+    Bake the single centered zoom into one clip in place.
 
     Returns (path_or_None, warnings). Soft by design, like the canvas resize: an
     unmoved clip is still a watchable video, so losing the move must never lose
@@ -469,18 +284,10 @@ def apply_camera_move_sync(
     latest = duration - TRANSITION_EDGE_MARGIN
     if not (TRANSITION_EDGE_MARGIN < cut_at < latest):
         return None, []
-    pivot = detect_face_center(source, max(0.0, cut_at - 0.15))
-    if pivot is None:
-        logger.info(
-            "No face pivot for %s; framing the camera move on the frame centre.", source.name,
-        )
-        face_x = face_y = 0.5
-    else:
-        face_x, face_y = pivot
     temp = source.with_name(f".{source.stem}_move_{uuid.uuid4().hex}{source.suffix}")
     try:
         argv = build_camera_move_command(
-            source, temp, cut_at, duration, face_x, face_y, direction,
+            source, temp, cut_at, duration,
         )
         try:
             proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
@@ -502,28 +309,9 @@ def apply_camera_move_sync(
 async def apply_camera_move(
     video_path: Path,
     at_seconds: float,
-    direction: int = 1,
     timeout: int = 600,
 ) -> tuple:
     """Async wrapper so the poll path can await this alongside its other work."""
     return await asyncio.to_thread(
-        apply_camera_move_sync, video_path, at_seconds, direction, timeout,
+        apply_camera_move_sync, video_path, at_seconds, timeout,
     )
-
-
-def move_direction_for(generation_id: str) -> int:
-    """
-    Which way this generation's move arcs: +1 (she travels right) or -1 (left).
-
-    Derived from the generation id, so it is not random: the same generation
-    always gets the same direction, which is what keeps the move reproducible
-    and lets a founder who dislikes one video regenerate it and get a different
-    one rather than an identical reroll. Every render leaning the identical way
-    is what made the arc read as a template rather than as a shot.
-    """
-    text = str(generation_id or "")
-    if not text:
-        return 1
-    return 1 if sum(ord(char) for char in text) % 2 == 0 else -1
-
-
