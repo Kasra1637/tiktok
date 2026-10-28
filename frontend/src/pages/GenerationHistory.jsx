@@ -513,7 +513,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       variant="secondary"
                       asChild
                       data-testid={`history-variation-${row.id}`}
-                      className="min-w-[150px] flex-1"
+                      className="h-auto min-w-[150px] flex-1 whitespace-normal py-2 text-center"
                     >
                       <Link
                         to={`/create?project=${row.studio_project_id}`}
@@ -521,16 +521,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                         title={isWinnerRow(row)
                           ? "Open this winner's plan in Create Video for another take like this"
                           : "Open this plan in Create Video for another take \u2014 your recorded thumbs steer the next plan"}
+                        className="flex flex-col items-center gap-0.5 leading-tight"
                       >
-                        <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Open plan"}
+                        <span className="flex items-center gap-2"><CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Open plan"}</span>
+                        <span className="text-xs font-normal opacity-80">Tweak one thing or rerun as-is.</span>
                       </Link>
                     </Button>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Reopens this render's plan in Create Video — change one thing or regenerate as-is.
-                </p>
-
               </div>
               </div>
             </div>

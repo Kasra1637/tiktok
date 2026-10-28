@@ -12445,17 +12445,15 @@ async function runDemoCtaChecks() {
           // The duplicate/variation endpoints were retired, so the entry is a
           // deep link into the draft project, not a new endpoint call: the
           // plan arrives intact and the recorded thumbs steer the next plan.
-          const entry = [...ctx.container.querySelectorAll("a")].find(
-            (a) => (a.textContent || "").trim() === "Open plan"
-          );
-          if (!entry) {
+          const entry = ctx.container.querySelector('[data-testid="history-variation-gen-vary"]');
+          if (!entry || !(entry.textContent || "").includes("Open plan")) {
             throw new Error(
               "History has no Open plan entry on a finished clip. Without " +
                 "it, recorded thumbs have no path into the next draft."
             );
           }
-          if (!ctx.container.textContent.includes("Reopens this render's plan")) {
-            throw new Error("the plan entry does not say it reopens the render's plan");
+          if (!(entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
+            throw new Error("the plan entry does not carry its punchy subcopy inside the button");
           }
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=proj-9")) {
@@ -12480,11 +12478,12 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
           await act(async () => {});
-          const entry = [...ctx.container.querySelectorAll("a")].find(
-            (a) => (a.textContent || "").trim() === "Another take like this"
-          );
-          if (!entry) {
+          const entry = ctx.container.querySelector('[data-testid="history-variation-gen-win"]');
+          if (!entry || !(entry.textContent || "").includes("Another take like this")) {
             throw new Error("a winner has no Another take like this entry");
+          }
+          if (!(entry.textContent || "").includes("Tweak one thing or rerun as-is.")) {
+            throw new Error("the winner entry does not carry its punchy subcopy inside the button");
           }
           const href = entry.getAttribute("href") || "";
           if (!href.includes("/create?project=wd1")) {
@@ -12515,9 +12514,7 @@ async function runDemoCtaChecks() {
           if (dead) {
             throw new Error(`a winner links a deleted draft: ${dead.getAttribute("href")}`);
           }
-          const entry = [...ctx.container.querySelectorAll("a")].find(
-            (a) => (a.textContent || "").trim() === "Another take like this"
-          );
+          const entry = ctx.container.querySelector('[data-testid="history-variation-gen-ghost"]');
           if (entry) {
             throw new Error("a winner with no live draft still offers another take");
           }
