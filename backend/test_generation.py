@@ -1297,6 +1297,11 @@ class TestFinalPhoneFraming:
         assert "clear margins" in prompt
         assert "never behind hand/arm/face" in prompt
         assert "through the last frame" in prompt
+        # Full mode names them outright; the condensed twin squeezes the same
+        # constraints shorter. Either way the screen faces her and her eyes
+        # stay on the phone.
+        assert "screen facing her" in prompt or "screen to her" in prompt
+        assert "eyes on the phone" in prompt or "eyes on it" in prompt
         assert "central 88%" in prompt
         assert "about a metre away (loose hint)" in prompt
         if condensed:
@@ -1339,6 +1344,8 @@ class TestFinalPhoneFraming:
             assert "clear margins" in prompt
             assert "never behind hand/arm/face" in prompt
             assert "through the last frame" in prompt
+            assert "screen to her" in prompt or "screen facing her" in prompt
+            assert "eyes on it" in prompt or "eyes on the phone" in prompt
             assert "central 88%" in prompt
             assert "about a metre away (loose hint)" in prompt
             assert len(prompt) <= limit

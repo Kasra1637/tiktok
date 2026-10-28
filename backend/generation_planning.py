@@ -169,8 +169,8 @@ CONDENSE_BELOW = 5000
 # and gesture, and final-phone visibility survive every provider squeeze.
 # Processing alone starts a zoom at 70% of hook_seconds and finishes 0.6s later;
 # no numeric timestamp or spoken-word sync is promised to the video model.
-FULL_PROMPT_FLOOR = 4198
-CONDENSED_PROMPT_FLOOR = 2346
+FULL_PROMPT_FLOOR = 4269
+CONDENSED_PROMPT_FLOOR = 2373
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -387,17 +387,18 @@ _CONDENSED_CAMERA_MOVE = (
 # the model to zoom or to show any screen content.
 _PHONE_HANDOFF_FRAMING = (
     "Final 1-2s: she raises the phone into view as she finishes saying she found it, "
-    "back to camera; whole phone fully visible and uncropped at chest height, clear "
-    "margins, never behind hand/arm/face, through the last frame. No screen/app use; "
-    "head/chin/phone in central 88%."
+    "back to camera, screen facing her; whole phone visible, uncropped, at chest height, "
+    "clear margins, never behind hand/arm/face, eyes on the phone, excited to open it, "
+    "never glancing away, through the last frame. No screen/app use; head/chin/phone "
+    "in central 88%."
 )
 
 # Condensed twin: every constraint survives. The no-screen rule is carried by the
 # condensed handoff above, so it is not repeated here.
 _CONDENSED_PHONE_HANDOFF_FRAMING = (
-    "Final 1-2s: she raises the phone into view as she finishes, back to camera; "
-    "whole phone visible, uncropped, chest height, clear margins, never behind "
-    "hand/arm/face, through the last frame; central 88%."
+    "Final 1-2s: she raises the phone into view, back to camera, screen to her; whole "
+    "phone visible, uncropped, clear margins, never behind hand/arm/face, eyes on it, "
+    "excited, never glancing away, through the last frame; central 88%."
 )
 
 

@@ -379,6 +379,14 @@ body {
     padding: 20px;
 }
 
+/* Wizard density: a step's blocks sit inside TWO 20px gutters — the step
+   card's own padding plus the inset panel's — which is 40px of air before
+   any content. Scoped to the wizard so the global tokens, and the design
+   guidelines that pin them, stay untouched. */
+.surface-step .inset-panel {
+    padding: 16px;
+}
+
 /* A small bordered aside inside a card (ratings, warnings, pre-render notes).
    Never a full card nested inside a card. 20px gutter, same step as cards. */
 .inset-panel {

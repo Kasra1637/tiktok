@@ -4593,9 +4593,9 @@ async def generate_video_strategy(
         "same distance from the face, then hold. Do not push in, pull back, or zoom. "
         "Simultaneously perform that gesture; subtle, natural. "
         "All fields agree; no timestamp or word sync.\n"
-        "- Final 1-2s: raise the phone into view as she finishes, back to camera; whole phone "
-        "fully visible and uncropped at chest height, clear margins, never hidden, through the "
-        "last frame.\n"
+        "- Final 1-2s: raise the phone into view, back to camera, screen to her; whole phone, "
+        "uncropped, clear margins, never hidden, eyes on it, excited, never glancing away, "
+        "through the last frame.\n"
         # proof_moment is deliberately NOT a generation input any more. It is the one moment
         # the camera must film to make the claim believable — which is the product demo, and
         # the demo is recorded by the founder. It stays on the App Profile as a brief for that

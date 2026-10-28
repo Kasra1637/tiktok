@@ -857,6 +857,10 @@ class TestStrategyBudget:
         assert "through the last frame" in prompt
         assert "clear margins" in prompt
         assert "never hidden" in prompt
+        assert "screen to her" in prompt
+        assert "eyes on it" in prompt
+        assert "never glancing away" in prompt
+        assert "excited" in prompt
         assert "about a metre away (loose hint)" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt

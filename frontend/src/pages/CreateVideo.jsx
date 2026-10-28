@@ -177,7 +177,7 @@ function RecommendationCard({ r, selected, onSelect, index = 0 }) {
       }}
       aria-pressed={selected}
       style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-      className={`card-pickable animate-fade-up w-full rounded-xl border p-5 text-left ${
+      className={`card-pickable animate-fade-up w-full rounded-xl border p-4 text-left ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
@@ -895,7 +895,7 @@ function AngleGoalPicker({
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
               style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-              className={`card-pickable animate-fade-up rounded-xl border p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+              className={`card-pickable animate-fade-up rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -982,7 +982,7 @@ function PlanPhaseLine() {
 
 function StepShell({ icon: Icon, title, children }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {Icon && (
         <div className="space-y-1">
           {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}
@@ -2887,7 +2887,7 @@ setObjective("");
                 script is shorter than the model wrote it, and silence about
                 that reads as the studio losing words. */}
             {project?.plan_trim?.dropped_chars > 0 && (
-              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-5" data-testid="plan-trimmed-note">
+              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-4" data-testid="plan-trimmed-note">
                 <p className="text-base">
                   I shortened your script by {project.plan_trim.dropped_chars} characters so it
                   fits the {project.plan_trim.middle_seconds}-second middle
@@ -3078,7 +3078,7 @@ setObjective("");
                 duration change once a plan exists precisely because the beats
                 were clamped to that number, so the only way to a different
                 length is a different template and a regenerated plan. */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-4">
                 <span className="text-sm font-semibold">Length of the generated piece</span>
                 <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-base">
@@ -3280,7 +3280,7 @@ setObjective("");
 
   if (loading) {
     return (
-      <PageFrame className="space-y-6">
+      <PageFrame className="space-y-4">
         <div className="flex items-center gap-2">
           {STEPS.map((s) => (
             <Skeleton key={s.key} className="h-7 w-24 shrink-0 rounded-full" />
