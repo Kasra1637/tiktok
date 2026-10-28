@@ -529,10 +529,10 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                         onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
                         title={isWinnerRow(row)
                           ? "Open this winner's plan in Create Video for another take like this"
-                          : "Open this plan in Create Video for another take \u2014 your recorded thumbs steer the next plan"}
+                          : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your recorded thumbs steer the next plan"}
                         className="flex flex-col items-center gap-0.5 leading-tight"
                       >
-                        <span className="flex items-center gap-2"><CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Open plan"}</span>
+                        <span className="flex items-center gap-2"><CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Remix this plan"}</span>
                         <span className="text-xs font-normal opacity-80">Tweak one thing or rerun as-is.</span>
                       </Link>
                     </Button>

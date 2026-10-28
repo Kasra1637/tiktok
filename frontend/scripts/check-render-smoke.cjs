@@ -12446,7 +12446,7 @@ async function runDemoCtaChecks() {
           // deep link into the draft project, not a new endpoint call: the
           // plan arrives intact and the recorded thumbs steer the next plan.
           const entry = ctx.container.querySelector('[data-testid="history-variation-gen-vary"]');
-          if (!entry || !(entry.textContent || "").includes("Open plan")) {
+          if (!entry || !(entry.textContent || "").includes("Remix this plan")) {
             throw new Error(
               "History has no Open plan entry on a finished clip. Without " +
                 "it, recorded thumbs have no path into the next draft."
