@@ -136,3 +136,42 @@ export function formatVerdicts(evidence) {
   if (flops) parts.push(`${flops} flop${flops === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }
+
+/**
+ * 0–10 fit of one video goal for the selected angle, as { score, basis, thin }.
+ *
+ * A match score, never an outcome promise: it says how well the goal fits this
+ * angle for this app, not what the video will do. Three honest inputs:
+ *
+ *   - rank: where the goal sits in this angle's suggestion order (first
+ *     counts most). The order is the server's persisted ranking, so it is
+ *     evidence, not decoration.
+ *   - tally: the goal's own win share across all angle kinds.
+ *   - fit reason: the scorer naming a concrete match is worth a point.
+ *
+ * Floored, never rounded up: with thin evidence a round-up would sell a coin
+ * flip as a measurement — the same rule that keeps formatVerdicts a count
+ * list. Under 3 total verdicts the score caps at 6 and `thin` is true, so the
+ * card can say "early signal" instead of wearing unearned certainty. Zero
+ * evidence is a valid input, not an error: an unproven goal still scores from
+ * its rank, low.
+ */
+export function goalFitScore({ index = 0, total = 6, evidence = null, hasFitReason = false } = {}) {
+  const wins = Math.max(0, Number(evidence?.wins) || 0);
+  const flops = Math.max(0, Number(evidence?.flops) || 0);
+  const verdicts = wins + flops;
+  const safeTotal = Math.max(1, Number(total) || 1);
+  const safeIndex = Math.min(Math.max(0, Number(index) || 0), safeTotal - 1);
+  const rank = (safeTotal - safeIndex) / safeTotal;
+  const tally = verdicts ? wins / verdicts : 0;
+  const thin = verdicts < 3;
+  let score = Math.floor(rank * 3 + tally * 6 + (hasFitReason ? 1 : 0));
+  if (thin) score = Math.min(score, 6);
+  score = Math.min(10, Math.max(0, score));
+  const ordinal =
+    safeIndex === 0 ? "1st" : safeIndex === 1 ? "2nd" : safeIndex === 2 ? "3rd" : `${safeIndex + 1}th`;
+  const basis = verdicts
+    ? `${wins} win${wins === 1 ? "" : "s"} in ${verdicts} · suggested ${ordinal} of ${safeTotal}${thin ? " · early signal" : ""}`
+    : `suggested ${ordinal} of ${safeTotal} · no results yet`;
+  return { score, basis, thin };
+}

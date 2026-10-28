@@ -32,7 +32,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
-import { angleDetails, formatVerdicts } from "../lib/angleSubtitle";
+import { angleDetails, formatVerdicts, goalFitScore } from "../lib/angleSubtitle";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -847,6 +847,15 @@ function AngleGoalPicker({
       <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={`Recommended video goals for ${angle.label}`}>
         {featured.map((goal, index) => {
           const selected = value === goal;
+          // 0–10 fit for this goal under the selected angle: annotates the
+          // card, never reorders the six. Rank is this angle's persisted
+          // suggestion order, tally is the goal's own win share.
+          const fit = goalFitScore({
+            index,
+            total: featured.length,
+            evidence: objectiveEvidence?.[goal],
+            hasFitReason: Boolean(fitReasons?.[goal]),
+          });
           return (
             // Staggered arrival, same language as the angle rows: a fresh
             // order is watched arriving instead of blinking in at once. Keyed
@@ -866,7 +875,16 @@ function AngleGoalPicker({
             >
               <span className="flex items-center justify-between gap-2 text-sm font-semibold">
                 {humanize(goal)}
-                {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span
+                    data-testid={`goal-fit-score-${goal}`}
+                    title={fit.basis}
+                    className="rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+                  >
+                    {fit.score}/10 fit
+                  </span>
+                  {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
+                </span>
               </span>
               {outcomes?.[goal] && (
                 <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
@@ -1044,6 +1062,15 @@ export default function CreateVideo() {
       { replace: true }
     );
   }, [step, setSearchParams, params]);
+  // Slide direction for the step transition, derived rather than tracked: the
+  // ref still holds the previous step during the render where `step` changed,
+  // so the incoming screen slides in from the side the founder moved toward.
+  // The effect below then catches the ref up for the next move.
+  const prevStepRef = useRef(step);
+  const slideDir = step - prevStepRef.current;
+  useEffect(() => {
+    prevStepRef.current = step;
+  }, [step]);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
   // The GOAL axis of the verdict tally, keyed by objective name and fetched
@@ -1123,6 +1150,21 @@ export default function CreateVideo() {
   // editing stays untouched — this is an additive fast path, not a
   // replacement, so the claim check and ready gate keep working as before.
   const [reviewThumb, setReviewThumb] = useState(0);
+  /* Review's two halves as sub-screens: "Read the plan" then "Render &
+     result". One screen in view at a time so the plan's dozen fields stop
+     competing with the render below. Not a new step — STEPS, ?step= and the
+     pills are untouched — just focus within step three. Both halves stay
+     mounted and switch with `hidden`, so nothing unmounts mid-poll and every
+     existing query keeps working; this is a focus split, never a new gate. */
+  const [reviewTab, setReviewTab] = useState("plan");
+  const scriptVersion = Number(project?.script_version) || 0;
+  const effectiveReviewTab = scriptVersion ? reviewTab : "plan";
+  // A fresh plan needs reading before it renders: whenever a new version
+  // arrives (first generate, regenerate, thumbs-down rewrite), land back on
+  // the plan half even if the founder was looking at the render.
+  useEffect(() => {
+    if (scriptVersion) setReviewTab("plan");
+  }, [scriptVersion]);
   // Consecutive AI refinements per saved plan version. Capped so a thumbs-down
   // loop can never spin the text model unboundedly on one plan.
   const reviewRefinesRef = useRef({});
@@ -1911,6 +1953,11 @@ setObjective("");
       detail: `plan v${Number(project.script_version) || 0}`,
     });
     if (next === 1) {
+      // Approval moves to the render half: thumbs-up is the moment the plan
+      // is done being read, so the founder lands on the render instead of
+      // having to notice the tab. scrollToSubmit already defers a frame, so
+      // it runs after the tab switch paints.
+      setReviewTab("render");
       scrollToSubmit();
       return;
     }
@@ -2146,6 +2193,45 @@ setObjective("");
   }
 
   const stepContent = renderStep();
+
+  /* One-line task for the footer, next to the arrows that walk the steps.
+     Plain body copy, deliberately NOT a data-subtitle: the subtitle budget
+     (text-xs, 55-60 chars) covers label-attached helpers only, and this is
+     step-level guidance with a job of its own. Navigation stays free — this
+     names what finishes the step, it never locks the arrows. */
+  const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
+  let footerHint = "Continue when ready \u2014 you can always go back.";
+  if (STEPS[step].key === "profile" && !profileId) {
+    footerHint = "Choose an app above \u2014 everything downstream builds on it.";
+  } else if (STEPS[step].key === "angle" && activeStepState?.state !== "done") {
+    footerHint = "Angle, goal, template and photo \u2014 each one ranks the next.";
+  } else if (STEPS[step].key === "review" && activeStepState?.state === "todo") {
+    footerHint = "Generate a plan above, read it, then render.";
+  } else if (STEPS[step].key === "review" && activeStepState?.state === "blocked") {
+    footerHint = "Save your edits and attach a photo before rendering.";
+  }
+
+  /* Within-step checklist: the pill above says whether the step is done, and
+     this names its parts so "blocked" never reads as a mystery. Derived from
+     the same values as stepCompletion, so the two can never disagree. Plain
+     status chips, not data-subtitles: the subtitle budget covers label-attached
+     helpers only, and this is step-level status with a job of its own. */
+  const hasPhoto = missingIdentity.length === 0;
+  const stepChecklist =
+    STEPS[step].key === "profile"
+      ? [{ label: "App chosen", done: !!profileId }]
+      : STEPS[step].key === "angle"
+        ? [
+            { label: "Angle", done: !!angleId },
+            { label: "Goal", done: !!objective },
+            { label: "Template", done: !!effectiveTemplateId },
+            { label: "Photo", done: hasPhoto },
+          ]
+        : [
+            { label: "Plan", done: scriptVersion > 0 },
+            { label: "Edits saved", done: !hasEdits },
+            { label: "Photo", done: hasPhoto },
+          ];
 
   function renderStep() {
     if (step === 0) {
@@ -2526,6 +2612,37 @@ setObjective("");
           icon={CheckCircle2}
           title="Review & submit"
         >
+        {/* The two halves of this step, once a plan exists to read. Before
+            that the plan states below (failed / generating / missing) are the
+            whole step and there is nothing to render yet, so no tabs. */}
+        {scriptVersion > 0 && (
+          <div
+            className="inline-flex items-center gap-1 self-start rounded-xl border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] p-1"
+            role="tablist"
+            aria-label="Review sections"
+          >
+            {[
+              { key: "plan", label: "Read the plan" },
+              { key: "render", label: "Render & result" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={effectiveReviewTab === tab.key}
+                onClick={() => setReviewTab(tab.key)}
+                data-testid={`review-tab-${tab.key}`}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  effectiveReviewTab === tab.key
+                    ? "bg-[color:var(--indigo-15)] text-foreground shadow-[var(--shadow-xs)]"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
         {!project?.script_version && planFailed && !busy ? (
           /* A plan attempt ran and failed. The page-level error above says why;
              this offers the retry. Manual and enabled: the auto latch already
@@ -2647,7 +2764,7 @@ setObjective("");
             )}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className={effectiveReviewTab === "plan" ? "space-y-4" : "hidden"}>
             {/* Regenerating replaces a plan that may have been edited and
                 approved, so it asks first — the same rule as the strategy
                 rebuild, and for the same reason. The status beside it names
@@ -3016,7 +3133,11 @@ setObjective("");
           </div>
         )}
             {/* Plan above, render below: the claim check in Review has been read
-                before any render down here runs. */}
+                before any render down here runs. This is the render half of the
+                review sub-tabs: hidden while the plan half is in view (and never
+                hidden before a plan exists, so the no-plan states above keep
+                their exact behavior). */}
+            <div className={scriptVersion && effectiveReviewTab !== "render" ? "hidden" : undefined}>
             {(project?.script_version || !firstGap) && (!angle && project?.script_version ? (
               /* The render is built around the audience angle, so it is the
                  first thing asked for here. This step never generates: its red
@@ -3123,6 +3244,7 @@ setObjective("");
                 )}
               </>
             ))}
+            </div>
         </StepShell>
       );
     }
@@ -3274,7 +3396,19 @@ setObjective("");
               Full width: the card's own surface padding is the gutter, so the
               step gets the whole frame like the rest of this editor page and
               no second width value is introduced here. */}
-          <div className="w-full">{stepContent}</div>
+          {/* One focused screen at a time: the step card holds a single step
+              at reading width, and the key remounts it on every step change so
+              the incoming screen slides in from the side the founder moved
+              toward (forward slides left, back slides right). Free-jump pills
+              above land directly; the arrows below walk one phase at a time. */}
+          <div className="mx-auto w-full max-w-3xl">
+            <div
+              key={step}
+              className={slideDir < 0 ? "wizard-slide-back" : "wizard-slide-forward"}
+            >
+              {stepContent}
+            </div>
+          </div>
         </div>
 
       {/* Sequential arrows beside free-jump pills. Back and Next lived here
@@ -3283,6 +3417,41 @@ setObjective("");
           a founder going through in order, the pills land a returning founder
           directly. Different jobs, so both stay. No guards, like the pills:
           these only move. */}
+      {/* Step task, in words: the pills above show state per step, and this
+          names the one thing to do on the screen in view. Plain body copy,
+          not a data-subtitle, for the same reason as the footer hint. */}
+      <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
+        {step === 0
+          ? "Step 1 of 3 \u2014 choose the approved app this video is for."
+          : step === 1
+            ? "Step 2 of 3 \u2014 pick the angle, goal, template, then add your photo."
+            : "Step 3 of 3 \u2014 read the plan, then render the Hook + Story."}
+      </p>
+
+      <ul
+        className="flex flex-wrap items-center gap-1.5"
+        data-testid="wizard-step-checklist"
+        aria-label="What finishes this step"
+      >
+        {stepChecklist.map((item) => (
+          <li
+            key={item.label}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+              item.done
+                ? "border-[color:var(--indigo-35)] text-foreground"
+                : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
+            }`}
+          >
+            {item.done ? (
+              <Check className="h-3 w-3 text-[color:var(--brand-indigo)]" aria-hidden="true" />
+            ) : (
+              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border border-current opacity-60" />
+            )}
+            {item.label}
+          </li>
+        ))}
+      </ul>
+
       <div className="flex items-center justify-between gap-2">
         <Button
           variant="ghost"
@@ -3295,9 +3464,19 @@ setObjective("");
         >
           <ChevronLeft className="h-3.5 w-3.5" /> Back
         </Button>
+        <p
+          className="hidden min-w-0 flex-1 truncate px-2 text-center text-sm text-muted-foreground sm:block"
+          data-testid="wizard-footer-hint"
+        >
+          {footerHint}
+        </p>
+        {/* Earns prominence: a finished step turns Continue primary, so the
+            way forward lights up the moment there is somewhere to go. Never
+            disabled — a returning founder can always walk forward to look —
+            the footer hint beside it already names what is still missing. */}
         {step < STEPS.length - 1 && (
           <Button
-            variant="secondary"
+            variant={activeStepState?.state === "done" ? "accent" : "secondary"}
             size="sm"
             onClick={() => setStep(step + 1)}
             aria-label={`Continue to ${STEPS[step + 1].label}`}

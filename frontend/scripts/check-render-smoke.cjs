@@ -4512,6 +4512,19 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (!kindLine.textContent.includes("2 wins") || !kindLine.textContent.includes("1 flop")) {
             throw new Error(`kind line does not read as counts: ${kindLine.textContent}`);
           }
+          // The 0–10 fit annotates the card: a bare score with the counts it
+          // came from behind it, never a percentage, never a promise.
+          const fitBadge = ctx.container.querySelector('[data-testid="goal-fit-score-address_user_problem"]');
+          if (!fitBadge) throw new Error("the goal card carries no fit score");
+          if (!/^\d+\/10 fit$/.test(fitBadge.textContent.trim())) {
+            throw new Error(`fit badge does not read as a score: ${fitBadge.textContent}`);
+          }
+          if (fitBadge.textContent.includes("%")) {
+            throw new Error("fit badge presents a rate instead of a score");
+          }
+          if (!fitBadge.getAttribute("title") || !fitBadge.getAttribute("title").includes("3 wins in 4")) {
+            throw new Error(`fit badge names no basis: ${fitBadge.getAttribute("title")}`);
+          }
         } finally {
           global.__SMOKE_PARAMS = "";
         }
@@ -6740,9 +6753,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 6) {
+      if (items.length !== 7) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 6. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -6762,6 +6775,7 @@ async function runSidebarNavChecks() {
         "/demo-cta",
         "/history",
         "/upscale",
+        "/assets",
         "/analytics",
       ];
       const actual = items.map((i) => i.to);
