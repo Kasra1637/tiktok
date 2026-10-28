@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
 import PageTransition from "./components/PageTransition";
+import { Skeleton } from "./components/ui/skeleton";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AuthProvider from "./components/auth/AuthProvider";
@@ -29,12 +30,27 @@ import Analytics from "./pages/Analytics";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 
 // The editor chunk is fetched on first navigation here, so the fallback
-// names what is coming rather than spinning silently. Shared by both
-// /demo-cta routes: only one can match at a time, so one element covers them.
+// mirrors the editor layout with shimmer skeletons — the same loading
+// language every other page speaks — rather than a static line. Shared by
+// both /demo-cta routes: only one can match at a time, so one element
+// covers them.
 function EditorLoading() {
   return (
-    <div className="surface" role="status">
-      <p className="text-sm text-muted-foreground">Loading the editor…</p>
+    <div
+      className="grid items-start gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]"
+      role="status"
+      aria-label="Loading the editor"
+    >
+      <div className="space-y-3">
+        <Skeleton className="h-10 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-10 w-2/3 rounded-xl" />
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="aspect-[9/16] w-full max-w-sm rounded-xl" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+      <span className="sr-only">Loading the editor…</span>
     </div>
   );
 }
