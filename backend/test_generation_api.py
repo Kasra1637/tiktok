@@ -946,6 +946,32 @@ class TestListingAndCapabilities:
         detail = _run(api.get_generation(gen["id"], ANON))
         assert FAKE_STRATEGY["hook_line"] in detail["prompt_used"]
 
+    def test_detail_carries_the_projects_demo_brief(self, api, monkeypatch):
+        """
+        The plan's recording note rides on the detail response.
+
+        `demo_brief` lives on the project, not on the generation row, and the
+        Demo + CTA editor — the one screen where the founder adds the footage
+        that note describes — opens through this endpoint. Without the join the
+        editor had nothing to show, and the founder had to leave it and reopen
+        Review to remember what they were told to record.
+        """
+        from models import StudioGenerationRequest
+        _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Demo Brief Carry")
+        brief = "Record yourself tapping the timer once, hands only."
+        _run(api._execute(
+            "UPDATE studio_projects SET demo_brief = ? WHERE id = ?", (brief, project["id"])))
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert _run(api.get_generation(gen["id"], ANON))["demo_brief"] == brief
+        # A row with no project behind it carries none, so the editor renders
+        # no note instead of an empty one. That is the standalone export case,
+        # and the case where the project has since been deleted.
+        _run(api._execute(
+            "UPDATE generations SET studio_project_id = NULL WHERE id = ?", (gen["id"],)))
+        assert _run(api.get_generation(gen["id"], ANON))["demo_brief"] is None
+
     def test_another_users_generation_is_404(self, api, monkeypatch):
         from models import StudioGenerationRequest
         _mock_submit(api, monkeypatch)
@@ -1274,6 +1300,15 @@ class TestModelSelectionAtTheApiBoundary:
         # Names the size, the ceiling, and reassures that nothing has been charged.
         assert "character prompt" in detail
         assert "nothing has been charged" in detail
+        assert " over the 200 " in detail, detail
+        # The ceiling here is below what the fixed instructions alone occupy, so
+        # the overshoot is larger than the script. The message has to say that
+        # cutting the script cannot rescue the render, and name the model as the
+        # only lever — a refusal that asks for an impossible trim is the failure
+        # this replaced ("shorten the script or the app's own wording").
+        assert "cutting the script cannot save this render" in detail, detail
+        assert "on the Generate step" in detail, detail
+        assert calls == []
 
     def test_heygen_trims_direction_and_keeps_the_script(self, api, monkeypatch):
         """

@@ -5879,14 +5879,31 @@ async def _submit_generation(
     # variables do, so a tight ceiling can still land over it. That is knowable
     # here and nowhere else, and it is knowable BEFORE spending — so it is
     # refused here rather than discovered as a provider 400 the founder pays for.
+    #
+    # The message is built from catalog data, not typed: the alternative model
+    # is the roomiest one this deployment actually offers above this ceiling, and
+    # the shortfall is compared against the project's own spoken words, so a
+    # founder is never told to cut more than their script contains.
     if prompt_budget and len(prompt) > prompt_budget:
+        capability = video_providers.capability(model_key)
+        alternative = None
+        for candidate in video_providers.list_capabilities():
+            candidate_ceiling = int(candidate.get("prompt_char_limit") or 0)
+            if candidate_ceiling <= int(prompt_budget):
+                continue
+            if alternative is None or candidate_ceiling > int(
+                alternative.get("prompt_char_limit") or 0
+            ):
+                alternative = candidate
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"This script and photo produce a {len(prompt)}-character prompt, over "
-                f"the {prompt_budget} {video_providers.capability(model_key).get('name', '')} "
-                f"accepts. Shorten the script or the app's own wording, or pick another "
-                f"model — nothing has been charged."
+            detail=generation_planning.prompt_ceiling_refusal(
+                prompt_chars=len(prompt),
+                ceiling=int(prompt_budget),
+                model_name=capability.get("name", ""),
+                spoken_chars=len(plan_words.get("hook_line") or "")
+                + len(plan_words.get("script") or ""),
+                alternative=alternative,
             ),
         )
 
@@ -6148,8 +6165,20 @@ async def list_generations(
 
 @api_router.get("/generations/{generation_id}")
 async def get_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+    # `demo_brief` rides along from the project. It is the plan's note telling
+    # the founder what to record for their own demo, and the Demo + CTA editor —
+    # the one screen where that footage is actually added — opens through this
+    # endpoint. Without it here the founder had to leave the editor and reopen
+    # Review to remember what they were told to show. The LEFT JOIN keeps the
+    # standalone case working: a row with no project (an export filed with no
+    # Hook + Story behind it, or a project deleted since) simply carries None,
+    # and the editor renders no note rather than an empty one.
     row = await _fetch_one(
-        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+        """SELECT g.*, p.demo_brief
+             FROM generations g
+             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+            WHERE g.id = ? AND g.user_id = ?""",
+        (generation_id, user_id),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")

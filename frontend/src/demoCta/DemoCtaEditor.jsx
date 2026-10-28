@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clapperboard,
   Download,
   Film,
   Loader2,
@@ -164,6 +165,34 @@ function SubLabel({ children }) {
 
 function FieldLabel({ children }) {
   return <span className="text-sm text-muted-foreground">{children}</span>;
+}
+
+/**
+ * The plan's recording note, read back where the footage is added.
+ *
+ * Review asks "What you record for the demo" and stores the plan's answer as
+ * `demo_brief` — a note to the founder, never part of the generated clip. The
+ * Demo + CTA editor is the screen where that recording is actually added, so
+ * the same sentence rides here as a read-only aside: styling a clip is no time
+ * to leave for the Review step to remember what to show. The words match the
+ * Review block on purpose, so it is recognisably the same instruction rather
+ * than a second, subtly different one.
+ *
+ * Not editable here: the plan owns this sentence, and Review is where it gets
+ * corrected (an editable copy in two places is two sources of truth). Rendered
+ * only when the plan actually wrote one — a standalone upload has no plan
+ * behind it, and an empty box would read as a missing instruction.
+ */
+function RecordBriefNote({ brief }) {
+  return (
+    <div className="inset-panel" data-testid="demo-cta-record-brief">
+      <GroupLabel icon={Clapperboard}>What you record for the demo</GroupLabel>
+      <p className="mt-3 text-base leading-relaxed">{brief}</p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        A note from your plan — never part of the generated clip.
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -1453,6 +1482,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
   // underestimating would grow a page scrollbar beside a studio that fits.
   const settingsRef = useRef(null);
   const appendNotReady = !!appendUrl && !appendMeta;
+  // The plan's recording note, when there is a plan behind this clip. Sits at
+  // the top of the settings column rather than inside a group: only one group
+  // is open at a time, and the instruction has to stay readable while the
+  // founder works through Source & Look or Second clip.
+  const recordBrief = (generation?.demo_brief || "").trim();
 
   return (
     // Radix tooltips need a provider ancestor; the app has none, and the
@@ -1503,6 +1537,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved }) 
           }}
         />
         )}
+        {recordBrief && <RecordBriefNote brief={recordBrief} />}
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
