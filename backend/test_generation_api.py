@@ -1300,6 +1300,15 @@ class TestModelSelectionAtTheApiBoundary:
         # Names the size, the ceiling, and reassures that nothing has been charged.
         assert "character prompt" in detail
         assert "nothing has been charged" in detail
+        assert " over the 200 " in detail, detail
+        # The ceiling here is below what the fixed instructions alone occupy, so
+        # the overshoot is larger than the script. The message has to say that
+        # cutting the script cannot rescue the render, and name the model as the
+        # only lever — a refusal that asks for an impossible trim is the failure
+        # this replaced ("shorten the script or the app's own wording").
+        assert "cutting the script cannot save this render" in detail, detail
+        assert "on the Generate step" in detail, detail
+        assert calls == []
 
     def test_heygen_trims_direction_and_keeps_the_script(self, api, monkeypatch):
         """

@@ -5879,14 +5879,31 @@ async def _submit_generation(
     # variables do, so a tight ceiling can still land over it. That is knowable
     # here and nowhere else, and it is knowable BEFORE spending — so it is
     # refused here rather than discovered as a provider 400 the founder pays for.
+    #
+    # The message is built from catalog data, not typed: the alternative model
+    # is the roomiest one this deployment actually offers above this ceiling, and
+    # the shortfall is compared against the project's own spoken words, so a
+    # founder is never told to cut more than their script contains.
     if prompt_budget and len(prompt) > prompt_budget:
+        capability = video_providers.capability(model_key)
+        alternative = None
+        for candidate in video_providers.list_capabilities():
+            candidate_ceiling = int(candidate.get("prompt_char_limit") or 0)
+            if candidate_ceiling <= int(prompt_budget):
+                continue
+            if alternative is None or candidate_ceiling > int(
+                alternative.get("prompt_char_limit") or 0
+            ):
+                alternative = candidate
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"This script and photo produce a {len(prompt)}-character prompt, over "
-                f"the {prompt_budget} {video_providers.capability(model_key).get('name', '')} "
-                f"accepts. Shorten the script or the app's own wording, or pick another "
-                f"model — nothing has been charged."
+            detail=generation_planning.prompt_ceiling_refusal(
+                prompt_chars=len(prompt),
+                ceiling=int(prompt_budget),
+                model_name=capability.get("name", ""),
+                spoken_chars=len(plan_words.get("hook_line") or "")
+                + len(plan_words.get("script") or ""),
+                alternative=alternative,
             ),
         )
 

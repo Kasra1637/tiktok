@@ -3,8 +3,9 @@
 - **Status:** accepted
 - **Date:** 2026-10-14 (decision predates this record; backfilled)
 - **Anchors:** commit `d618f150`; `backend/server.py` (prompt-budget build and
-  pre-send 409 refusal); `backend/generation_planning.py` (budget scaling);
-  `backend/video_providers.py` (`prompt_char_limit`, `script_is_sacred`)
+  pre-send 409 refusal); `backend/generation_planning.py` (budget scaling,
+  `prompt_ceiling_refusal`); `backend/video_providers.py`
+  (`prompt_char_limit`, `script_is_sacred`)
 
 ## Context
 
@@ -23,8 +24,12 @@ break every tight-ceiling model.
   direction and template wording absorb the squeeze, never the founder's
   approved words — a squeezed script is a different video.
 - A prompt still over budget after scaling is refused with a 409 **before**
-  any spend ("shorten the script or pick another model — nothing has been
-  charged"), never discovered as a provider 400.
+  any spend, never discovered as a provider 400. The refusal names the
+  overshoot, the size of a cut that would fit, and the roomiest model this
+  deployment offers above that ceiling — levers the founder actually has.
+  It used to say "shorten the script or the app's own wording, or pick another
+  model", which named one thing that is ours to change, not theirs, and gave
+  no size and no model (`generation_planning.prompt_ceiling_refusal`).
 
 ## Consequences
 

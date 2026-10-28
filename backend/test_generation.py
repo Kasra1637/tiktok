@@ -1061,6 +1061,73 @@ class TestProviderRefusalMessage:
         assert ai_service.describe_provider_refusal(None) is None
 
 
+class TestPromptCeilingRefusal:
+    """
+    The 409 a tight ceiling produces, which is the founder's only guidance once
+    the render is stopped. It used to name a lever they cannot pull ("the app's
+    own wording") and give no size and no model, so a founder was told to fix
+    something that is ours. These pin the sentence to the actions that exist.
+    """
+
+    def test_it_names_the_shortfall_the_ceiling_and_the_way_out(self):
+        message = gp.prompt_ceiling_refusal(
+            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
+            spoken_chars=380,
+            alternative={"name": "Hailuo 3", "prompt_char_limit": 6800},
+        )
+        assert "4294-character prompt" in message
+        assert "204 over the 4090 HeyGen Video accepts" in message
+        # The roomier model and its ceiling, so "pick another model" has a name.
+        assert "Hailuo 3 accepts 6800" in message
+        assert "switch to Hailuo 3 on the Generate step" in message
+        # The actionable cut, sized, and free.
+        assert "Cut about 204 characters from the script" in message
+        assert "nothing has been charged" in message
+        assert "app's own wording" not in message
+
+    def test_an_impossible_trim_is_never_asked_for(self):
+        """
+        A ceiling squeezed below the fixed instructions leaves an overshoot no
+        script cut can close. Asking for it anyway would send the founder round
+        a loop that cannot end, so the model is named as the only lever.
+        """
+        message = gp.prompt_ceiling_refusal(
+            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
+            spoken_chars=90,
+            alternative={"name": "Hailuo 3", "prompt_char_limit": 6800},
+        )
+        assert "bigger than the 90 characters your script has" in message
+        assert "cutting the script cannot save this render" in message
+        assert "Cut about" not in message
+        # A new sentence, so it is capitalised — the only lever named.
+        assert "Switch to Hailuo 3 on the Generate step" in message
+
+    def test_with_no_roomier_model_it_says_so(self):
+        """
+        Already on the roomiest model, "pick another model" is advice with
+        nowhere to go. The words have to come down, and the message says that
+        instead of pointing at a picker that cannot help.
+        """
+        message = gp.prompt_ceiling_refusal(
+            prompt_chars=6900, ceiling=6800, model_name="Hailuo 3",
+            spoken_chars=900, alternative=None,
+        )
+        assert "Cut about 100 characters from the script" in message
+        assert "no model in this workspace accepts a longer prompt" in message
+        assert "switch to" not in message
+        assert "nothing has been charged" in message
+
+    def test_a_smaller_alternative_is_not_offered(self):
+        """An alternative under the ceiling that just refused would re-refuse."""
+        message = gp.prompt_ceiling_refusal(
+            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
+            spoken_chars=380,
+            alternative={"name": "Smaller", "prompt_char_limit": 3000},
+        )
+        assert "Smaller" not in message
+        assert "no model in this workspace accepts a longer prompt" in message
+
+
 class TestRefusalNamesWhereThePhotoWent:
     """
     The founder-facing refusal describes the request we actually sent.

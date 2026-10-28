@@ -761,6 +761,80 @@ def _assemble_single_pass_prompt(
     return "\n\n".join(sections)
 
 
+def prompt_ceiling_refusal(
+    prompt_chars: int,
+    ceiling: int,
+    model_name: str,
+    spoken_chars: int,
+    alternative: Optional[dict] = None,
+) -> str:
+    """
+    The 409 body for a prompt still over its provider's ceiling after fitting.
+
+    This lives here, as a pure function, because the wording IS the refusal: the
+    founder has just been stopped before any spend, and this sentence is the
+    only thing telling them what to do next. It used to read "shorten the script
+    or the app's own wording, or pick another model — nothing has been charged",
+    which names one lever the founder cannot pull (the app's fixed instructions
+    are ours), and gives no size and no model. A refusal has to name the next
+    step, and only steps that exist.
+
+    The levers that do exist:
+
+    - The script. On a script-sacred provider it arrives whole, so a character
+      cut is a character saved. `spoken_chars` is the project's own hook line
+      plus script: when the overshoot is larger than that, trimming cannot
+      rescue the render — the ceiling is below what this project's words alone
+      need — and the message says so instead of asking for an impossible cut.
+    - The model, and only to one this deployment offers above this ceiling.
+      `alternative` is that model's capability record (or None when this is
+      already the roomiest), so the number quoted is the number the submit path
+      enforces rather than a name typed into a string.
+
+    "Nothing has been charged" stays in every variant: the guard runs before the
+    provider call, and that reassurance is the difference between a refusal the
+    founder retries and one they abandon.
+    """
+    prompt_chars = int(prompt_chars)
+    ceiling = int(ceiling)
+    over = max(0, prompt_chars - ceiling)
+    spoken = max(0, int(spoken_chars or 0))
+    name = (model_name or "this model").strip()
+    message = (
+        f"This script and photo assemble a {prompt_chars}-character prompt, {over} over "
+        f"the {ceiling} {name} accepts."
+    )
+
+    alt_name = (alternative.get("name") or alternative.get("key") or "").strip() if alternative else ""
+    alt_ceiling = int(alternative.get("prompt_char_limit") or 0) if alternative else 0
+    has_alternative = bool(alt_name and alt_ceiling > ceiling)
+    if has_alternative:
+        message += f" {alt_name} accepts {alt_ceiling}."
+
+    # The overshoot is larger than the project's own words: no cut to the script
+    # can close it, so name the model as the only lever rather than ask for a
+    # trim that would not exist.
+    if spoken and over > spoken:
+        message += (
+            f" The overshoot is bigger than the {spoken} characters your script has, so "
+            "cutting the script cannot save this render."
+        )
+        advice = (
+            f"Switch to {alt_name} on the Generate step"
+            if has_alternative
+            else "No model in this workspace accepts a longer prompt, so this project's "
+            "words have to come down before it can render"
+        )
+    else:
+        advice = f"Cut about {over} characters from the script"
+        advice += (
+            f", or switch to {alt_name} on the Generate step"
+            if has_alternative
+            else ", as no model in this workspace accepts a longer prompt"
+        )
+    return f"{message} {advice} — nothing has been charged."
+
+
 def is_recoverable_error(message: str) -> bool:
     """
     Whether retrying the same request could plausibly succeed.
