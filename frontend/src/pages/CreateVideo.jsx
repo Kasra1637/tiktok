@@ -809,6 +809,10 @@ function AngleGoalPicker({
   // or error, capped at the visible total so it never over-counts.
   const [shuffleCount, setShuffleCount] = useState(0);
   const shuffleTimer = useRef(null);
+  const trackRef = useRef(null);
+  const scrollGoals = (dir) => {
+    trackRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
+  };
   const shuffleTotal = Math.max(featured.length, 1);
   useEffect(() => {
     if (!regenerating) {
@@ -841,24 +845,50 @@ function AngleGoalPicker({
           <GroupLabel as="h3" icon={Target} id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
-          {onRegenerate && featured.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={onRegenerate}
-              disabled={regenerating}
-              title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
-              data-testid="regenerate-goals-button"
-            >
-              {regenerating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              {regenerating ? "Shuffling…" : "Shuffle"}
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {featured.length > 1 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 px-2"
+                  onClick={() => scrollGoals(-1)}
+                  aria-label="Browse goals left"
+                  data-testid="goals-browse-left"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 px-2"
+                  onClick={() => scrollGoals(1)}
+                  aria-label="Browse goals right"
+                  data-testid="goals-browse-right"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+            {onRegenerate && featured.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={onRegenerate}
+                disabled={regenerating}
+                title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
+                data-testid="regenerate-goals-button"
+              >
+                {regenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {regenerating ? "Shuffling…" : "Shuffle"}
+              </Button>
+            )}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           {featured.length > 0
@@ -872,7 +902,7 @@ function AngleGoalPicker({
           Shuffling goal {shuffleCount} of {shuffleTotal}…
         </p>
       )}
-      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={`Recommended video goals for ${angle.label}`}>
+      <div ref={trackRef} className="filmstrip-scroll flex snap-x gap-3 overflow-x-auto pb-1" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-browse-track">
         {featured.map((goal, index) => {
           const selected = value === goal;
           // 0–10 fit for this goal under the selected angle: annotates the
@@ -895,7 +925,7 @@ function AngleGoalPicker({
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
               style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-              className={`card-pickable animate-fade-up rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
+              className={`card-pickable animate-fade-up w-[78%] shrink-0 snap-start rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] sm:w-[calc(50%-6px)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -1356,6 +1386,10 @@ export default function CreateVideo() {
   // choice could be silently replaced by whatever ranked first that time, which
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
+  const templateTrackRef = useRef(null);
+  const scrollTemplates = (dir) => {
+    templateTrackRef.current?.scrollBy({ left: dir * 340, behavior: "smooth" });
+  };
   const recRequestRef = useRef(0);
 
   const loadRecommendations = useCallback(
@@ -2475,22 +2509,49 @@ setObjective("");
             )}
             {objective && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-4">
-                <span className="eyebrow block">
-                  {tailoredReady ? "Tailored for this app" : "Recommended"}
-                </span>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="eyebrow block">
+                    {tailoredReady ? "Tailored for this app" : "Recommended"}
+                  </span>
+                  {visibleRecommendations.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 px-2"
+                        onClick={() => scrollTemplates(-1)}
+                        aria-label="Browse templates left"
+                        data-testid="templates-browse-left"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 px-2"
+                        onClick={() => scrollTemplates(1)}
+                        aria-label="Browse templates right"
+                        data-testid="templates-browse-right"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div ref={templateTrackRef} className="filmstrip-scroll flex snap-x gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
                 {visibleRecommendations.map((r, i) => (
-                  <RecommendationCard
-                    key={r.template.id}
-                    r={r}
-                    index={i}
-                    selected={templateId === r.template.id}
-                    onSelect={() => {
-                      // Latched, so a later reload cannot move this pick.
-                      templateChosenByHand.current = true;
-                      setTemplateId(r.template.id);
-                    }}
-                  />
+                  <div key={r.template.id} className="w-[85%] shrink-0 snap-start sm:w-[calc(50%-6px)]">
+                    <RecommendationCard
+                      r={r}
+                      index={i}
+                      selected={templateId === r.template.id}
+                      onSelect={() => {
+                        // Latched, so a later reload cannot move this pick.
+                        templateChosenByHand.current = true;
+                        setTemplateId(r.template.id);
+                      }}
+                    />
+                  </div>
                 ))}
                 </div>
               </div>
@@ -3419,11 +3480,11 @@ setObjective("");
               step gets the whole frame like the rest of this editor page and
               no second width value is introduced here. */}
           {/* One focused screen at a time: the step card holds a single step
-              at reading width, and the key remounts it on every step change so
+              full width like every other page, and the key remounts it on every step change so
               the incoming screen slides in from the side the founder moved
               toward (forward slides left, back slides right). Free-jump pills
               above land directly; the arrows below walk one phase at a time. */}
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="w-full">
             <div
               key={step}
               className={slideDir < 0 ? "wizard-slide-back" : "wizard-slide-forward"}
