@@ -2035,6 +2035,21 @@ class TestHeygenScriptSacred:
         assert "H" * 200 in prompt
         assert "P" * 160 in prompt
 
+    def test_photo_and_prohibitions_still_fit_with_the_script_held(self):
+        kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
+        kwargs["assets"] = [{"kind": "character_reference", "name": "Founder face"}]
+        prompt = gp.build_segment_prompt(
+            **kwargs, prompt_budget=self._HEYGEN, script_sacred=True)
+
+        assert len(prompt) <= self._HEYGEN
+        assert "H" * 200 in prompt
+        assert "P" * 160 in prompt
+        assert "; ".join(["P" * 30] * 8) in prompt
+        assert "The person on camera is the person in the attached character reference" in prompt
+        assert "same face" in prompt
+        assert "same hair" in prompt
+        assert "not the place" in prompt
+
     def test_the_sacred_flag_does_not_leak_between_calls(self):
         """
         Same reason as the scale and the protect flag: a leak would hold the

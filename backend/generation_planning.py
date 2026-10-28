@@ -748,10 +748,11 @@ def _assemble_single_pass_prompt(
         # Same first-frame release as the main path, worded for a prompt with
         # no scene lock: this fallback renders from the plan alone, so the
         # place comes from the described scene rather than a locked one.
-        sections.append(
-            "Open in the scene described above, never the photo's room: the "
-            "photo supplies only the person."
-        )
+        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()):
+            sections.append(
+                "Open in the scene described above, never the photo's room: the "
+                "photo supplies only the person."
+            )
 
     sections.append(
         "Keep one consistent person, hand, or subject for the entire clip. Vertical framing "
@@ -938,6 +939,13 @@ def person_anchor_notes(assets: list) -> str:
         if str(asset.get("kind") or "").strip().lower() != "character_reference":
             continue
         label = _clip(asset.get("name") or asset.get("label") or "the attached character reference", 60)
+        if _PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get():
+            return (
+                "The person on camera is the person in the attached character reference "
+                f"({label}): same face, skin and age, and the same hair; no additions, "
+                "removals, restyling or blending. The image is the only authority on the person, "
+                "not the place; the scene sets clothing. Move and speak naturally."
+            )
         return (
             "The person on camera is the person in the attached character reference "
             f"image ({label}). Copy that person exactly: same face, skin and age, "
@@ -1553,14 +1561,13 @@ def _assemble_prompt(
         # without this the opening is the uploaded room and the prompted scene
         # only arrives mid-clip. HeyGen used to be that shape and no longer is
         # (its identity rides as a reference image), but Hailuo 3 Max still
-        # pins one — and even a *reference* image biases the room a model
-        # invents — so the sentence stays on every render with a person.
-        # One tight sentence: heygen's 4,090 ceiling is the catalog's lowest,
-        # and the anchor above already carries the rationale.
-        sections.append(
-            "Open in the locked scene, never the photo's room: the photo "
-            "supplies only the person."
-        )
+        # pins one — and even a *reference* image biases the room a model invents.
+        # HeyGen's condensed anchor already carries that rule; other prompts state it here.
+        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()):
+            sections.append(
+                "Open in the locked scene, never the photo's room: the photo "
+                "supplies only the person."
+            )
 
     if condensed:
         # The seconds are already stated in the opening sentence and in both
