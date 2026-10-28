@@ -680,6 +680,74 @@ class TestBrandTemplatePrompt:
             for i in range(n)
         ]
 
+    def test_the_default_set_is_six(self, monkeypatch):
+        """
+        Every generation targets six structures, not ten. Six is the picker's
+        own size, and the number is a product decision rather than a per-call
+        choice: no caller passes a count, so the default is the product.
+        """
+        import asyncio
+        import ai_service
+        assert ai_service.BRAND_TEMPLATE_COUNT == 6
+        captured = self._capture(monkeypatch, self._reply(10))
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [],
+            objective="demonstrate_feature"))
+        assert len(result) == 6
+        assert "Design exactly 6 DISTINCT" in captured["prompt"]
+
+    def _draft(self, offset, n):
+        return [
+            {"name": f"Hook {offset + i}", "category": "pain-point-question",
+             "objective": "address_user_problem",
+             "opening_structure": f"Open on pain {offset + i}.",
+             "middle_structure": "Name the cost, then stop at the reach."}
+            for i in range(n)
+        ]
+
+    def _sequence(self, monkeypatch, replies):
+        import ai_service
+        prompts = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return replies[len(prompts) - 1]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return prompts
+
+    def test_a_short_reply_is_topped_up_to_six(self, monkeypatch):
+        """
+        A model that returns four of six must not leave the picker on four.
+        The second call asks for the shortfall and names the titles already
+        taken, so the top-up cannot spend another call restating the same four.
+        """
+        import asyncio
+        import ai_service
+        prompts = self._sequence(monkeypatch, [self._draft(0, 4), self._draft(100, 3)])
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [],
+            objective="demonstrate_feature"))
+        assert len(result) == 6
+        assert len(prompts) == 2
+        assert "Design exactly 2 DISTINCT" in prompts[1]
+        assert "taken: hook 0; hook 1; hook 2; hook 3" in prompts[1]
+
+    def test_a_persistently_short_reply_returns_what_exists(self, monkeypatch):
+        """
+        One top-up, then stop. A model that keeps under-delivering would
+        otherwise be asked again and again for a set it will not produce, and
+        the founder would pay for every ask.
+        """
+        import asyncio
+        import ai_service
+        prompts = self._sequence(monkeypatch, [self._draft(0, 2), self._draft(100, 2)])
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Taskly", "core_features": ["timer"]}, [],
+            objective="demonstrate_feature"))
+        assert len(result) == 4
+        assert len(prompts) == 2, "the top-up must not loop"
+
     def test_generates_the_requested_count(self, monkeypatch):
         import asyncio
         import ai_service

@@ -2394,10 +2394,13 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     return {"caption": caption, "hashtags": hashtags, "cover_text": cover_text}
 
 
-# How many tailored structures each approved profile gets. Ten is a full
-# picker page without clutter; the picker ranks them against curated rows,
-# so a weak tenth still loses honestly rather than filling a quota.
-BRAND_TEMPLATE_COUNT = 10
+# How many tailored structures each approved profile gets, per objective.
+#
+# Six is the size a picker step can show as one scannable band: the tailored
+# set replaces the curated rows for the selected goal, and a full six keeps the
+# choice real without turning the step into a scroll. Asked for whole, with one
+# top-up call for a short reply, so the picker never opens on a partial set.
+BRAND_TEMPLATE_COUNT = 6
 
 
 def normalize_brand_template(raw: dict) -> Optional[dict]:
@@ -2469,6 +2472,52 @@ def _component_feedback_block(component_feedback: Optional[dict], component: str
     return f"\n\n{section}\n\n" if section else ""
 
 
+# Everything in the brand-template prompt after the per-call brief: the product
+# rules, the JSON example and the field constraints. Split out so the top-up
+# call can ask for the shortfall without restating the schema by hand.
+_BRAND_TEMPLATE_BODY = (
+    "A generated video is exactly TWO sections and nothing else: a HOOK in the first "
+    "4 seconds, then a MIDDLE that develops it. The middle develops the situation, the "
+    "friction or the reaction, and ends at the moment the viewer would reach for the app. "
+    "Design nothing past that moment. The product demo is recorded by the founder and "
+    "attached separately, and the call to action is added by them in their own editor — "
+    "so a structure that pays off, demonstrates the app in use, or closes on an action is "
+    "a wrong answer no matter how well it reads. "
+    "Presenter-led throughout: every video stars the founder on camera, so never design around "
+    "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
+    "content slot with this app's concrete specifics, not placeholders. "
+    "Return ONLY a JSON array where each element is:\n"
+    "{\n"
+    '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
+    '  "category": "one of the categories listed above",\n'
+    '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers | achieve_desired_outcome | overcome_viewer_doubt | ease_daily_moment | avoid_common_mistake | feel_seen_and_understood",\n'
+    '  "opening_structure": "what the first 4 seconds do, concretely for THIS app",\n'
+    '  "hook_seconds": 3,\n'
+    '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
+    '  "visual_style": "the look, presenter-led",\n'
+    '  "camera_pacing": "camera behaviour",\n'
+    '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
+    '  "default_duration": 15,\n'
+    '  "outcome": "what the viewer ends up with from this structure, one sentence, viewer-facing (e.g. hears their own frustration said out loud) -- never the mechanic, never a guaranteed result",\n'
+    "}\n"
+    "Rules: use ONLY facts present above. Every text field is a "
+    "sentence that starts with a capital letter -- write the examples above as "
+    "sentences, not as lowercase fragments, or the template renders with a typo. "
+    "Never invent a feature, price, rating, "
+    "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
+    "the categories and objectives — not rewordings of one idea. "
+    f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
+    f"{', '.join(str(d) for d in SUPPORTED_DURATIONS)} seconds, and it is the length of the "
+    "whole generated piece, not of a video the viewer finishes. Always set "
+    f"default_duration to {max(SUPPORTED_DURATIONS)} seconds: a shorter piece has a "
+    "smaller middle, and the plan's spoken words are budgeted to what that middle can "
+    "speak, so a shorter template silently cuts the payoff sentence. Only when this "
+    "structure's mechanic physically cannot hold a longer piece (for example a single "
+    "visual beat with nothing to develop) may a lower value be used. "
+    "Never use double-quote characters inside any string value. Return ONLY valid JSON."
+)
+
+
 async def generate_brand_templates(
     profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT,
     objective: str = "",
@@ -2477,6 +2526,10 @@ async def generate_brand_templates(
     """
     Draft tailored hook structures for one approved App Profile AND one
     selected objective.
+
+    The set is always filled: `count` structures (six by default), with one
+    top-up call when the model's first reply comes back short or loses entries
+    to normalization. A shortfall is never passed on as a smaller picker.
 
     The objective is caller-supplied (the founder picked it in the wizard),
     never model-chosen: every returned structure serves that goal, which is
@@ -2531,16 +2584,31 @@ async def generate_brand_templates(
         })
     categories = ", ".join(HOOK_CATEGORIES)
     want_objective = normalize_objective(objective)
-    if want_objective:
-        brief_line = (
-            f"Design exactly {count} DISTINCT hook structures for THIS app AND this objective: "
-            f"{want_objective}. Every structure below must serve that objective; a structure "
-            f"serving any other goal is a wrong answer no matter how good it reads. "
-        )
-    else:
-        # Defensive only: the endpoint refuses an empty objective, so this
-        # path means a direct caller. Spread rather than fail.
-        brief_line = f"Design exactly {count} DISTINCT hook structures for THIS app. "
+    head = (
+        f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
+        f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
+        f"Categories (use only these): {categories}\n\n"
+    )
+    feedback_block = _component_feedback_block(component_feedback, "template")
+
+    def _brief(want: int, avoid: tuple) -> str:
+        """The per-call instruction, sized to the number still missing."""
+        if want_objective:
+            line = (
+                f"Design exactly {want} DISTINCT hook structures for THIS app AND this objective: "
+                f"{want_objective}. Every structure below must serve that objective; a structure "
+                f"serving any other goal is a wrong answer no matter how good it reads. "
+            )
+        else:
+            # Defensive only: the endpoint refuses an empty objective, so this
+            # path means a direct caller. Spread rather than fail.
+            line = f"Design exactly {want} DISTINCT hook structures for THIS app. "
+        if avoid:
+            line += (
+                "None may repeat a structure already drafted — these titles are "
+                "taken: " + "; ".join(avoid) + ". "
+            )
+        return line
 
     system_message = (
         "You are a short-form video strategist for mobile apps. You design hook "
@@ -2551,77 +2619,48 @@ async def generate_brand_templates(
         "only, no markdown fences."
     )
 
-    prompt = (
-        f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
-        f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
-        f"Categories (use only these): {categories}\n\n"
-        f"{brief_line}"
-        f"{_component_feedback_block(component_feedback, 'template')}"
-        "A generated video is exactly TWO sections and nothing else: a HOOK in the first "
-        "4 seconds, then a MIDDLE that develops it. The middle develops the situation, the "
-        "friction or the reaction, and ends at the moment the viewer would reach for the app. "
-        "Design nothing past that moment. The product demo is recorded by the founder and "
-        "attached separately, and the call to action is added by them in their own editor — "
-        "so a structure that pays off, demonstrates the app in use, or closes on an action is "
-        "a wrong answer no matter how well it reads. "
-        "Presenter-led throughout: every video stars the founder on camera, so never design around "
-        "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
-        "content slot with this app's concrete specifics, not placeholders. "
-        "Return ONLY a JSON array where each element is:\n"
-        "{\n"
-        '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
-        '  "category": "one of the categories listed above",\n'
-        '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers | achieve_desired_outcome | overcome_viewer_doubt | ease_daily_moment | avoid_common_mistake | feel_seen_and_understood",\n'
-        '  "opening_structure": "what the first 4 seconds do, concretely for THIS app",\n'
-        '  "hook_seconds": 3,\n'
-        '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
-        '  "visual_style": "the look, presenter-led",\n'
-        '  "camera_pacing": "camera behaviour",\n'
-        '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
-        '  "default_duration": 15,\n'
-        '  "outcome": "what the viewer ends up with from this structure, one sentence, viewer-facing (e.g. hears their own frustration said out loud) -- never the mechanic, never a guaranteed result",\n'
-        "}\n"
-        "Rules: use ONLY facts present above. Every text field is a "
-        "sentence that starts with a capital letter -- write the examples above as "
-        "sentences, not as lowercase fragments, or the template renders with a typo. "
-        "Never invent a feature, price, rating, "
-        "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
-        "the categories and objectives — not ten variations of one idea. "
-        f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
-        f"{', '.join(str(d) for d in SUPPORTED_DURATIONS)} seconds, and it is the length of the "
-        "whole generated piece, not of a video the viewer finishes. Always set "
-        f"default_duration to {max(SUPPORTED_DURATIONS)} seconds: a shorter piece has a "
-        "smaller middle, and the plan's spoken words are budgeted to what that middle can "
-        "speak, so a shorter template silently cuts the payoff sentence. Only when this "
-        "structure's mechanic physically cannot hold a longer piece (for example a single "
-        "visual beat with nothing to develop) may a lower value be used. "
-        "Never use double-quote characters inside any string value. Return ONLY valid JSON."
-    )
-
-    # ~10 structures x ~12 short values is roughly triple the strategy
-    # schema, so the budget is tripled rather than reused.
-    raw = await _chat_json(
-        system_message=system_message,
-        prompt=prompt,
-        context="Brand templates",
-        temperature=0.5,
-        max_tokens=16384,
-        attempts=2,
-        json_schema=TEMPLATES_JSON_SCHEMA,
-        strict=False,
-    )
-    if isinstance(raw, dict):
-        raw = raw.get("templates") or []
-    if not isinstance(raw, list):
-        raise RuntimeError("Brand templates response was not a list.")
-
     templates = []
-    for item in raw:
-        normalized = normalize_brand_template(item)
-        if normalized is None:
-            continue
-        templates.append(normalized)
-        if len(templates) >= count:
+    taken = set()
+    # Two calls at most. The set is asked for whole; a second, briefed call
+    # covers a reply that came back short or lost entries to normalization.
+    # Re-asking for the same number would just re-spend the same call, so the
+    # top-up prompt names the shortfall and the titles already taken.
+    for _attempt in range(2):
+        want = count - len(templates)
+        if want <= 0:
+            break
+        prompt = head + _brief(want, tuple(sorted(taken))) + feedback_block + _BRAND_TEMPLATE_BODY
+        raw = await _chat_json(
+            system_message=system_message,
+            prompt=prompt,
+            context="Brand templates",
+            temperature=0.5,
+            max_tokens=16384,
+            attempts=2,
+            json_schema=TEMPLATES_JSON_SCHEMA,
+            strict=False,
+        )
+        if isinstance(raw, dict):
+            raw = raw.get("templates") or []
+        if not isinstance(raw, list):
+            raise RuntimeError("Brand templates response was not a list.")
+        added = 0
+        for item in raw:
+            normalized = normalize_brand_template(item)
+            if normalized is None:
+                continue
+            title = normalized["name"].strip().lower()
+            if title in taken:
+                continue
+            taken.add(title)
+            templates.append(normalized)
+            added += 1
+            if len(templates) >= count:
+                break
+        if added == 0:
+            # Nothing usable came back: another ask would spend again for the
+            # same answer. Return what exists rather than raising, because one
+            # usable structure still beats none.
             break
 
     if not templates:
