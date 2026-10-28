@@ -3085,7 +3085,7 @@ setObjective("");
                 </p>
               {hasSpokenCounts(project) && (
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-counts">
-                <GroupLabel icon={Ruler}>How the two lines measure up</GroupLabel>
+                <GroupLabel>How the two lines measure up</GroupLabel>
                 {[
                   { key: "hook", label: "Hook line" },
                   { key: "script", label: "Script" },
@@ -3116,7 +3116,7 @@ setObjective("");
             )}
             {hasSpokenPartition(project) && (
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-partition">
-                <GroupLabel icon={FileText}>What the middle will say</GroupLabel>
+                <GroupLabel>What the middle will say</GroupLabel>
                 <p className="text-base">{sentenceCase(project.spoken_middle)}</p>
                 {/* What is not spoken is counted by the server, not sliced out
                     of the script here. The kept words are no longer always a

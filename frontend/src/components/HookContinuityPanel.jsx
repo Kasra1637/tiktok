@@ -412,7 +412,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
            SHAPE of what comes back is, and that is what was missing. */
         <div className="space-y-3 rounded-xl border border-dashed border-[color:var(--hairline)] p-3">
           <div className="space-y-1">
-            <GroupLabel icon={Sparkles}>What you get</GroupLabel>
+            <GroupLabel>What you get</GroupLabel>
             <ol className="space-y-2 text-base">
               {["hook", "middle"].map((role) => (
                 <li key={role} className="space-y-1">
@@ -444,7 +444,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       {hasStrategy && (
         <div className="space-y-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
           <div className="space-y-1">
-            <GroupLabel icon={Sparkles}>Hook concept</GroupLabel>
+            <GroupLabel>Hook concept</GroupLabel>
             <p className="text-base">{sentenceCase(strategy.hook_concept)}</p>
             {/* The hook line itself is NOT printed here. It is the same string as
                 the Review step's "Hook line", verbatim, because the strategy
