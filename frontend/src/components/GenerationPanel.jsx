@@ -688,46 +688,53 @@ const handleGenerate = async () => {
                   like a broken app; the truth is usually a source the browser
                   cannot stream (an expired provider link), and the download is
                   the way through either way. */}
-              {previewBroken ? (
-                <p className="w-full max-w-[280px] rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-sm text-muted-foreground">
-                  Preview unavailable — download it to view.
-                </p>
-              ) : (
-                <video
-                  src={previewUrl}
-                  controls
-                  playsInline
-                  preload="none"
-                  poster={posterUrl || undefined}
-                  onError={() => setPreviewBroken(true)}
-                  className="w-full max-w-[280px] rounded-xl border border-[color:var(--hairline)]"
-                />
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" asChild>
-                  <a
-                    href={saveUrl}
-                    download
-                    onClick={() => recordSignal("video_downloaded", "downloaded", {
-                      brand_profile_id: generation?.brand_profile_id || "",
-                      studio_project_id: generation?.studio_project_id || "",
-                      generation_id: generation?.id || "",
-                      template_id: generation?.template_id || "",
-                    })}
-                  >
-                    <Download className="h-3.5 w-3.5" /> Download MP4
-                  </a>
-                </Button>
-              </div>
-              {/* Frozen post copy for this render; pre-kit renders show nothing. */}
-              {generation.post_kit && (
-                <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
-                  <PostKitSection
-                    postKit={generation.post_kit}
-                    generationId={generation.id}
-                  />
+              {/* Finished render: narrow video left, frozen post copy right on
+                  wide screens, stacked on narrow ones. Only the post-copy card
+                  sits beside the video; votes and Demo + CTA stay full-width below. */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="w-full max-w-[280px] shrink-0 space-y-2">
+                  {previewBroken ? (
+                    <p className="w-full rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-sm text-muted-foreground">
+                      Preview unavailable — download it to view.
+                    </p>
+                  ) : (
+                    <video
+                      src={previewUrl}
+                      controls
+                      playsInline
+                      preload="none"
+                      poster={posterUrl || undefined}
+                      onError={() => setPreviewBroken(true)}
+                      className="w-full rounded-xl border border-[color:var(--hairline)]"
+                    />
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" size="sm" asChild>
+                      <a
+                        href={saveUrl}
+                        download
+                        onClick={() => recordSignal("video_downloaded", "downloaded", {
+                          brand_profile_id: generation?.brand_profile_id || "",
+                          studio_project_id: generation?.studio_project_id || "",
+                          generation_id: generation?.id || "",
+                          template_id: generation?.template_id || "",
+                        })}
+                      >
+                        <Download className="h-3.5 w-3.5" /> Download MP4
+                      </a>
+                    </Button>
+                  </div>
                 </div>
-              )}
+                {/* Frozen post copy for this render; pre-kit renders show nothing. */}
+                {generation.post_kit && (
+                  <div className="min-w-0 flex-1 space-y-3 sm:border-t sm:border-[color:var(--hairline)] sm:pt-3">
+                    <PostKitSection
+                      postKit={generation.post_kit}
+                      generationId={generation.id}
+                    />
+                  </div>
+                )}
+              </div>
               <ComponentThumbs
                 component="video"
                 question="Did this generated video turn out well?"
