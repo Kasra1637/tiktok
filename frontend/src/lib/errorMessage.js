@@ -39,5 +39,11 @@ export function errorMessageFor(err) {
       "or export a shorter clip."
     );
   }
+  if (err?.response?.status === 429) {
+    return (
+      "Too many requests right now, so nothing was saved. " +
+      "Wait a moment and try again."
+    );
+  }
   return err?.message || "Something went wrong. Please try again.";
 }

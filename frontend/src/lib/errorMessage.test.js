@@ -31,4 +31,10 @@ describe("errorMessageFor", () => {
       errorMessageFor({ response: { status: 413, data: { detail: "Those parts would join past the 200 MB save ceiling. Export a shorter clip." } } })
     ).toBe("Those parts would join past the 200 MB save ceiling. Export a shorter clip.");
   });
+
+  test("a bodyless 429 names the retry, not the status code", () => {
+    const message = errorMessageFor({ response: { status: 429 }, message: "Request failed with status code 429" });
+    expect(message).toContain("try again");
+    expect(message).not.toContain("429");
+  });
 });

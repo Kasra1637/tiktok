@@ -8,7 +8,6 @@ import {
   Clapperboard,
   WandSparkles,
   Smartphone,
-  Images,
   Briefcase,
   History as HistoryIcon,
   TrendingUp,
@@ -21,15 +20,14 @@ import {
 /**
  * Sidebar navigation model.
  *
- * Ordering is the dependency order of the product: the App Profile first,
- * because everything else is made from it. Create Video refuses to run without
- * an approved profile, and Demo + CTA inherits the app's angles and claims, so
- * leading with either of those puts a screen in front of the founder whose
- * inputs do not exist yet. Then the two things you make, then the assets they
- * are generated from, then what you have already made. The retired Discover /
- * Saved Hooks / Research Archive / Trend Research pages are gone, so there is no
- * Research group and no Insight link. Analytics is back, last, and it is about
- * the founder's own logged results rather than an Insight group.
+ * Ordering follows the working sequence: App Profile first, because everything
+ * else is made from it and Create Video refuses to run without an approved one.
+ * Create Video makes the hook, Demo + CTA turns the finished hook into an
+ * export, History records those renders and exports, Video Upscaler polishes
+ * footage, and Analytics reads the founder's own logged results. The retired
+ * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
+ * there is no Research group and no Insight link. Analytics is last, not an
+ * Insight group.
  *
  * App Profile leads rather than Create Video for that reason, and it is named
  * for what the page actually holds. "Your app" described one app, while the page
@@ -37,11 +35,6 @@ import {
  * the product's own vocabulary everywhere else — the tour, the detail page, the
  * database column — already says App Profile. A nav label that disagreed with
  * the page it opens was the remaining inconsistency.
- *
- * Demo + CTA sits directly under it because it is the one screen that works
- * with no input at all: it takes a file you already have, or a finished render
- * from the list underneath it, so it stays the shortest path to something to
- * look at for someone who is not starting from scratch.
  *
  * This was two labelled groups — "Create" and "Insight" — and both headings
  * are gone. "Insight" sat above exactly one link, so it read as a section with
@@ -60,11 +53,10 @@ import {
  */
 const NAV_ITEMS = [
   { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
-  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
-  { to: "/upscale", label: "Video Upscaler", icon: WandSparkles, testId: "upscale-nav-link", hint: "Sharpen, enlarge, download" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
-  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
+  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
+  { to: "/upscale", label: "Video Upscaler", icon: WandSparkles, testId: "upscale-nav-link", hint: "Sharpen, enlarge, download" },
   /* Results, last: it is the one page that only means something once the pages
      above it have produced something. Leading with it would open on an empty
      ledger for anyone still setting up. */

@@ -6740,9 +6740,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length < 5) {
+      if (items.length !== 6) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 5. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 6. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -6758,13 +6758,10 @@ async function runSidebarNavChecks() {
       // so leading with it would open on an empty ledger during setup.
       const expected = [
         "/brand",
-        "/demo-cta",
-        // The upscaler sits with the editor: both work on footage the
-        // founder already has, needing no profile or render first.
-        "/upscale",
         "/create",
-        "/assets",
+        "/demo-cta",
         "/history",
+        "/upscale",
         "/analytics",
       ];
       const actual = items.map((i) => i.to);
