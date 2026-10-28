@@ -149,7 +149,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 Open live video <ExternalLink className="h-3 w-3" />
               </a>
               {isWinner && (
-                <Badge variant="indigo" data-testid={`history-winner-${row.id}`} title="Thumbs up plus posted link — a real winner">
+                <Badge variant="indigo" data-testid={`history-winner-${row.id}`} title="Good vote plus posted link — a real winner">
                   Winner
                 </Badge>
               )}
@@ -194,7 +194,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
         {linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}
         {!savedLink && (
           <p className="text-sm text-muted-foreground">
-            Marks this render posted. Only a thumbs up plus a link counts as a winner.
+            Marks this render posted. Only a Good vote plus a link counts as a winner.
           </p>
         )}
         {savedLink && (

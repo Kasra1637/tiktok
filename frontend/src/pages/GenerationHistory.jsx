@@ -72,7 +72,13 @@ function hasCopyContext(row) {
 function formatRenderDate(value) {
   const t = Date.parse(value);
   if (Number.isNaN(t)) return "";
-  return new Date(t).toLocaleString();
+  return new Date(t).toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -398,7 +404,9 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
+              <span aria-hidden="true">·</span>
               <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
+              <span aria-hidden="true">·</span>
               <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
           </div>

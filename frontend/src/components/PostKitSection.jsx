@@ -73,7 +73,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
   return (
     <div className="space-y-3" data-testid="post-kit">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <GroupLabel icon={MessageSquareText}>Post copy for this render</GroupLabel>
+        <GroupLabel icon={MessageSquareText}>Caption, hashtags, cover</GroupLabel>
         <div className="flex flex-wrap items-center gap-2">
           {canRegenerate && (
             <Button
@@ -96,8 +96,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        Written for this clip when it finished, from its approved hook. Copy
-        all pastes the caption and its hashtags in one go.
+        Written for this clip when it finished, from its approved hook.
       </p>
       {regenError && (
         <p className="text-sm text-destructive" role="alert" data-testid="postkit-regenerate-error">
