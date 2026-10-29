@@ -2358,19 +2358,43 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             from `--demo-cta-frame-w`, which spends the column's leftover height
             on the video. */}
         <div
-          className={`demo-cta-frame mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
+          className={`demo-cta-frame relative mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
             videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
           }`}
         >
           {videoUrl ? (
-            <canvas
-              ref={previewCanvasRef}
-              role="img"
-              aria-label="Styled video preview. Drag to adjust the framing, or use the zoom and position sliders."
-              className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
-              onPointerDown={handlePointerDown}
-              onWheel={handleWheel}
-            />
+            <>
+              <canvas
+                ref={previewCanvasRef}
+                role="img"
+                aria-label="Styled video preview. Drag to adjust the framing, or use the zoom and position sliders."
+                className="block h-full w-full cursor-grab touch-none active:cursor-grabbing"
+                onPointerDown={handlePointerDown}
+                onWheel={handleWheel}
+              />
+              {/* One branded play button on the clip itself. The transport sits
+                  below the frame in a column that scrolls, so starting the clip
+                  used to mean scrolling away from it. It calls the same
+                  togglePlayPause the transport does — never a second playback
+                  path — and it leaves the frame as soon as playback starts, so
+                  it cannot cover the footage or claim a state the row below
+                  disagrees with. Recording hides it too: the export owns the
+                  timeline then. */}
+              {videoMeta && !isPlaying && !recording && (
+                <Button
+                  type="button"
+                  variant="accent"
+                  size="icon"
+                  onClick={togglePlayPause}
+                  aria-label="Play the clip"
+                  title="Play the clip"
+                  data-testid="demo-cta-preview-play"
+                  className="absolute inset-0 m-auto h-14 w-14 rounded-full [&_svg]:size-6"
+                >
+                  <Play aria-hidden="true" />
+                </Button>
+              )}
+            </>
           ) : loadingSource ? (
             <div className="h-full w-full motion-safe:animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
               <span className="sr-only">Loading the finished render…</span>

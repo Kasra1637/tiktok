@@ -9966,6 +9966,44 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("the loaded Demo + CTA preview carries one branded play button", async (ctx) => {
+    // The transport sits under the frame in a column that scrolls, so starting
+    // the clip meant leaving the video. One accent play button belongs on the
+    // thing it plays. It is not a second transport: it calls the same
+    // togglePlayPause and leaves the frame the moment playback starts, so it
+    // can never disagree with the row below.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    try {
+      await mount(Editor, {})(ctx);
+      await act(async () => {});
+      if (ctx.container.querySelector('[data-testid="demo-cta-preview-play"]')) {
+        throw new Error("an empty frame offered a play button with nothing to play");
+      }
+      await act(async () => ctx.root.unmount());
+      ctx.root = createRoot(ctx.container);
+      await clip.loadClip(ctx);
+      const play = () => ctx.container.querySelector('[data-testid="demo-cta-preview-play"]');
+      if (!play()) throw new Error("the loaded clip has no play button on the preview");
+      if (!play().closest(".demo-cta-frame")) {
+        throw new Error("the play button does not sit on the video frame");
+      }
+      if (play().getAttribute("aria-label") !== "Play the clip") {
+        throw new Error(`the preview play button is not named for its action: ${play().getAttribute("aria-label")}`);
+      }
+      await clickEl(ctx, play(), "play the clip from the frame");
+      await clip.flush();
+      if (play()) throw new Error("the frame kept a play button over footage that is playing");
+      const transport = ctx.container.querySelector('[data-testid="transport-play"]');
+      if (transport.getAttribute("aria-label") !== "Pause") {
+        throw new Error("pressing the frame's play button did not start the transport");
+      }
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+    }
+  });
+
   await check("Demo + CTA draft recovery failures block editing and retry without losing account scope", async (ctx) => {
     const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
     const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
