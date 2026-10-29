@@ -1002,6 +1002,34 @@ h1,
     animation: shimmer-sweep 850ms ease-out;
 }
 
+/* Unified busy state: a slow light fill that breathes across the button while
+   it works. It lives on `::before` so the hover sweep keeps `::after`, and it
+   keys off `data-busy` (set by the Button `busy` prop) rather than a second
+   spinner style per screen — one behavior for every CTA after the click.
+   The label names the work without dots; the fill is the wait indicator.
+   Text and icons never animate: only this fill layer moves. */
+@keyframes busy-sweep {
+    0% { transform: translateX(-140%) skewX(-18deg); opacity: 0; }
+    15% { opacity: 1; }
+    55% { transform: translateX(170%) skewX(-18deg); opacity: 1; }
+    100% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
+}
+.btn-studio[data-busy="true"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 45%;
+    background: linear-gradient(
+        105deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.16) 50%,
+        transparent 100%
+    );
+    transform: translateX(-140%) skewX(-18deg);
+    animation: busy-sweep 1.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
 /* The dark bevel the brand/selected variant wears.
  *
  * This was the coral gradient — the loudest surface in the app, and the one
@@ -1146,6 +1174,12 @@ h1,
     .shimmer-on-hover:hover::after,
     .btn-studio:hover:not(:disabled)::after {
         animation: none !important;
+    }
+    .btn-studio[data-busy="true"]::before {
+        animation: none !important;
+        transform: none;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.08);
     }
     .pill-studio:hover:not(:disabled) {
         transform: none !important;

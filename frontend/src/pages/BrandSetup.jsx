@@ -646,12 +646,13 @@ export default function BrandSetup() {
                 <Button
                   type="submit"
                   disabled={researching}
+                  busy={researching}
                   variant="secondary"
                   className="w-full sm:w-auto"
                   data-testid="research-app-button"
                 >
                   {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {researching ? "Researching..." : "Research app for video"}
+                  {researching ? "Researching" : "Research app for video"}
                 </Button>
               )}
               {researchedProfile && (
@@ -659,12 +660,13 @@ export default function BrandSetup() {
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
+                  busy={saving}
                   variant="accent"
                   className="w-full sm:w-auto"
                   data-testid="save-brand-button"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {saving ? "Saving..." : "Save profile"}
+                  {saving ? "Saving" : "Save profile"}
                 </Button>
               )}
               {researchedProfile && status !== "approved" && (
@@ -672,12 +674,13 @@ export default function BrandSetup() {
                   type="button"
                   onClick={() => handleApprove(true)}
                   disabled={approving}
+                  busy={approving}
                   variant="accent"
                   className="w-full sm:w-auto"
                   data-testid="approve-profile-button"
                 >
                   {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                  {approving ? "Approving..." : "Approve for video"}
+                  {approving ? "Approving" : "Approve for video"}
                 </Button>
               )}
               {/* Refresh from sources is offered only on an approved profile: a
@@ -691,6 +694,7 @@ export default function BrandSetup() {
                       variant="secondary"
                       className="w-full sm:w-auto"
                       disabled={researching || refreshing}
+                      busy={researching || refreshing}
                       title="Re-run research from these listings: read them into a proposal, or fork a separate draft"
                       data-testid="research-menu-button"
                     >
@@ -758,6 +762,7 @@ export default function BrandSetup() {
               className="shrink-0"
               onClick={() => handleApprove(true)}
               disabled={approving}
+              busy={approving}
               data-testid="approve-pending-button"
             >
               {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
@@ -1106,12 +1111,13 @@ export default function BrandSetup() {
               <Button
                 onClick={handleSave}
                 disabled={saving}
+                busy={saving}
                 variant="accent"
                 className="w-full sm:w-auto"
                 data-testid="save-manual-profile-button"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saving ? "Saving..." : brand?.id ? "Save App Profile" : "Create App Profile"}
+                {saving ? "Saving" : brand?.id ? "Save App Profile" : "Create App Profile"}
               </Button>
             )}
 
@@ -1133,9 +1139,10 @@ export default function BrandSetup() {
                       ? () => navigate(`/create?profile=${encodeURIComponent(brand.id)}`)
                       : () => handleApprove(false)}
                     disabled={approving || saving}
+                    busy={approving}
                     data-testid="find-video-to-remix-button"
                   >
-                    {approving ? "Approving…" : status === "approved" ? "Create Video" : "Approve saved profile"} <ArrowRight className="h-3.5 w-3.5" />
+                    {approving ? "Approving" : status === "approved" ? "Create Video" : "Approve saved profile"} <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDescription>
               </Alert>

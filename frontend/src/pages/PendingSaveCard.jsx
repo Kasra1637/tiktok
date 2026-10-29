@@ -77,8 +77,8 @@ export function PendingSaveCard({ entry, onResolved }) {
             </Button>
           ) : null}
           {hasBytes ? (
-            <Button variant="secondary" size="sm" disabled={busy} onClick={retry} data-testid={`pending-save-retry-${entry.id}`}>
-              <RotateCcw className="h-3.5 w-3.5" /> {busy ? "Retrying…" : "Retry save"}
+            <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={retry} data-testid={`pending-save-retry-${entry.id}`}>
+              <RotateCcw className="h-3.5 w-3.5" /> {busy ? "Retrying" : "Retry save"}
             </Button>
           ) : (
             <Button variant="secondary" size="sm" asChild>

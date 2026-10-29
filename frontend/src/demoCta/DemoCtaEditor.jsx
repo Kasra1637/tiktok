@@ -1933,7 +1933,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   testId="hook-variant-surprise"
                   ariaLabel="Generate a fresh hook message"
                 >
-                  {openingMessages.generating ? "Writing fresh openings…" : "Surprise me"}
+                  {openingMessages.generating ? "Writing openings" : "Surprise me"}
                 </Chip>
               </div>
             </div>
@@ -2828,8 +2828,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                     <Link to={`/history#generation-${saved.id}`}>View in History</Link>
                   </Button>
                 ) : (
-                  <Button variant="secondary" size="sm" disabled={saving} onClick={() => result.blob && saveExport(result.blob, result.name)}>
-                    <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save to History"}
+                  <Button variant="secondary" size="sm" disabled={saving} busy={saving} onClick={() => result.blob && saveExport(result.blob, result.name)}>
+                    <RotateCcw className="h-3.5 w-3.5" /> {saving ? "Saving" : "Save to History"}
                   </Button>
                 )}
               </div>

@@ -569,7 +569,7 @@ function AngleSelector({
   // a call from a screen whose job is something else. The label names the
   // destination so the redirect never reads as a broken Generate.
   generateLabel = "Generate angles",
-  generatingLabel = "Generating…",
+  generatingLabel = "Generating angles",
 }) {
   // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
   // It answers the only question a spinner cannot — is this fresh work or a
@@ -615,6 +615,7 @@ function AngleSelector({
         className="gap-1.5"
         onClick={onGenerate}
         disabled={generating}
+        busy={generating}
         data-testid="generate-angles-button"
       >
         {generating ? (
@@ -641,6 +642,7 @@ function AngleSelector({
           className="gap-1.5"
           onClick={onRegenerate}
           disabled={generating}
+          busy={generating}
           data-testid="regenerate-angles-button"
         >
           {generating ? (
@@ -648,7 +650,7 @@ function AngleSelector({
           ) : (
             <RefreshCw className="h-3.5 w-3.5" />
           )}
-          {generating ? "Regenerating…" : "Regenerate angles"}
+          {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
           </div>
           {progressLine}
@@ -888,6 +890,7 @@ function AngleGoalPicker({
                 className="gap-1.5 shrink-0"
                 onClick={onRegenerate}
                 disabled={regenerating}
+                busy={regenerating}
                 title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
                 data-testid="regenerate-goals-button"
               >
@@ -896,7 +899,7 @@ function AngleGoalPicker({
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                {regenerating ? "Shuffling…" : "Shuffle"}
+                {regenerating ? "Shuffling goals" : "Shuffle"}
               </Button>
             )}
           </div>
@@ -2716,7 +2719,7 @@ setObjective("");
                   <p className="text-base text-muted-foreground">
                     Preparing the video draft for your photo…
                   </p>
-                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => ensureProject()}>
+                  <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={() => ensureProject()}>
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
                     Try preparing the draft again
                   </Button>
@@ -2915,6 +2918,7 @@ setObjective("");
                   variant="secondary"
                   size="sm"
                   disabled={busy}
+                  busy={busy}
                   onClick={() => {
                     if (hasEdits) {
                       const ok =
@@ -3233,7 +3237,7 @@ setObjective("");
             />
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="accent" onClick={handleSaveEdits} disabled={busy || !hasEdits}>
+              <Button variant="accent" onClick={handleSaveEdits} disabled={busy || !hasEdits} busy={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save edits
               </Button>
@@ -3340,6 +3344,7 @@ setObjective("");
                   variant="accent"
                   className="mt-4"
                   disabled={busy}
+                  busy={busy}
                   onClick={ensureProject}
                   data-testid="create-draft-button"
                 >

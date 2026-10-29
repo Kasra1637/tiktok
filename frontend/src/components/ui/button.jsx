@@ -54,12 +54,20 @@ const buttonVariants = cva(
   }
 )
 
-const Button = React.forwardRef(({ className, variant, size, asChild = false, ...props }, ref) => {
+/* Unified busy state (idea 1): `busy` paints the slow sweep-fill layer from
+   `.btn-studio[data-busy]` and exposes `aria-busy`, while the label names the
+   work without trailing dots ("Generating angles", never dotted) — the step
+   caption below the button, where one exists, carries the live detail. Text
+   and icons never animate; only the fill layer moves. Callers keep owning
+   `disabled`: busy describes the work, not whether the control accepts input. */
+const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   return (
     <Comp
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
+      data-busy={busy || undefined}
+      aria-busy={busy || undefined}
       {...props} />
   );
 })

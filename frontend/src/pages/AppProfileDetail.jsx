@@ -478,6 +478,7 @@ return (
                     variant="secondary"
                     size="sm"
                     disabled={regeneratingEverything || refreshing || researchingNew}
+                    busy={regeneratingEverything || refreshing || researchingNew}
                     className="gap-1.5"
                     data-testid="research-menu-button"
                   >
@@ -498,7 +499,7 @@ return (
                     className="text-sm"
                   >
                     {regeneratingEverything ? (
-                      <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Refreshing… </> 
+                      <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Refreshing </>
                     ) : (
                       <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh research & angles </>
                     )}
@@ -512,9 +513,8 @@ return (
                         disabled={refreshing || regeneratingEverything || researchingNew}
                         className="text-sm"
                         data-testid="refresh-sources-button"
-                      >
-                        {refreshing ? (
-                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Re-researching… </>
+                      >                        {refreshing ? (
+                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Re-researching </>
                         ) : (
                           <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh from sources </>
                         )}
@@ -530,9 +530,8 @@ return (
                         disabled={researchingNew || regeneratingEverything || refreshing}
                         className="text-sm"
                         data-testid="research-new-draft-button"
-                      >
-                        {researchingNew ? (
-                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Researching… </>
+                      >                        {researchingNew ? (
+                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Researching </>
                         ) : (
                           <> <Sparkles className="h-3.5 w-3.5 mr-2" /> Research into new draft </>
                         )}
@@ -593,10 +592,11 @@ return (
               className="shrink-0"
               onClick={handleApprovePending}
               disabled={approving}
+              busy={approving}
               data-testid="approve-pending-button"
             >
               {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
-              {approving ? "Approving..." : "Review & approve"}
+              {approving ? "Approving" : "Review & approve"}
             </Button>
           </AlertDescription>
         </Alert>
@@ -826,6 +826,7 @@ return (
               variant="accent"
               onClick={handleDeleteProfile}
               disabled={!canDelete}
+              busy={deletingProfile}
               data-testid="delete-profile-confirm"
             >
               {deletingProfile && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

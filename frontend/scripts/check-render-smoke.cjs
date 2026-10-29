@@ -7174,6 +7174,47 @@ async function runIconChecks() {
     }
   });
 
+  await check("busy buttons sweep without dots and expose busy state", async (ctx) => {
+    // Idea 1, pinned: one busy behavior for every CTA — a slow sweep-fill on
+    // `::before` (the hover sweep keeps `::after`), a dotless verb label, and
+    // `data-busy`/`aria-busy` while the work runs. Text and icons never
+    // animate; reduced motion gets a still fill, never a loop.
+    const { Button } = load("components/ui/button.jsx");
+    await mount(Button, { busy: true, variant: "accent", children: "Generating angles" })(ctx);
+    const btn = ctx.container.querySelector("button");
+    if (!btn) throw new Error("busy Button did not render");
+    if (btn.getAttribute("data-busy") !== "true") throw new Error("busy Button exposes no data-busy state for the fill");
+    if (btn.getAttribute("aria-busy") !== "true") throw new Error("busy Button exposes no aria-busy state");
+    if (/(\.\.\.|…)/.test(btn.textContent || "")) throw new Error("busy Button still carries dots in its label");
+    await mount(Button, { children: "Generate angles" })(ctx);
+    const idle = ctx.container.querySelector("button");
+    if (idle && idle.hasAttribute("data-busy")) throw new Error("idle Button wears the busy fill");
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    for (const token of ['.btn-studio[data-busy="true"]::before', "@keyframes busy-sweep"]) {
+      if (!css.includes(token)) throw new Error(`index.css is missing the busy fill rule: ${token}`);
+    }
+    if (!/\.btn-studio\[data-busy[^\]]*\]::before\s*\{[^}]*animation:\s*none/.test(css)) {
+      throw new Error("the busy fill has no reduced-motion fallback");
+    }
+    // No busy verb label carries dots anywhere in the app: the sweep is the
+    // wait indicator, so a second one in text reads as a stalled duplicate.
+    // Matched quoted so status lines and toasts (different copy) are untouched.
+    const banned = ["Generating...", "Generating…", "Regenerating…", "Shuffling…", "Saving...", "Researching...", "Approving...", "Retrying…", "Refreshing…", "Re-researching…", "Researching…", "Writing fresh openings…"];
+    const hits = [];
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      return e.isDirectory() ? walk(full) : [full];
+    });
+    for (const file of walk(SRC)) {
+      if (!/\.(jsx|js)$/.test(file)) continue;
+      const code = fs.readFileSync(file, "utf8");
+      for (const s of banned) {
+        if (code.includes(`"${s}"`)) hits.push(`${path.relative(SRC, file)}: ${s}`);
+      }
+    }
+    if (hits.length) throw new Error(`busy labels still carry dots:\n${hits.join("\n")}`);
+  });
+
   await check("no button paints coral or red, and the destructive fill stays dark", async (ctx) => {
     // Every CTA in the app used to be the loudest surface on its screen,
     // because the palette reserved coral for "this performs the action". The

@@ -851,7 +851,7 @@ export default function AssetLibrary({
             placeholder="Optional label — for example: Founder photo"
             aria-label="Optional photo label"
           />
-          <Button variant="accent" onClick={() => fileRef.current?.click()} disabled={busy}>
+          <Button variant="accent" onClick={() => fileRef.current?.click()} disabled={busy} busy={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {attachedAsset ? "Upload a different photo" : "Upload"}
           </Button>

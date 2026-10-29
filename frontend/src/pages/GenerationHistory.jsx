@@ -291,19 +291,19 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   }
 
   const retryRenderButton = row.status === "failed" && row.retryable && (
-    <Button variant="accent" disabled={busy} onClick={() => act(() => api.retryGeneration(row.id))} className="min-w-[150px] flex-1">
+    <Button variant="accent" disabled={busy} busy={busy} onClick={() => act(() => api.retryGeneration(row.id))} className="min-w-[150px] flex-1">
       <RotateCcw className="h-4 w-4" /> Retry render
     </Button>
   );
   const recheckButton = awaitingProvider && (
-    <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRecheckStranded}
+    <Button variant="secondary" size="sm" className="w-full" disabled={busy} busy={busy} onClick={handleRecheckStranded}
       data-testid={`recheck-stranded-${row.id}`} title="Ask the provider whether this render finished, and fetch it if it did">
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
       Check again
     </Button>
   );
   const retryStorageButton = canRepair && !awaitingProvider && (
-    <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRetryStorage}
+    <Button variant="secondary" size="sm" className="w-full" disabled={busy} busy={busy} onClick={handleRetryStorage}
       data-testid={`retry-storage-${row.id}`} title="Re-fetch the finished render and save a durable copy, so it plays here">
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
       Retry durable save

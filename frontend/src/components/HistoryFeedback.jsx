@@ -183,6 +183,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 variant="secondary"
                 size="sm"
                 disabled={savingLink || !link.trim()}
+                busy={savingLink}
                 onClick={saveLink}
                 data-testid={`history-tiktok-save-${row.id}`}
               >
@@ -225,6 +226,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 variant="secondary"
                 size="sm"
                 disabled={savingViews || String(views).trim() === ""}
+                busy={savingViews}
                 onClick={saveViews}
                 data-testid={`history-tiktok-views-save-${row.id}`}
               >

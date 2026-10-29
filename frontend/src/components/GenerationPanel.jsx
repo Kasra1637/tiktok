@@ -184,7 +184,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // that class of ordering mistake fails the gate instead of shipping.
   // Consecutive poll failures and the generation they belong to. One failed
   // poll used to kill the loop outright: a single 502 during a container
-  // restart left "Generating..." frozen beside a message promising the page
+  // restart left the Generating label frozen beside a message promising the page
   // checks back on its own — while nothing checked anything. Transient
   // failures now stay silent and keep polling; only a sustained outage (five
   // in a row) escalates to the error banner. The id guard resets the count
@@ -579,10 +579,11 @@ const handleGenerate = async () => {
         disabled={
           busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
         }
+        busy={busy || inFlight}
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-        {inFlight
-          ? "Generating..."
+        {inFlight || busy
+          ? "Generating video"
           : generation
             ? "Generate another"
             : "Generate the video"}
@@ -669,9 +670,9 @@ const handleGenerate = async () => {
                 <div className="mt-2">
                   <Button
                     variant="secondary"
-                    size="sm"
-                    onClick={handleRetryStorage}
-                    disabled={retryingStorage}
+                    size="sm"                      onClick={handleRetryStorage}
+                      disabled={retryingStorage}
+                      busy={retryingStorage}
                   >
                     {retryingStorage && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                     Retry durable save

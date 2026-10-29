@@ -81,10 +81,11 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
               size="sm"
               onClick={handleRegenerate}
               disabled={regenBusy}
+              busy={regenBusy}
               data-testid="postkit-regenerate"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              {regenBusy ? "Regenerating…" : "Regenerate"}
+              {regenBusy ? "Regenerating copy" : "Regenerate"}
             </Button>
           )}
           <CopyButton

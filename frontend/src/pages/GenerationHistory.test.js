@@ -30,8 +30,12 @@ jest.mock("lucide-react", () => {
 jest.mock("../components/ui/button", () => {
   const ReactStub = require("react");
   return {
-    Button: ({ asChild, variant, size, children, ...rest }) =>
-      ReactStub.createElement("button", rest, children),
+    Button: ({ asChild, variant, size, busy, children, ...rest }) =>
+      ReactStub.createElement(
+        "button",
+        { ...rest, ...(busy ? { "data-busy": "true", "aria-busy": "true" } : {}) },
+        children
+      ),
   };
 });
 
