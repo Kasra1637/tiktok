@@ -4221,6 +4221,129 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  await check("no template id is silently reported as done on the progress pills", async (ctx) => {
+    // A ?template= that names no row — a stale link, a draft adopted from a
+    // row whose template is gone — used to tick this step done while the eager
+    // draft sync 404ed "Template not found" into the page banner, with the
+    // recovery button hidden because the id string counted as a selection.
+    // The id is not the pick; the resolved row is.
+    const notFound = (payload) => {
+      const id = payload?.template_id || "";
+      if (id && id !== TEMPLATE.id) {
+        const err = new Error("not found");
+        err.response = { status: 404, data: { detail: "Template not found" } };
+        throw err;
+      }
+    };
+    // The params stay put for the whole check: the deep-link load reads them
+    // on every render, so resetting them mid-check re-fires the load and
+    // drags the wizard back to the angle step under the assertion.
+    global.__SMOKE_PARAMS = "?profile=b1&template=gone";
+    try {
+      await withApi(
+        {
+          createStudioProject: async (payload) => {
+            notFound(payload);
+            return { ...BASE_PROJECT };
+          },
+          updateStudioProject: async (id, updates) => {
+            notFound(updates);
+            return { ...BASE_PROJECT };
+          },
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          // Angle and goal picked the way a founder picks them, so the only
+          // thing missing is a template that exists.
+          await openTemplateStep(ctx);
+          await act(async () => {});
+          if (ctx.text().includes("Template not found")) {
+            throw new Error("a template id that names no row still reaches the server and errors the page");
+          }
+          const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+          if (!pill) throw new Error("the progress pills carry no state markers");
+          if (pill.getAttribute("data-state") === "done") {
+            throw new Error("the Audience step is ticked for a template id that names no row");
+          }
+          if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
+            throw new Error(
+              `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
+            );
+          }
+          // And Review names the gap with its red button instead of stranding
+          // the founder under a plan that can never generate. Two extra
+          // flushes after the pill: entering Review mounts effects that read
+          // the project from the API, and the state they set lands on the
+          // next act.
+          await openStep(ctx, "Review & submit");
+          await act(async () => {});
+          await act(async () => {});
+          const gap = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+          if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
+            throw new Error("the missing template has no red button back to its step");
+          }
+          if (ctx.text().includes("Template not found")) {
+            throw new Error("opening Review refires the dangling template id at the server");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a template deleted after picking never 404s the page", async (ctx) => {
+    // The pick was valid when chosen — the row vanished between picking and
+    // saving, so the 404 arrives from the plan write, not the sync the check
+    // above owns. The page must translate that into the gap it already owns
+    // (the red button back to the template step), never banner text no button
+    // on the page can fix, and never a retry that would 404 again.
+    const gone = () => {
+      const err = new Error("not found");
+      err.response = { status: 404, data: { detail: "Template not found" } };
+      throw err;
+    };
+    global.__SMOKE_PARAMS = "";
+    try {
+      await withApi(
+        {
+          createStudioProject: async (payload) => ({ ...BASE_PROJECT, ...payload, script_version: 0 }),
+          updateStudioProject: async (id, updates) => ({ ...BASE_PROJECT, ...updates, script_version: 0 }),
+          // The Review re-read must see the same unplanned draft the writes
+          // echo: the default stub answers a planned project, which would
+          // hide the gap this check is about behind a plan nobody wrote.
+          getStudioProject: async () => ({ ...BASE_PROJECT, template_id: "t1", script_version: 0 }),
+          generatePlan: async () => gone(),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          // Picked the way a founder picks: the top recommendation is
+          // preselected, so angle plus goal is a complete, valid selection.
+          await openTemplateStep(ctx);
+          await act(async () => {});
+          await act(async () => {});
+          await openStep(ctx, "Review & submit");
+          // The failed write settles through create, plan, catch, re-read and
+          // re-render — deeper than the happy-path checks above — so flush
+          // until the gap owns the step.
+          await act(async () => {});
+          await act(async () => {});
+          await act(async () => {});
+          await act(async () => {});
+          if (ctx.text().includes("Template not found")) {
+            throw new Error("a template deleted after picking 404s the page instead of naming the gap");
+          }
+          const gap = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+          if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
+            throw new Error("the deleted template has no red button back to its step");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   // The profile pill names the step, not the app. Echoing the chosen app's
   // name beside "App Profile" repeated what the step's own picker card already
   // says and read as a second label on the same thing.

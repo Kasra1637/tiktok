@@ -1074,6 +1074,27 @@ const STEP_STATE_COPY = {
 };
 
 /**
+ * A template id the library no longer carries.
+ *
+ * The wizard treats an id that names no row as "not a pick" (see
+ * effectiveTemplateId): the step stays blocked, the inline notice names the
+ * gap, and the red button walks back to it. A 404 carrying this detail from
+ * any write path is that same state arriving late — the row vanished between
+ * picking and saving — so it must resolve to the same gap, never to banner
+ * text no button on the page can fix, and never to a retry that 404s again.
+ */
+function isTemplateGoneError(err) {
+  return (
+    err?.response?.status === 404 &&
+    String(err?.response?.data?.detail || "").includes("Template not found")
+  );
+}
+
+// The banner copy for a vanished template. Identical to template-gone-notice
+// so the banner and the step agree on what happened and what to do next.
+const TEMPLATE_GONE_MESSAGE = "That template is no longer available — pick another below.";
+
+/**
  * Whether each step is satisfied, in the wizard's own terms.
  *
  * Returns one entry per STEPS item in order. `blocked` is not an error state —
@@ -1412,11 +1433,21 @@ export default function CreateVideo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectParam, profileParam]);
 
+  // The library answers once per mount. Until it has, a templateId names
+  // nothing verifiable: the eager draft sync below must wait for it rather
+  // than send an id the lists have not confirmed (see effectiveTemplateId).
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
   useEffect(() => {
     api
       .getTemplates()
-      .then((d) => setTemplates((d.templates || []).filter((t) => t.is_usable)))
-      .catch(() => setTemplates([]));
+      .then((d) => {
+        setTemplates((d.templates || []).filter((t) => t.is_usable));
+        setTemplatesLoaded(true);
+      })
+      .catch(() => {
+        setTemplates([]);
+        setTemplatesLoaded(true);
+      });
   }, []);
 
   // Set once the founder picks a template themselves, and never cleared.
@@ -1756,7 +1787,7 @@ setObjective("");
       const created = project?.id
         ? await api.updateStudioProject(project.id, {
             content_angle_id: angleId || "",
-            template_id: templateId || "",
+            template_id: template?.id || "",
             objective,
             tone,
             ...overrides,
@@ -1764,13 +1795,25 @@ setObjective("");
         : await api.createStudioProject({
             brand_profile_id: profileId,
             content_angle_id: angleId || "",
-            template_id: templateId || "",
+            template_id: template?.id || "",
             objective,
             tone,
           });
       setProject(created);
       return created;
     } catch (err) {
+      if (isTemplateGoneError(err)) {
+        // The pick names a row the server no longer has: drop it so every
+        // gate, pill and sync reads the same "no template" state the library
+        // already shows, and latch the choice so the preselect below does not
+        // resurrect the disproven pick on the next render. The caller turns
+        // the outcome into the gap panel.
+        templateGoneRef.current = true;
+        templateChosenByHand.current = true;
+        setTemplateId("");
+        setError(TEMPLATE_GONE_MESSAGE);
+        return null;
+      }
       setError(getErrorMessage(err));
       return null;
     } finally {
@@ -1791,13 +1834,18 @@ setObjective("");
    * nothing. Returns the project, or null when it cannot be created.
    */
   const ensureProject = useCallback(async () => {
-    if (!profileId || !templateId) return null;
+    // The resolved row, never the raw string: an id the lists cannot confirm
+    // (a stale ?template= link, a draft adopted from a deleted row) must not
+    // reach the server — see effectiveTemplateId and the smoke check that pins
+    // it. Without a resolved row there is nothing verifiable to sync.
+    const resolvedTemplateId = template?.id || "";
+    if (!profileId || !resolvedTemplateId) return null;
     try {
       if (project?.id) {
         // Keep the draft's selections in step with the wizard without
         // disturbing a plan that already exists.
         if (
-          project.template_id === templateId &&
+          project.template_id === resolvedTemplateId &&
           // Both sides normalize to "": the writes below send angleId || "",
           // so comparing against (angleId || null) never matched an empty
           // angle and every call fell through to a wasted update write -- which
@@ -1816,7 +1864,7 @@ setObjective("");
         // timeline that no longer adds up.
         const updated = await api.updateStudioProject(project.id, {
           content_angle_id: angleId || "",
-          template_id: templateId || "",
+          template_id: resolvedTemplateId || "",
           objective,
           tone,
         });
@@ -1835,11 +1883,19 @@ setObjective("");
     } catch (err) {
       // A failure here is not fatal: the plan step still creates the draft and
       // surfaces the error properly. Swallowing it here would just show an
-      // empty render step with no explanation.
+      // empty render step with no explanation. A vanished template stays
+      // silent here for the same reason — the plan step translates it into
+      // the gap — and the stale pick is dropped so nothing re-sends it.
+      if (isTemplateGoneError(err)) {
+        templateChosenByHand.current = true;
+        setTemplateId("");
+        setError(null);
+        return null;
+      }
       setError(getErrorMessage(err));
       return null;
     }
-  }, [profileId, templateId, angleId, objective, tone, project]);
+  }, [profileId, templateId, template, angleId, objective, tone, project]);
 
   // Wire up the eager creation the ensureProject docstring promises: as soon
   // as a profile and template are both chosen, the draft is created (or kept
@@ -1852,6 +1908,13 @@ setObjective("");
   const lastSyncedKey = useRef("");
   useEffect(() => {
     if (!profileId || !templateId || ensureProjectInFlight.current) return;
+    // The pick is not verified until the library has answered. Syncing an id
+    // the lists have not confirmed is exactly how a stale ?template= link or
+    // a draft adopted from a deleted row 404ed "Template not found" into the
+    // page banner above a step the pills called done. An unverified id waits
+    // here; a disproven one never syncs, and the choosing step owns telling
+    // the founder (see template-gone-notice).
+    if (!templatesLoaded || !template) return;
     // One sync per selection-set. Without this, any server echo that differs
     // from what was sent (a dropped angle, a normalized field, or a stub that
     // answers a create with a canned project) would ping-pong
@@ -1865,7 +1928,7 @@ setObjective("");
     ensureProject().finally(() => {
       ensureProjectInFlight.current = false;
     });
-  }, [profileId, templateId, angleId, objective, ensureProject]);
+  }, [profileId, templateId, angleId, objective, template, templatesLoaded, ensureProject]);
 
   /* The shell remembers the draft the founder is inside; the sidebar reads it
      and offers one line back into it, so three steps deep stops looking like a
@@ -1898,10 +1961,13 @@ setObjective("");
     planInFlightRef.current = true;
     const ready = await createProject();
     if (!ready) {
-      // createProject already reported the error above. Record the outcome
-      // so Review offers the retry instead of the generating spinner.
+      // createProject already reported the error above. A vanished template is
+      // a gap, not a failure: Review names the missing pick instead of
+      // offering a retry that would 404 again.
+      const gone = templateGoneRef.current;
+      templateGoneRef.current = false;
       planInFlightRef.current = false;
-      setPlanFailed(true);
+      setPlanFailed(!gone);
       return;
     }
     setPlanFailed(false);
@@ -1968,8 +2034,18 @@ setObjective("");
       // the end of the wizard when the steps merged.
       setStep(STEPS.findIndex((s) => s.key === "review"));
     } catch (err) {
-      setError(getErrorMessage(err));
-      setPlanFailed(true);
+      if (isTemplateGoneError(err)) {
+        // The row vanished between picking and saving: same resolution as a
+        // gone id at pick time — drop the pick, name the gap, no retry. The
+        // latch keeps the preselect from re-picking the disproven row.
+        templateChosenByHand.current = true;
+        setTemplateId("");
+        setError(TEMPLATE_GONE_MESSAGE);
+        setPlanFailed(false);
+      } else {
+        setError(getErrorMessage(err));
+        setPlanFailed(true);
+      }
     } finally {
       planInFlightRef.current = false;
       setBusy(false);
@@ -2093,12 +2169,15 @@ setObjective("");
     setReviewThumb(0);
   };
 
-  // A template can be selected either via URL param (templateId) or stored
-  // on the project (project.template_id). The URL param wins when present
-  // because it reflects the founder's current intent; the project's value is
-  // a fallback for cases like auto-generation on Review where the URL param
-  // hasn't been set yet but the project already knows its template.
-  const effectiveTemplateId = templateId || project?.template_id;
+  // The selection is the resolved row, never the raw id. A templateId that
+  // names nothing the founder can see — a stale ?template= link, a draft
+  // adopted from a row whose template is gone — is not a pick: it used to
+  // tick the step done, hide the recovery button, and 404 "Template not
+  // found" out of the eager draft sync with no way back. The project fallback
+  // is gone for the same reason: a row id the lists cannot confirm must not
+  // drive gates or writes. The draft load re-seeds state from its row, so a
+  // live template still flows through here through state.
+  const effectiveTemplateId = template?.id || "";
   const canGenerate = Boolean(profileId && effectiveTemplateId);
 
   // First missing choice in flow order, for the one red button on panels that
@@ -2129,7 +2208,10 @@ setObjective("");
   // yet" and "you still owe this template a photograph" are different problems
   // and the founder needs to be told which one they have. The split lives in
   // a tested helper rather than inline here.
-  const effectiveTemplate = template || project?.template_id ? { ...template, id: template?.id || project?.template_id } : null;
+  // The resolved row only: a project id the lists cannot confirm must not
+  // resurrect a dangling pick for the photo gate, exactly as it must not for
+  // the pills, the gates, or the writes above.
+  const effectiveTemplate = template || null;
   const missingIdentity = effectiveTemplate
     ? blockingRequirements(effectiveTemplate.required_assets, project?.assets)
     : [];
@@ -2188,6 +2270,9 @@ setObjective("");
   // still-false state, so both would start a model call. A ref flips
   // synchronously, collapsing the race before the first await.
   const planInFlightRef = useRef(false);
+  // Set when a draft write learns the picked template is gone server-side.
+  // Read once by the plan handler below to offer the gap instead of a retry.
+  const templateGoneRef = useRef(false);
   useEffect(() => {
     // The plan needs a profile, a template and a goal. The character photo is
     // required to RENDER, not to write the plan, so it does not gate this.
@@ -2275,11 +2360,14 @@ setObjective("");
      from any other, so nothing here can be a counter that advances — the pills
      have to be recomputed from what actually exists, or they go stale the moment
      they change something on an earlier step. */
+  // The step counts a template only when the id names a row the founder can
+  // see. Counting the raw string ticked this step done for a deleted template
+  // while the sync underneath 404ed — see effectiveTemplateId above.
   const stepStates = stepCompletion({
     profileId,
     objective,
     angleId,
-    templateId,
+    templateId: template?.id || "",
     project,
     missingIdentity,
     hasEdits,
@@ -2441,11 +2529,14 @@ setObjective("");
          click-to-scroll targets all stay; only the pill frame goes, so the nav
          owns that language and this row reads as what it is — the four things
          that finish the screen in view. */
+      // Template and photo read the resolved row, never the raw id: a stale
+      // ?template= link counted here once ticked the screen "4 of 4 done"
+      // while the step below it read blocked — see effectiveTemplateId.
       const substeps = [
         { key: "angle", label: "Angle", done: Boolean(angleId), target: "substep-angle" },
         { key: "goal", label: "Goal", done: Boolean(objective), target: "substep-goal" },
-        { key: "template", label: "Template", done: Boolean(templateId), target: "substep-template" },
-        { key: "photo", label: "Photo", done: Boolean(templateId) && missingIdentity.length === 0, target: "template-photo" },
+        { key: "template", label: "Template", done: Boolean(template?.id), target: "substep-template" },
+        { key: "photo", label: "Photo", done: Boolean(template?.id) && missingIdentity.length === 0, target: "template-photo" },
       ];
       const substepsDone = substeps.filter((s) => s.done).length;
 
@@ -2595,6 +2686,17 @@ setObjective("");
             )}
             {tailorError && !tailoring && (
               <p className="text-sm text-muted-foreground">{tailorError}</p>
+            )}
+            {templateId && !template && templatesLoaded && recKey === recRequestKey && (
+              // The pick names nothing the lists carry — a stale ?template=
+              // link or a draft adopted from a deleted row. The step stays
+              // blocked, the sync above never sends it, and the red button on
+              // Review names the way back, so this only has to say what
+              // happened rather than leave a step that cannot proceed and
+              // will not say why.
+              <p className="text-sm text-muted-foreground" data-testid="template-gone-notice">
+                That template is no longer available — pick another below.
+              </p>
             )}
             {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
               <div className="inset-panel">
