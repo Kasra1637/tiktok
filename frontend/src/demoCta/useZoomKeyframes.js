@@ -31,6 +31,7 @@ export function useZoomKeyframes() {
   }, []);
   return {
     zoomKeyframes,
+    setZoomKeyframes,
     zoomKeyframesRef,
     sortedKeyframes,
     captureZoomKeyframe,

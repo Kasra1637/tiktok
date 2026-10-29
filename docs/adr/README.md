@@ -62,7 +62,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0043](0043-history-single-source-identity.md) | History identity lives once, under the clip | accepted |
 | [0044](0044-post-kit-caption-spec.md) | Post-kit captions are short, user-voiced, and tailored | accepted |
 | [0038](0038-workspace-type-scale-step-up.md) | Workspace type steps up: 16px body/inputs/titles, 30px H1 | accepted |
-| [0045](0045-demo-cta-clip-start-point.md) | Demo + CTA clips carry a start point; the head is trimmed, the tail is not | accepted |
+| [0045](0045-demo-cta-clip-start-point.md) | Demo + CTA clips carry a start point; the head is trimmed, the tail is not | superseded by 0054 |
 | [0046](0046-analytics-status-disclosures.md) | Analytics opens on three results; render statuses open their clips | accepted |
 | [0047](0047-analytics-loaded-set-and-recorded-dates.md) | Analytics states its loaded set once; views carry recorded dates | accepted |
 | [0048](0048-clip-joint-transitions.md) | Five joint transitions between the two clips | partially superseded by 0049 (swipe replaced by flash + fade) |
@@ -71,3 +71,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0051](0051-history-compact-without-copy.md) | Without-copy History cards use a compact responsive grid | accepted |
 | [0052](0052-history-mobile-results.md) | History keeps primary filters and copy visible while compacting mobile results | accepted |
 | [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | accepted |
+| [0054](0054-demo-cta-editing-documents.md) | Browser-local editing documents, undo/redo and compact two-sided trimming | accepted |

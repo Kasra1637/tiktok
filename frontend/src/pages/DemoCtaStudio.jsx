@@ -8,6 +8,17 @@ import PageFrame from "../components/PageFrame";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl } from "../lib/api";
 import { DemoCtaEditor } from "../demoCta/DemoCtaEditor";
+import { useUser } from "@clerk/clerk-react";
+import { isClerkConfigured } from "../lib/clerk";
+
+function AccountEditor(props) {
+  const { user, isLoaded } = useUser();
+  if (!isLoaded || !user) return <Skeleton className="h-96 w-full" aria-label="Loading draft owner" />;
+  return <DemoCtaEditor key={`${user.id}:${props.generation?.id || "standalone"}`} {...props} draftOwner={user.id} />;
+}
+function ScopedEditor(props) {
+  return isClerkConfigured ? <AccountEditor {...props} /> : <DemoCtaEditor {...props} />;
+}
 
 /**
  * Native Product Demo + CTA studio.
@@ -93,7 +104,7 @@ function EditorRoute({ generationId }) {
   const sourceUrl = generation.sourceUrl;
 
   return (
-    <DemoCtaEditor
+    <ScopedEditor
       key={generation.id}
       generation={generation}
       sourceUrl={sourceUrl}
@@ -122,7 +133,7 @@ export function DemoCtaStudio() {
       {generationId ? (
         <EditorRoute generationId={generationId} />
       ) : (
-        <DemoCtaEditor />
+        <ScopedEditor />
       )}
     </PageFrame>
   );

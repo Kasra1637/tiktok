@@ -160,6 +160,37 @@ test("a muted added clip keeps the joined length with base audio only", async ()
   } finally { delete global.OfflineAudioContext; }
 });
 
+test("start and end trims bound both decoded segments and their audio windows", async () => {
+  videoSource.add.mockImplementation(async () => {});
+  track.computeDuration = async () => 10.5;
+  input.getPrimaryAudioTrack = async () => null;
+  addClip({ duration: 8 });
+  const result = await encode({ appendSource: new Blob(), baseStart: 2, baseEnd: 5, appendStart: 1, appendEnd: 3 });
+  expect(result.duration).toBe(5);
+  expect(videoSource.add).toHaveBeenCalledTimes(150);
+  expect(frames[0]).toBe(2.5);
+  expect(frames[89]).toBeLessThan(5.5);
+  expect(frames[90]).toBeCloseTo(1.2);
+  expect(frames[149]).toBeLessThan(3.2);
+});
+
+test("a single trimmed source clips audio at both in and out points", async () => {
+  videoSource.add.mockImplementation(async () => {});
+  track.computeDuration = async () => 6.5;
+  const trimmed = { timestamp: 2.5, setTimestamp: jest.fn(), close: jest.fn() };
+  const sample = { timestamp: 2.4, sampleRate: 48000, numberOfFrames: 105600, trim: jest.fn(() => trimmed), close: jest.fn() };
+  AudioSampleSink.mockImplementation(() => ({ samples: async function* (start, end) {
+    expect(start).toBe(2.5);
+    expect(end).toBe(4.5);
+    yield sample;
+  } }));
+  const result = await encode({ baseStart: 2, baseEnd: 4 });
+  expect(result.duration).toBe(2);
+  expect(sample.trim).toHaveBeenCalledWith(4800, 100800);
+  expect(trimmed.setTimestamp).toHaveBeenCalledWith(0);
+  expect(audioSource.add).toHaveBeenCalledWith(trimmed);
+});
+
 test("unsupported H.264 or AAC fails rather than silently dropping audio", async () => {
   canEncodeVideo.mockResolvedValueOnce(false);
   await expect(encode()).rejects.toThrow(/Chrome or Edge/);

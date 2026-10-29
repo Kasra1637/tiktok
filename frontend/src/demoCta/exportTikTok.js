@@ -63,7 +63,7 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
  * A muted segment keeps its video length; only its audio is left out.
  * Each clip's start point is where decoding begins, so the file opens on the
  * frame the preview shows — never on footage the founder skipped. */
-export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0 }) {
+export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -91,7 +91,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       const first = Math.max(0, await track.getFirstTimestamp());
       const full = (await track.computeDuration()) - first;
       if (!Number.isFinite(full) || full <= 0) throw new Error(`The ${label} has no playable duration. Upload another video.`);
-      const run = clipWindow(full, index ? appendStart : baseStart);
+      const run = clipWindow(full, index ? appendStart : baseStart, undefined, index ? appendEnd : baseEnd);
       if (!(run.duration > 0)) throw new Error(`The ${label} has nothing left after its start point. Move the start point earlier.`);
       const origin = first + run.start;
       const length = run.duration;

@@ -734,6 +734,14 @@ function load(relPath) {
         UserButton: () => React.createElement("button", { "aria-label": "Account" }, "Account"),
       };
     }
+    if (spec === "./draftStorage") {
+      // IndexedDB is the persistence boundary; mounts start without a saved
+      // document unless a recovery check explicitly supplies one.
+      return {
+        readDraft: async (key) => global.__SMOKE_DRAFTS?.get(key) || null,
+        writeDraft: async (key, edit) => { global.__SMOKE_DRAFTS?.set(key, edit); },
+      };
+    }
     if (spec === "sonner") {
       // Mirror the real toast surface the research flows use: loading toasts
       // resolve in place by id, and dismiss retires one. A mock missing
@@ -9202,6 +9210,105 @@ async function runDemoCtaChecks() {
     return { flush, restore, loadClip, createdVideos };
   }
 
+  await check("Demo + CTA resumes uploaded drafts and undo/redo restores editing choices", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    global.__SMOKE_DRAFTS = new Map();
+    try {
+      await clip.loadClip(ctx);
+      const addedInput = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      Object.defineProperty(addedInput, "files", { configurable: true, value: [new dom.window.File(["second"], "second.mp4", { type: "video/mp4" })] });
+      await act(async () => addedInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      const addedVideo = ctx.container.querySelector('[data-testid="append-video"]');
+      await act(async () => addedVideo.dispatchEvent(new dom.window.Event("loadeddata")));
+      const cta = ctx.container.querySelector('[data-testid="cta-controls"] > button');
+      await clickEl(ctx, cta, "open CTA");
+      const field = ctx.container.querySelector('[data-testid="cta-headline-input"]');
+      const before = field.value;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(field, "Resume this exact CTA");
+        field.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      });
+      const seek = ctx.container.querySelector('[aria-label="Seek"]');
+      await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-undo"]'), "undo text");
+      await act(async () => ctx.container.querySelector("video").dispatchEvent(new dom.window.Event("timeupdate")));
+      if (Number(seek.getAttribute("aria-valuenow")) !== 0) throw new Error("Undo left the second clip active instead of resetting to the restored base");
+      await clickEl(ctx, ctx.container.querySelector('[aria-label="Forward 1 frame (1/30s)"]'), "step restored base");
+      if (ctx.container.querySelector("video").currentTime < 0.03 || addedVideo.currentTime !== 8) throw new Error("transport did not follow the restored base clip");
+      if (field.value !== before) throw new Error("Undo did not restore the CTA");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-redo"]'), "redo text");
+      if (field.value !== "Resume this exact CTA") throw new Error("Redo did not restore the edit");
+      await act(async () => ctx.root.unmount());
+      const saved = global.__SMOKE_DRAFTS.get("anonymous:standalone");
+      if (!saved?.baseMedia?.blob || saved.ctaHeadline !== "Resume this exact CTA") throw new Error("navigation did not flush source bytes and text");
+      const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, {})(ctx);
+      await act(async () => {});
+      const button = ctx.container.querySelector('[data-testid="cta-controls"] > button');
+      if (button.getAttribute("aria-expanded") !== "true") await clickEl(ctx, button);
+      if (ctx.container.querySelector('[data-testid="cta-headline-input"]').value !== "Resume this exact CTA") throw new Error("reload lost the CTA draft");
+      if (!ctx.container.querySelector("video").src.startsWith("blob:")) throw new Error("reload did not pin saved footage to a fresh object URL");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("Demo + CTA draft recovery failures block editing and retry without losing account scope", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const reads = [];
+    let broken = true;
+    global.__SMOKE_DRAFTS = { get(key) { reads.push(key); if (broken) throw new Error("Draft storage unavailable"); return null; }, set() {} };
+    try {
+      await mount(Editor, { draftOwner: "account-a" })(ctx);
+      expectText(ctx, "Draft recovery failed");
+      if (!ctx.container.querySelector('[inert]')) throw new Error("editing remained enabled before recovery settled");
+      broken = false;
+      await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((b) => b.textContent === "Retry recovery"));
+      expectAbsent(ctx, "Draft recovery failed");
+      if (ctx.container.querySelector('[inert]')) throw new Error("successful retry left editing blocked");
+      await act(async () => ctx.root.unmount());
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { draftOwner: "account-b", generation: COMPLETED })(ctx);
+      if (!reads.includes("account-a:standalone") || !reads.includes(`account-b:${COMPLETED.id}`)) throw new Error("draft reads were not isolated by account and source");
+      if (reads.includes("anonymous:standalone")) throw new Error("signed-in editor read the anonymous draft");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("Demo + CTA timeline clamps trims and undo restores both edges", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const setRange = async (id, value) => {
+        const input = ctx.container.querySelector(`[data-testid="${id}"]`);
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, String(value));
+          input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+        });
+      };
+      await setRange("base-trim-start", 2);
+      await setRange("base-trim-end", 5);
+      const seek = () => Number(ctx.container.querySelector('[aria-label="Seek"]').getAttribute("aria-valuemax"));
+      if (seek() !== 3) throw new Error("trimmed timeline did not keep 2s to 5s");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-undo"]'));
+      if (seek() !== 6) throw new Error("undo did not restore the out point");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-redo"]'));
+      if (seek() !== 3) throw new Error("redo did not restore the out point");
+      await setRange("base-trim-end", 0);
+      if (seek() < 0.5) throw new Error("trim produced an empty clip");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+    }
+  });
+
   await check("Demo + CTA can remove and re-upload the same source file", async (ctx) => {
     const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
     try {
@@ -9267,9 +9374,11 @@ async function runDemoCtaChecks() {
             });
           },
           async () => {
-            await group("demo-cta-source");
-            const slider = ctx.container.querySelector('[data-testid="base-start-slider"] [role="slider"]');
-            await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+            const slider = ctx.container.querySelector('[data-testid="base-trim-start"]');
+            await act(async () => {
+              Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(slider, "0.1");
+              slider.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+            });
           },
           async () => {
             await group("story-controls");

@@ -1077,9 +1077,11 @@ const previewHookSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCt
 // across both files, while scrub/focus-ring rows below keep reading the
 // editor through previewSrc.
 const previewSrc = editorSrc + previewHookSrc;
-check("each Demo + CTA clip carries its own start control",
-  ["base-start-slider", "append-start-slider"].every((testId) => editorSrc.includes(`testId="${testId}"`)),
-  "a clip has no start control, so its opening frame cannot be chosen");
+const trimSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "TrimTimeline.jsx"), "utf8");
+check("each Demo + CTA clip carries start and end controls on the compact timeline",
+  editorSrc.includes("<TrimTimeline") && ["base", "append"].every((id) => editorSrc.includes(`id: "${id}"`)) &&
+    trimSrc.includes('["start", "end"]') && trimSrc.includes('type="range"'),
+  "a clip has no start/end control, so its kept frames cannot be chosen");
 const brokenPreviewWiring = PREVIEW_WIRING_ROWS
   .filter(([, re, kind]) => (kind === "absent") === re.test(previewSrc))
   .map(([name]) => name);
@@ -1220,7 +1222,7 @@ check("a clip start point trims the head and keeps a usable run", (() => {
 // at the segment's own start point, never at frame 0 of the file.
 const EXPORT_SRC = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "exportTikTok.js"), "utf8");
 check("the export decodes from each clip's start point",
-  EXPORT_SRC.includes("clipWindow(full, index ? appendStart : baseStart)") &&
+  EXPORT_SRC.includes("clipWindow(full, index ? appendStart : baseStart, undefined, index ? appendEnd : baseEnd)") &&
   EXPORT_SRC.includes("const origin = first + run.start;") &&
   EXPORT_SRC.includes("const length = run.duration;"),
   "exportTikTok encodes frame 0 of the file instead of the clip's start point");

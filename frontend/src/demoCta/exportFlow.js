@@ -81,7 +81,7 @@ export function useExportFlow(settings) {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
-    baseStart = 0, appendStart = 0,
+    baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
     resultObjectUrlRef,
@@ -175,7 +175,7 @@ export function useExportFlow(settings) {
       const { blob, duration, audioSegments } = await exportTikTok({
         source: await response.blob(), appendSource: appendBlob, canvas, signal: controller.signal,
         baseMuted: !!baseMuted, appendMuted: !!appendMuted,
-        baseStart, appendStart,
+        baseStart, appendStart, baseEnd, appendEnd,
         drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
         onProgress: setProgress,
       });

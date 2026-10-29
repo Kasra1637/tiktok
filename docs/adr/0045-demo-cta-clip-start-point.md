@@ -1,6 +1,6 @@
 # 0045 — Demo + CTA clips carry a start point; the head is trimmed, the tail is not
 
-- **Status:** accepted
+- **Status:** superseded by 0054
 - **Date:** 2026-10-26
 - **Anchors:** `frontend/src/demoCta/constants.js:296` (`clipWindow`), `frontend/src/demoCta/exportTikTok.js` (decode origin), `frontend/src/demoCta/DemoCtaEditor.jsx` ("Starts at" in Source & Look and Second clip)
 
