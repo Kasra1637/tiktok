@@ -11994,6 +11994,16 @@ async function runDemoCtaChecks() {
     if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-preview\s*\{[\s\S]*?width:\s*100%[\s\S]*?aspect-ratio:\s*9\s*\/\s*16/.test(css)) {
       throw new Error("the wide clip does not fill its column; the fixed-height box leaves dead stage beside it");
     }
+    const stackedPreview = css.match(/\.history-preview\s*\{[^}]*\}/);
+    if (!stackedPreview || !/aspect-ratio:\s*9\s*\/\s*16/.test(stackedPreview[0])) {
+      throw new Error("the stacked clip has no reserved 9:16 box, so it stretches and shifts while its metadata loads");
+    }
+    if (!stackedPreview || !/object-fit:\s*contain/.test(stackedPreview[0])) {
+      throw new Error("the stacked clip can crop or stretch the footage instead of containing the full frame");
+    }
+    if (!/\.history-preview-frame\s*\{[\s\S]*?max-width/.test(css)) {
+      throw new Error("the clip frame does not bound the reserved box, so badges float off the footage");
+    }
     if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-stage\s*\{[\s\S]*?min-height:\s*0/.test(css)) {
       throw new Error("the wide stage keeps its fixed box instead of hugging the clip");
     }

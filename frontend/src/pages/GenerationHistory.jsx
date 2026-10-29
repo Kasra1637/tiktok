@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -127,7 +127,11 @@ function describeResults(row) {
  * states has its own repair. Every action, its state, and the editors live
  * with the row that owns them.
  */
-function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null, compact = false }) {
+// Memoized: the parent re-renders on pagination, pending-save polls and
+// deep-link state while the rows stay put. Props are stable callbacks plus
+// row objects react-query structurally shares, so untouched rows skip the
+// re-render and only the changed row pays for one.
+const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null, compact = false }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -376,7 +380,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                  them, so they keep an icon-only trash in the row below, and a
                  dead render stays removable. pointer-events-none on the chips
                  so they never intercept a play tap; the icon re-enables it. */
-              <span className="relative inline-block max-w-full">
+              <span className="history-preview-frame relative block w-full max-w-full">
                 <video
                   key={`${row.id}-${playerVersion}`}
                   src={downloadUrl}
@@ -646,7 +650,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       </div>
     </article>
   );
-}
+});
 
 export default function GenerationHistory() {
   const [rows, setRows] = useState([]);

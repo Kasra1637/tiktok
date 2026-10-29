@@ -777,11 +777,18 @@ h1,
         radial-gradient(120% 80% at 50% 0%, hsl(var(--primary) / 0.12), transparent 62%),
         hsl(228 20% 5%);
 }
+.history-preview-frame {
+    width: 100%;
+    max-width: calc(var(--history-preview-h) * 9 / 16);
+    margin-inline: auto;
+}
 .history-preview {
     display: block;
-    width: auto;
+    width: 100%;
     max-width: 100%;
-    height: var(--history-preview-h);
+    height: auto;
+    aspect-ratio: 9 / 16;
+    max-height: var(--history-preview-h);
     object-fit: contain;
     background: #000;
     border-radius: 0.75rem;
@@ -824,10 +831,14 @@ h1,
         padding: var(--history-stage-pad);
         background: transparent;
     }
+    .history-preview-frame {
+        max-width: none;
+    }
     .history-preview {
         width: 100%;
         height: auto;
         aspect-ratio: 9 / 16;
+        object-fit: contain;
         /* Bounds freak metadata, not the common case: a 320px column fills
            to ~570px, so this cap almost never bites. Letterboxing inside the
            black frame on a near-black stage is invisible when it does. */
