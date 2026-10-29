@@ -73,3 +73,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | accepted |
 | [0054](0054-demo-cta-editing-documents.md) | Browser-local editing documents, undo/redo and compact two-sided trimming | accepted |
 | [0055](0055-implicit-behavior-signals.md) | Implicit behavior signals (adopted/abandoned/generated) supplement explicit thumbs | accepted |
+| [0056](0056-hero-play-control.md) | The autoplaying hero carries its own play/pause control; reduced motion loads on an explicit tap | accepted |

@@ -322,7 +322,9 @@ export default function Landing() {
               wide screens and sits on a soft indigo glow so it holds its
               own next to the headline. Autoplay is silent and loops; the
               footage loads lazily as the frame nears the viewport, and under
-              reduced motion it stays a poster frame that never loads. */}
+              reduced motion it stays a poster frame until someone presses
+              Play. The corner play/pause control is the way to stop the loop
+              and the way back into it. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
@@ -339,6 +341,7 @@ export default function Landing() {
                       { src: `${process.env.PUBLIC_URL}/hero-demo.mp4`, type: "video/mp4" },
                     ]}
                     ariaLabel="Screen recording: the three-step Create Video wizard, the Demo plus CTA canvas, and an expanded History tile — full interface with no page header or footer"
+                    showPlayControl
                   />
                 </div>
               </div>
