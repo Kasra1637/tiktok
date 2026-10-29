@@ -2305,28 +2305,6 @@ setObjective("");
     footerHint = "Save your edits and attach a photo before rendering.";
   }
 
-  /* Within-step checklist: the pill above says whether the step is done, and
-     this names its parts so "blocked" never reads as a mystery. Derived from
-     the same values as stepCompletion, so the two can never disagree. Plain
-     status chips, not data-subtitles: the subtitle budget covers label-attached
-     helpers only, and this is step-level status with a job of its own. */
-  const hasPhoto = missingIdentity.length === 0;
-  const stepChecklist =
-    STEPS[step].key === "profile"
-      ? [{ label: "App chosen", done: !!profileId }]
-      : STEPS[step].key === "angle"
-        ? [
-            { label: "Angle", done: !!angleId },
-            { label: "Goal", done: !!objective },
-            { label: "Template", done: !!effectiveTemplateId },
-            { label: "Photo", done: hasPhoto },
-          ]
-        : [
-            { label: "Plan", done: scriptVersion > 0 },
-            { label: "Edits saved", done: !hasEdits },
-            { label: "Photo", done: hasPhoto },
-          ];
-
   function renderStep() {
     if (step === 0) {
       // The gate and the explanation come from one place, so the picker can
@@ -3587,30 +3565,6 @@ setObjective("");
             ? "Step 2 of 3 \u2014 pick the angle, goal, template, then add your photo."
             : "Step 3 of 3 \u2014 read the plan, then render the Hook + Story."}
       </p>
-
-      <ul
-        className="flex flex-wrap items-center gap-1.5"
-        data-testid="wizard-step-checklist"
-        aria-label="What finishes this step"
-      >
-        {stepChecklist.map((item) => (
-          <li
-            key={item.label}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-              item.done
-                ? "border-[color:var(--indigo-35)] text-foreground"
-                : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
-            }`}
-          >
-            {item.done ? (
-              <Check className="h-3 w-3 text-[color:var(--brand-indigo)]" aria-hidden="true" />
-            ) : (
-              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border border-current opacity-60" />
-            )}
-            {item.label}
-          </li>
-        ))}
-      </ul>
 
       <div className="flex items-center justify-between gap-2">
         <Button
