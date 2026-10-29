@@ -11,7 +11,7 @@ import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
-import { FactChip, FactList } from "../components/FactChip";
+import { FactChip } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { recordSignal, verdictFor } from "../lib/feedback";
@@ -79,6 +79,37 @@ function formatRenderDate(value) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/**
+ * The one-line outcome of a render, written to be quiet by default.
+ *
+ * The row printed three separate negatives on every render nobody had touched
+ * yet — "Not posted · Views not recorded · Not rated" — which is the most common
+ * state in History and read as a list of failures rather than an invitation.
+ * Now an untouched render is one sentence, a missing number is named only when
+ * it is the next thing to fill in, and an absent vote says nothing at all: the
+ * record beside the clip already offers the vote, and "Not rated" on every row
+ * is noise, not information. The word "yet" is deliberate — it is the state,
+ * not a verdict on the render.
+ */
+function describeResults(row) {
+  const verdict = verdictFor(row.verdicts, "video");
+  const bits = [];
+  if (row.tiktok_url) {
+    bits.push("Posted");
+    bits.push(
+      row.tiktok_views == null
+        ? "no views yet"
+        : `${row.tiktok_views.toLocaleString("en-US")} views`
+    );
+  } else {
+    bits.push("Not posted yet");
+  }
+  if (verdict !== 0) {
+    bits.push(verdict > 0 ? "Your vote: Good" : "Your vote: Not good");
+  }
+  return bits.join(" · ");
 }
 
 /**
@@ -463,18 +494,23 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
               {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`}
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{row.tiktok_url ? "Posted" : "Not posted"}</span>
-              <span aria-hidden="true">·</span>
-              <span>{row.tiktok_views == null ? "Views not recorded" : `${row.tiktok_views.toLocaleString("en-US")} views`}</span>
-              <span aria-hidden="true">·</span>
-              <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
+              <span data-testid="history-result-line">{describeResults(row)}</span>
+              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
-            <FactList>
-              {row.model && <FactChip>{row.model}</FactChip>}
-              {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
-              {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
-              <FactChip>script v{row.script_version}</FactChip>
-            </FactList>
+            {/* Provenance is a line, not a chip run. Four bordered pills of
+                model, attempt and two versions competed with the headline for
+                the same corner of the card; they answer a follow-up question
+                ("why does this take look different?"), so they read as muted
+                metadata now and stop borrowing the badge language the status
+                and the winner use. */}
+            <p className="text-xs text-muted-foreground" data-testid="history-provenance">
+              {[
+                row.model,
+                row.attempt > 1 ? `attempt ${row.attempt}` : null,
+                row.template_id ? `template v${row.template_version}` : null,
+                `script v${row.script_version}`,
+              ].filter(Boolean).join(" · ")}
+            </p>
           </div>
         </div>
 

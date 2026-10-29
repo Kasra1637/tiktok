@@ -11419,8 +11419,15 @@ async function runDemoCtaChecks() {
         // playable card offers it through the overlay's trash button.
         if (!first.querySelector('button[aria-label="Delete this render"]')) throw new Error("History lost Delete");
         const summary = first.querySelector('[data-testid="history-summary"]');
-        for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
+        for (const text of ["Journal", "Find your next thought.", "Not posted yet"]) {
           if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
+        }
+        // An untouched render says so once. Three separate negatives on the
+        // most common row in History read as a list of failures.
+        for (const gone of ["Views not recorded", "Not rated"]) {
+          if (summary?.textContent.includes(gone)) {
+            throw new Error(`an untouched render still prints ${JSON.stringify(gone)}`);
+          }
         }
         // Order is the priority, and it used to be inverted: provenance chips
         // led, so the dimmest, least glance-relevant line came first and the
@@ -11436,11 +11443,11 @@ async function runDemoCtaChecks() {
         if (blocks[1].tagName !== "P" || !blocks[1].textContent.includes("Find your next thought.")) {
           throw new Error("the hook line is not the summary headline");
         }
-        if (!blocks[2].textContent.includes("Not posted")) {
+        if (!blocks[2].textContent.includes("Not posted yet")) {
           throw new Error("the results line does not follow the headline");
         }
-        if (!blocks[3].textContent.includes("script v")) {
-          throw new Error("provenance chips lead the summary instead of trailing it");
+        if (blocks[3].tagName !== "P" || !blocks[3].textContent.includes("script v")) {
+          throw new Error("provenance must trail the summary as a line, not a chip run");
         }
         // Identity lives once under the clip: the record beside it must not repeat the headline.
         const panelText = panel.textContent || "";
