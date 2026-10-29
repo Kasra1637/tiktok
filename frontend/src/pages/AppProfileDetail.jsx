@@ -442,7 +442,7 @@ export default function AppProfileDetail() {
   ]);
 
 return (
-    <PageFrame className="space-y-6">
+    <PageFrame className="page-content-enter space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         {/* Was "All profiles" -> /app-profiles. There is no list page any
             more, and the editor is where an app is created, approved and

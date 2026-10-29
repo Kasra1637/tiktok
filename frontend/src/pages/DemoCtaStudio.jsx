@@ -14,10 +14,10 @@ import { isClerkConfigured } from "../lib/clerk";
 function AccountEditor(props) {
   const { user, isLoaded } = useUser();
   if (!isLoaded || !user) return <Skeleton className="h-96 w-full" aria-label="Loading draft owner" />;
-  return <DemoCtaEditor key={`${user.id}:${props.generation?.id || "standalone"}`} {...props} draftOwner={user.id} />;
+  return <div className="page-content-enter"><DemoCtaEditor key={`${user.id}:${props.generation?.id || "standalone"}`} {...props} draftOwner={user.id} /></div>;
 }
 function ScopedEditor(props) {
-  return isClerkConfigured ? <AccountEditor {...props} /> : <DemoCtaEditor {...props} />;
+  return isClerkConfigured ? <AccountEditor {...props} /> : <div className="page-content-enter"><DemoCtaEditor {...props} /></div>;
 }
 
 /**

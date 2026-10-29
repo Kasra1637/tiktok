@@ -9,7 +9,7 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
     <motion.div
       initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: "easeOut" }}
+      transition={{ duration: reduceMotion ? 0 : 0.15, ease: "easeOut" }}
     >
       <div className="relative overflow-hidden rounded-2xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 py-14 text-center backdrop-blur-sm">
         {/* Soft indigo pool behind the icon keeps the dashed box from reading
@@ -26,7 +26,7 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
             <motion.span
               initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
               animate={{ scale: 1 }}
-              transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
+              transition={{ duration: reduceMotion ? 0 : 0.15, ease: "easeOut" }}
             >
               <IconTile icon={icon} size="empty" />
             </motion.span>

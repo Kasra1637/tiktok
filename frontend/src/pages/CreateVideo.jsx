@@ -3530,7 +3530,7 @@ setObjective("");
         </Alert>
       )}
 
-<div className="surface surface-step rounded-2xl">
+<div className="surface surface-step page-content-enter rounded-2xl">
           {/* The step card is the ONLY card on a step. Its blocks — the angle
               picker, "What you get", and the goal list — were
               `.surface` too, so a card sat inside an identical card: same fill,

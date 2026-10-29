@@ -944,6 +944,15 @@ h1,
     from { transform: translateX(-120%); }
     to { transform: translateX(220%); }
 }
+/* The primary area enters when it actually mounts, including after a page's
+   skeleton resolves. No timers, fabricated progress, or hidden content. */
+@keyframes page-content-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .page-content-enter { animation: page-content-enter 150ms ease-out both; }
+}
 @keyframes marquee-x {
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
@@ -1291,7 +1300,7 @@ h1,
 @keyframes wizard-slide-forward {
     from {
         opacity: 0;
-        transform: translateX(24px);
+        transform: translateX(8px);
     }
     to {
         opacity: 1;
@@ -1301,7 +1310,7 @@ h1,
 @keyframes wizard-slide-back {
     from {
         opacity: 0;
-        transform: translateX(-24px);
+        transform: translateX(-8px);
     }
     to {
         opacity: 1;
@@ -1309,10 +1318,10 @@ h1,
     }
 }
 .wizard-slide-forward {
-    animation: wizard-slide-forward 220ms ease-out;
+    animation: wizard-slide-forward 150ms ease-out;
 }
 .wizard-slide-back {
-    animation: wizard-slide-back 220ms ease-out;
+    animation: wizard-slide-back 150ms ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
     .wizard-slide-forward,

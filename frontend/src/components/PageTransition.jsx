@@ -2,9 +2,9 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 
 /**
- * Wraps route content with a subtle fade + rise entrance so navigating
- * between pages feels intentional rather than an abrupt content swap.
- * Respects prefers-reduced-motion by skipping the transform.
+ * A quick route entrance, separate from the primary-content reveal on pages
+ * that wait for data. It never delays the route or its requests, and reduced
+ * motion shows the page immediately.
  */
 export function PageTransition({ children }) {
   const location = useLocation();
@@ -13,9 +13,9 @@ export function PageTransition({ children }) {
   return (
     <motion.div
       key={location.pathname}
-      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
+      transition={{ duration: reduceMotion ? 0 : 0.12, ease: "easeOut" }}
     >
       {children}
     </motion.div>

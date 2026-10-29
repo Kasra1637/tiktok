@@ -204,7 +204,7 @@ export default function Analytics() {
           }
         />
       ) : (
-        <div className="space-y-6">
+        <div className="page-content-enter space-y-6">
           <p data-testid="analytics-scope" className="text-sm text-muted-foreground">
             Showing {renders?.length ?? 0} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200) and up to 500 saved events. Activity and feedback below use this same set.
           </p>

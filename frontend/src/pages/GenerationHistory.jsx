@@ -957,7 +957,7 @@ export default function GenerationHistory() {
           }
         />
       ) : (
-        <div className="history-grid" data-testid="history-list" ref={listRef}>
+        <div className="history-grid page-content-enter" data-testid="history-list" ref={listRef}>
           {copyVisible.length > 1 && (
             <p className="col-span-full text-sm text-muted-foreground">
               {copyVisible.length} results · {completed} completed · {failed} failed

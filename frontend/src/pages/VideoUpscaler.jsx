@@ -41,6 +41,7 @@ export function VideoUpscaler() {
       )}
 
       <SectionCard
+        className="page-content-enter"
         title="Your clip"
         icon={Upload}
         description="MP4 or WebM, under 4K on its shorter side. Everything is enhanced on this device — nothing is uploaded."

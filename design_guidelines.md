@@ -409,7 +409,11 @@ shipped model is the one documented above.
 Library: `framer-motion` (page transitions, card entrance). CSS keyframes cover
 ambient motion (`float-slow`, `fade-up`, `pulse-ring`, `shimmer-sweep`, `marquee-x`).
 
-Durations: fast `150ms`, base `220ms`, slow `320ms`.
+Durations: fast `150ms`, base `220ms`, slow `320ms`. Workspace route
+entrances are `120ms`; the primary page content uses the shared `150ms`
+`page-content-enter` fade and 4px rise when it mounts, including after loading.
+Skeletons shimmer while real work is pending, never for an artificial minimum;
+reduced motion leaves both the skeleton and page content static.
 
 **Hard rules:**
 

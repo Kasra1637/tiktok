@@ -576,6 +576,7 @@ export default function BrandSetup() {
           The testid stays on the form itself, because the suite submits
           through it. */}
       <SectionCard
+        className="page-content-enter"
         title="Research a mobile app"
         icon={Smartphone}
         description="App Store and Google Play URLs only — the draft appears below for review."
@@ -805,7 +806,7 @@ export default function BrandSetup() {
           The "App Profile Details" display heading went with the box — the
           PageHeader title already says it. */}
       {brand?.id && (
-      <div ref={manualCardRef} className="min-w-0 space-y-4" data-testid="brand-manual-card">
+      <div ref={manualCardRef} className={`min-w-0 space-y-4${loadingActive ? "" : " page-content-enter"}`} data-testid="brand-manual-card">
         {loadingActive ? (
           <div className="surface surface-flush space-y-2 rounded-2xl px-4 py-3 md:px-6" aria-label="Loading your app profile">
             <Skeleton className="h-10 w-full rounded-xl" />

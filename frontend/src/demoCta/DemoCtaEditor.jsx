@@ -2366,7 +2366,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               onWheel={handleWheel}
             />
           ) : loadingSource ? (
-            <div className="h-full w-full animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
+            <div className="h-full w-full motion-safe:animate-pulse bg-secondary/40" role="status" aria-label="Loading the finished render">
               <span className="sr-only">Loading the finished render…</span>
             </div>
 ) : (

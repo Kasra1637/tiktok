@@ -839,6 +839,7 @@ export default function AssetLibrary({
           together, so an upload no longer appears to "turn up" in a separate
           component further down the step. */}
       <SectionCard
+        className={embedded ? undefined : "page-content-enter"}
         title={embedded ? undefined : "Presenter photos"}
         icon={UserRound}
         description={embedded ? undefined : "A clear photo of the person you want on camera. It becomes the video's presenter reference."}
@@ -960,7 +961,7 @@ export default function AssetLibrary({
         </div>
       )}
 
-      <div data-testid="asset-list">
+      <div data-testid="asset-list" className={!embedded && !loading && assets.length > 0 ? "page-content-enter" : undefined}>
       {loading ? (
         <div className="space-y-4" aria-label="Loading assets">
           <Skeleton className="h-20 w-full rounded-xl" />

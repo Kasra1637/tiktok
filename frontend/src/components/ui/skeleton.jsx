@@ -13,7 +13,7 @@ function Skeleton({
       className={cn(
         "relative overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/40",
         "after:absolute after:inset-0 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-white/[0.06] after:to-transparent after:content-['']",
-        "motion-safe:after:animate-[shimmer-sweep_1.6s_ease-in-out_infinite] motion-reduce:animate-pulse",
+        "motion-safe:after:animate-[shimmer-sweep_1.1s_ease-in-out_infinite]",
         className
       )}
       {...props} />
