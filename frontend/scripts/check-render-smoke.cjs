@@ -12663,6 +12663,7 @@ async function runDemoCtaChecks() {
             generations: [{ ...COMPLETED, id: "gen-vary", studio_project_id: "proj-9", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getStudioProjects: async () => ({ projects: [{ id: "proj-9" }] }),
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);

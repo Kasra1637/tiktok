@@ -424,6 +424,50 @@ class TestPostKitCaptionGuards:
             with pytest.raises(RuntimeError, match="50 to 80"):
                 _run(api.ai_service.generate_post_kit(project, profile))
 
+    def test_three_relevant_hashtags_are_enough(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer", "#studytok", "#deepwork"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        kit = _run(api.ai_service.generate_post_kit(project, profile))
+        assert len(kit["hashtags"]) == 3
+
+    def test_six_hashtags_is_loud(self, api, monkeypatch):
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d", "#e"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        with pytest.raises(RuntimeError):
+            _run(api.ai_service.generate_post_kit(project, profile))
+
+    def test_hashtag_prompt_demands_relevance_over_trends(self, api, monkeypatch):
+        seen = {}
+
+        async def fake_chat(**kwargs):
+            seen.update(kwargs)
+            return {
+                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "hashtags": ["#FocusTimer", "#studytok", "#deepwork"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        _run(api.ai_service.generate_post_kit(project, profile))
+        brief = str(seen.get("system_message", "")) + str(seen.get("prompt", ""))
+        assert "3 to 5" in brief
+        assert "truly relevant" in brief
+
     def test_caption_prompt_demands_user_voice_and_length(self, api, monkeypatch):
         seen = {}
 

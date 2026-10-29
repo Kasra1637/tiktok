@@ -2267,7 +2267,7 @@ POST_KIT_JSON_SCHEMA = _strict_object({
 
 async def generate_post_kit(project: dict, profile: dict) -> dict:
     """
-    Post kit for one render: 1 caption, a hashtag set, cover text.
+    Post kit for one render: 1 caption, 3 to 5 hashtags, cover text.
 
     Grounded strictly in this render's own hook, script, and CTA plus the
     profile's verified facts. Anything outside that fails loudly instead of
@@ -2340,11 +2340,14 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '    promotional, never founder or marketer voice), name what the app "\n'
         '    did for you using the profile facts and plan above, then end with "\n'
         '    a short question — the caption\u2019s final character must be \u2018?\u2019"],\n'
-        '  "hashtags": ["4 to 7 tags, #AppName first, then niche and functional tags"],\n'
+        '  "hashtags": ["3 to 5 highly relevant tags for THIS clip: derive them from the actual hook, caption topic, audience, and niche above and keep them aligned with the hook and caption; include a trending tag only when it is truly relevant and verified for this topic"],\n'
         '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
-        "Caption must be 50 to 80 characters including the final \u2018?\u2019. No "
+        "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
+        "Hashtags must be 3 to 5 total, each grounded in the hook, caption "
+        "topic, audience, or niche above; never add a trending tag unless it is "
+        "truly relevant and verified for this topic. No "
         "banned claim may appear. No guaranteed outcomes. No promotional or "
         "founder voice. Return ONLY valid JSON."
     )
@@ -2365,9 +2368,9 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     raw_tags = parsed.get("hashtags")
     if isinstance(raw_tags, str):
         raw_tags = raw_tags.split()
-    hashtags = [str(t).strip()[:60] for t in (raw_tags or []) if str(t).strip()][:7]
+    hashtags = [str(t).strip()[:60] for t in (raw_tags or []) if str(t).strip()]
     cover_text = str(parsed.get("cover_text") or "").strip()[:100]
-    if not caption or len(hashtags) < 4 or not cover_text:
+    if not caption or not 3 <= len(hashtags) <= 5 or not cover_text:
         raise RuntimeError("Post kit response was missing caption, hashtags, or cover text.")
     if not caption.endswith("?"):
         raise RuntimeError("Post kit caption must end with its question.")
