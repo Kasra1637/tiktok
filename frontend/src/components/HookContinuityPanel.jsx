@@ -91,20 +91,20 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
   const filled = rows.filter(([, value]) => String(value || "").trim());
   if (!filled.length) return null;
   return (
-    <div className="space-y-2">
-      <div className="space-y-0.5">
+    <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
+      <div className="space-y-2">
         <GroupLabel icon={Icon}>{title}</GroupLabel>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
         )}
       </div>
-      <dl className="space-y-2">
+      <dl className="max-w-3xl divide-y divide-[color:var(--hairline)]">
         {filled.map(([label, value]) => (
-          <div key={label}>
+          <div key={label} className="py-3 first:pt-0 last:pb-0">
             <dt className="text-sm font-semibold text-muted-foreground">
               {strategyLabel(label)}
             </dt>
-            <dd className="mt-0.5 text-base leading-snug">{sentenceCase(String(value))}</dd>
+            <dd className="mt-1 text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(String(value))}</dd>
           </div>
         ))}
       </dl>
@@ -149,15 +149,15 @@ function SectionRow({ section }) {
   // Model-written, so normalized at display like every other generated field.
   const goal = sentenceCase(section.goal);
   return (
-    <li className="space-y-1">
+    <li className="max-w-3xl space-y-3 border-l-2 border-[color:var(--indigo-35)] pl-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold capitalize">{section.role}</span>
+        <span className="font-display text-base font-semibold capitalize">{section.role}</span>
         <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
       </div>
-      <p className="text-sm text-muted-foreground">{SECTION_COPY[section.role]}</p>
-      {goal && <p className="text-base">{goal}</p>}
+      <p className="text-sm leading-relaxed text-muted-foreground">{SECTION_COPY[section.role]}</p>
+      {goal && <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{goal}</p>}
       {section.action && (
-        <p className="text-base text-muted-foreground">What they do: {sentenceCase(section.action)}</p>
+        <p className="text-base leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">What they do: {sentenceCase(section.action)}</p>
       )}
       {/* The words the viewer hears, which is the entire point of this panel
           and was missing from it. These are the founder's approved words: the
@@ -167,7 +167,7 @@ function SectionRow({ section }) {
           model's drafts, which is why this line stays even when the words
           read like a draft: it is what will be sent, not what was approved. */}
       {typeof section.script === "string" && section.script.trim() && (
-        <p className="text-base" data-testid={`section-spoken-${section.role}`}>
+        <p className="text-base leading-relaxed [overflow-wrap:anywhere]" data-testid={`section-spoken-${section.role}`}>
           <span className="font-semibold">What is said here: </span>
           {sentenceCase(section.script.trim())}
         </p>
@@ -443,10 +443,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       )}
 
       {hasStrategy && (
-        <div className="space-y-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] p-3">
-          <div className="space-y-1">
+        <div className="space-y-5 border-t border-[color:var(--hairline-strong)] pt-5">
+          <div className="max-w-3xl space-y-2 border-l-2 border-[color:var(--indigo-35)] pl-4">
             <GroupLabel>Hook concept</GroupLabel>
-            <p className="text-base">{sentenceCase(strategy.hook_concept)}</p>
+            <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.hook_concept)}</p>
             {/* The hook line itself is NOT printed here. It is the same string as
                 the Review step's "Hook line", verbatim, because the strategy
                 prompt is told to echo the founder-approved line rather than write
@@ -455,13 +455,13 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 thing they cannot. `strategy.hook_line` still exists on the
                 strategy and still reaches the render prompt — this is the
                 duplicate display that was removed, not the field. */}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               What is said is the hook line you saved above, spoken as written.
             </p>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-2 border-t border-[color:var(--hairline-strong)] pt-5">
             <GroupLabel icon={Target}>Why this works for this app</GroupLabel>
-            <p className="text-base">{sentenceCase(strategy.strategy_summary)}</p>
+            <p className="max-w-3xl text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.strategy_summary)}</p>
           </div>
           {/* The three outcome fields, shown because they already govern the
               whole render (generation_planning reads them into the segment
@@ -520,9 +520,9 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               collapsed runs of continuation beats into ranges and closed by
               saying the hook and the call to action were the two that carried the
               video — a description of a chain with a fixed number of beats to
-              segments, none of which exists now. */}          <div className="space-y-2">
+              segments, none of which exists now. */}          <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
             <GroupLabel icon={Info}>The two sections</GroupLabel>
-            <ol className="space-y-3 text-base">
+            <ol className="space-y-6 text-base">
               {sections.map((section) => (
                 <SectionRow key={section.role} section={section} />
               ))}
