@@ -246,7 +246,12 @@ export const DEFAULTS = {
   hookDuration: 1.8,
   hookOffsetX: 0,
   hookOffsetY: 0,
-  ctaEnabled: true,
+  // Off until the founder asks: a base clip usually carries its own closing
+  // beat, so an end card the founder did not write should never paint over
+  // it. Turning it on previews it immediately (see the toggle) and the
+  // export then carries it; drafts the founder already saved keep the value
+  // they stored.
+  ctaEnabled: false,
   ctaHeadline: "Try it free — link in bio",
   ctaHandle: "@yourhandle",
   ctaDuration: 2,

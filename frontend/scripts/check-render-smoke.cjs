@@ -10022,11 +10022,11 @@ async function runDemoCtaChecks() {
 
   // A hook style tweak replays the hook window and a CTA tweak replays the
   // end card — never the middle of the clip. With an 8s stubbed clip the
-  // hook window opens at frame 0 and the default 2s end card opens at 6s,
-  // so each replay lands exactly on its window start with looping held off
-  // (a CTA replay ending at the clip end must not wrap to the top). A
-  // founder seek through the transport then ends the window and hands free
-  // playback back.
+  // hook window opens at frame 0 and the 2s end card, once enabled, opens
+  // at 6s, so each replay lands exactly on its window start with looping
+  // held off (a CTA replay ending at the clip end must not wrap to the
+  // top). A founder seek through the transport then ends the window and
+  // hands free playback back.
   await check("a hook tweak replays the hook and a CTA tweak replays the end card", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     const clip = installLoadedClipStubs({ width: 1280, height: 720 });
@@ -10060,6 +10060,19 @@ async function runDemoCtaChecks() {
         throw new Error("a hook replay did not hold the window (loop still on)");
       }
       await openGroup("End Card");
+      // The end card starts off, so enabling it is the founder's first move
+      // and everything this check replays happens after that.
+      const ctaToggle = ctx.container.querySelector('[data-testid="cta-toggle"]');
+      if (!ctaToggle) throw new Error("no end-card toggle");
+      if (ctaToggle.getAttribute("data-state") !== "checked") {
+        await act(async () => {
+          ctaToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+      if (ctaToggle.getAttribute("data-state") !== "checked") {
+        throw new Error("the end card did not stay on after enabling it");
+      }
       video.currentTime = 1;
       const ctaFade = ctx.container.querySelector('[data-testid="cta-anim-fade"]');
       if (!ctaFade) throw new Error("no CTA fade chip");
@@ -11225,7 +11238,14 @@ async function runDemoCtaChecks() {
       });
       await clickEl(ctx, ctx.container.querySelector('[data-testid="story-toggle"]'), "enable Story");
       const timing = () => [...ctx.container.querySelectorAll('[data-testid^="story-"] [role="slider"]')].map((s) => Number(s.getAttribute("aria-valuenow")));
-      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 6])) throw new Error(`wrong initial Story timing: ${timing()}`);
+      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 8])) throw new Error(`wrong initial Story timing with the end card off: ${timing()}`);
+      await openGroup("End Card");
+      // The end card starts off, so nothing reserves the tail until the
+      // founder turns it on — which is exactly the state this check clamps
+      // against from here on.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-toggle"]'), "enable the end card");
+      await openGroup("Story Text");
+      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 6])) throw new Error(`enabling the end card did not reserve its tail: ${timing()}`);
       await openGroup("End Card");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-last3"]'), "reserve last three seconds");
       await openGroup("Story Text");
