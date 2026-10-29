@@ -2052,11 +2052,19 @@ class TestSpokenWordsGate:
         assert check["over_ceiling"] is False
         # The hook asks the question and the middle closes it, so the pair reads
         # as one story rather than as two lines that happen to follow each other.
+        # The continuity flags ride along but stay independent of that verdict:
+        # this pair echoes the hook ("your emotions" / "Yours ends") and opens
+        # on an evening, but it does not end first-person — craft notes, not
+        # incoherence.
         assert check["story"] == {
             "problem_in_hook": True,
             "resolution_in_script": True,
             "restates_hook": False,
             "coherent": True,
+            "dangling_refs": [],
+            "echoes_hook": True,
+            "sets_scene": True,
+            "ends_on_handoff": False,
         }
 
     def test_a_feature_inventory_refuses_the_render(self):

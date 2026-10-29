@@ -3097,6 +3097,17 @@ async def generate_creative_plan(
         "their own words, and the script resolves that same problem — same subject, same viewer, "
         "the second line answering the first. Never restate the hook in the script, never open a "
         "second problem, and never leave the hook's problem unanswered.\n"
+        "- ONE CONTINUOUS THOUGHT: hook_line and script are one person speaking in one breath, "
+        "not two separate pieces. Name every place, person, object and time explicitly — never "
+        "'walk in' with no destination, never 'he', 'that meeting' or 'the place' unless the "
+        "hook or an earlier script line already named them. Open the script's first sentence on "
+        "the scene: where the speaker is and what moment this is. Echo the hook's exact image "
+        "or feeling word in the script and resolve it there — if the hook says 'loud', the script "
+        "says what quiets it using that same word. Keep one voice, one tense and one point of "
+        "view throughout, so it sounds like the same person continuing. End the script on the "
+        "payoff, the resolved feeling in the customer's own words at the moment they would reach "
+        "for the app, so the founder's demo and CTA that follow have something to land on; never "
+        "narrate the demo or speak the CTA yourself.\n"
         "- COMPLETE SENTENCES: every spoken line is complete grammatical sentences, each ending "
         "in . ! or ?. The hook_line must stand alone as one complete sentence — never end it on a "
         "conjunction, preposition or article (no trailing 'because', 'like', 'and' or 'the'), and "
@@ -3108,7 +3119,10 @@ async def generate_creative_plan(
         "Use ordinary customer language, not feature-list labels, marketing slogans or commands "
         "such as 'Find words for feelings'. Do not paste title-cased feature names into dialogue. "
         "Do not repeat the same benefit twice. Check each character ceiling separately; if a line "
-        "does not fit, rewrite BOTH lines coherently instead of splitting a sentence.\n"
+        "does not fit, rewrite BOTH lines coherently instead of splitting a sentence. Flag to "
+        "yourself any place, person or time the script names without establishing, any opening "
+        "script sentence missing its scene, and any hook image word the script never echoes back "
+        "— and rewrite until none remain.\n"
         "- NEVER write a product demonstration into either beat. Do not film the app in use, "
         "do not show a screen, and do not narrate what the app does while something unrelated "
         "happens on camera. Showing the working product is the founder's recording, attached "
@@ -3210,6 +3224,26 @@ async def generate_creative_plan(
     # than stored. The column keeps its old rows; nothing new is written.
     result.pop("overlays", None)
     result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
+    # Validation pass: read the two accepted lines together and flag what the
+    # retry loop above must not refuse. Continuity is craft, not an observable
+    # defect, so a dangling reference or an unanswered hook image is logged
+    # for the founder — it reaches Review inside spoken_check — rather than
+    # rewritten. No extra model call: this is arithmetic on the accepted
+    # words, so the single-pass rule holds.
+    continuity = check_spoken_story(
+        result.get("hook_line"), result.get("script"), hook_seconds, duration_seconds
+    )["story"]
+    continuity_flags = [
+        f"dangling reference: '{ref}'" for ref in continuity.get("dangling_refs", [])
+    ]
+    if not continuity.get("echoes_hook", True):
+        continuity_flags.append("the script never echoes the hook's image word")
+    if not continuity.get("sets_scene", True):
+        continuity_flags.append("the script's opening sentence names no scene")
+    if not continuity.get("ends_on_handoff", True):
+        continuity_flags.append("the script does not end on a handoff into the demo")
+    if continuity_flags:
+        logger.warning("Creative plan continuity flags: %s", "; ".join(continuity_flags))
     result["duration_seconds"] = duration_seconds
     return result
 
@@ -3863,6 +3897,220 @@ def _closes_the_problem(text: str) -> bool:
     return any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS)
 
 
+# Words that carry no image, so the hook-echo check ignores them: the hook's
+# load-bearing word is never "the", "just" or "still".
+_CONTINUITY_STOPWORDS = frozenset((
+    "the", "a", "an", "and", "or", "but", "if", "then", "than",
+    "that", "this", "these", "those", "with", "from", "have", "has",
+    "had", "were", "been", "are", "was", "will", "would", "could",
+    "should", "just", "very", "really", "still", "even", "also",
+    "when", "what", "which", "there", "their", "they", "them",
+    "into", "over", "under", "about", "after", "before", "again",
+    "every", "each", "more", "most", "much", "many", "some", "such",
+))
+
+# People whose earlier mention lets a later he/she/they refer back to someone.
+# Generic crowds (people, team, family) count: "they" after "most people"
+# is a genuine antecedent, not a dangling pronoun.
+_PERSON_WORDS = frozenset((
+    "mom", "mother", "dad", "father", "mama", "papa", "parent",
+    "parents", "boss", "friend", "friends", "kid", "kids", "child",
+    "children", "wife", "husband", "partner", "daughter", "son",
+    "sister", "brother", "doctor", "therapist", "counselor", "coach",
+    "coworker", "coworkers", "colleague", "colleagues", "neighbor",
+    "neighbors", "teacher", "nurse", "nurses", "guy", "guys", "man",
+    "men", "woman", "women", "person", "people", "team", "family",
+    "roommate", "classmate", "client", "clients", "customer",
+    "customers", "stranger", "strangers",
+))
+
+# Nouns where a leading "the" with no earlier mention genuinely confuses:
+# "the place" could be anywhere. Everyday objects ("the words", "the
+# suggestions") are left alone — flagging those would cry wolf on ordinary
+# customer speech.
+_BARE_LOCATION_NOUNS = frozenset((
+    "place", "meeting", "office", "house", "room", "building",
+    "event", "party", "store", "shop", "school", "interview",
+    "appointment",
+))
+
+# Where the speaker can be when the opening sentence sets the scene.
+_SCENE_PLACES = frozenset((
+    "car", "home", "house", "apartment", "flat", "dorm", "kitchen",
+    "desk", "office", "couch", "sofa", "bed", "bedroom", "bathroom",
+    "shower", "street", "train", "bus", "park", "gym", "store",
+    "shop", "cafe", "restaurant", "diner", "bar", "work", "school",
+    "library", "classroom", "porch", "driveway", "garage", "yard",
+    "backyard", "garden", "sidewalk", "elevator", "lobby", "hall",
+    "hallway", "stairs", "parking", "table", "counter", "window",
+    "door", "doorway", "closet", "basement", "attic", "balcony",
+    "patio", "deck", "playground", "field", "beach", "pool", "lake",
+    "river", "trail", "woods", "forest", "city", "town", "farm",
+))
+
+# Words that pin the moment the opening sentence happens in.
+_SCENE_MOMENTS = frozenset((
+    "morning", "afternoon", "evening", "night", "tonight", "today",
+    "yesterday", "tomorrow", "weekend", "monday", "tuesday",
+    "wednesday", "thursday", "friday", "saturday", "sunday", "dawn",
+    "dusk", "midnight", "noon", "lunch", "dinner", "breakfast",
+    "commute", "drive", "driving", "shift", "break", "bedtime",
+    "overtime", "deadline", "moment", "time", "after", "before",
+    "when", "while", "during", "since", "until",
+))
+
+# Concrete payoff verbs: the last sentence acts rather than trails off.
+_PAYOFF_VERBS = frozenset((
+    "open", "opens", "pull", "pulls", "reach", "reaches", "start",
+    "starts", "begin", "begins", "write", "writes", "wrote",
+    "written", "tap", "taps", "check", "checks", "look", "looks",
+    "read", "reads", "put", "puts", "set", "sets", "close",
+    "closes", "shut", "end", "ends", "finish", "finishes", "done",
+    "save", "saves", "keep", "keeps", "hold", "holds", "breathe",
+    "breathes", "say", "says", "said", "tell", "tells", "name",
+    "names", "named", "find", "finds", "found", "leave", "leaves",
+    "walk", "walks", "step", "steps", "sit", "sits",
+))
+
+
+def _continuity_stem(word: str) -> str:
+    """A light stem so "feeling" meets "feel" and "houses" meets "house".
+
+    Customer speech is short, so the rule is deliberately crude: strip one
+    common ending only when four letters remain. A missed inflection is a
+    missed echo, which is why the echo check also tries plain containment.
+    """
+    for suffix in ("ing", "ed", "es", "s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+            stemmed = word[: -len(suffix)]
+            # "houses" strips to "hous" through "es" but to "house"
+            # through "s" — the longer stem wins when both survive.
+            if suffix == "es" and word.endswith("s") and len(word) - 1 >= 4:
+                longer = word[:-1]
+                return longer if len(longer) > len(stemmed) else stemmed
+            return stemmed
+    return word
+
+
+def _continuity_words(text: str) -> list:
+    """The image-carrying words of a line: long enough to mean something."""
+    return [
+        word for word in _normalize_spoken(text).split()
+        if len(word) >= 4 and word not in _CONTINUITY_STOPWORDS
+    ]
+
+
+def _words_match(first: str, second: str) -> bool:
+    """Same word, same stem, or one plainly containing the other."""
+    if first == second:
+        return True
+    if _continuity_stem(first) == _continuity_stem(second):
+        return True
+    short, long = (first, second) if len(first) <= len(second) else (second, first)
+    return len(short) >= 5 and long.startswith(short)
+
+
+def _script_echoes_hook(hook: str, script: str) -> bool:
+    """Whether the script echoes at least one of the hook's image words.
+
+    A hook with no image words ("Hi.") asks nothing, so there is nothing
+    to miss — vacuously true, never a flag.
+    """
+    hook_words = _continuity_words(hook)
+    if not hook_words:
+        return True
+    script_words = _continuity_words(script)
+    return any(
+        _words_match(hook_word, script_word)
+        for hook_word in hook_words
+        for script_word in script_words
+    )
+
+
+def _dangling_references(hook: str, script: str) -> list:
+    """Spans in the script that point at nothing the pair established.
+
+    Three shapes, each matched on the words rather than the meaning: motion
+    into nowhere ("walk in," with no destination), a distal demonstrative
+    whose noun never appeared ("that meeting"), and a third-person pronoun
+    with no person mentioned anywhere before it ("he"). "It" is excluded:
+    in customer speech it almost always points at the feeling just named.
+    """
+    refs = []
+    seen = set()
+
+    def _add(span: str):
+        key = span.lower()
+        if key not in seen:
+            seen.add(key)
+            refs.append(span)
+
+    text = str(script or "")
+    lowered = text.lower()
+    for match in re.finditer(
+        r"\b(walk|go|come|head|step)s? in\b"
+        r"(?!\s+(?:to|through|past|around|between|among)\b)",
+        lowered,
+    ):
+        _add(text[match.start(): match.end()])
+    tokens = [(m.group(0), m.start()) for m in re.finditer(r"[a-z0-9]+", lowered)]
+    hook_stems = {_continuity_stem(word) for word in _normalize_spoken(hook).split()}
+
+    def _established_before(position: int, extra: set = frozenset()) -> set:
+        known = set(hook_stems) | set(extra)
+        for word, start in tokens:
+            if start >= position:
+                break
+            known.add(_continuity_stem(word))
+        return known
+
+    person_stems = {_continuity_stem(word) for word in _PERSON_WORDS}
+    for match in re.finditer(r"\b(that|those)\s+([a-z]+)\b", lowered):
+        noun = match.group(2)
+        known = _established_before(match.start())
+        if not any(_words_match(noun, word) for word in known):
+            _add(text[match.start(): match.end()])
+    for match in re.finditer(r"\b(he|him|his|she|her|they|them)\b", lowered):
+        known = _established_before(match.start())
+        if not (known & person_stems):
+            _add(text[match.start(): match.end()])
+    for match in re.finditer(r"\bthe\s+([a-z]+)\b", lowered):
+        noun = match.group(1)
+        if noun not in _BARE_LOCATION_NOUNS:
+            continue
+        known = _established_before(match.start())
+        if _continuity_stem(noun) not in known:
+            _add(text[match.start(): match.end()])
+    return refs
+
+
+def _sets_scene(script: str) -> bool:
+    """Whether the opening script sentence names a place or a moment."""
+    tokens = _normalize_spoken(_first_sentence(script)).split()
+    words = set(tokens) | {_continuity_stem(token) for token in tokens}
+    return bool(words & _SCENE_PLACES or words & _SCENE_MOMENTS)
+
+
+def _ends_on_handoff(script: str) -> bool:
+    """Whether the last script sentence lands a first-person payoff.
+
+    The founder's demo and CTA follow immediately, so the script must end on
+    the resolved feeling in the customer's own words — a first-person sentence
+    carrying a resolution marker or a concrete payoff verb — rather than
+    trailing off mid-thought.
+    """
+    sentences = _split_sentences(script)
+    if not sentences:
+        return False
+    last = sentences[-1]
+    padded = f" {_normalize_spoken(last)} "
+    if not any(f" {pronoun} " in padded for pronoun in ("i", "me", "my", "mine", "myself")):
+        return False
+    if _spoken_marker_hit(last, _RESOLUTION_MARKERS):
+        return True
+    return any(f" {verb} " in padded for verb in _PAYOFF_VERBS)
+
+
 def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_name="") -> dict:
     """
     Both spoken lines measured, and read as ONE story.
@@ -3875,8 +4123,12 @@ def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_
 
     Nothing here refuses anything. The ceiling is what the render enforces and
     an under-target line is a choice, so the story verdict is reported to the
-    founder rather than acted on. Pure, so the Review step and the render path
-    measure the same words the same way.
+    founder rather than acted on. The continuity flags below are the same kind
+    of report: a dangling reference or an unanswered hook image is craft, not
+    an observable defect, so it is flagged for the founder instead of
+    rewritten — the third failed editorial attempt must never destroy a plan
+    over it. Pure, so the Review step and the render path measure the same
+    words the same way.
 
     `app_name` adds the one check that cannot live in the prompt: whether the
     customer's own line names the product they are talking about, which is
@@ -3894,6 +4146,13 @@ def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_
         # The plan's script is written as the whole piece, so a copy of the
         # hook at its head is the hook being said twice rather than a middle.
         "restates_hook": bool(hook and body) and strip_leading_hook(hook, body) != body,
+        # One continuous thought, read across the boundary: every reference
+        # established, the hook's image echoed, the scene set, the handoff
+        # landed. Reported, never acted on — see the docstring.
+        "dangling_refs": _dangling_references(hook, body),
+        "echoes_hook": _script_echoes_hook(hook, body),
+        "sets_scene": _sets_scene(body),
+        "ends_on_handoff": _ends_on_handoff(body),
     }
     # Only a name long enough to be a real product name, and never the short
     # generic one that would match ordinary speech.

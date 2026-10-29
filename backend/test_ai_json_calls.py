@@ -2013,6 +2013,112 @@ class TestSpokenLineCraft:
         assert "names_the_app" not in bare["spoken_check"]["story"]
 
 
+class TestHookScriptContinuity:
+    """
+    Production failure: a stored plan reached Review with hook "My workday is
+    still loud in my head." and script "I just start talking right here in
+    the car. By the time I walk in, the day is written down and I can finally
+    put it down." — the hook and the script read as two separate pieces, and
+    "walk in" has no destination. The validator must read the two lines
+    together and flag exactly that: the dangling reference, and the hook's
+    image word the script never resolves.
+
+    The flags are reported, never acted on: the editorial retry loop stays for
+    observable defects (promotion, fragments, over-length lines), because a
+    continuity check that fires on a real customer line turns one bad plan
+    into no plan at all. The prompt carries the five rules; the check carries
+    the evidence.
+    """
+
+    HOOK = "My workday is still loud in my head."
+    DANGLING_SCRIPT = (
+        "I just start talking right here in the car. By the time I walk in, "
+        "the day is written down and I can finally put it down."
+    )
+    CONTINUOUS_SCRIPT = (
+        "I am sitting in my car outside my house and the loud day is still buzzing. "
+        "I say it all out here, and by the time I walk into my house the noise "
+        "is written down and I can finally put it down."
+    )
+
+    def test_a_dangling_walk_in_and_unresolved_hook_word_are_flagged(self):
+        import ai_service
+        check = ai_service.check_spoken_story(self.HOOK, self.DANGLING_SCRIPT, 3, 15)
+        assert any("walk in" in ref for ref in check["story"]["dangling_refs"])
+        # "loud" is the hook's image; the script never echoes or resolves it.
+        assert check["story"]["echoes_hook"] is False
+
+    def test_a_continuous_pair_passes_every_continuity_flag(self):
+        import ai_service
+        check = ai_service.check_spoken_story(self.HOOK, self.CONTINUOUS_SCRIPT, 3, 15)
+        assert check["story"]["dangling_refs"] == []
+        assert check["story"]["echoes_hook"] is True
+        assert check["story"]["sets_scene"] is True
+        assert check["story"]["ends_on_handoff"] is True
+
+    def test_unestablished_person_and_meeting_are_flagged(self):
+        import ai_service
+        check = ai_service.check_spoken_story(
+            "I dread the weekly review.",
+            "He told me that meeting went fine. I wrote it down after.",
+            3, 15,
+        )
+        refs = " ".join(check["story"]["dangling_refs"])
+        assert "he" in refs.lower()
+        assert "that meeting" in refs.lower()
+
+    def test_the_prompt_writes_hook_and_script_as_one_thought(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "I could never name what I felt.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "ONE CONTINUOUS THOUGHT" in prompt
+        assert "one breath" in prompt
+        # The old rule stays: one problem named, one problem answered.
+        assert "ONE STORY, TWO LINES" in prompt
+
+    def test_continuity_flags_never_trigger_an_editorial_retry(self, monkeypatch):
+        """A draft with a dangling reference is returned, not rewritten.
+
+        The walk-in script is grammatical, complete, fitting and promotion-free,
+        so the retry loop must accept it on the first call exactly as written —
+        the continuity flags travel in the report for the founder, and a third
+        failed attempt must never destroy a plan over a matter of craft.
+        """
+        import ai_service
+        plan = {
+            "hook_line": self.HOOK, "script": self.DANGLING_SCRIPT,
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook", "text": "t"},
+                {"start": 3, "end": 15, "label": "middle", "text": "t"},
+            ],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(plan))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == self.HOOK
+        assert result["script"] == self.DANGLING_SCRIPT
+        assert len(rec.payloads) == 1
+
+
 class TestCompleteSentences:
     """
     Production failure, 2026-10-13: a stored plan reached Review with hook_line
