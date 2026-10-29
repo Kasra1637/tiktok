@@ -44,7 +44,16 @@ jest.mock("../components/ui/alert", () => {
   };
 });
 
-import { historyActionError, needsHistoryRepairRow } from "./historyRepair";
+import {
+  historyActionError,
+  needsHistoryRepairRow,
+  isAwaitingProvider,
+  effectiveCopyFilter,
+  shouldShowHistoryEmpty,
+  shouldOfferDraftLink,
+  shouldApplyDeepLinkPage,
+  pageForRowIndex,
+} from "./historyRepair";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
   __resetPendingSavesForTests,
@@ -117,6 +126,62 @@ describe("needsHistoryRepairRow", () => {
     expect(needsHistoryRepairRow({ status: "completed", r2_url: "https://cdn.example/x.mp4" })).toBe(false);
     expect(needsHistoryRepairRow({ status: "archived" })).toBe(false);
     expect(needsHistoryRepairRow(null)).toBe(false);
+  });
+});
+
+describe("history deep-link and pager helpers", () => {
+  test("a deep link to a copy-less export resolves to the without side", () => {
+    expect(effectiveCopyFilter("with", { post_kit: null, audience: "", demo_brief: "" })).toBe("without");
+  });
+
+  test("a deep link to a copy-carrying render resolves to the with side", () => {
+    expect(effectiveCopyFilter("without", { audience: "QA" })).toBe("with");
+  });
+
+  test("without a deep-link target the chosen filter is kept", () => {
+    expect(effectiveCopyFilter("with", null)).toBe("with");
+    expect(effectiveCopyFilter("without", null)).toBe("without");
+  });
+
+  test("a deep link jumps to its page exactly once", () => {
+    expect(shouldApplyDeepLinkPage(null, "abc")).toBe(true);
+    expect(shouldApplyDeepLinkPage("abc", "abc")).toBe(false);
+    expect(shouldApplyDeepLinkPage("abc", "")).toBe(false);
+  });
+
+  test("row 50 of 50-per-page lives on page 2", () => {
+    expect(pageForRowIndex(0)).toBe(1);
+    expect(pageForRowIndex(49)).toBe(1);
+    expect(pageForRowIndex(50)).toBe(2);
+  });
+});
+
+describe("history queued repair", () => {
+  test("submitted rows without bytes are awaiting the provider", () => {
+    expect(isAwaitingProvider({ status: "submitted" })).toBe(true);
+    expect(isAwaitingProvider({ status: "submitted", video_url: "/api/media/x.mp4" })).toBe(false);
+  });
+
+  test("submitted rows without bytes need repair", () => {
+    expect(needsHistoryRepairRow({ status: "submitted" })).toBe(true);
+  });
+});
+
+describe("history empty state", () => {
+  test("a load failure never reads as an empty account", () => {
+    expect(shouldShowHistoryEmpty({ loading: false, error: "boom", rowsLength: 0 })).toBe(false);
+    expect(shouldShowHistoryEmpty({ loading: false, error: null, rowsLength: 0 })).toBe(true);
+  });
+});
+
+describe("history draft links", () => {
+  test("a confirmed-gone draft offers no link, even for non-winners", () => {
+    expect(shouldOfferDraftLink("gone", new Set(["kept"]))).toBe(false);
+  });
+
+  test("an unverified list fails open to the draft link", () => {
+    expect(shouldOfferDraftLink("maybe", null)).toBe(true);
+    expect(shouldOfferDraftLink("kept", new Set(["kept"]))).toBe(true);
   });
 });
 

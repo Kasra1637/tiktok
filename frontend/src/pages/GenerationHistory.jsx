@@ -18,7 +18,17 @@ import { recordSignal, verdictFor } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
-import { historyActionError, needsHistoryRepairRow } from "./historyRepair";
+import {
+  historyActionError,
+  needsHistoryRepairRow,
+  hasCopyContext,
+  isAwaitingProvider,
+  effectiveCopyFilter,
+  shouldApplyDeepLinkPage,
+  pageForRowIndex,
+  shouldShowHistoryEmpty,
+  shouldOfferDraftLink,
+} from "./historyRepair";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -49,16 +59,6 @@ const HISTORY_PAGE_SIZE = 50;
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
- * Whether a render carries anything for the copy/context section: a frozen
- * post kit, an audience, or a demo brief. Rows with none of these render no
- * disclosures, so the list can separate the two kinds instead of mixing
- * cards with copy beside cards without any.
- */
-function hasCopyContext(row) {
-  return Boolean(row.post_kit || row.audience || row.demo_brief);
 }
 
 /**
@@ -170,8 +170,8 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   // was down, so nothing ever polled them and they kept the status forever.
   // They are invisible otherwise -- no stage, no player, no repair -- which is
   // how a paid render could sit finished and unreachable with no affordance.
-  const stuckGenerating = row.status === "generating" && !row.video_url;
-  const canRepair = stuckGenerating || (row.status === "completed" && (!downloadUrl || previewBroken));
+  const awaitingProvider = isAwaitingProvider(row);
+  const canRepair = awaitingProvider || (row.status === "completed" && (!downloadUrl || previewBroken));
 
   const signalRefs = {
     brand_profile_id: row.brand_profile_id,
@@ -268,7 +268,12 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       title: "No clip — this render failed",
       body: row.error || "The provider returned an error instead of a video.",
     };
-  } else if (stuckGenerating) {
+  } else if (row.status === "submitted" && !row.video_url) {
+    stageNotice = {
+      title: "Queued — waiting on the provider",
+      body: "This render is still queued — nothing has reported back since it was submitted. Press Check again to ask the provider.",
+    };
+  } else if (awaitingProvider) {
     stageNotice = {
       title: "Still marked as generating",
       body: "This render may already be finished at the provider — nothing has checked since it was submitted.",
@@ -290,14 +295,14 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
       <RotateCcw className="h-4 w-4" /> Retry render
     </Button>
   );
-  const recheckButton = stuckGenerating && (
+  const recheckButton = awaitingProvider && (
     <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRecheckStranded}
       data-testid={`recheck-stranded-${row.id}`} title="Ask the provider whether this render finished, and fetch it if it did">
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
       Check again
     </Button>
   );
-  const retryStorageButton = canRepair && !stuckGenerating && (
+  const retryStorageButton = canRepair && !awaitingProvider && (
     <Button variant="secondary" size="sm" className="w-full" disabled={busy} onClick={handleRetryStorage}
       data-testid={`retry-storage-${row.id}`} title="Re-fetch the finished render and save a durable copy, so it plays here">
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
@@ -517,7 +522,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                       </Link>
                     </Button>
                   )}
-                  {row.studio_project_id && !(isWinnerRow(row) && draftIds && !draftIds.has(row.studio_project_id)) && (
+                  {shouldOfferDraftLink(row.studio_project_id, draftIds) && (
                     <Button
                       variant="secondary"
                       asChild
@@ -576,6 +581,13 @@ export default function GenerationHistory() {
   // cards carrying neither. Anything else (including a missing param)
   // reads as "with", the section that leads the page.
   const copyFilter = searchParams.get("copy") === "without" ? "without" : "with";
+  // A #generation-<id> deep link names one render, not one side of the
+  // copy/context split. Resolve it early so the target's side wins: a
+  // standalone Demo + CTA export would otherwise stay hidden behind the
+  // default with-side while the URL claims to show it.
+  const hashId = (location.hash || "").startsWith("#generation-")
+    ? location.hash.slice("#generation-".length)
+    : "";
   const setFilter = (name, value) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(name, value);
@@ -664,8 +676,11 @@ export default function GenerationHistory() {
   })();
 
   // The copy/context filter narrows after the hook-text search: both are
-  // client-side presentation over the same fetched window.
-  const copyVisible = copyFilter === "without"
+  // client-side presentation over the same fetched window. A deep link
+  // forces its target's side so the named clip is never filtered out.
+  const hashTarget = hashId ? rows.find((row) => row.id === hashId) : null;
+  const effectiveCopy = effectiveCopyFilter(copyFilter, hashTarget || null);
+  const copyVisible = effectiveCopy === "without"
     ? visible.filter((row) => !hasCopyContext(row))
     : visible.filter(hasCopyContext);
   const completed = copyVisible.filter((r) => r.status === "completed").length;
@@ -692,7 +707,7 @@ export default function GenerationHistory() {
     <GenerationRow
       key={row.id}
       row={row}
-      compact={copyFilter === "without"}
+      compact={effectiveCopy === "without"}
       onChanged={load}
       onUpdated={updateRow}
       deepLinked={hashId !== "" && hashId === row.id}
@@ -705,31 +720,44 @@ export default function GenerationHistory() {
   const listRef = useRef(null);
   const goToPage = useCallback((next) => {
     setPage(next);
+    // A manual page turn consumes the deep link: the anchor named a render,
+    // not a standing claim on the pager, so leaving it would pull every
+    // later turn back to the linked clip's page.
+    if (location.hash) {
+      navigate({ search: searchParams.toString(), hash: "" }, { replace: true });
+    }
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     listRef.current?.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
-  }, []);
+  }, [location.hash, navigate, searchParams]);
   // Focus needs no rescue here: the filter and sort controls that caused the
   // reset stay mounted, so focus is already somewhere sensible.
   useEffect(() => {
     setPage(1);
-  }, [profileFilter, statusFilter, query, sort, limit, copyFilter]);
+  }, [profileFilter, statusFilter, query, sort, limit, effectiveCopy]);
 
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
   // has nothing to land on. Settle it here once rows exist: bring the card
   // into view, so the link names a render that is
   // actually shown rather than a card somewhere below the fold.
-  const hashId = (location.hash || "").startsWith("#generation-")
-    ? location.hash.slice("#generation-".length)
-    : "";
   // A new anchor names the row to scroll to.
   // The deep link names a render, not a page: when the row sits past the
-  // render window, jump the pager to its page first. Setting an unchanged
-  // page is a React no-op, so this settles instead of looping.
+  // render window, jump the pager to its page exactly once per anchor. The
+  // guard keeps manual pager turns on the page the founder chose instead of
+  // pulling every turn back to the linked clip.
+  const deepLinkHandledRef = useRef(null);
   useEffect(() => {
-    if (!hashId || ordered.length === 0) return;
+    if (!hashId) {
+      deepLinkHandledRef.current = null;
+      return;
+    }
+    if (!shouldApplyDeepLinkPage(deepLinkHandledRef.current, hashId)) return;
+    if (ordered.length === 0) return;
     const index = ordered.findIndex((row) => row.id === hashId);
-    if (index !== -1) setPage(Math.floor(index / HISTORY_PAGE_SIZE) + 1);
+    if (index !== -1) {
+      setPage(pageForRowIndex(index, HISTORY_PAGE_SIZE));
+      deepLinkHandledRef.current = hashId;
+    }
   }, [hashId, ordered]);
   useEffect(() => {
     if (!hashId || rows.length === 0) return;
@@ -760,7 +788,7 @@ export default function GenerationHistory() {
             className={PILL_SELECT_CLASS}
           />
           <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
-          <select id="history-copy-filter" value={copyFilter} onChange={(e) => setFilter("copy", e.target.value)}
+          <select id="history-copy-filter" value={effectiveCopy} onChange={(e) => setFilter("copy", e.target.value)}
             aria-label="Filter by post copy and plan context" data-testid="history-copy-filter" className={PILL_SELECT_CLASS}>
             <option value="with">With post copy & context</option>
             <option value="without">Without post copy & context</option>
@@ -852,7 +880,7 @@ export default function GenerationHistory() {
           ? many
             ? "Open each card for its provider reason — then re-render from Create Video."
             : "Open its card for the provider reason — then re-render from Create Video."
-          : first.status === "generating"
+          : isAwaitingProvider(first)
             ? many
               ? "Open each card and press Check again — finished renders are fetched when found."
               : "Open its card and press Check again — the finished render is fetched when found."
@@ -897,7 +925,7 @@ export default function GenerationHistory() {
             </div>
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : shouldShowHistoryEmpty({ loading, error, rowsLength: rows.length }) ? (
         <EmptyState
           icon={Film}
           title="Nothing generated yet"
@@ -929,7 +957,7 @@ export default function GenerationHistory() {
               under another. Without-copy cards pair on wide screens and
               remain single-column on phones; stable row keys let React reorder without remounting, so sorting
               or filtering never drops focus and typed input mid-edit. */}
-          {copyFilter === "with" && pagedWith.length > 0 && (
+          {effectiveCopy === "with" && pagedWith.length > 0 && (
             <section
               aria-label="Renders with post copy and plan context"
               data-testid="history-section-with"
@@ -946,7 +974,7 @@ export default function GenerationHistory() {
               {pagedWith.map(renderRow)}
             </section>
           )}
-          {copyFilter === "without" && pagedWithout.length > 0 && (
+          {effectiveCopy === "without" && pagedWithout.length > 0 && (
             <section
               aria-label="Renders without post copy and plan context"
               data-testid="history-section-without"
