@@ -2198,7 +2198,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3" data-testid="look-save-review">
             <SubLabel>Happy with your look?</SubLabel>
             <p className="text-sm text-muted-foreground">
-              Review the hook &amp; end card in the preview, then save their fonts, entrances, text sizes &amp; accent for your next video. Footage, copy &amp; zoom locks are not included.
+              Save this hook &amp; end card styling for your next video. Video, copy &amp; zoom not included.
             </p>
             <div className="space-y-2" data-testid="look-presets-block">
               <SubLabel>Your looks</SubLabel>
@@ -2233,7 +2233,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             </div>
             {!canReviewLook && (
               <p className="text-sm text-muted-foreground" data-testid="look-review-hint">
-                {recording ? "Wait for export to finish before saving a look." : "Upload a playable clip to review your look before saving."}
+                {recording ? "Wait for export to finish." : "Upload a clip to review before saving."}
               </p>
             )}
             <label className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -2243,7 +2243,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 disabled={!canReviewLook}
                 onCheckedChange={(checked) => setReviewedLookKey(checked === true ? lookReviewKey : null)}
               />
-              I&apos;ve reviewed the current hook &amp; end card styling in the preview.
+              I&apos;ve reviewed it in the preview.
             </label>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -2252,7 +2252,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 aria-label="Name your finished look"
                 value={newLookName}
                 onChange={(e) => setNewLookName(e.target.value)}
-                placeholder="Name current look (e.g. Founder raw)"
+                placeholder="Name this look"
                 disabled={!canReviewLook}
                 className={`${INPUT_CLASS} min-w-0 flex-1 basis-40 disabled:opacity-50`}
               />
