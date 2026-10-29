@@ -330,31 +330,51 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
         <div className="history-media min-w-0">
           {!compactNotice && <div className="history-stage">
             {downloadUrl && !previewBroken ? (
-              <video
-                key={`${row.id}-${playerVersion}`}
-                src={downloadUrl}
-                controls
-                playsInline
-                // Poster first: the thumbnail is a tiny JPEG image, so the card
-                // shows a frame without fetching video bytes. preload="none"
-                // means the clip itself loads only on Play.
-                preload="none"
-                poster={posterUrl || undefined}
-                onLoadedData={() => {
-                  if (checkingRecovery) {
+              /* Duration + goal ride on the preview, not under it: they describe
+                 the clip itself, so they sit top-left over the frame where a
+                 viewer looks first. Top-left because the native controls own
+                 the bottom and the right rail/bottom strip are unsafe zones.
+                 pointer-events-none so the chips never intercept a play tap. */
+              <span className="relative inline-block max-w-full">
+                <video
+                  key={`${row.id}-${playerVersion}`}
+                  src={downloadUrl}
+                  controls
+                  playsInline
+                  // Poster first: the thumbnail is a tiny JPEG image, so the card
+                  // shows a frame without fetching video bytes. preload="none"
+                  // means the clip itself loads only on Play.
+                  preload="none"
+                  poster={posterUrl || undefined}
+                  onLoadedData={() => {
+                    if (checkingRecovery) {
+                      setCheckingRecovery(false);
+                      toast.success(recoveryStorageError
+                        ? "Video recovered locally. Download it now to keep a copy."
+                        : "Video recovered and ready to play.");
+                    }
+                  }}
+                  onError={() => {
+                    setPreviewBroken(true);
                     setCheckingRecovery(false);
-                    toast.success(recoveryStorageError
-                      ? "Video recovered locally. Download it now to keep a copy."
-                      : "Video recovered and ready to play.");
-                  }
-                }}
-                onError={() => {
-                  setPreviewBroken(true);
-                  setCheckingRecovery(false);
-                }}
-                className="history-preview"
-                // Contain the complete frame, never crop the creator's footage.
-              />
+                  }}
+                  className="history-preview"
+                  // Contain the complete frame, never crop the creator's footage.
+                />
+                {(row.duration || row.objective) && (
+                  <span
+                    className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5"
+                    data-testid="history-preview-meta"
+                  >
+                    {row.duration ? (
+                      <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
+                    ) : null}
+                    {row.objective ? (
+                      <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{humanize(row.objective)}</FactChip>
+                    ) : null}
+                  </span>
+                )}
+              </span>
             ) : (
               notice
             )}
@@ -390,12 +410,10 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
           </div>
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
-            {/* Spec facts first: model, length, objective and versions read as pills right under the clip, ahead of identity and results. */}
+            {/* Spec facts first: model and versions read as pills right under the clip, ahead of identity and results. Length and goal live on the preview overlay above, where the clip they describe plays. */}
             <FactList>
               {row.model && <FactChip>{row.model}</FactChip>}
-              {row.duration ? <FactChip>{row.duration}s</FactChip> : null}
               {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
-              {row.objective ? <FactChip>{humanize(row.objective)}</FactChip> : null}
               {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
               <FactChip>script v{row.script_version}</FactChip>
             </FactList>
