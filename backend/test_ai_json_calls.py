@@ -557,6 +557,125 @@ class TestAngleFeedbackPromptWiring:
         assert len(out) == 6
 
 
+class TestAnglePromptGrounding:
+    """
+    Angles were the thinnest prompt in the studio. The profile already carries
+    the moment the app is reached for, the reason a viewer would refuse it, and
+    what must never be shown — and none of it reached generation, so the model
+    generalised from a feature list and produced copy that read like a category
+    description instead of something filmable. These pin the material, the
+    craft bar that turns it into a scene, and the one field that stays out.
+    """
+
+    ANGLE = {
+        "kind": "problem_solution", "label": "Log the shift",
+        "target_audience": "Shift workers", "user_problem": "Timesheets go missing",
+        "hook_promise": "One tap at the door", "app_feature": "Shift log",
+        "desired_emotion": "Relief", "claims_to_respect": [],
+    }
+
+    PROFILE = {
+        "brand_name": "Shiftly",
+        "app_category": "scheduling",
+        "core_features": ["One-tap shift log"],
+        "problems_solved": ["Paper timesheets go missing"],
+        "target_audience": "Shift workers",
+        "usage_moments": ["End of a night shift", "Handover at 7am"],
+        "viewer_objections": [
+            {"objection": "Another app to keep updated",
+             "what_they_do_now": "Screenshots of the rota",
+             "honest_answer": "One tap logs it"},
+        ],
+        "must_not_show": ["managers approving shifts"],
+        # Recorded decision: the demo the founder films later, never a
+        # generation input. Passed here so its absence is an assertion.
+        "proof_moment": "One tap and the shift is on the log",
+    }
+
+    def _capture(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            captured["kwargs"] = kwargs
+            return [dict(self.ANGLE)]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def test_the_usage_moment_reaches_the_prompt(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert "End of a night shift" in captured["prompt"]
+        assert "Handover at 7am" in captured["prompt"]
+
+    def test_the_objection_reaches_the_prompt(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert "Another app to keep updated" in captured["prompt"]
+        assert "Screenshots of the rota" in captured["prompt"]
+
+    def test_must_not_show_reaches_the_prompt(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert "managers approving shifts" in captured["prompt"]
+
+    def test_proof_moment_stays_out(self, monkeypatch):
+        """
+        proof_moment is the product demo the founder records separately. It was
+        excluded from the strategy prompt because supplying it was the route by
+        which "show this happening" reached a prompt that may not show the app.
+        The same rule has to hold now that angles get the other rich fields.
+        """
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert '\"proof_moment\"' not in captured["prompt"]
+        assert "One tap and the shift is on the log" not in captured["prompt"]
+
+    def test_the_craft_bar_is_stated(self, monkeypatch):
+        """Rich input alone still produced benefit-speak. These are the rules
+        that turn a field into a scene, and the filler they exist to stop."""
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        prompt = captured["prompt"]
+        assert "a camera can SEE" in prompt
+        assert "differ in ARGUMENT" in prompt
+        for filler in ("seamless", "effortless", "game-changing", "unlock"):
+            assert filler in prompt, filler
+
+    def test_angles_request_the_dedicated_model(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        monkeypatch.setattr(ai_service, "ANGLE_MODEL", "vendor/strong-model")
+        _run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert captured["kwargs"]["model"] == "vendor/strong-model"
+
+    def test_the_angle_model_falls_back_to_the_text_model(self):
+        """Unset is the shipped behavior: same model as every other text flow.
+        A stronger default is a paid product decision, not a code change."""
+        import ai_service
+        override = (os.environ.get("AI_ANGLE_MODEL") or "").strip()
+        assert ai_service.ANGLE_MODEL == (override or ai_service.TEXT_MODEL)
+
+    def test_chat_json_sends_the_model_it_is_given(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"ok": true}')])
+        _run(ai_service._chat_json("sys", "prompt", "Ctx", model="vendor/strong-model"))
+        assert rec.payloads[0]["model"] == "vendor/strong-model"
+
+    def test_chat_json_still_defaults_to_the_text_model(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"ok": true}')])
+        _run(ai_service._chat_json("sys", "prompt", "Ctx"))
+        assert rec.payloads[0]["model"] == ai_service.TEXT_MODEL
+
+
 class TestAngleGoalPromptWiring:
     @pytest.mark.parametrize("flow", ["plan", "strategy"])
     def test_an_override_advances_the_goal_without_replacing_the_angle(self, monkeypatch, flow):

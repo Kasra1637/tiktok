@@ -80,6 +80,14 @@ def _model_from_env(var: str, default: str) -> str:
 
 TEXT_MODEL = _model_from_env("AI_TEXT_MODEL", DEFAULT_TEXT_MODEL)
 VISION_MODEL = _model_from_env("AI_VISION_MODEL", DEFAULT_VISION_MODEL)
+# Angles are the one text flow whose output the founder reads as strategy and
+# then films, so they may run a stronger model than the utility calls (opening
+# messages, post kit, research) that sit beside them on TEXT_MODEL. Unset means
+# TEXT_MODEL — the shipped behavior — because raising this default spends money
+# on every generation and that is a product decision, not a refactor. The slug
+# is logged as the model that produced the rows, so the dashboard never claims
+# TEXT_MODEL for a call it did not make.
+ANGLE_MODEL = _model_from_env("AI_ANGLE_MODEL", TEXT_MODEL)
 # Image generation model for opening scene stills. Uses a dedicated image model
 # rather than a video model, since the opening frame is a single still image.
 
@@ -844,6 +852,7 @@ async def _chat_json(
     timeout: int = 120,
     json_schema: Optional[dict] = None,
     strict: bool = True,
+    model: Optional[str] = None,
 ) -> dict:
     """
     One chat completion that must come back as a JSON object.
@@ -865,7 +874,13 @@ async def _chat_json(
     rather than the call — see _post_chat; `json_schema`, when given, is sent as
     OpenRouter structured output (strict JSON Schema) while the parse-and-retry
     below stays as defense-in-depth for provider errors, refusals and truncation.
+
+    `model` defaults to TEXT_MODEL. A flow that runs on its own model (angles,
+    see ANGLE_MODEL) passes it, and BOTH the payload and the temperature guard
+    follow that slug — sending one model's temperature rules to another is how
+    a working call starts 400ing after a config change.
     """
+    model = model or TEXT_MODEL
     last_error = None
 
     for attempt in range(1, attempts + 1):
@@ -882,12 +897,12 @@ async def _chat_json(
             )
 
         payload = {
-            "model": TEXT_MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": attempt_prompt},
             ],
-            **_temperature_param(TEXT_MODEL, temperature),
+            **_temperature_param(model, temperature),
             "max_tokens": budget,
         }
         if json_schema is not None:
@@ -2065,6 +2080,10 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
       - No guaranteed outcomes, no testimonials. Never state a price, plan name or
         trial term: the App Profile carries none, and a video that quotes one
         cannot be verified.
+      - Grounded in the profile's own material: usage_moments supply the moment,
+        viewer_objections supply the argument, must_not_show bounds what may be
+        depicted. proof_moment is withheld on purpose (see the context comment),
+        because the product demo is filmed separately by the founder.
 
     Args:
         profile: an App Profile row (brand_profiles) with fields already
@@ -2093,6 +2112,20 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "audience": profile.get("target_audience") or "(unstated)",
         "icp_segments": _list("icp_segments"),
         "outcomes": _list("desired_outcomes"),
+        # The moment the app is actually reached for. Without it the model
+        # invents a setting ("a kitchen at 7am") and the angle stops being
+        # something the founder can film. The strategy prompt has relied on
+        # this field since the scene rule landed, and the angle is chosen
+        # before the strategy exists.
+        "usage_moments": _list("usage_moments"),
+        # Why this viewer would refuse it, what they do instead, and the honest
+        # reply. An angle that names an objection can answer it in one scene;
+        # an angle without one only describes a benefit.
+        "viewer_objections": profile.get("viewer_objections") or [],
+        # The profile's own exclusions. Angles are the first place a banned
+        # visual can enter the pipeline, so they are bounded here rather than
+        # only at render time.
+        "must_not_show": _list("must_not_show"),
         # Kept linked so an angle's app_feature choice can stay on the
         # evidenced outcome pair instead of re-deriving it.
         "outcome_statements": profile.get("outcome_statements") or [],
@@ -2102,6 +2135,10 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "approved_claims": _list("claims_approved"),
         "claims_needing_review": _list("claims_review"),
         "banned_claims": _list("claims_banned"),
+        # proof_moment is DELIBERATELY NOT PASSED, for the same reason the
+        # strategy prompt omits it: it is the demo the founder films
+        # separately, and handing it over is how "show the app happening"
+        # reached a prompt that is not allowed to show the app happening.
     }
 
     kinds = ", ".join(CONTENT_ANGLE_KINDS)
@@ -2134,11 +2171,34 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "Rules: use ONLY facts present in the profile. Every text field is a "
         "sentence that starts with a capital letter -- write the examples above as "
         "sentences, not as lowercase fragments, or the angle renders with a typo. "
-        "If an angle would require a "
-        "claim from claims_needing_review, list that claim in claims_to_respect. Never "
-        "promise guaranteed outcomes, invent testimonials or reviews, state any price or "
-         "trial term, or imply a feature the profile does not list. Vary the "
-         "kinds — do not return six variations of the same angle. Return ONLY valid JSON."
+        "If an angle would require a claim from claims_needing_review, list that "
+        "claim in claims_to_respect. Never promise guaranteed outcomes, invent "
+        "testimonials or reviews, state any price or trial term, or imply a feature "
+        "the profile does not list. Return ONLY valid JSON.\n\n"
+        "WRITE LIKE THIS, NOT LIKE THAT:\n"
+        '- Weak: "Struggling to stay productive? Our app makes it effortless."\n'
+        '- Strong: "She stops at the kitchen door, phone out, and writes one line '
+        'before the kettle boils."\n'
+        "A strong angle names a MOMENT from usage_moments, a thing the viewer does "
+        "today that fails, or an objection from viewer_objections. A weak one names "
+        "a category of person plus a benefit.\n\n"
+        "For each angle:\n"
+        "- target_audience: one functional segment, not a stack of adjectives.\n"
+        "- user_problem: the concrete moment or cost -- a time, place, object or "
+        "repeated task. When usage_moments is empty, take the situation from "
+        "problems_solved.\n"
+        "- hook_promise: something a camera can SEE in the first three seconds, or a "
+        "line someone would actually say out loud. Never an abstract benefit.\n"
+        "- app_feature: the one feature above that answers this problem.\n"
+        "- desired_emotion: one word or a short phrase.\n"
+        "- label: three to six words, no colon.\n\n"
+        "Vary the kinds, and make the six differ in ARGUMENT -- the specific reason "
+        "this viewer would care. If two angles could be swapped onto the same "
+        "script, they are one angle: replace one of them.\n\n"
+        "Never use these words in any field: seamless, effortless, game-changing, "
+        "revolutionary, unlock, supercharge, ultimate, elevate, harness. None of "
+        "them is something a viewer can see.\n\n"
+        "Respect must_not_show: never build an angle around anything listed there."
     )
 
     # Goal thumbs, when any exist. Counts and fixed kind/objective names
@@ -2160,6 +2220,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         max_tokens=3000,
         timeout=90,
         json_schema=ANGLES_JSON_SCHEMA,
+        model=ANGLE_MODEL,
     )
 
     if isinstance(parsed, dict):

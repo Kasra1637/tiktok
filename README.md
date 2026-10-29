@@ -74,6 +74,7 @@ All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
 | `VIDEO_MODEL_DEFAULT` | Swap video provider without a code change |
 | `VIDEO_MODEL_ALLOWLIST` | Restrict which providers may be used at all |
 | `AI_TEXT_MODEL` | Chat model for research, angles, plans, scripts. Default `anthropic/claude-haiku-5.5` |
+| `AI_ANGLE_MODEL` | Overrides the chat model for content angles only. Unset uses `AI_TEXT_MODEL` |
 | `AI_VISION_MODEL` | Vision model for hook-frame analysis. Default `anthropic/claude-haiku-5.5` |
 
 ---

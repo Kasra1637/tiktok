@@ -42,7 +42,7 @@ from ai_service import (
     poll_video_job, analyze_app_profile,
     generate_content_angles, generate_creative_plan,
     page_text_with_metadata,
-    TEXT_MODEL,
+    TEXT_MODEL, ANGLE_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
     bind_spoken_words, spoken_budget,
 )
@@ -3234,7 +3234,7 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     try:
         angle_feedback = await _angle_feedback_for_profile(profile.get("id"), user_id)
         angles = await _log_model_call(
-            "content_angles", "text", TEXT_MODEL,
+            "content_angles", "text", ANGLE_MODEL,
             lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
             user_id,
             brand_profile_id=profile.get("id"),
@@ -3760,7 +3760,7 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
     try:
         angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
         angles = await _log_model_call(
-            "content_angles", "text", TEXT_MODEL,
+            "content_angles", "text", ANGLE_MODEL,
             lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
             user_id,
             brand_profile_id=profile_id,
@@ -3901,7 +3901,7 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
     try:
         angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
         angles = await _log_model_call(
-            "content_angles", "text", TEXT_MODEL,
+            "content_angles", "text", ANGLE_MODEL,
             lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
             user_id,
             brand_profile_id=profile_id,
@@ -8964,12 +8964,15 @@ async def on_startup():
     # Whether the chat endpoints accept a `temperature` field is read from
     # OpenRouter's own per-endpoint listing rather than guessed from the model
     # family, so swapping AI_TEXT_MODEL / AI_VISION_MODEL to a model that takes
-    # one (or does not) needs no code change. Same shape as the check above:
-    # free, unauthenticated, best-effort, and never able to fail the boot — a
-    # failed lookup just leaves the offline fallback in place.
+    # one (or does not) needs no code change. ANGLE_MODEL is in the list for the
+    # same reason and because it is the one slug that can be swapped alone: left
+    # out, its first angle call would pay a rejected-temperature round trip.
+    # Same shape as the check above: free, unauthenticated, best-effort, and
+    # never able to fail the boot — a failed lookup just leaves the offline
+    # fallback in place.
     try:
         await ai_service.refresh_temperature_support(
-            [ai_service.TEXT_MODEL, ai_service.VISION_MODEL]
+            [ai_service.TEXT_MODEL, ai_service.VISION_MODEL, ai_service.ANGLE_MODEL]
         )
     except Exception as e:  # defensive: the helper already swallows its own
         logger.warning(f"Temperature support lookup did not complete: {e}")
