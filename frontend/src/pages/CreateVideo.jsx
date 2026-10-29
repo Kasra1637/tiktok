@@ -2411,48 +2411,68 @@ setObjective("");
     }
 
     if (step === 1) {
+      /* The four picks that finish this screen, in the order they appear. All
+         panels stay mounted — these guide and jump, they never hide a required
+         pick, so the founder can always scroll and see everything.
+
+         This is a caption row, not a second progress bar. The wizard nav above
+         is the only row wearing pill chrome now, because the two rows shared
+         it: a dashed ring meant "not started" in both, an indigo ring meant
+         "done" in both, and four finished picks read as four more step pills
+         stacked under the three real ones. The ticks, the order and the
+         click-to-scroll targets all stay; only the pill frame goes, so the nav
+         owns that language and this row reads as what it is — the four things
+         that finish the screen in view. */
+      const substeps = [
+        { key: "angle", label: "Angle", done: Boolean(angleId), target: "substep-angle" },
+        { key: "goal", label: "Goal", done: Boolean(objective), target: "substep-goal" },
+        { key: "template", label: "Template", done: Boolean(templateId), target: "substep-template" },
+        { key: "photo", label: "Photo", done: Boolean(templateId) && missingIdentity.length === 0, target: "template-photo" },
+      ];
+      const substepsDone = substeps.filter((s) => s.done).length;
+
       return (
         <StepShell
           icon={Target}
           title="Audience & template"
         >
           <div className="space-y-4" data-testid="audience-goal-step">
-            {/* Substep checklist: angle, goal, template and photo share one
-                screen in that order, so this names the order and jumps to
-                each. All panels stay mounted — this guides, it never hides a
-                required pick, so the founder can always scroll and see all. */}
-            <div className="flex flex-wrap items-center gap-1.5" data-testid="audience-substeps" aria-label="What finishes this step">
-              {[
-                { key: "angle", label: "Angle", done: Boolean(angleId), target: "substep-angle" },
-                { key: "goal", label: "Goal", done: Boolean(objective), target: "substep-goal" },
-                { key: "template", label: "Template", done: Boolean(templateId), target: "substep-template" },
-                { key: "photo", label: "Photo", done: Boolean(templateId) && missingIdentity.length === 0, target: "template-photo" },
-              ].map((s, i, all) => {
-                const current = !s.done && all.slice(0, i).every((p) => p.done);
-                return (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => scrollToSubstep(s.target)}
-                    aria-label={s.done ? `${s.label}: done` : current ? `${s.label}: up next` : `${s.label}: not started`}
-                    aria-current={current ? "step" : undefined}
-                    data-testid={`audience-substep-${s.key}`}
-                    data-state={s.done ? "done" : "todo"}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                      s.done
-                        ? "border-[color:var(--indigo-35)] text-foreground"
-                        : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
-                    }`}
-                  >
-                    {s.done ? (
-                      <Check className="h-3 w-3 text-[color:var(--brand-indigo)]" aria-hidden="true" />
-                    ) : (
-                      <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border border-current opacity-60" />
-                    )}
-                    {s.label}
-                  </button>
-                );
-              })}
+            {/* The caption names the scope the nav cannot: these four are one
+                screen, not four more steps. No eyebrow — the section heading
+                directly above is already an uppercase kicker, and two stacked
+                kickers would read as two headings for one row. */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground" data-testid="audience-substeps-caption">
+                On this screen · {substepsDone} of {substeps.length} done
+              </p>
+              <div className="flex flex-wrap items-center gap-1" data-testid="audience-substeps" aria-label="What finishes this screen">
+                {substeps.map((s, i, all) => {
+                  const current = !s.done && all.slice(0, i).every((p) => p.done);
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => scrollToSubstep(s.target)}
+                      aria-label={s.done ? `${s.label}: done` : current ? `${s.label}: up next` : `${s.label}: not started`}
+                      aria-current={current ? "step" : undefined}
+                      data-testid={`audience-substep-${s.key}`}
+                      data-state={s.done ? "done" : "todo"}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold transition-colors hover:bg-[color:var(--indigo-8)] ${
+                        s.done
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {s.done ? (
+                        <Check className="h-3 w-3 text-[color:var(--brand-indigo)]" aria-hidden="true" />
+                      ) : (
+                        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full border border-current opacity-60" />
+                      )}
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             {/* No description on this shell. It carried one three times over:
                 the progress rail's own sentence above it, and the angle's hint

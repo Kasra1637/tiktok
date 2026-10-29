@@ -1031,6 +1031,42 @@ async function main() {
     }
   });
 
+  // The four picks on the choosing step used to wear the same pill chrome as
+  // the wizard nav directly above them: a dashed ring meant "not started" in
+  // both rows and an indigo ring meant "done" in both, so a finished step read
+  // as four more step pills stacked under the three real ones. The row is a
+  // caption now -- one named line, plain ticks, no pill frame -- while the nav
+  // keeps the pill language to itself.
+  await check("the substep row names its screen and drops the step-pill chrome", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Audience & template");
+    const caption = ctx.container.querySelector('[data-testid="audience-substeps-caption"]');
+    if (!caption) {
+      throw new Error("the substep row has no caption naming the screen it belongs to");
+    }
+    if (!/^On this screen · \d of 4 done$/.test((caption.textContent || "").trim())) {
+      throw new Error(
+        `the substep caption does not state its own progress: ${JSON.stringify(caption.textContent)}`
+      );
+    }
+    const substeps = [...ctx.container.querySelectorAll('[data-testid^="audience-substep-"]')]
+      .filter((el) => el.tagName === "BUTTON");
+    if (substeps.length !== 4) {
+      throw new Error(`expected four substeps, saw ${substeps.length}`);
+    }
+    for (const button of substeps) {
+      if (button.className.includes("border")) {
+        throw new Error(
+          `${button.dataset.testid} still wears pill chrome; the wizard nav must be the only pill row`
+        );
+      }
+      if (!button.getAttribute("aria-label")) {
+        throw new Error(`${button.dataset.testid} lost its announced state`);
+      }
+    }
+  });
+
   // The photo is the identity input the render needs, so it only makes sense
   // once there is a story to put it in. Landing on the merged step straight
   // from the pill, with no audience angles generated, shows the template ask

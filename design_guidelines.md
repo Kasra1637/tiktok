@@ -239,7 +239,10 @@ if any opens text-only (it also pins the page's 10+ cards and exactly 5 groups).
 Bars use `h-4 w-4` (16px); the card's own `.eyebrow` uses `h-3 w-3` (12px).
 Step pills (`text-xs`, `rounded-full`) encode state in the ring and a tick glyph
 — never in position, which is the only thing a reader has while a step is
-unreachable.
+unreachable. That chrome belongs to the wizard nav alone: the picks inside the
+Audience & template step are a caption row instead — one `text-xs` line naming
+the screen and its count, then plain ticks and labels with no frame — because
+two rows of rings and ticks read as two progress bars stacked over each other.
 
 Spacing, in these steps and no others:
 
