@@ -59,15 +59,26 @@ const buttonVariants = cva(
    work without trailing dots ("Generating angles", never dotted) — the step
    caption below the button, where one exists, carries the live detail. Text
    and icons never animate; only the fill layer moves. Callers keep owning
-   `disabled`: busy describes the work, not whether the control accepts input. */
-const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, ...props }, ref) => {
+   `disabled`: busy describes the work, not whether the control accepts input.
+   Determinate waits pass `progress` (0–1): the fill then holds at that width
+   instead of looping, and falls back to the loop when it is absent — so a
+   counted job (6 angles, 6 goals) shows real position while an unknowable
+   one (plan body, render queue) keeps the breathing sweep. */
+const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, style, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
+  // `?? NaN`: Number(null) is 0, so a missing progress must not coerce — an
+  // absent progress stays indeterminate and keeps the looping sweep.
+  const fraction = Number(progress ?? NaN);
+  const determinate = Boolean(busy) && Number.isFinite(fraction);
+  const clamped = determinate ? Math.min(1, Math.max(0, fraction)) : 0;
   return (
     <Comp
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       data-busy={busy || undefined}
+      data-progress={determinate ? "true" : undefined}
       aria-busy={busy || undefined}
+      style={determinate ? { ...style, "--busy-progress": `${Math.round(clamped * 100)}%` } : style}
       {...props} />
   );
 })

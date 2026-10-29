@@ -616,6 +616,7 @@ function AngleSelector({
         onClick={onGenerate}
         disabled={generating}
         busy={generating}
+        progress={generating ? genCount / 6 : null}
         data-testid="generate-angles-button"
       >
         {generating ? (
@@ -643,6 +644,7 @@ function AngleSelector({
           onClick={onRegenerate}
           disabled={generating}
           busy={generating}
+          progress={generating ? genCount / 6 : null}
           data-testid="regenerate-angles-button"
         >
           {generating ? (
@@ -891,6 +893,7 @@ function AngleGoalPicker({
                 onClick={onRegenerate}
                 disabled={regenerating}
                 busy={regenerating}
+                progress={regenerating ? shuffleCount / shuffleTotal : null}
                 title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
                 data-testid="regenerate-goals-button"
               >

@@ -1029,6 +1029,16 @@ h1,
     animation: busy-sweep 1.8s ease-in-out infinite;
     pointer-events: none;
 }
+/* Determinate waits: the fill holds at the real position instead of looping.
+   The width eases between ticks so each counted row lands softly rather than
+   jumping. A static width is motion-safe, so this rule stands on its own
+   outside the reduced-motion fallback. */
+.btn-studio[data-busy="true"][data-progress="true"]::before {
+    animation: none;
+    transform: none;
+    width: var(--busy-progress, 0%);
+    transition: width 300ms ease-out;
+}
 
 /* The dark bevel the brand/selected variant wears.
  *
@@ -1175,7 +1185,7 @@ h1,
     .btn-studio:hover:not(:disabled)::after {
         animation: none !important;
     }
-    .btn-studio[data-busy="true"]::before {
+    .btn-studio[data-busy="true"]:not([data-progress="true"])::before {
         animation: none !important;
         transform: none;
         width: 100%;

@@ -7189,11 +7189,20 @@ async function runIconChecks() {
     await mount(Button, { children: "Generate angles" })(ctx);
     const idle = ctx.container.querySelector("button");
     if (idle && idle.hasAttribute("data-busy")) throw new Error("idle Button wears the busy fill");
+    // Counted jobs hold real position: progress pins the fill width and stops
+    // the loop, falling back to the sweep when absent.
+    await mount(Button, { busy: true, progress: 0.5, children: "Generating angles" })(ctx);
+    const held = ctx.container.querySelector("button");
+    if (!held || held.getAttribute("data-progress") !== "true") throw new Error("busy Button with progress exposes no determinate state");
+    if (!String(held.style.getPropertyValue("--busy-progress")).includes("50%")) throw new Error("busy Button with progress holds no fill width");
+    await mount(Button, { busy: true, children: "Generating angles" })(ctx);
+    const looping = ctx.container.querySelector("button");
+    if (looping && looping.hasAttribute("data-progress")) throw new Error("busy Button without progress claims a position it cannot know");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    for (const token of ['.btn-studio[data-busy="true"]::before', "@keyframes busy-sweep"]) {
+    for (const token of ['.btn-studio[data-busy="true"]::before', '.btn-studio[data-busy="true"][data-progress="true"]::before', "@keyframes busy-sweep", "--busy-progress"]) {
       if (!css.includes(token)) throw new Error(`index.css is missing the busy fill rule: ${token}`);
     }
-    if (!/\.btn-studio\[data-busy[^\]]*\]::before\s*\{[^}]*animation:\s*none/.test(css)) {
+    if (!/\.btn-studio\[data-busy[^\]]*\][^{]*::before\s*\{[^}]*animation:\s*none/.test(css)) {
       throw new Error("the busy fill has no reduced-motion fallback");
     }
     // No busy verb label carries dots anywhere in the app: the sweep is the
