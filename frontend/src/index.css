@@ -1102,6 +1102,18 @@ h1,
     transform: translateY(0);
 }
 
+/* Chips are chrome-sized under a mouse and thumb-sized under a finger.
+   The 12px pills sit around 26–30px tall: plenty to click, easy to miss with
+   a thumb, and hover cannot rescue the affordance on a touch screen. This
+   raises the tap area to the 44px minimum only when the pointer is coarse, so
+   desktop density is unchanged. */
+@media (pointer: coarse) {
+    .tap-chip {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+}
+
 .card-pickable {
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
     transition: background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),

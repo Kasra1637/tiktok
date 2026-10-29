@@ -1064,6 +1064,16 @@ async function main() {
       if (!button.getAttribute("aria-label")) {
         throw new Error(`${button.dataset.testid} lost its announced state`);
       }
+      if (!button.className.includes("tap-chip")) {
+        throw new Error(`${button.dataset.testid} lost its coarse-pointer tap target`);
+      }
+    }
+    // The wizard nav is the same physical target: on a phone these are the only
+    // way to change step, and they sit well under 44px without the rule.
+    for (const pill of ctx.container.querySelectorAll("[data-testid^='step-pill-']")) {
+      if (!pill.className.includes("tap-chip")) {
+        throw new Error(`${pill.dataset.testid} lost its coarse-pointer tap target`);
+      }
     }
   });
 

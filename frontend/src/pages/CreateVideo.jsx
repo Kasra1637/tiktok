@@ -2457,7 +2457,7 @@ setObjective("");
                       aria-current={current ? "step" : undefined}
                       data-testid={`audience-substep-${s.key}`}
                       data-state={s.done ? "done" : "todo"}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold transition-colors hover:bg-[color:var(--indigo-8)] ${
+                      className={`tap-chip inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold transition-colors hover:bg-[color:var(--indigo-8)] ${
                         s.done
                           ? "text-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -3487,7 +3487,7 @@ setObjective("");
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
               data-testid={`step-pill-${s.step.key}`}
-              className={`pill-studio inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              className={`pill-studio tap-chip inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
                 active
                   ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)] shadow-[0_0_10px_var(--brand-indigo)]"
                   : s.state === "done"

@@ -139,6 +139,7 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
 | `.pill-studio` | Raised beveled pill (`Chip`, wizard step pills, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
+| `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Every interactive chip that is not already 44px tall carries it (wizard step pills, the in-step substep picks) |
 | `.card-pickable` | Selectable option card (`aria-pressed`) with lit indigo top rim when selected |
 | `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
