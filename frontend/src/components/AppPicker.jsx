@@ -2,8 +2,10 @@ import { profileLabel } from "../lib/profileSelection";
 import { cn } from "../lib/utils";
 
 /** The pill dropdown used in page headers and filter bars. */
+/** Shared by every filter bar, so the 44px coarse-pointer rule lands on all
+    of them at once: a 32px pill is a comfortable click and a miss with a thumb. */
 export const PILL_SELECT_CLASS =
-  "pill-studio h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
+  "pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
 
 /**
  * Which app a page is showing. One picker for every sidebar page, so the

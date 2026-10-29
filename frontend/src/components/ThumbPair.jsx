@@ -31,7 +31,7 @@ export function ThumbPair({
         type="button"
         variant={current === 1 ? "brand" : "secondary"}
         size={size}
-        className={current === 1 ? "thumb-selected" : undefined}
+        className={`tap-chip${current === 1 ? " thumb-selected" : ""}`}
         disabled={disabled}
         aria-pressed={current === 1}
         aria-label={upLabel}
@@ -46,7 +46,7 @@ export function ThumbPair({
         type="button"
         variant={current === -1 ? "brand" : "secondary"}
         size={size}
-        className={current === -1 ? "thumb-selected" : undefined}
+        className={`tap-chip${current === -1 ? " thumb-selected" : ""}`}
         disabled={disabled}
         aria-pressed={current === -1}
         aria-label={downLabel}

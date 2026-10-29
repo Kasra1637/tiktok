@@ -890,7 +890,7 @@ export default function GenerationHistory() {
             <option value="with">With post copy & context</option>
             <option value="without">Without post copy & context</option>
           </select>
-          <button type="button" className="history-more-filters pill-studio h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
+          <button type="button" className="history-more-filters pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
             More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
           </button>

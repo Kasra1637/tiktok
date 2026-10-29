@@ -42,7 +42,7 @@ export function Chip({
       aria-label={ariaLabel}
       title={title}
       data-testid={testId}
-      className={`pill-studio focus-ring inline-flex shrink-0 items-center rounded-full border font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
+      className={`pill-studio focus-ring tap-chip inline-flex shrink-0 items-center rounded-full border font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${sizing} ${
         active
           ? activeTone
           : "border-[color:var(--hairline)] bg-secondary/40 text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground"

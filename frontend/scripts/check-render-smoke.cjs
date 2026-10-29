@@ -13451,6 +13451,31 @@ await check(
         if (toggle.getAttribute('aria-expanded') !== 'true' || filters.dataset.expanded !== 'true' || !filters.querySelector('#history-status-filter')) {
           throw new Error('mobile filters must open to expose the current status filter');
         }
+        // Every filter control on this bar is a chip, and a chip is a thumb
+        // target on a phone: the shared pill-select class and the toggle must
+        // both carry the coarse-pointer rule, or half the bar stays 32px.
+        for (const el of [
+          toggle,
+          ctx.container.querySelector('#history-search'),
+          ctx.container.querySelector('#history-copy-filter'),
+          filters.querySelector('#history-status-filter'),
+        ]) {
+          if (!el || !el.className.includes('tap-chip')) {
+            throw new Error('a History filter control lost its coarse-pointer tap target');
+          }
+        }
+        // The rule itself lives once, in index.css, and the shared components
+        // carry it so new filters inherit it instead of each opting in.
+        const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.css'), 'utf8');
+        if (!/@media \(pointer: coarse\)[\s\S]{0,200}\.tap-chip/.test(css)) {
+          throw new Error('index.css lost the coarse-pointer .tap-chip rule');
+        }
+        for (const rel of ['src/components/Chip.jsx', 'src/components/AppPicker.jsx']) {
+          const src = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+          if (!src.includes('tap-chip')) {
+            throw new Error(`${rel} lost the shared coarse-pointer tap rule`);
+          }
+        }
       });
     } finally { global.__SMOKE_PARAMS = previousParams; }
   });
