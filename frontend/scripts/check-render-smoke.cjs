@@ -1229,6 +1229,28 @@ async function main() {
         }
       });
 
+      await check("the angle list dates its set", async (ctx) => {
+        const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
+        global.__SMOKE_PARAMS = "";
+        try {
+          await withApi(
+            { getContentAngles: async () => ({ angles: rows }) },
+            async () => {
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              await passAngleGate(ctx);
+              const line = ctx.container.querySelector('[data-testid="angle-set-freshness"]');
+              if (!line || !(line.textContent || "").includes("Refreshed 3d ago")) {
+                throw new Error(`the set does not date itself: ${line ? JSON.stringify(line.textContent) : "no line"}`);
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
       await check("Review's angle redirect keeps its own label", async (ctx) => {
         // The honesty rule renames the gate, never a button that leaves the
         // step: Review's redirect names its destination, not the click's cost.

@@ -35,6 +35,7 @@ import {
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
 import { angleDetails, formatVerdicts, goalFitScore } from "../lib/angleSubtitle";
+import { angleSetAge } from "../lib/angleFreshness";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -610,6 +611,12 @@ function AngleSelector({
       : angles.length > 0
         ? "Show your angles"
         : "Generate angles";
+  // One line beside the refresh decision, never a number on a row: the set
+  // is scanned by name, and only its staleness informs Regenerate. Null
+  // (no parseable dates) renders nothing — no claim off a guess. Plain
+  // copy, deliberately NOT a data-subtitle: the 55–60 char budget covers
+  // label-attached helpers, and a dynamic age cannot hold a fixed length.
+  const angleSetFreshness = angleSetAge(angles);
 
   const body = !showAngles || angles.length === 0 ? (
     // 12px, matching the Review step's "what's missing" panel: the red action
@@ -667,6 +674,11 @@ function AngleSelector({
           )}
           {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
+            {angleSetFreshness && (
+              <p className="text-xs text-muted-foreground" data-testid="angle-set-freshness">
+                Refreshed {angleSetFreshness}
+              </p>
+            )}
           </div>
           {progressLine}
       {notice && (

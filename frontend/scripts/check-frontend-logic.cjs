@@ -1261,6 +1261,34 @@ check("CTA variants and builtin look presets are populated",
   "missing copy variants or look presets");
 
 // ---------------------------------------------------------------------------
+// angleSetAge - the set's age in founder words
+// ---------------------------------------------------------------------------
+// The freshness line beside Regenerate answers "is this set stale?" A
+// regen rewrites every derived row, so the newest row dates the refresh;
+// unparseable or absent dates claim nothing rather than dating the set
+// off a guess.
+const AF = loadModule(path.resolve(__dirname, "..", "src", "lib", "angleFreshness.js"));
+console.log("\nangleSetAge - the set's age in founder words");
+const AGE_NOW = Date.parse("2026-10-28T12:00:00.000Z");
+const ageAt = (agoMs) => new Date(AGE_NOW - agoMs).toISOString();
+check("just now within the first minute",
+  AF.angleSetAge([{ created_at: ageAt(30 * 1000) }], AGE_NOW) === "just now");
+check("minutes under an hour",
+  AF.angleSetAge([{ created_at: ageAt(12 * 60 * 1000) }], AGE_NOW) === "12m ago");
+check("hours under a day",
+  AF.angleSetAge([{ created_at: ageAt(5 * 60 * 60 * 1000) }], AGE_NOW) === "5h ago");
+check("days beyond that",
+  AF.angleSetAge([{ created_at: ageAt(3 * 24 * 60 * 60 * 1000) }], AGE_NOW) === "3d ago");
+check("the newest row dates the set, not the oldest",
+  AF.angleSetAge([{ created_at: ageAt(9 * 24 * 3600 * 1000) }, { created_at: ageAt(2 * 3600 * 1000) }], AGE_NOW) === "2h ago");
+check("unparseable dates yield no claim",
+  AF.angleSetAge([{ created_at: "not a date" }, {}], AGE_NOW) === null);
+check("no rows yields no claim", AF.angleSetAge([], AGE_NOW) === null);
+check("non-array input is safe", AF.angleSetAge(null, AGE_NOW) === null);
+check("the future reads as just now, never negative",
+  AF.angleSetAge([{ created_at: ageAt(-60 * 1000) }], AGE_NOW) === "just now");
+
+// ---------------------------------------------------------------------------
 console.log("\n" + "=".repeat(70));
 if (failures.length === 0) {
   console.log("All frontend length/section logic behaves correctly.");
