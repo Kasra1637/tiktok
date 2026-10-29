@@ -1647,7 +1647,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           {generation ? (
             <>
               <p className="text-sm text-muted-foreground">
-                This finished render is the base clip. Use Second clip to add footage after it, or Real Video for a phone overlay.
+                This render is your base. Add footage after it in Second clip, or put a phone over it in Real Video.
               </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="secondary">Hook + Story</Badge>
@@ -1697,7 +1697,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
               label="Base clip style"
-              hint="Floating phone, hand-held mockup, or the Real Video full-frame. Drag preview to reframe; in hand mode, pick a scene."
+              hint="Drag the preview to reframe. Hand Holding picks a scene too."
               value={viewMode}
               onChange={(id) => { invalidateSequence(); setViewMode(id); }}
               prefix="view-mode-"
@@ -1836,7 +1836,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             "before" was the second upload button nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
-          <p className="text-sm text-muted-foreground">Base first, then this clip — each keeps its own audio and style. One export covers both.</p>
+          <p className="text-sm text-muted-foreground">Plays after the base, with its own audio and style. One export covers both.</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
