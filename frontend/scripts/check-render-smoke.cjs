@@ -6900,6 +6900,28 @@ async function runIconChecks() {
   };
   walk(SRC);
 
+  await check("workspace page loading and content reveals share short reduced-motion-safe timing", async (ctx) => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const transition = fs.readFileSync(path.join(SRC, "components", "PageTransition.jsx"), "utf8");
+    const { Skeleton } = load("components/ui/skeleton.jsx");
+    await mount(Skeleton, { "aria-label": "Loading" })(ctx);
+    const skeleton = ctx.container.querySelector('[aria-label="Loading"]');
+    if (!skeleton?.className.includes("motion-safe:after:animate-[shimmer-sweep_1.1s_ease-in-out_infinite]") || skeleton.className.includes("motion-reduce:animate-pulse")) {
+      throw new Error("loading skeletons must use the shared shimmer and stay still under reduced motion");
+    }
+    if (!/initial=\{reduceMotion \? false/.test(transition) || !/duration: reduceMotion \? 0 : 0\.12/.test(transition)) {
+      throw new Error("route entry must be brief and instant under reduced motion");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.page-content-enter\s*\{\s*animation:\s*page-content-enter 150ms/.test(css)) {
+      throw new Error("primary content reveal must be brief and run only when motion is allowed");
+    }
+    for (const file of ["CreateVideo.jsx", "BrandSetup.jsx", "AppProfileDetail.jsx", "AssetLibrary.jsx", "Analytics.jsx", "GenerationHistory.jsx", "DemoCtaStudio.jsx", "VideoUpscaler.jsx"]) {
+      if (!fs.readFileSync(path.join(SRC, "pages", file), "utf8").includes("page-content-enter")) {
+        throw new Error(`${file} does not use the shared primary content reveal`);
+      }
+    }
+  });
+
   await check("no page imports a lucide icon it never renders", async () => {
     const dead = [];
     for (const abs of iconFiles) {
@@ -11354,9 +11376,12 @@ async function runDemoCtaChecks() {
         if (!panel) throw new Error("the card shows no record beside its clip");
         if (!first.contains(panel)) throw new Error("the record is not attached inside its card");
         if (!panel.querySelector('[data-testid="history-context"]')?.textContent.includes("Record the emotion suggestions.")) throw new Error("useful demo context missing");
-        for (const label of ["Download", "Delete", "Demo + CTA"]) {
+        for (const label of ["Download", "Demo + CTA"]) {
           if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
         }
+        // Delete is icon-only on the preview, not text below the video: the
+        // playable card offers it through the overlay's trash button.
+        if (!first.querySelector('button[aria-label="Delete this render"]')) throw new Error("History lost Delete");
         const summary = first.querySelector('[data-testid="history-summary"]');
         for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
           if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
@@ -12620,31 +12645,36 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History offers Delete on a failed clip",
+    "History offers an icon-only Delete on a failed clip",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       let deleted = null;
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, error: "boom", audience: "Night scrollers" }],
+            // A failed render genuinely has no playable copy: every URL is
+            // null, so no preview mounts and the trash below the video is the
+            // only way to remove the dead row.
+            generations: [{ ...COMPLETED, id: "gen-failed", status: "failed", video_url: null, playback_url: null, r2_url: null, error: "boom", audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           deleteGeneration: async (id) => { deleted = id; return { deleted: id }; },
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          // A failed row has no clip, so its actions live in the drawer like
-          // every other tile's. Open it, then look for the control that keeps a
-          // dead render from sitting in history forever.
-          const del = [...ctx.container.querySelectorAll("button")].find(
-            (b) => (b.textContent || "").trim() === "Delete"
-          );
+          // A failed row has no clip, so the preview overlay never mounts:
+          // the trash below the video keeps a dead render from sitting in
+          // history forever. It is the same icon-only square the idle frame
+          // carries, so no row reintroduces a Delete text label.
+          const del = ctx.container.querySelector('button[aria-label="Delete this render"]');
           if (!del) {
             throw new Error(
               "no Delete on a failed render: the rail Delete never mounts " +
                 "without a preview rail, so the row cannot be removed"
             );
+          }
+          if ((del.textContent || "").trim() !== "") {
+            throw new Error("the failed-row Delete must be icon-only, with no Delete text");
           }
           await act(async () => {
             del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -12657,13 +12687,13 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History keeps Download and Delete together below the video",
+    "History keeps Download below the video and Delete on the preview",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed", audience: "Night scrollers" }],
+            generations: [{ ...COMPLETED, id: "gen-tiles", status: "completed", objective: "address_user_problem", audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
         },
@@ -12677,26 +12707,59 @@ async function runDemoCtaChecks() {
           if (!group.textContent.includes("Demo + CTA")) {
             throw new Error("the action bar lost Demo + CTA");
           }
-          // Download and Delete share one row directly below the video, so the
-          // clip keeps its save and remove controls together under the footage.
+          // Download owns the row directly below the video. Delete no longer
+          // sits beside it: it rides the top-right of the idle preview as an
+          // icon-only button next to the duration, and both hide on Play so
+          // nothing sits over the footage.
           const mediaActions = card?.querySelector('[data-testid="history-media-actions"]');
           if (!mediaActions) {
-            throw new Error("History lost the Download/Delete row below the video");
+            throw new Error("History lost the Download row below the video");
           }
-          for (const label of ["Download", "Delete"]) {
-            if (!mediaActions.textContent.includes(label)) {
-              throw new Error(`the row below the video lost ${label}`);
-            }
+          if (!mediaActions.textContent.includes("Download")) {
+            throw new Error("the row below the video lost Download");
+          }
+          if (mediaActions.querySelector('button[aria-label="Delete this render"]')) {
+            throw new Error("Delete is still below the video instead of on the preview");
           }
           const stage = card?.querySelector(".history-stage");
           const summary = card?.querySelector('[data-testid="history-summary"]');
           if (!(stage && summary &&
             stage.compareDocumentPosition(mediaActions) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING &&
             mediaActions.compareDocumentPosition(summary) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-            throw new Error("the Download/Delete row is not between the video and its summary");
+            throw new Error("the Download row is not between the video and its summary");
+          }
+          const overlay = card?.querySelector('[data-testid="history-preview-actions"]');
+          const remove = overlay?.querySelector('button[aria-label="Delete this render"]');
+          if (!overlay || !remove) {
+            throw new Error("the preview lost its top-right Delete");
+          }
+          if (remove.textContent.trim() !== "") {
+            throw new Error("the preview Delete must be icon-only, with no Delete text");
+          }
+          if (!overlay.textContent.includes("10s")) {
+            throw new Error("the preview lost its duration badge");
           }
           if (group.textContent.includes("Download")) {
             throw new Error("Download is still in the detail action bar instead of below the video");
+          }
+          // Playing the clip hides the whole pre-play cluster so nothing but
+          // the footage sits over the frame.
+          const video = card?.querySelector("video.history-preview");
+          if (!video) {
+            throw new Error("the playable preview is gone");
+          }
+          const goal = card.querySelector('[data-testid="history-preview-meta"]');
+          if (!goal || !goal.textContent.includes("Address User Problem")) {
+            throw new Error("the idle frame lost its goal-angle badge");
+          }
+          await act(async () => {
+            video.dispatchEvent(new dom.window.Event("play", { bubbles: true }));
+          });
+          if (card.querySelector('[data-testid="history-preview-actions"]')) {
+            throw new Error("the preview Delete and duration survived Play instead of hiding");
+          }
+          if (card.querySelector('[data-testid="history-preview-meta"]')) {
+            throw new Error("the goal angle survived Play instead of hiding with the rest");
           }
         }
       );
@@ -13220,9 +13283,16 @@ await check(
         await mount(GenerationHistory)(ctx);
         const playable = ctx.container.querySelector('#generation-compact-playable');
         const actions = playable.querySelector('[data-testid="history-media-actions"]');
-        const remove = actions.querySelector('button[aria-label="Delete this render"]');
-        if (!actions.querySelector('a[download]') || !remove?.querySelector('.sr-only') || !remove.classList.contains('px-2')) {
-          throw new Error("compact download needs room beside an accessible icon-only delete button");
+        // Delete moved off the row below the video onto the preview itself:
+        // the row below keeps Download only, and the remove control rides the
+        // top-right of the idle frame as an icon-only button.
+        if (!actions.querySelector('a[download]') || actions.querySelector('button[aria-label="Delete this render"]')) {
+          throw new Error("below the video belongs to Download; Delete rides the preview overlay");
+        }
+        const overlay = playable.querySelector('[data-testid="history-preview-actions"]');
+        const remove = overlay?.querySelector('button[aria-label="Delete this render"]');
+        if (!remove || remove.textContent.trim() !== "" || !remove.classList.contains("h-11") || !remove.classList.contains("w-11")) {
+          throw new Error("compact playable needs an icon-only 44px delete on the preview");
         }
         for (const [id, message] of [["compact-missing", "No durable copy"], ["compact-failed", "Provider error"]]) {
           const card = ctx.container.querySelector(`#generation-${id}`);

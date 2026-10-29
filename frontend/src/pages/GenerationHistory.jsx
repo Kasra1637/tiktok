@@ -123,6 +123,10 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   const [checkingRecovery, setCheckingRecovery] = useState(false);
   const [recoveryStorageError, setRecoveryStorageError] = useState(null);
   const [playerVersion, setPlayerVersion] = useState(0);
+  // True once the founder presses play on this row's clip. Every badge over
+  // the preview (goal, duration, delete) describes or acts on the idle frame;
+  // once playback starts they all hide so nothing sits over the footage.
+  const [hasPlayed, setHasPlayed] = useState(false);
   // Set when a stranded row was re-checked and the provider is genuinely still
   // rendering. Distinct from `error`: this is a successful check that found the
   // render unfinished, not a failed action, so it must not read as one.
@@ -185,6 +189,8 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
   // the player hidden after the row is reloaded.
   useEffect(() => {
     setPreviewBroken(false);
+    // A new playable URL is a new idle frame: show the pre-play badges again.
+    setHasPlayed(false);
   }, [downloadUrl]);
 
   const act = async (fn, action = "finish this") => {
@@ -330,11 +336,15 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
         <div className="history-media min-w-0">
           {!compactNotice && <div className="history-stage">
             {downloadUrl && !previewBroken ? (
-              /* Duration + goal ride on the preview, not under it: they describe
-                 the clip itself, so they sit top-left over the frame where a
-                 viewer looks first. Top-left because the native controls own
-                 the bottom and the right rail/bottom strip are unsafe zones.
-                 pointer-events-none so the chips never intercept a play tap. */
+              /* The idle frame carries exactly two facts and one control: the
+                 goal angle top-left (where a viewer looks first) and the
+                 duration + trash top-right, so the length and the remove
+                 control read as one cluster. All three are pre-play only —
+                 pressing play hides them together so nothing sits over the
+                 footage. Rows with no playable preview have no frame to host
+                 them, so they keep an icon-only trash in the row below, and a
+                 dead render stays removable. pointer-events-none on the chips
+                 so they never intercept a play tap; the icon re-enables it. */
               <span className="relative inline-block max-w-full">
                 <video
                   key={`${row.id}-${playerVersion}`}
@@ -346,6 +356,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   // means the clip itself loads only on Play.
                   preload="none"
                   poster={posterUrl || undefined}
+                  onPlay={() => setHasPlayed(true)}
                   onLoadedData={() => {
                     if (checkingRecovery) {
                       setCheckingRecovery(false);
@@ -361,17 +372,34 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                   className="history-preview"
                   // Contain the complete frame, never crop the creator's footage.
                 />
-                {(row.duration || row.objective) && (
+                {!hasPlayed && row.objective && (
                   <span
                     className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5"
                     data-testid="history-preview-meta"
                   >
+                    <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{humanize(row.objective)}</FactChip>
+                  </span>
+                )}
+                {!hasPlayed && (
+                  <span
+                    className="absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-1.5"
+                    data-testid="history-preview-actions"
+                  >
                     {row.duration ? (
-                      <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
+                      <FactChip className="pointer-events-none border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
                     ) : null}
-                    {row.objective ? (
-                      <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{humanize(row.objective)}</FactChip>
-                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`pointer-events-auto rounded-full border border-white/25 bg-black/65 p-0 text-white backdrop-blur-sm hover:bg-black/80 hover:text-white${compact ? " h-11 w-11" : " h-8 w-8"}`}
+                      disabled={busy}
+                      onClick={() => act(() => api.deleteGeneration(row.id))}
+                      data-testid={`history-delete-${row.id}`}
+                      title="Remove this render from history"
+                      aria-label="Delete this render"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </span>
                 )}
               </span>
@@ -380,6 +408,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
             )}
           </div>}
 
+          {(saveUrl || !(downloadUrl && !previewBroken)) && (
           <div
             className={`flex gap-2 border-t border-[color:var(--hairline)] py-2 ${compact ? "px-2" : "px-3"}`}
             data-testid="history-media-actions"
@@ -395,19 +424,25 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
                 </a>
               </Button>
             )}
+            {/* No playable frame to hang the trash on, so the remove control
+                lives here instead — the same icon-only square, never a
+                "Delete" label that competes with Download. */}
+            {!(downloadUrl && !previewBroken) && (
             <Button
               variant="ghost"
-              size="sm"
-              className={`shrink-0 text-muted-foreground hover:text-destructive${compact ? " h-11 w-11 px-2" : ""}`}
+              size="icon"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
               disabled={busy}
               onClick={() => act(() => api.deleteGeneration(row.id))}
               data-testid={`history-delete-${row.id}`}
               title="Remove this render from history"
               aria-label="Delete this render"
             >
-              <Trash2 className="h-3.5 w-3.5" /> <span className={compact ? "sr-only" : undefined}>Delete</span>
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
+            )}
           </div>
+          )}
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
             {/* Spec facts first: model and versions read as pills right under the clip, ahead of identity and results. Length and goal live on the preview overlay above, where the clip they describe plays. */}
