@@ -2379,20 +2379,29 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   path — and it leaves the frame as soon as playback starts, so
                   it cannot cover the footage or claim a state the row below
                   disagrees with. Recording hides it too: the export owns the
-                  timeline then. */}
+                  timeline then.
+
+                  The wrapper is the positioned element, not the button:
+                  `.btn-studio` sets `position: relative` after Tailwind's
+                  utilities, so `absolute` on a <Button> is dropped and the
+                  overlay lands in flow inside this overflow-hidden frame.
+                  pointer-events-none on the wrapper keeps the canvas
+                  draggable right up to the button's own 56px. */}
               {videoMeta && !isPlaying && !recording && (
-                <Button
-                  type="button"
-                  variant="accent"
-                  size="icon"
-                  onClick={togglePlayPause}
-                  aria-label="Play the clip"
-                  title="Play the clip"
-                  data-testid="demo-cta-preview-play"
-                  className="absolute inset-0 m-auto h-14 w-14 rounded-full [&_svg]:size-6"
-                >
-                  <Play aria-hidden="true" />
-                </Button>
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                  <Button
+                    type="button"
+                    variant="accent"
+                    size="icon"
+                    onClick={togglePlayPause}
+                    aria-label="Play the clip"
+                    title="Play the clip"
+                    data-testid="demo-cta-preview-play"
+                    className="pointer-events-auto h-14 w-14 rounded-full [&_svg]:size-6"
+                  >
+                    <Play aria-hidden="true" />
+                  </Button>
+                </div>
               )}
             </>
           ) : loadingSource ? (

@@ -6105,6 +6105,56 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   }
 
+  await check("no <Button> is positioned with the absolute utility", async () => {
+    // `.btn-studio` sets `position: relative` in index.css, which loads after
+    // `@tailwind utilities`. Both are single-class selectors, so the later rule
+    // wins and an `absolute` utility on a <Button> is silently dropped. A play
+    // button meant to float over the preview rendered in flow instead — inside
+    // its own overflow-hidden frame, where nobody could see it. Position a
+    // wrapper and leave the button in it.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.btn-studio\s*\{[^}]*position:\s*relative/.test(css)) {
+      throw new Error("the .btn-studio position rule moved; recheck this guard before trusting it");
+    }
+    const offenders = [];
+    for (const abs of sourceFiles().filter((f) => /\.jsx$/.test(f) && !/\.test\.jsx$/.test(f))) {
+      const source = fs.readFileSync(abs, "utf8");
+      const ast = babel.parseSync(source, {
+        filename: abs,
+        babelrc: false,
+        configFile: false,
+        parserOpts: { plugins: ["jsx"] },
+      });
+      const visit = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) {
+          node.forEach(visit);
+          return;
+        }
+        if (
+          node.type === "JSXOpeningElement" &&
+          node.name?.type === "JSXIdentifier" &&
+          node.name.name === "Button"
+        ) {
+          const tagSource = source.slice(node.start, node.end);
+          if (/className=\{?["`][\s\S]*?\babsolute\b/.test(tagSource)) {
+            const line = source.slice(0, node.start).split("\n").length;
+            offenders.push(`${path.relative(SRC, abs)}:${line}`);
+          }
+        }
+        for (const key of Object.keys(node)) {
+          if (key !== "loc" && key !== "start" && key !== "end") visit(node[key]);
+        }
+      };
+      visit(ast.program);
+    }
+    if (offenders.length) {
+      throw new Error(
+        `a <Button> cannot be positioned with \`absolute\` (it is overridden by .btn-studio): ${offenders.join(", ")}`
+      );
+    }
+  });
+
   // The landing payload must stay lean: the Demo + CTA editor pulls in
   // mediabunny (megabytes of encode/decode), and the hero footage competes
   // with JS on slow networks. So the editor route is split out of the

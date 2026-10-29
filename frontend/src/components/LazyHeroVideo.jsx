@@ -126,23 +126,28 @@ export function LazyHeroVideo({ poster, sources, ariaLabel, className, showPlayC
             <source key={source.type} src={source.src} type={source.type} />
           ))}
       </video>
+      {/* The wrapper owns the position: `.btn-studio` sets `position:
+          relative` after Tailwind's utilities, so `absolute` on the <Button>
+          itself is dropped and the control would sit in the frame's flow. */}
       {showPlayControl && !failed && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="tap-chip focus-ring absolute bottom-2 right-2 z-10 h-9 w-9 rounded-full border border-white/25 bg-black/65 p-0 text-white backdrop-blur-sm hover:bg-black/80 hover:text-white"
-          onClick={togglePlayback}
-          aria-label={label}
-          title={label}
-          data-testid="hero-play-toggle"
-        >
-          {isPlaying ? (
-            <Pause className="h-4 w-4" aria-hidden="true" />
-          ) : (
-            <Play className="h-4 w-4" aria-hidden="true" />
-          )}
-        </Button>
+        <div className="absolute bottom-2 right-2 z-10">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="tap-chip focus-ring h-9 w-9 rounded-full border border-white/25 bg-black/65 p-0 text-white backdrop-blur-sm hover:bg-black/80 hover:text-white"
+            onClick={togglePlayback}
+            aria-label={label}
+            title={label}
+            data-testid="hero-play-toggle"
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
+          </Button>
+        </div>
       )}
     </>
   );

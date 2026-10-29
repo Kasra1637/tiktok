@@ -384,6 +384,8 @@ accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 
 **Sizes (roomy inner spacing):** `default` `h-11 px-5 py-2.5`, `sm` `h-9 px-4 py-1.5`, `lg` `h-[52px] px-10 py-3`, `icon` `h-11 w-11`. Header action rows wrap with `gap-x-3 gap-y-3` so wrapped rows clear by 12px top-to-bottom.
 
+**A `<Button>` never carries a positioning utility.** `.btn-studio` sets `position: relative` in `index.css`, which loads after `@tailwind utilities`; both are single-class rules, so the later one wins and `absolute` on a button is silently dropped — the button lands in normal flow instead of floating. This shipped: a play button meant to sit on the preview frame rendered inside the frame's `overflow-hidden` box and was invisible. Position a wrapper (`<div className="absolute inset-0 flex items-center justify-center">`) and leave the button in it. `check-render-smoke.cjs` fails any `<Button>` whose `className` carries `absolute`.
+
 **Hover & press micro-interaction (`.btn-studio`, softer):**
 - Hover lifts `-1px` over `300ms ease-out`, drifts a soft 105° sheen (`::after`, 40% width, 0.10 alpha) across the button in `850ms`, and brightens the top bevel rim with a shadow tighten.
 - Text and icons never animate: no `svg`/text transforms anywhere in `.btn-studio` or `.pill-studio`.
