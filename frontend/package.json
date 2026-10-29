@@ -69,7 +69,8 @@
     "check:imports": "node scripts/check-imports.cjs",
     "check:logic": "node scripts/check-frontend-logic.cjs",
     "check:render": "node scripts/check-render-smoke.cjs",
-    "check": "node scripts/check-imports.cjs && node scripts/check-frontend-logic.cjs && node scripts/check-render-smoke.cjs"
+    "check:draft": "node scripts/check-demo-cta-draft.cjs",
+    "check": "node scripts/check-imports.cjs && node scripts/check-frontend-logic.cjs && node scripts/check-demo-cta-draft.cjs && node scripts/check-render-smoke.cjs"
   },
   "browserslist": {
     "production": [

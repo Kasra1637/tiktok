@@ -1,5 +1,5 @@
 import "./App.css";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import AppShell from "./components/AppShell";
@@ -14,10 +14,17 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
-import GenerationHistory from "./pages/GenerationHistory";
-import BrandSetup from "./pages/BrandSetup";
-import AppProfileDetail from "./pages/AppProfileDetail";
-import CreateVideo from "./pages/CreateVideo";
+// The dashboard pages are the heavy half of the app (CreateVideo alone is
+// thousands of lines, all eager before this change), so each rides its own
+// lazy chunk: the landing page and auth gates never download them, and
+// navigating between pages only fetches the one opened. Public pages stay
+// eager — they are light and most visits start there.
+const GenerationHistory = lazy(() => import("./pages/GenerationHistory"));
+const BrandSetup = lazy(() => import("./pages/BrandSetup"));
+const AppProfileDetail = lazy(() => import("./pages/AppProfileDetail"));
+const CreateVideo = lazy(() => import("./pages/CreateVideo"));
+const AssetLibrary = lazy(() => import("./pages/AssetLibrary"));
+const Analytics = lazy(() => import("./pages/Analytics"));
 // Split out of the landing chunk: the editor pulls in mediabunny, which the
 // landing page must never download. Both /demo-cta routes resolve through
 // this one component, so one lazy boundary covers them.
@@ -25,9 +32,8 @@ const DemoCtaStudio = lazy(() => import("./pages/DemoCtaStudio"));
 // Video Upscaler is a separate lazy chunk for the same reason: it pulls in
 // mediabunny, which the landing page must never download.
 const VideoUpscaler = lazy(() => import("./pages/VideoUpscaler"));
-import AssetLibrary from "./pages/AssetLibrary";
-import Analytics from "./pages/Analytics";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
+import { initVitals } from "./lib/vitals";
 
 // The editor chunk is fetched on first navigation here, so the fallback
 // mirrors the editor layout with shimmer skeletons — the same loading
@@ -59,8 +65,30 @@ const editorElement = (
     <DemoCtaStudio />
   </Suspense>
 );
+// Neutral loading language for the lazy dashboard pages: the editor gets its
+// own layout-mirroring fallback above, everything else gets shimmer blocks.
+function PageLoading() {
+  return (
+    <div className="space-y-3" role="status" aria-label="Loading the page">
+      <Skeleton className="h-10 w-1/3 rounded-xl" />
+      <Skeleton className="h-40 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-xl" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
+function LazyPage({ children }) {
+  return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
+}
 
 function App() {
+  // Real-user timing, once per tab: LCP/INP/CLS via PerformanceObserver,
+  // logged in dev and exposed on window for manual profiling. No backend
+  // sink and no dependency — the numbers exist to guide the next perf pass,
+  // not to surveil founders.
+  useEffect(() => {
+    initVitals();
+  }, []);
   return (
     // ErrorBoundary is the outermost layer on purpose: if anything below it
     // throws (including auth setup), the user gets a readable error screen
@@ -92,9 +120,9 @@ function App() {
                             "Review and approve", and the profile detail back
                             link all landing somewhere real instead of a 404. */}
                         <Route path="/app-profiles" element={<Navigate to="/brand" replace />} />
-                        <Route path="/app-profiles/:profileId" element={<AppProfileDetail />} />
-                        <Route path="/app-profiles/:profileId/assets" element={<AssetLibrary />} />
-                        <Route path="/assets" element={<AssetLibrary />} />
+                        <Route path="/app-profiles/:profileId" element={<LazyPage><AppProfileDetail /></LazyPage>} />
+                        <Route path="/app-profiles/:profileId/assets" element={<LazyPage><AssetLibrary /></LazyPage>} />
+                        <Route path="/assets" element={<LazyPage><AssetLibrary /></LazyPage>} />
                         {/* The Dashboard is gone. It restated what Generation
                             History already shows — totals and failed
                             generations with a Retry button — and then linked out
@@ -112,7 +140,7 @@ function App() {
                             question: what the founder's own logged results say.
                             That data was already collected and already fed the
                             next strategy — it simply had nowhere to be read. */}
-                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/analytics" element={<LazyPage><Analytics /></LazyPage>} />
                         {/* The template library is gone: templates are picked
                             per App Profile inside the Create Video wizard, so
                             there is nowhere standalone left to land. Redirects
@@ -120,14 +148,14 @@ function App() {
                             the work is. */}
                         <Route path="/templates" element={<Navigate to="/create" replace />} />
                         <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
-                        <Route path="/create" element={<CreateVideo />} />
+                        <Route path="/create" element={<LazyPage><CreateVideo /></LazyPage>} />
                         {/* Native Product Demo + CTA editor. The picker lives at
                             /demo-cta and the editor at /demo-cta/:generationId,
                             so a finished render is the input and the export is
                             saved beside it in History. */}
                         <Route path="/demo-cta" element={editorElement} />
                         <Route path="/demo-cta/:generationId" element={editorElement} />
-                        <Route path="/brand" element={<BrandSetup />} />
+                        <Route path="/brand" element={<LazyPage><BrandSetup /></LazyPage>} />
                         {/* Standalone client-side upscaler: sub-4K video in, 4K MP4 out. */}
                         <Route path="/upscale" element={(
                           <Suspense fallback={<EditorLoading />}>
@@ -135,7 +163,7 @@ function App() {
                           </Suspense>
                         )} />
                         {/* Generation History is the history view. */}
-                        <Route path="/history" element={<GenerationHistory />} />
+                        <Route path="/history" element={<LazyPage><GenerationHistory /></LazyPage>} />
                       </Routes>
                     </PageTransition>
                   </AppShell>

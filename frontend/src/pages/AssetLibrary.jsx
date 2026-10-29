@@ -74,6 +74,7 @@ function AssetThumb({ asset, isVideo, isAudio }) {
           alt={asset.label || asset.name || asset.kind}
           className="h-full w-full object-cover"
           loading="lazy"
+          decoding="async"
           onError={() => setFailed(true)}
         />
       )}
