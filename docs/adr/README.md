@@ -72,3 +72,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0052](0052-history-mobile-results.md) | History keeps primary filters and copy visible while compacting mobile results | accepted |
 | [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | accepted |
 | [0054](0054-demo-cta-editing-documents.md) | Browser-local editing documents, undo/redo and compact two-sided trimming | accepted |
+| [0055](0055-implicit-behavior-signals.md) | Implicit behavior signals (adopted/abandoned/generated) supplement explicit thumbs | accepted |

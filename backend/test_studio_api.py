@@ -2190,7 +2190,8 @@ class TestComponentFeedbackRouting:
         monkeypatch.setattr(api, "generate_creative_plan", fake_plan)
         _run(api.generate_plan(project_id=project["id"],
                                payload=GeneratePlanRequest(), user_id=ANON))
-        assert seen["component_feedback"] == {"plan": {"up": 3, "down": 0, "total": 3}}
+        assert seen["component_feedback"] == {"plan": {"up": 3, "down": 0, "total": 3,
+                                                           "adopted": 0, "abandoned": 0, "shown": 0}}
 
     def test_script_stage_receives_only_script_verdicts(self, api, monkeypatch):
         from models import GenerateStrategyRequest
@@ -2204,7 +2205,8 @@ class TestComponentFeedbackRouting:
         with pytest.raises(Exception):
             _run(api.generate_project_strategy(
                 project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
-        assert seen["component_feedback"] == {"script": {"up": 0, "down": 4, "total": 4}}
+        assert seen["component_feedback"] == {"script": {"up": 0, "down": 4, "total": 4,
+                                                             "adopted": 0, "abandoned": 0, "shown": 0}}
 
     def test_template_stage_receives_only_template_verdicts(self, api, monkeypatch):
         profile, _ = self._setup(api, "Route Template")
@@ -2216,14 +2218,16 @@ class TestComponentFeedbackRouting:
             return []
         monkeypatch.setattr(api, "generate_brand_templates", fake_templates)
         _run(api._ensure_objective_templates(profile, "address_user_problem", ANON))
-        assert seen["component_feedback"] == {"template": {"up": 0, "down": 2, "total": 2}}
+        assert seen["component_feedback"] == {"template": {"up": 0, "down": 2, "total": 2,
+                                                               "adopted": 0, "abandoned": 0, "shown": 0}}
 
     def test_goal_stage_counts_only_goal_verdicts(self, api):
         profile, _ = self._setup(api, "Route Goal")
         summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
         assert summary["total"] == 1
         assert summary["objectives"] == [
-            {"name": "demonstrate_feature", "wins": 1, "flops": 0}]
+            {"name": "demonstrate_feature", "wins": 1, "flops": 0,
+             "adoptions": 0, "abandonments": 0}]
 
     def test_stage_prompts_carry_their_own_verdicts(self, monkeypatch):
         import ai_service
@@ -2269,6 +2273,8 @@ class TestComponentFeedbackRouting:
             detail="objective=create_curiosity;kind=founder_story"), ANON))
         summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
         assert summary["objectives"] == [
-            {"name": "create_curiosity", "wins": 0, "flops": 1}]
+            {"name": "create_curiosity", "wins": 0, "flops": 1,
+             "adoptions": 0, "abandonments": 0}]
         assert summary["kinds"] == [
-            {"name": "founder_story", "wins": 0, "flops": 1}]
+            {"name": "founder_story", "wins": 0, "flops": 1,
+             "adoptions": 0, "abandonments": 0}]

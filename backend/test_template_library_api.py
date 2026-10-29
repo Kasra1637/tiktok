@@ -1139,9 +1139,12 @@ class TestGoalFeedback:
             {"kind": "", "objective": "", "event": "thumb_up", "step": "goal"},
         ])
         assert summary["total"] == 3
-        assert {"name": "problem_solution", "wins": 2, "flops": 0} in summary["kinds"]
-        assert {"name": "founder_story", "wins": 0, "flops": 1} in summary["kinds"]
-        assert {"name": "demonstrate_feature", "wins": 2, "flops": 1} in summary["objectives"]
+        assert {"name": "problem_solution", "wins": 2, "flops": 0,
+                "adoptions": 0, "abandonments": 0} in summary["kinds"]
+        assert {"name": "founder_story", "wins": 0, "flops": 1,
+                "adoptions": 0, "abandonments": 0} in summary["kinds"]
+        assert {"name": "demonstrate_feature", "wins": 2, "flops": 1,
+                "adoptions": 0, "abandonments": 0} in summary["objectives"]
 
     def test_empty_record_is_stated_not_silent(self):
         import feedback as feedback_mod

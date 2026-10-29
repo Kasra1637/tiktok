@@ -3158,7 +3158,7 @@ async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> di
            LEFT JOIN studio_projects sp ON sp.id = f.studio_project_id
            LEFT JOIN content_angles ca ON ca.id = sp.content_angle_id
            WHERE f.brand_profile_id = ? AND f.user_id = ?
-             AND f.event IN ('thumb_up', 'thumb_down')
+             AND f.event IN ('thumb_up', 'thumb_down', 'adopted', 'abandoned')
            ORDER BY f.created_at DESC LIMIT 200""",
         (brand_profile_id, user_id),
     )
@@ -3172,7 +3172,7 @@ async def _component_feedback_for_profile(
     rows = await _fetch_all(
         "SELECT event, step FROM feedback_events"
         " WHERE brand_profile_id = ? AND user_id = ?"
-        " AND event IN ('thumb_up', 'thumb_down')"
+        " AND event IN ('thumb_up', 'thumb_down', 'adopted', 'abandoned', 'generated')"
         " ORDER BY created_at DESC LIMIT 200",
         (brand_profile_id, user_id),
     )
@@ -4464,6 +4464,24 @@ def _score_template_for_angle(
                 0,
                 f"Rated a good template {feedback['thumb_ups']} time(s) for this app.",
             )
+        # Behavior beside the verdicts: moving forward with this template is
+        # the strongest signal in the loop, so its line leads; dropping it
+        # after picking it reads as a limitation; being shown and passed over
+        # is only noted, not headlined.
+        if feedback["adoptions"]:
+            reasons.insert(
+                0,
+                f"Moved forward with this template {feedback['adoptions']} time(s) for this app.",
+            )
+        if feedback["abandonments"]:
+            limitations.insert(
+                0,
+                f"Picked then dropped without rendering {feedback['abandonments']} time(s) for this app.",
+            )
+        if feedback["impressions"]:
+            limitations.append(
+                f"Shown but not picked {feedback['impressions']} time(s) for this app.",
+            )
 
     # The 0–10 bound lives here, not in the caller: this is the single
     # return every recommendation flows through, so no consumer can ever
@@ -5145,6 +5163,47 @@ async def update_studio_project(
         "WHERE id = ? AND user_id = ?",
         tuple(values),
     )
+    # Behavior: switching away from a template or goal that never rendered
+    # drops it without proceeding, so the orphan is abandoned. Something that
+    # already rendered was moved forward with — its adoption is recorded at
+    # submit — so only a renderless switch counts as abandonment.
+    _old_template = (row.get("template_id") or "").strip()
+    _new_template = updates.get("template_id", row.get("template_id")) or ""
+    _new_template = _new_template.strip() if isinstance(_new_template, str) else _new_template
+    if "template_id" in updates and _new_template != _old_template and _old_template:
+        _old_template_rendered = await _fetch_one(
+            "SELECT id FROM generations WHERE studio_project_id = ?"
+            " AND template_id = ? AND user_id = ? LIMIT 1",
+            (project_id, _old_template, user_id),
+        )
+        if not _old_template_rendered:
+            await _record_behavior(
+                "abandoned", "template", user_id,
+                brand_profile_id=row.get("brand_profile_id") or "",
+                studio_project_id=project_id,
+                template_id=_old_template)
+    _old_angle = (row.get("content_angle_id") or "").strip()
+    _new_angle = updates.get("content_angle_id", row.get("content_angle_id")) or ""
+    _new_angle = _new_angle.strip() if isinstance(_new_angle, str) else _new_angle
+    _old_objective = template_library.normalize_objective(row.get("objective") or "")
+    _new_objective = updates.get("objective", row.get("objective")) or ""
+    if (("content_angle_id" in updates and _new_angle != _old_angle)
+            or ("objective" in updates and _new_objective != _old_objective)):
+        _any_render = await _fetch_one(
+            "SELECT id FROM generations WHERE studio_project_id = ? AND user_id = ? LIMIT 1",
+            (project_id, user_id),
+        )
+        if not _any_render:
+            _old_kind = ""
+            if _old_angle:
+                _old_angle_row = await _fetch_one(
+                    "SELECT kind FROM content_angles WHERE id = ?", (_old_angle,))
+                _old_kind = ((_old_angle_row or {}).get("kind") or "").strip()
+            await _record_behavior(
+                "abandoned", "goal", user_id,
+                brand_profile_id=row.get("brand_profile_id") or "",
+                studio_project_id=project_id,
+                detail=f"objective={_old_objective};kind={_old_kind}")
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
@@ -5317,6 +5376,41 @@ async def generate_plan(
          json.dumps(report), summary, objective, duration, tone or None,
          trimmed_chars, now, project_id, user_id),
     )
+    # Behavior, both directions. Writing this plan means moving forward with
+    # the goal and template behind it, so both are adopted. Overwriting a
+    # script that never rendered means dropping it without proceeding, so the
+    # orphaned plan and script are abandoned.
+    _plan_objective = template_library.normalize_objective(objective or "")
+    _plan_kind = ((angle or {}).get("kind") or "").strip()
+    if _plan_objective or _plan_kind or row.get("content_angle_id"):
+        await _record_behavior(
+            "adopted", "goal", user_id,
+            brand_profile_id=row.get("brand_profile_id") or "",
+            studio_project_id=project_id,
+            detail=f"objective={_plan_objective};kind={_plan_kind}")
+    if template.get("id"):
+        await _record_behavior(
+            "adopted", "template", user_id,
+            brand_profile_id=row.get("brand_profile_id") or "",
+            studio_project_id=project_id,
+            template_id=template.get("id"))
+    if (row.get("script") or "").strip():
+        _old_rendered = await _fetch_one(
+            "SELECT id FROM generations WHERE studio_project_id = ?"
+            " AND script_version = ? AND user_id = ? LIMIT 1",
+            (project_id, int(row.get("script_version") or 0), user_id),
+        )
+        if not _old_rendered:
+            await _record_behavior(
+                "abandoned", "plan", user_id,
+                brand_profile_id=row.get("brand_profile_id") or "",
+                studio_project_id=project_id,
+                detail=f"strategy v{int(row.get('strategy_version') or 0)}")
+            await _record_behavior(
+                "abandoned", "script", user_id,
+                brand_profile_id=row.get("brand_profile_id") or "",
+                studio_project_id=project_id,
+                detail=f"script v{int(row.get('script_version') or 0)}")
     logger.info(
         f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1}) — {summary}"
     )
@@ -6030,6 +6124,39 @@ async def _submit_generation(
                 adopted["idempotent_replay"] = True
                 return adopted
         raise
+
+    # Behavior: submitting IS moving forward. The render locks in everything
+    # that produced it — the goal, the template, the plan and the script — so
+    # each is recorded as adopted, the strongest positive signal in the loop.
+    # Dedupe keeps repeats (retries, re-renders of the same version) to one
+    # row per item per project.
+    _adopt_kind = ""
+    if project.get("content_angle_id"):
+        _adopt_angle = await _fetch_one(
+            "SELECT kind FROM content_angles WHERE id = ?", (project["content_angle_id"],))
+        _adopt_kind = ((_adopt_angle or {}).get("kind") or "").strip()
+    _adopt_objective = template_library.normalize_objective(project.get("objective") or "")
+    await _record_behavior(
+        "adopted", "goal", user_id,
+        brand_profile_id=project.get("brand_profile_id") or "",
+        studio_project_id=project["id"],
+        detail=f"objective={_adopt_objective};kind={_adopt_kind}")
+    if project.get("template_id"):
+        await _record_behavior(
+            "adopted", "template", user_id,
+            brand_profile_id=project.get("brand_profile_id") or "",
+            studio_project_id=project["id"],
+            template_id=project["template_id"])
+    await _record_behavior(
+        "adopted", "plan", user_id,
+        brand_profile_id=project.get("brand_profile_id") or "",
+        studio_project_id=project["id"],
+        detail=f"strategy v{int(strategy_version or 0)}")
+    await _record_behavior(
+        "adopted", "script", user_id,
+        brand_profile_id=project.get("brand_profile_id") or "",
+        studio_project_id=project["id"],
+        detail=f"script v{int(project.get('script_version') or 0)}")
 
     try:
         submitted = await _log_model_call(
@@ -8045,6 +8172,29 @@ async def generate_project_strategy(
         (json.dumps(strategy), version, script_version_at_build, hook_seconds,
          json.dumps(report), summary, now, project_id, user_id),
     )
+    # Behavior: building the strategy moves forward with the goal behind it,
+    # so the goal is adopted. Replacing a strategy that never rendered drops
+    # it without proceeding, so the orphaned plan is abandoned.
+    _strategy_kind = ((angle or {}).get("kind") or "").strip()
+    _strategy_objective = template_library.normalize_objective(objective or "")
+    if _strategy_objective or _strategy_kind or row.get("content_angle_id"):
+        await _record_behavior(
+            "adopted", "goal", user_id,
+            brand_profile_id=row.get("brand_profile_id") or "",
+            studio_project_id=project_id,
+            detail=f"objective={_strategy_objective};kind={_strategy_kind}")
+    if int(row.get("strategy_version") or 0) > 0:
+        _old_strategy_rendered = await _fetch_one(
+            "SELECT id FROM generations WHERE studio_project_id = ?"
+            " AND strategy_version = ? AND user_id = ? LIMIT 1",
+            (project_id, int(row.get("strategy_version") or 0), user_id),
+        )
+        if not _old_strategy_rendered:
+            await _record_behavior(
+                "abandoned", "plan", user_id,
+                brand_profile_id=row.get("brand_profile_id") or "",
+                studio_project_id=project_id,
+                detail=f"strategy v{int(row.get('strategy_version') or 0)}")
     logger.info(
         f"Generated strategy for project {project_id} (v{version}) — hook "
         f"{hook_seconds}s, middle {total_duration - hook_seconds}s, "
@@ -8782,6 +8932,66 @@ async def feedback_catalog():
     return feedback_mod.catalog()
 
 
+async def _behavior_exists(user_id: str, event: str, step: str,
+                           brand_profile_id: str = "", studio_project_id: str = "",
+                           generation_id: str = "", template_id: str = "",
+                           detail: str = "") -> str:
+    """The id of an identical behavior row, or '' when this is new."""
+    row = await _fetch_one(
+        """SELECT id FROM feedback_events
+           WHERE user_id = ? AND event = ? AND step = ?
+             AND COALESCE(brand_profile_id, '') = COALESCE(?, '')
+             AND COALESCE(studio_project_id, '') = COALESCE(?, '')
+             AND COALESCE(generation_id, '') = COALESCE(?, '')
+             AND COALESCE(template_id, '') = COALESCE(?, '')
+             AND COALESCE(detail, '') = COALESCE(?, '')
+           LIMIT 1""",
+        (user_id, event, step, brand_profile_id, studio_project_id,
+         generation_id, template_id, detail),
+    )
+    return (row or {}).get("id") or ""
+
+
+async def _record_behavior(event: str, step: str, user_id: str,
+                           brand_profile_id: str = "", studio_project_id: str = "",
+                           generation_id: str = "", template_id: str = "",
+                           detail: str = "") -> dict:
+    """
+    Server-side behavior emission: adopted/abandoned/generated with dedupe.
+
+    These rows are written by the seams that know the founder moved forward,
+    dropped something, or passed it over — the project update that switches a
+    template, the plan overwrite of an unrendered script, the submit that
+    renders. Never raises: a feedback row must not fail the render, plan or
+    update it describes. Failures are logged loudly instead.
+    """
+    try:
+        clean_step = feedback_mod.normalize_component(step)
+        if event not in ("adopted", "abandoned", "generated") or not clean_step:
+            logger.error("Refusing to record behavior %s on '%s': invalid pair", event, step)
+            return {"recorded": False}
+        clean_detail = (detail or "")[:500]
+        existing = await _behavior_exists(
+            user_id, event, clean_step, brand_profile_id, studio_project_id,
+            generation_id, template_id, clean_detail)
+        if existing:
+            return {"id": existing, "deduped": True, "recorded": False}
+        event_id = str(uuid.uuid4())
+        await _execute(
+            """INSERT INTO feedback_events
+               (id, brand_profile_id, studio_project_id, generation_id, template_id,
+                event, signal, reason, detail, step, created_at, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)""",
+            (event_id, brand_profile_id or None, studio_project_id or None,
+             generation_id or None, template_id or None,
+             event, clean_detail, clean_step, now_iso(), user_id),
+        )
+        return {"id": event_id, "deduped": False, "recorded": True}
+    except Exception:
+        logger.exception("Behavior feedback insert failed for %s/%s", event, step)
+        return {"recorded": False}
+
+
 @api_router.post("/feedback", status_code=201)
 async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_current_user_id)):
     """
@@ -8827,20 +9037,24 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
         )
     # Thumbs verdicts judge one component (goal, template, plan, script or
     # video) and carry no signal or reason, so a thumb can never be miscounted
-    # as an automatic trigger or a stated cause.
+    # as an automatic trigger or a stated cause. Behavior events (adopted,
+    # abandoned, generated) are the same shape: the behavior names its
+    # component, and the behavior itself is the fact, so no signal or reason
+    # is accepted on them either.
     is_thumb = event in ("thumb_up", "thumb_down")
+    is_behavior = event in ("adopted", "abandoned", "generated")
     step = feedback_mod.normalize_component(payload.step)
-    if is_thumb:
+    if is_thumb or is_behavior:
         if not step:
             raise HTTPException(
                 status_code=400,
-                detail="Thumbs feedback needs a valid component. "
+                detail=f"{'Thumbs' if is_thumb else 'Behavior'} feedback needs a valid component. "
                        f"Known: {', '.join(feedback_mod.COMPONENTS)}.",
             )
         if signal or reason:
             raise HTTPException(
                 status_code=400,
-                detail="Thumbs feedback carries no signal or reason; the step is the context.",
+                detail=f"{'Thumbs' if is_thumb else 'Behavior'} feedback carries no signal or reason; the step is the context.",
             )
     elif (payload.step or "").strip():
         if not step:
@@ -8848,11 +9062,27 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
                 status_code=400,
                 detail=f"Unknown step '{payload.step}'.",
             )
-    if not signal and not reason and not is_thumb:
+    if not signal and not reason and not is_thumb and not is_behavior:
         raise HTTPException(
             status_code=400,
             detail="Feedback needs a signal or a reason.",
         )
+
+    # A reshown candidate is not new evidence: the same item filed again for
+    # the same project collapses into the row already there, so a list that
+    # re-renders does not spam the loop. The replay answers with the kept row.
+    if is_behavior:
+        dup_id = await _behavior_exists(
+            user_id, event, step,
+            (payload.brand_profile_id or "").strip(),
+            (payload.studio_project_id or "").strip(),
+            (payload.generation_id or "").strip(),
+            (payload.template_id or "").strip(),
+            (payload.detail or "")[:500],
+        )
+        if dup_id:
+            return {"id": dup_id, "event": event, "signal": "", "reason": "",
+                    "step": step, "deduped": True}
 
     event_id = str(uuid.uuid4())
     await _execute(
@@ -8867,7 +9097,8 @@ async def record_feedback(payload: FeedbackRequest, user_id: str = Depends(get_c
          event, signal or None, reason or None, (payload.detail or "")[:500],
          step or None, now_iso(), user_id),
     )
-    return {"id": event_id, "event": event, "signal": signal, "reason": reason, "step": step}
+    return {"id": event_id, "event": event, "signal": signal, "reason": reason,
+            "step": step, "deduped": False}
 
 
 @api_router.get("/feedback")

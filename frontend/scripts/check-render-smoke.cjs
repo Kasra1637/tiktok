@@ -792,6 +792,13 @@ function load(relPath) {
           (global.__SMOKE_THUMBS = global.__SMOKE_THUMBS || []).push({ step, verdict, refs });
           return load("lib/feedback.js").recordThumb(step, verdict, refs);
         },
+        // recordBehavior mirrors recordThumb: CreateVideo's pick wrappers
+        // call it unguarded, so a stub without it turns every angle, goal
+        // or template pick into a TypeError.
+        recordBehavior: async (event, step, refs) => {
+          (global.__SMOKE_BEHAVIOR = global.__SMOKE_BEHAVIOR || []).push({ event, step, refs });
+          return load("lib/feedback.js").recordBehavior(event, step, refs);
+        },
         verdictFor,
         classifyScriptEdit: () => ({ kind: "other" }),
       };
@@ -3424,6 +3431,50 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         } finally {
           global.__SMOKE_PARAMS = "";
           global.__SMOKE_THUMBS = [];
+        }
+      }
+    );
+  });
+
+  // Picking a candidate files the passed-over ones as shown-but-not-picked.
+  // Adoption and abandonment are server-side (the plan/strategy/submit seams
+  // know what moved forward); only the UI knows what else was on screen, so
+  // the pick wrapper must emit a generated row per unpicked item, and none
+  // for the pick itself.
+  await check("picking an angle files the passed-over angles as generated", async (ctx) => {
+    const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [FRESH] }),
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        global.__SMOKE_BEHAVIOR = [];
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+          await clickEl(ctx, step.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA");
+          await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no angle a1 to pick");
+          await act(async () => {});
+          const rows = global.__SMOKE_BEHAVIOR || [];
+          const passed = rows.filter((r) => r.event === "generated" && r.step === "goal");
+          if (passed.length !== 1) {
+            throw new Error(`expected one passed-over angle, saw ${JSON.stringify(rows)}`);
+          }
+          if (!/angle_id=a2/.test(passed[0].refs.detail || "")) {
+            throw new Error(`passed-over row does not name a2: ${JSON.stringify(passed[0])}`);
+          }
+          if (!/kind=feature_demonstration/.test(passed[0].refs.detail || "")) {
+            throw new Error(`passed-over row carries no kind: ${JSON.stringify(passed[0])}`);
+          }
+          if (rows.some((r) => r.event === "adopted" || r.event === "abandoned")) {
+            throw new Error("a UI pick must not record adoption or abandonment");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+          global.__SMOKE_BEHAVIOR = [];
         }
       }
     );

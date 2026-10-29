@@ -99,6 +99,41 @@ export function verdictFor(verdicts, component) {
   return v > 0 ? 1 : v < 0 ? -1 : 0;
 }
 
+/**
+ * Record implicit behavior on one component: what the founder moved forward
+ * with (adopted), produced or picked then dropped without proceeding
+ * (abandoned), or was shown but never picked (generated).
+ *
+ * Same shape as thumbs — a component plus an optional detail naming the item —
+ * and likewise carrying no signal or reason, because the behavior itself is
+ * the fact. The video rating stays thumbs-only; nothing here records one.
+ *
+ * @param {string} event One of adopted | abandoned | generated.
+ * @param {string} step One of goal | template | plan | script | video.
+ * @param {object} refs Optional detail + brand_profile_id / studio_project_id /
+ *                       generation_id / template_id to attribute it to.
+ * @returns {Promise<boolean>} whether it was recorded.
+ */
+export async function recordBehavior(event, step, refs = {}) {
+  if (event !== "adopted" && event !== "abandoned" && event !== "generated") return false;
+  if (!step) return false;
+  try {
+    await api.recordFeedback({
+      event,
+      step,
+      detail: refs.detail || "",
+      brand_profile_id: refs.brand_profile_id || "",
+      studio_project_id: refs.studio_project_id || "",
+      generation_id: refs.generation_id || "",
+      template_id: refs.template_id || "",
+    });
+    return true;
+  } catch {
+    // Deliberately silent. See the note above.
+    return false;
+  }
+}
+
 export async function recordThumb(step, verdict, refs = {}) {
   if (verdict !== 1 && verdict !== -1) return false;
   try {

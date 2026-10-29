@@ -212,13 +212,16 @@ class TestApproveAppProfile:
 class TestFeedbackCatalog:
     def test_catalog_lists_events_with_reasons(self, api):
         catalog = _run(api.feedback_catalog())
-        assert len(catalog["events"]) == 7
+        assert len(catalog["events"]) == 10
         for event in catalog["events"]:
             # Thumbs verdicts are standalone: the component is the context, so
             # they carry no reason vocabulary by design. Plan opens are a pure
             # reuse count beside them: the plan thumb already says whether the
             # plan was good, so the open carries no reason vocabulary either.
-            if event["key"] in ("thumb_up", "thumb_down", "plan_opened"):
+            # Behavior events are the same shape as thumbs: the behavior on
+            # its component is the whole fact, so they carry none either.
+            if event["key"] in ("thumb_up", "thumb_down", "plan_opened",
+                                 "adopted", "abandoned", "generated"):
                 assert event["reasons"] == []
             else:
                 assert event["reasons"], event["key"]
@@ -351,10 +354,14 @@ class TestRecordFeedback:
             {"event": "video_regenerated", "signal": "regenerated"},
         ]
         per = fb.summarize_component_feedback(rows)
-        assert per["plan"] == {"up": 1, "down": 1, "total": 2}
-        assert per["script"] == {"up": 1, "down": 0, "total": 1}
-        assert per["goal"] == {"up": 0, "down": 1, "total": 1}
-        assert per["template"] == {"up": 0, "down": 0, "total": 0}
+        assert per["plan"] == {"up": 1, "down": 1, "total": 2,
+                                "adopted": 0, "abandoned": 0, "shown": 0}
+        assert per["script"] == {"up": 1, "down": 0, "total": 1,
+                                  "adopted": 0, "abandoned": 0, "shown": 0}
+        assert per["goal"] == {"up": 0, "down": 1, "total": 1,
+                                "adopted": 0, "abandoned": 0, "shown": 0}
+        assert per["template"] == {"up": 0, "down": 0, "total": 0,
+                                    "adopted": 0, "abandoned": 0, "shown": 0}
         assert fb.summarize(rows)["top_signals"] == [{"signal": "regenerated", "count": 1}]
         # Thumbs never leak into the shared profile aggregate other stages read.
         assert fb.summarize_profile_feedback(rows)["total"] == 1
@@ -557,6 +564,108 @@ class TestRecordSignal:
         assert catalog["heavy_edit"]["ratio"] == fb.HEAVY_EDIT_RATIO
         assert catalog["heavy_edit"]["min_chars"] == fb.HEAVY_EDIT_MIN_CHARS
         assert {s["key"] for s in catalog["signals"]} == set(fb.SIGNALS)
+
+
+class TestBehaviorSignals:
+    """
+    Implicit behavior beside the explicit thumbs: what the founder moved
+    forward with (adopted, strongest positive), what they produced or picked
+    and then dropped without proceeding (abandoned, hard negative), and what
+    was shown but never picked (generated, soft negative). Thumbs stay the
+    explicit verdict; these add the dense evidence underneath.
+    """
+
+    def test_adopted_needs_a_component(self, api):
+        from models import FeedbackRequest
+        with pytest.raises(HTTPException) as err:
+            _run(api.record_feedback(FeedbackRequest(event="adopted"), ANON))
+        assert err.value.status_code == 400
+
+    def test_behavior_events_carry_no_signal_or_reason(self, api):
+        from models import FeedbackRequest
+        for event in ("adopted", "abandoned", "generated"):
+            with pytest.raises(HTTPException) as err:
+                _run(api.record_feedback(FeedbackRequest(
+                    event=event, step="template", signal="downloaded"), ANON))
+            assert err.value.status_code == 400
+            with pytest.raises(HTTPException) as err:
+                _run(api.record_feedback(FeedbackRequest(
+                    event=event, step="template", reason="hook_too_weak"), ANON))
+            assert err.value.status_code == 400
+
+    def test_generated_is_deduped_per_project_step_and_item(self, api):
+        from models import FeedbackRequest
+        solo = "behavior-dedupe-user"
+        profile = _profile(api, "Behavior Dedupe")
+        from models import CreateStudioProjectRequest
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"],
+            objective="demonstrate_feature"), user_id=ANON))
+        first = _run(api.record_feedback(FeedbackRequest(
+            event="generated", step="template", template_id="tpl-shown",
+            brand_profile_id=profile["id"],
+            studio_project_id=project["id"]), solo))
+        assert first.get("deduped") in (False, None)
+        second = _run(api.record_feedback(FeedbackRequest(
+            event="generated", step="template", template_id="tpl-shown",
+            brand_profile_id=profile["id"],
+            studio_project_id=project["id"]), solo))
+        assert second.get("deduped") is True
+        rows = [f for f in _run(api.list_feedback(user_id=solo))["feedback"]
+                if f["event"] == "generated"]
+        assert len(rows) == 1
+
+    def test_adopted_feeds_the_component_aggregate(self):
+        import feedback as fb
+        per = fb.summarize_component_feedback([
+            {"event": "adopted", "step": "template"},
+            {"event": "thumb_up", "step": "template"},
+            {"event": "abandoned", "step": "template"},
+            {"event": "generated", "step": "template"},
+        ])
+        assert per["template"]["adopted"] == 1
+        assert per["template"]["abandoned"] == 1
+        assert per["template"]["shown"] == 1
+        assert per["template"]["up"] == 1
+
+    def test_adopted_goal_attributes_to_kind_and_objective(self):
+        import feedback as fb
+        summary = fb.summarize_angle_feedback([
+            {"event": "adopted", "step": "goal",
+             "detail": "objective=demonstrate_feature;kind=drive_home",
+             "kind": "", "objective": ""},
+        ])
+        assert summary["total"] == 1
+        assert summary["kinds"] == [
+            {"name": "drive_home", "wins": 0, "flops": 0,
+             "adoptions": 1, "abandonments": 0}]
+
+    def test_behavior_weights_rank_adoption_above_a_thumb(self):
+        import feedback as fb
+        assert fb.BEHAVIOR_WEIGHTS["adopted"] > fb.FEEDBACK_WEIGHTS["template_thumb_up"]
+        assert fb.BEHAVIOR_WEIGHTS["abandoned"] < 0
+        assert fb.BEHAVIOR_WEIGHTS["generated"] < 0
+        assert abs(fb.BEHAVIOR_WEIGHTS["generated"]) < abs(
+            fb.BEHAVIOR_WEIGHTS["abandoned"])
+
+    def test_template_score_moves_with_behavior(self):
+        import feedback as fb
+        base = [{"event": "adopted", "step": "template",
+                 "template_id": "tpl-behavior", "reason": "", "signal": ""}]
+        assert fb.template_feedback_adjustment(
+            base, "tpl-behavior")["delta"] == pytest.approx(
+            fb.BEHAVIOR_WEIGHTS["adopted"])
+        facts = fb.template_feedback_adjustment([
+            {"event": "abandoned", "step": "template",
+             "template_id": "tpl-behavior", "reason": "", "signal": ""},
+            {"event": "generated", "step": "template",
+             "template_id": "tpl-behavior", "reason": "", "signal": ""},
+        ], "tpl-behavior")
+        assert facts["abandonments"] == 1
+        assert facts["impressions"] == 1
+        assert facts["delta"] == pytest.approx(
+            fb.BEHAVIOR_WEIGHTS["abandoned"]
+            + fb.BEHAVIOR_WEIGHTS["generated"])
 
 
 class TestClassifyScriptEdit:

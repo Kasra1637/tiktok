@@ -19,7 +19,7 @@ import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
-import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
+import { recordSignal, recordThumb, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { rememberDraft } from "../lib/recentDraft";
 import {
   partitionProfiles,
@@ -1768,6 +1768,67 @@ export default function CreateVideo() {
     setTemplateId(visibleRecommendations[0].template.id);
   }, [visibleRecommendations, recommendationsVisible, templateId]);
 
+  // Implicit behavior: what was shown but not picked. Adoption and
+  // abandonment are recorded server-side — the plan, strategy and submit
+  // seams know exactly what moved forward and what was dropped without
+  // proceeding — but only the UI knows what else was on screen when a
+  // choice was made. Each shown-but-not-picked item is a soft negative; the
+  // server dedupes it to one row per item per project, so a re-rendered
+  // list does not spam the loop. Programmatic sets (presets, resets,
+  // profile switches) bypass these wrappers and record nothing.
+  const behaviorRefs = () => ({
+    brand_profile_id: profileId || "",
+    studio_project_id: project?.id || "",
+  });
+  const handleAnglePick = (id) => {
+    if (id && id !== angleId && Array.isArray(angles)) {
+      const refs = behaviorRefs();
+      angles.forEach((a) => {
+        if (!a || !a.id || a.id === id) return;
+        recordBehavior("generated", "goal", {
+          ...refs,
+          detail: `angle_id=${a.id};kind=${(a.kind || "").trim()}`,
+        });
+      });
+    }
+    setAngleId(id);
+  };
+  const handleGoalPick = (value) => {
+    if (value && value !== objective) {
+      // The six the picker actually shows: ranked suggestions first, then
+      // the facet list — the same order AngleGoalPicker renders.
+      const knownGoals = Array.isArray(objectiveOptions) ? objectiveOptions : [];
+      const suggestions = Array.isArray(angle?.goal_suggestions) ? angle.goal_suggestions : [];
+      const ordered = suggestions.length > 0
+        ? suggestions.filter((goal) => knownGoals.includes(goal))
+        : (recommendedObjectives || []).filter((goal) => knownGoals.includes(goal));
+      const featured = [...new Set([...ordered, ...knownGoals])].slice(0, 6);
+      const refs = behaviorRefs();
+      const kind = (angle?.kind || "").trim();
+      featured.forEach((goal) => {
+        if (!goal || goal === value) return;
+        recordBehavior("generated", "goal", {
+          ...refs,
+          detail: `objective=${goal};kind=${kind}`,
+        });
+      });
+    }
+    setObjective(value);
+  };
+  const handleTemplatePick = (id) => {
+    if (id && id !== templateId && Array.isArray(visibleRecommendations)) {
+      const refs = behaviorRefs();
+      visibleRecommendations.forEach((r) => {
+        const tid = r?.template?.id;
+        if (!tid || tid === id) return;
+        recordBehavior("generated", "template", { ...refs, template_id: tid });
+      });
+    }
+    // Latched, so a later reload cannot move this pick.
+    templateChosenByHand.current = true;
+    setTemplateId(id);
+  };
+
   const selectProfile = async (id) => {
     setSelectedProfileId(id);
     setAngles([]);
@@ -2632,7 +2693,7 @@ setObjective("");
             <AngleSelector
               angles={angles}
               angleId={angleId}
-              onSelect={setAngleId}
+              onSelect={handleAnglePick}
               showAngles={showAngles}
               generating={generatingAngles}
               error={angleError}
@@ -2659,7 +2720,7 @@ setObjective("");
 <AngleGoalPicker
               angle={angle}
               value={objective}
-              onPick={setObjective}
+              onPick={handleGoalPick}
               options={objectiveOptions}
               recommendations={recommendedObjectives}
               outcomes={objectiveOutcomes}
@@ -2780,11 +2841,7 @@ setObjective("");
                       r={r}
                       index={i}
                       selected={templateId === r.template.id}
-                      onSelect={() => {
-                        // Latched, so a later reload cannot move this pick.
-                        templateChosenByHand.current = true;
-                        setTemplateId(r.template.id);
-                      }}
+                      onSelect={() => handleTemplatePick(r.template.id)}
                     />
                   </div>
                 ))}
@@ -2992,7 +3049,7 @@ setObjective("");
               <AngleGoalPicker
                 angle={angle}
                 value={objective}
-                onPick={setObjective}
+                onPick={handleGoalPick}
                 options={objectiveOptions}
                 recommendations={recommendedObjectives}
                 outcomes={objectiveOutcomes}
@@ -3070,7 +3127,7 @@ setObjective("");
               <AngleGoalPicker
                 angle={angle}
                 value={objective}
-                onPick={setObjective}
+                onPick={handleGoalPick}
                 options={objectiveOptions}
                 recommendations={recommendedObjectives}
                 outcomes={objectiveOutcomes}
@@ -3470,7 +3527,7 @@ setObjective("");
               <AngleSelector
                 angles={angles}
                 angleId={angleId}
-                onSelect={setAngleId}
+                onSelect={handleAnglePick}
                 showAngles={showAngles}
                 generating={generatingAngles}
                 error={angleError}

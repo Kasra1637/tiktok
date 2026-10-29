@@ -39,6 +39,28 @@ EVENTS = (
     "plan_opened",
     "thumb_up",
     "thumb_down",
+    # Implicit behavior beside the explicit thumbs. Thumbs stay the founder's
+    # verdict; these add the dense evidence underneath:
+    #
+    # - adopted: the founder moved forward with exactly this item (picked it
+    #   AND advanced: the goal/angle/template behind a generated plan, the
+    #   plan and script behind a submitted render). Strongest positive.
+    # - abandoned: the founder produced or picked this item and then moved
+    #   past it without proceeding (regenerated over an unrendered plan,
+    #   switched away from a template/angle that never rendered). Hard
+    #   negative.
+    # - generated: the item was shown as a candidate but never picked
+    #   (an angle/goal/template on screen while another was chosen). Soft
+    #   negative, and the weakest: being passed over once is not rejection.
+    #
+    # Like thumbs, behavior rows name their component in `step`, carry no
+    # signal and no reason, and are never inferred into judgments. Adoption
+    # and abandonment attribute exactly like thumbs (goal rows carry
+    # `objective=..;kind=..` in detail); a shown-but-not-picked row carries
+    # whatever identifies the item (template_id, or detail for angles/goals).
+    "adopted",
+    "abandoned",
+    "generated",
 )
 
 COMPONENTS = ("goal", "template", "plan", "script", "video")
@@ -234,6 +256,10 @@ def summarize_angle_feedback(rows) -> dict:
             verdict = "wins"
         elif event == "thumb_down":
             verdict = "flops"
+        elif event == "adopted":
+            verdict = "adoptions"
+        elif event == "abandoned":
+            verdict = "abandonments"
         else:
             continue
         # What was on screen when the founder voted beats the project's
@@ -245,15 +271,19 @@ def summarize_angle_feedback(rows) -> dict:
             continue
         total += 1
         if kind:
-            bucket = kinds.setdefault(kind, {"wins": 0, "flops": 0})
+            bucket = kinds.setdefault(
+                kind, {"wins": 0, "flops": 0, "adoptions": 0, "abandonments": 0})
             bucket[verdict] += 1
         if objective:
-            bucket = objectives.setdefault(objective, {"wins": 0, "flops": 0})
+            bucket = objectives.setdefault(
+                objective, {"wins": 0, "flops": 0, "adoptions": 0, "abandonments": 0})
             bucket[verdict] += 1
 
     def _ranked(buckets):
         return [
-            {"name": name, "wins": counts["wins"], "flops": counts["flops"]}
+            {"name": name, "wins": counts["wins"], "flops": counts["flops"],
+             "adoptions": counts["adoptions"],
+             "abandonments": counts["abandonments"]}
             for name, counts in sorted(
                 buckets.items(),
                 key=lambda item: (-item[1]["wins"] - item[1]["flops"], item[0]),
@@ -281,10 +311,14 @@ def build_angle_feedback_section(summary: dict) -> str:
         )
 
     def _describe(entries):
-        return "; ".join(
-            f"{entry['name']} ({entry['wins']} win(s), {entry['flops']} flop(s))"
-            for entry in entries
-        )
+        parts = []
+        for entry in entries:
+            text = f"{entry['name']} ({entry['wins']} win(s), {entry['flops']} flop(s)"
+            if entry.get("adoptions") or entry.get("abandonments"):
+                text += (f", moved forward with {entry.get('adoptions', 0)}, "
+                         f"dropped after picking {entry.get('abandonments', 0)}")
+            parts.append(text + ")")
+        return "; ".join(parts)
 
     lines = [
         "PAST VERDICTS from the founder's thumbs on previously picked goals "
@@ -323,22 +357,39 @@ def catalog() -> dict:
 
 def summarize_component_feedback(events) -> dict:
     """
-    Thumbs per component. Each bucket counts only rows naming that component,
-    so a verdict on one component can never move another's counts.
+    Thumbs and behavior per component. Each bucket counts only rows naming
+    that component, so a verdict on one component can never move another's
+    counts. `total` stays the thumbs total so existing readers keep their
+    meaning; behavior rides in its own counters.
     """
-    per = {c: {"up": 0, "down": 0} for c in COMPONENTS}
+    per = {
+        c: {"up": 0, "down": 0, "adopted": 0, "abandoned": 0, "shown": 0}
+        for c in COMPONENTS
+    }
     for row in events or []:
         if not isinstance(row, dict):
             continue
         event = row.get("event") or ""
-        if event not in ("thumb_up", "thumb_down"):
+        if event not in ("thumb_up", "thumb_down", "adopted", "abandoned",
+                          "generated"):
             continue
         component = normalize_component(row.get("step") or "")
         if not component:
             continue
-        per[component]["up" if event == "thumb_up" else "down"] += 1
+        if event == "thumb_up":
+            per[component]["up"] += 1
+        elif event == "thumb_down":
+            per[component]["down"] += 1
+        elif event == "adopted":
+            per[component]["adopted"] += 1
+        elif event == "abandoned":
+            per[component]["abandoned"] += 1
+        else:
+            per[component]["shown"] += 1
     return {
-        c: {"up": n["up"], "down": n["down"], "total": n["up"] + n["down"]}
+        c: {"up": n["up"], "down": n["down"], "total": n["up"] + n["down"],
+            "adopted": n["adopted"], "abandoned": n["abandoned"],
+            "shown": n["shown"]}
         for c, n in per.items()
     }
 
@@ -369,9 +420,24 @@ def build_component_feedback_section(summary: dict, component: str) -> str:
         )
     else:
         steer = "Verdicts are mixed: weak evidence, do not over-correct."
+    behavior = _describe_behavior(counts)
     return (
         f"FOUNDER VERDICTS on the {label} for this app: {up} thumbs up, "
         f"{down} thumbs down. {steer} These verdicts are about the {label} only."
+        f"{behavior}"
+    )
+
+
+def _describe_behavior(counts: dict) -> str:
+    """One behavior sentence for a prompt section, or '' when there is none."""
+    adopted = int((counts or {}).get("adopted") or 0)
+    abandoned = int((counts or {}).get("abandoned") or 0)
+    shown = int((counts or {}).get("shown") or 0)
+    if not adopted and not abandoned and not shown:
+        return ""
+    return (
+        f" Behavior: moved forward with {adopted}, dropped after picking "
+        f"{abandoned}, shown but not picked {shown}."
     )
 
 
@@ -383,6 +449,18 @@ FEEDBACK_WEIGHTS = {
     "automatic_template_change": -1.0,
     "template_thumb_down": -1.5,
     "template_thumb_up": 1.0,
+}
+# Implicit behavior beside the explicit verdicts. Adoption is the strongest
+# signal in the loop — the founder picked this item AND moved forward with
+# it — so it outranks a thumb up. Abandonment (picked or produced, then
+# dropped without proceeding) is a hard negative on par with an explicit
+# rejection. A shown-but-not-picked impression is only a soft negative:
+# being passed over once is not rejection, but a template that is always
+# shown and never chosen is telling the founder something.
+BEHAVIOR_WEIGHTS = {
+    "adopted": 3.0,
+    "abandoned": -2.0,
+    "generated": -0.25,
 }
 FEEDBACK_CAPS = {
     "rejection": -6.0,
@@ -439,6 +517,9 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
         "template_rejections": 0,
         "generation_rejections": 0,
         "heavy_script_edits": 0,
+        "adoptions": 0,
+        "abandonments": 0,
+        "impressions": 0,
         "top_reasons": [],
         "selected_template": {
             "template_id": template_id or "",
@@ -452,8 +533,9 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
         if not isinstance(row, dict):
             continue
         event = row.get("event") or ""
-        # Component verdicts and retired video-level verdicts travel only
-        # through their own stage, never this shared aggregate.
+        # Component thumbs travel only through their own stage, never this
+        # shared aggregate. Behavior events DO travel here: an adoption is
+        # exactly "this founder moves forward with this kind of thing".
         if event not in EVENTS or event in ("thumb_up", "thumb_down"):
             continue
         reason = row.get("reason") or ""
@@ -466,6 +548,12 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
             summary["generation_rejections"] += 1
         elif row.get("signal") == "script_edited_heavy":
             summary["heavy_script_edits"] += 1
+        elif event == "adopted":
+            summary["adoptions"] += 1
+        elif event == "abandoned":
+            summary["abandonments"] += 1
+        elif event == "generated":
+            summary["impressions"] += 1
         if reason:
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
             if is_selected:
@@ -501,6 +589,9 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
         "automatic_changes": 0,
         "thumb_ups": 0,
         "thumb_downs": 0,
+        "adoptions": 0,
+        "abandonments": 0,
+        "impressions": 0,
         "top_reasons": [],
     }
     rejection_delta = 0.0
@@ -531,6 +622,19 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
             else:
                 facts["thumb_downs"] += 1
                 rejection_delta += FEEDBACK_WEIGHTS["template_thumb_down"]
+        elif event in ("adopted", "abandoned", "generated"):
+            # Only behavior on the template itself moves its score.
+            if normalize_component(row.get("step") or "") != "template":
+                continue
+            if event == "adopted":
+                facts["adoptions"] += 1
+                approval_delta += BEHAVIOR_WEIGHTS["adopted"]
+            elif event == "abandoned":
+                facts["abandonments"] += 1
+                rejection_delta += BEHAVIOR_WEIGHTS["abandoned"]
+            else:
+                facts["impressions"] += 1
+                rejection_delta += BEHAVIOR_WEIGHTS["generated"]
         else:
             continue
         if reason:
@@ -563,6 +667,15 @@ def build_profile_feedback_section(summary: dict) -> str:
         f"Video regenerations: {summary.get('generation_rejections', 0)}.",
         f"Heavy script edits: {summary.get('heavy_script_edits', 0)}.",
     ]
+    # Behavior lines are conditional: a zero count carries no information, and
+    # every prompt line spends ceiling the strategy budget test guards.
+    if summary.get("adoptions"):
+        lines.append(f"Moved forward with (adoptions): {summary.get('adoptions')}.")
+    if summary.get("abandonments"):
+        lines.append(
+            f"Dropped after picking (abandonments): {summary.get('abandonments')}.")
+    if summary.get("impressions"):
+        lines.append(f"Shown but not picked: {summary.get('impressions')}.")
     top_reasons = summary.get("top_reasons") or []
     if top_reasons:
         stated = ", ".join(

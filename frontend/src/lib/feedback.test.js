@@ -1,4 +1,9 @@
-import { verdictFor, classifyScriptEdit } from "./feedback";
+import { verdictFor, classifyScriptEdit, recordBehavior } from "./feedback";
+import { api } from "./api";
+
+jest.mock("./api", () => ({
+  api: { recordFeedback: jest.fn().mockResolvedValue({}) },
+}));
 
 describe("verdictFor", () => {
   test("a saved up or down vote restores the highlight", () => {
@@ -13,6 +18,42 @@ describe("verdictFor", () => {
     expect(verdictFor(undefined, "video")).toBe(0);
     expect(verdictFor({ video: "yes" }, "video")).toBe(0);
     expect(verdictFor({ video: 0 }, "video")).toBe(0);
+  });
+});
+
+describe("recordBehavior", () => {
+  beforeEach(() => {
+    api.recordFeedback.mockClear();
+  });
+
+  test("records adopted, abandoned and generated with the component and refs", async () => {
+    await expect(
+      recordBehavior("generated", "template", {
+        brand_profile_id: "p1",
+        studio_project_id: "s1",
+        template_id: "t-shown",
+      })
+    ).resolves.toBe(true);
+    expect(api.recordFeedback).toHaveBeenCalledWith({
+      event: "generated",
+      step: "template",
+      detail: "",
+      brand_profile_id: "p1",
+      studio_project_id: "s1",
+      generation_id: "",
+      template_id: "t-shown",
+    });
+  });
+
+  test("refuses unknown events and a missing component without calling the api", async () => {
+    await expect(recordBehavior("thumb_up", "template", {})).resolves.toBe(false);
+    await expect(recordBehavior("adopted", "", {})).resolves.toBe(false);
+    expect(api.recordFeedback).not.toHaveBeenCalled();
+  });
+
+  test("a failed post reads as not recorded, never a throw", async () => {
+    api.recordFeedback.mockRejectedValueOnce(new Error("offline"));
+    await expect(recordBehavior("adopted", "goal", {})).resolves.toBe(false);
   });
 });
 
