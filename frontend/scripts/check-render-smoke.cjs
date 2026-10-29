@@ -2197,6 +2197,41 @@ async function main() {
     }
   });
 
+  // One guidance line per step. The task line names what finishes the screen;
+  // the footer used to say the same thing again between the arrows, so step two
+  // read "pick the angle, goal, template, then add your photo" above "Angle,
+  // goal, template and photo — each one ranks the next". The arrows are one
+  // centred cluster now: pinned to opposite edges with a sentence between them,
+  // the pair read as two unrelated controls.
+  await check("the wizard states the step once and centres its arrows", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
+      "Continue to the angle step"
+    );
+    const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
+    if (!task || !task.textContent.includes("each one ranks the next")) {
+      throw new Error("the angle step no longer says its picks rank the next");
+    }
+    if (task.textContent.includes("then add your photo")) {
+      throw new Error("the angle step is back to two sentences for one task");
+    }
+    const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
+    if (hint && hint.textContent.includes("ranks the next")) {
+      throw new Error("the footer repeats the task line the founder just read");
+    }
+    const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const row = back && back.parentElement;
+    if (!row) throw new Error("the wizard arrows are gone");
+    if (!/justify-center/.test(row.className)) {
+      throw new Error("the wizard arrows are pinned to the edges again, not one cluster");
+    }
+  });
+
   // Nothing that calls the model may render before the plan has been read. This
   // the reorder's whole point, and it is invisible to a type-check: the render
   // panel is still imported and still reachable, just on a later step.
@@ -6087,6 +6122,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("");
   console.log("Mounting the App Profile detail page...");
   await runDeleteDialogChecks();
+
   // The header is an identity band. Every other page states its job in one
   // short line; this page printed the whole researched paragraph, which pushed
   // the title, badge and actions three lines apart. The approved badge was also
@@ -6143,7 +6179,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       global.__SMOKE_ROUTE_PARAMS = previousParams;
     }
   });
-
 
   console.log("");
   console.log("Checking the App Profile research actions...");

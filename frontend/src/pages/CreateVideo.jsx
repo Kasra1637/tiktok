@@ -912,7 +912,7 @@ function AngleGoalPicker({
           {featured.length > 0
             ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
             : `Goal suggestions for “${angle.label}” are unavailable. Try reloading the page.`}{" "}
-          The angle stays the story’s focus; the goal shapes what the overall campaign should achieve.
+          The angle shapes this video — the goal shapes the campaign it serves.
         </p>
       </div>
       {regenerating && (
@@ -2310,17 +2310,19 @@ setObjective("");
 
   const stepContent = renderStep();
 
-  /* One-line task for the footer, next to the arrows that walk the steps.
-     Plain body copy, deliberately NOT a data-subtitle: the subtitle budget
-     (text-xs, 55-60 chars) covers label-attached helpers only, and this is
-     step-level guidance with a job of its own. Navigation stays free — this
-     names what finishes the step, it never locks the arrows. */
+  /* Only state the task line cannot know — that is the footer's whole job
+     now. It used to restate the step's own task a second time, once above the
+     card and once in the middle of the arrows: step two read "pick the angle,
+     goal, template, then add your photo" over "Angle, goal, template and
+     photo — each one ranks the next". That ranking sentence lives in the task
+     line now, so nothing here repeats it. Plain body copy, deliberately NOT a
+     data-subtitle: the subtitle budget (text-xs, 55-60 chars) covers
+     label-attached helpers only. Navigation stays free — a hint names what is
+     missing, it never locks the arrows. */
   const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
   let footerHint = "Continue when ready \u2014 you can always go back.";
   if (STEPS[step].key === "profile" && !profileId) {
     footerHint = "Choose an app above \u2014 everything downstream builds on it.";
-  } else if (STEPS[step].key === "angle" && activeStepState?.state !== "done") {
-    footerHint = "Angle, goal, template and photo \u2014 each one ranks the next.";
   } else if (STEPS[step].key === "review" && activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
   } else if (STEPS[step].key === "review" && activeStepState?.state === "blocked") {
@@ -3600,56 +3602,74 @@ setObjective("");
           directly. Different jobs, so both stay. No guards, like the pills:
           these only move. */}
       {/* Step task, in words: the pills above show state per step, and this
-          names the one thing to do on the screen in view. Plain body copy,
-          not a data-subtitle, for the same reason as the footer hint. */}
+          names the one thing to do on the screen in view. It is the ONLY
+          guidance line a step gets — the footer no longer echoes it, so the
+          angle step's ranking sentence sits here and nowhere else. Colon after
+          the counter rather than a dash, because the sentence that follows
+          carries its own dash and two in one line read as a stutter. Plain
+          body copy, not a data-subtitle, for the same reason as the hint. */}
       <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
         {step === 0
-          ? "Step 1 of 3 \u2014 choose the approved app this video is for."
+          ? "Step 1 of 3: choose the approved app this video is for."
           : step === 1
-            ? "Step 2 of 3 \u2014 pick the angle, goal, template, then add your photo."
-            : "Step 3 of 3 \u2014 read the plan, then render the Hook + Story."}
+            ? "Step 2 of 3: Angle, goal, template and photo \u2014 each one ranks the next."
+            : "Step 3 of 3: read the plan, then render the Hook + Story."}
       </p>
 
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setStep(Math.max(0, step - 1))}
-          disabled={step === 0}
-          aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
-          data-testid="wizard-back-button"
-          className="gap-1.5"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" /> Back
-        </Button>
+      {/* Hint, then one centred cluster. Back and Continue used to sit on the
+          opposite edges of a full-width frame with a sentence stranded
+          between them, which read as two unrelated controls rather than one
+          pair — the arrows are the same control cluster the pills are not.
+          The hint keeps its own line (hidden on phones, where the step is the
+          only thing worth the height), and the pair keeps back-to-front order
+          with the primary on the right. */}
+      <div className="sm:space-y-2">
         <p
-          className="hidden min-w-0 flex-1 truncate px-2 text-center text-sm text-muted-foreground sm:block"
+          className="hidden text-center text-sm text-muted-foreground sm:block"
           data-testid="wizard-footer-hint"
         >
           {footerHint}
         </p>
-        {/* Earns prominence: a finished step turns Continue primary, so the
-            way forward lights up the moment there is somewhere to go. Never
-            disabled — a returning founder can always walk forward to look —
-            the footer hint beside it already names what is still missing. */}
-        {step < STEPS.length - 1 && (
+        <div className="flex items-center justify-center gap-2">
           <Button
-            variant={activeStepState?.state === "done" ? "accent" : "secondary"}
+            variant="ghost"
             size="sm"
-            onClick={() => setStep(step + 1)}
-            aria-label={`Continue to ${STEPS[step + 1].label}`}
-            data-testid="wizard-continue-button"
+            onClick={() => setStep(Math.max(0, step - 1))}
+            disabled={step === 0}
+            aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+            data-testid="wizard-back-button"
             className="gap-1.5"
           >
-            Continue <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-3.5 w-3.5" /> Back
           </Button>
-        )}
+          {/* Earns prominence: a finished step turns Continue primary, so the
+              way forward lights up the moment there is somewhere to go. Never
+              disabled — a returning founder can always walk forward to look —
+              the hint above already names what is still missing. */}
+          {step < STEPS.length - 1 && (
+            <Button
+              variant={activeStepState?.state === "done" ? "accent" : "secondary"}
+              size="sm"
+              onClick={() => setStep(step + 1)}
+              aria-label={`Continue to ${STEPS[step + 1].label}`}
+              data-testid="wizard-continue-button"
+              className="gap-1.5"
+            >
+              Continue <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* The one thing the pills cannot do is leave the studio, so the exit
-          stays — on the last step only, which is where it already was. */}
+          stays — on the last step only, which is where it already was. It is
+          centred with the arrows above it rather than pinned right: the last
+          step has no Continue, so Back is alone in that row, and a lone ghost
+          button floating mid-page only reads as deliberate when the exit it
+          belongs to sits under it in the same column. Pinned right, the two
+          read as two different footers sharing a screen. */}
       {step === STEPS.length - 1 && project && (
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-center">
           <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
             Back to your app
           </Button>
