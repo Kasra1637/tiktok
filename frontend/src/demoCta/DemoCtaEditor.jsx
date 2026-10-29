@@ -799,7 +799,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // undoing a trim must restore the earlier story window too.
   const selectCtaTimingPreset = (presetId) => {
     setCtaTimingMode(presetId);
-    const dur = baseDuration;
+    // "Full" fills the clip the card paints over: the appended clip when a
+    // second clip exists, otherwise the base.
+    const dur = appendMeta ? appendDuration : baseDuration;
     if (presetId === "last2") {
       setCtaDuration(2);
     } else if (presetId === "last3") {
@@ -1446,11 +1448,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     const cy = (e.clientY - rect.top) * scaleY;
 
     const vt = currentTime;
-    const dur = baseDuration;
+    // currentTime is timeline time and the card closes the timeline: measure
+    // its drag window from the timeline end, sized on the owning clip, so a
+    // grab on the second clip finds the card instead of dead footage.
+    const total = baseDuration + appendDuration;
+    const ctaOwnerDur = appendMeta ? appendDuration : baseDuration;
     const hookWindow = hookDuration + 0.28;
-    const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode) + 0.4;
+    const ctaWindow = resolveCtaWindow(ctaDuration, ctaOwnerDur, ctaTimingMode) + 0.4;
     const hookVisible = hookEnabled && vt <= hookWindow;
-    const ctaVisible = ctaEnabled && dur > 0 && (dur - vt) <= ctaWindow && (dur - vt) >= 0;
+    const ctaVisible = ctaEnabled && total > 0 && (total - vt) <= ctaWindow && (total - vt) >= 0;
 
     let dragTarget = "video";
     if (storyEnabled && storyAvailable && vt >= storyStart && vt < storyEnd) {

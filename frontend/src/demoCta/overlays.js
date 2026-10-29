@@ -302,6 +302,27 @@ export function drawStoryOverlay(ctx, cw, ch, time, { start, end, ...style }) {
 }
 
 /**
+ * Segment ownership for the closing end card: it closes the timeline, so
+ * with a second clip it paints on the appended segment's end and never on
+ * the base — a card on the base would flash the CTA mid-video, ahead of
+ * the second clip. Without a second clip the base is the whole timeline,
+ * so it keeps the card.
+ */
+export function paintsEndCard({ segment, hasSecondClip }) {
+  return segment === (hasSecondClip ? 1 : 0);
+}
+
+/**
+ * Hook and story open the video on the base; the "overlays on both clips"
+ * toggle mirrors them onto the appended segment too. The end card is not
+ * part of this rule — see paintsEndCard above.
+ */
+export function paintsHookStory({ segment, mirrorOverlays }) {
+  if (segment === 0) return true;
+  return !!mirrorOverlays;
+}
+
+/**
  * Lead-gen end card: sits above TikTok's caption strip, clear of the icon rail,
  * with an arrow that pumps toward the bio link.
  *

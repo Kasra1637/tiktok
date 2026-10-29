@@ -8,7 +8,7 @@ import {
   resolveCtaWindow,
   clipWindow,
 } from "./constants";
-import { drawEndCard, drawHookOverlay, drawStoryOverlay } from "./overlays";
+import { drawEndCard, drawHookOverlay, drawStoryOverlay, paintsEndCard, paintsHookStory } from "./overlays";
 import { transitionAt, transitionWindow, effectiveTransition, easeInOut, hash01 } from "./transitions";
 import { drawHandView } from "./handView";
 import { fitVideoToScreen } from "./fit";
@@ -169,36 +169,48 @@ export function usePreviewLoop(settings) {
   const startScopedPreview = useCallback((kind) => {
     if (isExportingRef.current) return;
     const video = videoRef.current;
+    const added = appendVideoRef?.current;
     const dur = baseDuration;
     if (!video || !(dur > 0)) return;
     let start;
     let end;
+    let owner = video;
+    let ownerStart = baseStart;
     if (kind === "hook") {
       if (!hookEnabled) return;
       end = Math.min(hookDuration, dur * 0.45);
       start = 0;
     } else if (kind === "cta") {
       if (!ctaEnabled) return;
-      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      end = dur;
-      start = Math.max(0, dur - window);
+      // The card closes the timeline, so replay it where it paints: the
+      // appended clip's end when a second clip exists, never the base.
+      const second = sequenceRef.current?.enabled && added && appendDuration > 0;
+      const ownerDur = second ? appendDuration : dur;
+      const window = resolveCtaWindow(ctaDuration, ownerDur, ctaTimingMode);
+      end = second ? dur + appendDuration : dur;
+      start = Math.max(second ? dur : 0, end - window);
+      if (second) {
+        owner = added;
+        ownerStart = appendStart;
+      }
     } else {
       return;
     }
     if (!(end > start)) return;
-    appendVideoRef?.current?.pause();
-    activeVideoRef.current = video;
+    if (!owner) return;
+    (owner === video ? added : video)?.pause();
+    activeVideoRef.current = owner;
     scopedReplayRef.current = { end };
-    video.loop = false;
+    owner.loop = false;
     try {
-      video.currentTime = start + baseStart;
+      owner.currentTime = start - (owner === video ? 0 : dur) + ownerStart;
     } catch {
       // A seekable clip always accepts this; a transient failure leaves the
       // playhead where it is and the window guard still parks on time.
     }
     setCurrentTime(start);
-    video.play().then(() => setIsPlaying(true)).catch(() => {});
-  }, [baseDuration, baseStart, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
+    owner.play().then(() => setIsPlaying(true)).catch(() => {});
+  }, [baseDuration, baseStart, appendStart, appendDuration, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, appendVideoRef]);
 
   // A transition pick replays the join, like a font pick replays its
   // overlay window: park just before the cut and play through it, so the
@@ -246,21 +258,26 @@ export function usePreviewLoop(settings) {
       start = 0;
     } else if (kind === "cta") {
       if (!ctaEnabled) return;
-      const window = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      end = dur;
-      start = Math.max(0, dur - window);
+      // Same owning clip as the replay above: the appended clip's end when
+      // a second clip exists, so the check tracks the playing element.
+      const second = sequenceRef.current?.enabled && appendVideoRef?.current && appendDuration > 0;
+      const ownerDur = second ? appendDuration : dur;
+      const window = resolveCtaWindow(ctaDuration, ownerDur, ctaTimingMode);
+      end = second ? dur + appendDuration : dur;
+      start = Math.max(second ? dur : 0, end - window);
     } else {
       return;
     }
     if (!(end > start)) return;
-    const t = timelineTime(video);
-    if (!video.paused && t >= start - 0.05 && t < end) {
+    const live = activeVideo();
+    const t = timelineTime(live);
+    if (live && !live.paused && t >= start - 0.05 && t < end) {
       scopedReplayRef.current = { end };
-      video.loop = false;
+      live.loop = false;
       return;
     }
     startScopedPreview(kind);
-  }, [baseDuration, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview, timelineTime]);
+  }, [baseDuration, appendDuration, activeVideo, hookEnabled, hookDuration, ctaEnabled, ctaDuration, ctaTimingMode, startScopedPreview, timelineTime, appendVideoRef]);
 
   // Stable so the Space shortcut below subscribes once: it closes over the
   // video ref and a state setter only, so an empty dep array is complete.
@@ -466,13 +483,17 @@ export function usePreviewLoop(settings) {
     canvas.width = cw;
     canvas.height = ch;
 
-    const drawOverlays = (ctx, vt, dur = baseDuration) => {
+    // The end card closes the timeline, not the base clip: with a second
+    // clip it paints on the appended segment's end only, so the CTA never
+    // flashes mid-video inside the first upload. Hook/story open on the
+    // base and mirror onto the second only under the both-clips toggle.
+    const drawOverlays = (ctx, vt, dur = baseDuration, { segment = 0, mirrorOverlays = false } = {}) => {
       const hookWindow = dur > 0 ? Math.min(hookDuration, dur * 0.45) : hookDuration;
       const ctaWindow = resolveCtaWindow(ctaDuration, dur, ctaTimingMode);
-      if (hookEnabled) {
+      if (hookEnabled && paintsHookStory({ segment, mirrorOverlays })) {
         drawHookOverlay(ctx, cw, ch, vt, { text: hookText, duration: hookWindow, accent: overlayAccent, offsetX: hookOffsetX, offsetY: hookOffsetY, font: fontStack(captionFont), anim: captionAnim, scale: captionScale, textStyle });
       }
-      if (storyEnabled && storyAvailable) {
+      if (storyEnabled && storyAvailable && paintsHookStory({ segment, mirrorOverlays })) {
         drawStoryOverlay(ctx, cw, ch, vt, {
           text: storyText, start: storyStart, end: storyEnd,
           accent: overlayAccent, offsetY: storyOffsetY,
@@ -480,7 +501,7 @@ export function usePreviewLoop(settings) {
           textStyle,
         });
       }
-      if (ctaEnabled && dur > 0) {
+      if (ctaEnabled && dur > 0 && paintsEndCard({ segment, hasSecondClip: sequence })) {
         drawEndCard(ctx, cw, ch, dur - vt, {
           headline: ctaHeadline,
           handle: ctaHandle,
@@ -594,7 +615,7 @@ export function usePreviewLoop(settings) {
       if (mode === "hand" && video) {
         const t = vt;
         drawHandView(ctx, cw, ch, frame, lookEnv, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
-        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+        drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
         paintJointTransition(target, vt);
         return;
       }
@@ -617,7 +638,7 @@ export function usePreviewLoop(settings) {
             ctx.drawImage(frame, (cw - box.dw) / 2 + (segment ? 0 : ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segment ? 0 : ez.vOffY / 100) * maxOffY, box.dw, box.dh);
           }
         }
-        if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+        drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
         paintJointTransition(target, vt);
         return;
       }
@@ -945,7 +966,7 @@ export function usePreviewLoop(settings) {
         const y = (ch - drawH) / 2;
         drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
       }
-      if (!segment || appendOverlays) drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration);
+      drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
       paintJointTransition(target, vt);
     };
     paintFrameRef.current = paintFrame;
