@@ -1204,13 +1204,14 @@ export default function CreateVideo() {
   // was a round trip the flow never offered a way back from.
   const [generatingAngles, setGeneratingAngles] = useState(false);
   const [angleError, setAngleError] = useState(null);
-  // Click-to-view gate for angles. Landing on this step always starts gated:
-  // one "Generate angles" CTA, never a finished list — and "Regenerate" only
+  // Click-to-view gate for angles. This step always starts gated: one
+  // "Generate angles" CTA, never a finished list — and "Regenerate" only
   // ever appears beside a visible list, i.e. when there is a current
-  // generation to be unhappy with. The reveal is session-local on purpose:
-  // persisting it put returning founders straight onto selections they didn't
-  // ask to see. A pick bypasses the gate entirely — a draft or deep link
-  // that already names an angle has been viewed by definition.
+  // generation to be unhappy with. The reveal lasts for the visit, not the
+  // mount: entering the step without a pick re-arms the CTA (see below), so
+  // navigating away and back never greets an unpicked founder with a stale
+  // list. A pick bypasses the gate entirely — a draft or deep link that
+  // already names an angle has been viewed by definition.
   const [anglesRevealed, setAnglesRevealed] = useState(false);
   const revealAngles = useCallback(() => {
     setAnglesRevealed(true);
@@ -1297,6 +1298,15 @@ export default function CreateVideo() {
   // pointing at a deleted angle must not open a list of strangers on first
   // view, which is the exact screenshot this rule fixes.
   const showAngles = anglesRevealed || Boolean(angle);
+  // The reveal lasts for the visit, not the mount. Entering the angle step
+  // without a resolved pick re-arms the CTA, so a list revealed earlier
+  // never greets a founder who navigated away and back unpicked. A resolved
+  // angle still bypasses the gate — a reopened draft shows its own angle,
+  // never an empty gate — while a dangling pick re-gates like any other
+  // visit with nothing to show.
+  useEffect(() => {
+    if (STEPS[step]?.key === "angle" && !angle) setAnglesRevealed(false);
+  }, [step, angle]);
   // The detail card prefers the full library, but a failed library fetch must
   // not blank a chosen template the recommendation rows already carry.
   const template = templates.find((t) => t.id === templateId)

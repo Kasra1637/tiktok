@@ -1167,6 +1167,30 @@ async function main() {
     }
   });
 
+  await check("the angle list re-gates on every unpicked entry to the step", async (ctx) => {
+    // The reveal lasts for the visit, not the mount: navigating away and
+    // back without picking must re-arm the Generate CTA rather than greet
+    // the founder with the stale list. A resolved pick still bypasses —
+    // that path is pinned by the photo-gate check above.
+    global.__SMOKE_PARAMS = "";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      const gate = () => ctx.container.querySelector('[data-testid="generate-angles-button"]');
+      const list = () => ctx.container.querySelector('[data-testid="audience-angle-list"]');
+      if (!gate()) throw new Error("the angle step does not start behind its Generate CTA");
+      if (list()) throw new Error("the angle list is visible before anything was asked for");
+      await clickEl(ctx, gate());
+      if (!list()) throw new Error("the Generate CTA revealed no angles");
+      await openStep(ctx, "Review & submit");
+      await openStep(ctx, "Audience & template");
+      if (!gate()) throw new Error("returning to the step does not re-arm the Generate CTA");
+      if (list()) throw new Error("a revealed list greeted an unpicked return to the step");
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("no step offers time-range or audio controls for an asset", async (ctx) => {
     // The video is one render with no compositing, so an asset has
     // no on-screen window and there is nothing to mix. The row used to carry
