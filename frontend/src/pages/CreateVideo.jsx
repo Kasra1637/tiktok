@@ -599,6 +599,18 @@ function AngleSelector({
       Reading angle {genCount} of 6…
     </p>
   ) : null;
+  // The gate names what the click will do: revealing a cached set is
+  // instant and free, generating from nothing is a model call with a wait.
+  // A custom label (Review's redirect off this step) always wins — the
+  // honesty rule must never rename a button that leaves the step.
+  const gateButtonLabel = generating
+    ? generatingLabel
+    : generateLabel !== "Generate angles"
+      ? generateLabel
+      : angles.length > 0
+        ? "Show your angles"
+        : "Generate angles";
+
   const body = !showAngles || angles.length === 0 ? (
     // 12px, matching the Review step's "what's missing" panel: the red action
     // and the helper line under it are one gate section, and a tighter stack
@@ -625,7 +637,7 @@ function AngleSelector({
         ) : (
           <Sparkles className="h-3.5 w-3.5" />
         )}
-            {generating ? generatingLabel : generateLabel}
+            {gateButtonLabel}
           </Button>
           {progressLine}
       <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">

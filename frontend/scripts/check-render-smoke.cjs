@@ -1183,13 +1183,79 @@ async function main() {
       await clickEl(ctx, gate());
       if (!list()) throw new Error("the Generate CTA revealed no angles");
       await openStep(ctx, "Review & submit");
-      await openStep(ctx, "Audience & template");
-      if (!gate()) throw new Error("returning to the step does not re-arm the Generate CTA");
-      if (list()) throw new Error("a revealed list greeted an unpicked return to the step");
-    } finally {
-      global.__SMOKE_PARAMS = "";
-    }
-  });
+      await openStep(ctx, "Audience & template");          if (!gate()) throw new Error("returning to the step does not re-arm the Generate CTA");
+          if (list()) throw new Error("a revealed list greeted an unpicked return to the step");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
+      await check("the angle gate offers Show for a cached set", async (ctx) => {
+        // Revealing costs nothing, generating costs a model call with a wait:
+        // the button must say which. The default stubs carry a set, and
+        // dateless rows must render no freshness claim.
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          const label = (ctx.container.querySelector('[data-testid="generate-angles-button"]') || {}).textContent || "";
+          if (!label.includes("Show your angles")) {
+            throw new Error(`a cached set still promises a generate: ${JSON.stringify(label)}`);
+          }
+          if (ctx.container.querySelector('[data-testid="angle-set-freshness"]')) {
+            throw new Error("a dateless set renders a freshness claim");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
+      await check("the angle gate offers Generate when no set exists", async (ctx) => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await withApi(
+            { getContentAngles: async () => ({ angles: [] }) },
+            async () => {
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              const label = (ctx.container.querySelector('[data-testid="generate-angles-button"]') || {}).textContent || "";
+              if (!label.includes("Generate angles") || label.includes("Show your")) {
+                throw new Error(`an empty set does not offer a generate: ${JSON.stringify(label)}`);
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
+      await check("Review's angle redirect keeps its own label", async (ctx) => {
+        // The honesty rule renames the gate, never a button that leaves the
+        // step: Review's redirect names its destination, not the click's cost.
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await withApi(
+            {
+              getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
+            },
+            async () => {
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Review & submit");
+              const labels = [...ctx.container.querySelectorAll('[data-testid="generate-angles-button"]')]
+                .map((b) => b.textContent || "");
+              if (!labels.some((t) => t.includes("Pick an audience angle first"))) {
+                throw new Error(`the redirect lost its label to the honesty rule: ${JSON.stringify(labels)}`);
+              }
+              if (labels.some((t) => t.includes("Show your angles"))) {
+                throw new Error("the honesty rule renamed a button that leaves the step");
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
 
   await check("no step offers time-range or audio controls for an asset", async (ctx) => {
     // The video is one render with no compositing, so an asset has
@@ -3583,7 +3649,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // for free (no endpoint call, no spend). Regenerate appears only beside
   // the visible list. A fresh profile id keeps this free of whatever other
   // checks persisted, so the gate is asserted, not the order they ran in.
-  await check("landing on angles shows Generate, not the list or Regenerate", async (ctx) => {
+  await check("landing on angles offers Show for the cached set", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
@@ -3600,9 +3666,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         throw new Error("Regenerate shows before there is a visible generation");
       }
       const cta = step.querySelector('[data-testid="generate-angles-button"]');
-      if (!cta) throw new Error("first view offers no Generate CTA for the six");
-      if (!/Generate angles/.test(cta.textContent || "")) {
-        throw new Error(`the CTA does not read as Generate angles: ${JSON.stringify(cta.textContent)}`);
+      if (!cta) throw new Error("first view offers no CTA for the six");
+      // A cached set is a reveal, not a generation: the button must say
+      // Show (instant, free), never promise a Generate the click will not do.
+      if (!/Show your angles/.test(cta.textContent || "")) {
+        throw new Error(`the CTA does not offer the cached set: ${JSON.stringify(cta.textContent)}`);
       }
       apiCalls.length = 0;
       await clickEl(ctx, cta);
