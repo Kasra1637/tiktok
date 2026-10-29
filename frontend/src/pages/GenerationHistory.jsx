@@ -431,7 +431,7 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0 text-muted-foreground hover:text-destructive"
+              className={`shrink-0 text-muted-foreground hover:text-destructive${compact ? " h-11 w-11" : " h-9 w-9"}`}
               disabled={busy}
               onClick={() => act(() => api.deleteGeneration(row.id))}
               data-testid={`history-delete-${row.id}`}
