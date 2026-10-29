@@ -10054,6 +10054,50 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("a new clip starts with no text overlay turned on", async (ctx) => {
+    // Hook text used to start on, so a fresh clip opened with copy the founder
+    // never chose painted across the face. All three overlay groups start off
+    // now — like the end card already did — and turning one on is the
+    // founder's first move. A draft keeps whatever it stored.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const openGroup = async (name) => {
+        const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+          .find((b) => (b.textContent || "").trim() === name);
+        if (!header) throw new Error(`no ${name} group header`);
+        if (header.getAttribute("aria-expanded") !== "true") {
+          await act(async () => {
+            header.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      };
+      for (const [group, testId] of [
+        ["Hook Text", "hook-toggle"],
+        ["Story Text", "story-toggle"],
+        ["End Card", "cta-toggle"],
+      ]) {
+        await openGroup(group);
+        const toggle = ctx.container.querySelector(`[data-testid="${testId}"]`);
+        if (!toggle) throw new Error(`no ${group} toggle`);
+        if (toggle.getAttribute("data-state") !== "unchecked") {
+          throw new Error(`${group} is on for a clip the founder just added`);
+        }
+      }
+      // Off is a default, not a removal: the founder can still turn the hook on.
+      await openGroup("Hook Text");
+      const hook = ctx.container.querySelector('[data-testid="hook-toggle"]');
+      await clickEl(ctx, hook, "turn hook text on");
+      if (hook.getAttribute("data-state") !== "checked") {
+        throw new Error("the hook toggle no longer turns hook text on");
+      }
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+    }
+  });
+
   await check("Demo + CTA draft recovery failures block editing and retry without losing account scope", async (ctx) => {
     const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
     const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
@@ -10384,6 +10428,12 @@ async function runDemoCtaChecks() {
         hookGroup.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
       await flush();
+      // Hook text starts off, so it has to be on before an entrance change can
+      // replay its window. Enabling it is itself a change, so the paint
+      // baseline is taken after it lands.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
+      await flush();
+      video.currentTime = 4;
       const paintsAfterOpen = paints;
       const fade = ctx.container.querySelector('[data-testid="caption-anim-fade"]');
       if (!fade) throw new Error("no caption fade chip");
@@ -10452,6 +10502,19 @@ async function runDemoCtaChecks() {
         }
       };
       await openGroup("Hook Text");
+      // Hook text starts off, so enabling it is the founder's first move and
+      // everything this check replays happens after that.
+      const hookToggle = ctx.container.querySelector('[data-testid="hook-toggle"]');
+      if (!hookToggle) throw new Error("no hook-text toggle");
+      if (hookToggle.getAttribute("data-state") !== "checked") {
+        await act(async () => {
+          hookToggle.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+      if (hookToggle.getAttribute("data-state") !== "checked") {
+        throw new Error("hook text did not stay on after enabling it");
+      }
       video.currentTime = 4;
       const fade = ctx.container.querySelector('[data-testid="caption-anim-fade"]');
       if (!fade) throw new Error("no caption fade chip");
@@ -11644,14 +11707,17 @@ async function runDemoCtaChecks() {
       });
       await clickEl(ctx, ctx.container.querySelector('[data-testid="story-toggle"]'), "enable Story");
       const timing = () => [...ctx.container.querySelectorAll('[data-testid^="story-"] [role="slider"]')].map((s) => Number(s.getAttribute("aria-valuenow")));
-      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 8])) throw new Error(`wrong initial Story timing with the end card off: ${timing()}`);
+      // The hook starts off now, so nothing reserves the opening and Story
+      // can begin at frame 0; the end card is off too, so the window runs to
+      // the clip end.
+      if (JSON.stringify(timing()) !== JSON.stringify([0, 8])) throw new Error(`wrong initial Story timing with both overlays off: ${timing()}`);
       await openGroup("End Card");
       // The end card starts off, so nothing reserves the tail until the
       // founder turns it on — which is exactly the state this check clamps
       // against from here on.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-toggle"]'), "enable the end card");
       await openGroup("Story Text");
-      if (JSON.stringify(timing()) !== JSON.stringify([1.8, 6])) throw new Error(`enabling the end card did not reserve its tail: ${timing()}`);
+      if (JSON.stringify(timing()) !== JSON.stringify([0, 6])) throw new Error(`enabling the end card did not reserve its tail: ${timing()}`);
       await openGroup("End Card");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="cta-timing-last3"]'), "reserve last three seconds");
       await openGroup("Story Text");
@@ -11806,7 +11872,12 @@ async function runDemoCtaChecks() {
           generateOpeningMessages: async () => ({ messages: Array.from({ length: 20 }, (_, i) => `Fresh app opening ${i + 1}`) }),
         },
         async () => {
-          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);           // #5 Named look presets live with saving in End Card, not Source & Look
+          await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
+          // Hook text starts off, so turn it on first: the size presets, the
+          // safe-area guard and the copy flipper below all describe it.
+          await openGroup("Hook Text");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
+          // #5 Named look presets live with saving in End Card, not Source & Look
           await openGroup("End Card");
           if (ctx.container.querySelector('[data-testid="demo-cta-source"] [data-testid="look-preset-ugc"]')) {
             throw new Error("look presets are still offered prematurely in Source & Look");
@@ -11956,6 +12027,19 @@ async function runDemoCtaChecks() {
     overlays.drawEndCard = () => textCalls.push("cta");
     try {
       await clip.loadClip(ctx);
+      // The export below must carry overlays, and hook text starts off, so
+      // turning it on is the founder's first move.
+      await clickEl(ctx,
+        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Hook Text"),
+        "open Hook Text");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
+      await clip.flush();
+      // Turning the hook on swapped the open group; Source & Look owns the
+      // view-mode picker this check drives next.
+      await clickEl(ctx,
+        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Source & Look"),
+        "reopen Source & Look");
+      await clip.flush();
       const click = async (selector) => {
         await clickEl(ctx, ctx.container.querySelector(selector), selector);
         await clip.flush();

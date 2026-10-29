@@ -75,3 +75,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0055](0055-implicit-behavior-signals.md) | Implicit behavior signals (adopted/abandoned/generated) supplement explicit thumbs | accepted |
 | [0056](0056-hero-play-control.md) | The autoplaying hero carries its own play/pause control; reduced motion loads on an explicit tap | accepted |
 | [0057](0057-preview-frame-play-button.md) | The Demo + CTA preview plays from a branded button on its own frame | accepted |
+| [0058](0058-text-overlays-start-off.md) | Hook, story and end-card text overlays all start off until the founder turns one on | accepted |

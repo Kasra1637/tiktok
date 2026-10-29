@@ -241,7 +241,13 @@ export const DEFAULTS = {
   handZoom: 1,
   handPanX: 0,
   handPanY: 0,
-  hookEnabled: true,
+  // Off until the founder turns it on. Hook copy is the loudest thing on the
+  // preview, and it used to open on every new clip whether or not the founder
+  // chose it — a base clip usually carries its own opening beat. Turning it on
+  // previews it immediately (see the toggle) and the export then carries it;
+  // drafts the founder already saved keep the value they stored. The default
+  // copy below stays so enabling it has something to show.
+  hookEnabled: false,
   hookText: "I built this so I'd stop journaling in Notes app",
   hookDuration: 1.8,
   hookOffsetX: 0,
