@@ -36,6 +36,47 @@ import {
   BadgeCheck, Star, ListChecks, Clock, ShieldCheck, MessageCircleQuestion,
 } from "lucide-react";
 
+/**
+ * The page header is an identity band, not the research document.
+ *
+ * Every other page's subtitle is one short line; this one printed the whole
+ * researched paragraph, so the title, the badge and the actions sat three
+ * lines apart (and the page opened on prose instead of on the app). The
+ * subtitle is the app's own opening now, trimmed to a subtitle's length; the
+ * paragraph itself is untouched in App Profile, where it is read and edited.
+ *
+ * Three rules keep it from re-inflating:
+ * - the title already says the app, so a "<name> is a …" lead-in is dropped;
+ * - whole sentences only, added while they still fit, so the line never stops
+ *   mid-thought;
+ * - a single sentence that runs long is cut at a word boundary with an ellipsis.
+ */
+const SUBTITLE_LIMIT = 90;
+
+function headerSubtitle(description, appName) {
+  const text = sentenceCase(String(description || "").trim());
+  if (!text) return undefined;
+  const name = String(appName || "").trim();
+  let body = text;
+  if (name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const lead = new RegExp(`^${escaped}\\s+(?:is|are)\\s+(?:an?\\s+)?`, "i");
+    body = text.replace(lead, "").trim() || text;
+  }
+  const sentences = body.match(/[^.!?]+[.!?]+/g) || [body];
+  let summary = "";
+  for (const sentence of sentences) {
+    const next = `${summary} ${sentence.trim()}`.trim();
+    if (summary && next.length > SUBTITLE_LIMIT) break;
+    summary = next;
+  }
+  if (!summary) summary = body;
+  if (summary.length > SUBTITLE_LIMIT) {
+    summary = `${summary.slice(0, SUBTITLE_LIMIT - 1).replace(/\s+\S*$/, "")}…`;
+  }
+  return sentenceCase(summary);
+}
+
 /** Read an array-or-empty field into a clean list. */
 function list(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -459,12 +500,18 @@ return (
            The name also stays where it is actionable, in the delete
            confirmation the founder has to type it. */
         title={profile?.brand_name?.trim() || "App Profile"}
-        description={profile?.brand_description ? sentenceCase(profile.brand_description) : undefined}
+        description={headerSubtitle(profile?.brand_description, profile?.brand_name)}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-3">
             {/* Brand hierarchy: status badge, primary edit, research dropdown, delete */}
             {approved ? (
-              <Badge className="border-green-500/25 bg-green-500/10 px-3 py-1 font-semibold text-green-300 transition-none">Ready for video</Badge>
+              /* The same state, in the same chrome as the App Profile page's own
+                 badge: indigo tint and the check that says "ready". Green was
+                 the only green chip in the product and read as a status from a
+                 different app; this palette has indigo and coral. */
+              <Badge variant="indigo" className="px-3 py-1 transition-none">
+                <BadgeCheck className="h-3 w-3" /> Ready for video
+              </Badge>
             ) : (
               <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — blocked for video</Badge>
             )}

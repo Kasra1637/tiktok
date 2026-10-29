@@ -6087,6 +6087,63 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("");
   console.log("Mounting the App Profile detail page...");
   await runDeleteDialogChecks();
+  // The header is an identity band. Every other page states its job in one
+  // short line; this page printed the whole researched paragraph, which pushed
+  // the title, badge and actions three lines apart. The approved badge was also
+  // the only green chip in the product, while the same "Ready for video" state
+  // is indigo on App Profile — one state, two apps.
+  await check("the App Profile header stays a header, not the research document", async (ctx) => {
+    const previousParams = global.__SMOKE_ROUTE_PARAMS;
+    global.__SMOKE_ROUTE_PARAMS = { profileId: "p1" };
+    const AppProfileDetail = load("pages/AppProfileDetail.jsx").default;
+    const LONG =
+      "Threadly is an AI voice journal and mood tracker. Users speak their thoughts instead of " +
+      "typing, and the app transcribes them, analyzes emotions, and offers personalized " +
+      "reflections and mood trends over time.";
+    try {
+      await withApi(
+        {
+          getAppProfile: async () => ({
+            id: "p1",
+            brand_name: "Threadly",
+            brand_description: LONG,
+            status: "approved",
+          }),
+          getContentAngles: async () => ({ angles: [] }),
+          getStudioProjects: async () => ({ projects: [] }),
+          getTemplateRecommendations: async () => ({ recommendations: [] }),
+        },
+        async () => {
+          await mount(AppProfileDetail, {})(ctx);
+        }
+      );
+      const header = ctx.container.querySelector('[data-testid="app-profile-header"]');
+      if (!header) throw new Error("the App Profile header did not render");
+      const subtitle = (header.querySelector("p")?.textContent || "").trim();
+      if (!subtitle) throw new Error("the header lost its subtitle");
+      if (subtitle.length > 90) {
+        throw new Error(
+          `the profile subtitle is ${subtitle.length} characters; every other page's is one short line`
+        );
+      }
+      if (/^Threadly is/i.test(subtitle)) {
+        throw new Error("the subtitle repeats the app name the title above already says");
+      }
+      const ready = [...header.querySelectorAll("div")].find(
+        (el) => (el.textContent || "").trim() === "Ready for video"
+      );
+      if (!ready) throw new Error("the approved state badge is gone");
+      if (/green/.test(ready.className)) {
+        throw new Error("the ready badge is green again; this palette has indigo and coral only");
+      }
+      if (!ready.className.includes("var(--indigo-15)")) {
+        throw new Error("the ready badge does not wear the app's indigo tint");
+      }
+    } finally {
+      global.__SMOKE_ROUTE_PARAMS = previousParams;
+    }
+  });
+
 
   console.log("");
   console.log("Checking the App Profile research actions...");
