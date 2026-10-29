@@ -6096,6 +6096,65 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("Checking the sidebar navigation model...");
   await runSidebarNavChecks();
 
+  // The frame is a map of destinations; the draft line is the one thing in it
+  // that remembers a place the founder already is. It has to appear only when
+  // there is a real project behind it — a shortcut into an empty wizard looks
+  // like a destination and opens as a dead step.
+  await check("the sidebar offers the draft you were last inside", async (ctx) => {
+    const { Sidebar } = load("components/Sidebar.jsx");
+    const { rememberDraft, forgetDraft } = load("lib/recentDraft.js");
+    const renderSidebar = (collapsed) =>
+      React.createElement(
+        OnboardingProvider,
+        null,
+        React.createElement(Sidebar, { collapsed, onToggleCollapsed: () => {} })
+      );
+    try {
+      forgetDraft();
+      await act(async () => {
+        ctx.root.render(renderSidebar(false));
+      });
+      await act(async () => {});
+      if (ctx.container.querySelector('[data-testid="continue-draft"]')) {
+        throw new Error("a draft shortcut appeared with nothing remembered");
+      }
+      // Written through the same call Create Video makes, so the live update is
+      // exercised too: the shell must react without a reload when the wizard
+      // records the draft it opened.
+      await act(async () => {
+        rememberDraft({ projectId: "proj-42", appName: "Vocolens", step: "review" });
+      });
+      await act(async () => {});
+      const link = ctx.container.querySelector('[data-testid="continue-draft"]');
+      if (!link) {
+        throw new Error("the remembered draft has no way back into it");
+      }
+      if (link.getAttribute("href") !== "/create?project=proj-42&step=review") {
+        throw new Error(
+          `the draft shortcut points at ${link.getAttribute("href")} instead of the draft`
+        );
+      }
+      if (!link.textContent.includes("Vocolens")) {
+        throw new Error("the draft shortcut does not name the app it belongs to");
+      }
+      // Collapsed, the rail has no room for a label and a glyph alone would be
+      // a mystery, so the line hides rather than becoming an unlabelled icon.
+      await act(async () => {
+        ctx.root.render(renderSidebar(true));
+      });
+      await act(async () => {});
+      if (ctx.container.querySelector('[data-testid="continue-draft"]')) {
+        throw new Error("the collapsed rail still renders the draft shortcut");
+      }
+    } finally {
+      // The rail is still mounted here, so the cleanup is a real state update
+      // and belongs inside act like any other.
+      await act(async () => {
+        forgetDraft();
+      });
+    }
+  });
+
   console.log("");
   console.log("Checking the icon system...");
   await runIconChecks();

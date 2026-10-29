@@ -20,6 +20,7 @@ import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal, recordThumb, classifyScriptEdit } from "../lib/feedback";
+import { rememberDraft } from "../lib/recentDraft";
 import {
   partitionProfiles,
   profileLabel,
@@ -1865,6 +1866,21 @@ setObjective("");
       ensureProjectInFlight.current = false;
     });
   }, [profileId, templateId, angleId, objective, ensureProject]);
+
+  /* The shell remembers the draft the founder is inside; the sidebar reads it
+     and offers one line back into it, so three steps deep stops looking like a
+     cold start. Only a real project is written: a wizard with no project has
+     nothing to continue, and a link into one would look like a destination and
+     open as an empty step. */
+  const draftAppName = profiles.find((p) => p.id === profileId)?.brand_name || "";
+  useEffect(() => {
+    if (!project?.id) return;
+    rememberDraft({
+      projectId: project.id,
+      appName: draftAppName || project.brand_name || "",
+      step: STEPS[step].key,
+    });
+  }, [project?.id, project?.brand_name, draftAppName, step]);
 
   const handleGeneratePlan = async () => {
     if (!angle || !objective) {

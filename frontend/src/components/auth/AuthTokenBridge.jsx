@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { setAuthTokenProvider } from "../../lib/api";
 import { forgetCurrentAppId } from "../../lib/currentApp";
+import { forgetDraft } from "../../lib/recentDraft";
 
 /**
  * Registers Clerk's session token source with the API client, and scopes
@@ -17,9 +18,10 @@ import { forgetCurrentAppId } from "../../lib/currentApp";
  *    as someone else remounts the app instead of showing the previous user's
  *    state (or a stale empty list) to the new identity. Signing in as the
  *    same user keeps the same key and nothing remounts. On sign-out the
- *    remembered "current app" is forgotten, so the next identity never opens
- *    on the previous user's default — the resolver already guards this, but
- *    forgetting is the honest cleanup.
+ *    remembered "current app" and the remembered draft are forgotten, so the
+ *    next identity never opens on the previous user's default and the sidebar
+ *    never offers a link into someone else's work — the resolver guards the
+ *    default, and the draft shortcut has no such guard to lean on.
  */
 export function AuthTokenBridge({ children }) {
   const { getToken, userId, isSignedIn } = useAuth();
@@ -32,6 +34,7 @@ export function AuthTokenBridge({ children }) {
   useEffect(() => {
     if (!isSignedIn) {
       forgetCurrentAppId();
+      forgetDraft();
     }
   }, [isSignedIn]);
 

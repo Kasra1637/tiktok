@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AccountButton } from "./auth/AuthControls";
 import { isClerkConfigured } from "../lib/clerk";
@@ -16,7 +16,9 @@ import {
   PanelLeftOpen,
   X,
   HelpCircle,
+  CornerDownRight,
 } from "lucide-react";
+import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentDraft";
 
 /**
  * Sidebar navigation model.
@@ -133,6 +135,39 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
   );
 }
 
+/**
+ * The one line in the frame that remembers work.
+ *
+ * A nav item is a destination; this is a place the founder already is. It
+ * sits directly under Create Video because that is where a draft lives, names
+ * the app so the line is recognizable, and renders nothing when there is
+ * nothing to continue — an empty wizard is not a draft. Collapsed, the rail
+ * has no room for a label and the glyph alone would be a mystery, so it hides
+ * there too.
+ *
+ * The geometry copies a nav row on purpose: same 18px glyph box, same gaps, so
+ * the text lines up with the labels above it without a magic indent.
+ */
+function DraftShortcut({ collapsed, testIdPrefix }) {
+  const [draft, setDraft] = useState(() => readRecentDraft());
+  useEffect(() => subscribeRecentDraft(setDraft), []);
+  const href = draftHref(draft);
+  if (collapsed || !href) return null;
+  return (
+    <Link
+      to={href}
+      data-testid={`${testIdPrefix}continue-draft`}
+      title={draft.appName ? `Continue your draft for ${draft.appName}` : "Continue your draft"}
+      className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-[color:var(--indigo-8)] hover:text-foreground"
+    >
+      <CornerDownRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 opacity-60" />
+      <span className="min-w-0 truncate">
+        Continue draft{draft.appName ? ` · ${draft.appName}` : ""}
+      </span>
+    </Link>
+  );
+}
+
 function NavList({ collapsed, onNavigate, testIdPrefix = "" }) {
   const isActive = useIsActive();
 
@@ -143,14 +178,18 @@ function NavList({ collapsed, onNavigate, testIdPrefix = "" }) {
        rhythm has to come from the spacing itself. */
     <nav className={`flex flex-col gap-1.5 ${collapsed ? "items-center px-4" : "px-4"}`} aria-label="Main">
       {NAV_ITEMS.map((item) => (
-        <NavItem
-          key={item.to}
-          item={item}
-          collapsed={collapsed}
-          active={isActive(item.to)}
-          onNavigate={onNavigate}
-          testId={`${testIdPrefix}${item.testId}`}
-        />
+        <Fragment key={item.to}>
+          <NavItem
+            item={item}
+            collapsed={collapsed}
+            active={isActive(item.to)}
+            onNavigate={onNavigate}
+            testId={`${testIdPrefix}${item.testId}`}
+          />
+          {item.to === "/create" ? (
+            <DraftShortcut collapsed={collapsed} testIdPrefix={testIdPrefix} />
+          ) : null}
+        </Fragment>
       ))}
     </nav>
   );
