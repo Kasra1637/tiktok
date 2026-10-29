@@ -2707,8 +2707,10 @@ setObjective("");
                 only exists once there is an angle to show goals for: before
                 that the picker renders just its waits marker, and wrapping an
                 empty marker in an inset-panel is how the stray empty box below
-                the angle panel happened. */}
-            <div id="substep-goal" className={angle ? "inset-panel scroll-mt-4" : "hidden"}>
+                the angle panel happened. The rating lives inside this same
+                panel (flush, no nested box) so picker and verdict read as one
+                section, not two stacked cards. */}
+            <div id="substep-goal" className={angle ? "inset-panel scroll-mt-4 space-y-4" : "hidden"}>
               {angle && facetsError && (
                 <p className="text-sm text-destructive" role="alert">
                   {facetsError}{" "}
@@ -2730,22 +2732,22 @@ setObjective("");
               onRegenerate={handleRegenerateGoals}
               regenerating={cyclingGoals}
             />
+              {angle && objective && (
+                <ComponentThumbs
+                  component="goal"
+                  flush
+                  question="Is this the right goal for your customers?"
+                  hint="Rates the goal only. It shapes future goal suggestions for this app."
+                  resetKey={`${angleId}:${objective}`}
+                  refs={{
+                    brand_profile_id: profileId,
+                    studio_project_id: project?.id,
+                    detail: `objective=${objective};kind=${angle.kind || ""}`,
+                  }}
+                  testId="goal-feedback"
+                />
+              )}
             </div>
-
-            {angle && objective && (
-              <ComponentThumbs
-                component="goal"
-                question="Is this the right goal for your customers?"
-                hint="Rates the goal only. It shapes future goal suggestions for this app."
-                resetKey={`${angleId}:${objective}`}
-                refs={{
-                  brand_profile_id: profileId,
-                  studio_project_id: project?.id,
-                  detail: `objective=${objective};kind=${angle.kind || ""}`,
-                }}
-                testId="goal-feedback"
-              />
-            )}
             {/* Angle, goal, template and photo share one step now: the angle
                 picker above, the goal it ranks, then the templates filtered
                 below it. No step change between choosing and seeing what the

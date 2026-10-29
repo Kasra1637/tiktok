@@ -13,6 +13,10 @@ import { recordThumb } from "../lib/feedback";
  * stays highlighted across reloads and return visits; `onVoted` reports a
  * freshly saved vote back so the parent can keep it highlighted even before
  * the next fetch.
+ *
+ * `flush` drops the outer inset-panel so the rating can sit inside the
+ * section it judges (e.g. the goal picker) and read as one unit instead of
+ * a box in a box. Defaults off; every standalone use keeps its panel.
  */
 
 export function ComponentThumbs({
@@ -26,6 +30,7 @@ export function ComponentThumbs({
   onVoted,
   disabled = false,
   size = "sm",
+  flush = false,
   testId,
 }) {
   const startValue = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
@@ -80,7 +85,7 @@ export function ComponentThumbs({
 
   return (
     <div
-      className="inset-panel flex flex-wrap items-center justify-between gap-2"
+      className={flush ? "flex flex-wrap items-center justify-between gap-2" : "inset-panel flex flex-wrap items-center justify-between gap-2"}
       data-testid={testId}
     >
       <div className="min-w-0 space-y-0.5">
