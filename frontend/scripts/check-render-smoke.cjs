@@ -11422,6 +11422,26 @@ async function runDemoCtaChecks() {
         for (const text of ["Journal", "Find your next thought.", "Not posted", "Views not recorded", "Not rated"]) {
           if (!summary?.textContent.includes(text)) throw new Error(`attached identity/result missing: ${text}`);
         }
+        // Order is the priority, and it used to be inverted: provenance chips
+        // led, so the dimmest, least glance-relevant line came first and the
+        // loudest one (the hook) sat third from last. Identity, headline,
+        // results, provenance — in that order, as four blocks.
+        const blocks = [...summary.children];
+        if (blocks.length !== 4) {
+          throw new Error(`the summary should read as four blocks, saw ${blocks.length}`);
+        }
+        if (!blocks[0].textContent.includes("Journal") || !blocks[0].textContent.includes("Completed")) {
+          throw new Error("the summary does not open with app identity and its status");
+        }
+        if (blocks[1].tagName !== "P" || !blocks[1].textContent.includes("Find your next thought.")) {
+          throw new Error("the hook line is not the summary headline");
+        }
+        if (!blocks[2].textContent.includes("Not posted")) {
+          throw new Error("the results line does not follow the headline");
+        }
+        if (!blocks[3].textContent.includes("script v")) {
+          throw new Error("provenance chips lead the summary instead of trailing it");
+        }
         // Identity lives once under the clip: the record beside it must not repeat the headline.
         const panelText = panel.textContent || "";
         if (panelText.includes("Find your next thought.")) throw new Error("the record repeats the clip headline instead of keeping one copy under the video");

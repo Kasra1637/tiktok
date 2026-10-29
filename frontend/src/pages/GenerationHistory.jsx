@@ -445,13 +445,15 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
           )}
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
-            {/* Spec facts first: model and versions read as pills right under the clip, ahead of identity and results. Length and goal live on the preview overlay above, where the clip they describe plays. */}
-            <FactList>
-              {row.model && <FactChip>{row.model}</FactChip>}
-              {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
-              {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
-              <FactChip>script v{row.script_version}</FactChip>
-            </FactList>
+            {/* Read top to bottom in the order a founder actually scans: which
+                render this is (app, state, date), then the hook that tells one
+                row from another, then what happened to it (posted, views,
+                vote), then provenance last — model, attempt, template and
+                script versions answer a follow-up question ("why does this
+                take look different from the last one?"), not the glance. They
+                used to lead, which put the dimmest, least decision-relevant
+                line first and the loudest one third from last. Length and goal
+                stay on the preview above, where the clip they describe plays. */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
               <StatusBadge status={row.status} />
@@ -467,6 +469,12 @@ function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds
               <span aria-hidden="true">·</span>
               <span>{verdictFor(row.verdicts, "video") > 0 ? "Your vote: Good" : verdictFor(row.verdicts, "video") < 0 ? "Your vote: Not good" : "Not rated"}</span>              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
+            <FactList>
+              {row.model && <FactChip>{row.model}</FactChip>}
+              {row.attempt > 1 ? <FactChip>attempt {row.attempt}</FactChip> : null}
+              {row.template_id ? <FactChip>template v{row.template_version}</FactChip> : null}
+              <FactChip>script v{row.script_version}</FactChip>
+            </FactList>
           </div>
         </div>
 
