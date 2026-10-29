@@ -16,6 +16,10 @@ name: deploy
 on:
   push:
     branches: [main]
+    # Docs-only pushes cannot change the image, so they skip the full
+    # ~10-minute build+deploy. Behavior-carrying commits always touch code
+    # too (docs ride same-commit per repo convention), so those still build.
+    paths-ignore: ['docs/**', 'test_reports/**', 'design_guidelines.md']
 
 concurrency:
   group: production-deploy

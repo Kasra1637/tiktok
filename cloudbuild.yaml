@@ -49,6 +49,11 @@ steps:
         fi
         echo "Clerk publishable key present (${#_CLERK_PUBLISHABLE_KEY} chars, value not logged)."
 
+  # Layer cache: the Dockerfile orders slow layers first (yarn/pip/apt
+  # before source), so rebuilding against the last deployed image turns a
+  # ~10-minute cold build into a ~2-3 minute app-layer rebuild on code-only
+  # pushes. A missing :latest (first cached build) is a non-fatal miss, not
+  # an error: docker warns and builds cold.
   - id: build
     name: gcr.io/cloud-builders/docker
     args:
@@ -57,15 +62,23 @@ steps:
       - Dockerfile
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:latest
+      - --cache-from
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:latest
       - --build-arg
       - REACT_APP_CLERK_PUBLISHABLE_KEY=${_CLERK_PUBLISHABLE_KEY}
       - .
 
+  # --all-tags pushes both the SHA tag (the deploy target below) and the
+  # moving :latest the next build's --cache-from reads. The `images:` field
+  # below still declares the SHA artifact for provenance.
   - id: push
     name: gcr.io/cloud-builders/docker
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge:$COMMIT_SHA
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/hookforge/hookforge
 
   # Deploy the image this build just pushed. Image-only on purpose: no
   # --set-env-vars / --set-secrets / --update-* flag is passed, so the new
