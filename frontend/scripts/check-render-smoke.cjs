@@ -1908,7 +1908,7 @@ async function main() {
       if (!ctx.text().includes(value)) throw new Error(`missing outcome row value: ${label}`);
     }
     // Framed as a change the app supports, never a target it is held to.
-    expectText(ctx, "not a result this video can promise", "the outcome block reads as a guarantee");
+    expectText(ctx, "never promise it as a result", "the outcome block reads as a guarantee");
   });
 
   // A strategy generated before these fields existed has none of them, and an

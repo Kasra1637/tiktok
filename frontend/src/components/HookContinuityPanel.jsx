@@ -478,7 +478,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               generated gets: nothing shown until the strategy is rebuilt. */}
           <StrategyBlock
             title="What the viewer ends up with"
-            description="How this app is framed for the person watching: the change it supports, how it works stated as a benefit, and the payoff line. This is the framing the render is written from — not a result this video can promise."
+            description="How the viewer sees this app: the change, the benefit, the payoff. The render is written from this framing — aim at it, never promise it as a result."
             icon={Target}
             rows={[
               ["The change this supports", strategy.desired_outcome],
@@ -509,7 +509,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               what tells the founder where to fix a disagreement. */}
           <StrategyBlock
             title="The scene"
-            description="Locked for both sections, and one render, so the hook and the middle cannot disagree about the room. Built from the plan's visual and voice direction, which you edit above on Review & submit."
+            description="One room, one render: the hook and the middle can't disagree. Built from your visual and voice direction — edit it above on Review & submit."
             icon={MapPin}
             rows={[
               ...Object.entries(strategy.scene || {}),
