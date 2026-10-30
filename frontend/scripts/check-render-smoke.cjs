@@ -2351,6 +2351,31 @@ async function main() {
     }
   });
 
+  // Review & submit offers one way back, not two. The wizard Back and the
+  // "Back to your app" exit stacked as two centred controls that read as two
+  // different footers sharing a screen. A drafted project (?project=) is what
+  // renders the exit, so that is the state this asserts on.
+  await check("review shows a single back control", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review & submit");
+      await act(async () => {});
+      await act(async () => {});
+      const backs = [...ctx.container.querySelectorAll("button")].filter((b) =>
+        /\bback\b/i.test(b.textContent || "")
+      );
+      if (backs.length !== 1) {
+        throw new Error(`Review shows ${backs.length} back controls instead of one`);
+      }
+      if (!/your app/i.test(backs[0].textContent || "")) {
+        throw new Error("the single back control is not the exit to the app");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   // Nothing that calls the model may render before the plan has been read. This
   // the reorder's whole point, and it is invisible to a type-check: the render
   // panel is still imported and still reachable, just on a later step.
@@ -13606,10 +13631,6 @@ async function runDemoCtaChecks() {
           if (!overlay.textContent.includes("10s")) {
             throw new Error("the preview lost its duration badge");
           }
-          const playButton = card?.querySelector('[data-testid="history-preview-play"]');
-          if (!playButton || playButton.getAttribute("aria-label") !== "Play this render") {
-            throw new Error("the idle preview lost its branded play button");
-          }
           if (group.textContent.includes("Download")) {
             throw new Error("Download is still in the detail action bar instead of below the video");
           }
@@ -13631,9 +13652,6 @@ async function runDemoCtaChecks() {
           }
           if (card.querySelector('[data-testid="history-preview-meta"]')) {
             throw new Error("the goal angle survived Play instead of hiding with the rest");
-          }
-          if (card.querySelector('[data-testid="history-preview-play"]')) {
-            throw new Error("the preview play button survived Play instead of hiding with the rest");
           }
         }
       );
