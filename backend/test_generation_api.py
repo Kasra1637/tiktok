@@ -647,6 +647,47 @@ class TestPolling:
         assert "expired" in result["error"]
         assert "renders it anew" in result["error"]
 
+    def test_rate_limited_poll_leaves_the_row_alone(self, api, monkeypatch):
+        """
+        A 429 while checking is throttling, not a render failure: the job is
+        still going at the provider. Poisoning the row with rate-limit noise
+        and 502ing burns the panel's outage budget on a healthy render, so
+        the endpoint answers 429 and touches nothing.
+        """
+        gen = self._submitted(api, monkeypatch, "Poll Throttled")
+
+        async def throttled(job_id):
+            raise RuntimeError("Client error '429 Too Many Requests' for url")
+
+        monkeypatch.setattr(api, "poll_video_job", throttled)
+        with pytest.raises(HTTPException) as err:
+            _run(api.poll_generation(gen["id"], ANON))
+        assert err.value.status_code == 429
+        row = _run(api._fetch_one(
+            "SELECT status, error, retryable FROM generations WHERE id = ?", (gen["id"],)))
+        assert row["status"] in ("submitted", "generating")
+        assert not row["error"]
+
+    def test_rate_limited_submit_names_the_wait(self, api, monkeypatch):
+        """
+        A 429 at submit means the render never started and nothing was
+        charged: the failure must say to wait and retry rather than quoting
+        the raw provider refusal.
+        """
+        from models import StudioGenerationRequest
+        _mock_submit(api, monkeypatch, raises=RuntimeError("HTTP 429 rate limit exceeded"))
+        project, _, _ = _ready_project(api, "Submit Throttled")
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 502
+        detail = str(err.value.detail)
+        assert "429" not in detail
+        assert "Render it again" in detail or "try again" in detail.lower()
+        rows = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
+        assert rows["generations"][0]["status"] == "failed"
+        assert rows["generations"][0]["retryable"] is True
+
     def test_completed_generation_short_circuits(self, api, monkeypatch):
         gen = self._submitted(api, monkeypatch, "Poll Done")
         _mock_poll(api, monkeypatch, {"status": "completed", "unsigned_urls": ["u"]})

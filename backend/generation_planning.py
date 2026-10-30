@@ -883,6 +883,28 @@ def is_recoverable_error(message: str) -> bool:
     )
     if any(marker in text for marker in permanent_markers):
         return False
+    return _has_recoverable_marker(text)
+
+
+def is_rate_limit_error(message: str) -> bool:
+    """
+    Whether a failure is provider throttling rather than a verdict on the
+    work. Narrower than is_recoverable_error on purpose: a 500 is worth one
+    more attempt, but only a 429 means "asked too often" — and a throttled
+    status check must never read as a broken render.
+    """
+    if not message:
+        return False
+    text = message.lower()
+    return (
+        "429" in text
+        or "rate limit" in text
+        or "rate-limit" in text
+        or "too many requests" in text
+    )
+
+
+def _has_recoverable_marker(text: str) -> bool:
     recoverable_markers = (
         "timeout",
         "timed out",

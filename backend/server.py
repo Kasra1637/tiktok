@@ -6197,6 +6197,16 @@ async def _submit_generation(
              now_iso(), generation_id),
         )
         logger.error(f"Generation {generation_id} submission failed: {message}")
+        if generation_planning.is_rate_limit_error(message):
+            # Throttled before anything started: nothing was produced and
+            # nothing was charged, so the message names the wait and the
+            # retry instead of quoting the raw provider refusal.
+            raise HTTPException(
+                status_code=502,
+                detail="The video provider is handling too many requests right now, "
+                "so this render never started and nothing was charged. "
+                "Wait a moment, then Render it again.",
+            )
         # Fail loudly with the provider's own words. The old message[:200] cut
         # the request summary mid-sentence ("The full p…") and hid the provider
         # excerpt ai_service now attaches. 800 chars keeps the summary +
@@ -7005,6 +7015,17 @@ async def poll_generation(
         )
     except Exception as e:
         message = str(e)
+        if generation_planning.is_rate_limit_error(message):
+            # Throttled status check, not a broken render: the job is still
+            # going at the provider. Writing 429 noise into the row would
+            # surface it later as the render's own error, and 502ing would
+            # spend the panel's outage budget on a healthy render — so the
+            # row is untouched and the panel keeps waiting quietly.
+            raise HTTPException(
+                status_code=429,
+                detail="The video provider is rate limiting status checks right now. "
+                "Your render is still going — this page keeps checking on its own.",
+            )
         await _execute(
             "UPDATE generations SET error = ?, retryable = ?, updated_at = ? WHERE id = ?",
             (message[:2000], 1 if generation_planning.is_recoverable_error(message) else 0,

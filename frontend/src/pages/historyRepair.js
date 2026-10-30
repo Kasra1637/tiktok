@@ -23,6 +23,12 @@ export function historyActionError(err, action = "finish this") {
   if (!err?.response && err?.message === "Network Error") {
     return `The connection dropped before History could ${action}. Check your connection, then try again.`;
   }
+  if (err?.response?.status === 429) {
+    return (
+      `The provider is rate limiting right now, so History could not ${action} this time. ` +
+      `Nothing is lost — wait a moment and try again.`
+    );
+  }
   return err?.message || `Something went wrong while trying to ${action}. Please try again.`;
 }
 

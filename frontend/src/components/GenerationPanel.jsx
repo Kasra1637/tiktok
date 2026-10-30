@@ -209,6 +209,13 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
           schedulePoll(id);
         }
       } catch (err) {
+        if (err?.response?.status === 429) {
+          // Rate limited, not broken: the render is still going at the
+          // provider, so keep waiting without spending the outage budget
+          // or raising the banner on a healthy render.
+          schedulePoll(id);
+          return;
+        }
         pollFailures.current += 1;
         if (pollFailures.current >= MAX_POLL_FAILURES) {
           setError(getErrorMessage(err));
