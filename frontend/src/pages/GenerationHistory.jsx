@@ -131,7 +131,7 @@ function describeResults(row) {
 // deep-link state while the rows stay put. Props are stable callbacks plus
 // row objects react-query structurally shares, so untouched rows skip the
 // re-render and only the changed row pays for one.
-const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null, compact = false }) {
+const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, compact = false }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -169,8 +169,10 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
   // Post copy and Plan context stack vertically and share one open slot:
   // Post copy starts expanded, opening one closes the other, and the open
   // one never collapses — exactly one panel is always expanded, so the row
-  // never shows two dead-end headers and never stacks both open long.
-  const [openPanel, setOpenPanel] = useState("post");
+  // never shows two dead-end headers and never stacks both open long. A row
+  // with context but no kit yet starts on context instead: defaulting to a
+  // panel that is not rendered would leave both headers closed.
+  const [openPanel, setOpenPanel] = useState(row.post_kit ? "post" : "context");
   const togglePanel = (name) => (e) => {
     e.preventDefault();
     setOpenPanel(name);
@@ -318,6 +320,10 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
       }
       onUpdated(row.id, { post_kit: kit });
       setOpenPanel("post");
+      // The fresh kit moves the row to the with-copy side, which would
+      // unmount it out from under the founder mid-click. Follow it there
+      // instead, so the generated copy is what lands on screen.
+      onKitGenerated?.();
     } catch (err) {
       setError(historyActionError(err, "write this render's post copy"));
     } finally {
@@ -863,6 +869,7 @@ export default function GenerationHistory() {
       compact={effectiveCopy === "without"}
       onChanged={load}
       onUpdated={updateRow}
+      onKitGenerated={() => setFilter("copy", "with")}
       deepLinked={hashId !== "" && hashId === row.id}
       draftIds={draftIds}
     />

@@ -14023,6 +14023,7 @@ await check(
       }, async () => {
         // Kit-less rows live under the without-copy filter.
         global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_NAVIGATIONS = [];
         await mount(GenerationHistory)(ctx);
         const box = ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]');
         if (!box) throw new Error("a kit-less finished render offers no post-copy generation");
@@ -14032,10 +14033,45 @@ await check(
           "generate the missing post copy"
         );
         if (regenerated !== 1) throw new Error("generating post copy did not call regenerate once");
-        // The fresh kit moves the row to the with-copy side, so the
-        // generate box must be gone rather than offering a second write.
+        // The fresh kit moves the row to the with-copy side: the page must
+        // follow it there instead of unmounting the row mid-click, so the
+        // new copy is what lands on screen — and the generate box must be
+        // gone rather than offering a second write.
+        const navs = global.__SMOKE_NAVIGATIONS || [];
+        if (!navs.some((to) => to && typeof to === "object" && /copy=with/.test(to.search || ""))) {
+          throw new Error("generating post copy did not follow the row to the with-copy side");
+        }
         if (ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]')) {
           throw new Error("the generate box survived its own kit");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      delete global.__SMOKE_NAVIGATIONS;
+    }
+  });
+
+  // A context-only row has no Post copy panel to start expanded, so Plan
+  // context starts expanded instead — one panel is always open, never two
+  // dead-end headers.
+  await check("a context-only row starts with plan context expanded", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({
+          generations: [{ ...COMPLETED, id: "ctx-1", audience: "Night scrollers" }],
+        }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "";
+        await mount(GenerationHistory)(ctx);
+        const context = ctx.container.querySelector('[data-testid="history-context"]');
+        if (!context || context.tagName !== "DETAILS") {
+          throw new Error("plan context is not behind a disclosure");
+        }
+        if (!context.open) {
+          throw new Error("plan context starts collapsed on a context-only row");
         }
       });
     } finally {

@@ -36,3 +36,7 @@ way to get one.
 - No finished render is permanently copy-less: one click writes the kit.
 - The smoke suite pins both the offer and the failure message, so a future
   removal of the box fails the gate.
+- Generating follows the row: the fresh kit moves it to the with-copy side,
+  so the page switches the filter there instead of unmounting the row
+  mid-click. Context-only rows start with Plan context expanded, keeping
+  the exactly-one-panel-open contract where no Post copy panel exists.
