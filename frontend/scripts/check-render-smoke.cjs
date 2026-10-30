@@ -13606,6 +13606,10 @@ async function runDemoCtaChecks() {
           if (!overlay.textContent.includes("10s")) {
             throw new Error("the preview lost its duration badge");
           }
+          const playButton = card?.querySelector('[data-testid="history-preview-play"]');
+          if (!playButton || playButton.getAttribute("aria-label") !== "Play this render") {
+            throw new Error("the idle preview lost its branded play button");
+          }
           if (group.textContent.includes("Download")) {
             throw new Error("Download is still in the detail action bar instead of below the video");
           }
@@ -13627,6 +13631,9 @@ async function runDemoCtaChecks() {
           }
           if (card.querySelector('[data-testid="history-preview-meta"]')) {
             throw new Error("the goal angle survived Play instead of hiding with the rest");
+          }
+          if (card.querySelector('[data-testid="history-preview-play"]')) {
+            throw new Error("the preview play button survived Play instead of hiding with the rest");
           }
         }
       );
