@@ -12544,6 +12544,33 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("History attention banner names kit-less finished renders", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "";
+      await withApi({
+        // Durable copy present, so this is no repair — only the post copy is missing.
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kb-1" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const banner = ctx.container.querySelector('[data-testid="history-attention"]');
+        if (!banner || !/no post copy/.test(banner.textContent || "")) {
+          throw new Error("kit-less finished renders get no attention banner");
+        }
+        const link = ctx.container.querySelector('[data-testid="history-attention-review"]');
+        const url = new URL(link.getAttribute('href'), 'http://localhost/history');
+        if (url.hash !== '#generation-kb-1' || url.searchParams.get('copy') !== 'without') {
+          throw new Error('kit-less banner must link the without-copy side at the render');
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_HASH = '';
+    }
+  });
+
   await check("History names a failed rows fetch and retries it", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     let fail = true;

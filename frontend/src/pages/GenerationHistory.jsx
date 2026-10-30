@@ -1030,7 +1030,37 @@ export default function GenerationHistory() {
       {(() => {
         if (loading || rows.length === 0) return null;
         const needsRepair = rows.filter(needsHistoryRepairRow);
-        if (needsRepair.length === 0) return null;
+        // Finished renders whose kit was never written are not broken, so
+        // they are no repair — but without this banner the Generate post
+        // copy box sits behind the without-copy filter where no one looks.
+        const kitless = rows.filter(
+          (r) => (r.status === "completed" || r.status === "archived") && !r.post_kit
+        );
+        if (needsRepair.length === 0 && kitless.length === 0) return null;
+        if (needsRepair.length === 0) {
+          const firstKitless = kitless[0];
+          const kitParams = new URLSearchParams(searchParams);
+          kitParams.set("copy", "without");
+          kitParams.delete("q");
+          return (
+            <Alert data-testid="history-attention">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span>
+                  {kitless.length === 1
+                    ? "1 finished render has no post copy yet. "
+                    : `${kitless.length} finished renders have no post copy yet. `}
+                  Open its card and press Generate post copy.
+                </span>
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={{ search: `?${kitParams.toString()}`, hash: `#generation-${firstKitless.id}` }} data-testid="history-attention-review">
+                    Review without copy <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </AlertDescription>
+            </Alert>
+          );
+        }
         const first = needsRepair[0];
         const repairParams = new URLSearchParams(searchParams);
         repairParams.set("copy", hasCopyContext(first) ? "with" : "without");
