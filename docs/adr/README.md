@@ -79,3 +79,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted |
 | [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
 | [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |
+| [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | accepted |

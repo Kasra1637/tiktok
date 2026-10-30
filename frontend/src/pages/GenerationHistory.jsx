@@ -798,6 +798,41 @@ export default function GenerationHistory() {
     return () => { loadRequest.current = null; };
   }, [load]);
 
+  // Rows still awaiting the provider poll themselves: a render that finishes
+  // while History is open arrives on its own instead of sitting generating
+  // until someone opens the card and presses Check again. Only the awaiting
+  // few are polled, every ten seconds, up to twenty rounds — a stuck job
+  // stops burning requests and keeps its manual Check. A 429 is throttling,
+  // not failure, so it never stops the loop; any other error does, quietly.
+  const awaitingKey = rows.filter(isAwaitingProvider).map((r) => r.id).join("|");
+  useEffect(() => {
+    if (!awaitingKey) return undefined;
+    const ids = awaitingKey.split("|");
+    let cancelled = false;
+    let attempts = 0;
+    const timer = setInterval(async () => {
+      attempts += 1;
+      if (attempts > 20) {
+        clearInterval(timer);
+        return;
+      }
+      try {
+        const results = await Promise.all(ids.map((id) => api.pollGeneration(id)));
+        if (cancelled) return;
+        results.forEach((updated) => {
+          if (updated && updated.id) updateRow(updated.id, updated);
+        });
+      } catch (err) {
+        if (err?.response?.status === 429) return;
+        clearInterval(timer);
+      }
+    }, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [awaitingKey, updateRow]);
+
   // The app filter is a convenience: its load failing must not silently
   // narrow the page to "All apps". It names itself with its own retry.
   const [profilesError, setProfilesError] = useState(null);

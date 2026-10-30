@@ -12571,6 +12571,48 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("History polls a still-awaiting render on its own", async (ctx) => {
+    // A render that finishes while History is open must arrive without
+    // opening the card and pressing Check again: the page polls the few
+    // awaiting rows itself. One throttled poll then a completion proves the
+    // loop fires more than once and lands the finished clip.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      let polls = 0;
+      const awaiting = {
+        ...COMPLETED,
+        id: "auto-1",
+        status: "generating",
+        video_url: null,
+        playback_url: null,
+        r2_url: null,
+        audience: "Night scrollers",
+      };
+      global.__SMOKE_PARAMS = "";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [awaiting] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        pollGeneration: async () => {
+          polls += 1;
+          if (polls === 1) return awaiting;
+          return { ...COMPLETED, id: "auto-1", audience: "Night scrollers" };
+        },
+      }, async () => {
+        await mount(History)(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 23000));
+        });
+        if (polls < 2) throw new Error("History did not keep polling the awaiting render");
+        if (!ctx.container.querySelector('#generation-auto-1 video')) {
+          throw new Error("the finished render did not land on History on its own");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
   await check("History names a failed rows fetch and retries it", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     let fail = true;
