@@ -4771,7 +4771,7 @@ async def generate_video_strategy(
         f'    "environment": "the physical place, named concretely",\n'
         f'    "background": "what is behind them, concretely and unchanging",\n'
         f'    "setting": "time of day and situational context",\n'
-        f'    "visual_style": "the overall look — documentary, polished UGC, cinematic",\n'
+        f'    "visual_style": "the overall look — natural amateur phone UGC, never polished",\n'
         f'    "character_positioning": "where they stand or sit in frame",\n'
         f'    "wardrobe": "what they are wearing, chosen to suit the setting — the ONE thing about '
         f'their appearance this render may change",\n'

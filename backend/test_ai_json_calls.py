@@ -1222,6 +1222,46 @@ class TestStrategyBudget:
         ))
         assert "fast, upbeat, high-energy" in captured["prompt"]
 
+    def test_the_strategy_schema_defaults_to_unpolished_phone_shot_look(self, monkeypatch):
+        """
+        The visual_style schema hint is the only lever on the look: whatever it
+        names, the model writes into scene.visual_style, and the scene lock
+        then enforces exactly that on the render. Polished studio footage
+        reads as an ad on TikTok and dies there, so the hint must ask for a
+        natural, amateur, phone-shot look up front. Otherwise every strategy
+        defaults to polished UGC and the founder pays for a render that looks
+        like marketing.
+        """
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 3,
+                              "goal": "g", "script": "s", "action": "a"},
+                             {"index": 1, "role": "middle", "seconds": 17,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Sleeply"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        assert "polished UGC" not in captured["prompt"]
+        assert "never polished" in captured["prompt"]
+
     def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
         """
         The guard I promised and did not write the first time.
