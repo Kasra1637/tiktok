@@ -3817,7 +3817,10 @@ setObjective("");
           pair — the arrows are the same control cluster the pills are not.
           The hint keeps its own line (hidden on phones, where the step is the
           only thing worth the height), and the pair keeps back-to-front order
-          with the primary on the right. */}
+          with the primary on the right. On the last step the exit below is
+          the way back, so the wizard Back stays out of its way: two stacked
+          Back controls read as two different footers sharing a screen. The
+          step pills at the top still walk anywhere, including one step back. */}
       <div className="sm:space-y-2">
         <p
           className="hidden text-center text-sm text-muted-foreground sm:block"
@@ -3826,6 +3829,7 @@ setObjective("");
           {footerHint}
         </p>
         <div className="flex items-center justify-center gap-2">
+          {!(step === STEPS.length - 1 && project) && (
           <Button
             variant="ghost"
             size="sm"
@@ -3837,6 +3841,7 @@ setObjective("");
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Back
           </Button>
+          )}
           {/* Earns prominence: a finished step turns Continue primary, so the
               way forward lights up the moment there is somewhere to go. Never
               disabled — a returning founder can always walk forward to look —
@@ -3858,14 +3863,17 @@ setObjective("");
 
       {/* The one thing the pills cannot do is leave the studio, so the exit
           stays — on the last step only, which is where it already was. It is
-          centred with the arrows above it rather than pinned right: the last
-          step has no Continue, so Back is alone in that row, and a lone ghost
-          button floating mid-page only reads as deliberate when the exit it
-          belongs to sits under it in the same column. Pinned right, the two
-          read as two different footers sharing a screen. */}
+          the single back control there: the wizard Back above hides on this
+          step while a draft exists, because the two stacked together read as
+          two different footers sharing a screen. The pills still walk back. */}
       {step === STEPS.length - 1 && project && (
         <div className="flex items-center justify-center">
-          <Button variant="ghost" onClick={() => navigate("/app-profiles")}>
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/app-profiles")}
+            aria-label="Back to your app"
+            data-testid="wizard-exit-button"
+          >
             Back to your app
           </Button>
         </div>
