@@ -1852,6 +1852,44 @@ async function main() {
     );
   });
 
+  await check("a rate-limited poll neither stops the loop nor raises the banner", async (ctx) => {
+    // A 429 while checking is throttling, not a broken render: the panel
+    // must keep waiting without spending its outage budget. Five straight
+    // 429s then a success prove the loop survives past the point an outage
+    // would have raised the banner, and no banner appears at any point.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    let polls = 0;
+    const generating = { ...SEGMENT, id: "gen-poll-429", status: "generating" };
+    const throttled = () => {
+      const err = new Error("throttled poll");
+      err.response = { status: 429 };
+      return err;
+    };
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [generating] }),
+        pollGeneration: async () => {
+          polls += 1;
+          if (polls <= 5) throw throttled();
+          return generating;
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 41000));
+        });
+        if (polls < 6) {
+          throw new Error(
+            "rate-limited polls stopped the loop: fewer than six polls fired"
+          );
+        }
+        expectAbsent(ctx, "throttled poll", "a rate-limited poll raised the banner");
+        expectAbsent(ctx, "Could not check", "a rate-limited poll raised the banner");
+      }
+    );
+  });
+
   await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
     await mount(GenerationPanel, {
       project: {
@@ -13961,6 +13999,69 @@ await check(
         throw new Error("the attached record leaks the retired caption layout");
       }
       assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "History");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // A finished render whose kit was never written shows no Post copy and no
+  // regenerate control — the section only renders around an existing kit. The
+  // row must offer to generate one instead of staying silently kit-less.
+  await check("a finished render without post copy offers to generate it", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      let regenerated = 0;
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "nokit-1" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        regeneratePostKit: async () => {
+          regenerated += 1;
+          return { post_kit: POST_KIT };
+        },
+      }, async () => {
+        // Kit-less rows live under the without-copy filter.
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const box = ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]');
+        if (!box) throw new Error("a kit-less finished render offers no post-copy generation");
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="history-generate-post-copy-button-nokit-1"]'),
+          "generate the missing post copy"
+        );
+        if (regenerated !== 1) throw new Error("generating post copy did not call regenerate once");
+        // The fresh kit moves the row to the with-copy side, so the
+        // generate box must be gone rather than offering a second write.
+        if (ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]')) {
+          throw new Error("the generate box survived its own kit");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  await check("a failed post-copy generation names the next step", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "nokit-2" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        regeneratePostKit: async () => { throw new Error("text model is down"); },
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        await clickEl(
+          ctx,
+          ctx.container.querySelector('[data-testid="history-generate-post-copy-button-nokit-2"]'),
+          "generate the missing post copy"
+        );
+        if (!ctx.text().includes("text model is down")) {
+          throw new Error("a failed post-copy generation shows no reason");
+        }
       });
     } finally {
       global.__SMOKE_PARAMS = previousParams;

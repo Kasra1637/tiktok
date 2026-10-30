@@ -77,3 +77,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0057](0057-preview-frame-play-button.md) | The Demo + CTA preview plays from a branded button on its own frame | accepted |
 | [0058](0058-text-overlays-start-off.md) | Hook, story and end-card text overlays all start off until the founder turns one on | accepted |
 | [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted |
+| [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
+| [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |

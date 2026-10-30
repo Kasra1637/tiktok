@@ -300,6 +300,31 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
     }
   };
 
+  // A finished render whose post copy never got written has no kit to show
+  // and no regenerate control to reach — the section only renders around an
+  // existing kit. This writes one on demand through the same regenerate
+  // endpoint, then opens the Post copy panel on the fresh kit. A refusal
+  // names the next step instead of dying silently: without materials the
+  // endpoint 404s and the founder learns the draft is gone rather than
+  // staring at a button that does nothing.
+  const handleGeneratePostKit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.regeneratePostKit(row.id);
+      const kit = res && typeof res === "object" && res.post_kit ? res.post_kit : res;
+      if (!kit || typeof kit !== "object") {
+        throw new Error("The server answered without post copy.");
+      }
+      onUpdated(row.id, { post_kit: kit });
+      setOpenPanel("post");
+    } catch (err) {
+      setError(historyActionError(err, "write this render's post copy"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // One place decides what the stage says, because the four reasons a clip is
   // not on screen are four different repairs and must not collapse into
   // "something went wrong".
@@ -575,6 +600,33 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
                       </dl>
                     </details>
                   )}
+                </div>
+              )}
+
+              {!row.post_kit && (row.status === "completed" || row.status === "archived") && (
+                <div
+                  className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 py-3"
+                  data-testid={`history-generate-post-copy-${row.id}`}
+                >
+                  <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                    <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                    <span>Post copy</span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    This render finished before its caption was written, so there is no post copy yet.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleGeneratePostKit}
+                    disabled={busy}
+                    busy={busy}
+                    data-testid={`history-generate-post-copy-button-${row.id}`}
+                    className="gap-1.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {busy ? "Writing post copy" : "Generate post copy"}
+                  </Button>
                 </div>
               )}
 
