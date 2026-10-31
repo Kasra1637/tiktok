@@ -828,9 +828,9 @@ function AngleGoalPicker({
   outcomes,
   fitReasons,
   objectiveEvidence = {},
-  // The six suggestions in the angle's PERSISTED variant order, from the
-  // server (angle.goal_suggestions). Falls back to the static facet list
-  // when the angle row carries none.
+  // The six suggestions in the angle's profile-tailored PERSISTED variant
+  // order, from the server (angle.goal_suggestions). Falls back to the
+  // static facet list when the angle row carries none.
   suggestions,
   onRegenerate,
   regenerating = false,

@@ -285,6 +285,58 @@ class TestGoalSuggestionVariants:
         assert tl.next_goal_suggestion_variant("garbage") == 1
 
 
+class TestProfileTailoredGoalOrder:
+    """The six suggestions keep their kind, but their starting order follows
+    the profile: a goal the profile gives nothing to stand on drops to the
+    back instead of leading the row."""
+
+    PROFILE_WITHOUT_ALTERNATIVE = {
+        "brand_description": "A journaling app with short prompts and reminders.",
+        "differentiation": "Private by design, works offline.",
+        "viewer_objections": [],
+        "desired_outcomes": ["Write every day"],
+    }
+
+    PROFILE_WITH_ALTERNATIVE = {
+        "brand_description": "A journaling app for people switching from Day One.",
+        "differentiation": "Cheaper than the competitor and private by design.",
+        "viewer_objections": [
+            {"objection": "Why switch?", "what_they_do_now": "I use Day One today",
+             "honest_answer": "Import takes a minute."},
+        ],
+        "desired_outcomes": ["Write every day"],
+    }
+
+    def test_compare_goal_drops_to_back_without_profile_alternative(self):
+        ordered = tl.goal_suggestions_for_profile(
+            "competitor_alternative", self.PROFILE_WITHOUT_ALTERNATIVE, 0)
+        # Both comparison and doubt demote (no alternative, no objections),
+        # keeping their curated relative order at the back.
+        assert ordered[-2:] == ["compare_alternative", "overcome_viewer_doubt"]
+        assert sorted(ordered) == sorted(
+            tl.ANGLE_GOAL_RECOMMENDATIONS["competitor_alternative"])
+
+    def test_compare_goal_leads_when_profile_names_an_alternative(self):
+        ordered = tl.goal_suggestions_for_profile(
+            "competitor_alternative", self.PROFILE_WITH_ALTERNATIVE, 0)
+        assert ordered[0] == "compare_alternative"
+
+    def test_doubt_goal_drops_to_last_without_objections(self):
+        ordered = tl.goal_suggestions_for_profile(
+            "objection_handling", self.PROFILE_WITHOUT_ALTERNATIVE, 0)
+        assert ordered[-1] == "overcome_viewer_doubt"
+        assert sorted(ordered) == sorted(
+            tl.ANGLE_GOAL_RECOMMENDATIONS["objection_handling"])
+
+    def test_tailored_order_still_shuffles_by_variant(self):
+        first = tl.goal_suggestions_for_profile(
+            "competitor_alternative", self.PROFILE_WITHOUT_ALTERNATIVE, 0)
+        second = tl.goal_suggestions_for_profile(
+            "competitor_alternative", self.PROFILE_WITHOUT_ALTERNATIVE, 1)
+        assert sorted(second) == sorted(first)
+        assert second != first
+
+
 class TestClampDuration:
     """
     Duration clamping is the guard against silently requesting more than a

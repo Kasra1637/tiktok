@@ -3545,7 +3545,8 @@ CONTENT_ANGLE_TEXT_FIELDS = (
 )
 
 
-def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
+def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
+                         profile: Optional[dict] = None) -> dict:
     """Shape a content_angles row for the API (kind is already normalized).
 
     `evidence` is this kind's own verdict tally from
@@ -3553,6 +3554,10 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
     a percentage over one verdict would present a coin flip as a measurement.
     Keyed by KIND, not by angle id, so the counts survive an angle
     regeneration that replaces every row id.
+
+    `profile` tailors the goal order: the same six curated goals, demoting
+    ones the profile gives nothing to stand on (no named alternative, no
+    recorded objection) instead of letting them lead the row.
     """
     return {
         "id": row.get("id"),
@@ -3568,11 +3573,11 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None) -> dict:
         "rank": row.get("rank") or 0,
         "goal_variant": int(row.get("goal_variant") or 0),
         "origin": row.get("origin") or "generated",
-        # The six suggestions in THIS row's saved variant order, computed
-        # server-side so every consumer (wizard, review recovery) agrees
-        # without each client re-deriving the rotation.
-        "goal_suggestions": template_library.goal_suggestions_for_kind(
-            row.get("kind"), int(row.get("goal_variant") or 0)
+        # The six suggestions in THIS row's saved variant order, tailored to
+        # the profile and computed server-side so every consumer (wizard,
+        # review recovery) agrees without each client re-deriving it.
+        "goal_suggestions": template_library.goal_suggestions_for_profile(
+            row.get("kind"), profile, int(row.get("goal_variant") or 0)
         ),
         "created_at": row.get("created_at"),
         "evidence": evidence or {"wins": 0, "flops": 0},
@@ -3596,6 +3601,9 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
         "ORDER BY rank ASC, created_at ASC",
         (profile_id, user_id),
     )
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
     verdicts = await _angle_feedback_for_profile(profile_id, user_id)
     by_kind = {
         str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
@@ -3607,7 +3615,7 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     }
     return {
         "angles": [
-            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")))
+            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")), profile)
             for r in rows
         ],
         "objective_evidence": objective_evidence,
@@ -3982,11 +3990,12 @@ async def regenerate_angle_goal_suggestions(
 
     No model call and no model_requests row: the suggestions are the same six
     curated goals every time — what changes is their ORDER, advanced one
-    deterministic variant step (template_library.goal_suggestions_for_kind).
-    The picked variant is persisted on the angle row, so a reload re-shows
-    the exact ordering the founder last asked for rather than silently
-    reverting — the same cache-stability rule the goal picker's existing
-    "selected goal outside the suggestions" state already relies on.
+    deterministic variant step over the profile-tailored order
+    (template_library.goal_suggestions_for_profile). The picked variant is
+    persisted on the angle row, so a reload re-shows the exact ordering the
+    founder last asked for rather than silently reverting — the same
+    cache-stability rule the goal picker's existing "selected goal outside
+    the suggestions" state already relies on.
 
     Not gated on profile approval deliberately: the variant is presentation
     state, not derived data — reordering suggestions for an angle the founder
@@ -4001,7 +4010,11 @@ async def regenerate_angle_goal_suggestions(
         raise HTTPException(status_code=404, detail="Content angle not found")
 
     next_variant = template_library.next_goal_suggestion_variant(row.get("goal_variant"))
-    suggestions = template_library.goal_suggestions_for_kind(row.get("kind"), next_variant)
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    suggestions = template_library.goal_suggestions_for_profile(
+        row.get("kind"), profile, next_variant)
     await _execute(
         "UPDATE content_angles SET goal_variant = ? WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
         (next_variant, angle_id, profile_id, user_id),
@@ -4026,10 +4039,13 @@ async def angle_goal_suggestions(
     if not row:
         raise HTTPException(status_code=404, detail="Content angle not found")
     variant = int(row.get("goal_variant") or 0)
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
     return {
         "goal_variant": variant,
-        "suggestions": template_library.goal_suggestions_for_kind(
-            row.get("kind"), variant
+        "suggestions": template_library.goal_suggestions_for_profile(
+            row.get("kind"), profile, variant
         ),
     }
 

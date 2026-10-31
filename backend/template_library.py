@@ -298,6 +298,99 @@ def goal_suggestions_for_kind(kind: Optional[str], variant: int = 0) -> list:
     return list(goals[step:]) + list(goals[:step])
 
 
+# Words that mean the profile actually names something to compare against.
+# Checked against differentiation, description, niche, desired outcomes and
+# every viewer-objection field — a profile that never names an alternative
+# has nothing for a comparison goal to stand on.
+_ALTERNATIVE_SIGNALS = (
+    "competitor", "alternative", "instead of", "switch", "compared",
+    "comparison", "versus", " vs ", "rival", "other app",
+)
+
+
+def _profile_text_blob(profile: Optional[dict]) -> str:
+    """Flatten the profile fields a goal decision can read, lowercased."""
+    if not isinstance(profile, dict):
+        return ""
+    parts: list = []
+    for key in ("brand_description", "niche", "differentiation",
+                 "known_limitations", "target_audience",
+                 "ideal_customer_profile"):
+        value = profile.get(key)
+        if value:
+            parts.append(str(value))
+    for key in ("desired_outcomes", "problems_solved", "core_features"):
+        value = profile.get(key)
+        if isinstance(value, list):
+            parts.extend(str(v) for v in value if str(v).strip())
+        elif value:
+            parts.append(str(value))
+    objections = profile.get("viewer_objections")
+    if isinstance(objections, list):
+        for entry in objections:
+            if isinstance(entry, dict):
+                for sub in ("objection", "what_they_do_now", "honest_answer"):
+                    if entry.get(sub):
+                        parts.append(str(entry[sub]))
+            elif entry:
+                parts.append(str(entry))
+    return "\n".join(parts).lower()
+
+
+def _profile_names_alternative(profile: Optional[dict]) -> bool:
+    """Whether the profile names a current alternative worth comparing."""
+    blob = _profile_text_blob(profile)
+    if not blob.strip():
+        return False
+    return any(signal in blob for signal in _ALTERNATIVE_SIGNALS)
+
+
+def _profile_has_objections(profile: Optional[dict]) -> bool:
+    """Whether the profile records any viewer objection to answer."""
+    if not isinstance(profile, dict):
+        return False
+    objections = profile.get("viewer_objections")
+    if isinstance(objections, list):
+        return any(
+            (str(e.get("objection") or str(e)).strip() if isinstance(e, dict)
+             else str(e).strip())
+            for e in objections
+        )
+    return False
+
+
+def goal_suggestions_for_profile(kind: Optional[str], profile: Optional[dict] = None,
+                                  variant: int = 0) -> list:
+    """The six suggested goals for one angle kind, tailored to the profile.
+
+    Same six goals as goal_suggestions_for_kind — only the starting order can
+    move, and only by demotion: a goal the profile gives nothing to stand on
+    sinks to the back, keeping the curated relative order otherwise. Today
+    that means `compare_alternative` drops last when the profile names no
+    alternative, and `overcome_viewer_doubt` drops last when the profile
+    records no objection. Variant rotation then applies on top of the tailored
+    order, so Shuffle still cycles through distinct, stable orders.
+    """
+    k = normalize_angle_kind(kind)
+    goals = ANGLE_GOAL_RECOMMENDATIONS.get(k)
+    if not goals:
+        return []
+    ordered = list(goals)
+    demote: list = []
+    if "compare_alternative" in ordered and not _profile_names_alternative(profile):
+        demote.append("compare_alternative")
+    if "overcome_viewer_doubt" in ordered and not _profile_has_objections(profile):
+        demote.append("overcome_viewer_doubt")
+    for goal in demote:
+        ordered.remove(goal)
+        ordered.append(goal)
+    variant = int(variant) % GOAL_SUGGESTION_VARIANTS if variant is not None else 0
+    if variant <= 0:
+        return ordered
+    step = ((k.count("_") + variant * 2 + 1) % 5) + 1
+    return ordered[step:] + ordered[:step]
+
+
 def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS) -> int:
     """Cycle: -1/None/0 -> 1 -> 2 -> 3 -> 1 -> ... Variant 0 is the initial
     curated set, so after the first shuffle the cycle never returns to it:
