@@ -313,7 +313,7 @@ def _profile_text_blob(profile: Optional[dict]) -> str:
     if not isinstance(profile, dict):
         return ""
     parts: list = []
-    for key in ("brand_description", "niche", "differentiation",
+    for key in ("brand_description", "app_category", "niche", "differentiation",
                  "known_limitations", "target_audience",
                  "ideal_customer_profile"):
         value = profile.get(key)
@@ -404,6 +404,275 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
         current = 0
     slots = max(int(count) - 1, 1)
     return (current % slots) + 1
+
+
+# Review-step direction dropdowns, keyed by the app's category group.
+#
+# Each group offers four plain-language options per field (setting, lighting,
+# wardrobe, voice direction, tone). The options are pre-vetted by
+# construction: none describes the presenter's face or body (the character
+# reference photograph is the only authority on appearance), and none makes
+# a claim the claim-check would refuse. A dropdown is a UX constraint, not a
+# trust boundary — saving still runs the normal claim check.
+DIRECTION_OPTIONS = {
+    "wellness": {
+        "setting": [
+            "Quiet bedroom corner with a cushion on the floor",
+            "Calm living room with a plant beside the chair",
+            "Sunlit balcony with a simple chair",
+            "Tidy desk with a candle and notebook",
+        ],
+        "lighting": [
+            "Soft morning window light",
+            "Warm low lamp glow",
+            "Gentle diffused daylight",
+            "Cool even shade, no harsh shadows",
+        ],
+        "wardrobe": [
+            "Loose oatmeal linen shirt",
+            "Soft sage crewneck sweater",
+            "Plain charcoal t-shirt",
+            "Comfortable cream knit top",
+        ],
+        "voice": [
+            "Slow, soft-spoken delivery with pauses",
+            "Warm low-volume narration",
+            "Gentle steady pace, unhurried",
+            "Quiet confiding tone, close to the mic",
+        ],
+        "tone": [
+            "calm and gentle",
+            "soothing and patient",
+            "quiet and reassuring",
+            "soft and unhurried",
+        ],
+    },
+    "fitness": {
+        "setting": [
+            "Bright home gym corner with a mat",
+            "Park bench beside a running path",
+            "Clean kitchen counter with a shaker bottle",
+            "Balcony with morning city light",
+        ],
+        "lighting": [
+            "Bright daylight, crisp and clear",
+            "High-energy gym overhead light",
+            "Fresh morning sun",
+            "Clean even daylight, vivid colors",
+        ],
+        "wardrobe": [
+            "Plain black athletic t-shirt",
+            "Navy training top",
+            "Grey workout tee with shorts",
+            "Simple white gym shirt",
+        ],
+        "voice": [
+            "Upbeat high-energy delivery",
+            "Punchy motivating pace",
+            "Bright confident narration",
+            "Fast friendly coaching tone",
+        ],
+        "tone": [
+            "energetic and motivating",
+            "bold and upbeat",
+            "confident and punchy",
+            "lively and direct",
+        ],
+    },
+    "finance": {
+        "setting": [
+            "Tidy home office desk with a laptop",
+            "Bright kitchen table with papers neatly stacked",
+            "Minimal living room with a bookshelf",
+            "Clean cafe corner table",
+        ],
+        "lighting": [
+            "Clear neutral office daylight",
+            "Bright even window light",
+            "Professional soft overhead light",
+            "Crisp morning light, no glare",
+        ],
+        "wardrobe": [
+            "Navy button-down shirt",
+            "Smart grey blazer over a plain tee",
+            "Crisp white shirt",
+            "Dark green polo shirt",
+        ],
+        "voice": [
+            "Steady trustworthy narration",
+            "Calm assured delivery",
+            "Clear measured pace",
+            "Confident plain-spoken tone",
+        ],
+        "tone": [
+            "trustworthy and clear",
+            "calm and assured",
+            "straightforward and honest",
+            "steady and confident",
+        ],
+    },
+    "food": {
+        "setting": [
+            "Home kitchen counter with ingredients laid out",
+            "Cozy dining table with a finished dish",
+            "Bright market aisle",
+            "Small cafe table by the window",
+        ],
+        "lighting": [
+            "Warm kitchen daylight",
+            "Bright appetizing window light",
+            "Cozy warm overhead glow",
+            "Fresh natural daylight, true colors",
+        ],
+        "wardrobe": [
+            "Plain denim shirt with sleeves rolled",
+            "Simple striped apron over a tee",
+            "Casual rust-colored henley",
+            "Clean white casual shirt",
+        ],
+        "voice": [
+            "Warm appetizing narration",
+            "Friendly unhurried delivery",
+            "Cheerful inviting pace",
+            "Relaxed conversational tone",
+        ],
+        "tone": [
+            "warm and inviting",
+            "cheerful and relaxed",
+            "friendly and appetizing",
+            "cozy and casual",
+        ],
+    },
+    "learning": {
+        "setting": [
+            "Tidy study desk with books stacked",
+            "Quiet library corner table",
+            "Bright bedroom desk with a notebook",
+            "Calm armchair with a reading lamp",
+        ],
+        "lighting": [
+            "Clear study-friendly daylight",
+            "Bright even desk light",
+            "Soft focused reading light",
+            "Clean morning window light",
+        ],
+        "wardrobe": [
+            "Plain casual button-down shirt",
+            "Simple navy sweater",
+            "Smart casual check shirt",
+            "Neat grey polo",
+        ],
+        "voice": [
+            "Clear teaching pace, one idea at a time",
+            "Patient explanatory delivery",
+            "Bright encouraging narration",
+            "Steady instructive tone",
+        ],
+        "tone": [
+            "patient and clear",
+            "encouraging and bright",
+            "steady and instructive",
+            "friendly and precise",
+        ],
+    },
+    "work": {
+        "setting": [
+            "Modern home office with a monitor behind",
+            "Bright coworking desk corner",
+            "Minimal living room workspace",
+            "Cafe table with a laptop open",
+        ],
+        "lighting": [
+            "Clean professional daylight",
+            "Bright even office light",
+            "Soft window light, no screen glare",
+            "Crisp neutral overhead light",
+        ],
+        "wardrobe": [
+            "Light blue business-casual shirt",
+            "Charcoal casual blazer",
+            "Smart black polo",
+            "Crisp light-grey shirt",
+        ],
+        "voice": [
+            "Crisp professional delivery",
+            "Confident efficient pace",
+            "Clear direct narration",
+            "Assured businesslike tone",
+        ],
+        "tone": [
+            "professional and direct",
+            "confident and efficient",
+            "clear and businesslike",
+            "sharp and practical",
+        ],
+    },
+    "default": {
+        "setting": [
+            "Bright tidy living room",
+            "Clean bedroom corner with daylight",
+            "Simple home office background",
+            "Neutral balcony with soft light",
+        ],
+        "lighting": [
+            "Soft natural window light",
+            "Bright even daylight",
+            "Warm friendly indoor light",
+            "Clean balanced daylight",
+        ],
+        "wardrobe": [
+            "Plain navy t-shirt",
+            "Simple white casual shirt",
+            "Casual grey crewneck",
+            "Neat black polo",
+        ],
+        "voice": [
+            "Natural friendly delivery",
+            "Clear conversational pace",
+            "Warm upbeat narration",
+            "Relaxed confident tone",
+        ],
+        "tone": [
+            "friendly and natural",
+            "clear and upbeat",
+            "warm and relaxed",
+            "confident and casual",
+        ],
+    },
+}
+
+# Keyword signals mapping profile text to a direction group. First match
+# wins; wellness leads so a yoga-fitness hybrid reads calm, not energetic.
+_DIRECTION_GROUP_SIGNALS = (
+    ("wellness", ("meditat", "yoga", "sleep", "mindfulness", "calm", "journal",
+                    "mental health", "breath", "relax", "therapy")),
+    ("fitness", ("workout", "gym", "fitness", "runn", "sport", "muscle",
+                   "training", "exercise", "crossfit")),
+    ("finance", ("money", "budget", "invest", "financ", "bank", "saving",
+                   "expense", "tax", "debt")),
+    ("food", ("recipe", "cook", "meal", "food", "diet", "restaurant",
+                "grocery", "kitchen", "bake")),
+    ("learning", ("learn", "study", "course", "language", "school",
+                    "student", "exam", "tutor")),
+    ("work", ("productiv", "business", "work", "focus", "task", "project",
+                "team", "freelance", "crm", "office")),
+)
+
+
+def direction_group_for_profile(profile: Optional[dict]) -> str:
+    """The direction-dropdown group for one App Profile, by keyword."""
+    blob = _profile_text_blob(profile)
+    for group, signals in _DIRECTION_GROUP_SIGNALS:
+        if any(signal in blob for signal in signals):
+            return group
+    return "default"
+
+
+def direction_options_for_profile(profile: Optional[dict] = None) -> dict:
+    """The five Review-step dropdown option lists for one App Profile."""
+    group = direction_group_for_profile(profile)
+    options = DIRECTION_OPTIONS.get(group) or DIRECTION_OPTIONS["default"]
+    return {"group": group, **{k: list(v) for k, v in options.items()}}
 
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.

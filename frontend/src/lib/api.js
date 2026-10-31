@@ -244,6 +244,12 @@ export const api = {
   deleteContentAngle: (profileId, angleId) =>
     client.delete(`/app-profiles/${profileId}/content-angles/${angleId}`).then((r) => r.data),
 
+  // Review-step direction dropdowns for one profile: setting, lighting,
+  // wardrobe, voice and tone option lists in the profile's category group.
+  // Deterministic mapping, no model call.
+  getDirectionOptions: (profileId) =>
+    client.get(`/app-profiles/${profileId}/direction-options`).then((r) => r.data),
+
   // Hook templates. The standalone library is gone: the wizard picks from
   // profile-scoped recommendations. Only the read endpoints the wizard needs
   // survive here.

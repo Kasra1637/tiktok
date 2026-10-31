@@ -546,6 +546,43 @@ function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
 }
 
 /**
+ * One profile-aware dropdown for a Review-step direction field.
+ *
+ * The options come from the profile's category group (no free typing), and
+ * picking only fills the draft — saving still runs the normal claim check
+ * and the strategy still needs a rebuild, exactly as with typed notes.
+ */
+function DirectionSelect({
+  id,
+  testId,
+  label,
+  value,
+  onPick,
+  options,
+  placeholder,
+  disabled,
+}) {
+  return (
+    <div className="space-y-4">
+      <label htmlFor={id} className="text-sm font-semibold">{label}</label>
+      <select
+        id={id}
+        data-testid={testId}
+        className={CONTROL_CLASS}
+        value={value}
+        disabled={disabled || !options}
+        onChange={(e) => onPick(e.target.value)}
+      >
+        <option value="">{options ? placeholder : "Loading options…"}</option>
+        {(options || []).map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
  * The studio's angle-selection control. It lives on Audience & template and on
  * Review & submit — one control, one behaviour, wherever the founder is asked
  * for it. The review copy picks the angle through the single red jump back to step 1,
@@ -2342,6 +2379,83 @@ setObjective("");
     setEdits((prev) => ({ ...prev, tone: value }));
   };
 
+  // Profile-aware direction dropdowns: setting, lighting, wardrobe, voice and
+  // tone options in the app's category group. Dropdown-only by design — a
+  // list the profile chose cannot smuggle in face or body descriptions, so
+  // there is nothing to guard at save time beyond the normal claim check.
+  const [directionOptions, setDirectionOptions] = useState(null);
+  useEffect(() => {
+    if (!profileId) {
+      setDirectionOptions(null);
+      return undefined;
+    }
+    let cancelled = false;
+    api.getDirectionOptions(profileId)
+      .then((data) => {
+        if (!cancelled) setDirectionOptions(data);
+      })
+      .catch(() => {
+        if (!cancelled) setDirectionOptions(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+  // The five picks. Initialized by matching the saved plan text against the
+  // options, so a legacy free-text plan preselects whatever it already
+  // names instead of silently resetting. Unmatched starts empty and stays
+  // out of the save until the founder picks — the plan default stands.
+  const [dirSel, setDirSel] = useState({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
+  useEffect(() => {
+    if (!directionOptions) return;
+    const savedVisual = project?.visual_direction || "";
+    const savedVoice = project?.voice_direction || "";
+    const savedTone = project?.tone || tone || "";
+    const matchPart = (text, list) =>
+      (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
+    const matchTone = (list) =>
+      (list || []).find((option) =>
+        savedTone &&
+        (option.toLowerCase().includes(savedTone.toLowerCase()) ||
+          savedTone.toLowerCase().includes(option.toLowerCase()))
+      ) || "";
+    setDirSel({
+      setting: matchPart(savedVisual, directionOptions.setting),
+      lighting: matchPart(savedVisual, directionOptions.lighting),
+      wardrobe: matchPart(savedVisual, directionOptions.wardrobe),
+      voice: matchPart(savedVoice, directionOptions.voice),
+      tone: matchTone(directionOptions.tone),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matched once per
+    // project/options load; re-matching on every render would discard picks.
+  }, [project?.id, directionOptions]);
+  const pickScenePart = (field) => (value) => {
+    const next = { ...dirSel, [field]: value };
+    setDirSel(next);
+    const composed = [next.setting, next.lighting, next.wardrobe].filter(Boolean).join(", ");
+    setEdits((previous) => {
+      const out = { ...previous };
+      // Nothing chosen means the plan default stands — never write a blank
+      // over scene notes the founder has not replaced.
+      if (!composed || composed === (project?.visual_direction || "")) delete out.visual_direction;
+      else out.visual_direction = composed;
+      return out;
+    });
+  };
+  const pickVoice = (value) => {
+    setDirSel((previous) => ({ ...previous, voice: value }));
+    setEdits((previous) => {
+      const out = { ...previous };
+      if (!value || value === (project?.voice_direction || "")) delete out.voice_direction;
+      else out.voice_direction = value;
+      return out;
+    });
+  };
+  const pickTone = (value) => {
+    setDirSel((previous) => ({ ...previous, tone: value }));
+    editTone(value);
+  };
+
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback so landing on Review with a complete
   // draft always auto-fires — even when this session's state lost the choice
@@ -3416,17 +3530,45 @@ setObjective("");
             </div>
             <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
             <div className="space-y-4">
-              <label htmlFor="review-visual-direction" className="text-sm font-semibold">Setting, lighting &amp; wardrobe</label>
-              <p className="text-xs text-muted-foreground" data-subtitle="">Scene notes stay yours; camera setup owns how it is filmed.</p>
-              <Textarea
-                id="review-visual-direction"
-                aria-describedby="review-visual-direction-help"
-                value={editValue("visual_direction", "")}
-                onChange={(e) => setEdits({ ...edits, visual_direction: e.target.value })}
-                className="min-h-[90px]"
+              <p className="text-sm font-semibold">Setting, lighting &amp; wardrobe</p>
+              <p className="text-xs text-muted-foreground" data-subtitle="">Options matched to this app; pick all three for a scene.</p>
+              <DirectionSelect
+                id="review-setting"
+                testId="review-setting"
+                label="Setting"
+                value={dirSel.setting}
+                onPick={pickScenePart("setting")}
+                options={directionOptions?.setting}
+                placeholder="Choose a setting…"
+                disabled={busy}
               />
+              <DirectionSelect
+                id="review-lighting"
+                testId="review-lighting"
+                label="Lighting"
+                value={dirSel.lighting}
+                onPick={pickScenePart("lighting")}
+                options={directionOptions?.lighting}
+                placeholder="Choose lighting…"
+                disabled={busy}
+              />
+              <DirectionSelect
+                id="review-wardrobe"
+                testId="review-wardrobe"
+                label="Wardrobe"
+                value={dirSel.wardrobe}
+                onPick={pickScenePart("wardrobe")}
+                options={directionOptions?.wardrobe}
+                placeholder="Choose wardrobe…"
+                disabled={busy}
+              />
+              {project?.visual_direction && !edits.visual_direction && (
+                <p className="text-sm text-muted-foreground">
+                  Plan default: {sentenceCase(project.visual_direction)}
+                </p>
+              )}
               <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                Your notes are preserved when you switch setups. Any camera or framing directions here are secondary to Camera setup; remove conflicting directions before rebuilding the strategy.
+                Choosing replaces the plan&apos;s scene notes — pick all three for a complete scene. Camera setup still owns how it is filmed.
               </p>
             </div>
 
@@ -3481,25 +3623,28 @@ setObjective("");
                     : "Set by the hook template you pick."}
                 </p>
               </div>
-              <div className="space-y-4">
-                <label htmlFor="review-tone" className="text-sm font-semibold">Tone</label>
-                <Input
-                  id="review-tone"
-                  value={editValue("tone", "")}
-                  onChange={(e) => editTone(e.target.value)}
-                  placeholder="For example: calm and direct"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-sm font-semibold">Voice direction</label>
-              <Textarea
-                value={editValue("voice_direction", "")}
-                onChange={(e) => setEdits({ ...edits, voice_direction: e.target.value })}
-                className="min-h-[70px]"
+              <DirectionSelect
+                id="review-tone"
+                testId="review-tone"
+                label="Tone"
+                value={dirSel.tone}
+                onPick={pickTone}
+                options={directionOptions?.tone}
+                placeholder="Choose a tone…"
+                disabled={busy}
               />
             </div>
+
+            <DirectionSelect
+              id="review-voice-direction"
+              testId="review-voice-direction"
+              label="Voice direction"
+              value={dirSel.voice}
+              onPick={pickVoice}
+              options={directionOptions?.voice}
+              placeholder="Choose a voice direction…"
+              disabled={busy}
+            />
 
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             <SafetyPanel

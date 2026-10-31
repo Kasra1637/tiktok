@@ -1598,3 +1598,27 @@ class TestGoalSuggestionsCycle:
             _run(api.regenerate_angle_goal_suggestions(
                 profile_id=profile["id"], angle_id=str(uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
+
+
+class TestDirectionOptionsEndpoint:
+    """Review-step dropdowns follow the profile's category group."""
+
+    def test_meditation_and_fitness_profiles_get_different_options(self, api):
+        calm = _make_profile(api, ANON, name="Calm Rider", category="Meditation")
+        pumped = _make_profile(api, ANON, name="Pumped Rider", category="Fitness")
+        calm_out = _run(api.profile_direction_options(
+            profile_id=calm["id"], user_id=ANON))
+        pumped_out = _run(api.profile_direction_options(
+            profile_id=pumped["id"], user_id=ANON))
+        assert calm_out["group"] == "wellness"
+        assert pumped_out["group"] == "fitness"
+        assert calm_out["wardrobe"] != pumped_out["wardrobe"]
+        for out in (calm_out, pumped_out):
+            for field in ("setting", "lighting", "wardrobe", "voice", "tone"):
+                assert len(out[field]) == 4
+
+    def test_missing_profile_404s(self, api):
+        with pytest.raises(HTTPException) as err:
+            _run(api.profile_direction_options(
+                profile_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404

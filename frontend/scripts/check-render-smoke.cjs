@@ -402,6 +402,16 @@ const apiStub = {
   // verified paths override this with the drafts their fixtures name.
   getStudioProjects: async () => ({ projects: [] }),
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+  // Profile-matched direction dropdowns. Four options per field by default;
+  // checks that exercise the picks override with their own sets.
+  getDirectionOptions: async () => ({
+    group: "default",
+    setting: ["Setting one", "Setting two", "Setting three", "Setting four"],
+    lighting: ["Lighting one", "Lighting two", "Lighting three", "Lighting four"],
+    wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"],
+    voice: ["Voice one", "Voice two", "Voice three", "Voice four"],
+    tone: ["Tone one", "Tone two", "Tone three", "Tone four"],
+  }),
   // Empty by default: the base stub has angles, so this only answers checks
   // that override the read to empty and then exercise the generate button.
   generateContentAngles: async () => ({ angles: [] }),
@@ -4063,13 +4073,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
-  await check("camera setup saves through review and survives reload with strategy guidance", async (ctx) => {
+  await check("camera setup and profile-matched direction dropdowns save and survive reload", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
-    const visualDirection = "Handheld selfie, close framing. Kitchen, soft window light, blue shirt.";
-    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", visual_direction: visualDirection };
+    const OPTIONS = {
+      group: "default",
+      setting: ["Setting one", "Setting two", "Setting three", "Setting four"],
+      lighting: ["Lighting one", "Lighting two", "Lighting three", "Lighting four"],
+      wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"],
+      voice: ["Voice one", "Voice two", "Voice three", "Voice four"],
+      tone: ["Tone one", "Tone two", "Tone three", "Tone four"],
+    };
+    // Legacy free-text scene notes match no option, so the dropdowns open
+    // empty with the plan default shown read-only beside them.
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", visual_direction: "Close, 9:16, desk." };
     try {
       await withApi({
         getStudioProject: async () => saved,
+        getDirectionOptions: async () => OPTIONS,
         updateStudioProject: async (_id, patch) => {
           saved = { ...saved, ...patch, strategy_is_current: false };
           return saved;
@@ -4080,25 +4100,40 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const select = ctx.container.querySelector('#camera-setup');
         if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
-        await act(async () => {
-          select.value = "fixed";
-          select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-        });
+        for (const [id, list] of Object.entries({ "review-setting": OPTIONS.setting, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice, "review-tone": OPTIONS.tone })) {
+          const dropdown = ctx.container.querySelector(`#${id}`);
+          if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
+          if (dropdown.tagName !== "SELECT") throw new Error(`${id} is not a dropdown`);
+          if (dropdown.options.length !== list.length + 1) {
+            throw new Error(`${id} does not offer exactly four profile-matched options`);
+          }
+          if (dropdown.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
+        }
+        expectText(ctx, "Setting, lighting & wardrobe");
+        expectText(ctx, "Plan default:");
+        await selectOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
+        await selectOption(ctx, ctx.container.querySelector('#review-setting'), "Setting one");
+        await selectOption(ctx, ctx.container.querySelector('#review-lighting'), "Lighting one");
+        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
+        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone one");
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
         expectText(ctx, "Camera setup controls framing and camera movement");
-        expectText(ctx, "Setting, lighting & wardrobe");
-        const direction = ctx.container.querySelector('#review-visual-direction');
-        if (direction?.value !== visualDirection || saved.visual_direction !== visualDirection) {
-          throw new Error("changing camera setup discarded reviewed scene details");
+        if (saved.visual_direction !== "Setting one, Lighting one, Wardrobe one") {
+          throw new Error(`scene picks did not compose the saved scene notes: ${JSON.stringify(saved.visual_direction)}`);
         }
-        if (!direction.getAttribute('aria-describedby')?.includes('review-visual-direction-help')) {
-          throw new Error("scene direction is not associated with camera ownership guidance");
-        }
+        if (saved.voice_direction !== "Voice one") throw new Error("voice pick was not saved");
+        if (saved.tone !== "Tone one") throw new Error("tone pick was not saved");
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
+        for (const [id, want] of Object.entries({ "review-setting": "Setting one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one", "review-tone": "Tone one" })) {
+          if (ctx.container.querySelector(`#${id}`)?.value !== want) {
+            throw new Error(`saved ${id} pick lost on reload`);
+          }
+        }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="review-tab-render"]'));
         expectText(ctx, "Rebuild");
       });

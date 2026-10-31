@@ -4050,6 +4050,26 @@ async def angle_goal_suggestions(
     }
 
 
+@api_router.get("/app-profiles/{profile_id}/direction-options")
+async def profile_direction_options(
+    profile_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """The Review-step direction dropdowns for one App Profile.
+
+    Deterministic category mapping, no model call: the same profile always
+    gets the same five option lists (setting, lighting, wardrobe, voice,
+    tone). Options are pre-vetted by construction — none describes the
+    presenter's face or body — but saving still runs the normal claim
+    check, since the dropdown is a UX constraint, not a trust boundary.
+    """
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    return template_library.direction_options_for_profile(profile)
+
+
 @api_router.delete("/app-profiles/{profile_id}/content-angles/{angle_id}")
 async def delete_content_angle(profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)):
     row = await _fetch_one(

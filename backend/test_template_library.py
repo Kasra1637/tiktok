@@ -337,6 +337,69 @@ class TestProfileTailoredGoalOrder:
         assert second != first
 
 
+class TestDirectionOptions:
+    """Review-step dropdowns follow the app's profile: a meditation app is
+offered calm, modest options while a fitness app is offered energetic ones.
+No option may describe the presenter's face or body — the photograph is
+the only authority on appearance."""
+
+    MEDITATION = {
+        "brand_description": "A meditation app with guided breathing sessions.",
+        "app_category": "health",
+        "niche": "mindfulness",
+    }
+    FITNESS = {
+        "brand_description": "A workout tracker with gym plans.",
+        "app_category": "fitness",
+        "niche": "strength training",
+    }
+
+    def test_meditation_profile_reads_as_wellness(self):
+        assert tl.direction_group_for_profile(self.MEDITATION) == "wellness"
+
+    def test_fitness_profile_reads_as_fitness(self):
+        assert tl.direction_group_for_profile(self.FITNESS) == "fitness"
+
+    def test_unknown_profile_falls_back_to_default(self):
+        assert tl.direction_group_for_profile({}) == "default"
+        assert tl.direction_group_for_profile(None) == "default"
+
+    def test_meditation_and_fitness_wardrobes_differ(self):
+        calm = tl.direction_options_for_profile(self.MEDITATION)["wardrobe"]
+        energetic = tl.direction_options_for_profile(self.FITNESS)["wardrobe"]
+        assert calm != energetic
+        assert any("linen" in w or "knit" in w or "sweater" in w for w in calm)
+
+    def test_every_group_has_five_fields_of_four_unique_options(self):
+        for group in tl.DIRECTION_OPTIONS:
+            options = tl.DIRECTION_OPTIONS[group]
+            assert set(options) == {"setting", "lighting", "wardrobe", "voice", "tone"}, group
+            for field, values in options.items():
+                assert len(values) == 4, f"{group}.{field}"
+                assert len(set(values)) == 4, f"{group}.{field} repeats an option"
+                assert all(v.strip() for v in values), f"{group}.{field} has a blank option"
+
+    def test_no_option_describes_face_or_body(self):
+        import re
+        banned = [
+            "slim", "skinny", "muscular", "beard", "moustache", "mustache",
+            "blonde", "brunette", "ginger", "redhead", "bald",
+            "blue eyes", "green eyes", "brown eyes", "hazel eyes",
+            "beautiful", "handsome", "pretty", "sexy", "attractive",
+            "gorgeous", "young", "elderly", "tall", "glasses",
+            "makeup", "lipstick", "tattoo", "piercing", "curvy",
+            "jawline", "chiseled",
+        ]
+        patterns = [re.compile(r"\b" + re.escape(w) + r"\b") for w in banned]
+        for group, fields in tl.DIRECTION_OPTIONS.items():
+            for field, values in fields.items():
+                for value in values:
+                    lowered = value.lower()
+                    for pattern in patterns:
+                        assert not pattern.search(lowered), \
+                            f"{group}.{field} describes appearance: {value!r}"
+
+
 class TestClampDuration:
     """
     Duration clamping is the guard against silently requesting more than a
