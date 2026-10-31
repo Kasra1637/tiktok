@@ -1,6 +1,6 @@
 # 0053 — Generation owns the orbit and gesture; processing owns one centered zoom
 
-- **Status:** accepted
+- **Status:** partially superseded by [0063](0063-two-camera-setups.md) for fixed camera; handheld rules remain accepted
 - **Date:** 2026-10-27
 - **Supersedes:** [0008](0008-hook-boundary-lean-in.md)
 - **Anchors:** [strategy schema and normalization](../../backend/ai_service.py#L557),

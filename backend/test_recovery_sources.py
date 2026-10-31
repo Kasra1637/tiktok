@@ -285,6 +285,14 @@ class TestCameraMoveRunsInFinalize:
         assert calls[0][1] == pytest.approx(2.8)
         assert len(calls[0]) == 2
 
+    def test_fixed_render_stays_unzoomed_after_project_switches_to_handheld(self, api, monkeypatch, tmp_path):
+        row = provider_row(studio_project_id="fixed-snapshot", camera_setup="fixed")
+        stored, error, calls = self._persist_with_stubs(
+            api, monkeypatch, tmp_path, row, project_id="fixed-snapshot", project_hook=3)
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert calls == []
+
     def test_a_strategy_with_no_beat_falls_back_to_the_hook(self, api, monkeypatch, tmp_path):
         row = provider_row(studio_project_id="proj-move-3")
         stored, error, calls = self._persist_with_stubs(

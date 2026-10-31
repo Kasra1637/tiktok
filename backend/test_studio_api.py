@@ -158,6 +158,29 @@ def _patch_plan(monkey, server, plan):
 
 
 class TestProjectCreation:
+    def test_camera_setup_survives_create_edit_and_reload(self, api):
+        from models import CreateStudioProjectRequest, UpdateStudioProjectRequest
+        from pydantic import ValidationError
+
+        profile = _approved_profile(api, "Camera setups")
+        project = _run(api.create_studio_project(CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], camera_setup="fixed"), ANON))
+        assert _run(api.get_studio_project(project["id"], ANON))["camera_setup"] == "fixed"
+        edited = _run(api.update_studio_project(project["id"],
+            UpdateStudioProjectRequest(tone="Casual"), ANON))
+        assert edited["camera_setup"] == "fixed"
+        updated = _run(api.update_studio_project(project["id"],
+            UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
+        assert updated["camera_setup"] == "handheld"
+        version = updated["script_version"]
+        unchanged = _run(api.update_studio_project(project["id"],
+            UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
+        assert unchanged["script_version"] == version
+        assert _a_project(api, profile, _a_template(api))["camera_setup"] == "handheld"
+        for value in ("orbit", None):
+            with pytest.raises(ValidationError):
+                UpdateStudioProjectRequest(camera_setup=value)
+
     def test_create_against_approved_profile(self, api):
         profile = _approved_profile(api, "Create OK")
         template = _a_template(api)
@@ -874,6 +897,23 @@ class TestReadyGate:
         after = _run(api.generate_project_strategy(
             project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
         assert after["status"] == "ready_for_generation"
+        assert after["strategy"]["camera_setup"] == "handheld"
+        from models import UpdateStudioProjectRequest, StudioGenerationRequest
+        changed = _run(api.update_studio_project(project["id"],
+            UpdateStudioProjectRequest(camera_setup="fixed"), ANON))
+        assert changed["strategy_is_current"] is False
+        hand_edited = _run(api.update_studio_project(project["id"],
+            UpdateStudioProjectRequest(strategy={"camera_setup": "fixed"}), ANON))
+        assert hand_edited["strategy"]["camera_setup"] == "handheld"
+        assert hand_edited["strategy_is_current"] is False
+        _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        with pytest.raises(HTTPException) as exc:
+            _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
+        assert exc.value.status_code == 409
+        rebuilt = _run(api.generate_project_strategy(
+            project["id"], GenerateStrategyRequest(), ANON))
+        assert rebuilt["strategy"]["camera_setup"] == "fixed"
+        assert rebuilt["strategy_is_current"] is True
 
     def test_a_content_edit_un_readies_an_approved_project(self, api, monkeypatch):
         """

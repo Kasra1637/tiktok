@@ -18,8 +18,8 @@ from typing import Optional
 import httpx
 
 from face_crop import crop_face_from_path
-# Share the exact selfie starting shot with the render prompt.
-from generation_planning import SELFIE_STARTING_SHOT
+# Strategy and rendering share the selected camera's shot instructions.
+from generation_planning import starting_shot, camera_move_section
 from template_library import (
     CONTENT_ANGLE_KINDS,
     HOOK_CATEGORIES,
@@ -3502,6 +3502,9 @@ def normalize_strategy(raw: dict) -> dict:
         _STRATEGY_TEXT_LIMITS["hook_line"])
     result["segments"] = _normalize_sections(raw.get("segments"))
     result["camera_beat"] = _normalize_camera_beat(raw.get("camera_beat"))
+    result["camera_setup"] = raw.get("camera_setup") or "handheld"
+    if result["camera_setup"] not in ("handheld", "fixed"):
+        raise ValueError("Camera setup must be handheld or fixed; rebuild the strategy.")
     return result
 
 
@@ -4511,6 +4514,7 @@ async def generate_video_strategy(
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
+    camera_setup: str = "handheld",
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -4620,8 +4624,14 @@ async def generate_video_strategy(
             template.get("middle_structure") or template.get("continuation_structure")
             or "(unstated)"
         ),
-        "visual_style": template.get("visual_style") or "(unstated)",
-        "camera_pacing": template.get("camera_pacing") or "(unstated)",
+        "visual_style": (
+            "Natural amateur phone footage, not a polished studio shoot."
+            if camera_setup == "fixed" else template.get("visual_style") or "(unstated)"
+        ),
+        "camera_pacing": (
+            "Stationary camera, no camera movement or zoom."
+            if camera_setup == "fixed" else template.get("camera_pacing") or "(unstated)"
+        ),
         "required_assets": _list_of(template, "required_assets"),
         "content_slots": template.get("content_slots") or {},
     }
@@ -4911,11 +4921,18 @@ async def generate_video_strategy(
         "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
         "for the app, not using it. The demo is the founder's own recording, attached after "
         "this footage, so the last frame of your video should be the moment before it.\n"
-        f"- STARTING SHOT: {SELFIE_STARTING_SHOT}\n"
-        "- When the story begins, one smooth small orbit left or right to three-quarter; "
-        "same distance from the face, then hold. Do not push in, pull back, or zoom. "
-        "Simultaneously perform that gesture; subtle, natural. "
-        "All fields agree; no timestamp or word sync.\n"
+        f"- STARTING SHOT: {starting_shot(camera_setup)}\n"
+        + (
+            f"- {camera_move_section({'camera_setup': 'fixed'})} "
+            "All scene, action and performance fields must agree with this setup; "
+            "it overrides conflicting camera directions in the plan or template.\n"
+            if camera_setup == "fixed" else
+            "- When the story begins, one smooth small orbit left or right to three-quarter; "
+            "same distance from the face, then hold. Do not push in, pull back, or zoom. "
+            "Simultaneously perform that gesture; subtle, natural. "
+            "All fields agree; no timestamp or word sync.\n"
+        )
+        +
         "- Final 1-2s: raise the phone into view, back to camera, screen to her; whole phone, "
         "uncropped, clear margins, never hidden, eyes on it, excited, never glancing away, "
         "through the last frame.\n"
@@ -5022,7 +5039,7 @@ async def generate_video_strategy(
         )
         raise RuntimeError(f"Video strategy missing required fields: {missing}")
 
-    strategy = normalize_strategy(raw)
+    strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)

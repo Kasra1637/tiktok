@@ -1274,6 +1274,28 @@ class TestSubmitFailureIsPermanent:
 
 class TestFinalPhoneFraming:
     @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    def test_fixed_camera_is_wide_and_stationary_without_losing_speech(self, prompt_budget):
+        prompt = gp.build_segment_prompt(
+            strategy={"camera_setup": "fixed", "hook_line": "Stop waiting.",
+                      "camera_beat": {"gesture": "a small relieved smile"},
+                      "segments": [{"role": "middle", "script": "Start with one small task."}]},
+            profile={}, template={"camera_pacing": "handheld orbit right", "visual_style": "handheld selfie"}, duration=10,
+            plan={"hook_line": "Stop waiting.", "script": "Start with one small task.", "hook_seconds": 3},
+            prompt_budget=prompt_budget, script_sacred=True,
+        )
+        assert "head to mid-thigh" in prompt
+        assert "stationary" in prompt
+        assert "both hands" in prompt
+        assert "a small relieved smile" in prompt
+        assert "selfie" not in prompt.lower()
+        assert "orbit right" not in prompt
+        assert "then hold that angle" not in prompt
+        assert "Stop waiting." in prompt
+        assert "Start with one small task." in prompt
+        assert "whole phone" in prompt
+        assert len(prompt) <= prompt_budget
+
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
     def test_final_phone_framing_survives_full_and_condensed_prompts(self, prompt_budget):
         prompt = gp.build_segment_prompt(
             strategy={"scene": {"camera_angle": "Eye-level handheld 1.1 metres away."},
@@ -1315,6 +1337,20 @@ class TestFinalPhoneFraming:
             3, prompt_budget < gp.CONDENSE_BELOW,
         ) in prompt
         assert len(prompt) <= prompt_budget
+
+    def test_fixed_camera_survives_a_saturated_strategy_at_every_ceiling(self):
+        kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
+        kwargs["strategy"]["camera_setup"] = "fixed"
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key)["prompt_char_limit"]
+            prompt = gp.build_segment_prompt(
+                **kwargs, prompt_budget=limit, script_sacred=vp.script_is_sacred(key),
+            )
+            assert "head to mid-thigh" in prompt
+            assert "Camera stays locked" in prompt
+            assert "whole phone" in prompt
+            assert gp.SELFIE_STARTING_SHOT not in prompt
+            assert len(prompt) <= limit
 
     @pytest.mark.parametrize("direction", ["left", "right"])
     def test_final_phone_framing_survives_a_saturated_strategy_at_every_ceiling(self, direction):

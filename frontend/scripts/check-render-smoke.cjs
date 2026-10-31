@@ -1542,6 +1542,18 @@ async function main() {
 
   await check("GenerationPanel mounts with no project", mount(GenerationPanel, { project: null }));
 
+  await check("fixed camera explains incompatible first-frame models before rendering", async (ctx) => {
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({ default: CAPABILITY.key,
+        models: [{ ...CAPABILITY, identity_via_first_frame: true }] }),
+    }, async () => {
+      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed" } })(ctx);
+      expectText(ctx, "literal first frame");
+      if (!buttonByText(ctx, /Generate the video/).disabled) throw new Error("incompatible fixed-camera render enabled");
+    });
+  });
+
   await check("GenerationPanel shows the completed generation", async (ctx) => {
     await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectText(ctx, "Completed", "the generation status did not render");
@@ -4051,6 +4063,40 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
+  await check("camera setup saves through review and survives reload with strategy guidance", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch, strategy_is_current: false };
+          return saved;
+        },
+        markProjectReady: async () => saved,
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        const select = ctx.container.querySelector('#camera-setup');
+        if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
+        await act(async () => {
+          select.value = "fixed";
+          select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+        });
+        await clickEl(ctx, buttonByText(ctx, /Save edits/));
+        if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
+        await act(async () => ctx.root.render(null));
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="review-tab-render"]'));
+        expectText(ctx, "Rebuild");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("the studio never offers a call to action or a product demo", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {

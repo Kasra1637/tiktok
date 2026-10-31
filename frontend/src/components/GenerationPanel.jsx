@@ -376,6 +376,7 @@ const handleGenerate = async () => {
   };
 
   const capability = models?.models?.find((m) => m.key === selectedModel);
+  const cameraIncompatible = project?.camera_setup === "fixed" && capability?.identity_via_first_frame;
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
   // The save must originate same-origin: the playback href above is a raw
@@ -494,6 +495,13 @@ const handleGenerate = async () => {
               </option>
             ))}
           </select>
+          {cameraIncompatible && (
+            <p className="text-sm text-destructive" role="alert" data-testid="fixed-camera-model-warning">
+              This model uses your face photo as its literal first frame. For Fixed camera,
+              select a model that accepts an identity reference image, or save Handheld selfie
+              and rebuild the strategy. No model is switched automatically.
+            </p>
+          )}
           {(capability?.supported_resolutions || []).length > 0 && (
             <div className="space-y-2 pt-1">
               <label htmlFor="gen-resolution" className="text-sm font-semibold">Resolution</label>
@@ -584,7 +592,7 @@ const handleGenerate = async () => {
         variant="accent"
         onClick={handleGenerate}
         disabled={
-          busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
+          busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
         }
         busy={busy || inFlight}
       >

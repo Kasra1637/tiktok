@@ -929,7 +929,8 @@ class TestCreativePlanBudget:
 
 
 class TestStrategyBudget:
-    def test_strategy_requests_selfie_orbit_and_visible_final_phone(self, monkeypatch):
+    @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
+    def test_strategy_requests_selected_camera_and_visible_final_phone(self, monkeypatch, camera_setup):
         import ai_service
 
         captured = {}
@@ -957,10 +958,17 @@ class TestStrategyBudget:
         asyncio.run(ai_service.generate_video_strategy(
             profile={"brand_name": "Test"},
             template={"name": "T", "hook_seconds": 3},
-            hook_seconds=3,
+            hook_seconds=3, camera_setup=camera_setup,
         ))
         prompt = captured["prompt"]
-        from generation_planning import SELFIE_STARTING_SHOT
+        from generation_planning import SELFIE_STARTING_SHOT, FIXED_STARTING_SHOT
+        if camera_setup == "fixed":
+            assert FIXED_STARTING_SHOT in prompt
+            assert "Camera stays locked" in prompt
+            assert SELFIE_STARTING_SHOT not in prompt
+            assert "same distance from the face" not in prompt
+            assert "whole phone" in prompt
+            return
         assert SELFIE_STARTING_SHOT in prompt
         assert "1.1 metres" not in prompt
         assert '"direction": "left or right"' in prompt

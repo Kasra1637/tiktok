@@ -241,6 +241,28 @@ class TestSinglePassGeneration:
         assert result["openrouter_job_id"]
 
 
+class TestCameraSetup:
+    def test_fixed_camera_is_snapshotted_and_first_frame_models_refused(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest, UpdateStudioProjectRequest
+        project, _, _ = _ready_project(api, "Fixed camera submit")
+        strategy = {**FAKE_STRATEGY, "camera_setup": "fixed"}
+        _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
+            ("fixed", json.dumps(strategy), project["id"])))
+        with pytest.raises(HTTPException) as exc:
+            _run(api.submit_project_generation(project["id"],
+                StudioGenerationRequest(model="minimax-h3-max"), ANON))
+        assert exc.value.status_code == 409
+        assert "first frame" in exc.value.detail
+        assert not calls
+        result = _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
+        assert result["camera_setup"] == "fixed"
+        assert "head to mid-thigh" in calls[0]["prompt"]
+        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
+        saved = _run(api.get_generation(result["id"], ANON))
+        assert saved["camera_setup"] == "fixed"
+
+
 class TestResolutionOverride:
     """
     heygen-video-1 offers 480p beside its 768p default so renders can be

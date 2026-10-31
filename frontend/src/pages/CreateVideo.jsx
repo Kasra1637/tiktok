@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { CONTROL_CLASS } from "../components/formControls";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
@@ -374,6 +375,7 @@ const REVIEW_EDIT_LABELS = {
   hook_line: "Hook line",
   script: "Script",
   demo_brief: "Demo note",
+  camera_setup: "Camera setup",
   visual_direction: "Visual direction",
   voice_direction: "Voice direction",
   tone: "Tone",
@@ -3383,6 +3385,34 @@ setObjective("");
               <p className="text-xs text-muted-foreground" data-subtitle="">
                 A note to you, not the model — never reaches the render.
               </p>
+            </div>
+            <div className="inset-panel space-y-2">
+              <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
+              <select
+                id="camera-setup"
+                data-testid="camera-setup"
+                className={CONTROL_CLASS}
+                value={editValue("camera_setup", "handheld")}
+                disabled={busy}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setEdits((previous) => {
+                    const next = { ...previous };
+                    if (value === (project?.camera_setup || "handheld")) delete next.camera_setup;
+                    else next.camera_setup = value;
+                    return next;
+                  });
+                }}
+              >
+                <option value="handheld">Handheld selfie</option>
+                <option value="fixed">Fixed camera</option>
+              </select>
+              <p className="text-sm text-muted-foreground">
+                {editValue("camera_setup", "handheld") === "fixed"
+                  ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
+                  : "Close handheld framing, subtle camera movement, and the current centered zoom."}
+              </p>
+              <p className="text-sm text-muted-foreground">Save changes, then rebuild and review the strategy before rendering.</p>
             </div>
             <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
             <div className="space-y-4">

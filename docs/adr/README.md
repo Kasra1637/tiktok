@@ -70,7 +70,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0050](0050-four-trend-transition-row.md) | Four motion trends in one transition row; whip is the default | accepted |
 | [0051](0051-history-compact-without-copy.md) | Without-copy History cards use a compact responsive grid | accepted |
 | [0052](0052-history-mobile-results.md) | History keeps primary filters and copy visible while compacting mobile results | accepted |
-| [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | accepted |
+| [0053](0053-generated-orbit-centered-zoom.md) | Generation owns the orbit and gesture; processing owns one exact centered zoom | partially superseded by 0063 (fixed camera) |
 | [0054](0054-demo-cta-editing-documents.md) | Browser-local editing documents, undo/redo and compact two-sided trimming | accepted |
 | [0055](0055-implicit-behavior-signals.md) | Implicit behavior signals (adopted/abandoned/generated) supplement explicit thumbs | accepted |
 | [0056](0056-hero-play-control.md) | The autoplaying hero carries its own play/pause control; reduced motion loads on an explicit tap | accepted |
@@ -80,3 +80,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
 | [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |
 | [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | accepted |
+| [0063](0063-two-camera-setups.md) | Handheld selfie stays default; fixed camera is wider, stationary and unzoomed | accepted |

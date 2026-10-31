@@ -1180,10 +1180,12 @@ async def init_db():
             # so existing drafts keep working and are simply unprotected until
             # the strategy is rebuilt.
             ("studio_projects", "strategy_script_version", "INTEGER DEFAULT 0"),
+            ("studio_projects", "camera_setup", "TEXT NOT NULL DEFAULT 'handheld'"),
             ("studio_projects", "hook_seconds", "INTEGER DEFAULT 0"),
             ("studio_projects", "extend_intent", "INTEGER DEFAULT 1"),
             ("generations", "segment_index", "INTEGER DEFAULT 0"),
             ("generations", "strategy_version", "INTEGER DEFAULT 0"),
+            ("generations", "camera_setup", "TEXT NOT NULL DEFAULT 'handheld'"),
             ("generations", "continuity", "TEXT"),
             ("generations", "approved", "INTEGER DEFAULT 0"),
             ("generations", "approved_at", "TEXT"),
@@ -4693,6 +4695,7 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     out["safety_report"] = out.get("safety_report") or None
     out["duration_seconds"] = out.get("duration_seconds") or 0
     out["script_version"] = out.get("script_version") or 0
+    out["camera_setup"] = out.get("camera_setup") or "handheld"
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     # Which script the strategy was built from, and whether the script has moved
@@ -4726,6 +4729,9 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
         except (json.JSONDecodeError, TypeError):
             strategy = {}
     out["strategy"] = strategy if isinstance(strategy, dict) else {}
+    out["strategy_is_current"] = out["strategy_is_current"] and (
+        (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
+    )
     # How much of the approved script cannot be spoken in the middle's seconds.
     # Recomputed, never stored: it is a pure function of (plan, seconds), so a
     # hand-edited strategy cannot drop it and the founder edits that change the
@@ -4943,14 +4949,14 @@ async def create_studio_project(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
              objective, audience, duration_seconds, hook_seconds, extend_intent, tone, assets,
-             script_version, status, created_at, updated_at, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             script_version, status, created_at, updated_at, user_id, camera_setup)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
          duration, hook_seconds, 1, (payload.tone or "").strip() or None,
-         json.dumps([]), 0, "draft", now, now, user_id),
+         json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
     return _public_project(
@@ -5007,7 +5013,7 @@ async def update_studio_project(
     # regenerate could recover. Presence is not a change; compare the
     # normalized value about to be stored against the stored row.
     content_changed = False
-    _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "assets", "strategy"}
+    _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "assets", "strategy", "camera_setup"}
     for key, value in updates.items():
         if key in ("beat_timeline", "assets"):
             value = json.dumps(value if isinstance(value, list) else [])
@@ -5025,6 +5031,7 @@ async def update_studio_project(
             if not isinstance(value, dict):
                 value = existing if isinstance(existing, dict) else {}
             value = normalize_strategy({**existing, **value} if isinstance(existing, dict) else value)
+            value["camera_setup"] = (existing.get("camera_setup") or "handheld") if isinstance(existing, dict) else "handheld"
             set_clauses.append("strategy_version = strategy_version + 1")
             strategy_edited = True
             value = json.dumps(value)
@@ -5873,6 +5880,13 @@ async def _submit_generation(
     )
     model_key = video_providers.resolve(model)[0]
     cap = video_providers.capability(model_key)
+    camera_setup = project.get("camera_setup") or "handheld"
+    if camera_setup == "fixed" and cap.get("identity_via_first_frame"):
+        raise HTTPException(status_code=409, detail=(
+            "This model uses your face photo as its literal first frame, so it cannot "
+            "start with fixed-camera head-to-mid-thigh framing. Select a model that "
+            "accepts an identity reference image, or choose Handheld selfie."
+        ))
     if requested > cap["max_duration"]:
         requested = int(cap["max_duration"])
     seconds = requested
@@ -6093,15 +6107,15 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id, idempotency_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
          requested, seconds, segment_role, int(segment_index or 0), strategy_version,
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, prompt, json.dumps([]), now, now, now, user_id,
-         claim_key or None),
+         claim_key or None, camera_setup),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request
@@ -6783,7 +6797,9 @@ def _require_current_strategy(project: dict) -> dict:
     # Both sides zero means one predates the other. That is missing history, not
     # a mismatch, and the founder is not blocked for it -- matching
     # _public_project's own reading of the same two columns.
-    if built_from and current and built_from != current:
+    if (built_from and current and built_from != current) or (
+        (strategy.get("camera_setup") or "handheld") != (project.get("camera_setup") or "handheld")
+    ):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -7585,7 +7601,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                 )
             except (TypeError, ValueError):
                 move_at = 0.0
-            if move_at > 0:
+            if move_at > 0 and (row.get("camera_setup") or "handheld") != "fixed":
                 moved, move_warnings = await overlays.apply_camera_move(local_path, move_at)
                 if moved:
                     local_path = moved
@@ -8086,6 +8102,7 @@ async def generate_project_strategy(
                 profile_feedback=profile_feedback,
                 component_feedback=script_feedback,
                 plan=approved_plan,
+                camera_setup=row.get("camera_setup") or "handheld",
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
@@ -8144,6 +8161,7 @@ async def generate_project_strategy(
     # finish about 0.6s later. Never promise generated spoken-word sync.
     strategy = dict(strategy or {})
     strategy["camera_beat"] = normalize_strategy(strategy)["camera_beat"]
+    strategy["camera_setup"] = row.get("camera_setup") or "handheld"
 
     merged = dict(row)
     merged["strategy"] = strategy

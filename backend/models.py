@@ -1,7 +1,7 @@
 """Shared helpers and Pydantic request models."""
 import json
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, StrictInt
 
 
@@ -290,7 +290,7 @@ STUDIO_TEXT_FIELDS = (
 # because there is no renderer left to read it.
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
-    "beat_timeline", "assets", "strategy", "hook_seconds",
+    "beat_timeline", "assets", "strategy", "hook_seconds", "camera_setup",
 )
 
 
@@ -305,6 +305,7 @@ class CreateStudioProjectRequest(BaseModel):
     that is duration_seconds. 0 means "decide from the template".
     """
     brand_profile_id: str
+    camera_setup: Literal["handheld", "fixed"] = "handheld"
     content_angle_id: Optional[str] = ""
     template_id: Optional[str] = ""
     objective: Optional[str] = ""
@@ -320,6 +321,7 @@ class CreateStudioProjectRequest(BaseModel):
 
 class UpdateStudioProjectRequest(BaseModel):
     """Edit any draft field. Every field optional; only set fields change."""
+    camera_setup: Literal["handheld", "fixed"] = "handheld"
     content_angle_id: Optional[str] = None
     template_id: Optional[str] = None
     objective: Optional[str] = None

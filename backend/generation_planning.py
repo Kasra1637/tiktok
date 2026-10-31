@@ -367,6 +367,18 @@ SELFIE_STARTING_SHOT = (
     "handheld sway."
 )
 
+FIXED_STARTING_SHOT = (
+    "Fixed camera: a stationary phone on a shelf or tripod, eye-level and straight-on. "
+    "Frame the standing presenter from head to mid-thigh, full head with headroom, "
+    "both hands inside frame with room for gestures. Natural amateur phone footage, "
+    "not a polished studio shoot."
+)
+
+
+def starting_shot(camera_setup="handheld") -> str:
+    return FIXED_STARTING_SHOT if camera_setup == "fixed" else SELFIE_STARTING_SHOT
+
+
 _CAMERA_MOVE = (
     "When the story begins, make one smooth, small camera orbit {direction} to a "
     "three-quarter angle, keeping the same distance from the face, then hold that angle "
@@ -422,6 +434,13 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     if gesture[:3].lower() == "as ":
         gesture = gesture[3:].lstrip(" ,—-")
     clause = f": {gesture}" if gesture else " (a slight head tilt or expression shift)"
+    if (strategy or {}).get("camera_setup") == "fixed":
+        return (
+            "Camera stays locked for the whole take: no sway, orbit, pan, tracking or zoom. "
+            "When the story begins, one small actor gesture" + clause + ". "
+            "Natural expressions and small weight shifts; do not walk toward the lens. "
+            "Keep head and both hands in frame; the recording phone is not in her hands."
+        )
     template = _CONDENSED_CAMERA_MOVE if condensed else _CAMERA_MOVE
     return template.format(direction=direction, gesture=clause)
 
@@ -1556,15 +1575,15 @@ def _assemble_prompt(
         sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 80)}")
     if tpl.get("middle_structure"):
         sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 80)}")
-    if tpl.get("visual_style"):
+    if tpl.get("visual_style") and strategy.get("camera_setup") != "fixed":
         sections.append(f"Visual style: {_clip(tpl['visual_style'], 80)}")
-    if tpl.get("camera_pacing"):
+    if tpl.get("camera_pacing") and strategy.get("camera_setup") != "fixed":
         sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")
 
     # After the sections it governs and before the general look, which is where
     # the opening-interrupt directive sits for the same reason: the model reads a
     # standard immediately before the material it is a standard for.
-    sections.append(SELFIE_STARTING_SHOT)
+    sections.append(starting_shot(strategy.get("camera_setup")))
     sections.append(camera_move_section(strategy, hook_seconds, condensed))
     sections.append(_CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING)
 
