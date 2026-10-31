@@ -9059,6 +9059,60 @@ async function runBrandSetupChecks() {
   );
 
   await check(
+    "profile edits autosave after every change without the save button",
+    async (ctx) => {
+      // 20+ fields behind one Save press is the same lost-work shape the
+      // Review step already autosaves through: a silent server save ~1s
+      // after the last change, the manual button staying for an explicit
+      // save. Editing never changes approval status, so the autosave rides
+      // the exact manual path.
+      let saved = { ...handTyped };
+      let saves = 0;
+      await withApi(
+        {
+          getActiveBrand: async () => saved,
+          getAppProfiles: async () => ({ profiles: [saved] }),
+          updateAppProfile: async (id, payload) => {
+            saves += 1;
+            saved = { ...saved, ...payload };
+            return saved;
+          },
+        },
+        async () => {
+          await mount(BrandSetup, {})(ctx);
+          await act(async () => {});
+          const name = ctx.container.querySelector('[data-testid="brand-name-field"]');
+          if (!name) throw new Error("the profile form has no name field to type into");
+          const setter = Object.getOwnPropertyDescriptor(
+            dom.window.HTMLInputElement.prototype,
+            "value"
+          ).set;
+          await act(async () => {
+            setter.call(name, "Handmade Plus");
+            name.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+          });
+          if (saves !== 0) throw new Error("an edit saved before the debounce elapsed");
+          await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+          if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
+          if (saved.brand_name !== "Handmade Plus") throw new Error("the autosave did not carry the new name");
+          const status = ctx.container.querySelector('[data-testid="brand-autosave-status"]');
+          if (!status || !status.textContent.includes("All changes saved")) {
+            throw new Error("no saved confirmation after the autosave");
+          }
+          // A second change must schedule a second save, not reuse the first.
+          await act(async () => {
+            setter.call(name, "Handmade Pro");
+            name.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+          });
+          await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+          if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
+          if (saved.brand_name !== "Handmade Pro") throw new Error("the second autosave did not carry the newer name");
+        }
+      );
+    }
+  );
+
+  await check(
     "with no profile the details stay hidden and only research is offered",
     async (ctx) => {
       // Before research there is no draft to correct, so the manual card must

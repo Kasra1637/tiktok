@@ -380,6 +380,171 @@ export default function BrandSetup() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
   };
 
+  // One payload builder for both save paths below: the manual Save and the
+  // autosave send the same row, so an autosaved profile is never a thinner
+  // record than a manually saved one.
+  const buildPayload = () => ({
+    appstore_url: appstoreUrl.trim() || undefined,
+    play_url: playUrl.trim() || undefined,
+    support_urls: textToProducts(supportUrls),
+    notes: notes.trim(),
+    brand_name: form.brand_name,
+    brand_description: form.brand_description,
+    niche: form.niche,
+    app_category: form.app_category,
+    platforms: textToProducts(form.platforms),
+    core_features: textToProducts(form.core_features),
+    primary_use_cases: textToProducts(form.primary_use_cases),
+    problems_solved: textToProducts(form.problems_solved),
+    must_not_show: textToProducts(form.must_not_show),
+    usage_moments: textToProducts(form.usage_moments),
+    proof_moment: form.proof_moment,
+    viewer_objections: textToObjections(form.viewer_objections),
+    desired_outcomes: textToProducts(form.desired_outcomes),
+    outcome_statements: textToOutcomes(form.outcome_statements),
+    target_audience: form.target_audience,
+    ideal_customer_profile: form.ideal_customer_profile,
+    icp_segments: textToLines(form.icp_segments),
+    differentiation: form.differentiation,
+    tone_voice: form.tone_voice,
+    claims_approved: textToProducts(form.claims_approved),
+    claims_review: textToProducts(form.claims_review),
+    claims_banned: textToProducts(form.claims_banned),
+  });
+
+  // The write itself, shared: update in place when a profile already exists,
+  // otherwise create one from the hand-typed fields — research is optional,
+  // not a prerequisite.
+  const persistProfile = async () => {
+    const payload = buildPayload();
+    return brand?.id
+      ? api.updateAppProfile(brand.id, payload)
+      : api.createBrand(payload);
+  };
+
+  // What the inputs look like as one string, and what a server row looks
+  // like as the same string. When the two agree there is nothing to save:
+  // research, refresh, profile switches and manual saves all land through
+  // applyProfile, so the form matching the row is the baseline syncing
+  // itself without scheduling a redundant write.
+  const liveSignature = () =>
+    JSON.stringify({ form, appstoreUrl, playUrl, supportUrls, notes });
+  const signatureForRow = (row) =>
+    JSON.stringify({
+      form: profileToForm(row),
+      appstoreUrl: row.appstore_url || "",
+      playUrl: row.play_url || "",
+      supportUrls: productsToText(row.support_urls),
+      notes: row.notes || "",
+    });
+
+  // Autosave mirrors the Review step's rhythm (save ~1s after the last
+  // change through the same path as the manual button), because this form
+  // is the same shape of risk: 20+ fields behind one Save press, so an
+  // unpressed button reads as lost work. Silent saves never touch `saving`
+  // — locking the form on every debounced keystroke would interrupt the
+  // typing they follow — and the manual Save stays for an explicit save.
+  // Editing never changes approval status server-side, so autosaving an
+  // approved profile stores the edit without yanking its approval; the
+  // founder still re-approves explicitly, exactly as after a manual Save.
+  const [autosaving, setAutosaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
+  const brandRef = useRef(null);
+  brandRef.current = brand;
+  const liveRef = useRef(null);
+  liveRef.current = { form, appstoreUrl, playUrl, supportUrls, notes };
+  const lastSavedRef = useRef(null);
+  const saveProfileRef = useRef(null);
+  const saveProfile = async ({ silent = false } = {}) => {
+    if (silent) {
+      // A profile cannot be created without a name, and nagging about it on
+      // every keystroke would punish typing the name last. The manual Save
+      // still validates with a toast; autosave simply waits for a name.
+      if (!form.brand_name.trim()) return;
+      if (autosaving || saving || researching || approving || refreshing) return;
+    } else {
+      setSaving(true);
+    }
+    const sentBrandId = brand?.id || null;
+    const sentSignature = liveSignature();
+    if (silent) {
+      setAutosaving(true);
+      setSaveStatus("Saving…");
+    }
+    try {
+      const saved = await persistProfile();
+      // A profile switch (or a research run replacing the row) mid-flight:
+      // the result belongs to a screen the founder already left.
+      if ((brandRef.current?.id || null) !== sentBrandId) {
+        refreshProfilesList();
+        return;
+      }
+      const latest = JSON.stringify(liveRef.current);
+      if (silent && latest !== sentSignature) {
+        // Typed during the flight: keep the keystrokes, never clobber them
+        // with the older response. The id is still worth keeping (a create
+        // just minted it); the chained save below stores the newer text.
+        setBrand(saved);
+        refreshProfilesList();
+      } else {
+        applyProfile(saved);
+        refreshProfilesList();
+        lastSavedRef.current = signatureForRow(saved);
+        if (silent) setSaveStatus("All changes saved");
+      }
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (silent) {
+        setSaveStatus(`Could not autosave: ${message}`);
+      } else {
+        const group = groupForSaveError(message);
+        if (group) toggleGroup(group, true);
+        toast.error(message);
+      }
+    } finally {
+      if (silent) {
+        setAutosaving(false);
+        // A change that landed mid-flight still owes a save now that the
+        // flag is clear. Compared against what this flight sent, not the
+        // baseline: a normalization gap between the typed text and the
+        // stored row must never read as a new edit, or this chains
+        // forever. Failures do not chain — the status names the failure
+        // and the next keystroke retries — so a dead server cannot spin
+        // this into a loop either.
+        if (JSON.stringify(liveRef.current) !== sentSignature) {
+          saveProfileRef.current?.({ silent: true });
+        }
+      } else {
+        setSaving(false);
+        setSaveStatus("");
+      }
+    }
+  };
+  saveProfileRef.current = (options) => saveProfile(options);
+  // Save ~1s after the last change, never during a research/refresh flight
+  // or a manual save: the same button the founder would press, without
+  // being asked. The baseline syncs itself whenever the form matches the
+  // loaded row, so research, refreshes and profile switches never schedule
+  // a redundant write.
+  const formSignature = liveSignature();
+  useEffect(() => {
+    if (saving || researching || approving || refreshing || autosaving) return undefined;
+    const row = brandRef.current;
+    if (formSignature === lastSavedRef.current) return undefined;
+    if (row && formSignature === signatureForRow(row)) {
+      lastSavedRef.current = formSignature;
+      return undefined;
+    }
+    if (!row && !liveRef.current.form.brand_name.trim()) return undefined;
+    setSaveStatus("");
+    const timer = setTimeout(() => {
+      saveProfileRef.current?.({ silent: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the signature
+    // is the inputs; the saver rides a ref so scheduling never re-fires.
+  }, [formSignature, saving, researching, approving, refreshing, autosaving, brand?.id]);
+
   const handleSave = async () => {
     // A brand with no name is useless to every downstream generator, so this is
     // the one field we insist on. Everything else can be filled in later.
@@ -392,39 +557,7 @@ export default function BrandSetup() {
     }
     setSaving(true);
     try {
-      const payload = {
-        appstore_url: appstoreUrl.trim() || undefined,
-        play_url: playUrl.trim() || undefined,
-        support_urls: textToProducts(supportUrls),
-        notes: notes.trim(),
-        brand_name: form.brand_name,
-        brand_description: form.brand_description,
-        niche: form.niche,
-        app_category: form.app_category,
-        platforms: textToProducts(form.platforms),
-        core_features: textToProducts(form.core_features),
-        primary_use_cases: textToProducts(form.primary_use_cases),
-        problems_solved: textToProducts(form.problems_solved),
-        must_not_show: textToProducts(form.must_not_show),
-        usage_moments: textToProducts(form.usage_moments),
-        proof_moment: form.proof_moment,
-        viewer_objections: textToObjections(form.viewer_objections),
-        desired_outcomes: textToProducts(form.desired_outcomes),
-        outcome_statements: textToOutcomes(form.outcome_statements),
-        target_audience: form.target_audience,
-        ideal_customer_profile: form.ideal_customer_profile,
-        icp_segments: textToLines(form.icp_segments),
-        differentiation: form.differentiation,
-        tone_voice: form.tone_voice,
-        claims_approved: textToProducts(form.claims_approved),
-        claims_review: textToProducts(form.claims_review),
-        claims_banned: textToProducts(form.claims_banned),
-      };
-      // Update in place when a profile already exists, otherwise create one from
-      // the manual fields — research is optional, not a prerequisite.
-      const saved = brand?.id
-        ? await api.updateAppProfile(brand.id, payload)
-        : await api.createBrand(payload);
+      const saved = await persistProfile();
       applyProfile(saved);
       refreshProfilesList();
       toast.success("App Profile saved!");
@@ -434,6 +567,7 @@ export default function BrandSetup() {
       toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
+      setSaveStatus("");
     }
   };
 
@@ -739,6 +873,15 @@ export default function BrandSetup() {
                 </DropdownMenu>
               )}
             </div>
+            {/* Autosave status for the researched path, same rhythm as the
+                Review step's draft line: silent saves narrate here so an
+                unpressed Save never reads as lost work. Conditioned on the
+                path like the Save buttons are, so the testid stays unique. */}
+            {researchedProfile && saveStatus && (
+              <p role="status" data-testid="brand-autosave-status" className="pt-2 text-sm text-muted-foreground">
+                {saveStatus}
+              </p>
+            )}
           </form>
       </SectionCard>
 
@@ -1109,17 +1252,26 @@ export default function BrandSetup() {
                 them for no reason. Without this the gate would silently remove
                 the only way to store a hand-typed profile. */}
             {!researchedProfile && (
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                busy={saving}
-                variant="accent"
-                className="w-full sm:w-auto"
-                data-testid="save-manual-profile-button"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saving ? "Saving" : brand?.id ? "Save App Profile" : "Create App Profile"}
-              </Button>
+              <>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  busy={saving}
+                  variant="accent"
+                  className="w-full sm:w-auto"
+                  data-testid="save-manual-profile-button"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {saving ? "Saving" : brand?.id ? "Save App Profile" : "Create App Profile"}
+                </Button>
+                {/* Autosave status for the hand-typed path — see the research
+                    form above for why it narrates here. */}
+                {saveStatus && (
+                  <p role="status" data-testid="brand-autosave-status" className="text-sm text-muted-foreground">
+                    {saveStatus}
+                  </p>
+                )}
+              </>
             )}
 
             {brand?.id && (
