@@ -199,11 +199,31 @@ describe("history attention selection", () => {
     expect(words.cta).toBe("Review repair");
   });
 
+  test("an archived render with a filed copy is kit-less, not repair", () => {
+    const attention = getHistoryAttention([
+      { id: "a1", status: "archived", post_kit: null, r2_url: "https://cdn.example/a1.mp4" },
+    ]);
+    expect(attention.kind).toBe("kitless");
+  });
+
+  test("an awaiting row names Check again, a copy-less filed row names Retry save", () => {
+    const awaiting = describeHistoryAttention(
+      getHistoryAttention([{ id: "g1", status: "generating" }])
+    );
+    expect(awaiting.guidance).toContain("Check again");
+    const undurable = describeHistoryAttention(
+      getHistoryAttention([{ id: "c1", status: "completed" }])
+    );
+    expect(undurable.guidance).toContain("Retry durable save");
+  });
+
   test("the banner link selects its clip's side and clears the search", () => {
     const kitless = getHistoryAttention([{ id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" }]);
-    const kitLink = historyAttentionLink("profile=b1&q=noise", kitless);
+    // The page passes the live URLSearchParams object, not a string.
+    const kitLink = historyAttentionLink(new URLSearchParams("profile=b1&q=noise"), kitless);
     expect(kitLink.search).toContain("copy=without");
     expect(kitLink.search).not.toContain("q=");
+    expect(kitLink.search).toContain("profile=b1");
     expect(kitLink.hash).toBe("#generation-k1");
     const failed = getHistoryAttention([{ id: "f1", status: "failed", audience: "QA" }]);
     expect(historyAttentionLink("", failed).search).toContain("copy=with");
