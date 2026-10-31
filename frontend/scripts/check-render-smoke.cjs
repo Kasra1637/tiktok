@@ -1570,6 +1570,26 @@ async function main() {
     expectText(ctx, "Download MP4", "the download control did not render");
   });
 
+  await check("paid render reuses the mock progress UI and the mock section is gone", async (ctx) => {
+    // The hypothetical preview was removed: the paid in-flight render must
+    // carry its progress bar + stage checklist instead, with billed (never
+    // hypothetical) copy.
+    const generating = { ...SEGMENT, id: "gen-flight", status: "generating" };
+    await withApi({
+      getGenerations: async () => ({ generations: [generating] }),
+      pollGeneration: async () => generating,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    expectText(ctx, "Stitching one clip", "the paid in-flight stages did not render");
+    const bar = ctx.container.querySelector('[data-testid="paid-render-progress"] [role="progressbar"]');
+    if (!bar) throw new Error("the paid render progress bar did not render");
+    if (bar.getAttribute("aria-valuenow") !== "85") {
+      throw new Error(`paid progress should sit at 85 during generating, got ${JSON.stringify(bar.getAttribute("aria-valuenow"))}`);
+    }
+    expectText(ctx, "This run is billed", "the paid progress does not say it is billed");
+    expectAbsent(ctx, "Hypothetical", "the removed mock preview still renders beside the paid render");
+    expectAbsent(ctx, "Show hypothetical processing", "the mock preview trigger still renders");
+  });
+
   await check("GenerationPanel blocks generation before the project is ready", async (ctx) => {
     // No generations yet: the ready gate only shows when nothing has been
     // produced, so a fixture that still returns a segment proves nothing.

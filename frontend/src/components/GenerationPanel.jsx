@@ -8,16 +8,92 @@ import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { PostKitSection } from "./PostKitSection";
-import { HypotheticalProcessing } from "./HypotheticalProcessing";
 import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Smartphone,
+  Play, Info, Clock, Smartphone, Check, Film,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
+
+/**
+ * Paid render progress — the same UI the mock preview used.
+ *
+ * Three stages, one progress bar, one checklist. Driven by the real
+ * generation row, not timers: submitted means the script lock stage,
+ * generating means the provider is working the single-pass clip (shown as
+ * the final "Stitching one clip" stage at 85%, matching the capture).
+ * No mock frame, no replay, no hypothetical copy — this only renders while
+ * a paid render is in flight.
+ */
+const RENDER_STAGES = [
+  { key: "lock", label: "Locking your approved script" },
+  { key: "render", label: "Rendering hook + story in one pass" },
+  { key: "stitch", label: "Stitching one clip" },
+];
+
+function PaidRenderProgress({ status, modelName }) {
+  const stageIndex = status === "generating" ? 2 : 0;
+  const progress = status === "generating" ? 85 : 25;
+  return (
+    <div className="space-y-3" aria-live="polite" data-testid="paid-render-progress">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <GroupLabel icon={Film}>Render in progress — paid render</GroupLabel>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Real render{modelName ? ` · ${modelName}` : ""}. This run is billed.
+      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold">{RENDER_STAGES[stageIndex].label}…</p>
+        <span className="text-xs text-muted-foreground">{progress}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        aria-label="Paid render progress"
+        className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
+      >
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] transition-[width] duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <ul className="space-y-1.5">
+        {RENDER_STAGES.map((s, i) => (
+          <li
+            key={s.key}
+            className={`flex items-center gap-2 text-xs ${
+              i < stageIndex
+                ? "text-muted-foreground"
+                : i === stageIndex
+                  ? "font-semibold text-foreground"
+                  : "text-muted-foreground"
+            }`}
+          >
+            {i < stageIndex ? (
+              <Check className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 rounded-full ${
+                  i === stageIndex
+                    ? "bg-[color:var(--brand-indigo)]"
+                    : "border border-current opacity-40"
+                }`}
+              />
+            )}
+            {s.label}
+            {i === stageIndex ? "…" : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * The render. One request, one job, one file.
@@ -644,13 +720,12 @@ const handleGenerate = async () => {
         </p>
       )}
 
-      {/* Hypothetical preview: front-end only, never a render. Sits below the
-          real Generate button so the paid path keeps its place; shows founders
-          what processing & the result layout look like after the four steps. */}
-      <HypotheticalProcessing
-        pieceSeconds={pieceSeconds}
-        modelName={capability?.name || selectedModel || ""}
-      />
+      {(busy || inFlight) && (
+        <PaidRenderProgress
+          status={generation?.status || "submitted"}
+          modelName={capability?.name || selectedModel || ""}
+        />
+      )}
 
       {generation && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-base">
