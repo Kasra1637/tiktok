@@ -904,6 +904,20 @@ def is_rate_limit_error(message: str) -> bool:
     )
 
 
+# Single owner for the throttling words the API returns: submit never started
+# (nothing produced, nothing charged — name the wait and the retry), poll is
+# still going at the provider (the row is untouched, the page keeps waiting).
+RATE_LIMIT_SUBMIT_DETAIL = (
+    "The video provider is handling too many requests right now, "
+    "so this render never started and nothing was charged. "
+    "Wait a moment, then Render it again."
+)
+RATE_LIMIT_POLL_DETAIL = (
+    "The video provider is rate limiting status checks right now. "
+    "Your render is still going \u2014 this page keeps checking on its own."
+)
+
+
 def _has_recoverable_marker(text: str) -> bool:
     recoverable_markers = (
         "timeout",

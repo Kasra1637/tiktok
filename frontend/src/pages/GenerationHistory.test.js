@@ -52,7 +52,11 @@ import {
   historyActionError,
   needsHistoryRepairRow,
   isAwaitingProvider,
+  isThrottlingError,
   effectiveCopyFilter,
+  getHistoryAttention,
+  describeHistoryAttention,
+  historyAttentionLink,
   shouldShowHistoryEmpty,
   shouldOfferDraftLink,
   shouldApplyDeepLinkPage,
@@ -157,6 +161,58 @@ describe("history deep-link and pager helpers", () => {
     expect(pageForRowIndex(0)).toBe(1);
     expect(pageForRowIndex(49)).toBe(1);
     expect(pageForRowIndex(50)).toBe(2);
+  });
+});
+
+describe("history attention selection", () => {
+  test("no rows means no banner", () => {
+    expect(getHistoryAttention([])).toBeNull();
+  });
+
+  test("repairs beat kit-less finished renders", () => {
+    const attention = getHistoryAttention([
+      { id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" },
+      { id: "f1", status: "failed" },
+    ]);
+    expect(attention.kind).toBe("repair");
+    expect(attention.first.id).toBe("f1");
+  });
+
+  test("kit-less finished renders surface only when nothing needs repair", () => {
+    // A durable copy is filed, so this is not a repair — it merely lacks kits.
+    const attention = getHistoryAttention([
+      { id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" },
+    ]);
+    expect(attention.kind).toBe("kitless");
+    const words = describeHistoryAttention(attention);
+    expect(words.summary).toContain("no post copy yet");
+    expect(words.guidance).toContain("Generate post copy");
+    expect(words.cta).toBe("Review without copy");
+  });
+
+  test("repair words name the failed-row next step", () => {
+    const words = describeHistoryAttention(
+      getHistoryAttention([{ id: "f1", status: "failed" }])
+    );
+    expect(words.summary).toContain("needs attention");
+    expect(words.guidance).toContain("provider reason");
+    expect(words.cta).toBe("Review repair");
+  });
+
+  test("the banner link selects its clip's side and clears the search", () => {
+    const kitless = getHistoryAttention([{ id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" }]);
+    const kitLink = historyAttentionLink("profile=b1&q=noise", kitless);
+    expect(kitLink.search).toContain("copy=without");
+    expect(kitLink.search).not.toContain("q=");
+    expect(kitLink.hash).toBe("#generation-k1");
+    const failed = getHistoryAttention([{ id: "f1", status: "failed", audience: "QA" }]);
+    expect(historyAttentionLink("", failed).search).toContain("copy=with");
+  });
+
+  test("only a 429 reads as throttling", () => {
+    expect(isThrottlingError({ response: { status: 429 } })).toBe(true);
+    expect(isThrottlingError({ response: { status: 502 } })).toBe(false);
+    expect(isThrottlingError(null)).toBe(false);
   });
 });
 

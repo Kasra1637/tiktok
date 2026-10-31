@@ -23,13 +23,97 @@ export function historyActionError(err, action = "finish this") {
   if (!err?.response && err?.message === "Network Error") {
     return `The connection dropped before History could ${action}. Check your connection, then try again.`;
   }
-  if (err?.response?.status === 429) {
+  if (isThrottlingError(err)) {
     return (
       `The provider is rate limiting right now, so History could not ${action} this time. ` +
       `Nothing is lost — wait a moment and try again.`
     );
   }
   return err?.message || `Something went wrong while trying to ${action}. Please try again.`;
+}
+
+/**
+ * Whether a failure is provider throttling rather than a verdict on the
+ * work. Single owner for the 429 check the action error and the awaiting
+ * poll share, so a throttled retry never reads as a broken render.
+ */
+export function isThrottlingError(err) {
+  return err?.response?.status === 429;
+}
+
+/**
+ * Which attention the History banner owes the founder, if any. Repairs
+ * first: a failed, awaiting, or undurable row beats a finished render that
+ * merely lacks post copy. Single owner for the rule the banner reads, so
+ * the two boxes cannot disagree about which one shows.
+ */
+export function getHistoryAttention(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const repair = list.filter(needsHistoryRepairRow);
+  if (repair.length > 0) return { kind: "repair", items: repair, first: repair[0] };
+  const kitless = list.filter(
+    (r) => (r.status === "completed" || r.status === "archived") && !r.post_kit
+  );
+  if (kitless.length > 0) return { kind: "kitless", items: kitless, first: kitless[0] };
+  return null;
+}
+
+/**
+ * The banner's words for one attention: the count, the next step, and the
+ * link label. Pure, so the page renders one box driven by data instead of
+ * two near-identical boxes differing only in copy.
+ */
+export function describeHistoryAttention(attention) {
+  if (!attention) return null;
+  if (attention.kind === "kitless") {
+    const n = attention.items.length;
+    return {
+      summary:
+        n === 1
+          ? "1 finished render has no post copy yet. "
+          : `${n} finished renders have no post copy yet. `,
+      guidance: "Open its card and press Generate post copy.",
+      cta: "Review without copy",
+    };
+  }
+  const n = attention.items.length;
+  const first = attention.first;
+  const many = n > 1;
+  let guidance;
+  if (first.status === "failed") {
+    guidance = many
+      ? "Open each card for its provider reason — then re-render from Create Video."
+      : "Open its card for the provider reason — then re-render from Create Video.";
+  } else if (isAwaitingProvider(first)) {
+    guidance = many
+      ? "Open each card and press Check again — finished renders are fetched when found."
+      : "Open its card and press Check again — the finished render is fetched when found.";
+  } else {
+    guidance = many
+      ? "Open each card and press Retry durable save — fresh copies are re-fetched and filed."
+      : "Open its card and press Retry durable save — a fresh copy is re-fetched and filed.";
+  }
+  return {
+    summary: n === 1 ? "1 clip needs attention. " : `${n} clips need attention. `,
+    guidance,
+    cta: "Review repair",
+  };
+}
+
+/**
+ * Where the banner's link lands: the side holding its first clip, with the
+ * hook-text search cleared so the target is never filtered out. Server
+ * filters (app, status) are kept; only presentation moves.
+ */
+export function historyAttentionLink(searchParams, attention) {
+  const params = new URLSearchParams(searchParams);
+  if (attention.kind === "kitless") {
+    params.set("copy", "without");
+  } else {
+    params.set("copy", hasCopyContext(attention.first) ? "with" : "without");
+  }
+  params.delete("q");
+  return { search: `?${params.toString()}`, hash: `#generation-${attention.first.id}` };
 }
 
 /**

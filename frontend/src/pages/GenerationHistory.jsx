@@ -20,15 +20,18 @@ import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
   historyActionError,
-  needsHistoryRepairRow,
   hasCopyContext,
   isAwaitingProvider,
   effectiveCopyFilter,
+  getHistoryAttention,
+  describeHistoryAttention,
+  historyAttentionLink,
   shouldApplyDeepLinkPage,
   pageForRowIndex,
   shouldShowHistoryEmpty,
   shouldOfferDraftLink,
 } from "./historyRepair";
+import { useAwaitingHistoryPoll } from "./historyPolling";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -798,40 +801,9 @@ export default function GenerationHistory() {
     return () => { loadRequest.current = null; };
   }, [load]);
 
-  // Rows still awaiting the provider poll themselves: a render that finishes
-  // while History is open arrives on its own instead of sitting generating
-  // until someone opens the card and presses Check again. Only the awaiting
-  // few are polled, every ten seconds, up to twenty rounds — a stuck job
-  // stops burning requests and keeps its manual Check. A 429 is throttling,
-  // not failure, so it never stops the loop; any other error does, quietly.
-  const awaitingKey = rows.filter(isAwaitingProvider).map((r) => r.id).join("|");
-  useEffect(() => {
-    if (!awaitingKey) return undefined;
-    const ids = awaitingKey.split("|");
-    let cancelled = false;
-    let attempts = 0;
-    const timer = setInterval(async () => {
-      attempts += 1;
-      if (attempts > 20) {
-        clearInterval(timer);
-        return;
-      }
-      try {
-        const results = await Promise.all(ids.map((id) => api.pollGeneration(id)));
-        if (cancelled) return;
-        results.forEach((updated) => {
-          if (updated && updated.id) updateRow(updated.id, updated);
-        });
-      } catch (err) {
-        if (err?.response?.status === 429) return;
-        clearInterval(timer);
-      }
-    }, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [awaitingKey, updateRow]);
+  // Awaiting rows poll themselves through one hook; the page owns nothing
+  // of the timer — rows in, finished rows out through updateRow.
+  useAwaitingHistoryPoll(rows, updateRow);
 
   // The app filter is a convenience: its load failing must not silently
   // narrow the page to "All apps". It names itself with its own retry.
@@ -1063,68 +1035,24 @@ export default function GenerationHistory() {
       ) : null}
 
       {(() => {
+        // One box, driven by data: selection, words, and link each have one
+        // owner in historyRepair, so the two cases cannot disagree.
         if (loading || rows.length === 0) return null;
-        const needsRepair = rows.filter(needsHistoryRepairRow);
-        // Finished renders whose kit was never written are not broken, so
-        // they are no repair — but without this banner the Generate post
-        // copy box sits behind the without-copy filter where no one looks.
-        const kitless = rows.filter(
-          (r) => (r.status === "completed" || r.status === "archived") && !r.post_kit
-        );
-        if (needsRepair.length === 0 && kitless.length === 0) return null;
-        if (needsRepair.length === 0) {
-          const firstKitless = kitless[0];
-          const kitParams = new URLSearchParams(searchParams);
-          kitParams.set("copy", "without");
-          kitParams.delete("q");
-          return (
-            <Alert data-testid="history-attention">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="flex flex-wrap items-center gap-2">
-                <span>
-                  {kitless.length === 1
-                    ? "1 finished render has no post copy yet. "
-                    : `${kitless.length} finished renders have no post copy yet. `}
-                  Open its card and press Generate post copy.
-                </span>
-                <Button variant="secondary" size="sm" asChild>
-                  <Link to={{ search: `?${kitParams.toString()}`, hash: `#generation-${firstKitless.id}` }} data-testid="history-attention-review">
-                    Review without copy <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              </AlertDescription>
-            </Alert>
-          );
-        }
-        const first = needsRepair[0];
-        const repairParams = new URLSearchParams(searchParams);
-        repairParams.set("copy", hasCopyContext(first) ? "with" : "without");
-        repairParams.delete("q");
-        const many = needsRepair.length > 1;
-        const repair = first.status === "failed"
-          ? many
-            ? "Open each card for its provider reason — then re-render from Create Video."
-            : "Open its card for the provider reason — then re-render from Create Video."
-          : isAwaitingProvider(first)
-            ? many
-              ? "Open each card and press Check again — finished renders are fetched when found."
-              : "Open its card and press Check again — the finished render is fetched when found."
-            : many
-              ? "Open each card and press Retry durable save — fresh copies are re-fetched and filed."
-              : "Open its card and press Retry durable save — a fresh copy is re-fetched and filed.";
+        const attention = getHistoryAttention(rows);
+        if (!attention) return null;
+        const { summary, guidance, cta } = describeHistoryAttention(attention);
+        const link = historyAttentionLink(searchParams, attention);
         return (
           <Alert data-testid="history-attention">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="flex flex-wrap items-center gap-2">
               <span>
-                {needsRepair.length === 1
-                  ? "1 clip needs attention. "
-                  : `${needsRepair.length} clips need attention. `}
-                {repair}
+                {summary}
+                {guidance}
               </span>
               <Button variant="secondary" size="sm" asChild>
-                <Link to={{ search: `?${repairParams.toString()}`, hash: `#generation-${first.id}` }} data-testid="history-attention-review">
-                  Review repair <ChevronRight className="h-3.5 w-3.5" />
+                <Link to={{ search: link.search, hash: link.hash }} data-testid="history-attention-review">
+                  {cta} <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>
             </AlertDescription>
