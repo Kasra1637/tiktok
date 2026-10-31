@@ -558,8 +558,39 @@ class TestContentAngles:
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert [a["id"] for a in listed["angles"]] == [quiet["id"], winner["id"]]
         by_id = {a["id"]: a for a in listed["angles"]}
-        assert by_id[winner["id"]]["evidence"] == {"wins": 1, "flops": 0}
-        assert by_id[quiet["id"]]["evidence"] == {"wins": 0, "flops": 0}
+        assert by_id[winner["id"]]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0}
+        assert by_id[quiet["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
+
+    def test_adopted_goal_surfaces_as_moved_forward_in_evidence(self, api):
+        """
+        Proceeding to build (submit records adopted on the goal behind the
+        render) must reach the picker as momentum beside the verdict tally:
+        the front end can only reflect what the payload carries. The key
+        annotates, exactly like wins/flops — no score reads it.
+        """
+        import uuid as _uuid
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, name="Momentum App")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        angle = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="problem_solution", label="M", target_audience="a", user_problem="p"),
+            user_id=ANON))
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], content_angle_id=angle["id"],
+            objective="address_user_problem"), user_id=ANON))
+        # The submit seam's adoption row, verbatim in shape.
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, studio_project_id, event, detail, created_at, user_id, step)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, 'goal')",
+            (str(_uuid.uuid4()), profile["id"], project["id"],
+             "adopted", "objective=address_user_problem;kind=problem_solution",
+             "2026-01-01T00:00:00", ANON)))
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        by_id = {a["id"]: a for a in listed["angles"]}
+        assert by_id[angle["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 1}
+        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 0, "flops": 0, "adoptions": 1}}
 
     def test_evidence_is_zeroed_without_verdicts_and_never_crosses_profiles(self, api):
         import uuid as _uuid
@@ -583,8 +614,8 @@ class TestContentAngles:
             " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), p1["id"], project["id"],
              "thumb_up", "2026-01-01T00:00:00", ANON)))
-        assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0}
-        assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0}
+        assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0}
+        assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
 
     def test_objective_evidence_aggregates_by_goal_and_is_scoped(self, api):
         """
@@ -623,10 +654,10 @@ class TestContentAngles:
              "thumb_up", "2026-01-01T00:00:00", ANON)))
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
-        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0}}
+        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0, "adoptions": 0}}
         # Angle rows keep the kind axis only; the goal axis is response-level.
         for a in listed["angles"]:
-            assert a["evidence"] in ({"wins": 1, "flops": 0}, {"wins": 0, "flops": 0})
+            assert a["evidence"] in ({"wins": 1, "flops": 0, "adoptions": 0}, {"wins": 0, "flops": 0, "adoptions": 0})
 
         # Cross-profile isolation holds for objective axis too
         p2 = _make_profile(api, ANON, name="Other App")
@@ -679,8 +710,8 @@ class TestContentAngles:
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         obj_map = listed["objective_evidence"]
-        assert obj_map["address_user_problem"] == {"wins": 1, "flops": 0}
-        assert obj_map["demonstrate_feature"] == {"wins": 0, "flops": 1}
+        assert obj_map["address_user_problem"] == {"wins": 1, "flops": 0, "adoptions": 0}
+        assert obj_map["demonstrate_feature"] == {"wins": 0, "flops": 1, "adoptions": 0}
         assert len(obj_map) == 2
 
 
@@ -1499,7 +1530,7 @@ class TestRegenerateContentAngles:
         row = out["angles"][0]
         assert row["origin"] == "generated"
         assert row["goal_variant"] == 0
-        assert row["evidence"] == {"wins": 0, "flops": 0}
+        assert row["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
         assert len(row["goal_suggestions"]) == 6
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert listed["angles"] == out["angles"]

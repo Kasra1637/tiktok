@@ -8,8 +8,14 @@ describe("formatVerdicts", () => {
 
   test("stays silent with no evidence", () => {
     expect(formatVerdicts({ wins: 0, flops: 0 })).toBe("");
+    expect(formatVerdicts({ wins: 0, flops: 0, adoptions: 0 })).toBe("");
     expect(formatVerdicts(null)).toBe("");
     expect(formatVerdicts(undefined)).toBe("");
+  });
+
+  test("shows moved-forward momentum beside verdicts, never as a win", () => {
+    expect(formatVerdicts({ wins: 0, flops: 0, adoptions: 2 })).toBe("2 moved forward");
+    expect(formatVerdicts({ wins: 3, flops: 1, adoptions: 2 })).toBe("3 wins · 1 flop · 2 moved forward");
   });
 });
 

@@ -3553,7 +3553,9 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
     `_angle_feedback_for_profile`. Counts only — never a rate or a score:
     a percentage over one verdict would present a coin flip as a measurement.
     Keyed by KIND, not by angle id, so the counts survive an angle
-    regeneration that replaces every row id.
+    regeneration that replaces every row id. `adoptions` rides beside the
+    verdicts as momentum — projects the founder moved forward with on this
+    kind — so the picker can show commitment without any score reading it.
 
     `profile` tailors the goal order: the same six curated goals, demoting
     ones the profile gives nothing to stand on (no named alternative, no
@@ -3580,7 +3582,7 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
             row.get("kind"), profile, int(row.get("goal_variant") or 0)
         ),
         "created_at": row.get("created_at"),
-        "evidence": evidence or {"wins": 0, "flops": 0},
+        "evidence": evidence or {"wins": 0, "flops": 0, "adoptions": 0},
     }
 
 
@@ -3606,11 +3608,13 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     )
     verdicts = await _angle_feedback_for_profile(profile_id, user_id)
     by_kind = {
-        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0),
+                                            "adoptions": int(entry.get("adoptions") or 0)}
         for entry in (verdicts.get("kinds") or [])
     }
     objective_evidence = {
-        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0)}
+        str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0),
+                                            "adoptions": int(entry.get("adoptions") or 0)}
         for entry in (verdicts.get("objectives") or [])
     }
     return {

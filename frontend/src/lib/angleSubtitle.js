@@ -126,14 +126,21 @@ export function angleDetails(angle) {
  *
  * Both halves are named only when non-zero, so "3 wins" is not padded into
  * "3 wins · 0 flops" — an empty half is not information.
+ *
+ * `adoptions` rides as momentum beside the verdicts — "2 moved forward" —
+ * so proceeding to build is visible without any score reading it. Named in
+ * the prompt's own words ("moved forward with"), never as a win: moving
+ * forward is commitment, not success.
  */
 export function formatVerdicts(evidence) {
   const wins = Math.max(0, Number(evidence?.wins) || 0);
   const flops = Math.max(0, Number(evidence?.flops) || 0);
-  if (!wins && !flops) return "";
+  const moved = Math.max(0, Number(evidence?.adoptions) || 0);
+  if (!wins && !flops && !moved) return "";
   const parts = [];
   if (wins) parts.push(`${wins} win${wins === 1 ? "" : "s"}`);
   if (flops) parts.push(`${flops} flop${flops === 1 ? "" : "s"}`);
+  if (moved) parts.push(`${moved} moved forward`);
   return parts.join(" · ");
 }
 

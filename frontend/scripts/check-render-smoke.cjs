@@ -5072,12 +5072,43 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
+  // Momentum (proceeding to build) renders beside verdicts, never inside
+  // the score: moving forward is commitment, not success. The badge below
+  // stays rank-only while the count line names the momentum.
+  await check("moved-forward momentum shows beside verdicts without moving the score", async (ctx) => {
+    const MOMENTUM = { ...ANGLE, evidence: { wins: 0, flops: 0, adoptions: 2 } };
+    await withApi({ getContentAngles: async () => ({ angles: [MOMENTUM, ANGLE_B] }) }, async () => {
+      global.__SMOKE_PARAMS = "";
+      try {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & template");
+        await passAngleGate(ctx);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
+        if (!line) throw new Error("the goal card shows no angle-kind count");
+        if (!line.textContent.includes("2 moved forward")) {
+          throw new Error(`proceeding to build is invisible on the goal card: ${line.textContent}`);
+        }
+        const badge = ctx.container.querySelector('[data-testid="goal-fit-score-address_user_problem"]');
+        if (!badge) throw new Error("the goal card shows no fit badge");
+        if (badge.textContent.trim() !== "Fit 3/10") {
+          throw new Error(`momentum leaked into the score: ${badge.textContent}`);
+        }
+      } finally {
+        global.__SMOKE_PARAMS = "";
+      }
+    });
+  });
+
   await check("formatVerdicts prints counts and stays silent on empty evidence", async () => {
     const { formatVerdicts } = load("lib/angleSubtitle.js");
     const cases = [
       [{ wins: 3, flops: 1 }, "3 wins · 1 flop"],
       [{ wins: 1, flops: 0 }, "1 win"],
       [{ wins: 0, flops: 1 }, "1 flop"],
+      [{ wins: 0, flops: 0, adoptions: 2 }, "2 moved forward"],
+      [{ wins: 3, flops: 1, adoptions: 2 }, "3 wins · 1 flop · 2 moved forward"],
+      [{ wins: 0, flops: 0, adoptions: 0 }, ""],
       [{ wins: 0, flops: 0 }, ""],
       [undefined, ""],
       [null, ""],

@@ -82,3 +82,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | accepted |
 | [0063](0063-two-camera-setups.md) | Handheld selfie stays default; fixed camera is wider, stationary and unzoomed | accepted |
 | [0064](0064-camera-direction-conflicts-fail-before-render.md) | Refuse conflicting fixed-camera directions before rendering; preserve reviewed scene notes | accepted |
+| [0069](0069-moved-forward-momentum.md) | Proceeding to build shows as momentum beside verdicts, never inside the fit score | accepted |
