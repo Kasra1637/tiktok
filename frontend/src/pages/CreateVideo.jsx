@@ -2222,9 +2222,23 @@ setObjective("");
     });
   };
 
-  const handleSaveEdits = async () => {
+  // Autosave mirrors the Demo + CTA editor's draft rhythm (save shortly
+  // after every change), but through the server path, not browser storage:
+  // Review edits are claim-checked plan text, so only a real save counts.
+  // Silent saves never touch `busy` — disabling the step on every debounced
+  // keystroke would interrupt the typing they follow — and the manual Save
+  // button stays for an immediate, explicit save.
+  const [autosaving, setAutosaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
+  const handleSaveEdits = async ({ silent = false } = {}) => {
     if (!project) return;
-    setBusy(true);
+    if (silent) {
+      if (autosaving) return;
+      setAutosaving(true);
+      setSaveStatus("Saving…");
+    } else {
+      setBusy(true);
+    }
     setError(null);
     try {
       // Measured against the saved script, not the textarea, so a save that
@@ -2267,12 +2281,38 @@ setObjective("");
       setProject(settled);
       setEdits({});
       setReviewThumb(0);
+      if (silent) setSaveStatus("All changes saved");
     } catch (err) {
-      setError(getErrorMessage(err));
+      const message = getErrorMessage(err);
+      setError(message);
+      if (silent) setSaveStatus(`Could not autosave: ${message}`);
     } finally {
-      setBusy(false);
+      if (silent) {
+        setAutosaving(false);
+      } else {
+        setBusy(false);
+        setSaveStatus("");
+      }
     }
   };
+  const saveEditsRef = useRef(null);
+  saveEditsRef.current = (options) => handleSaveEdits(options);
+  // Save ~1s after the last change, never during a plan flight: the same
+  // button the founder would press, without being asked. Skipped while a
+  // manual save or plan generation holds `busy`, and while a plan flight
+  // owns the outcome — stacked writes read as a frozen page.
+  const editsSignature = JSON.stringify(edits);
+  useEffect(() => {
+    if (!hasEdits || busy || !project) return undefined;
+    if (planInFlightRef.current) return undefined;
+    setSaveStatus("");
+    const timer = setTimeout(() => {
+      saveEditsRef.current?.({ silent: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature is
+    // the edits value; the saver rides a ref so scheduling never re-fires.
+  }, [editsSignature, busy, project?.id]);
 
   // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
   // the approval and moves to the render below. Down reuses the existing plan
@@ -3662,7 +3702,7 @@ setObjective("");
             />
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="accent" onClick={handleSaveEdits} disabled={busy || !hasEdits} busy={busy}>
+              <Button variant="accent" onClick={() => handleSaveEdits()} disabled={busy || !hasEdits} busy={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save edits
               </Button>
@@ -3682,6 +3722,16 @@ setObjective("");
                 <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Ready for generation.
+                </p>
+              )}
+              {/* Autosave status, same rhythm as the Demo + CTA draft line:
+                  narrates the background save so an unpressed button never
+                  reads as lost work. Manual saves clear it — the button is
+                  the feedback then. */}
+              {saveStatus && (
+                <p role="status" data-testid="review-autosave-status" className="text-sm text-muted-foreground">
+                  {autosaving && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
+                  {saveStatus}
                 </p>
               )}
             </div>

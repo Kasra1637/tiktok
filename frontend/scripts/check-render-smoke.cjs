@@ -4142,6 +4142,51 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  await check("review edits autosave after every change without the save button", async (ctx) => {
+    // The Demo + CTA editor saves its draft shortly after every change; the
+    // Review step does the same through the server path (claim check and
+    // ready re-mark included), so an unpressed Save button never reads as
+    // lost work. The manual button stays for an immediate, explicit save.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", tone: "calm" };
+    let saves = 0;
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        getDirectionOptions: async () => ({
+          group: "default",
+          setting: ["Setting one"], lighting: ["Lighting one"], wardrobe: ["Wardrobe one"],
+          voice: ["Voice one"], tone: ["Tone one", "Tone two"],
+        }),
+        updateStudioProject: async (_id, patch) => {
+          saves += 1;
+          saved = { ...saved, ...patch, strategy_is_current: false };
+          return saved;
+        },
+        markProjectReady: async () => saved,
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone two");
+        if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
+        if (saved.tone !== "Tone two") throw new Error("the autosave did not carry the tone pick");
+        const status = ctx.container.querySelector('[data-testid="review-autosave-status"]');
+        if (!status || !status.textContent.includes("All changes saved")) {
+          throw new Error("no saved confirmation after the autosave");
+        }
+        // A second change must schedule a second save, not reuse the first.
+        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone one");
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
+        if (saved.tone !== "Tone one") throw new Error("the second autosave did not carry the newer pick");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("the studio never offers a call to action or a product demo", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
