@@ -405,15 +405,14 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
         <div className="history-media min-w-0">
           {!compactNotice && <div className="history-stage">
             {downloadUrl && !previewBroken ? (
-              /* The idle frame carries exactly two facts and one control: the
+              /* The idle frame carries exactly two facts and no controls: the
                  goal angle top-left (where a viewer looks first) and the
-                 duration + trash top-right, so the length and the remove
-                 control read as one cluster. All three are pre-play only —
-                 pressing play hides them together so nothing sits over the
-                 footage. Rows with no playable preview have no frame to host
-                 them, so they keep an icon-only trash in the row below, and a
-                 dead render stays removable. pointer-events-none on the chips
-                 so they never intercept a play tap; the icon re-enables it. */
+                 duration top-right, so the length reads as one cluster. Both
+                 are pre-play only — pressing play hides them together so
+                 nothing sits over the footage. Removing the render never
+                 floats over the clip: Delete lives beside Download in the row
+                 below, for playable and dead rows alike. pointer-events-none
+                 on the chips so they never intercept a play tap. */
               /* The clip wears the studio's own edge, not the app's: a
                  hairline indigo surround with two corner marks. It lives in
                  the frame's padding — outside the footage — so it never
@@ -457,35 +456,20 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                     <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{humanize(row.objective)}</FactChip>
                   </span>
                 )}
-                {!hasPlayed && (
+                {!hasPlayed && row.duration ? (
                   <span
-                    className="absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-1.5"
-                    data-testid="history-preview-actions"
+                    className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-1.5"
+                    data-testid="history-preview-duration"
                   >
-                    {row.duration ? (
-                      <FactChip className="pointer-events-none border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={`pointer-events-auto rounded-full border border-white/25 bg-black/65 p-0 text-white backdrop-blur-sm hover:bg-black/80 hover:text-white${compact ? " h-11 w-11" : " h-8 w-8"}`}
-                      disabled={busy}
-                      onClick={() => act(() => api.deleteGeneration(row.id))}
-                      data-testid={`history-delete-${row.id}`}
-                      title="Remove this render from history"
-                      aria-label="Delete this render"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
                   </span>
-                )}
+                ) : null}
               </span>
             ) : (
               notice
             )}
           </div>}
 
-          {(saveUrl || !(downloadUrl && !previewBroken)) && (
           <div
             className={`flex gap-2 border-t border-[color:var(--hairline)] py-2 ${compact ? "px-2" : "px-3"}`}
             data-testid="history-media-actions"
@@ -501,10 +485,9 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </a>
               </Button>
             )}
-            {/* No playable frame to hang the trash on, so the remove control
-                lives here instead — the same icon-only square, never a
-                "Delete" label that competes with Download. */}
-            {!(downloadUrl && !previewBroken) && (
+            {/* Delete sits beside the file that saves the render, never over
+                the footage: the same icon-only square for playable and dead
+                rows, and never a "Delete" label competing with Download. */}
             <Button
               variant="ghost"
               size="icon"
@@ -517,9 +500,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
-            )}
           </div>
-          )}
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
             {/* Read top to bottom in the order a founder actually scans: which

@@ -310,10 +310,10 @@ fixed 135px clip (`width: max-content`) rather than drawing gutters beside
 it. Cards with no playable clip keep their notice and no frame.
 
 Inside the record, actions are grouped by consequence rather than by kind:
-Download and Demo + CTA are the wide pair, Retry render joins them on a failed
-row, and Delete sits on the quieter line beneath — Delete is never beside
-the button that saves the same file. Related-render links are capped at two
-per card.
+Download and Demo + CTA are the wide pair, and Retry render joins them on a
+failed row. Delete is the quieter icon-only button beside Download directly
+below the clip — it never floats over the footage. Related-render links are
+capped at two per card.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.

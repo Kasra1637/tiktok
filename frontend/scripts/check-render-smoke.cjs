@@ -12385,8 +12385,8 @@ async function runDemoCtaChecks() {
         for (const label of ["Download", "Demo + CTA"]) {
           if (!first.textContent.includes(label)) throw new Error(`History lost ${label}`);
         }
-        // Delete is icon-only on the preview, not text below the video: the
-        // playable card offers it through the overlay's trash button.
+        // Delete is icon-only and shares the Download row below the video, so
+        // removing a render never floats over the footage.
         if (!first.querySelector('button[aria-label="Delete this render"]')) throw new Error("History lost Delete");
         const summary = first.querySelector('[data-testid="history-summary"]');
         for (const text of ["Journal", "Find your next thought.", "Not posted yet"]) {
@@ -13774,15 +13774,15 @@ async function runDemoCtaChecks() {
         },
         async () => {
           await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-          // A failed row has no clip, so the preview overlay never mounts:
-          // the trash below the video keeps a dead render from sitting in
-          // history forever. It is the same icon-only square the idle frame
-          // carries, so no row reintroduces a Delete text label.
+          // A failed row has no clip, so the trash below the video keeps a
+          // dead render from sitting in history forever. It is the same
+          // icon-only square every row carries, so no row reintroduces a
+          // Delete text label.
           const del = ctx.container.querySelector('button[aria-label="Delete this render"]');
           if (!del) {
             throw new Error(
-              "no Delete on a failed render: the rail Delete never mounts " +
-                "without a preview rail, so the row cannot be removed"
+              "no Delete on a failed render: the row below the video never " +
+                "mounted its remove control, so the dead row cannot be removed"
             );
           }
           if ((del.textContent || "").trim() !== "") {
@@ -13799,7 +13799,7 @@ async function runDemoCtaChecks() {
     }
   );
   await check(
-    "History keeps Download below the video and Delete on the preview",
+    "History keeps Download and Delete together below the video",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -13819,10 +13819,9 @@ async function runDemoCtaChecks() {
           if (!group.textContent.includes("Demo + CTA")) {
             throw new Error("the action bar lost Demo + CTA");
           }
-          // Download owns the row directly below the video. Delete no longer
-          // sits beside it: it rides the top-right of the idle preview as an
-          // icon-only button next to the duration, and both hide on Play so
-          // nothing sits over the footage.
+          // Download and Delete share the row directly below the video; the
+          // preview carries only the goal and duration facts, so nothing
+          // removable floats over the footage.
           const mediaActions = card?.querySelector('[data-testid="history-media-actions"]');
           if (!mediaActions) {
             throw new Error("History lost the Download row below the video");
@@ -13830,8 +13829,16 @@ async function runDemoCtaChecks() {
           if (!mediaActions.textContent.includes("Download")) {
             throw new Error("the row below the video lost Download");
           }
-          if (mediaActions.querySelector('button[aria-label="Delete this render"]')) {
-            throw new Error("Delete is still below the video instead of on the preview");
+          const remove = mediaActions.querySelector('button[aria-label="Delete this render"]');
+          if (!remove) {
+            throw new Error("Delete is missing from the row beside Download");
+          }
+          if ((remove.textContent || "").trim() !== "") {
+            throw new Error("Delete must stay icon-only beside Download");
+          }
+          const download = mediaActions.querySelector('a[download]');
+          if (!download || !(download.compareDocumentPosition(remove) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+            throw new Error("Delete does not sit immediately after Download");
           }
           const stage = card?.querySelector(".history-stage");
           const summary = card?.querySelector('[data-testid="history-summary"]');
@@ -13840,16 +13847,12 @@ async function runDemoCtaChecks() {
             mediaActions.compareDocumentPosition(summary) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
             throw new Error("the Download row is not between the video and its summary");
           }
-          const overlay = card?.querySelector('[data-testid="history-preview-actions"]');
-          const remove = overlay?.querySelector('button[aria-label="Delete this render"]');
-          if (!overlay || !remove) {
-            throw new Error("the preview lost its top-right Delete");
-          }
-          if (remove.textContent.trim() !== "") {
-            throw new Error("the preview Delete must be icon-only, with no Delete text");
-          }
-          if (!overlay.textContent.includes("10s")) {
+          const duration = card?.querySelector('[data-testid="history-preview-duration"]');
+          if (!duration || !duration.textContent.includes("10s")) {
             throw new Error("the preview lost its duration badge");
+          }
+          if (duration.querySelector("button")) {
+            throw new Error("a control still floats over the preview footage");
           }
           if (group.textContent.includes("Download")) {
             throw new Error("Download is still in the detail action bar instead of below the video");
@@ -13867,8 +13870,11 @@ async function runDemoCtaChecks() {
           await act(async () => {
             video.dispatchEvent(new dom.window.Event("play", { bubbles: true }));
           });
-          if (card.querySelector('[data-testid="history-preview-actions"]')) {
-            throw new Error("the preview Delete and duration survived Play instead of hiding");
+          if (card.querySelector('[data-testid="history-preview-duration"]')) {
+            throw new Error("the duration survived Play instead of hiding");
+          }
+          if (!card.querySelector('[data-testid="history-media-actions"] button[aria-label="Delete this render"]')) {
+            throw new Error("Delete vanished once the clip started playing");
           }
           if (card.querySelector('[data-testid="history-preview-meta"]')) {
             throw new Error("the goal angle survived Play instead of hiding with the rest");
@@ -14494,16 +14500,16 @@ await check(
         await mount(GenerationHistory)(ctx);
         const playable = ctx.container.querySelector('#generation-compact-playable');
         const actions = playable.querySelector('[data-testid="history-media-actions"]');
-        // Delete moved off the row below the video onto the preview itself:
-        // the row below keeps Download only, and the remove control rides the
-        // top-right of the idle frame as an icon-only button.
-        if (!actions.querySelector('a[download]') || actions.querySelector('button[aria-label="Delete this render"]')) {
-          throw new Error("below the video belongs to Download; Delete rides the preview overlay");
+        // Download and Delete share the row below the video; nothing removable
+        // floats over the compact footage.
+        const remove = actions.querySelector('button[aria-label="Delete this render"]');
+        if (!actions.querySelector('a[download]') || !remove || remove.textContent.trim() !== "" ||
+            !remove.classList.contains("h-11") || !remove.classList.contains("w-11")) {
+          throw new Error("compact playable needs an icon-only 44px delete beside Download");
         }
-        const overlay = playable.querySelector('[data-testid="history-preview-actions"]');
-        const remove = overlay?.querySelector('button[aria-label="Delete this render"]');
-        if (!remove || remove.textContent.trim() !== "" || !remove.classList.contains("h-11") || !remove.classList.contains("w-11")) {
-          throw new Error("compact playable needs an icon-only 44px delete on the preview");
+        const overlay = playable.querySelector('[data-testid="history-preview-duration"]');
+        if (!overlay || overlay.querySelector("button")) {
+          throw new Error("the compact preview must carry no control over the footage");
         }
         for (const [id, message] of [["compact-missing", "No durable copy"], ["compact-failed", "Provider error"]]) {
           const card = ctx.container.querySelector(`#generation-${id}`);
