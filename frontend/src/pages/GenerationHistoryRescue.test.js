@@ -155,4 +155,33 @@ describe("history kit-less rescue flow", () => {
     });
     container.remove();
   });
+
+  test("a refused Generate names the next step instead of dying silently", async () => {
+    // The draft behind this render is gone, so the endpoint 404s.
+    api.regeneratePostKit.mockRejectedValue({
+      response: { status: 404, data: { detail: "That draft is gone, so there is no material to write." } },
+    });
+    const { container, root } = await renderHistoryPage("copy=without");
+    const button = container.querySelector(
+      '[data-testid="history-generate-post-copy-button-kitless-1"]'
+    );
+
+    await act(async () => {
+      button.click();
+    });
+
+    // The refusal is loud: the row names the next step...
+    expect(container.textContent).toContain("That draft is gone");
+    // ...the banner still offers the rescue, nothing navigated away...
+    expect(container.querySelector('[data-testid="history-attention"]')).not.toBeNull();
+    expect(global.__historyRoute.navigations).toHaveLength(0);
+    // ...and the button is pressable again.
+    expect(button.textContent).toContain("Generate post copy");
+    expect(button.disabled).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });
