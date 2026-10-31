@@ -77,10 +77,8 @@ import GenerationHistory from "./GenerationHistory";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
+// No shared setup: the single flow below sets its own mocks, route, and
+// api implementations. (CRA resets all mocks before each test anyway.)
 describe("history kit-less rescue flow", () => {
   const KIT = {
     caption: "Stop writing empty pages — one tap starts the session. What stalls you?",
