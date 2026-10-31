@@ -726,16 +726,28 @@ function AngleSelector({
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
-      {/* Selection opens the angle. A closed row is its uppercase title and
-          nothing else: the list is scanned by name, and the picked row then
-          shows what the strategy is written from — audience, problem,
-          promise, feature, the emotion it aims at, and any claim bounding it.
-          Only the picked row opens, because two open panels side by side are
-          two half-read angles, and the fields are what the render downstream
-          is held to. */}
+      {/* Selection opens the angle. A closed row is its uppercase title plus
+          its fit pill, so the six compare without opening: the list is
+          scanned by name, decided by score, and the picked row then shows
+          what the strategy is written from — audience, problem, promise,
+          feature, the emotion it aims at, and any claim bounding it. Only
+          the picked row opens, because two open panels side by side are
+          two half-read angles, and the fields are what the render
+          downstream is held to. */}
       {angles.map((a, i) => {
         const picked = angleId === a.id;
         const details = picked ? angleDetails(a) : [];
+        const angleVerdicts =
+          Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
+        const angleFit = goalFitScore({
+          index: i,
+          total: angles.length,
+          evidence: a.evidence,
+          hasFitReason: false,
+        });
+        const angleFitBasis = angleVerdicts
+          ? `${angleFit.basis} · at this angle kind`
+          : angleFit.basis;
         return (
           // Staggered arrival: each row fades up ~70ms after the previous, so
           // a fresh set is watched arriving instead of blinking in at once.
@@ -775,6 +787,16 @@ function AngleSelector({
               <span className="eyebrow min-w-0 flex-1 truncate leading-[22px]">
                 {sentenceCase(a.label).replace(/\.\s*$/, "")}
               </span>
+              {/* The fittest score rides on the closed row, so the list can be
+                  compared without opening every angle. Opening still shows
+                  the same pill with its basis beside the angle's fields. */}
+              <span className="shrink-0">
+                <FitBadge
+                  score={angleFit.score}
+                  basis={angleFitBasis}
+                  testId={`angle-row-fit-${a.id}`}
+                />
+              </span>
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
                   picked ? "rotate-180" : ""
@@ -797,30 +819,17 @@ function AngleSelector({
                 ))}
               </dl>
             )}
-            {/* The picked angle's fit, in the same pill as goals and
-                templates. Closed rows stay name-only so the list scans by
-                name; the score lives where the angle is actually read. Rank
-                is this list's order, tally is the kind's own win share —
-                verdicts attribute through the kind, so the basis says so. */}
+            {/* The picked angle's fit again beside its fields, in the same
+                pill as goals and templates. Rank is this list's order,
+                tally is the kind's own win share — verdicts attribute
+                through the kind, so the basis says so. */}
             {(() => {
-              const angleVerdicts =
-                Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
-              const angleFit = goalFitScore({
-                index: i,
-                total: angles.length,
-                evidence: a.evidence,
-                hasFitReason: false,
-              });
               return (
                 picked && (
                   <div className="border-t border-[color:var(--hairline)] row-pad">
                     <FitBadge
                       score={angleFit.score}
-                      basis={
-                        angleVerdicts
-                          ? `${angleFit.basis} · at this angle kind`
-                          : angleFit.basis
-                      }
+                      basis={angleFitBasis}
                       testId={`angle-fit-score-${a.id}`}
                     />
                   </div>

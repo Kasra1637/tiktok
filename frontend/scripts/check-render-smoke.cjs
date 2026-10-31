@@ -4798,9 +4798,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (step.querySelector('[data-testid^="angle-details-"]')) {
         throw new Error("an angle shows its fields before it is picked");
       }
-      // A closed row is its title only. The subtitle came off the bar, so the
-      // field that used to summarize it must not be on screen before the pick
-      // — the open panel is what shows it now.
+      // A closed row shows no subtitle. The subtitle came off the bar (the
+      // row keeps its title and its fit pill), so the field that used to
+      // summarize it must not be on screen before the pick — the open panel
+      // is what shows it now.
       if (step.textContent.includes("Plans get made after the day is over")) {
         throw new Error("a closed angle row still prints its subtitle");
       }
@@ -4840,13 +4841,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // A row is its kind's glyph and its uppercase title, and nothing else. The
-  // subtitle, the kind badge and the founder verdict tally all came off the
-  // bar: three pieces of meta around the title made a list you scan into a
-  // paragraph you read, and the picked row still opens onto every field. Pinned
-  // on the rendered row, so any of the three drifting back is caught here.
-  // The title rides the shared eyebrow token (12px caps), not its own size.
-  await check("angle rows show only their kind icon and caps title", async (ctx) => {
+  // A row is its check mark, its uppercase title, and its fit pill — and
+  // nothing else. The subtitle, the kind badge and the founder verdict tally
+  // all came off the bar: three pieces of meta around the title made a list
+  // you scan into a paragraph you read, and the picked row still opens onto
+  // every field. Pinned on the rendered row, so any of the three drifting
+  // back is caught here. The title rides the shared eyebrow token (12px
+  // caps), not its own size.
+  await check("angle rows show only check, caps title and fit pill", async (ctx) => {
     const PROVEN = { ...ANGLE, id: "a9", label: "Proven opener", evidence: { wins: 3, flops: 1 } };
     // Every row, not the first: the rule is the list's, and a row that kept
     // its old chrome would be the one a single-row fixture never looked at.
@@ -4868,11 +4870,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         for (const [id, label, extras] of ROWS) {
           const row = step.querySelector(`[data-testid="angle-option-${id}"]`);
           if (!row) throw new Error(`no row for angle ${id}`);
-          const spans = [...row.querySelectorAll("span")];
-          if (spans.length !== 1) {
-            throw new Error(`angle ${id} renders ${spans.length} text spans, expected its title alone`);
+          // Title plus the one fit pill: the title keeps the eyebrow token
+          // and the pill keeps its testid, so anything else is chrome.
+          const title = row.querySelector("span.eyebrow");
+          if (!title) throw new Error(`angle ${id} lost its eyebrow title`);
+          const pill = row.querySelector(`[data-testid="angle-row-fit-${id}"]`);
+          if (!pill) throw new Error(`angle ${id} lost its closed-row fit pill`);
+          const stray = [...row.querySelectorAll("span")].filter(
+            (el) => el !== title && el !== pill && !pill.contains(el) && !el.contains(pill)
+          );
+          if (stray.length !== 0) {
+            throw new Error(`angle ${id} renders ${stray.length} extra spans beyond title and pill`);
           }
-          const title = spans[0];
           if (!/uppercase|eyebrow/.test(title.className) || !/tracking-|eyebrow/.test(title.className)) {
             throw new Error(`angle ${id}'s title is off the uppercase tracked token: ${title.className}`);
           }
@@ -4935,10 +4944,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // The picked angle shows its fit in the same pill as goals and templates:
-  // rank in this list plus the kind's own win share, with the kind caveat in
-  // the basis. Closed rows stay name-only so the list scans by name.
-  await check("the picked angle shows its fit badge", async (ctx) => {
+  // Every angle row carries its fit pill, open or not: rank in this list
+  // plus the kind's own win share, with the kind caveat in the basis. The
+  // closed pill compares without opening; picking adds the same pill
+  // beside the angle's fields. No more expanding just to see the score.
+  await check("every angle row shows its fit badge, open or not", async (ctx) => {
     const PROVEN = { ...ANGLE, evidence: { wins: 2, flops: 1 } };
     await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
       global.__SMOKE_PARAMS = "";
@@ -4946,8 +4956,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
-        if (ctx.container.querySelector('[data-testid^="angle-fit-score-"]')) {
-          throw new Error("a closed angle row shows a fit badge");
+        const closed = ctx.container.querySelector('[data-testid="angle-row-fit-a1"]');
+        if (!closed) {
+          throw new Error("a closed angle row shows no fit badge");
+        }
+        if (closed.textContent.trim() !== "Fit 7/10") {
+          throw new Error(`closed angle badge is not the shared pill: ${closed.textContent}`);
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
         const badge = ctx.container.querySelector('[data-testid="angle-fit-score-a1"]');
