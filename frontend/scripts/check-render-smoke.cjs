@@ -4065,7 +4065,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // -------------------------------------------------------------------------
   await check("camera setup saves through review and survives reload with strategy guidance", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
-    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
+    const visualDirection = "Handheld selfie, close framing. Kitchen, soft window light, blue shirt.";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", visual_direction: visualDirection };
     try {
       await withApi({
         getStudioProject: async () => saved,
@@ -4085,6 +4086,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         });
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
+        expectText(ctx, "Camera setup controls framing and camera movement");
+        expectText(ctx, "Setting, lighting & wardrobe");
+        const direction = ctx.container.querySelector('#review-visual-direction');
+        if (direction?.value !== visualDirection || saved.visual_direction !== visualDirection) {
+          throw new Error("changing camera setup discarded reviewed scene details");
+        }
+        if (!direction.getAttribute('aria-describedby')?.includes('review-visual-direction-help')) {
+          throw new Error("scene direction is not associated with camera ownership guidance");
+        }
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));

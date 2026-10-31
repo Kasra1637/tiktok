@@ -3412,17 +3412,22 @@ setObjective("");
                   ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
                   : "Close handheld framing, subtle camera movement, and the current centered zoom."}
               </p>
-              <p className="text-sm text-muted-foreground">Save changes, then rebuild and review the strategy before rendering.</p>
+              <p className="text-sm text-muted-foreground">Camera setup controls framing and camera movement. Save changes, then rebuild and review the strategy before rendering.</p>
             </div>
             <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
             <div className="space-y-4">
-              <label className="text-sm font-semibold">Visual direction</label>
-              <p className="text-xs text-muted-foreground" data-subtitle="">Guidance for the generated clip, not footage of your demo.</p>
+              <label htmlFor="review-visual-direction" className="text-sm font-semibold">Setting, lighting &amp; wardrobe</label>
+              <p className="text-xs text-muted-foreground" data-subtitle="">Scene notes stay yours; camera setup owns how it is filmed.</p>
               <Textarea
+                id="review-visual-direction"
+                aria-describedby="review-visual-direction-help"
                 value={editValue("visual_direction", "")}
                 onChange={(e) => setEdits({ ...edits, visual_direction: e.target.value })}
                 className="min-h-[90px]"
               />
+              <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
+                Your notes are preserved when you switch setups. Any camera or framing directions here are secondary to Camera setup; remove conflicting directions before rebuilding the strategy.
+              </p>
             </div>
 
             {/* Read-only, and labelled as such, because it sits among seven
