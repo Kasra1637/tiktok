@@ -184,4 +184,30 @@ describe("history kit-less rescue flow", () => {
     });
     container.remove();
   });
+
+  test("a connection drop during Generate fails loud with a retry", async () => {
+    // No provider answer at all: the fallback names the dropped connection
+    // and the action, instead of a status code or silence.
+    api.regeneratePostKit.mockRejectedValue({ message: "Network Error" });
+    const { container, root } = await renderHistoryPage("copy=without");
+    const button = container.querySelector(
+      '[data-testid="history-generate-post-copy-button-kitless-1"]'
+    );
+
+    await act(async () => {
+      button.click();
+    });
+
+    expect(container.textContent).toContain("connection dropped");
+    expect(container.textContent).toContain("write this render's post copy");
+    expect(container.querySelector('[data-testid="history-attention"]')).not.toBeNull();
+    expect(global.__historyRoute.navigations).toHaveLength(0);
+    expect(button.textContent).toContain("Generate post copy");
+    expect(button.disabled).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });
