@@ -242,6 +242,27 @@ class TestSinglePassGeneration:
 
 
 class TestCameraSetup:
+    def test_fixed_camera_conflict_is_refused_before_a_provider_call(self, api, monkeypatch):
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest
+        project, _, _ = _ready_project(api, "Fixed camera conflict")
+        strategy = {**FAKE_STRATEGY, "camera_setup": "fixed", "scene": {
+            "visual_style": "Handheld selfie, close framing.",
+            "environment": "kitchen", "lighting": "soft window light", "wardrobe": "blue shirt",
+        }}
+        _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
+            ("fixed", json.dumps(strategy), project["id"])))
+
+        with pytest.raises(HTTPException) as exc:
+            _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
+        assert exc.value.status_code == 409
+        assert "scene.visual_style" in exc.value.detail
+        assert "rebuild" in exc.value.detail.lower()
+        assert not calls
+        assert _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))["generations"] == []
+        saved = _run(api.get_studio_project(project["id"], ANON))
+        assert saved["strategy"]["scene"] == strategy["scene"]
+
     def test_fixed_camera_is_snapshotted_and_first_frame_models_refused(self, api, monkeypatch):
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest, UpdateStudioProjectRequest

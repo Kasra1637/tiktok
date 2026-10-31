@@ -5955,16 +5955,19 @@ async def _submit_generation(
     # template wording is trimmed there, never the founder's own words.
     prompt_budget = video_providers.capability(model_key).get("prompt_char_limit")
     if strategy:
-        prompt = generation_planning.build_segment_prompt(
-            strategy=strategy,
-            profile=profile,
-            template=template,
-            duration=seconds,
-            assets=project.get("assets") or [],
-            plan=render_plan,
-            prompt_budget=prompt_budget,
-            script_sacred=video_providers.script_is_sacred(model_key),
-        )
+        try:
+            prompt = generation_planning.build_segment_prompt(
+                strategy=strategy,
+                profile=profile,
+                template=template,
+                duration=seconds,
+                assets=project.get("assets") or [],
+                plan=render_plan,
+                prompt_budget=prompt_budget,
+                script_sacred=video_providers.script_is_sacred(model_key),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     else:
         # The no-strategy fallback, and it now takes the same ceiling and the
         # same sacred-script rule as the strategy path. It used to take neither,

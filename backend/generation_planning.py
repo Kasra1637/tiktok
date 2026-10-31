@@ -19,6 +19,7 @@ app (prices, ratings, interface text) must come from verified facts or
 stay out of frame.
 """
 from contextvars import ContextVar
+import re
 from typing import Optional
 
 
@@ -377,6 +378,69 @@ FIXED_STARTING_SHOT = (
 
 def starting_shot(camera_setup="handheld") -> str:
     return FIXED_STARTING_SHOT if camera_setup == "fixed" else SELFIE_STARTING_SHOT
+
+
+# Detect explicit conflicting directions, not spoken dialogue. Refuse instead
+# of stripping whole fields: a mixed direction may also carry reviewed scene,
+# wardrobe or performance details that must not be silently thrown away.
+_FIXED_CAMERA_CONFLICT = re.compile(
+    r"\b(?:hand[ -]?held|selfie|arm['’]?s[ -]+length|close[ -]?(?:up|framing)|"
+    r"(?:chest|waist|shoulders?)[ -]up|full[ -]body|head[ -]to[ -]toe|"
+    r"zoom\w*|orbit\w*|(?:pan(?:s|ning)?|tilt(?:s|ing)?)\s+(?:the\s+)?camera|"
+    r"(?:camera|lens)\s+(?:(?:slowly|gently|smoothly)\s+)?"
+    r"(?:mov\w*|sway\w*|track\w*|tilt\w*|pan\w*)|"
+    r"(?:push|pull|dolly)[ -]?(?:in|out|back)|"
+    r"(?:walk\w*|step\w*|lean\w*)\s+(?:\w+\s+){0,3}"
+    r"(?:towards?|closer to)\s+(?:the\s+)?(?:camera|lens)|"
+    r"(?:hold\w*|grip\w*)\s+(?:the\s+)?(?:recording\s+)?(?:phone|camera)"
+    r"\s+(?:in\s+(?:her|his|their)\s+hands?|to\s+(?:film|record)))\b",
+    re.IGNORECASE,
+)
+
+
+def require_camera_setup_directions(strategy: dict) -> None:
+    """Validate unbudgeted direction before any prompt can reach a provider.
+
+    Camera-specific scene fields are checked too, even though the lock omits
+    them, so a strategy cannot claim it was reviewed for two different setups.
+    Scripts are deliberately excluded: talking about a selfie is not filming one.
+    """
+    if (strategy or {}).get("camera_setup") != "fixed":
+        return
+    directions = {key: strategy.get(key) for key in (
+        "strategy_summary", "hook_concept", "hook_action", "hook_dialogue",
+    )}
+    for section in ("scene", "performance", "camera_beat"):
+        values = strategy.get(section)
+        if isinstance(values, dict):
+            directions.update({f"{section}.{key}": value for key, value in values.items()})
+    for index, segment in enumerate(strategy.get("segments") or []):
+        if isinstance(segment, dict):
+            for key in ("goal", "action"):
+                directions[f"segments.{index}.{key}"] = segment.get(key)
+    for field, value in directions.items():
+        # Carry negation only through a camera list, not unrelated prose like
+        # "not polished, handheld selfie". Contrast words start a new direction.
+        for sentence in re.split(r"[.!?;:\n]|\b(?:but|instead|however|then)\b", str(value or ""), flags=re.I):
+            negative_list = False
+            for clause in sentence.split(","):
+                matches = list(_FIXED_CAMERA_CONFLICT.finditer(clause))
+                previous_end = 0
+                for match in matches:
+                    prefix = clause[previous_end:match.start()]
+                    previous_end = match.end()
+                    negated = re.search(r"\b(?:no|not|never|without|avoid)\b", prefix, re.I)
+                    if negated or (negative_list and re.fullmatch(r"\s*(?:(?:and|or)\s*)?", prefix, re.I)):
+                        negative_list = True
+                        continue
+                    raise ValueError(
+                        f"Fixed camera conflicts with {field}: {clause.strip()!r}. "
+                        "Camera setup owns framing and camera movement. Edit this direction "
+                        "or rebuild the strategy on Hook + Story for a stationary head-to-mid-thigh "
+                        "shot, then review it again. No render was submitted."
+                    )
+                if not matches:
+                    negative_list = False
 
 
 _CAMERA_MOVE = (
@@ -1088,10 +1152,10 @@ def character_scene_lock(strategy: dict) -> str:
     decided it, instead of being left to the photograph and the model to
     reconcile.
 
-    The fixed selfie starting shot and one model-generated orbit now own camera
-    position and framing. Older camera_angle/framing fields are omitted so they
-    cannot override that instruction. The lock still owns the room, light,
-    wardrobe and props; processing adds only its centered zoom afterwards.
+    Camera setup owns position and framing. Older camera_angle/framing fields
+    are omitted; fixed-camera directions are validated before prompt assembly.
+    The lock still owns the room, light, wardrobe and props. Only handheld
+    footage receives the processing zoom.
     """
     strategy = strategy or {}
     lines = []
@@ -1275,6 +1339,7 @@ def build_segment_prompt(
             server sets this for heygen-video-1, whose 4,090 ceiling tripped the
             withdrawal on ordinary strategies and ate the founder's own words.
     """
+    require_camera_setup_directions(strategy)
     scale = 1.0
     condensed = False
     budget = 0.0

@@ -1274,6 +1274,58 @@ class TestSubmitFailureIsPermanent:
 
 class TestFinalPhoneFraming:
     @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    @pytest.mark.parametrize("field, direction", [
+        ("scene.visual_style", "Handheld selfie, close framing."),
+        ("scene.visual_style", "Not polished, handheld selfie."),
+        ("performance.movement", "No zoom, but the camera pans left."),
+        ("performance.movement", "Holds the recording phone at arm’s length."),
+        ("scene.character_positioning", "Tight close-up of her face."),
+        ("hook_action", "She walks toward the lens."),
+        ("segments.0.action", "The camera pans left."),
+        ("camera_beat.gesture", "Push in toward her face."),
+    ])
+    def test_fixed_camera_refuses_conflicting_strategy_directions(self, prompt_budget, field, direction):
+        from ai_service import normalize_strategy
+
+        strategy = {"camera_setup": "fixed", "scene": {
+            "environment": "kitchen", "lighting": "soft window light", "wardrobe": "blue shirt",
+        }, "segments": [{"role": "hook", "action": "Raises her eyebrows."}]}
+        target = strategy
+        parts = field.split(".")
+        for part in parts[:-1]:
+            target = target[int(part)] if isinstance(target, list) else target.setdefault(part, {})
+        target[parts[-1]] = direction
+        strategy = normalize_strategy(strategy)
+
+        with pytest.raises(ValueError, match="Fixed camera") as exc:
+            gp.build_segment_prompt(strategy=strategy, profile={}, duration=10,
+                                    prompt_budget=prompt_budget, script_sacred=True)
+        assert field in str(exc.value)
+        assert "rebuild" in str(exc.value).lower()
+        assert strategy["scene"]["environment"] == "kitchen"
+        assert strategy["scene"]["lighting"] == "soft window light"
+        assert strategy["scene"]["wardrobe"] == "blue shirt"
+
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    def test_fixed_camera_keeps_scene_delivery_gestures_and_spoken_words(self, prompt_budget):
+        prompt = gp.build_segment_prompt(
+            strategy={
+                "camera_setup": "fixed", "hook_line": "I took a selfie.",
+                "scene": {"environment": "kitchen with a frying pan", "lighting": "soft window light",
+                          "wardrobe": "blue shirt", "visual_style": "Amateur footage. No zoom, orbit or handheld sway."},
+                "performance": {"movement": "A small head tilt, then she raises a second phone into view.",
+                                "voice_delivery": "Warm and conversational."},
+                "camera_beat": {"gesture": "a small relieved smile"},
+                "segments": [{"role": "middle", "script": "Start with one small task."}],
+            }, profile={}, duration=10, prompt_budget=prompt_budget, script_sacred=True,
+        )
+        for detail in ("kitchen with a frying pan", "soft window light", "blue shirt",
+                       "Warm and conversational", "A small head tilt", "a small relieved smile",
+                       "I took a selfie.", "Start with one small task.", "head to mid-thigh"):
+            assert detail in prompt
+        assert len(prompt) <= prompt_budget
+
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
     def test_fixed_camera_is_wide_and_stationary_without_losing_speech(self, prompt_budget):
         prompt = gp.build_segment_prompt(
             strategy={"camera_setup": "fixed", "hook_line": "Stop waiting.",
