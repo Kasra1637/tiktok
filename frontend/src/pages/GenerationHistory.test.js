@@ -167,39 +167,28 @@ describe("historyActionError", () => {
 });
 
 describe("needsHistoryRepairRow", () => {
-  test("failed rows need repair", () => {
-    expect(needsHistoryRepairRow({ status: "failed" })).toBe(true);
-  });
-
-  test("stuck generating rows need repair only without bytes", () => {
-    expect(needsHistoryRepairRow({ status: "generating" })).toBe(true);
-    expect(needsHistoryRepairRow({ status: "generating", video_url: "/api/media/x.mp4" })).toBe(false);
-  });
-
-  test("completed rows need repair only without a durable copy", () => {
-    expect(needsHistoryRepairRow({ status: "completed" })).toBe(true);
-    expect(needsHistoryRepairRow({ status: "completed", playback_url: "/api/media/x.mp4?sig=1" })).toBe(false);
-  });
-
-  test("healthy rows never need repair", () => {
-    expect(needsHistoryRepairRow({ status: "completed", r2_url: "https://cdn.example/x.mp4" })).toBe(false);
-    expect(needsHistoryRepairRow({ status: "archived" })).toBe(false);
-    expect(needsHistoryRepairRow(null)).toBe(false);
+  test.each([
+    ["failed", { status: "failed" }, true],
+    ["generating with no bytes yet", { status: "generating" }, true],
+    ["generating with bytes", { status: "generating", video_url: "/api/media/x.mp4" }, false],
+    ["completed with no durable copy", { status: "completed" }, true],
+    ["completed with a signed playback copy", { status: "completed", playback_url: "/api/media/x.mp4?sig=1" }, false],
+    ["completed with an R2 copy", { status: "completed", r2_url: "https://cdn.example/x.mp4" }, false],
+    ["archived", { status: "archived" }, false],
+    ["missing row", null, false],
+  ])("%s", (_label, row, expected) => {
+    expect(needsHistoryRepairRow(row)).toBe(expected);
   });
 });
 
 describe("history deep-link and pager helpers", () => {
-  test("a deep link to a copy-less export resolves to the without side", () => {
-    expect(effectiveCopyFilter("with", { post_kit: null, audience: "", demo_brief: "" })).toBe("without");
-  });
-
-  test("a deep link to a copy-carrying render resolves to the with side", () => {
-    expect(effectiveCopyFilter("without", { audience: "QA" })).toBe("with");
-  });
-
-  test("without a deep-link target the chosen filter is kept", () => {
-    expect(effectiveCopyFilter("with", null)).toBe("with");
-    expect(effectiveCopyFilter("without", null)).toBe("without");
+  test.each([
+    ["a copy-less export resolves to the without side", "with", { post_kit: null, audience: "", demo_brief: "" }, "without"],
+    ["a copy-carrying render resolves to the with side", "without", { audience: "QA" }, "with"],
+    ["without a target the with side is kept", "with", null, "with"],
+    ["without a target the without side is kept", "without", null, "without"],
+  ])("deep link %s", (_label, param, row, expected) => {
+    expect(effectiveCopyFilter(param, row)).toBe(expected);
   });
 
   test("a deep link jumps to its page exactly once", () => {
@@ -215,69 +204,45 @@ describe("history deep-link and pager helpers", () => {
   });
 });
 
-describe("history attention selection", () => {
+const FILED_COPY = "https://cdn.example/x.mp4";
+
+describe("history attention contract", () => {
   test("no rows means no banner", () => {
     expect(getHistoryAttention([])).toBeNull();
   });
 
-  test("repairs beat kit-less finished renders", () => {
-    const attention = getHistoryAttention([
-      { id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" },
-      { id: "f1", status: "failed" },
-    ]);
-    expect(attention.kind).toBe("repair");
-    expect(attention.first.id).toBe("f1");
+  test.each([
+    ["a repair beats a kit-less render", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "f1", status: "failed" }], "repair", "f1"],
+    ["a filed copy with no kit", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "kitless", "k1"],
+    ["an archived filed copy with no kit", [{ id: "a1", status: "archived", post_kit: null, r2_url: FILED_COPY }], "kitless", "a1"],
+  ])("selects %s", (_label, rows, kind, firstId) => {
+    const attention = getHistoryAttention(rows);
+    expect(attention.kind).toBe(kind);
+    expect(attention.first.id).toBe(firstId);
   });
 
-  test("kit-less finished renders surface only when nothing needs repair", () => {
-    // A durable copy is filed, so this is not a repair — it merely lacks kits.
-    const attention = getHistoryAttention([
-      { id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" },
-    ]);
-    expect(attention.kind).toBe("kitless");
-    const words = describeHistoryAttention(attention);
-    expect(words.summary).toContain("no post copy yet");
-    expect(words.guidance).toContain("Generate post copy");
-    expect(words.cta).toBe("Review without copy");
+  test.each([
+    ["kit-less", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "1 finished render has no post copy yet.", "Generate post copy", "Review without copy"],
+    ["two kit-less", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "k2", status: "completed", post_kit: null, r2_url: FILED_COPY }], "2 finished renders have no post copy yet.", "Generate post copy", "Review without copy"],
+    ["failed", [{ id: "f1", status: "failed" }], "1 clip needs attention.", "provider reason", "Review repair"],
+    ["two failed", [{ id: "f1", status: "failed" }, { id: "f2", status: "failed" }], "2 clips need attention.", "Open each card", "Review repair"],
+    ["awaiting", [{ id: "g1", status: "generating" }], "1 clip needs attention.", "Check again", "Review repair"],
+    ["missing durable copy", [{ id: "c1", status: "completed" }], "1 clip needs attention.", "Retry durable save", "Review repair"],
+  ])("words: %s", (_label, rows, summary, guidance, cta) => {
+    const words = describeHistoryAttention(getHistoryAttention(rows));
+    expect(words.summary).toContain(summary);
+    expect(words.guidance).toContain(guidance);
+    expect(words.cta).toBe(cta);
   });
 
-  test("repair words name the failed-row next step", () => {
-    const words = describeHistoryAttention(
-      getHistoryAttention([{ id: "f1", status: "failed" }])
-    );
-    expect(words.summary).toContain("needs attention");
-    expect(words.guidance).toContain("provider reason");
-    expect(words.cta).toBe("Review repair");
-  });
-
-  test("an archived render with a filed copy is kit-less, not repair", () => {
-    const attention = getHistoryAttention([
-      { id: "a1", status: "archived", post_kit: null, r2_url: "https://cdn.example/a1.mp4" },
-    ]);
-    expect(attention.kind).toBe("kitless");
-  });
-
-  test("an awaiting row names Check again, a copy-less filed row names Retry save", () => {
-    const awaiting = describeHistoryAttention(
-      getHistoryAttention([{ id: "g1", status: "generating" }])
-    );
-    expect(awaiting.guidance).toContain("Check again");
-    const undurable = describeHistoryAttention(
-      getHistoryAttention([{ id: "c1", status: "completed" }])
-    );
-    expect(undurable.guidance).toContain("Retry durable save");
-  });
-
-  test("the banner link selects its clip's side and clears the search", () => {
-    const kitless = getHistoryAttention([{ id: "k1", status: "completed", post_kit: null, r2_url: "https://cdn.example/k1.mp4" }]);
-    // The page passes the live URLSearchParams object, not a string.
-    const kitLink = historyAttentionLink(new URLSearchParams("profile=b1&q=noise"), kitless);
-    expect(kitLink.search).toContain("copy=without");
-    expect(kitLink.search).not.toContain("q=");
-    expect(kitLink.search).toContain("profile=b1");
-    expect(kitLink.hash).toBe("#generation-k1");
-    const failed = getHistoryAttention([{ id: "f1", status: "failed", audience: "QA" }]);
-    expect(historyAttentionLink("", failed).search).toContain("copy=with");
+  // The page passes the live URLSearchParams object, not a string.
+  test.each([
+    ["kit-less links to the without side, keeping server filters", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "profile=b1&q=noise", "?profile=b1&copy=without", "#generation-k1"],
+    ["repair links to the side holding its first clip", [{ id: "f1", status: "failed", audience: "QA" }], "", "?copy=with", "#generation-f1"],
+  ])("link: %s", (_label, rows, params, search, hash) => {
+    const link = historyAttentionLink(new URLSearchParams(params), getHistoryAttention(rows));
+    expect(link.search).toBe(search);
+    expect(link.hash).toBe(hash);
   });
 
   test("only a 429 reads as throttling", () => {
