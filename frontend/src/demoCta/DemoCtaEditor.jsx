@@ -186,7 +186,8 @@ function FieldLabel({ children }) {
  * Not editable here: the plan owns this sentence, and Review is where it gets
  * corrected (an editable copy in two places is two sources of truth). Rendered
  * only when the plan actually wrote one — a standalone upload has no plan
- * behind it, and an empty box would read as a missing instruction.
+ * behind it, and an empty box would read as a missing instruction. Hidden
+ * once the second clip is attached: the job it names is done.
  */
 function RecordBriefNote({ brief }) {
   return (
@@ -1648,7 +1649,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           }}
         />
         )}
-        {recordBrief && <RecordBriefNote brief={recordBrief} />}
+        {/* The recording note reads until the demo exists: once the second
+            clip is attached the founder has done what it asked, and a
+            standing instruction for finished work reads as an unanswered
+            debt. Removing the clip brings it back. */}
+        {recordBrief && !appendUrl && <RecordBriefNote brief={recordBrief} />}
         <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>

@@ -11708,6 +11708,59 @@ async function runDemoCtaChecks() {
     );
   });
 
+  await check("the recording note reads until the demo is attached", async (ctx) => {
+    // The brief names a job; once the second clip is attached the job is
+    // done, and a standing instruction for finished work reads as an
+    // unanswered debt. Removing the clip brings it back.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const brief = "Record yourself tapping the timer once, hands only.";
+    global.__SMOKE_DRAFTS = new Map();
+    try {
+      await mount(DemoCtaEditor, { generation: { ...COMPLETED, id: "brief-hide-1", demo_brief: brief } })(ctx);
+      if (!ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+        throw new Error("the recording note is missing before any demo is attached");
+      }
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      Object.defineProperty(input, "files", { value: [new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" })], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+      const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+      if (!probe) throw new Error("the uploaded clip was never probed");
+      await act(async () => {
+        probe.onloadedmetadata();
+      });
+      await clip.flush();
+      await clip.flush();
+      if (!ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+        throw new Error("loading the base clip hid the recording note before the demo exists");
+      }
+      const addedInput = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      if (!addedInput) throw new Error("no second-clip input once the base exists");
+      Object.defineProperty(addedInput, "files", { configurable: true, value: [new dom.window.File(["second"], "second.mp4", { type: "video/mp4" })] });
+      await act(async () => addedInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      if (ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+        throw new Error("the recording note stands after the demo was attached");
+      }
+      // The remove control lives inside the Second clip group, which starts
+      // closed — collapsed groups unmount their children.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-second"] button'), "open the second clip group");
+      await clickEl(ctx, ctx.container.querySelector('[title="Remove the second clip"]'), "remove the demo");
+      await clip.flush();
+      if (!ctx.container.querySelector('[data-testid="demo-cta-record-brief"]')) {
+        throw new Error("removing the demo did not bring the recording note back");
+      }
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
   await check("no plan note, no empty recording brief", async (ctx) => {
     // A standalone upload has no plan behind it, and a project can carry a
     // blank brief. An empty labelled box would read as a missing instruction,
