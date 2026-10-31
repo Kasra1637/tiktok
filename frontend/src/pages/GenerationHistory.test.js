@@ -125,7 +125,6 @@ beforeEach(() => {
   global.URL.createObjectURL = jest.fn(() => "blob:mock-card");
   global.URL.revokeObjectURL = jest.fn();
   jest.clearAllMocks();
-  global.__historyRoute = { query: "", navigations: [] };
 });
 
 async function renderCard(entry, onResolved) {
@@ -273,7 +272,9 @@ describe("history kit-less rescue flow", () => {
   };
 
   async function renderHistoryPage(query) {
-    global.__historyRoute.query = query;
+    // Route state belongs to this mount, not the shared setup: no other
+    // test in this file navigates.
+    global.__historyRoute = { query, navigations: [] };
     api.getGenerationHistory.mockResolvedValue({ generations: [{ ...KITLESS_ROW }] });
     api.getAppProfiles.mockResolvedValue({ profiles: [] });
     // HistoryFeedback refreshes each row's verdicts on mount.
