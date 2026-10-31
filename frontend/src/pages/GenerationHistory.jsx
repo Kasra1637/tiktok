@@ -414,7 +414,15 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                  them, so they keep an icon-only trash in the row below, and a
                  dead render stays removable. pointer-events-none on the chips
                  so they never intercept a play tap; the icon re-enables it. */
-              <span className="history-preview-frame relative block w-full max-w-full">
+              /* The clip wears the studio's own edge, not the app's: a
+                 hairline indigo surround with two corner marks. It lives in
+                 the frame's padding — outside the footage — so it never
+                 covers a pixel, survives playback, and never reaches a
+                 download. */
+              <span
+                className="history-preview-frame relative block w-full max-w-full"
+                data-testid="history-brand-frame"
+              >
                 <video
                   key={`${row.id}-${playerVersion}`}
                   src={downloadUrl}

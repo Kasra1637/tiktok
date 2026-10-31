@@ -12298,6 +12298,63 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("History frames every playable clip in the studio brand edge", async (ctx) => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const frame = css.match(/\.history-preview-frame\s*\{[^}]*\}/);
+    if (!frame || !/padding:\s*4px/.test(frame[0]) || !/border:\s*1px solid var\(--indigo-25\)/.test(frame[0])) {
+      throw new Error("the History clip frame lost its hairline indigo surround");
+    }
+    if (!/\.history-preview-frame::before,[\s\S]*?\.history-preview-frame::after\s*\{[^}]*border-color:\s*var\(--brand-indigo\)/.test(css)) {
+      throw new Error("the History clip frame lost its indigo corner marks");
+    }
+    if (!/\.history-card-compact \.history-preview-frame\s*\{[^}]*width:\s*max-content/.test(css)) {
+      throw new Error("compact clips draw frame-only gutters beside the fixed-width video");
+    }
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({
+          generations: [
+            { ...COMPLETED, id: "brand-frame", audience: "Night scrollers" },
+            { ...COMPLETED, id: "brand-frame-compact" },
+            { ...COMPLETED, id: "brand-frame-empty", video_url: null, playback_url: null, r2_url: null, audience: "Night scrollers" },
+          ],
+        }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const card = ctx.container.querySelector("#generation-brand-frame");
+        const framed = card?.querySelector('[data-testid="history-brand-frame"]');
+        if (!framed || !framed.querySelector("video.history-preview")) {
+          throw new Error("the playable History clip is not inside the brand frame");
+        }
+        if (!framed.classList.contains("history-preview-frame")) {
+          throw new Error("the brand frame is not the clip frame itself");
+        }
+        if (ctx.container.querySelector("#generation-brand-frame-empty [data-testid=\"history-brand-frame\"]")) {
+          throw new Error("a card with no playable clip still wears a video frame");
+        }
+        const video = framed.querySelector("video");
+        await act(async () => {
+          video.dispatchEvent(new dom.window.Event("play", { bubbles: true }));
+        });
+        if (!card.querySelector('[data-testid="history-brand-frame"]')) {
+          throw new Error("the brand frame disappears once the clip starts playing");
+        }
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const compact = ctx.container.querySelector("#generation-brand-frame-compact");
+        if (!compact?.classList.contains("history-card-compact") || !compact.querySelector('[data-testid="history-brand-frame"] video')) {
+          throw new Error("compact History cards lost the brand frame around their clip");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
   await check("History shows each render as one attached card with clip beside its record", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;

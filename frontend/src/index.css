@@ -778,9 +778,47 @@ h1,
         hsl(228 20% 5%);
 }
 .history-preview-frame {
+    position: relative;
     width: 100%;
     max-width: calc(var(--history-preview-h) * 9 / 16);
     margin-inline: auto;
+    /* Every playable History clip wears the studio's own edge: a hairline
+     * indigo surround with two corner marks. The surround lives in this
+     * frame's padding, outside the footage, so it never covers a pixel,
+     * stays put through playback, and never reaches a download. */
+    padding: 4px;
+    border: 1px solid var(--indigo-25);
+    border-radius: calc(0.75rem + 5px);
+    background:
+        linear-gradient(160deg, var(--indigo-15), var(--indigo-4) 55%, transparent),
+        hsl(228 20% 6%);
+    box-shadow: 0 18px 40px -30px rgba(0, 0, 0, 0.95);
+}
+.history-preview-frame::before,
+.history-preview-frame::after {
+    content: "";
+    position: absolute;
+    bottom: 3px;
+    z-index: 5;
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+    border-style: solid;
+    border-width: 0;
+    border-color: var(--brand-indigo);
+    opacity: 0.75;
+}
+.history-preview-frame::before {
+    left: 3px;
+    border-left-width: 1.5px;
+    border-bottom-width: 1.5px;
+    border-bottom-left-radius: 7px;
+}
+.history-preview-frame::after {
+    right: 3px;
+    border-right-width: 1.5px;
+    border-bottom-width: 1.5px;
+    border-bottom-right-radius: 7px;
 }
 .history-preview {
     display: block;
@@ -872,6 +910,12 @@ h1,
 .history-card-compact .history-stage {
     min-height: 264px;
     padding: 12px;
+}
+.history-card-compact .history-preview-frame {
+    /* Shrink to the compact clip rather than leaving frame-only gutters
+       beside a fixed 135px video. */
+    width: max-content;
+    max-width: 100%;
 }
 .history-card-compact .history-preview {
     width: 135px;

@@ -301,6 +301,14 @@ card and, when it still awaits its TikTok link, focus that input. The
 preview and the stage padding are custom properties on `.history-card`
 (`--history-preview-h`, `--history-stage-pad`).
 
+Every playable clip wears the studio's own edge: `.history-preview-frame`
+is a hairline indigo surround (`--indigo-25`) with two `--brand-indigo`
+corner marks. The frame lives in its own 4px padding, outside the footage,
+so it never covers a pixel, stays visible through playback, and never
+reaches a download. Compact without-copy cards shrink the frame to its
+fixed 135px clip (`width: max-content`) rather than drawing gutters beside
+it. Cards with no playable clip keep their notice and no frame.
+
 Inside the record, actions are grouped by consequence rather than by kind:
 Download and Demo + CTA are the wide pair, Retry render joins them on a failed
 row, and Delete sits on the quieter line beneath — Delete is never beside
