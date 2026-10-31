@@ -2,22 +2,14 @@ import { useEffect } from "react";
 import { api } from "../lib/api";
 import { isAwaitingProvider, isThrottlingError } from "./historyRepair";
 
-export const HISTORY_AWAIT_POLL_MS = 10000;
-export const HISTORY_AWAIT_POLL_ROUNDS = 20;
-
 /**
- * Rows still awaiting the provider poll themselves: a render that finishes
- * while History is open arrives on its own instead of sitting generating
- * until someone opens the card and presses Check again. Only the awaiting
- * few are polled, every ten seconds, up to twenty rounds — a stuck job
- * stops burning requests and keeps its manual Check. A 429 is throttling,
- * not failure, so it never stops the loop; any other error does, quietly.
- *
- * Single owner for the loop the page used to inline: rows flow in, finished
- * rows flow out through onUpdated, and the page owns nothing of the timer.
+ * Rows still awaiting the provider poll themselves, every ten seconds for
+ * up to twenty rounds, so a render that finishes while History is open
+ * arrives on its own. A 429 is throttling, not failure, so it never stops
+ * the loop; any other error does, quietly, leaving the manual Check.
  */
 export function useAwaitingHistoryPoll(rows, onUpdated) {
-  const awaitingKey = (Array.isArray(rows) ? rows : [])
+  const awaitingKey = rows
     .filter(isAwaitingProvider)
     .map((r) => r.id)
     .join("|");
@@ -28,7 +20,7 @@ export function useAwaitingHistoryPoll(rows, onUpdated) {
     let attempts = 0;
     const timer = setInterval(async () => {
       attempts += 1;
-      if (attempts > HISTORY_AWAIT_POLL_ROUNDS) {
+      if (attempts > 20) {
         clearInterval(timer);
         return;
       }
@@ -42,7 +34,7 @@ export function useAwaitingHistoryPoll(rows, onUpdated) {
         if (isThrottlingError(err)) return;
         clearInterval(timer);
       }
-    }, HISTORY_AWAIT_POLL_MS);
+    }, 10000);
     return () => {
       cancelled = true;
       clearInterval(timer);

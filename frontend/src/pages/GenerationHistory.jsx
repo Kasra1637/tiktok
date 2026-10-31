@@ -829,6 +829,12 @@ export default function GenerationHistory() {
     rows.some((r) => r.studio_project_id)
   );
 
+  // One banner, driven by data: selection, words, and link each have one
+  // owner in historyRepair, so the two cases cannot disagree.
+  const attention = loading || rows.length === 0 ? null : getHistoryAttention(rows);
+  const attentionWords = attention ? describeHistoryAttention(attention) : null;
+  const attentionLink = attention ? historyAttentionLink(searchParams, attention) : null;
+
   // Hook-text search is client-side: founders remember "the plumber one",
   // not its status, and the endpoint only filters by app + status.
   const visible = (() => {
@@ -1034,31 +1040,22 @@ export default function GenerationHistory() {
         </div>
       ) : null}
 
-      {(() => {
-        // One box, driven by data: selection, words, and link each have one
-        // owner in historyRepair, so the two cases cannot disagree.
-        if (loading || rows.length === 0) return null;
-        const attention = getHistoryAttention(rows);
-        if (!attention) return null;
-        const { summary, guidance, cta } = describeHistoryAttention(attention);
-        const link = historyAttentionLink(searchParams, attention);
-        return (
-          <Alert data-testid="history-attention">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="flex flex-wrap items-center gap-2">
-              <span>
-                {summary}
-                {guidance}
-              </span>
-              <Button variant="secondary" size="sm" asChild>
-                <Link to={{ search: link.search, hash: link.hash }} data-testid="history-attention-review">
-                  {cta} <ChevronRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-            </AlertDescription>
-          </Alert>
-        );
-      })()}
+      {attention && (
+        <Alert data-testid="history-attention">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>
+              {attentionWords.summary}
+              {attentionWords.guidance}
+            </span>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={{ search: attentionLink.search, hash: attentionLink.hash }} data-testid="history-attention-review">
+                {attentionWords.cta} <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {loading ? (
         /* Mirrors the real tile rather than a centered spinner: a bare spinner on

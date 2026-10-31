@@ -48,10 +48,9 @@ export function isThrottlingError(err) {
  * the two boxes cannot disagree about which one shows.
  */
 export function getHistoryAttention(rows) {
-  const list = Array.isArray(rows) ? rows : [];
-  const repair = list.filter(needsHistoryRepairRow);
+  const repair = rows.filter(needsHistoryRepairRow);
   if (repair.length > 0) return { kind: "repair", items: repair, first: repair[0] };
-  const kitless = list.filter(
+  const kitless = rows.filter(
     (r) => (r.status === "completed" || r.status === "archived") && !r.post_kit
   );
   if (kitless.length > 0) return { kind: "kitless", items: kitless, first: kitless[0] };
@@ -64,7 +63,6 @@ export function getHistoryAttention(rows) {
  * two near-identical boxes differing only in copy.
  */
 export function describeHistoryAttention(attention) {
-  if (!attention) return null;
   if (attention.kind === "kitless") {
     const n = attention.items.length;
     return {
