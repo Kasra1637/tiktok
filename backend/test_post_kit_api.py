@@ -238,6 +238,67 @@ class TestPostKitFrozenOnCompletion:
         assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
 
 
+class TestStrandedRender:
+    """One slice: the founder's stranded story through this file's seam.
+
+    A 429 while polling leaves the row alone, the kit write fails
+    best-effort at completion, and list/history show a finished render
+    with no kit — the row the History banner offers to rescue. (The
+    rescue press itself is pinned by the regenerate tests below.)
+    """
+
+    def test_throttled_poll_then_failed_kit_leaves_a_kitless_finished_row(
+        self, api, monkeypatch
+    ):
+        from fastapi import HTTPException
+        from models import StudioGenerationRequest
+
+        async def boom_kit(project, profile):
+            raise RuntimeError("text model is down")
+
+        monkeypatch.setattr(api, "generate_video", _fake_generate_video)
+        monkeypatch.setattr(api.ai_service, "generate_post_kit", boom_kit)
+
+        seen = []
+
+        async def throttled_once_then_done(job_id):
+            if not seen:
+                seen.append(job_id)
+                raise RuntimeError("Client error '429 Too Many Requests' for url")
+            return await _fake_poll(job_id)
+
+        monkeypatch.setattr(api, "poll_video_job", throttled_once_then_done)
+
+        project = _ready_project(api, "Stranded Rescue App")
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert gen.get("post_kit") in (None, {}, [])
+
+        # The throttled check: still going, row untouched, nothing written.
+        with pytest.raises(HTTPException) as err:
+            _run(api.poll_generation(gen["id"], ANON))
+        assert err.value.status_code == 429
+        row = _run(api._fetch_one(
+            "SELECT status, error FROM generations WHERE id = ?", (gen["id"],)))
+        assert row["status"] in ("submitted", "generating")
+        assert not row["error"]
+
+        # Completion with a failing kit writer: finished, but kit-less.
+        completed = _run(api.poll_generation(gen["id"], ANON))
+        assert completed["status"] == "completed"
+        assert completed.get("post_kit") is None
+
+        # The surfaces a founder reads agree: finished, no kit.
+        listed = _run(api.list_generations(
+            studio_project_id=project["id"], user_id=ANON))["generations"]
+        assert listed and listed[0]["status"] == "completed"
+        assert listed[0].get("post_kit") is None
+        history = _run(api.generation_history(user_id=ANON))["generations"]
+        history_row = next(g for g in history if g["id"] == gen["id"])
+        assert history_row["status"] == "completed"
+        assert history_row.get("post_kit") is None
+
+
 class TestPostKitSingleCaption:
     """One caption per render: grounded, guarded, and exactly one."""
 
