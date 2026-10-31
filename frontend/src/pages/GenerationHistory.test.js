@@ -31,7 +31,6 @@ jest.mock(
         search: global.__historyRoute?.query ? `?${global.__historyRoute.query}` : "",
         hash: "",
       }),
-      useParams: () => ({}),
     };
   },
   { virtual: true }
@@ -54,11 +53,11 @@ jest.mock("../lib/api", () => {
     ...actual,
     api: {
       ...actual.api,
+      // Only the endpoints this flow touches: history and profiles on load,
+      // verdicts per mounted row, and the kit writer on Generate.
       getGenerationHistory: jest.fn(),
       getAppProfiles: jest.fn(),
-      getStudioProjects: jest.fn(),
       getGeneration: jest.fn(),
-      pollGeneration: jest.fn(),
       regeneratePostKit: jest.fn(),
     },
   };
@@ -310,7 +309,6 @@ describe("history kit-less rescue flow", () => {
 
   async function renderHistoryPage(query) {
     global.__historyRoute.query = query;
-    global.__historyRoute.navigations.length = 0;
     api.getGenerationHistory.mockResolvedValue({ generations: [{ ...KITLESS_ROW }] });
     api.getAppProfiles.mockResolvedValue({ profiles: [] });
     // HistoryFeedback refreshes each row's verdicts on mount.
