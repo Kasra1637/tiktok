@@ -8,7 +8,7 @@ lives in test_template_library_api.py.
 import pytest
 
 import template_library as tl
-from server import _score_template_for_angle
+from template_recommendations import score_template_for_angle as _score_template_for_angle
 
 
 class TestCuratedSeeds:

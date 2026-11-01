@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker } from "../components/studio/SelectionPanels";
+import { ReviewRevisionsPanel, DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
+import { useWizardTemplates } from "../hooks/useWizardTemplates";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -14,7 +18,7 @@ import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
-import { FitBadge } from "../components/FitBadge";
+
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { ThumbPair } from "../components/ThumbPair";
@@ -36,17 +40,11 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
-import { angleDetails, formatVerdicts, goalFitScore } from "../lib/angleSubtitle";
-import { angleSetAge } from "../lib/angleFreshness";
-import {
-  readPieceSeconds,
-  sectionSplit,
-  clampHookSeconds,
-  DEFAULT_HOOK_SECONDS,
-} from "../lib/videoLength";
+
+import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -105,225 +103,6 @@ const STEPS = [
   { key: "review", label: "Review & submit", icon: CheckCircle2 },
 ];
 
-/* The single instruction for the angle picker, shared by the empty state
-   (click generates the six) and the reveal state (click shows the six).
-   One line on purpose: three stacked explanations said the same thing in
-   different words, and the step stalled on reading instead of moving. The
-   verb is deliberately neutral — "get" covers generating fresh angles and
-   revealing pre-generated ones, so the line never disagrees with its button. */
-const ANGLES_CTA_COPY = "Get your six audience angles, then pick one to move forward.";
-
-function formatTemplateUse(n) {
-  if (!n) return "Never used";
-  return n === 1 ? "Used once" : `Used ${n} times`;
-}
-
-/**
- * One recommended template.
- *
- * Every fit reason and every limitation is shown, always. They used to be
- * collapsed behind a "Show all N more" link, which was wrong twice over: these
- * ARE the evidence for the choice the founder is making here, and the count
- * they were hiding behind is not a quality signal. The scorer emits one reason
- * per matched factor and sorts by weight, so a single "Built for the 'create
- * curiosity' objective" (3.0) outranks three 1.0 matches — and a miss becomes
- * a LIMITATION rather than a reason, so a template can match strongly and still
- * carry a caveat. Four reasons is not better than two.
- *
- * The score is therefore the number worth reading, and it is already computed
- * server-side (and already what the list is sorted by), so it is shown here
- * rather than left for the founder to infer from ordering.
- *
- * Two blocks, not one: a reason is the case FOR this template and a limitation
- * is the caveat ON it. Rendering them identically made a warning look like
- * supporting evidence.
- *
- * A div with button semantics rather than a <button> because the whole card is
- * the control. There is no longer a nested toggle — the previous one called
- * stopPropagation on click but not on keydown, so Enter and Space on the link
- * selected the template instead of expanding it.
- */
-function RecommendationCard({ r, selected, onSelect, index = 0 }) {
-  const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
-  const limits = Array.isArray(r.limitations) ? r.limitations : [];
-  const score = Number(r.score);
-  // The server sorts reasons strongest-first and sends only the strings, so
-  // the first reason IS the verdict and the rest is supporting detail. Shown
-  // that way rather than as four identical paragraphs, which left the founder
-  // unable to tell the decision from its evidence.
-  const [verdict, ...detail] = reasons;
-  const example =
-    typeof r.template.example_preview === "string" && r.template.example_preview.trim()
-      ? r.template.example_preview.trim()
-      : "";
-  // The viewer-facing outcome, when the row carries one. Curated rows always
-  // do; tailored rows do once regenerated. Rendered as the card's lead line
-  // in body weight so the first thing read is the result, not the mechanic.
-  // Tailored rows are model-written, so this can open lowercase next to the
-  // hand-written recommendation copy on the same card.
-  const outcome =
-    typeof r.template.outcome === "string" && r.template.outcome.trim()
-      ? sentenceCase(r.template.outcome.trim())
-      : "";
-  return (
-    // Staggered arrival like the angle and goal rows: a fresh ranking is
-    // watched arriving instead of blinking in at once. Keyed by template id
-    // at the call site, so only genuinely new sets replay it.
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-pressed={selected}
-      style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-      className={`card-pickable animate-fade-up w-full rounded-xl border p-4 text-left ${
-        selected
-          ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
-      }`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-base font-semibold">{r.template.name}</span>
-        <span className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="text-xs">
-            {r.suggested_duration}s
-          </Badge>
-          {Number.isFinite(score) && (
-            // The sort key on a 0–10 scale: a weighted sum of matched
-            // factors, clamped server-side, comparable only between these
-            // cards. Shared FitBadge pill so the template score reads as the
-            // same instrument as the angle and goal scores above it.
-            <FitBadge
-              score={score}
-              basis="Fit score — a weighted sum of the factors this template matched, on a 0–10 scale. Only comparable against the other templates below."
-              testId="template-fit-score"
-            />
-          )}
-          <Badge variant="secondary" className="text-xs">
-            {formatTemplateUse(r.template.times_used)}
-          </Badge>
-          {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
-        </span>
-      </div>
-      {outcome && (
-        <p className="mt-1 text-base text-foreground/90" data-testid="template-outcome">
-          {outcome}
-        </p>
-      )}
-      {example && (
-        <p className="mt-1 text-sm text-foreground/80">
-          <span className="text-muted-foreground">Sounds like: </span>
-          &ldquo;{example}&rdquo;
-        </p>
-      )}
-      {reasons.length > 0 && (
-        <div className="mt-2 space-y-2">
-          <p className="eyebrow">Why it fits</p>
-          {/* The verdict: the strongest match, in body weight with the same
-              tick the step pills use for "positive", so it reads as the reason
-              rather than one of several. */}
-          <p
-            className="flex items-start gap-1.5 text-base text-foreground"
-            data-testid="template-fit-verdict"
-          >
-            <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
-            <span>{sentenceCase(verdict)}</span>
-          </p>
-        </div>
-      )}
-      {/* Supporting detail and limitations tuck into a disclosure: the card
-          leads with its verdict, and the rest opens on demand. The verdict
-          stays outside any list, and a single-reason card with no limits
-          renders no disclosure at all. */}
-      {(detail.length > 0 || limits.length > 0) && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-muted-foreground">
-            More on this fit
-          </summary>
-          <div className="mt-1 space-y-1">
-            {detail.length > 0 && (
-              <ul className="space-y-1">
-                {detail.map((reason, i) => (
-                  <li
-                    key={`r-${i + 1}`}
-                    className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
-                  >
-                    <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-                    <span>{sentenceCase(reason)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {limits.length > 0 && (
-              <ul className="space-y-1">
-                {limits.map((limitation, i) => (
-                  <li
-                    key={`l-${i}`}
-                    className="flex items-start gap-1.5 text-sm leading-relaxed text-muted-foreground"
-                  >
-                    <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-                    <span>{sentenceCase(limitation)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </details>
-      )}
-    </div>
-  );
-}
-
-function humanize(value) {
-  return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
- * The middle's curated structure, under whichever name the row still carries.
- *
- * `middle_structure` replaced `continuation_structure` and a separate
- * `cta_pattern`: the old pair described a chain with a closing beat, which is
- * not what a template declares any more. Rows seeded before the change still
- * carry the retired name, and the backend reads it as a fallback for the same
- * reason. Reading only the new name would leave those templates showing a blank
- * where the curated middle lives, which reads as a template with nothing after
- * its opening.
- */
-function middleStructure(template) {
-  return String(template?.middle_structure || template?.continuation_structure || "");
-}
-
-/**
- * The shape of the piece a template produces: its length, its two section
- * lengths, and the curated middle.
- *
- * Shown on the template card because the template is where the length comes
- * from. A founder choosing between two openings is also choosing between two
- * lengths, and a picker on the step after this used to make that look
- * independent. The numbers are the ones the project will be seeded with, so
- * nothing on the later steps can quietly disagree.
- */
-function TemplateShape({ template }) {
-  const total = readPieceSeconds(null, template);
-  const hook = clampHookSeconds(template?.hook_seconds) || DEFAULT_HOOK_SECONDS;
-  const split = sectionSplit(total, hook);
-  const middle = middleStructure(template);
-  return (
-    <div className="mt-2 space-y-1">
-      <p className="text-sm">
-        <span className="font-semibold">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
-        {split.middleSeconds}s middle.
-      </p>
-      {middle && <p className="text-sm text-muted-foreground">{sentenceCase(middle)}</p>}
-    </div>
-  );
-}
-
 /**
  * What the selected template is still waiting on.
  *
@@ -357,834 +136,8 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
   );
 }
 
-/**
- * What changed on Review and what it means downstream.
- *
- * Read-only explanatory panel: which edits are still unsaved, whether the
- * downstream strategy needs rebuilding, and whether the newest rendered clip
- * still reflects the current plan and strategy. It never edits, rebuilds, or
- * renders anything itself — the existing Save, Rebuild, and Generate controls
- * keep their confirmations and gates, and nothing here triggers a paid render.
- *
- * Honest about missing history. There is no plan-history table, so "what
- * changed" is derived only from unsaved edits against the saved plan — never
- * fabricated from a previous snapshot. The clip comparison reads the newest
- * generation's recorded script/strategy versions; when the record carries no
- * versions (or no finished clip exists) it says so instead of guessing.
- */
-const REVIEW_EDIT_LABELS = {
-  hook_line: "Hook line",
-  script: "Script",
-  demo_brief: "Demo note",
-  camera_setup: "Camera setup",
-  visual_direction: "Visual direction",
-  voice_direction: "Voice direction",
-  tone: "Tone",
-  beat_timeline: "Shot timeline",
-};
-
-function ReviewRevisionsPanel({ project, edits, hasEdits, onGoToHookStory }) {
-  const scriptVersion = Number(project?.script_version) || 0;
-  const strategy = project?.strategy || {};
-  const hasStrategy = Boolean(strategy?.hook_line);
-  const strategyVersion = Number(project?.strategy_version) || 0;
-  const strategyScriptVersion = Number(project?.strategy_script_version) || 0;
-  const staleStrategy = hasStrategy && project?.strategy_is_current === false;
-  const angleStale =
-    hasStrategy &&
-    String(strategy?.content_angle_id || "") !== String(project?.content_angle_id || "");
-
-  const [clip, setClip] = useState(null);
-  const [clipLoaded, setClipLoaded] = useState(false);
-  const [clipError, setClipError] = useState(null);
-  const [clipCheck, setClipCheck] = useState(0);
-  const projectId = project?.id;
-  useEffect(() => {
-    let cancelled = false;
-    if (!projectId || !scriptVersion) {
-      setClip(null);
-      setClipLoaded(false);
-      return undefined;
-    }
-    setClipLoaded(false);
-    api
-      .getGenerations({ studio_project_id: projectId, limit: 1 })
-      .then((data) => {
-        if (cancelled) return;
-        setClip(data?.generations?.[0] || null);
-        setClipError(null);
-        setClipLoaded(true);
-      })
-      .catch((err) => {
-        // A failed check is not an empty shelf: naming it stops the panel
-        // from inviting a duplicate paid render for a clip that exists.
-        if (cancelled) return;
-        setClip(null);
-        setClipError(getErrorMessage(err));
-        setClipLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, scriptVersion, clipCheck]);
-
-  if (!scriptVersion) return null;
-
-  const editedLabels = Object.keys(edits || {}).map(
-    (key) => REVIEW_EDIT_LABELS[key] || humanize(key)
-  );
-
-  // A strategy row without a recorded version is missing history, not proof
-  // of a match: the server numbers every build, so v0 means the record
-  // predates the versioning rather than that it matches the current plan.
-  const strategyUnversioned = hasStrategy && !strategyVersion;
-
-  const clipIsCurrent =
-    clipLoaded &&
-    clip &&
-    clip.status === "completed" &&
-    typeof clip.script_version === "number" &&
-    typeof clip.strategy_version === "number" &&
-    clip.script_version === scriptVersion &&
-    clip.strategy_version === strategyVersion;
-  const clipIsStale =
-    clipLoaded &&
-    clip &&
-    clip.status === "completed" &&
-    typeof clip.script_version === "number" &&
-    typeof clip.strategy_version === "number" &&
-    (clip.script_version !== scriptVersion || clip.strategy_version !== strategyVersion);
-  const clipUnversioned =
-    clipLoaded &&
-    clip &&
-    clip.status === "completed" &&
-    (typeof clip.script_version !== "number" || typeof clip.strategy_version !== "number");
-
-  // One status line: the saved-plan state plus the single next thing to do.
-  // Priority is unchanged — unsaved edits first (the render gate refuses
-  // them), then strategy staleness (a paid render built from the wrong
-  // words), then clip staleness.
-  const planState =
-    `Plan v${scriptVersion} · ` +
-    ((project?.hook_line || project?.script) ? "has words." : "empty.");
-  let status;
-  if (hasEdits) {
-    status =
-      `${planState} Unsaved edits in: ${editedLabels.join(", ")}. ` +
-      "Save below first — rendering needs the saved plan.";
-  } else if (!hasStrategy) {
-    status = `${planState} No strategy yet — build it below before rendering.`;
-  } else if (strategyUnversioned) {
-    status =
-      `${planState} Strategy exists but its version was not recorded — ` +
-      "rebuild it below before rendering.";
-  } else if (staleStrategy) {
-    status =
-      `${planState} Strategy v${strategyVersion} was built from plan v${strategyScriptVersion}. ` +
-      "Rebuild the strategy before rendering, or the clip follows the older plan.";
-  } else if (angleStale) {
-    status =
-      `${planState} Strategy was built for a different audience angle. ` +
-      "Rebuild it for the current angle before rendering.";
-  } else if (!clipLoaded) {
-    status = `${planState} Strategy v${strategyVersion} matches. Checking for rendered clips…`;
-  } else if (clipIsStale) {
-    status =
-      `${planState} Strategy v${strategyVersion} matches. ` +
-      `Rendered clip reflects plan v${clip.script_version} and strategy v${clip.strategy_version} — ` +
-      "re-render below.";
-  } else if (clipUnversioned) {
-    status =
-      `${planState} Strategy v${strategyVersion} matches. ` +
-      "Rendered clip's versions were not recorded — re-render if you edited since.";
-  } else if (clip && clip.status !== "completed") {
-    status =
-      `${planState} Strategy v${strategyVersion} matches. ` +
-      `Latest render is ${clip.status || "not finished"} — finish or retry it below.`;
-  } else if (clipIsCurrent) {
-    status =
-      `${planState} Strategy v${strategyVersion} matches · rendered clip is current.`;
-  } else if (clipError) {
-    status =
-      `${planState} Strategy v${strategyVersion} matches. ` +
-      `Could not check for rendered clips (${clipError}) — check again below.`;
-  } else {
-    status =
-      `${planState} Strategy v${strategyVersion} matches. ` +
-      "No rendered clip yet — render below when ready.";
-  }
-
-  return (
-    <div
-      className="inset-panel space-y-4"
-      data-testid="review-revisions"
-    >
-      <span className="eyebrow block">Revisions &amp; consequences</span>
-      <p className="text-base" data-testid="revisions-status">
-        {status}
-      </p>
-      {clipError && clipLoaded && (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setClipError(null);
-            setClipLoaded(false);
-            setClipCheck((k) => k + 1);
-          }}
-          data-testid="clip-recheck"
-        >
-          Check again
-        </Button>
-      )}
-      {onGoToHookStory && (
-        <Button variant="secondary" size="sm" onClick={onGoToHookStory}>
-          Review strategy below
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/**
- * One profile-aware dropdown for a Review-step direction field.
- *
- * The options come from the profile's category group (no free typing), and
- * picking only fills the draft — saving still runs the normal claim check
- * and the strategy still needs a rebuild, exactly as with typed notes.
- */
-function DirectionSelect({
-  id,
-  testId,
-  label,
-  value,
-  onPick,
-  options,
-  placeholder,
-  disabled,
-  // Fresh-list generation for this dropdown alone. When provided, a small
-  // action beside the label spends one text model call for four new options
-  // grounded in the profile and the selected angle — the static category
-  // list repeats itself across videos, and a founder who has seen all four
-  // has nowhere else to go. { onRefresh, refreshing, refreshTestId }.
-  refresh = null,
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="text-sm font-semibold">{label}</label>
-        {refresh && (
-          <button
-            type="button"
-            onClick={refresh.onRefresh}
-            disabled={disabled || refresh.refreshing}
-            data-testid={refresh.refreshTestId}
-            className="shrink-0 text-xs text-muted-foreground underline disabled:opacity-50"
-          >
-            {refresh.refreshing ? "Finding new options…" : "New options"}
-          </button>
-        )}
-      </div>
-      <select
-        id={id}
-        data-testid={testId}
-        className={CONTROL_CLASS}
-        value={value}
-        disabled={disabled || !options}
-        onChange={(e) => onPick(e.target.value)}
-      >
-        <option value="">{options ? placeholder : "Loading options…"}</option>
-        {(options || []).map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-/**
- * The studio's angle-selection control. It lives on Audience & template and on
- * Review & submit — one control, one behaviour, wherever the founder is asked
- * for it. The review copy picks the angle through the single red jump back to step 1,
- * never a second copy of this list: the goal picker there waits silently.
- *
- * Landing is always gated: one "Generate angles" action, never a finished list.
- * The click reveals a pre-generated set for free (the server generates on
- * approval) and generates fresh only when there is nothing to show, so no
- * step can spend a call the founder did not ask for. "Regenerate angles"
- * appears only beside a visible list, where it always has a current generation
- * to act on.
- */
-function AngleSelector({
-  angles,
-  angleId,
-  onSelect,
-  showAngles,
-  generating = false,
-  error = "",
-  onGenerate,
-  onRegenerate,
-  notice = "",
-  // The notice's way out, when one exists: { label, onClick, testId }. The
-  // regen notice carries "Go to Review and rebuild" — a notice that names a
-  // next step without offering it is a dead end. Rendered inside the alert so
-  // the action reads as part of the message, not a second decision.
-  noticeAction = null,
-  // Steps other than Audience & template never generate inline: their red button
-  // sends the founder to step 1, where selection lives, instead of spending
-  // a call from a screen whose job is something else. The label names the
-  // destination so the redirect never reads as a broken Generate.
-  generateLabel = "Generate angles",
-  generatingLabel = "Generating angles",
-  // The video's picked goal, when one is picked. Angle generation aims the
-  // fresh set at it; with none picked the set comes back broad, so the
-  // step says so beside Regenerate instead of silently spending the call.
-  objective = "",
-}) {
-  // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
-  // It answers the only question a spinner cannot — is this fresh work or a
-  // cached list — and it unmounts the moment `generating` clears, so a
-  // failure can never leave a frozen count beside the error alert. Capped at
-  // the six-row contract; the interval is wall-clock display only, and the
-  // rows below still arrive on the endpoint's real response.
-  const [genCount, setGenCount] = useState(0);
-  const genTimer = useRef(null);
-  useEffect(() => {
-    if (!generating) {
-      setGenCount(0);
-      return undefined;
-    }
-    setGenCount(1);
-    genTimer.current = setInterval(() => {
-      setGenCount((c) => (c >= 6 ? 6 : c + 1));
-    }, 450);
-    return () => {
-      clearInterval(genTimer.current);
-      genTimer.current = null;
-    };
-  }, [generating]);
-  const progressLine = generating ? (
-    <p className="text-sm text-muted-foreground" role="status" data-testid="angles-progress">
-      Reading angle {genCount} of 6…
-    </p>
-  ) : null;
-  // The gate names what the click will do: revealing a cached set is
-  // instant and free, generating from nothing is a model call with a wait.
-  // A custom label (Review's redirect off this step) always wins — the
-  // honesty rule must never rename a button that leaves the step.
-  const gateButtonLabel = generating
-    ? generatingLabel
-    : generateLabel !== "Generate angles"
-      ? generateLabel
-      : angles.length > 0
-        ? "Show your angles"
-        : "Generate angles";
-  // One line beside the refresh decision, never a number on a row: the set
-  // is scanned by name, and only its staleness informs Regenerate. Null
-  // (no parseable dates) renders nothing — no claim off a guess. Plain
-  // copy, deliberately NOT a data-subtitle: the 55–60 char budget covers
-  // label-attached helpers, and a dynamic age cannot hold a fixed length.
-  const angleSetFreshness = angleSetAge(angles);
-
-  const body = !showAngles || angles.length === 0 ? (
-    // 12px, matching the Review step's "what's missing" panel: the red action
-    // and the helper line under it are one gate section, and a tighter stack
-    // here made the same ask read as a different control two steps later.
-    // The action leads: the copy explains the button, so the button comes
-    // first and the explanation follows it.
-    <div className="space-y-4">
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Button
-        variant="accent"
-        className="gap-1.5"
-        onClick={onGenerate}
-        disabled={generating}
-        busy={generating}
-        progress={generating ? genCount / 6 : null}
-        data-testid="generate-angles-button"
-      >
-        {generating ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5" />
-        )}
-            {gateButtonLabel}
-          </Button>
-          {progressLine}
-      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
-        {ANGLES_CTA_COPY}
-      </p>
-        </div>
-      ) : (
-    <div className="space-y-4" data-testid="audience-angle-list">
-      {/* Regeneration for a populated app: the endpoint replaces only
-          AI-derived angles and keeps hand-written ones server-side, so this
-          cannot discard founder work. */}
-      <div className="pt-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5"
-          onClick={onRegenerate}
-          disabled={generating}
-          busy={generating}
-          progress={generating ? genCount / 6 : null}
-          data-testid="regenerate-angles-button"
-        >
-          {generating ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          {generating ? "Regenerating angles" : "Regenerate angles"}
-            </Button>
-            {angleSetFreshness && (
-              <p className="text-xs text-muted-foreground" data-testid="angle-set-freshness">
-                Refreshed {angleSetFreshness}
-              </p>
-            )}
-            {!objective && (
-              <p className="text-xs text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
-                Pick a goal first — regenerating aims fresh angles at it.
-              </p>
-            )}
-          </div>
-          {progressLine}
-      {notice && (
-        <Alert data-testid="angle-regen-notice">
-          <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertDescription>
-            {notice}
-            {noticeAction && (
-              <Button
-                variant="accent"
-                size="sm"
-                className="mt-2 gap-1.5"
-                onClick={noticeAction.onClick}
-                data-testid={noticeAction.testId || "angle-regen-notice-action"}
-              >
-                {noticeAction.label}
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      {/* Selection opens the angle. A closed row is its uppercase title plus
-          its fit pill, so the six compare without opening: the list is
-          scanned by name, decided by score, and the picked row then shows
-          what the strategy is written from — audience, problem, promise,
-          feature, the emotion it aims at, and any claim bounding it. Only
-          the picked row opens, because two open panels side by side are
-          two half-read angles, and the fields are what the render
-          downstream is held to. */}
-      {angles.map((a, i) => {
-        const picked = angleId === a.id;
-        const details = picked ? angleDetails(a) : [];
-        const angleVerdicts =
-          Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
-        const angleFit = goalFitScore({
-          index: i,
-          total: angles.length,
-          evidence: a.evidence,
-          hasFitReason: false,
-        });
-        const angleFitBasis = angleVerdicts
-          ? `${angleFit.basis} · at this angle kind`
-          : angleFit.basis;
-        return (
-          // Staggered arrival: each row fades up ~70ms after the previous, so
-          // a fresh set is watched arriving instead of blinking in at once.
-          // Keyed by row id, so the cascade plays on mount and on genuinely
-          // new sets — never on a re-render of the same rows. Collapses to
-          // instant under prefers-reduced-motion via .animate-fade-up.
-          <div
-            key={a.id}
-            style={{ animationDelay: `${Math.min(i, 8) * 70}ms` }}
-            className={`animate-fade-up overflow-hidden rounded-xl border bg-card/70 ${
-              picked
-                ? "border-[color:var(--indigo-35)]"
-                : "border-[color:var(--hairline)]"
-            }`}
-          >
-            <button
-              type="button"
-              aria-pressed={picked}
-              aria-expanded={picked}
-              aria-controls={picked ? `angle-details-${a.id}` : undefined}
-              onClick={() => onSelect(a.id)}
-              data-testid={`angle-option-${a.id}`}
-              className={`flex w-full min-w-0 items-center gap-3 row-pad text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
-                picked ? "bg-[color:var(--indigo-6)]" : ""
-              }`}
-            >
-              {/* One check per row, always: muted until picked, indigo once
-                  open. The per-kind glyphs are gone — twelve icons made the
-                  list something you decode rather than scan. */}
-              <Check
-                aria-hidden="true"
-                data-testid="angle-row-check"
-                className={`h-4 w-4 shrink-0 ${
-                  picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
-                }`}
-              />
-              <span className="eyebrow min-w-0 flex-1 truncate leading-[22px]">
-                {sentenceCase(a.label).replace(/\.\s*$/, "")}
-              </span>
-              {/* The fittest score rides on the closed row, so the list can be
-                  compared without opening every angle. Opening still shows
-                  the same pill with its basis beside the angle's fields. */}
-              <span className="shrink-0">
-                <FitBadge
-                  score={angleFit.score}
-                  basis={angleFitBasis}
-                  testId={`angle-row-fit-${a.id}`}
-                />
-              </span>
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                  picked ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {picked && details.length > 0 && (
-              /* One spec sheet, not a spaced stack: divided rows with the
-                  shared eyebrow label and body value, the same language
-                  Post copy and History context already read in. */
-              <dl
-                id={`angle-details-${a.id}`}
-                data-testid={`angle-details-${a.id}`}
-                className="divide-y divide-[color:var(--hairline)] border-t border-[color:var(--hairline)] row-pad"
-              >
-                {details.map((row) => (
-                  <div key={row.label} className="post-kit-row">
-                    <dt className="eyebrow sm:pt-1">{row.label}</dt>
-                    <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
-                      {row.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            {/* The picked angle's fit again beside its fields, in the same
-                pill as goals and templates. Rank is this list's order,
-                tally is the kind's own win share — verdicts attribute
-                through the kind, so the basis says so. */}
-            {(() => {
-              return (
-                picked && (
-                  <div className="border-t border-[color:var(--hairline)] row-pad">
-                    <FitBadge
-                      score={angleFit.score}
-                      basis={angleFitBasis}
-                      testId={`angle-fit-score-${a.id}`}
-                    />
-                  </div>
-                )
-              );
-            })()}
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  return (
-    <div className="inset-panel space-y-4">
-      <GroupLabel as="label" icon={Target}>
-        Audience angle <span className="text-muted-foreground">(required)</span>
-      </GroupLabel>
-      {body}
-    </div>
-  );
-}
-
-/**  * Goal picker shared by the Audience & template step and Review recovery. Its
- * six angle-conditioned suggestions use the same state, so
- * selecting a goal still triggers the existing template/plan synchronization.
- *
- * Each card shows the goal's general outcome plus an optional angle-specific
- * fit line explaining why that goal suits the selected angle. The fit line is
- * explanatory text only: it never changes selection, ranking, or saving.
- *
- * It picks a GOAL, never an angle. It used to fall back to its own plain list
- * of angle names when none was picked, which is the second implementation
- * `AngleSelector` above replaced — that fallback now renders only the waits
- * marker, and the step above it owns choosing the angle.
- */
-function AngleGoalPicker({
-  angle,
-  value,
-  onPick,
-  options,
-  recommendations,
-  outcomes,
-  fitReasons,
-  objectiveEvidence = {},
-  pairEvidence = {},
-  // The six suggestions in the angle's profile-tailored PERSISTED variant
-  // order, from the server (angle.goal_suggestions). Falls back to the
-  // static facet list when the angle row carries none.
-  suggestions,
-  onRegenerate,
-  regenerating = false,
-}) {
-  const knownGoals = Array.isArray(options) ? options : [];
-  const orderedGoals =
-    Array.isArray(suggestions) && suggestions.length > 0
-      ? suggestions.filter((goal) => knownGoals.includes(goal))
-      : [];
-  const rankedGoals = orderedGoals.length > 0
-    ? orderedGoals
-    : (recommendations || []).filter((goal) => knownGoals.includes(goal));
-  const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
-  const outsideRecommendation = Boolean(value && !featured.includes(value));
-
-  // Live count-up while the six reshuffle ("Shuffling goal 3 of 6…"). Same
-  // contract as the angle count-up: narrates fresh work, unmounts on settle
-  // or error, capped at the visible total so it never over-counts.
-  const [shuffleCount, setShuffleCount] = useState(0);
-  const shuffleTimer = useRef(null);
-  const trackRef = useRef(null);
-  const scrollGoals = (dir) => {
-    trackRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
-  };
-  const shuffleTotal = Math.max(featured.length, 1);
-  useEffect(() => {
-    if (!regenerating) {
-      setShuffleCount(0);
-      return undefined;
-    }
-    setShuffleCount(1);
-    shuffleTimer.current = setInterval(() => {
-      setShuffleCount((c) => (c >= shuffleTotal ? shuffleTotal : c + 1));
-    }, 450);
-    return () => {
-      clearInterval(shuffleTimer.current);
-      shuffleTimer.current = null;
-    };
-  }, [regenerating, shuffleTotal]);
-
-  if (!angle) {
-    /* The waits marker, and nothing to read in it: no goal button may render
-       before an angle exists, and this is what the smoke suite asserts in
-       their place. The red jump back lives in the owning panel, never here —
-       one gap, one button, or two missing prerequisites render two competing
-       "first" actions. */
-    return <div data-testid="goal-waits-for-angle" />;
-  }
-
-  return (
-    <section className="space-y-4" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
-      <div className="space-y-1">
-        <div className="flex items-start justify-between gap-2">
-          <GroupLabel as="h3" icon={Target} id="video-goal-label">
-            Video goal <span className="text-muted-foreground">(required)</span>
-          </GroupLabel>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {featured.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 px-2"
-                  onClick={() => scrollGoals(-1)}
-                  aria-label="Browse goals left"
-                  data-testid="goals-browse-left"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 px-2"
-                  onClick={() => scrollGoals(1)}
-                  aria-label="Browse goals right"
-                  data-testid="goals-browse-right"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            )}
-            {onRegenerate && featured.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={onRegenerate}
-                disabled={regenerating}
-                busy={regenerating}
-                progress={regenerating ? shuffleCount / shuffleTotal : null}
-                title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
-                data-testid="regenerate-goals-button"
-              >
-                {regenerating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {regenerating ? "Shuffling goals" : "Shuffle"}
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {featured.length > 0
-            ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
-            : `Goal suggestions for “${angle.label}” are unavailable. Try reloading the page.`}{" "}
-          The angle shapes this video — the goal shapes the campaign it serves.
-        </p>
-      </div>
-      {regenerating && (
-        <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
-          Shuffling goal {shuffleCount} of {shuffleTotal}…
-        </p>
-      )}
-      <div ref={trackRef} className="filmstrip-scroll no-scrollbar flex snap-x gap-3 overflow-x-auto pb-1" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-browse-track">
-        {featured.map((goal, index) => {
-          const selected = value === goal;
-          // 0–10 fit for this goal under the selected angle: annotates the
-          // card, never reorders the six. Rank is this angle's persisted
-          // suggestion order, tally is the goal's own win share.
-          const fit = goalFitScore({
-            index,
-            total: featured.length,
-            evidence: objectiveEvidence?.[goal],
-            hasFitReason: Boolean(fitReasons?.[goal]),
-          });
-          return (
-            // Staggered arrival, same language as the angle rows: a fresh
-            // order is watched arriving instead of blinking in at once. Keyed
-            // by goal, so only genuinely new sets replay it.
-            <button
-              key={goal}
-              type="button"
-              aria-pressed={selected}
-              data-testid={`recommended-goal-${goal}`}
-              onClick={() => onPick(goal)}
-              style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-              className={`card-pickable animate-fade-up w-[78%] shrink-0 snap-start rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] sm:w-[calc(50%-6px)] ${
-                selected
-                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                  : "border-[color:var(--hairline)]"
-              }`}
-            >
-              <span className="flex items-center justify-between gap-2 text-sm font-semibold">
-                {humanize(goal)}
-                <span className="flex shrink-0 items-center gap-1.5">
-                  <FitBadge score={fit.score} basis={fit.basis} testId={`goal-fit-score-${goal}`} />
-                  {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
-                </span>
-              </span>
-              {outcomes?.[goal] && (
-                <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
-                  {sentenceCase(outcomes[goal])}
-                </span>
-              )}
-              {/* One descriptive line stays visible: the outcome when there is
-                  one, otherwise the fit reason. The fit reason behind an
-                  outcome, plus both verdict counts, tuck into a disclosure so
-                  six cards scan instead of shouting. Every testid stays in the
-                  DOM either way. */}
-              {!outcomes?.[goal] && fitReasons?.[goal] && (
-                <span
-                  data-testid={`goal-fit-${goal}`}
-                  className="mt-1 block text-sm leading-relaxed text-muted-foreground"
-                >
-                  {sentenceCase(fitReasons[goal])}
-                </span>
-              )}
-              {(Boolean(outcomes?.[goal] && fitReasons?.[goal]) ||
-                formatVerdicts(angle?.evidence) ||
-                formatVerdicts(objectiveEvidence?.[goal]) ||
-                formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`])) && (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-xs text-muted-foreground">
-                    Why this goal fits
-                  </summary>
-                  <div className="mt-1 space-y-1">
-                    {outcomes?.[goal] && fitReasons?.[goal] && (
-                      <span
-                        data-testid={`goal-fit-${goal}`}
-                        className="block text-sm leading-relaxed text-muted-foreground"
-                      >
-                        {sentenceCase(fitReasons[goal])}
-                      </span>
-                    )}
-                    {/* Founder verdicts for the selected angle's KIND, carried on the
-                        angle row too. Shown only as counts so one verdict never reads
-                        as a verdict on the goal itself; the six stay in fetched order. */}
-                    {formatVerdicts(angle?.evidence) && (
-                      <span
-                        data-testid={`goal-angle-evidence-${goal}`}
-                        className="block text-sm leading-relaxed text-muted-foreground"
-                      >
-                        {formatVerdicts(angle.evidence)} at this angle kind
-                      </span>
-                    )}
-                    {/* Objective-level tally: wins/flops per GOAL, shared across kinds.
-                        Same counts, same styling, different axis — the goal picker is
-                        the surface where the objective axis answers "what wins here". */}
-                    {formatVerdicts(objectiveEvidence?.[goal]) && (
-                      <span
-                        data-testid={`goal-objective-evidence-${goal}`}
-                        className="block text-sm leading-relaxed text-muted-foreground"
-                      >
-                        {formatVerdicts(objectiveEvidence[goal])} for this goal
-                      </span>
-                    )}
-                    {/* Intersection tally: this KIND for this GOAL. The most
-                        specific evidence on the card — a proven pairing names
-                        what neither axis alone can. Same counts, same styling. */}
-                    {formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`]) && (
-                      <span
-                        data-testid={`goal-pair-evidence-${goal}`}
-                        className="block text-sm leading-relaxed text-muted-foreground"
-                      >
-                        {formatVerdicts(pairEvidence[`${angle.kind}‖${goal}`])} for this pairing
-                      </span>
-                    )}
-                  </div>
-                </details>
-              )}
-              {index === 0 && <span className="sr-only">Best fit suggestion. </span>}
-            </button>
-          );
-        })}
-      </div>
-      {outsideRecommendation && (
-        <p className="text-sm text-muted-foreground" data-testid="goal-outside-recommendations">
-          Your current goal, {humanize(value)}, is outside these six suggestions. It stays selected unless you choose a suggested goal.
-        </p>
-      )}
-    </section>
-  );
-}
-
-/**
- * Live narration while the plan writes. The artifact arrives whole, so there
- * is nothing honest to count — but its sections are known up front (hook,
- * script, shots, demo note), and naming the current one beats a static line
- * that never moves. Unmounts with its branch, so a failure can never strand
- * it beside the error; the interval dies with the component.
- */
-function PlanPhaseLine() {
-  const phases = ["Writing the hook…", "Writing the script…", "Placing the shots…", "Adding the demo note…"];
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % phases.length);
-    }, 1800);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <span role="status" data-testid="plan-progress">
-      {phases[index]}
-    </span>
-  );
+function humanize(value) {
+  return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function StepShell({ icon: Icon, title, children }) {
@@ -1365,20 +318,16 @@ export default function CreateVideo() {
   // draft on a DIFFERENT angle learns it lost its story. Count of 0 shows
   // nothing: a clean regen is not news.
   const [facets, setFacets] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
-  // Fit notes every visible recommendation shares, hoisted out of the cards
-  // by the server so identical bullets are read once at the section level
-  // instead of repeated on every card. Reset wherever recommendations are.
-  const [sharedFit, setSharedFit] = useState({ reasons: [], limitations: [] });
-  const clearRecommendations = () => {
-    setRecommendations([]);
-    setSharedFit({ reasons: [], limitations: [] });
-  };
-  const [recError, setRecError] = useState(null);
-  const [recKey, setRecKey] = useState("");
-  const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [templates, setTemplates] = useState([]);
-  const [project, setProject] = useState(null);
+  const [draft, dispatchDraft] = useReducer(wizardDraftReducer, {
+    profile: params.get("profile") || "",
+    angle: params.get("angle") || "",
+    template: params.get("template") || "",
+  }, createWizardDraft);
+  const { selectedProfileId, angleId, templateId, objective, tone, project, edits } = draft;
+  const receiveProject = useCallback((fresh) => {
+    dispatchDraft({ type: "project-received", project: fresh });
+  }, []);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -1396,18 +345,12 @@ export default function CreateVideo() {
   // brings it back.
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
 
-  const [selectedProfileId, setSelectedProfileId] = useState(params.get("profile") || "");
-  const [angleId, setAngleId] = useState(params.get("angle") || "");
-  const [templateId, setTemplateId] = useState(params.get("template") || "");
-  const [objective, setObjective] = useState("");
   // There is no length state and no intent state any more, and that is the
   // whole point of this step's current shape. Duration is computed: a template
   // declares the length its mechanic suits, the project seeds from it, and the
   // render is that long in one pass. `extendIntent` ("hook only" versus "extend
   // into a full video") asked a question about a chain that no longer exists —
   // there is no hook-only render to choose between.
-  const [tone, setTone] = useState("");
-  const [edits, setEdits] = useState({});
   // Thumbs verdict on the saved Review plan: up advances to the render below,
   // down records the rejection and asks the AI for a fresh plan. Manual
   // editing stays untouched — this is an additive fast path, not a
@@ -1434,6 +377,11 @@ export default function CreateVideo() {
   const reviewRefinesRef = useRef({});
 
   const profileId = project?.brand_profile_id || selectedProfileId;
+  const {
+    recommendations, sharedFit, recError, recKey, recRequestKey, clearRecommendations,
+    runTailoring, tailoring, tailorError, tailorCount, tailorTotal,
+    tailoredReady, recommendationsVisible, visibleRecommendations,
+  } = useWizardTemplates({ profileId, angleId, objective, active: step === 1 });
   // Every app lands gated: switching apps re-arms the CTA so a revealed set
   // for one app never leaks into another app's first view.
   useEffect(() => {
@@ -1525,7 +473,7 @@ export default function CreateVideo() {
                 return { angles: [] };
               });
             if (cancelled) return;
-            setProject(draft);
+            dispatchDraft({ type: "draft-resumed", project: draft });
             // This row came from the server, so it is already current: recording
             // it means the Review re-read has nothing to reconcile and does not
             // fire. Without that, every deep link issued a second identical
@@ -1533,13 +481,7 @@ export default function CreateVideo() {
             // the founder) had moved on.
             syncedProjectsRef.current[draft.id] = draft.updated_at || "";
             adoptAngles(angleData);
-            setAngleId(draft.content_angle_id || "");
-            setTemplateId(draft.template_id || "");
-            setObjective(draft.objective || "");
-            setTone(draft.tone || "");
             clearRecommendations();
-            setRecError(null);
-            setEdits({});
             // A duplicate always arrives with its plan intact, so it opens on
             // Review; an unplanned draft still needs a photo before a plan can
             // be written. Both indices are looked up by KEY rather than written
@@ -1564,7 +506,7 @@ export default function CreateVideo() {
           // The pick must live in state: profileId drives recommendations,
           // canGenerate, and draft creation, and selectProfile is the only
           // other writer. Reading it from URL params alone left it empty.
-          setSelectedProfileId(chosen.id);
+          dispatchDraft({ type: "profile-loaded", id: chosen.id });
           // A ?step= link names the step explicitly; only advance to the
           // angle step when none was asked for, so the link survives the
           // profiles load instead of being overridden by it.
@@ -1625,97 +567,6 @@ export default function CreateVideo() {
   const scrollToSubstep = (id) => {
     document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
-  const recRequestRef = useRef(0);
-
-  const loadRecommendations = useCallback(
-    async (pid, aid) => {
-      if (!pid) return;
-      // Recommendations are keyed to the exact profile/angle/objective that
-      // requested them. A slow response for a previous key must never populate
-      // the step the founder is now reading, and rows for a previous key must
-      // not linger while the new key loads.
-      const request = ++recRequestRef.current;
-      const key = `${pid || ""}:${aid || ""}:${objective || ""}`;
-      setRecKey(key);
-      clearRecommendations();
-      setRecError(null);
-      try {
-        const rec = await api.getTemplateRecommendations(pid, {
-          angle_id: aid || undefined,
-          objective: objective || undefined,
-          limit: 6,
-        });
-        if (recRequestRef.current !== request) return;
-        const rows = rec.recommendations || [];
-        setRecKey(key);
-        setRecommendations(rows);
-        setSharedFit({
-          reasons: Array.isArray(rec.shared_reasons) ? rec.shared_reasons : [],
-          limitations: Array.isArray(rec.shared_limitations) ? rec.shared_limitations : [],
-        });
-        setRecError(null);
-        // Preselection moved to its own effect below: it must wait until the
-        // tailored set for this key is ready, otherwise the top curated card
-        // is picked before the custom templates exist.
-      } catch (err) {
-        if (recRequestRef.current !== request) return;
-        // An empty list used to mean three different things: nothing ranked,
-        // nothing compatible, or the request failed. The third one stranded the
-        // founder in front of a step that looked merely thin, so the reason is
-        // shown rather than absorbed.
-        setRecKey(key);
-        clearRecommendations();
-        setRecError(getErrorMessage(err));
-      }
-    },
-    [objective]
-  );
-
-  useEffect(() => {
-    loadRecommendations(profileId, angleId);
-  }, [profileId, angleId, loadRecommendations]);
-
-  // Tailored templates generate per (profile, selected objective) — the
-  // objective does not exist at approve time, so this is where the request
-  // belongs. Auto-fires once per key while the founder reads the step
-  // (cache hits return instantly); the button below forces a refresh.
-  // Guarded by ref so a remount never pays for a second generation.
-  const tailorKeyRef = useRef("");
-  const [tailoring, setTailoring] = useState(false);
-  const [tailorError, setTailorError] = useState(null);
-  const [tailorCount, setTailorCount] = useState(0);
-  const tailorTimer = useRef(null);
-  const runTailoring = useCallback(async (regenerate) => {
-    if (!profileId || !objective) return;
-    const key = `${profileId}:${objective}`;
-    setTailoring(true);
-    setTailorError(null);
-    try {
-      const res = await api.ensureObjectiveTemplates(profileId, {
-        objective,
-        ...(regenerate ? { regenerate: true } : {}),
-      });
-      // A response for a previous profile/objective must not mark the current
-      // step ready: that is exactly how pre-made cards appeared before the
-      // current app's custom set existed.
-      if (tailorKeyRef.current !== key) return;
-      setTailored({
-        key,
-        templates: Array.isArray(res?.templates) ? res.templates : [],
-      });
-      if (res.generated) {
-        await loadRecommendations(profileId, angleId);
-      }
-      if (res.error) setTailorError(res.error);
-    } catch (err) {
-      if (tailorKeyRef.current !== key) return;
-      setTailored({ key, templates: [] });
-      setTailorError(getErrorMessage(err));
-    } finally {
-      if (tailorKeyRef.current === key) setTailoring(false);
-    }
-  }, [profileId, objective, angleId, loadRecommendations]);
-
   // The step's single CTA: "Generate angles", shown on landing instead of any
   // list. The click reveals a pre-generated set for free when one exists
   // (generated on approval — no endpoint call, no spend, no pick change), and
@@ -1746,7 +597,7 @@ export default function CreateVideo() {
       // the goal picker would collapse to its wait state. Park the founder
       // on the strongest new angle; an empty set clears the pick.
       if (!fresh.some((a) => a && a.id === angleId)) {
-        setAngleId(fresh.length > 0 ? fresh[0].id : "");
+        dispatchDraft({ type: "angle-selected", id: fresh.length > 0 ? fresh[0].id : "" });
       }
       if (!data.angles?.length) {
         setAngleError("The model returned no usable angles. Try again.");
@@ -1756,7 +607,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, generatingAngles, angles.length, revealAngles, objective]);
+  }, [profileId, angleId, generatingAngles, angles.length, revealAngles, objective, adoptAngles]);
 
   // Regenerating the audience angles without leaving the wizard. Offered on
   // a populated list too, because the regenerate endpoint keeps hand-written
@@ -1792,7 +643,7 @@ export default function CreateVideo() {
       // when fresh options arrived. A surviving row (a kept manual angle)
       // keeps the founder's pick; otherwise park on the strongest new one.
       if (!fresh.some((a) => a && a.id === angleId)) {
-        setAngleId(fresh.length > 0 ? fresh[0].id : "");
+        dispatchDraft({ type: "angle-selected", id: fresh.length > 0 ? fresh[0].id : "" });
       }
       const affected = Number(data?.projects_affected) || 0;
       if (affected > 0) {
@@ -1814,7 +665,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, project, objective]);
+  }, [profileId, angleId, project, objective, adoptAngles]);
 
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back
@@ -1833,67 +684,6 @@ export default function CreateVideo() {
     }
   }, [profileId, angleId, adoptAngles]);
 
-  useEffect(() => {
-    if (step !== 1 || !profileId || !objective) return;
-    const key = `${profileId}:${objective}`;
-    if (tailorKeyRef.current === key) return;
-    tailorKeyRef.current = key;
-    runTailoring(false);
-  }, [step, profileId, objective, runTailoring]);
-
-  // Template cards stay hidden until this profile/objective has its own custom
-  // set. Recommendations otherwise arrive first and show pre-made cards before
-  // the tailored templates exist. On a tailoring failure with no custom set,
-  // the ranked curated fallback is shown instead of an empty step.
-  const tailorKey = profileId && objective ? `${profileId}:${objective}` : "";
-  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}`;
-  const tailoredReady = Boolean(
-    tailorKey && tailored.key === tailorKey && tailored.templates.length > 0
-  );
-  const tailorFallbackVisible = Boolean(
-    tailorKey &&
-      tailored.key === tailorKey &&
-      tailored.templates.length === 0 &&
-      tailorError &&
-      !tailoring
-  );
-  const recommendationsVisible = Boolean(
-    objective &&
-      recKey &&
-      recKey === recRequestKey &&
-      (tailoredReady || tailorFallbackVisible)
-  );
-  // Once the custom set is ready, only its templates are shown. The ranked
-  // curated fallback remains available when tailoring fails with no custom
-  // set, so a model outage does not strand the step.
-  const visibleRecommendations = useMemo(() => {
-    if (!recommendationsVisible) return [];
-    if (!tailoredReady) return recommendations;
-    const tailoredIds = new Set(
-      (tailored.templates || []).map((t) => t?.id).filter(Boolean)
-    );
-    return recommendations.filter((r) => tailoredIds.has(r?.template?.id));
-  }, [recommendationsVisible, tailoredReady, tailored.templates, recommendations]);
-
-  // Live count-up while templates tailor ("Reading template 2 of 4…"). The
-  // total is the outgoing list — the only honest denominator mid-flight —
-  // and the line unmounts on settle or error, same contract as the other
-  // generation counts.
-  const tailorTotal = Math.max(visibleRecommendations.length, 1);
-  useEffect(() => {
-    if (!tailoring) {
-      setTailorCount(0);
-      return undefined;
-    }
-    setTailorCount(1);
-    tailorTimer.current = setInterval(() => {
-      setTailorCount((c) => (c >= tailorTotal ? tailorTotal : c + 1));
-    }, 450);
-    return () => {
-      clearInterval(tailorTimer.current);
-      tailorTimer.current = null;
-    };
-  }, [tailoring, tailorTotal]);
   // Preselect the top pick only once its key is displayable. Deliberately not
   // "on every reload": a reload must never move a selection the founder made,
   // so the only conditions are that nothing is selected and nothing has ever
@@ -1902,7 +692,7 @@ export default function CreateVideo() {
     if (!recommendationsVisible) return;
     if (templateId || templateChosenByHand.current) return;
     if (visibleRecommendations.length === 0) return;
-    setTemplateId(visibleRecommendations[0].template.id);
+    dispatchDraft({ type: "template-selected", id: visibleRecommendations[0].template.id });
   }, [visibleRecommendations, recommendationsVisible, templateId]);
 
   // Implicit behavior: what was shown but not picked. Adoption and
@@ -1928,7 +718,7 @@ export default function CreateVideo() {
         });
       });
     }
-    setAngleId(id);
+    dispatchDraft({ type: "angle-selected", id });
   };
   const handleGoalPick = (value) => {
     if (value && value !== objective) {
@@ -1950,7 +740,7 @@ export default function CreateVideo() {
         });
       });
     }
-    setObjective(value);
+    dispatchDraft({ type: "goal-selected", value });
   };
   const handleTemplatePick = (id) => {
     if (id && id !== templateId && Array.isArray(visibleRecommendations)) {
@@ -1963,41 +753,22 @@ export default function CreateVideo() {
     }
     // Latched, so a later reload cannot move this pick.
     templateChosenByHand.current = true;
-    setTemplateId(id);
+    dispatchDraft({ type: "template-selected", id });
   };
 
   const selectProfile = async (id) => {
-    setSelectedProfileId(id);
+    dispatchDraft({ type: "profile-selected", id });
     setAngles([]);
-    setAngleId("");
     clearRecommendations();
-    setRecError(null);
-    setEdits({});
-    setProject(null);
-    // The template is cleared with everything else, because it was chosen
-    // against the previous app's profile. This was latent before; auto-selection
-    // made it reachable, since a template preselected for one app would survive
-    // the switch and the new profile's recommendations would then see a
-    // selection already made and decline to preselect theirs.
-    setTemplateId("");
-    // The objective and tone were left behind, which is the same bug for a
-    // different field: both are creative direction chosen against the PREVIOUS
-    // app, and both are written onto the next project in createProject. Carrying
-    // them over means the new app's plan is built toward another app's goal,
-    // and the Audience & template step shows a choice the founder already made for
-    // a product they just switched away from.
-setObjective("");
-        setTone("");
-        // The latch is per-app, not per-session: a deliberate pick for one app says
-        // nothing about the next one, so the new app starts from its own top pick.
-        templateChosenByHand.current = false;
-        try {
-          const d = await api.getContentAngles(id);
-          adoptAngles(d);
-        } catch (err) {
-          setAngles([]);
-          setObjectiveEvidence({});
-          setAngleError(getErrorMessage(err));
+    // A deliberate template choice is per app, not per session.
+    templateChosenByHand.current = false;
+    try {
+      const data = await api.getContentAngles(id);
+      adoptAngles(data);
+    } catch (err) {
+      setAngles([]);
+      setObjectiveEvidence({});
+      setAngleError(getErrorMessage(err));
     }
     setStep(1);
   };
@@ -2031,7 +802,7 @@ setObjective("");
             objective,
             tone,
           });
-      setProject(created);
+      dispatchDraft({ type: "project-received", project: created });
       return created;
     } catch (err) {
       if (isTemplateGoneError(err)) {
@@ -2042,7 +813,7 @@ setObjective("");
         // the outcome into the gap panel.
         templateGoneRef.current = true;
         templateChosenByHand.current = true;
-        setTemplateId("");
+        dispatchDraft({ type: "template-selected", id: "" });
         setError(TEMPLATE_GONE_MESSAGE);
         return null;
       }
@@ -2100,7 +871,7 @@ setObjective("");
           objective,
           tone,
         });
-        setProject(updated);
+        dispatchDraft({ type: "project-received", project: updated });
         return updated;
       }
       const created = await api.createStudioProject({
@@ -2110,7 +881,7 @@ setObjective("");
         objective,
         tone,
       });
-      setProject(created);
+      dispatchDraft({ type: "project-received", project: created });
       return created;
     } catch (err) {
       // A failure here is not fatal: the plan step still creates the draft and
@@ -2120,7 +891,7 @@ setObjective("");
       // the gap — and the stale pick is dropped so nothing re-sends it.
       if (isTemplateGoneError(err)) {
         templateChosenByHand.current = true;
-        setTemplateId("");
+        dispatchDraft({ type: "template-selected", id: "" });
         setError(null);
         return null;
       }
@@ -2256,8 +1027,7 @@ setObjective("");
       // A refusal is stated rather than swallowed, so a founder who lands on a
       // disabled render button can read why instead of assuming the app broke.
       setError(readyError ? getErrorMessage(readyError) : null);
-      setProject(settled);
-      setEdits({});
+      dispatchDraft({ type: "plan-accepted", project: settled });
       setReviewThumb(0);
       // Straight to the top of Review & submit, where the fresh plan reads: the
       // plan is the thing to read first, and the render section below it is the
@@ -2271,7 +1041,7 @@ setObjective("");
         // gone id at pick time — drop the pick, name the gap, no retry. The
         // latch keeps the preselect from re-picking the disproven row.
         templateChosenByHand.current = true;
-        setTemplateId("");
+        dispatchDraft({ type: "template-selected", id: "" });
         setError(TEMPLATE_GONE_MESSAGE);
         setPlanFailed(false);
       } else {
@@ -2397,8 +1167,7 @@ setObjective("");
         syncedProjectsRef.current[settled.id] = settled.updated_at || "";
       }
       setError(readyError ? getErrorMessage(readyError) : null);
-      setProject(settled);
-      setEdits({});
+      dispatchDraft({ type: "plan-accepted", project: settled });
       setReviewThumb(0);
       if (silent) setSaveStatus("All changes saved");
     } catch (err) {
@@ -2420,18 +1189,18 @@ setObjective("");
   // button the founder would press, without being asked. Skipped while a
   // manual save or plan generation holds `busy`, and while a plan flight
   // owns the outcome — stacked writes read as a frozen page.
+  const hasEdits = Object.keys(edits).length > 0;
   const editsSignature = JSON.stringify(edits);
+  const autosaveProjectId = project?.id;
   useEffect(() => {
-    if (!hasEdits || busy || !project) return undefined;
+    if (!hasEdits || busy || !autosaveProjectId) return undefined;
     if (planInFlightRef.current) return undefined;
     setSaveStatus("");
     const timer = setTimeout(() => {
       saveEditsRef.current?.({ silent: true });
     }, 1000);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature is
-    // the edits value; the saver rides a ref so scheduling never re-fires.
-  }, [editsSignature, busy, project?.id]);
+  }, [editsSignature, busy, autosaveProjectId, hasEdits]);
 
   // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
   // the approval and moves to the render below. Down reuses the existing plan
@@ -2536,15 +1305,13 @@ setObjective("");
 
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
-  const hasEdits = Object.keys(edits).length > 0;
 
   // Tone is editable here and also seeds the plan, so a change has to move
   // both or going back and regenerating would silently reinstate the old value.
   // Length has no editor on this step at all, editable or otherwise: it is the
   // template's number, and the plan's beat timeline is built to it.
   const editTone = (value) => {
-    setTone(value);
-    setEdits((prev) => ({ ...prev, tone: value }));
+    dispatchDraft({ type: "tone-edited", value });
   };
 
   // Profile-aware direction dropdowns: setting, lighting, wardrobe, voice and
@@ -2574,11 +1341,17 @@ setObjective("");
   // names instead of silently resetting. Unmatched starts empty and stays
   // out of the save until the founder picks — the plan default stands.
   const [dirSel, setDirSel] = useState({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
+  // Read the latest saved values when the project/options identity changes.
+  // Ordinary draft edits must not reset a dropdown the founder just picked.
+  const savedDirectionsRef = useRef(null);
+  savedDirectionsRef.current = {
+    visual: project?.visual_direction || "",
+    voice: project?.voice_direction || "",
+    tone: project?.tone || tone || "",
+  };
   useEffect(() => {
     if (!directionOptions) return;
-    const savedVisual = project?.visual_direction || "";
-    const savedVoice = project?.voice_direction || "";
-    const savedTone = project?.tone || tone || "";
+    const { visual: savedVisual, voice: savedVoice, tone: savedTone } = savedDirectionsRef.current;
     const matchPart = (text, list) =>
       (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
     const matchTone = (list) =>
@@ -2594,30 +1367,17 @@ setObjective("");
       voice: matchPart(savedVoice, directionOptions.voice),
       tone: matchTone(directionOptions.tone),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- matched once per
-    // project/options load; re-matching on every render would discard picks.
   }, [project?.id, directionOptions]);
   const pickScenePart = (field) => (value) => {
     const next = { ...dirSel, [field]: value };
     setDirSel(next);
     const composed = [next.setting, next.lighting, next.wardrobe].filter(Boolean).join(", ");
-    setEdits((previous) => {
-      const out = { ...previous };
-      // Nothing chosen means the plan default stands — never write a blank
-      // over scene notes the founder has not replaced.
-      if (!composed || composed === (project?.visual_direction || "")) delete out.visual_direction;
-      else out.visual_direction = composed;
-      return out;
-    });
+    // An empty choice keeps the saved plan default rather than erasing it.
+    dispatchDraft({ type: "edit-field", field: "visual_direction", value: composed, omitDefault: true });
   };
   const pickVoice = (value) => {
     setDirSel((previous) => ({ ...previous, voice: value }));
-    setEdits((previous) => {
-      const out = { ...previous };
-      if (!value || value === (project?.voice_direction || "")) delete out.voice_direction;
-      else out.voice_direction = value;
-      return out;
-    });
+    dispatchDraft({ type: "edit-field", field: "voice_direction", value, omitDefault: true });
   };
   const pickTone = (value) => {
     setDirSel((previous) => ({ ...previous, tone: value }));
@@ -2699,7 +1459,7 @@ setObjective("");
       // starts on arrival. Returned from, not fallen through, because the
       // state update re-runs this effect and the fire happens there — firing
       // here would send the draft's goal while `objective` is still empty.
-      setObjective(project.objective);
+      dispatchDraft({ type: "goal-selected", value: project.objective });
       return;
     }
     if (!objective) return;
@@ -2764,7 +1524,7 @@ setObjective("");
           return;
         }
         syncedProjectsRef.current[project.id] = fresh.updated_at || "";
-        setProject(fresh);
+        dispatchDraft({ type: "project-received", project: fresh });
       })
       .catch(() => {});
     return () => {
@@ -3317,11 +2077,11 @@ setObjective("");
                     profileId={profileId}
                     projectId={project.id}
                     projectAssets={project.assets}
-                    onProjectChanged={(fresh) => setProject(fresh || project)}
+                    onProjectChanged={(fresh) => dispatchDraft({ type: "project-received", project: fresh || project })}
                     onChanged={() => {
                       // Re-read the project's attached assets so the picker updates.
                       // Silent on failure: the pre-change project is still valid.
-                      api.getStudioProject(project.id).then(setProject).catch(() => {});
+                      api.getStudioProject(project.id).then(receiveProject).catch(() => {});
                     }}
                   />
                 </>
@@ -3589,7 +2349,7 @@ setObjective("");
               <Input
                 id="review-hook_line"
                 value={editValue("hook_line", "")}
-                onChange={(e) => setEdits({ ...edits, hook_line: e.target.value })}
+                onChange={(e) => dispatchDraft({ type: "edit-field", field: "hook_line", value: e.target.value })}
               />
             </div>
             <div className="space-y-4">
@@ -3598,7 +2358,7 @@ setObjective("");
               <Textarea
                 id="review-script"
                 value={editValue("script", "")}
-                onChange={(e) => setEdits({ ...edits, script: e.target.value })}
+                onChange={(e) => dispatchDraft({ type: "edit-field", field: "script", value: e.target.value })}
                 className="min-h-[160px]"
               />
             </div>
@@ -3610,7 +2370,7 @@ setObjective("");
               <div className="inset-panel space-y-2">
                 <label htmlFor={`review-${repairField}`} className="text-sm font-semibold">Edit flagged {repairField.replace(/_/g, " ")}</label>
                 <Textarea id={`review-${repairField}`} value={editValue(repairField, "")}
-                  onChange={(e) => setEdits({ ...edits, [repairField]: e.target.value })} />
+                  onChange={(e) => dispatchDraft({ type: "edit-field", field: repairField, value: e.target.value })} />
                 <p className="text-sm text-muted-foreground">Save to recheck this direction. Rebuild the strategy after changing it.</p>
               </div>
             )}
@@ -3719,7 +2479,7 @@ setObjective("");
               <Textarea
                 id="review-demo-brief"
                 value={editValue("demo_brief", "")}
-                onChange={(e) => setEdits({ ...edits, demo_brief: e.target.value })}
+                onChange={(e) => dispatchDraft({ type: "edit-field", field: "demo_brief", value: e.target.value })}
                 className="min-h-[70px]"
                 placeholder="For example: Record yourself tapping the timer once, hands only"
               />
@@ -3737,12 +2497,7 @@ setObjective("");
                 disabled={busy}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setEdits((previous) => {
-                    const next = { ...previous };
-                    if (value === (project?.camera_setup || "handheld")) delete next.camera_setup;
-                    else next.camera_setup = value;
-                    return next;
-                  });
+                  dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
                 }}
               >
                 <option value="handheld">Handheld selfie</option>
@@ -4039,7 +2794,7 @@ setObjective("");
                   <>
                     <HookContinuityPanel
                       project={project}
-                      onProjectChange={setProject}
+                      onProjectChange={receiveProject}
                     />
                     {project?.strategy && (
                       <ComponentThumbs
@@ -4060,7 +2815,7 @@ setObjective("");
                       <GenerationPanel
                         project={project}
                         onGenerationChange={() => {}}
-                        onProjectChange={setProject}
+                        onProjectChange={receiveProject}
                         hasUnsavedEdits={hasEdits}
                       />
                     </div>
@@ -4072,7 +2827,6 @@ setObjective("");
         </StepShell>
       );
     }
-
 
     // Unreachable: every index in STEPS has a branch above. This is a guard
     // against an index out of range rendering an empty page, so it must not

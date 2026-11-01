@@ -14,6 +14,11 @@ the alternatives we rejected and why. Git records *what* changed; these record
 - Each record cites a verifiable anchor (commit hash or `file:line`). If the
   anchor doesn't resolve, the record is stale — fix or supersede it.
 
+Current navigation: [architecture](../architecture.md),
+[operations](../operations.md), [contributing](../../CONTRIBUTING.md).
+Records below preserve historical decisions; current routes and state owners
+come from the architecture map and code, not an old record's UI description.
+
 ## Index
 
 | # | Decision | Status |
@@ -82,6 +87,10 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | partially superseded by 0078 (visible per-row stop state) |
 | [0063](0063-two-camera-setups.md) | Handheld selfie stays default; fixed camera is wider, stationary and unzoomed | accepted |
 | [0064](0064-camera-direction-conflicts-fail-before-render.md) | Refuse conflicting fixed-camera directions before rendering; preserve reviewed scene notes | accepted |
+| [0065](0065-profile-tailored-goal-order.md) | Tailor goal suggestion order to recorded profile evidence, retaining the six-goal set | accepted |
+| [0066](0066-profile-matched-direction-dropdowns.md) | Match direction dropdown choices to the approved profile; retain validated saves | accepted |
+| [0067](0067-review-edits-autosave.md) | Autosave Review edits through the existing server save and claim-check path | accepted |
+| [0068](0068-brand-autosave.md) | Autosave App Profile edits without clobbering newer inputs or changed profiles | accepted |
 | [0069](0069-moved-forward-momentum.md) | Proceeding to build shows as momentum beside verdicts, never inside the fit score | accepted |
 | [0070](0070-posted-performance-judges.md) | Posted TikTok performance judges; founder verdicts nominate; 90-day half-life on sort | accepted |
 | [0071](0071-pair-attribution-and-exploration-guard.md) | Pair (kind × objective) attribution sharpens below each axis; thin evidence invites one untried kind | accepted |
@@ -92,3 +101,5 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0076](0076-angle-diversity-and-source-links.md) | Correct duplicate arguments and carry recorded feature/outcome links | accepted |
 | [0077](0077-intent-aware-core-tours.md) | Core tours wait for first-run page readiness; other help stays manual | accepted |
 | [0078](0078-history-check-state-and-results.md) | History names polling stops and opens existing results controls directly | accepted |
+| [0079](0079-policy-and-studio-module-ownership.md) | Isolate deterministic policies and studio panels; retain project orchestration and compatibility | accepted |
+| [0080](0080-wizard-draft-state-transitions.md) | Make coupled wizard draft changes atomic; isolate template-loading state | accepted |

@@ -8622,7 +8622,7 @@ async function runIconChecks() {
       ["components/formControls.js", "input-well"],
       ["components/IconTile.jsx", "from-[color:var(--indigo-15)]"],
       ["components/Sidebar.jsx", "shadow-[0_0_10px_var(--brand-indigo)]"],
-      ["pages/CreateVideo.jsx", "card-pickable"],
+      ["components/studio/SelectionPanels.jsx", "card-pickable"],
     ];
     for (const [rel, token] of expectations) {
       const src = fs.readFileSync(path.join(SRC, rel), "utf8");
@@ -9995,8 +9995,10 @@ async function runDemoCtaChecks() {
   await check("every wizard subtitle fits the shared size and length budget", async () => {
     const MIN = 55;
     const MAX = 60;
-    const FILE = path.join(__dirname, "..", "src/pages/CreateVideo.jsx");
-    const text = fs.readFileSync(FILE, "utf8");
+    // Keep the same assertions over every owner after splitting the panels.
+    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx"]
+      .map((file) => fs.readFileSync(path.join(SRC, file), "utf8"))
+      .join("\n");
     const found = [];
     for (const m of text.matchAll(/<p className="([^"]*)"[^>]*data-subtitle=""[^>]*>([\s\S]*?)<\/p>/g)) {
       const copy = m[2]
