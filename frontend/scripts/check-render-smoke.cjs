@@ -4550,6 +4550,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!verdict.textContent.includes(FOUR_REASONS[0])) {
       throw new Error("the verdict is not the strongest (first) reason");
     }
+
+    // The title is one example framing ("Name the misdiagnosis") while the
+    // final setting comes from the angle, so the card must show the opening
+    // shape. Without it a park-bench angle paired with an 11pm-titled
+    // template reads as a mismatch.
+    const shape = ctx.container.querySelector('[data-testid="template-structure"]');
+    if (!shape) {
+      throw new Error("the template opening shape is not shown on the card");
+    }
+    if (!shape.textContent.includes(TEMPLATE.opening_structure)) {
+      throw new Error("the card shape does not carry the template opening structure");
+    }
+    if (!shape.textContent.includes("Final setting comes from your angle")) {
+      throw new Error("the card does not say the final setting comes from the angle");
+    }
   });
 
   await check("a card with no reasons or limitations shows neither block", async (ctx) => {

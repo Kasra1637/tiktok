@@ -80,6 +80,14 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
     typeof r.template.outcome === "string" && r.template.outcome.trim()
       ? sentenceCase(r.template.outcome.trim())
       : "";
+  // The structure is what the founder actually picks: the title above is one
+  // example framing ("Eleven pm...") while the final setting comes from
+  // their angle (park bench, desk, walk). Showing the opening shape stops the
+  // title reading as the final setting.
+  const opening =
+    typeof r.template.opening_structure === "string" && r.template.opening_structure.trim()
+      ? sentenceCase(r.template.opening_structure.trim())
+      : "";
   return (
     // Staggered arrival like the angle and goal rows: a fresh ranking is
     // watched arriving instead of blinking in at once. Keyed by template id
@@ -134,6 +142,12 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
         <p className="mt-1 text-sm text-foreground/80">
           <span className="text-muted-foreground">Sounds like: </span>
           &ldquo;{example}&rdquo;
+        </p>
+      )}
+      {opening && (
+        <p className="mt-1 text-sm text-muted-foreground" data-testid="template-structure">
+          <span className="text-muted-foreground">Shape: </span>
+          {opening} Final setting comes from your angle.
         </p>
       )}
       {reasons.length > 0 && (
