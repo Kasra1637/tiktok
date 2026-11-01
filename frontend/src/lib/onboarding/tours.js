@@ -64,7 +64,7 @@ export const TOURS = {
   },
 
   // Targets BrandSetup — research, edit and approve an App Profile at /brand.
-  // Profiles are created from store listings only; the details card appears
+  // Profiles are created from the website, App Store and Google Play URLs; the details card appears
   // once research returns one, so every step below targets something that
   // exists from that point on.
   brand: {

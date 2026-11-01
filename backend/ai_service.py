@@ -1886,7 +1886,7 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "core_features": ["concrete features evidenced by the sources"],\n'
         '  "primary_use_cases": ["top jobs the app helps users do"],\n'
         '  "problems_solved": ["user problems the app removes"],\n'
-        '  "target_audience": "short label for the primary audience, repeating the sources\' stated audience verbatim when one is stated (e.g. people with ADHD)",\n'
+        '  "target_audience": "short label for the primary audience -- when the sources state several audiences (e.g. ADHD, ADD, OCD), name them comma-separated verbatim rather than compressing to one",\n'
         '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online -- keep the sources\' stated audience (including named conditions) verbatim, never infer beyond them",\n'
         '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise -- keep stated audiences verbatim"],\n'
         '  "desired_outcomes": ["outcomes users want from the app"],\n'
@@ -2280,7 +2280,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "today that fails, or an objection from viewer_objections. A weak one names "
         "a category of person plus a benefit.\n\n"
         "For each angle:\n"
-        "- target_audience: one functional segment, not a stack of adjectives.\n"
+        "- target_audience: one functional segment per angle -- spread angles across icp_segments so a multi-condition app is represented, not every angle on the first segment.\n"
         "- user_problem: the concrete moment or cost -- a time, place, object or "
         "repeated task. When usage_moments is empty, take the situation from "
         "problems_solved.\n"

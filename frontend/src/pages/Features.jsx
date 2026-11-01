@@ -23,7 +23,7 @@ const ROWS = [
     icon: Briefcase,
     eyebrow: "App profile",
     title: "Start with your app's facts",
-    body: "Research an App Store or Google Play listing, then correct and approve the draft. Reuse that profile across your videos.",
+    body: "Research your website and store listings, then correct and approve the draft. Reuse that profile across your videos.",
   },
   {
     id: "templates",

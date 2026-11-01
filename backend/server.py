@@ -2324,6 +2324,22 @@ def _brand_update_parts(updates: dict) -> tuple:
     return set_clauses, values
 
 
+def _cap_page_text(text: str, max_chars: int) -> str:
+    """Cap page text while keeping the footer, not just the head.
+
+    Audience positioning (who the app is for, conditions it names) often lives
+    late on a page — FAQ, footer, "who it's for" sections. A blind head slice
+    keeps the hero copy and drops exactly that. When over budget, keep the head
+    plus a marked tail window instead.
+    """
+    text = text or ""
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    tail_window = min(1500, max_chars // 4)
+    head_window = max_chars - tail_window
+    return text[:head_window] + "\n\n[... snipped for length ...]\n\n" + text[-tail_window:]
+
+
 async def _fetch_url_text(url: str, max_chars: int) -> str:
     """Fetch a public page and return cleaned text, capped at max_chars.
 
@@ -2341,7 +2357,7 @@ async def _fetch_url_text(url: str, max_chars: int) -> str:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return page_text_with_metadata(resp.text)[:max_chars]
+            return _cap_page_text(page_text_with_metadata(resp.text), max_chars)
     except Exception as e:
         logger.warning(f"App research: could not fetch {url}: {e}")
         return ""
@@ -2778,14 +2794,15 @@ APP_RESEARCH_MAX_SUPPORT_URLS = 5
 
 @api_router.post("/app-profiles/research", status_code=201)
 async def research_app_profile(payload: AppProfileResearchRequest, user_id: str = Depends(get_current_user_id)):
-    """Research a mobile app from its store listings and draft an App Profile.
+    """Research a mobile app from its public pages and draft an App Profile.
 
-    Fetches the App Store and Google Play pages plus up to 5 support
+    Fetches the website, App Store and Google Play pages plus up to 5 support
     URLs, then asks OpenRouter to draft the full profile. The result is stored
     as status='draft' — the founder must review and approve it (POST
     /app-profiles/{id}/approve) before it drives video generation.
     """
     require_ai_configured()
+    website = _normalize_url(payload.website_url or "")
     appstore = _normalize_url(payload.appstore_url or "")
     play = _normalize_url(payload.play_url or "")
     support: list = []
@@ -2793,11 +2810,18 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
         n = _normalize_url(u)
         if n and n not in support:
             support.append(n)
+    skipped_support = support[APP_RESEARCH_MAX_SUPPORT_URLS:]
     support = support[:APP_RESEARCH_MAX_SUPPORT_URLS]
-    if not (appstore or play):
+    if skipped_support:
+        logger.warning(
+            "App research ignoring %d support URL(s) past the cap of %d: %s",
+            len(skipped_support), APP_RESEARCH_MAX_SUPPORT_URLS,
+            ", ".join(skipped_support),
+        )
+    if not (website or appstore or play):
         raise HTTPException(
             status_code=400,
-            detail="Provide your app's App Store URL, Google Play URL, or both.",
+            detail="Provide your app's website, App Store URL, Google Play URL, or a combination.",
         )
 
     sources: dict = {}
@@ -2808,6 +2832,9 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
     # and a founder reading the list had no way to know the rest were empty.
     requested_sources: list = []
     source_failures: list = []
+    if website:
+        requested_sources.append("website")
+        sources["website"] = await _fetch_url_text(website, APP_RESEARCH_CAPS["website"])
     if appstore:
         requested_sources.append("app_store")
         sources["app_store"] = await _fetch_url_text(appstore, APP_RESEARCH_CAPS["app_store"])
@@ -2866,10 +2893,7 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        # website_url is always "" here: research no longer accepts a website,
-        # and the column itself stays for legacy rows SQLite cannot cheaply
-        # drop it from.
-        (brand_id, "", profile.get("brand_name") or "Untitled app",
+        (brand_id, website or None, profile.get("brand_name") or "Untitled app",
 
          profile.get("brand_description") or "", profile.get("niche") or "",
          profile.get("target_audience") or "",
@@ -3399,7 +3423,7 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
     try:
         proposal = await _log_model_call(
             "app_profile_refresh", "text", TEXT_MODEL,
-            lambda: analyze_app_profile(sources, existing.get("notes") or ""),
+            lambda: analyze_app_profile(sources, _founder_verified_context(existing)),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -3445,6 +3469,38 @@ async def regenerate_everything(profile_id: str, user_id: str = Depends(get_curr
     return updated_profile
 
 
+def _founder_verified_context(existing: dict) -> str:
+    """Founder-verified positioning that re-research must not wipe.
+
+    A founder who hand-adds "people with ADHD" and then hits regenerate
+    used to watch the model rebuild from sources only and overwrite the edit
+    — when the sources state it, the model now keeps it, but when the
+    positioning lives only in the founder's edit there is nothing in the
+    sources to keep. Passing the existing audience back as verified context
+    makes regenerate/refresh incorporate it instead of erasing it.
+    """
+    parts = []
+    notes = (existing.get("notes") or "").strip()
+    if notes:
+        parts.append(f"Founder notes: {notes}")
+    audience = (existing.get("target_audience") or "").strip()
+    if audience:
+        parts.append(f"Founder-verified audience (do not drop): {audience}")
+    icp = (existing.get("ideal_customer_profile") or "").strip()
+    if icp:
+        parts.append(f"Founder-verified customer: {icp}")
+    segments = existing.get("icp_segments") or []
+    if isinstance(segments, str):
+        try:
+            segments = json.loads(segments)
+        except (json.JSONDecodeError, TypeError):
+            segments = []
+    segments = [str(s).strip() for s in (segments or []) if str(s).strip()]
+    if segments:
+        parts.append("Founder-verified segments (do not drop): " + " | ".join(segments[:6]))
+    return "\n".join(parts)
+
+
 async def _fetch_one_source(label: str, url: str, cap: int) -> tuple[str, str]:
     """One labeled fetch that never raises: _fetch_url_text already swallows
     fetch failures into "", and this guards the gather itself."""
@@ -3481,6 +3537,13 @@ async def _research_profile_sources(existing: dict) -> tuple[dict, list]:
             stored_support = json.loads(stored_support)
         except (json.JSONDecodeError, TypeError):
             stored_support = []
+    skipped_support = (stored_support or [])[APP_RESEARCH_MAX_SUPPORT_URLS:]
+    if skipped_support:
+        logger.warning(
+            "App research ignoring %d support URL(s) past the cap of %d: %s",
+            len(skipped_support), APP_RESEARCH_MAX_SUPPORT_URLS,
+            ", ".join(skipped_support),
+        )
     for i, u in enumerate((stored_support or [])[:APP_RESEARCH_MAX_SUPPORT_URLS]):
         urls[f"support_{i + 1} ({u})"] = (u, APP_RESEARCH_CAPS["support"])
     if not urls:
@@ -3499,6 +3562,9 @@ async def _research_profile_sources(existing: dict) -> tuple[dict, list]:
          "ok": bool((sources.get(label) or "").strip())}
         for label, (url, cap) in urls.items()
     ]
+    for u in skipped_support:
+        report.append({"label": f"skipped (over cap): {u}", "url": u,
+                       "chars": 0, "ok": False, "skipped": True})
     read = sum(1 for r in report if r["ok"])
     logger.info(
         f"App research: read {read}/{len(report)} sources "
@@ -3530,7 +3596,7 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
     try:
         proposal = await _log_model_call(
             "app_profile_refresh", "text", TEXT_MODEL,
-            lambda: analyze_app_profile(sources, existing.get("notes") or ""),
+            lambda: analyze_app_profile(sources, _founder_verified_context(existing)),
             user_id,
             brand_profile_id=profile_id,
         )

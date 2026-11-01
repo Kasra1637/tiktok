@@ -177,6 +177,30 @@ class TestConcurrentFetchReport:
             _run(api._research_profile_sources({"website_url": "https://a.example"}))
         assert err.value.status_code == 400
 
+    def test_skipped_support_urls_are_reported_not_silent(self, api, monkeypatch):
+        """Past the 5-URL cap, extras are reported as skipped, not dropped quiet."""
+        async def fake_fetch(url, cap):
+            return "text"
+
+        monkeypatch.setattr(api, "_fetch_url_text", fake_fetch)
+        existing = {"website_url": "https://site.example",
+                    "support_urls": [f"https://s{i}.example" for i in range(7)]}
+        _, report = _run(api._research_profile_sources(existing))
+        skipped = [r for r in report if r.get("skipped")]
+        assert len(skipped) == 2
+        assert all(r["chars"] == 0 and r["ok"] is False for r in skipped)
+
+    def test_page_cap_keeps_the_footer_positioning(self, api):
+        """Who-the-app-is-for often lives late (FAQ/footer); a blind head cut drops it."""
+        import server as srv
+        head = "Hero copy. " * 2000
+        tail = "Built for people with ADHD."
+        text = head + tail
+        assert len(text) > 6000
+        out = srv._cap_page_text(text, 6000)
+        assert len(out) <= 6200
+        assert "people with ADHD" in out
+
     def test_no_urls_raises_before_any_fetch(self, api, monkeypatch):
         from fastapi import HTTPException
         calls = []

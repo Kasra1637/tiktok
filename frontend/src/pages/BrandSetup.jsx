@@ -210,6 +210,7 @@ function groupForSaveError(message) {
 export default function BrandSetup() {
   const navigate = useNavigate();
 
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [appstoreUrl, setAppstoreUrl] = useState("");
   const [playUrl, setPlayUrl] = useState("");
   const [supportUrls, setSupportUrls] = useState("");
@@ -261,6 +262,7 @@ export default function BrandSetup() {
   const applyProfile = (data) => {
     setBrand(data);
     setForm(profileToForm(data));
+    setWebsiteUrl(data.website_url || "");
     setAppstoreUrl(data.appstore_url || "");
     setPlayUrl(data.play_url || "");
     setSupportUrls(productsToText(data.support_urls));
@@ -335,15 +337,16 @@ export default function BrandSetup() {
    */
   const runResearch = async () => {
     const forking = Boolean(brand?.id);
-    if (!appstoreUrl.trim() && !playUrl.trim()) {
-      toast.error("Enter your app's App Store URL, Google Play URL, or both.");
+    if (!websiteUrl.trim() && !appstoreUrl.trim() && !playUrl.trim()) {
+      toast.error("Enter your app's website, App Store URL, Google Play URL, or a combination.");
       return;
     }
     setResearching(true);
     setAnalyzeError(null);
-    const toastId = toast.loading("Researching the store listings…");
+    const toastId = toast.loading("Researching your app pages…");
     try {
       const data = await api.researchAppProfile({
+        website_url: websiteUrl.trim() || undefined,
         appstore_url: appstoreUrl.trim() || undefined,
         play_url: playUrl.trim() || undefined,
         support_urls: textToProducts(supportUrls),
@@ -384,6 +387,7 @@ export default function BrandSetup() {
   // autosave send the same row, so an autosaved profile is never a thinner
   // record than a manually saved one.
   const buildPayload = () => ({
+    website_url: websiteUrl.trim() || undefined,
     appstore_url: appstoreUrl.trim() || undefined,
     play_url: playUrl.trim() || undefined,
     support_urls: textToProducts(supportUrls),
@@ -428,10 +432,11 @@ export default function BrandSetup() {
   // applyProfile, so the form matching the row is the baseline syncing
   // itself without scheduling a redundant write.
   const liveSignature = () =>
-    JSON.stringify({ form, appstoreUrl, playUrl, supportUrls, notes });
+    JSON.stringify({ form, websiteUrl, appstoreUrl, playUrl, supportUrls, notes });
   const signatureForRow = (row) =>
     JSON.stringify({
       form: profileToForm(row),
+      websiteUrl: row.website_url || "",
       appstoreUrl: row.appstore_url || "",
       playUrl: row.play_url || "",
       supportUrls: productsToText(row.support_urls),
@@ -452,7 +457,7 @@ export default function BrandSetup() {
   const brandRef = useRef(null);
   brandRef.current = brand;
   const liveRef = useRef(null);
-  liveRef.current = { form, appstoreUrl, playUrl, supportUrls, notes };
+  liveRef.current = { form, websiteUrl, appstoreUrl, playUrl, supportUrls, notes };
   const lastSavedRef = useRef(null);
   const saveProfileRef = useRef(null);
   const saveProfile = async ({ silent = false } = {}) => {
@@ -593,7 +598,7 @@ export default function BrandSetup() {
   const handleRefresh = async () => {
     if (!brand?.id) return;
     setRefreshing(true);
-    const toastId = toast.loading("Re-reading the store listings…");
+    const toastId = toast.loading("Re-reading your app pages…");
     try {
       const saved = await api.refreshAppProfile(brand.id);
       applyProfile(saved);
@@ -701,9 +706,11 @@ export default function BrandSetup() {
         }
       />
 
-      {/* ---------- App research (store listings) ----------
-          Profiles are created from App Store and Google Play URLs only. The
-          details card below renders once research returns a profile.
+      {/* ---------- App research (public pages) ----------
+          Profiles are created from the website, App Store and Google Play URLs.
+          The website often carries the positioning the stores omit, so leaving
+          it out builds the first draft without it. The details card below
+          renders once research returns a profile.
 
           A SectionCard like every Create Video step: 32px tile + 16px
           heading + one-line description, surface padding from `.surface`.
@@ -713,10 +720,16 @@ export default function BrandSetup() {
         className="page-content-enter"
         title="Research a mobile app"
         icon={Smartphone}
-        description="App Store and Google Play URLs only — the draft appears below for review."
+        description="Website, App Store and Google Play URLs — the draft appears below for review."
       >
           <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card" aria-label="Research a mobile app">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder="Website URL (carries your positioning)"
+                data-testid="website-url-input"
+              />
               <Input
                 value={appstoreUrl}
                 onChange={(e) => setAppstoreUrl(e.target.value)}

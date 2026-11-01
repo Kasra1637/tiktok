@@ -1351,6 +1351,34 @@ class TestResearchRecordsOnlyWhatItRead:
         assert list(seen[0]) == ["app_store"]
         assert all((v or "").strip() for v in seen[0].values())
 
+    def test_website_is_a_first_class_research_source(self, api, monkeypatch):
+        """The website carries positioning the stores omit; research must read it."""
+        from models import AppProfileResearchRequest
+        seen = []
+
+        async def fake_fetch(url, cap):
+            if "site" in url:
+                return "Built for people with ADHD."
+            return "A focus timer."
+
+        async def fake_analyze(sources, notes):
+            seen.append(dict(sources))
+            return {
+                "brand_name": "V", "brand_description": "d", "app_category": "c",
+                "core_features": ["f"], "usage_moments": ["u"],
+                "target_audience": "people with ADHD", "tone_voice": "t",
+                "claims_approved": ["c"],
+            }
+
+        monkeypatch.setattr(api, "_fetch_url_text", fake_fetch)
+        monkeypatch.setattr(api, "analyze_app_profile", fake_analyze)
+        profile = _run(api.research_app_profile(payload=AppProfileResearchRequest(
+            website_url="https://site.example",
+        ), user_id=ANON))
+        assert "website" in seen[0]
+        assert profile["website_url"] == "https://site.example"
+        assert profile["target_audience"] == "people with ADHD"
+
     def test_a_partially_failed_research_still_succeeds(self, api, monkeypatch):
         """
         Losing one source is not losing the profile. The point is that the gap

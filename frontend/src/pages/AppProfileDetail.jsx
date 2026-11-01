@@ -274,7 +274,7 @@ export default function AppProfileDetail() {
     }
   };
 
-  // Refresh from sources: re-read the store listings into a pending
+  // Refresh from sources: re-read the app pages into a pending
   // proposal. The approved profile is unchanged until the proposal is
   // approved — the opposite of Refresh research & angles above, which
   // applies immediately. Only for researched profiles: a hand-typed one
@@ -282,7 +282,7 @@ export default function AppProfileDetail() {
   const handleRefreshFromSources = async () => {
     setRefreshing(true);
     setError(null);
-    const toastId = toast.loading("Re-reading the store listings…");
+    const toastId = toast.loading("Re-reading your app pages…");
     try {
       const saved = await api.refreshAppProfile(profileId);
       setProfile(saved);
@@ -316,21 +316,23 @@ export default function AppProfileDetail() {
     }
   };
 
-  // Research into a new draft: re-run research for this app's store URLs
+  // Research into a new draft: re-run research for this app's stored URLs
   // as a separate draft profile. The current profile is untouched, and the
   // editor opens on the new draft (it is the most recently created row, so
-  // getActiveBrand returns it). Needs a store listing on file — research
-  // with no URL is the toast BrandSetup shows, so the button stays disabled
-  // with that reason instead.
+  // getActiveBrand returns it). Needs a URL on file — research with no URL
+  // is the toast BrandSetup shows, so the button stays disabled with that
+  // reason instead.
   const handleResearchNewDraft = async () => {
+    const websiteUrl = (profile?.website_url || "").trim();
     const appstoreUrl = (profile?.appstore_url || "").trim();
     const playUrl = (profile?.play_url || "").trim();
-    if (!appstoreUrl && !playUrl) return;
+    if (!websiteUrl && !appstoreUrl && !playUrl) return;
     setResearchingNew(true);
     setError(null);
     const toastId = toast.loading("Researching a new draft…");
     try {
       const created = await api.researchAppProfile({
+        ...(websiteUrl ? { website_url: websiteUrl } : {}),
         ...(appstoreUrl ? { appstore_url: appstoreUrl } : {}),
         ...(playUrl ? { play_url: playUrl } : {}),
       });
@@ -429,6 +431,7 @@ export default function AppProfileDetail() {
   // hand-typed create.
   const researched = Boolean(profile?.last_research_at);
   const hasStoreUrl = Boolean(
+    (profile?.website_url || "").trim() ||
     (profile?.appstore_url || "").trim() || (profile?.play_url || "").trim()
   );
   const pendingProposal = profile?.pending_research;

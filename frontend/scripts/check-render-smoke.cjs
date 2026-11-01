@@ -8919,7 +8919,7 @@ async function runProfileResearchActionsChecks() {
  * viewport: the old sticky bottom bar was removed, so these also pin that no
  * `.sticky` element remains here.
  *
- * Profiles are created from store listings only: the details card renders
+ * Profiles are created from the website, App Store and Google Play URLs: the details card renders
  * once research returns a profile, never before. So these also pin the two
  * halves of that gate — nothing to correct before research, and the draft
  * revealed the moment it exists.

@@ -19,7 +19,7 @@ const FEATURES = [
     icon: Briefcase,
     title: "Start with your app’s facts",
     description:
-      "Research an App Store or Google Play listing, then correct and approve the draft. Reuse that profile across your videos.",
+      "Research your website and store listings, then correct and approve the draft. Reuse that profile across your videos.",
   },
   {
     icon: Target,
@@ -69,7 +69,7 @@ const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    detail: "Add an App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts.",
+    detail: "Add your website, App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts.",
   },
   {
     step: "2",

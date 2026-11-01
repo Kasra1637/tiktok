@@ -2264,6 +2264,41 @@ class TestStatedAudiencePreserved:
         assert "never a sensitive trait or diagnosis" not in prompt
         assert "stated" in prompt.lower()
 
+    def test_multi_condition_audiences_are_listed_not_compressed(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({
+            k: ([] if k in set(ai_service.APP_PROFILE_LIST_KEYS) | {
+                "outcome_statements", "viewer_objections"} else "x")
+            for k in ai_service.REQUIRED_APP_PROFILE_KEYS
+        }))])
+        _run(ai_service.analyze_app_profile({"website": "for ADHD, ADD and OCD"}))
+        prompt = rec.payloads[0]["messages"][1]["content"]
+        assert "comma-separated" in prompt
+
+    def test_manual_audience_survives_as_verified_context(self, monkeypatch):
+        import server as srv
+        existing = {"notes": "", "target_audience": "people with ADHD",
+                    "ideal_customer_profile": "", "icp_segments": ["ADHD line"]}
+        ctx = srv._founder_verified_context(existing)
+        assert "people with ADHD" in ctx
+        assert "ADHD line" in ctx
+
+    def test_angles_spread_across_segments(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({"angles": [{
+            "kind": "problem_solution", "label": "L", "target_audience": "a",
+            "user_problem": "p", "hook_promise": "h", "app_feature": "f",
+            "desired_emotion": "e", "viewer_outcome": "v", "claims_to_respect": [],
+        }]}))])
+        _run(ai_service.generate_content_angles({
+            "brand_name": "V", "target_audience": "people with ADHD",
+            "icp_segments": ["ADHD", "alexithymia"],
+        }))
+        combined = " ".join(
+            m.get("content", "") for m in rec.payloads[0]["messages"]
+        )
+        assert "icp_segments" in combined.lower() or "segments" in combined.lower()
+
     def test_angle_prompt_repeats_stated_positioning(self, monkeypatch):
         import ai_service
         rec = _patch_client(monkeypatch, [_completion(json.dumps({"angles": [{
