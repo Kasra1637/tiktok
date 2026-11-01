@@ -2275,7 +2275,7 @@ class TestComponentFeedbackRouting:
         assert summary["total"] == 1
         assert summary["objectives"] == [
             {"name": "demonstrate_feature", "wins": 1, "flops": 0,
-             "adoptions": 0, "abandonments": 0}]
+             "adoptions": 0, "abandonments": 0, "posted": 0, "views": 0}]
 
     def test_stage_prompts_carry_their_own_verdicts(self, monkeypatch):
         import ai_service
@@ -2322,7 +2322,7 @@ class TestComponentFeedbackRouting:
         summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
         assert summary["objectives"] == [
             {"name": "create_curiosity", "wins": 0, "flops": 1,
-             "adoptions": 0, "abandonments": 0}]
+             "adoptions": 0, "abandonments": 0, "posted": 0, "views": 0}]
         assert summary["kinds"] == [
             {"name": "founder_story", "wins": 0, "flops": 1,
-             "adoptions": 0, "abandonments": 0}]
+             "adoptions": 0, "abandonments": 0, "posted": 0, "views": 0}]

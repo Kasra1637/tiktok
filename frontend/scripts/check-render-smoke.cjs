@@ -5163,7 +5163,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       objective_evidence: { address_user_problem: { wins: 3, flops: 1 } },
     };
     await withApi(
-      { getContentAngles: async () => ({ angles: [PROVEN_OBJ, ANGLE_B], objective_evidence: { address_user_problem: { wins: 3, flops: 1 } } }) },
+      { getContentAngles: async () => ({ angles: [PROVEN_OBJ, ANGLE_B], objective_evidence: { address_user_problem: { wins: 3, flops: 1 } }, pair_evidence: {} }) },
       async () => {
         global.__SMOKE_PARAMS = "";
         try {
@@ -5196,6 +5196,39 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           if (!fitBadge.getAttribute("title") || !fitBadge.getAttribute("title").includes("3 wins in 4")) {
             throw new Error(`fit badge names no basis: ${fitBadge.getAttribute("title")}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+// The intersection axis: this kind for this goal is the most specific
+  // evidence on the card. A proven pairing names what neither axis alone
+  // can — same counts, same styling, third line.
+  await check("goal cards name the kind-goal pairing when it has evidence", async (ctx) => {
+    const PAIRED = {
+      ...ANGLE,
+      objective: "address_user_problem",
+      evidence: { wins: 0, flops: 0 },
+    };
+    await withApi(
+      { getContentAngles: async () => ({ angles: [PAIRED, ANGLE_B], objective_evidence: {}, pair_evidence: { "problem_solution‖address_user_problem": { wins: 4, flops: 0, posted: 1, views: 12400 } } }) },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const pairLine = ctx.container.querySelector('[data-testid="goal-pair-evidence-address_user_problem"]');
+          if (!pairLine) throw new Error("the goal card shows no pairing count");
+          if (!pairLine.textContent.includes("4 wins") || !pairLine.textContent.includes("for this pairing")) {
+            throw new Error(`pairing line does not read as counts: ${pairLine.textContent}`);
+          }
+          if (!pairLine.textContent.includes("12.4k views")) {
+            throw new Error(`pairing line hides the audience evidence: ${pairLine.textContent}`);
           }
         } finally {
           global.__SMOKE_PARAMS = "";

@@ -558,8 +558,8 @@ class TestContentAngles:
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert [a["id"] for a in listed["angles"]] == [quiet["id"], winner["id"]]
         by_id = {a["id"]: a for a in listed["angles"]}
-        assert by_id[winner["id"]]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0}
-        assert by_id[quiet["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
+        assert by_id[winner["id"]]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
+        assert by_id[quiet["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
 
     def test_adopted_goal_surfaces_as_moved_forward_in_evidence(self, api):
         """
@@ -589,8 +589,8 @@ class TestContentAngles:
              "2026-01-01T00:00:00", ANON)))
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         by_id = {a["id"]: a for a in listed["angles"]}
-        assert by_id[angle["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 1}
-        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 0, "flops": 0, "adoptions": 1}}
+        assert by_id[angle["id"]]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 1, "posted": 0, "views": 0}
+        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 0, "flops": 0, "adoptions": 1, "posted": 0, "views": 0}}
 
     def test_evidence_is_zeroed_without_verdicts_and_never_crosses_profiles(self, api):
         import uuid as _uuid
@@ -614,8 +614,8 @@ class TestContentAngles:
             " VALUES (?, ?, ?, ?, ?, ?, 'goal')",
             (str(_uuid.uuid4()), p1["id"], project["id"],
              "thumb_up", "2026-01-01T00:00:00", ANON)))
-        assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0}
-        assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
+        assert _run(api.list_content_angles(profile_id=p1["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
+        assert _run(api.list_content_angles(profile_id=p2["id"], user_id=ANON))["angles"][0]["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
 
     def test_objective_evidence_aggregates_by_goal_and_is_scoped(self, api):
         """
@@ -654,10 +654,10 @@ class TestContentAngles:
              "thumb_up", "2026-01-01T00:00:00", ANON)))
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
-        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0, "adoptions": 0}}
+        assert listed["objective_evidence"] == {"address_user_problem": {"wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}}
         # Angle rows keep the kind axis only; the goal axis is response-level.
         for a in listed["angles"]:
-            assert a["evidence"] in ({"wins": 1, "flops": 0, "adoptions": 0}, {"wins": 0, "flops": 0, "adoptions": 0})
+            assert a["evidence"] in ({"wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}, {"wins": 0, "flops": 0, "adoptions": 0, "posted": 0, "views": 0})
 
         # Cross-profile isolation holds for objective axis too
         p2 = _make_profile(api, ANON, name="Other App")
@@ -710,8 +710,8 @@ class TestContentAngles:
 
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         obj_map = listed["objective_evidence"]
-        assert obj_map["address_user_problem"] == {"wins": 1, "flops": 0, "adoptions": 0}
-        assert obj_map["demonstrate_feature"] == {"wins": 0, "flops": 1, "adoptions": 0}
+        assert obj_map["address_user_problem"] == {"wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
+        assert obj_map["demonstrate_feature"] == {"wins": 0, "flops": 1, "adoptions": 0, "posted": 0, "views": 0}
         assert len(obj_map) == 2
 
 
@@ -1272,6 +1272,60 @@ class TestGoalFeedback:
         # Undated rows are treated as fresh, never dropped.
         assert feedback_mod._decay_weight(None) == 1.0
 
+    def test_pairs_attribute_the_intersection_not_each_axis(self):
+        import feedback as feedback_mod
+        summary = feedback_mod.summarize_angle_feedback([
+            {"kind": "problem_solution", "objective": "demonstrate_feature",
+             "event": "thumb_up", "step": "goal"},
+            {"kind": "problem_solution", "objective": "build_trust",
+             "event": "thumb_down", "step": "goal"},
+        ])
+        pair = next(e for e in summary["pairs"]
+                    if e["kind"] == "problem_solution"
+                    and e["objective"] == "demonstrate_feature")
+        assert pair["wins"] == 1
+        assert pair["flops"] == 0
+        flop_pair = next(e for e in summary["pairs"]
+                         if e["objective"] == "build_trust")
+        assert flop_pair["flops"] == 1
+        # A verdict naming only a kind never invents a pair.
+        assert all(e["kind"] and e["objective"] for e in summary["pairs"])
+
+    def test_pairs_carry_posted_clips_and_lead_with_them(self):
+        import feedback as feedback_mod
+        section = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback(
+                [{"kind": "problem_solution",
+                  "objective": "demonstrate_feature",
+                  "event": "thumb_up", "step": "goal"}],
+                posted_rows=[
+                    {"kind": "problem_solution",
+                     "objective": "demonstrate_feature",
+                     "views": 12400, "at": "2026-10-30T00:00:00"},
+                ],
+            ))
+        assert "problem_solution × demonstrate_feature" in section
+        assert section.index("Proven pairs") < section.index("Angle kinds")
+
+    def test_thin_evidence_invites_one_untried_kind(self):
+        import feedback as feedback_mod
+        thin = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback([
+                {"kind": "problem_solution", "objective": "",
+                 "event": "thumb_up", "step": "goal"},
+            ]))
+        assert "propose one untried kind" in thin
+        rich = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback([
+                {"kind": "problem_solution", "objective": "",
+                 "event": "thumb_up", "step": "goal"},
+                {"kind": "founder_story", "objective": "",
+                 "event": "thumb_up", "step": "goal"},
+                {"kind": "social_proof", "objective": "",
+                 "event": "thumb_up", "step": "goal"},
+            ]))
+        assert "propose one untried kind" not in rich
+
     def test_angle_feedback_joins_posted_generation_views(self, api):
         import uuid as _uuid
         profile = _make_profile(api, ANON, name="Posted Probe")
@@ -1644,10 +1698,42 @@ class TestRegenerateContentAngles:
         row = out["angles"][0]
         assert row["origin"] == "generated"
         assert row["goal_variant"] == 0
-        assert row["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0}
+        assert row["evidence"] == {"wins": 0, "flops": 0, "adoptions": 0,
+                                      "posted": 0, "views": 0}
         assert len(row["goal_suggestions"]) == 6
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert listed["angles"] == out["angles"]
+
+    def test_list_serves_pair_evidence_keyed_by_kind_and_objective(self, api):
+        import uuid as _uuid
+        profile = _make_profile(api, ANON, name="Pair Payload")
+        angle_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO content_angles (id, brand_profile_id, kind, label, "
+            "created_at, user_id, origin) VALUES (?, ?, 'problem_solution', "
+            "'Pair angle', '2026-10-29T00:00:00', ?, 'generated')",
+            (angle_id, profile["id"], ANON),
+        ))
+        project_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO studio_projects (id, brand_profile_id, "
+            "content_angle_id, objective, user_id) VALUES (?, ?, ?, "
+            "'demonstrate_feature', ?)",
+            (project_id, profile["id"], angle_id, ANON),
+        ))
+        _run(api._execute(
+            "INSERT INTO feedback_events (id, brand_profile_id, "
+            "studio_project_id, event, step, detail, created_at, user_id) "
+            "VALUES (?, ?, ?, 'thumb_up', 'goal', "
+            "'objective=demonstrate_feature;kind=problem_solution', "
+            "'2026-10-29T00:00:00', ?)",
+            (str(_uuid.uuid4()), profile["id"], project_id, ANON),
+        ))
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        pair = listed["pair_evidence"].get("problem_solution‖demonstrate_feature")
+        assert pair is not None
+        assert pair["wins"] == 1
+        assert pair["posted"] == 0
 
     def test_generate_response_matches_list_shape(self, api, monkeypatch):
         """Same serialized-shape guarantee for the bare generate endpoint,

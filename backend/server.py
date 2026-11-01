@@ -3637,12 +3637,26 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
                                             "views": int(entry.get("views") or 0)}
         for entry in (verdicts.get("objectives") or [])
     }
+    # The intersection axis: kind × objective, keyed "kind‖objective". The
+    # goal card knows both (its goal + the selected angle's kind), so it can
+    # name the most specific evidence available — a proven pairing — without
+    # the card re-deriving anything.
+    pair_evidence = {
+        f"{entry.get('kind') or ''}‖{entry.get('objective') or ''}":
+            {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0),
+             "adoptions": int(entry.get("adoptions") or 0),
+             "posted": int(entry.get("posted") or 0),
+             "views": int(entry.get("views") or 0)}
+        for entry in (verdicts.get("pairs") or [])
+        if entry.get("kind") and entry.get("objective")
+    }
     return {
         "angles": [
             _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")), profile)
             for r in rows
         ],
         "objective_evidence": objective_evidence,
+        "pair_evidence": pair_evidence,
     }
 
 

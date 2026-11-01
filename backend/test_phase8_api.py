@@ -638,7 +638,8 @@ class TestBehaviorSignals:
         assert summary["total"] == 1
         assert summary["kinds"] == [
             {"name": "drive_home", "wins": 0, "flops": 0,
-             "adoptions": 1, "abandonments": 0}]
+             "adoptions": 1, "abandonments": 0,
+             "posted": 0, "views": 0}]
 
     def test_behavior_weights_rank_adoption_above_a_thumb(self):
         import feedback as fb

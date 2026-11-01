@@ -874,6 +874,7 @@ function AngleGoalPicker({
   outcomes,
   fitReasons,
   objectiveEvidence = {},
+  pairEvidence = {},
   // The six suggestions in the angle's profile-tailored PERSISTED variant
   // order, from the server (angle.goal_suggestions). Falls back to the
   // static facet list when the angle row carries none.
@@ -1048,7 +1049,8 @@ function AngleGoalPicker({
               )}
               {(Boolean(outcomes?.[goal] && fitReasons?.[goal]) ||
                 formatVerdicts(angle?.evidence) ||
-                formatVerdicts(objectiveEvidence?.[goal])) && (
+                formatVerdicts(objectiveEvidence?.[goal]) ||
+                formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`])) && (
                 <details className="mt-1">
                   <summary className="cursor-pointer text-xs text-muted-foreground">
                     Why this goal fits
@@ -1082,6 +1084,17 @@ function AngleGoalPicker({
                         className="block text-sm leading-relaxed text-muted-foreground"
                       >
                         {formatVerdicts(objectiveEvidence[goal])} for this goal
+                      </span>
+                    )}
+                    {/* Intersection tally: this KIND for this GOAL. The most
+                        specific evidence on the card — a proven pairing names
+                        what neither axis alone can. Same counts, same styling. */}
+                    {formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`]) && (
+                      <span
+                        data-testid={`goal-pair-evidence-${goal}`}
+                        className="block text-sm leading-relaxed text-muted-foreground"
+                      >
+                        {formatVerdicts(pairEvidence[`${angle.kind}‖${goal}`])} for this pairing
                       </span>
                     )}
                   </div>
@@ -1265,9 +1278,13 @@ export default function CreateVideo() {
   // because it is not per angle: a goal's verdicts are shared across kinds, so
   // they cannot hang off one angle row. Cleared wherever angles are cleared.
   const [objectiveEvidence, setObjectiveEvidence] = useState({});
+  // The intersection axis: kind × objective, keyed "kind‖objective". Own
+  // state for the same reason as objectiveEvidence — it is not per angle.
+  const [pairEvidence, setPairEvidence] = useState({});
   const adoptAngles = useCallback((data, onAngles = () => {}) => {
     setAngles(data?.angles || []);
     setObjectiveEvidence(data?.objective_evidence || {});
+    setPairEvidence(data?.pair_evidence || {});
     onAngles(data?.angles || []);
     return data?.angles;
   }, []);
@@ -2893,6 +2910,7 @@ setObjective("");
               outcomes={objectiveOutcomes}
               fitReasons={objectiveFitReasons}
               objectiveEvidence={objectiveEvidence}
+              pairEvidence={pairEvidence}
               suggestions={angle?.goal_suggestions}
               onRegenerate={handleRegenerateGoals}
               regenerating={cyclingGoals}

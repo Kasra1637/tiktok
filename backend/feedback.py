@@ -318,6 +318,7 @@ def summarize_angle_feedback(rows, posted_rows=None, now=None) -> dict:
     """
     kinds: dict = {}
     objectives: dict = {}
+    pairs: dict = {}
     total = 0
     ref = _parse_ts(now) if isinstance(now, str) else now
     for row in rows or []:
@@ -345,12 +346,20 @@ def summarize_angle_feedback(rows, posted_rows=None, now=None) -> dict:
             continue
         total += 1
         weight = _decay_weight(row.get("created_at"), ref)
+        # The pair is the sharpest regeneration-safe attribution: a kind and
+        # an objective are each fixed vocabularies, so their intersection
+        # survives an angle regeneration that replaces every row id. A
+        # verdict naming only one axis never invents a pair.
         if kind:
             bucket = kinds.setdefault(kind, _empty_angle_bucket())
             bucket[verdict] += 1
             bucket["sort_weight"] += weight
         if objective:
             bucket = objectives.setdefault(objective, _empty_angle_bucket())
+            bucket[verdict] += 1
+            bucket["sort_weight"] += weight
+        if kind and objective:
+            bucket = pairs.setdefault((kind, objective), _empty_angle_bucket())
             bucket[verdict] += 1
             bucket["sort_weight"] += weight
 
@@ -377,11 +386,30 @@ def summarize_angle_feedback(rows, posted_rows=None, now=None) -> dict:
             bucket["views"] += views
             bucket["effective"] += weight
             bucket["sort_weight"] += weight
+        if kind and objective:
+            bucket = pairs.setdefault((kind, objective), _empty_angle_bucket())
+            bucket["posted"] += 1
+            bucket["views"] += views
+            bucket["effective"] += weight
+            bucket["sort_weight"] += weight
 
+    ranked_pairs = [
+        {"kind": key[0], "objective": key[1],
+         "name": f"{key[0]} × {key[1]}",
+         "wins": counts["wins"], "flops": counts["flops"],
+         "adoptions": counts["adoptions"],
+         "abandonments": counts["abandonments"],
+         "posted": counts["posted"], "views": counts["views"]}
+        for key, counts in sorted(
+            pairs.items(),
+            key=lambda item: (-item[1]["sort_weight"], item[0]),
+        )
+    ][:5]
     return {"total": total, "posted_clips": posted_clips,
             "posted_views": posted_views,
             "kinds": _ranked_angle_buckets(kinds),
-            "objectives": _ranked_angle_buckets(objectives)}
+            "objectives": _ranked_angle_buckets(objectives),
+            "pairs": ranked_pairs}
 
 
 def build_angle_feedback_section(summary: dict) -> str:
@@ -394,12 +422,18 @@ def build_angle_feedback_section(summary: dict) -> str:
     summary = summary or {}
     kinds = summary.get("kinds") or []
     objectives = summary.get("objectives") or []
+    pairs = summary.get("pairs") or []
     if not kinds and not objectives:
         return (
             "PAST VERDICTS: none recorded for this app yet. There is no evidence "
             "about which angles work, so propose from the verified facts and do "
             "not assume any approach is proven."
         )
+    # Exploration guard: with almost nothing to learn from, exploiting the
+    # one tried kind would freeze the loop on its first guess. Inviting one
+    # untried kind keeps the loop exploring until the evidence earns weight.
+    thin = (int(summary.get("total") or 0)
+            + 2 * int(summary.get("posted_clips") or 0)) < 3
 
     def _views_label(views):
         views = int(views or 0)
@@ -440,10 +474,18 @@ def build_angle_feedback_section(summary: dict) -> str:
         "lean toward what won and away from what flopped, but do not exclude "
         "a kind or objective on one verdict alone."
     )
+    if pairs:
+        lines.append("Proven pairs (kind for objective): " + _describe(pairs) + ".")
     if kinds:
         lines.append("Angle kinds: " + _describe(kinds) + ".")
     if objectives:
         lines.append("Objectives: " + _describe(objectives) + ".")
+    if thin:
+        lines.append(
+            "Evidence is thin (fewer than 3 verdicts or posted clips): "
+            "propose one untried kind alongside the proven ones so the "
+            "founder sees something new, and say which one it is."
+        )
     return "\n".join(lines)
 
 
