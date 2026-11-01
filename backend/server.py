@@ -4501,9 +4501,12 @@ async def recommend_templates(
             "suggested_duration": tpl.get("default_duration") or template_library.DEFAULT_DURATION,
             "limitations": result["limitations"],
             "feedback": result["feedback"],
+            "retired": result["retired"],
         })
-    scored.sort(key=lambda r: (-r["score"], r["template"]["name"]))
-    visible = scored[: max(1, min(int(limit or 8), 30))]
+    scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
+    want = max(1, min(int(limit or 8), 30))
+    active = [r for r in scored if not r["retired"]]
+    visible = (active if len(active) >= want else scored)[:want]
     # Shared across the visible set, not the whole table: the section line
     # must describe exactly the cards beside it.
     shared = _split_shared_notes(visible)
@@ -5206,7 +5209,17 @@ async def generate_plan(
 
     # The same explicit history that moves recommendations also constrains the
     # next draft. Only counts and fixed reason codes travel into the prompt;
-    # free-text detail never does.
+    # free-text detail never does. Posted clips travel too so plans reproduce
+    # what earned posts instead of repeating what flopped.
+    try:
+        plan_posted = await _fetch_all(
+            "SELECT tiktok_url, tiktok_views FROM generations "
+            "WHERE brand_profile_id = ? AND user_id = ? AND tiktok_url IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT 200",
+            (row.get("brand_profile_id"), user_id),
+        )
+    except Exception:
+        plan_posted = []
     profile_feedback = feedback_mod.summarize_profile_feedback(
         await _fetch_all(
             "SELECT event, signal, reason, template_id FROM feedback_events "
@@ -5214,6 +5227,7 @@ async def generate_plan(
             (row.get("brand_profile_id"), user_id),
         ),
         template.get("id") or "",
+        posted_rows=plan_posted,
     )
     plan_feedback = await _component_feedback_for_profile(
         row.get("brand_profile_id"), user_id, "plan")

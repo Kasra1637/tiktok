@@ -306,6 +306,14 @@ def score_template_for_angle(
                 f"Marked a winner {outcome['wins']} time(s) for this app.",
             )
     feedback["outcome"] = outcome
+    retired = feedback_mod.is_template_retired(feedback, outcome)
+    if retired:
+        score -= 3.0
+        limitations.insert(
+            0,
+            "Retired after repeated poor fit — deprioritized until a post proves otherwise.",
+        )
+    feedback["retired"] = retired
 
     # The 0–10 bound lives here, not in the caller: this is the single
     # return every recommendation flows through, so no consumer can ever
@@ -317,6 +325,7 @@ def score_template_for_angle(
         "limitations": limitations,
         "feedback": feedback,
         "matched": matched,
+        "retired": retired,
     }
 
 def split_shared_notes(recs):

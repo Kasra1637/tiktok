@@ -686,7 +686,23 @@ def summarize(events) -> dict:
     }
 
 
-def summarize_profile_feedback(events, template_id: str = "") -> dict:
+def is_template_retired(feedback: dict, outcome: dict) -> bool:
+    """A template with repeated explicit flops and no posted proof retires.
+
+    Retired is deprioritized, not deleted: two thumbs-down with zero posted
+    clips and zero wins means the founder twice judged it poor and no audience
+    proved otherwise. One post or win revives it immediately.
+    """
+    feedback = feedback or {}
+    outcome = outcome or {}
+    return (
+        int(feedback.get("thumb_downs") or 0) >= 2
+        and int(outcome.get("posted_clips") or 0) == 0
+        and int(outcome.get("wins") or 0) == 0
+    )
+
+
+def summarize_profile_feedback(events, template_id: str = "", posted_rows=()) -> dict:
     """
     Aggregate one App Profile's feedback into recommendation- and prompt-ready
     facts.
@@ -696,6 +712,17 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
     applied consistently, and passing founder notes into a prompt would leak
     unstructured judgments into generated copy.
     """
+    posted_clips = 0
+    posted_views = 0
+    for clip in posted_rows or []:
+        if not isinstance(clip, dict):
+            continue
+        if not clip.get("tiktok_url"): 
+            continue
+        posted_clips += 1
+        views = clip.get("tiktok_views")
+        if isinstance(views, (int, float)) and views and views > 0:
+            posted_views += int(views)
     summary = {
         "total": 0,
         "template_rejections": 0,
@@ -704,6 +731,8 @@ def summarize_profile_feedback(events, template_id: str = "") -> dict:
         "adoptions": 0,
         "abandonments": 0,
         "impressions": 0,
+        "posted_clips": posted_clips,
+        "posted_views": posted_views,
         "top_reasons": [],
         "selected_template": {
             "template_id": template_id or "",
@@ -904,6 +933,12 @@ def build_profile_feedback_section(summary: dict) -> str:
             f"Dropped after picking (abandonments): {summary.get('abandonments')}.")
     if summary.get("impressions"):
         lines.append(f"Shown but not picked: {summary.get('impressions')}.")
+    if summary.get("posted_clips"):
+        lines.append(
+            f"Posted performance: {summary.get('posted_clips')} posted clip(s), "
+            f"{summary.get('posted_views', 0)} views. Reproduce what earned posts; "
+            f"do not repeat what flopped without posts."
+        )
     top_reasons = summary.get("top_reasons") or []
     if top_reasons:
         stated = ", ".join(
