@@ -25,7 +25,68 @@ piece has no closing beat — the middle stops at the moment the viewer would
 reach for the app, and the close is the founder's own footage. Asking why a
 generated video's CTA was unclear asked about something that was never in it.
 """
+import math
 from collections import Counter
+from datetime import datetime, timezone
+
+# Half-life for outcome evidence: a verdict from ~90 days ago steers half as
+# hard as one cast today. Old wins retire instead of ruling forever; the raw
+# counts stay exact so the display never lies — only the sort order decays.
+OUTCOME_HALF_LIFE_DAYS = 90.0
+# One posted clip beside any number of thumbs. Stronger than a thumb (an
+# audience of strangers beats one founder's judgment) but weaker than a
+# verdict pattern: two posted clips do not overrule three thumbs down.
+POSTED_CLIP_WEIGHT = 2.0
+
+
+def _parse_ts(value):
+    """Best-effort ISO-8601 parse; unparseable is treated as fresh."""
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, str) and value.strip():
+        text = value.strip()
+        try:
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            moment = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
+
+
+def _decay_weight(created_at, ref=None) -> float:
+    """Exponential-decay weight for one evidence row, in half-lives."""
+    moment = _parse_ts(created_at)
+    if moment is None:
+        return 1.0
+    anchor = ref if isinstance(ref, datetime) else _parse_ts(ref)
+    if anchor is None:
+        anchor = datetime.now(timezone.utc)
+    age_days = max(0.0, (anchor - moment).total_seconds() / 86400.0)
+    return 0.5 ** (age_days / OUTCOME_HALF_LIFE_DAYS)
+
+
+def _empty_angle_bucket() -> dict:
+    return {"wins": 0, "flops": 0, "adoptions": 0, "abandonments": 0,
+            "posted": 0, "views": 0, "effective": 0.0, "sort_weight": 0.0}
+
+
+def _ranked_angle_buckets(buckets: dict) -> list:
+    """Top five by decayed sort weight; ties break alphabetical."""
+    return [
+        {"name": name, "wins": counts["wins"], "flops": counts["flops"],
+         "adoptions": counts["adoptions"],
+         "abandonments": counts["abandonments"],
+         "posted": counts["posted"], "views": counts["views"]}
+        for name, counts in sorted(
+            buckets.items(),
+            key=lambda item: (-item[1]["sort_weight"], item[0]),
+        )
+    ][:5]
 
 # What happened.
 # thumb_up / thumb_down are founder verdicts on ONE component (goal, template,
@@ -80,6 +141,11 @@ _LEGACY_STEPS = {
     "review": "plan",
     "hook_story": "script",
 }
+
+
+def parse_outcome_timestamp(value):
+    """Public alias for the decay anchor parser, for tests and the UI."""
+    return _parse_ts(value)
 
 
 def normalize_component(step: str) -> str:
@@ -235,17 +301,25 @@ def _goal_detail(detail: str) -> dict:
     return parsed
 
 
-def summarize_angle_feedback(rows) -> dict:
+def summarize_angle_feedback(rows, posted_rows=None, now=None) -> dict:
     """
     Goal thumbs grouped by the angle kind and objective they judged.
 
     `rows` are pre-joined dicts carrying `kind`, `objective`, `event`, `step`.
     Only thumbs on the goal component count; verdicts on a template, plan or
     script say nothing about the goal and are ignored.
+
+    `posted_rows` carry what happened AFTER the founder's judgment: posted
+    TikTok clips (`kind`, `objective`, `views`, `at`). A posted clip is
+    audience evidence, not a founder verdict — it counts double beside
+    thumbs inside `effective`, never inside wins/flops. `sort_weight`
+    decays both with a 90-day half-life so an old win retires instead of
+    ruling forever; the raw counts stay exact so the display never lies.
     """
     kinds: dict = {}
     objectives: dict = {}
     total = 0
+    ref = _parse_ts(now) if isinstance(now, str) else now
     for row in rows or []:
         if not isinstance(row, dict):
             continue
@@ -270,27 +344,44 @@ def summarize_angle_feedback(rows) -> dict:
         if not kind and not objective:
             continue
         total += 1
+        weight = _decay_weight(row.get("created_at"), ref)
         if kind:
-            bucket = kinds.setdefault(
-                kind, {"wins": 0, "flops": 0, "adoptions": 0, "abandonments": 0})
+            bucket = kinds.setdefault(kind, _empty_angle_bucket())
             bucket[verdict] += 1
+            bucket["sort_weight"] += weight
         if objective:
-            bucket = objectives.setdefault(
-                objective, {"wins": 0, "flops": 0, "adoptions": 0, "abandonments": 0})
+            bucket = objectives.setdefault(objective, _empty_angle_bucket())
             bucket[verdict] += 1
+            bucket["sort_weight"] += weight
 
-    def _ranked(buckets):
-        return [
-            {"name": name, "wins": counts["wins"], "flops": counts["flops"],
-             "adoptions": counts["adoptions"],
-             "abandonments": counts["abandonments"]}
-            for name, counts in sorted(
-                buckets.items(),
-                key=lambda item: (-item[1]["wins"] - item[1]["flops"], item[0]),
-            )
-        ][:5]
+    posted_clips = 0
+    posted_views = 0
+    for clip in posted_rows or []:
+        if not isinstance(clip, dict):
+            continue
+        kind = (clip.get("kind") or "").strip()
+        objective = (clip.get("objective") or "").strip()
+        # A posted clip with no attributable kind/objective counts in the
+        # totals, never lumped onto a kind. A views-less post is still a
+        # completed post; NULL views just add no views.
+        views = clip.get("views")
+        views = int(views) if isinstance(views, (int, float)) and views > 0 else 0
+        posted_clips += 1
+        posted_views += views
+        weight = 2.0 * _decay_weight(clip.get("at"), ref)
+        for buckets, name in ((kinds, kind), (objectives, objective)):
+            if not name:
+                continue
+            bucket = buckets.setdefault(name, _empty_angle_bucket())
+            bucket["posted"] += 1
+            bucket["views"] += views
+            bucket["effective"] += weight
+            bucket["sort_weight"] += weight
 
-    return {"total": total, "kinds": _ranked(kinds), "objectives": _ranked(objectives)}
+    return {"total": total, "posted_clips": posted_clips,
+            "posted_views": posted_views,
+            "kinds": _ranked_angle_buckets(kinds),
+            "objectives": _ranked_angle_buckets(objectives)}
 
 
 def build_angle_feedback_section(summary: dict) -> str:
@@ -310,6 +401,14 @@ def build_angle_feedback_section(summary: dict) -> str:
             "not assume any approach is proven."
         )
 
+    def _views_label(views):
+        views = int(views or 0)
+        if views >= 1_000_000:
+            return f"{views / 1_000_000:.1f}M"
+        if views >= 1_000:
+            return f"{views / 1_000:.1f}k"
+        return str(views)
+
     def _describe(entries):
         parts = []
         for entry in entries:
@@ -317,15 +416,30 @@ def build_angle_feedback_section(summary: dict) -> str:
             if entry.get("adoptions") or entry.get("abandonments"):
                 text += (f", moved forward with {entry.get('adoptions', 0)}, "
                          f"dropped after picking {entry.get('abandonments', 0)}")
+            if entry.get("posted"):
+                text += (f", posted in {entry['posted']} clip(s), "
+                         f"{_views_label(entry.get('views'))} views")
             parts.append(text + ")")
         return "; ".join(parts)
 
-    lines = [
+    posted_clips = int(summary.get("posted_clips") or 0)
+    lines = []
+    if posted_clips:
+        lines.append(
+            "POSTED PERFORMANCE from TikTok clips the founder linked back "
+            f"({posted_clips} posted clip(s), "
+            f"{_views_label(summary.get('posted_views'))} views). Strongest "
+            "evidence, still not proof: an audience of strangers outranks "
+            "one founder's judgment, but one clip does not crown a kind — "
+            "lean hard toward what was watched, away from what was posted "
+            "and ignored."
+        )
+    lines.append(
         "PAST VERDICTS from the founder's thumbs on previously picked goals "
         f"({summary.get('total', 0)} attributed verdict(s)). Weak evidence, not proof: "
         "lean toward what won and away from what flopped, but do not exclude "
-        "a kind or objective on one verdict alone.",
-    ]
+        "a kind or objective on one verdict alone."
+    )
     if kinds:
         lines.append("Angle kinds: " + _describe(kinds) + ".")
     if objectives:

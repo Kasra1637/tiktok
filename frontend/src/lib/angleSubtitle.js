@@ -132,15 +132,26 @@ export function angleDetails(angle) {
  * the prompt's own words ("moved forward with"), never as a win: moving
  * forward is commitment, not success.
  */
+export function formatViews(views) {
+  const total = Math.max(0, Number(views) || 0);
+  if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
+  if (total >= 1_000) return `${(total / 1_000).toFixed(1)}k`;
+  return `${Math.floor(total)}`;
+}
+
 export function formatVerdicts(evidence) {
   const wins = Math.max(0, Number(evidence?.wins) || 0);
   const flops = Math.max(0, Number(evidence?.flops) || 0);
   const moved = Math.max(0, Number(evidence?.adoptions) || 0);
-  if (!wins && !flops && !moved) return "";
+  const posted = Math.max(0, Number(evidence?.posted) || 0);
+  const views = Math.max(0, Number(evidence?.views) || 0);
+  if (!wins && !flops && !moved && !posted) return "";
   const parts = [];
   if (wins) parts.push(`${wins} win${wins === 1 ? "" : "s"}`);
   if (flops) parts.push(`${flops} flop${flops === 1 ? "" : "s"}`);
   if (moved) parts.push(`${moved} moved forward`);
+  if (posted) parts.push(`posted in ${posted} clip${posted === 1 ? "" : "s"}`);
+  if (posted && views) parts.push(`${formatViews(views)} views`);
   return parts.join(" · ");
 }
 
@@ -153,32 +164,41 @@ export function formatVerdicts(evidence) {
  *   - rank: where the goal sits in this angle's suggestion order (first
  *     counts most). The order is the server's persisted ranking, so it is
  *     evidence, not decoration.
- *   - tally: the goal's own win share across all angle kinds.
+ *   - tally: the goal's own win share across all angle kinds, with each
+ *     posted clip counting double beside thumbs — an audience of strangers
+ *     outranks one founder's judgment, but never swamps it.
  *   - fit reason: the scorer naming a concrete match is worth a point.
  *
  * Floored, never rounded up: with thin evidence a round-up would sell a coin
  * flip as a measurement — the same rule that keeps formatVerdicts a count
- * list. Under 3 total verdicts the score caps at 6 and `thin` is true, so the
- * card can say "early signal" instead of wearing unearned certainty. Zero
- * evidence is a valid input, not an error: an unproven goal still scores from
- * its rank, low.
+ * list. Under 3 units of evidence (thumbs plus posted clips) the score caps
+ * at 6 and `thin` is true, so the card can say "early signal" instead of
+ * wearing unearned certainty. Zero evidence is a valid input, not an error:
+ * an unproven goal still scores from its rank, low.
  */
 export function goalFitScore({ index = 0, total = 6, evidence = null, hasFitReason = false } = {}) {
   const wins = Math.max(0, Number(evidence?.wins) || 0);
   const flops = Math.max(0, Number(evidence?.flops) || 0);
+  const posted = Math.max(0, Number(evidence?.posted) || 0);
+  const views = Math.max(0, Number(evidence?.views) || 0);
   const verdicts = wins + flops;
+  // Posted clips are audience evidence, not founder verdicts: each counts
+  // double inside the tally and the thin threshold, never inside wins.
+  const effectiveWins = wins + 2 * posted;
+  const effectiveVerdicts = verdicts + 2 * posted;
   const safeTotal = Math.max(1, Number(total) || 1);
   const safeIndex = Math.min(Math.max(0, Number(index) || 0), safeTotal - 1);
   const rank = (safeTotal - safeIndex) / safeTotal;
-  const tally = verdicts ? wins / verdicts : 0;
-  const thin = verdicts < 3;
+  const tally = effectiveVerdicts ? effectiveWins / effectiveVerdicts : 0;
+  const thin = effectiveVerdicts < 3;
   let score = Math.floor(rank * 3 + tally * 6 + (hasFitReason ? 1 : 0));
   if (thin) score = Math.min(score, 6);
   score = Math.min(10, Math.max(0, score));
   const ordinal =
     safeIndex === 0 ? "1st" : safeIndex === 1 ? "2nd" : safeIndex === 2 ? "3rd" : `${safeIndex + 1}th`;
-  const basis = verdicts
-    ? `${wins} win${wins === 1 ? "" : "s"} in ${verdicts} · suggested ${ordinal} of ${safeTotal}${thin ? " · early signal" : ""}`
+  const proven = posted ? ` · proven in ${posted} posted clip${posted === 1 ? "" : "s"}${views ? ` (${formatViews(views)} views)` : ""}` : "";
+  const basis = effectiveVerdicts
+    ? `${wins} win${wins === 1 ? "" : "s"} in ${verdicts}${proven} · suggested ${ordinal} of ${safeTotal}${thin ? " · early signal" : ""}`
     : `suggested ${ordinal} of ${safeTotal} · no results yet`;
   return { score, basis, thin };
 }

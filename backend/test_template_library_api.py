@@ -1170,12 +1170,17 @@ class TestGoalFeedback:
             {"kind": "", "objective": "", "event": "thumb_up", "step": "goal"},
         ])
         assert summary["total"] == 3
+        assert summary["posted_clips"] == 0
+        assert summary["posted_views"] == 0
         assert {"name": "problem_solution", "wins": 2, "flops": 0,
-                "adoptions": 0, "abandonments": 0} in summary["kinds"]
+                "adoptions": 0, "abandonments": 0,
+                "posted": 0, "views": 0} in summary["kinds"]
         assert {"name": "founder_story", "wins": 0, "flops": 1,
-                "adoptions": 0, "abandonments": 0} in summary["kinds"]
+                "adoptions": 0, "abandonments": 0,
+                "posted": 0, "views": 0} in summary["kinds"]
         assert {"name": "demonstrate_feature", "wins": 2, "flops": 1,
-                "adoptions": 0, "abandonments": 0} in summary["objectives"]
+                "adoptions": 0, "abandonments": 0,
+                "posted": 0, "views": 0} in summary["objectives"]
 
     def test_empty_record_is_stated_not_silent(self):
         import feedback as feedback_mod
@@ -1195,6 +1200,115 @@ class TestGoalFeedback:
         assert "problem_solution (1 win(s), 0 flop(s))" in section
         assert "founder_story (0 win(s), 1 flop(s))" in section
         assert "Weak evidence, not proof" in section
+
+    def test_posted_clips_attribute_to_kind_and_objective(self):
+        import feedback as feedback_mod
+        summary = feedback_mod.summarize_angle_feedback(
+            [{"kind": "problem_solution", "objective": "demonstrate_feature",
+              "event": "thumb_up", "step": "goal",
+              "created_at": "2026-10-29T00:00:00"}],
+            posted_rows=[
+                {"kind": "problem_solution", "objective": "demonstrate_feature",
+                 "views": 12400, "at": "2026-10-30T00:00:00"},
+                {"kind": "problem_solution", "objective": "demonstrate_feature",
+                 "views": None, "at": "2026-10-30T00:00:00"},
+                # Posted with no attributable kind/objective: counted in the
+                # totals, never lumped onto a kind.
+                {"kind": "", "objective": "", "views": 50,
+                 "at": "2026-10-30T00:00:00"},
+            ],
+        )
+        kind = next(e for e in summary["kinds"]
+                    if e["name"] == "problem_solution")
+        assert kind["posted"] == 2
+        assert kind["views"] == 12400
+        objective = next(e for e in summary["objectives"]
+                         if e["name"] == "demonstrate_feature")
+        assert objective["posted"] == 2
+        assert objective["views"] == 12400
+        assert summary["posted_clips"] == 3
+        assert summary["posted_views"] == 12450
+
+    def test_posted_performance_leads_the_prompt_section(self):
+        import feedback as feedback_mod
+        section = feedback_mod.build_angle_feedback_section(
+            feedback_mod.summarize_angle_feedback(
+                [{"kind": "problem_solution", "objective": "",
+                  "event": "thumb_up", "step": "goal"}],
+                posted_rows=[
+                    {"kind": "problem_solution", "objective": "",
+                     "views": 12400, "at": "2026-10-30T00:00:00"},
+                ],
+            ))
+        assert "POSTED PERFORMANCE" in section
+        assert section.index("POSTED PERFORMANCE") < \
+            section.index("PAST VERDICTS")
+        assert "12.4k views" in section
+
+    def test_old_verdicts_decay_below_fresh_ones(self):
+        import feedback as feedback_mod
+        summary = feedback_mod.summarize_angle_feedback(
+            [{"kind": "stale_kind", "objective": "",
+              "event": "thumb_up", "step": "goal",
+              "created_at": "2025-01-01T00:00:00"},
+             {"kind": "fresh_kind", "objective": "",
+              "event": "thumb_up", "step": "goal",
+              "created_at": "2026-10-29T00:00:00"}],
+            now="2026-10-30T00:00:00",
+        )
+        # Raw counts stay exact — only the order decays.
+        assert {"name": "stale_kind", "wins": 1, "flops": 0,
+                "adoptions": 0, "abandonments": 0,
+                "posted": 0, "views": 0} in summary["kinds"]
+        names = [e["name"] for e in summary["kinds"]]
+        assert names.index("fresh_kind") < names.index("stale_kind")
+
+    def test_ninety_day_old_verdict_steers_half_as_hard(self):
+        import feedback as feedback_mod
+        assert feedback_mod._decay_weight("2026-10-30T00:00:00",
+                                          "2026-10-30T00:00:00") == 1.0
+        assert feedback_mod._decay_weight("2026-07-31T12:00:00",
+                                          "2026-10-29T12:00:00") == 0.5
+        # Undated rows are treated as fresh, never dropped.
+        assert feedback_mod._decay_weight(None) == 1.0
+
+    def test_angle_feedback_joins_posted_generation_views(self, api):
+        import uuid as _uuid
+        profile = _make_profile(api, ANON, name="Posted Probe")
+        angle_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO content_angles (id, brand_profile_id, kind, label, "
+            "created_at, user_id, origin) VALUES (?, ?, 'problem_solution', "
+            "'Probe angle', '2026-10-29T00:00:00', ?, 'generated')",
+            (angle_id, profile["id"], ANON),
+        ))
+        project_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO studio_projects (id, brand_profile_id, "
+            "content_angle_id, objective, user_id) VALUES (?, ?, ?, "
+            "'demonstrate_feature', ?)",
+            (project_id, profile["id"], angle_id, ANON),
+        ))
+        _run(api._execute(
+            "INSERT INTO generations (id, studio_project_id, brand_profile_id, "
+            "status, tiktok_url, tiktok_views, tiktok_views_at, user_id) "
+            "VALUES (?, ?, ?, 'completed', "
+            "'https://www.tiktok.com/@probe/video/1', 12400, "
+            "'2026-10-30T00:00:00', ?)",
+            (str(_uuid.uuid4()), project_id, profile["id"], ANON),
+        ))
+        # Unposted renders are commitment, not performance: no link, no count.
+        _run(api._execute(
+            "INSERT INTO generations (id, studio_project_id, brand_profile_id, "
+            "status, tiktok_views, user_id) VALUES (?, ?, ?, 'completed', "
+            "100, ?)",
+            (str(_uuid.uuid4()), project_id, profile["id"], ANON),
+        ))
+        summary = _run(api._angle_feedback_for_profile(profile["id"], ANON))
+        kind = next(e for e in summary["kinds"]
+                    if e["name"] == "problem_solution")
+        assert kind["posted"] == 1
+        assert kind["views"] == 12400
 
 
 class TestCrossUserIsolation:

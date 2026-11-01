@@ -3147,15 +3147,19 @@ def _approval_gaps(profile: dict, pending: Optional[dict] = None) -> list:
 
 async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> dict:
     """
-    Goal thumbs attributed to the angle kind and objective the founder picked.
+    Goal thumbs attributed to the angle kind and objective the founder picked,
+    plus posted-performance from linked TikTok clips on this app's renders.
 
     A goal verdict names its project, so attribution walks project -> angle
     kind + objective. Verdicts on templates, plans and scripts are filtered
-    out by the summarizer and never steer goal generation.
+    out by the summarizer and never steer goal generation. Posted clips walk
+    the other way: generation -> project -> angle kind + objective. Only
+    renders with a TikTok link count — an unposted render is commitment,
+    not audience evidence.
     """
     rows = await _fetch_all(
         """SELECT ca.kind AS kind, sp.objective AS objective, f.event AS event,
-                  f.step AS step, f.detail AS detail
+                  f.step AS step, f.detail AS detail, f.created_at AS created_at
            FROM feedback_events f
            LEFT JOIN studio_projects sp ON sp.id = f.studio_project_id
            LEFT JOIN content_angles ca ON ca.id = sp.content_angle_id
@@ -3164,7 +3168,18 @@ async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> di
            ORDER BY f.created_at DESC LIMIT 200""",
         (brand_profile_id, user_id),
     )
-    return feedback_mod.summarize_angle_feedback(rows)
+    posted = await _fetch_all(
+        """SELECT ca.kind AS kind, sp.objective AS objective,
+                  g.tiktok_views AS views, g.tiktok_views_at AS at
+           FROM generations g
+           LEFT JOIN studio_projects sp ON sp.id = g.studio_project_id
+           LEFT JOIN content_angles ca ON ca.id = sp.content_angle_id
+           WHERE g.brand_profile_id = ? AND g.user_id = ?
+             AND g.tiktok_url IS NOT NULL AND TRIM(g.tiktok_url) != ''
+           ORDER BY g.tiktok_views_at DESC LIMIT 200""",
+        (brand_profile_id, user_id),
+    )
+    return feedback_mod.summarize_angle_feedback(rows, posted_rows=posted)
 
 
 async def _component_feedback_for_profile(
@@ -3582,7 +3597,8 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
             row.get("kind"), profile, int(row.get("goal_variant") or 0)
         ),
         "created_at": row.get("created_at"),
-        "evidence": evidence or {"wins": 0, "flops": 0, "adoptions": 0},
+        "evidence": evidence or {"wins": 0, "flops": 0, "adoptions": 0,
+                                   "posted": 0, "views": 0},
     }
 
 
@@ -3609,12 +3625,16 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     verdicts = await _angle_feedback_for_profile(profile_id, user_id)
     by_kind = {
         str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0),
-                                            "adoptions": int(entry.get("adoptions") or 0)}
+                                            "adoptions": int(entry.get("adoptions") or 0),
+                                            "posted": int(entry.get("posted") or 0),
+                                            "views": int(entry.get("views") or 0)}
         for entry in (verdicts.get("kinds") or [])
     }
     objective_evidence = {
         str(entry.get("name") or ""): {"wins": int(entry.get("wins") or 0), "flops": int(entry.get("flops") or 0),
-                                            "adoptions": int(entry.get("adoptions") or 0)}
+                                            "adoptions": int(entry.get("adoptions") or 0),
+                                            "posted": int(entry.get("posted") or 0),
+                                            "views": int(entry.get("views") or 0)}
         for entry in (verdicts.get("objectives") or [])
     }
     return {
