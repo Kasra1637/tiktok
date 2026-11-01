@@ -46,19 +46,19 @@ export const TOURS = {
         target: '[data-testid="step-pill-profile"]',
         title: "Three steps to a finished clip",
         body:
-          "Pick your app, angle, goal, template and presenter photo on one screen, then read your free script plan and render Hook + Story. Hop between steps freely — the plan sits above the render it approves.",
+          "Choose an approved App Profile here. If you have none, open App Profile to research and review your app first.",
       },
       {
         target: '[data-testid="step-pill-angle"]',
         title: "Angle, goal, template, photo",
         body:
-          "An audience angle is required — everything hangs on it. Six goal suggestions come with it: Shuffle reorders the same six free, Regenerate makes new ones. Templates rank for your goal below; add the photo here too.",
+          "Open Audience & template when your app is selected. Pick an audience angle there to see matching goals and templates.",
       },
       {
         target: '[data-testid="step-pill-review"]',
         title: "Review the words, then render",
         body:
-          "Your script plan is free, written once the required choices are set. Edit hook, story and visuals here — a prohibited claim blocks rendering until fixed. The clip renders at its template's length: hook and story only.",
+          "Open Review & submit after choosing a template and photo. Read the free plan before starting a paid render; the demo and CTA stay yours.",
       },
     ],
   },
@@ -75,13 +75,13 @@ export const TOURS = {
         target: '[data-testid="app-research-card"]',
         title: "Research, then trust but verify",
         body:
-          "Drop in your App Store or Google Play URL — support pages help. Hit Research app for video and a draft comes back below. It is a draft: check it against your real product, then approve it for video.",
+          "Paste an App Store or Google Play URL, then choose Research app for video. Research creates a draft, not an approved profile.",
       },
       {
         target: '[data-testid="brand-manual-card"]',
         title: "Make it yours in detail",
         body:
-          "Research gets the shape; you supply the truth. Fix the details, add real features and outcomes, ban what must never show, and sort claims into approved, needs review, or banned. Scripts live by these facts.",
+          "Review your app's features and outcomes in the details below. Correct anything the research got wrong before approval.",
       },
       {
         target: '[data-testid="save-brand-button"]',
@@ -93,7 +93,7 @@ export const TOURS = {
         target: '[data-testid="approve-profile-button"], [data-testid="research-menu-button"]',
         title: "Approve a reviewed profile",
         body:
-          "Approval unlocks Create Video: audience angles and template suggestions come alive with it. Refresh from the Research menu builds a proposal instead — review it, then approve before it replaces your current profile.",
+          "Approve only after reviewing the facts. Approval makes this profile available in Create Video; saving alone does not approve it.",
       },
       {
         target: '[data-testid="find-video-to-remix-button"]',
@@ -237,21 +237,21 @@ export const TOURS = {
         target: '[data-testid="history-header"], [data-testid="history-list"]',
         title: "Every render, in one place",
         body:
-          "Filter by app or status in the title bar; every render lands here as its own tile. Completed clips gather here — posting is always your move, and nothing publishes itself.",
+          "Use the app and status filters to find a render. Completed clips stay here for review; posting is always manual.",
       },
       {
         target: '[data-testid="history-list"]',
         title: "Each card is clip plus record",
         optional: true,
         body:
-          "Cards show the clip beside its record: app, hook, status, facts, votes, downloads and Demo + CTA are all visible together. Play a finished clip here; read the facts before you publish.",
+          "Play a finished clip before downloading it. Its status tells you whether it is ready or still waiting on the provider.",
       },
       {
         target: '[data-testid="history-detail-panel"]',
         title: "Work the record beside the clip",
         optional: true,
         body:
-          "The record beside each clip holds its facts, post copy, votes, download and Demo + CTA. Nothing hides behind a tab."
+          "Open Results & actions on a compact card to record a posted TikTok link and its views. Post copy and plan context expand separately."
       },
       {
         // Centered summary: with no rows both tile steps skip, so a fresh
@@ -261,7 +261,7 @@ export const TOURS = {
         target: null,
         title: "Your shelf, not your publisher",
         body:
-          "Every finished render lands here as its own tile — review it, download it, or take it to Demo + CTA. Nothing here yet? Create your first video and it lands here. Nothing publishes itself either way.",
+          "Choose Create a video to make your first clip. Return here to review and download it; nothing publishes automatically.",
       },
     ],
   },
