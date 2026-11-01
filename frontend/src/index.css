@@ -404,7 +404,9 @@ body {
     background-color: hsl(var(--secondary) / 0.25);
 }
 
-/* Post copy panel: one labelled row per field, hairline-separated.
+/* Shared spec-sheet row: one labelled row per field, hairline-separated.
+ * Post copy established it; the picked angle details and History context
+ * reuse it, so every dense label/value stack reads as the same element.
  *
  * Caption, hashtags and cover text were three separate boxes, each carrying
  * its own Copy button; they are one panel now, so the row rhythm and the

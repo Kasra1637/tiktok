@@ -86,6 +86,12 @@ function strategyLabel(key) {
  * side, `shrink-0` on the label plus a long value forced the value column to
  * wrap into a ragged narrow strip, which is what made this block hard to scan.
  * Stacked, every value gets the full column width regardless of key length.
+ *
+ * Tokens still match the shared spec-sheet language: the label is the shared
+ * `.eyebrow` and the value the shared body, the same pair the angle details,
+ * Post copy and History context use. Only the grid differs — strategy keys
+ * are long, so these rows stay stacked while short-labelled rows go two
+ * columns — never the label or body itself.
  */
 function StrategyBlock({ title, icon: Icon, rows, description }) {
   const filled = rows.filter(([, value]) => String(value || "").trim());
@@ -101,10 +107,10 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
       <dl className="max-w-3xl divide-y divide-[color:var(--hairline)]">
         {filled.map(([label, value]) => (
           <div key={label} className="py-3 first:pt-0 last:pb-0">
-            <dt className="text-sm font-semibold text-muted-foreground">
+            <dt className="eyebrow">
               {strategyLabel(label)}
             </dt>
-            <dd className="mt-1 text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(String(value))}</dd>
+            <dd className="mt-1 text-base leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{sentenceCase(String(value))}</dd>
           </div>
         ))}
       </dl>

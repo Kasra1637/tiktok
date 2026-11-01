@@ -850,15 +850,18 @@ function AngleSelector({
               />
             </button>
             {picked && details.length > 0 && (
+              /* One spec sheet, not a spaced stack: divided rows with the
+                  shared eyebrow label and body value, the same language
+                  Post copy and History context already read in. */
               <dl
                 id={`angle-details-${a.id}`}
                 data-testid={`angle-details-${a.id}`}
-                className="space-y-2 border-t border-[color:var(--hairline)] row-pad"
+                className="divide-y divide-[color:var(--hairline)] border-t border-[color:var(--hairline)] row-pad"
               >
                 {details.map((row) => (
-                  <div key={row.label} className="min-w-0">
-                    <dt className="eyebrow">{row.label}</dt>
-                    <dd className="mt-1 text-base leading-[22px] text-foreground/90">
+                  <div key={row.label} className="post-kit-row">
+                    <dt className="eyebrow sm:pt-1">{row.label}</dt>
+                    <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
                       {row.value}
                     </dd>
                   </div>

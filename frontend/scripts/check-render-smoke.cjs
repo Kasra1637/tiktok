@@ -5275,6 +5275,46 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // One spec-sheet language for every dense label/value stack: hairline-
+  // divided rows, the shared eyebrow label, the shared body value. The
+  // picked angle's panel used its own spaced stack while Post copy and
+  // History context already read as spec sheets.
+  await check("the picked angle details read as one spec sheet", async (ctx) => {
+    const SPEC_ANGLE = {
+      ...ANGLE,
+      label: "Start without stalling",
+      app_feature: "Task timer",
+      viewer_outcome: "Starting without stalling on setup",
+    };
+    await withApi(
+      { getContentAngles: async () => ({ angles: [SPEC_ANGLE, ANGLE_B], objective_evidence: {} }) },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const details = ctx.container.querySelector('[data-testid="angle-details-a1"]');
+          if (!details) throw new Error("the picked angle shows no detail panel");
+          const rows = [...details.querySelectorAll(":scope > div")];
+          if (!rows.length) throw new Error("the detail panel has no rows");
+          for (const row of rows) {
+            if (!row.classList.contains("post-kit-row")) {
+              throw new Error("an angle detail row does not use the shared spec-sheet row");
+            }
+            const dt = row.querySelector("dt");
+            if (!dt || !dt.classList.contains("eyebrow")) {
+              throw new Error("an angle detail label is not the shared eyebrow");
+            }
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
 // The objective axis must not reorder the six-goal list — it annotates.
   await check("objective evidence does not reorder the goal list", async (ctx) => {
     const PROVEN_OBJ = {

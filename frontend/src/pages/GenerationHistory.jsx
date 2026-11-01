@@ -586,13 +586,13 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                     {row.audience && (
                       <div className="post-kit-row">
                         <dt className="eyebrow sm:pt-1">Audience</dt>
-                        <dd className="min-w-0 break-words text-base leading-relaxed text-muted-foreground">{row.audience}</dd>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.audience}</dd>
                       </div>
                     )}
                     {row.demo_brief && (
                       <div className="post-kit-row">
                         <dt className="eyebrow sm:pt-1">Your demo brief</dt>
-                        <dd className="min-w-0 break-words text-base leading-relaxed text-muted-foreground">{row.demo_brief}</dd>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.demo_brief}</dd>
                       </div>
                     )}
                       </dl>
