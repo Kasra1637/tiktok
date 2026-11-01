@@ -1728,7 +1728,7 @@ class TestUsageMomentsAndProofMoment:
             monkeypatch, usage_moments=[], proof_moment="",
         )
         assert '"usage_moments": []' in captured["prompt"]
-        assert "state that the moment is unspecified" in captured["prompt"]
+        assert "empty stays unspecified, never invented" in captured["prompt"]
 
 
 class TestFirstPersonClaimsAreFlagged:

@@ -857,6 +857,25 @@ class TestAppearanceIsLockedAndClothingIsNot:
         import ai_service
 
         assert "wardrobe" in ai_service.STRATEGY_SCENE_FIELDS
+
+    def test_setting_guidance_demands_active_varied_places(self):
+        """
+        Bedrooms and car interiors are the model's lazy defaults: enclosed,
+        easy to hold stable. Without explicit steering every strategy comes
+        back sitting indoors. The guidance must demand the opposite — a
+        person doing something in a concrete, preferably outdoor place tied
+        to the usage moment or the outcome — or the render stays redundant.
+        """
+        import ai_service
+
+        block = ai_service.scene_setting_guidance()
+        lowered = block.lower()
+        assert "usage_moments" in lowered
+        assert "kitchen" in lowered and "desk" in lowered
+        assert "bedroom" in lowered and "car" in lowered
+        for needle in ("walking", "outdoor", "sitting"):
+            assert needle in lowered, f"setting guidance never says {needle!r}"
+        assert "coastal" in lowered or "trail" in lowered or "market" in lowered
         normalized = ai_service.normalize_strategy(
             {"scene": {"wardrobe": "a grey knit jumper"}}
         )

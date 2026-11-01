@@ -85,3 +85,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0069](0069-moved-forward-momentum.md) | Proceeding to build shows as momentum beside verdicts, never inside the fit score | accepted |
 | [0070](0070-posted-performance-judges.md) | Posted TikTok performance judges; founder verdicts nominate; 90-day half-life on sort | accepted |
 | [0071](0071-pair-attribution-and-exploration-guard.md) | Pair (kind × objective) attribution sharpens below each axis; thin evidence invites one untried kind | accepted |
+| [0072](0072-active-varied-settings.md) | Strategies stage active, varied settings from the usage moment; bedrooms and cars stop being the default | accepted |

@@ -2831,6 +2831,29 @@ def _spoken_line_rules_block() -> str:
     )
 
 
+def scene_setting_guidance() -> str:
+    """
+    Where the video happens, and what the person is doing there.
+
+    The model's lazy defaults are a bedroom and a car interior: enclosed,
+    easy to hold stable across the hook-to-middle handoff. Without explicit
+    steering every strategy comes back sitting indoors, so the guidance
+    demands the opposite — a concrete, preferably outdoor place tied to the
+    usage moment or the outcome, with the presenter mid-activity, not posed.
+    The existing usage_moments rule stays word for word (it is what grounds
+    the setting in verified facts); the new lines set the register — active,
+    specific, dramatic — with vivid worked examples, because the model copies
+    the style of whatever examples it sees.
+    """
+    return (
+        "- scene.setting must come from usage_moments — the only evidence of when and where "
+        "it is used. Never a kitchen, desk or routine; empty stays unspecified, never invented. "
+        "Stage it where the promise lives (a hilltop path "
+        "at sunrise, a night market, a coastal trail — not a bedroom, almost never a car); "
+        "prefer walking outdoors over sitting indoors.\n"
+    )
+
+
 def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "") -> str:
     """
     The audience, problem and goal rule shared by the plan and the strategy.
@@ -4913,12 +4936,8 @@ async def generate_video_strategy(
         # the app is reached for at a specific moment, so the middle develops
         # towards that moment and stops there. That stop is the seam the
         # founder's own demo picks up from.
-        "- scene.setting must come from usage_moments. Those are the specific moments this app "
-        "is reached for, and they are the only evidence of when and where a viewer would use "
-        "it. Do not default to a generic kitchen, desk or morning routine. If usage_moments is "
-        "empty, state that the moment is unspecified in the setting rather than inventing a "
-        "plausible one.\n"
-        "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
+        + scene_setting_guidance()
+        + "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
         "for the app, not using it. The demo is the founder's own recording, attached after "
         "this footage, so the last frame of your video should be the moment before it.\n"
         f"- STARTING SHOT: {starting_shot(camera_setup)}\n"
