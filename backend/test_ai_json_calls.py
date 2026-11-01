@@ -2297,6 +2297,36 @@ class TestHookScriptContinuity:
         assert "big" in prompt and "transformation" in prompt
         assert "I felt lighter" in prompt
 
+    def test_the_prompt_bans_bare_message_wording_for_own_thoughts(self, monkeypatch):
+        """In a journaling app 'the unanswered message' reads as someone else's text.
+
+        The script must name the speaker's own thoughts or feelings explicitly
+        — 'what I'd been avoiding saying', 'what was on my mind' — never a
+        bare 'message' that points at another person.
+        """
+        import ai_service
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "I don't want to type anything today, not even a word.",
+                "script": "So I just talked instead.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "unanswered message" in prompt
+        assert "what I'd been avoiding saying" in prompt
+        assert "what was on my mind" in prompt
+
     def test_the_prompt_demands_a_thumb_stopping_hook(self, monkeypatch):
         """The hook must stop a mid-scroll thumb, not introduce the topic.
 
