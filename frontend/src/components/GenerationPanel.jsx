@@ -287,7 +287,32 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
         if (err?.response?.status === 429) {
           // Rate limited, not broken: the render is still going at the
           // provider, so keep waiting without spending the outage budget
-          // or raising the banner on a healthy render.
+          // or raising the banner on a healthy render. Before re-queueing
+          // the same provider check, re-read the newest generation row
+          // (a cheap DB read, never a provider call): History may already
+          // hold the finished clip — a retry child or a render finished
+          // by another tab — while this loop still hammers the old id.
+          // Adopting the newest row snaps the panel to the clip instead
+          // of looping at 85% forever behind a wall of 429s.
+          try {
+            const data = await api.getGenerations({ studio_project_id: projectId, limit: 1 });
+            const newest = data.generations?.[0] || null;
+            if (newest && newest.id !== id) {
+              setGeneration(newest);
+              onGenerationChange?.(newest);
+              if (newest.status === "submitted" || newest.status === "generating") {
+                schedulePoll(newest.id);
+              }
+              return;
+            }
+            if (newest && newest.id === id && newest.status !== "submitted" && newest.status !== "generating") {
+              setGeneration(newest);
+              onGenerationChange?.(newest);
+              return;
+            }
+          } catch {
+            /* the row re-read is best-effort; the retry below still fires */
+          }
           schedulePoll(id);
           return;
         }
@@ -299,7 +324,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
         }
       }
     }, POLL_INTERVAL_MS);
-  }, [onGenerationChange]);
+  }, [onGenerationChange, projectId]);
 
   // Adopt the newest generation for this project, and stop polling a
   // finished one so a completed video is not re-checked forever.
