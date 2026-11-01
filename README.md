@@ -1,291 +1,196 @@
-# HookForge — internal app-promo video studio
+# HookForge — short-form app video studio
 
-An internal tool for mobile app founders to create short-form promotional
-videos from curated, reusable hook templates.
+HookForge helps app founders research their product, choose an audience angle
+and hook template, review a script, and generate one short presenter video.
+The Demo + CTA editor adds the founder's own footage, product presentation,
+and optional text overlays before a manual download and post.
 
-This is **not** a viral-video copying tool. It reproduces reusable hook
-*mechanics* — never a creator's identity, performance, gestures, frames, voice,
-or copyrighted content. The primary workflow requires **no source video at
-all**.
+**Nothing posts automatically.** There is no platform-posting or scheduling
+workflow. A claim-check pass does not guarantee video-provider acceptance,
+TikTok approval, engagement, or medical accuracy.
 
-**Nothing is ever published automatically.** Videos are generated, reviewed,
-downloaded, and posted by hand. The app has no code path that posts,
-schedules, engages, or holds platform credentials.
+## Start here
 
----
+| Goal | Guide |
+|---|---|
+| Run locally | [Quick start](#quick-start) |
+| Find the owner of a feature or rule | [Architecture](docs/architecture.md) |
+| Make and verify a change | [Contributor guide](CONTRIBUTING.md) |
+| Diagnose auth, storage, rendering, or deployment | [Operations runbook](docs/operations.md) |
+| Understand a product or architecture trade-off | [Decision records](docs/adr/README.md) |
+| Change layout, spacing, typography, or motion | [Design guidelines](design_guidelines.md) |
+| Work only on the client | [Frontend guide](frontend/README.md) |
 
 ## Quick start
 
+Run commands from the repository root in Bash (Git Bash on Windows).
+For PowerShell, use its environment/activation syntax rather than pasting Bash
+assignments. Keep private values in ignored environment files, not in commands
+that will be shared or committed.
+
 ### Prerequisites
 
-| Tool | Why | Notes |
-|---|---|---|
-| Python 3.12 | Backend | `pip install -r requirements.txt` |
-| Node 20+ | Frontend | Uses `yarn` 1.22 |
-| **ffmpeg** | Frame extraction **and the finalize pass** (canvas fit, camera cut) | Must be on `PATH` |
-
-Without ffmpeg, the finalize steps are skipped and the raw render is kept.
+- Python **3.12**, matching [backend CI](.github/workflows/ci.yml). The current
+  [Dockerfile](Dockerfile) still uses Python 3.11; that difference is not a
+  statement of equal test coverage.
+- Node **20+** and **Yarn Classic 1.22.22**, as declared by
+  [frontend/package.json](frontend/package.json). Use the tracked
+  [frontend/yarn.lock](frontend/yarn.lock); do not replace it with npm output.
+- **ffmpeg and ffprobe on PATH** for media processing and the tests that encode
+  real clips. A text-only check is not a substitute for those media tests.
 
 ### Backend
 
 ```bash
-cd backend
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-cp .env.example .env      # then fill in the keys below
-python -m uvicorn server:app --reload
+python -m venv backend/.venv
+# macOS/Linux:
+source backend/.venv/bin/activate
+# Git Bash on Windows, instead:
+# source backend/.venv/Scripts/activate
+python -m pip install -r backend/requirements.txt
 ```
 
-API on `http://localhost:8000`. `init_db()` runs on startup and is
-idempotent: it creates tables, adds missing columns, and seeds the curated
-template library without duplicating it.
-
-### Frontend
+Copy [backend/.env.example](backend/.env.example) to `backend/.env` only if a
+private environment file does not already exist, then fill the required keys.
+Start the API with the environment loaded **before module imports**:
 
 ```bash
-cd frontend
-yarn install
-echo "REACT_APP_BACKEND_URL=http://localhost:8000" > .env
-yarn start
+python -m uvicorn server:app --app-dir backend --env-file backend/.env --host 127.0.0.1 --port 8000 --reload
 ```
 
-App on `http://localhost:3000`.
+The `--env-file` is important: auth, AI, and storage adapters capture settings
+at import time, before the late `load_dotenv` in the HTTP module. An existing
+shell variable takes precedence over an env-file value. Restart after changing
+backend settings.
 
-### Environment
+- API description: `http://127.0.0.1:8000/docs`
+- Basic response: `http://127.0.0.1:8000/api/`
+- Storage/inventory diagnostic: `GET /api/health` (requires sign-in when auth
+  is configured; inspect `database`, `durable`, and `your_rows`, not just HTTP 200).
 
-All optional except `OPENROUTER_API_KEY` if you want AI features. Copy
-`backend/.env.example` and set what you need:
+Startup runs idempotent table creation, column additions and template seeding.
+Without Turso settings, local data lives at `backend/storage/hookforge.db`.
+Do not point a development process or test fixture at production data.
 
-| Variable | Purpose |
-|---|---|
-| `OPENROUTER_API_KEY` | **Required** for research, angles, scripts, video |
-| `CLERK_JWKS_URL` | Optional. Unset means auth is disabled (all access is `anonymous`) |
-| `PUBLIC_BASE_URL` | Public HTTPS origin; required for V2V references |
-| `R2_*` | Durable video storage. Unset means videos don't survive a redeploy |
-| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Cloud SQLite. Unset uses local SQLite |
-| `MODAL_FRAME_EXTRACTOR_URL` | Offloads frame extraction off the API host |
-| `MODAL_SHARED_SECRET` | Authenticates the Modal frame-extraction worker |
-| `CORS_ORIGINS` | Allowed browser origins, comma-separated. Defaults to `*` |
-| `VIDEO_MODEL_DEFAULT` | Swap video provider without a code change |
-| `VIDEO_MODEL_ALLOWLIST` | Restrict which providers may be used at all |
-| `AI_TEXT_MODEL` | Chat model for research, angles, plans, scripts. Default `anthropic/claude-haiku-5.5` |
-| `AI_ANGLE_MODEL` | Overrides the chat model for content angles only. Unset uses `AI_TEXT_MODEL` |
-| `AI_VISION_MODEL` | Vision model for hook-frame analysis. Default `anthropic/claude-haiku-5.5` |
-
----
-
-## The workflow
-
-```
-App URL  →  website + store research  →  AI App Profile  →  review & approve
-        →  ICP segments + content angles  →  template recommended or chosen
-        →  real assets attached  →  script + shot plan  →  claim check
-        →  ONE complete video generated  →  real app visuals composited
-        →  review, vary, download  →  founder posts by hand
-```
-
-Three gates stand between an unreviewed plan and a render, in order:
-
-1. **Profile approval** — nothing is generated from an unreviewed profile.
-2. **Claim check** — the plan is independently re-checked on *every edit*, and
-   generation is blocked while a prohibited claim is present.
-3. **Ready state** — a project must be explicitly marked ready before a
-   generation is submitted.
-
-### Why a variation never renders by itself
-
-A variation produces a **draft project**. Producing the video is a separate,
-explicit action. Variations are never batch-generated.
-
-### Why interfaces are never fabricated
-
-The model produces a person, a scene, and movement. Screenshots, screen
-recordings, logos, on-screen text, and the CTA are composited afterwards with
-ffmpeg from **real assets**, so app interfaces, pricing, and text are
-pixel-exact and cannot drift.
-
----
-
-## Architecture
-
-### Backend modules
-
-| Module | Responsibility |
-|---|---|
-| `server.py` | Routes, DB, orchestration |
-| `ai_service.py` | OpenRouter: research, angles, plans, video, polling |
-| `template_library.py` | Curated structures, vocabularies, duration clamping |
-| `claim_safety.py` | **Deterministic** claim checking (never model self-report) |
-| `video_providers.py` | Provider capability layer; env-configurable model |
-| `generation_planning.py` | Single-pass prompt, error triage |
-| `overlays.py` | ffmpeg filter-graph construction and rendering |
-| `variations.py` | The nine controlled variation axes |
-| `feedback.py` | Structured feedback vocabulary and its aggregate summary |
-| `research_abstraction.py` | Trend data → abstract template drafts |
-| `pipeline.py` | yt-dlp / ffmpeg / Modal media pipeline |
-| `storage_service.py` | Cloudflare R2 |
-| `viral_detection.py` | Engagement ranking |
-
-### Data model
-
-`brand_profiles` (App Profiles, extended from the old `brand_profiles`) ·
-`content_angles` · `hook_templates` (extended) · `template_favorites` ·
-`studio_projects` · `generations` · `assets` · `overlay_compositions` ·
-`feedback_events` · `research_runs`
-
-`studio_projects` is deliberately separate from `generations`: the founder
-iterates on a script on text alone, and only a marked-ready project renders.
-
----
-
-## Testing
+### Frontend (another terminal)
 
 ```bash
-cd backend
-python -m pytest -q
+yarn --cwd frontend install --frozen-lockfile
 ```
 
-The full suite passes (`cd backend`, `python -m pytest -q`). ffmpeg must be on
-`PATH`: the tests that exercise the canvas fit, the camera cut and real MP4
-handling do real encodes, and without it they fail rather than skip.
+Create or edit `frontend/.env` without replacing existing settings:
 
-A mocked suite cannot prove a provider ACCEPTS what we send it. After any model
-swap, run the live check with a real key:
+```dotenv
+REACT_APP_BACKEND_URL=http://127.0.0.1:8000
+# Optional locally; must match backend Clerk configuration when enabled:
+# REACT_APP_CLERK_PUBLISHABLE_KEY=your-real-publishable-key
+```
 
 ```bash
-export OPENROUTER_API_KEY="<key never committed anywhere>"
-python backend/verify_chat_model.py --photo ./face.png
+yarn --cwd frontend start
 ```
 
-Overlay tests render real MP4s with ffmpeg and assert on output, because the
-worst bugs in that path (an orphaned filter chain, a 600-second output) exited
-0 and produced plausible-looking files.
+The development app normally serves at `http://localhost:3000`. If that port
+is occupied, use a free `PORT`; do not stop another project's listener.
+`REACT_APP_*` values are build-time inputs: restart the dev server or rebuild
+the bundle after changing them. The production bundle uses an empty backend
+URL for same-origin API calls.
 
----
+### Required versus optional configuration
 
-## Known limitations
+[backend/.env.example](backend/.env.example) lists the adapter settings.
 
-### Video model capabilities
-
-| Model | Single pass | Notes |
-|---|---|---|
-| `minimax-h3` | 5–15s | 2K, native audio. **Cannot** combine `frame_images` with `input_references`. 20s and 30s need a second generation. |
-| `minimax-h3-max` *(opt-in)* | 5–15s | 768p (not 2K), faster with tighter prompt adherence; the audio flag is not sent for this model. Photo as first frame. |
-| `heygen-video-1` *(opt-in)* | 5–15s | Business-video renderer with synthesized audio in one call, 768p. The cropped founder photo rides as an identity reference, so the clip is generated from the plan from its first frame — it is never sent as the opening frame, which would open the video on the photo itself. For talking-head hooks and demos. |
-
-Other constraints:
-
-- **768p vs 2K.** MiniMax H3 renders 2K; H3 Max and HeyGen render 768p, which is
-  still above TikTok's 720×1280 floor but visibly softer after the 1080×1920
-  re-export. A request longer than 15s is refused rather than split — the
-  founder attaches their own demo and call to action to cover it.
-- **Vertical is assumed.** Every model here is driven at 9:16.
-- **No cost reporting at all.** The product does not meter what a render costs
-  the operator. No generation row, no model-request row and no API response
-  carries a cost field, and no screen shows one. Metering this honestly is a
-  product of its own, and a half-honest meter is worse than none.
-- **No live end-to-end verification.** Duration logic, retry,  provenance, and overlay compositing are verified — the last against real
-  rendered MP4s. Whether a given model returns a usable clip to composite onto
-  has **not** been confirmed against a live generation; that needs a key with
-  credit.
-
-### Other limitations
-
-- **Turso untested on Windows.** `libsql_experimental` is a Rust extension
-  without Windows wheels, so tests exercise the local SQLite path. The cloud
-  branch is unverified.
-- **Overlay quality depends on the base clip.** Overlays are composited at
-  fixed 1080×1920 with a 0–3s hook assumption baked into templates.
-- **Text overlays are only as good as the plan.** They come from the reviewed
-  plan, never invented at composition time — which is correct for claim safety
-  but means a poor plan yields a poor caption.
-
----
-
-## What changed from the previous version
-
-### Preserved
-
-- OpenRouter client, polling, retry-on-transient, and job normalization
-- Apify integration and public TikTok data parsing
-- yt-dlp / ffmpeg / Modal frame-extraction pipeline
-- Cloudflare R2 storage and the `video_assets` registry
-- SQLite with the Turso fallback, plus the migration pattern
-- Clerk auth (unchanged, per your instruction) and the anonymous fallback
-- SQLite/Turso DB helpers, MediaFile storage, and the deploy setup
-- The legacy exact-match flow, demoted but fully working
-
-### Modified
-
-- `brand_profiles` → **App Profiles** with store URLs, pricing, features,
-  ICP, claim tiers, and review/approve/refresh
-- `hook_templates` → **Hook Template Library** with structure fields,
-  versioning, favorites, archive, and publication
-- Video generation → **one job per video** with provenance- Nav → Create / Insight / Research
-
-### Added
-
-App Profiles, content angles, the 18-template curated library, the
-recommendation engine, the creation studio, deterministic claim safety, the
-provider capability layer, the per-App-Profile asset library, deterministic
-overlay compositing, generation history, nine controlled variation axes,
-manual performance logging, trend research, and structured feedback.
-
-### Removed since
-
-Nothing was deleted lightly; each of these was a view *of* the work rather
-than a place *of* work, and everything each one showed is still served where
-the work happens:
-
-| Removed | Where its content lives now |
+| Setting | Requirement / behavior |
 |---|---|
-| Operations (`/operations`) | History (failures + Retry), per-generation endpoints |
-| Settings (`/settings`) | Studio footer (never-publishes line), History (entered-by-hand figures), Create Video (not-proven-performers note) |
-| Dashboard (`/`) | History (totals + failures + Retry), the sidebar (next steps). `/` redirects to `/create` |
-| App Profiles list (`/app-profiles`) | App Profile (`/brand`) for research/edit/approve; the profile detail page survives for angles, templates, and per-app drafts. `/app-profiles` redirects to `/brand` |
-| Analytics (`/analytics`) | Nowhere — deliberately. It reported the operator's own activity and what it cost them, and this product does not meter that. `/analytics` redirects to `/create` |
-### Removed / demoted
+| `OPENROUTER_API_KEY` | Needed for AI research, angles, plans, strategies, and renders; non-AI screens can run without it. |
+| `CLERK_JWKS_URL` + client publishable key | Optional only for isolated local development. Without backend auth all callers share `anonymous`. Set `ENVIRONMENT=production` on hosted processes so the boot guard refuses missing auth outside Render too. |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Cloud database. Otherwise local SQLite; a failed cloud connection can also fall back locally. Read the active backend from health. |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Durable media storage. Without it, clips depend on the host's local disk. `R2_PUBLIC_URL` is optional; private buckets can use signed reads. |
+| `MEDIA_URL_SECRET` | Stable signing key for media URLs. Without one, the development process uses a temporary key and links do not survive restart. |
+| `PUBLIC_BASE_URL` | Public origin where a provider must retrieve a reference. Loopback is not reachable by an external provider. |
+| `CORS_ORIGINS` | Explicit comma-separated browser origins for split-origin setups. Empty defaults to `*`; it does not disable cross-origin requests. |
+| `VIDEO_MODEL_DEFAULT`, `VIDEO_MODEL_ALLOWLIST` | Select or restrict existing video providers; not permission for silent model substitution. |
+| `AI_TEXT_MODEL`, `AI_VISION_MODEL`, `AI_ANGLE_MODEL` | Override model slugs. Unset angle model uses the text model; inspect current defaults in [ai_service.py](backend/ai_service.py). |
+| `MODAL_FRAME_EXTRACTOR_URL`, `MODAL_SHARED_SECRET` | Optional frame-extraction offload for source-video utilities, not required for the primary studio path. |
 
-Pages that were views *of* the work rather than places *of* work have been
-deleted outright (see "Removed since" above). The exact-match recreation flow
-is **demoted** to the Research nav group and kept working:
+## Current workflow
 
-| Route | Was | Now |
-|---|---|---|
-| `/discover` | primary entry | Research group |
-| `/face-swap` | primary creation | Route removed; the photo-crop helper (`face_crop.py`) remains for the first-frame crop |
-| `/bookmarks` | Hook Templates | Research group (Saved Hooks) |
-| `/history` | exact-match history | **Generation History** (old one at `/legacy-history`) |
+The creation wizard has **three steps**, not five:
 
-No code path can publish, post, schedule, engage, or capture platform
-credentials — asserted by tests, not just documented.
+1. **App Profile** — research or select a profile, review its facts and claims,
+   and approve it. Profile editing/research lives at `/brand`.
+2. **Audience & template** — choose an angle and goal, compare templates, and
+   attach the presenter's photograph. There is one angle selector.
+3. **Review & submit** — generate and edit the text plan, inspect claim
+   findings, build/review the matching strategy, and explicitly submit a video.
 
-### Deliberately not added
+Rendering remains gated on approved profile, valid angle/template/photograph,
+claim checks, saved/current plan and strategy, and project readiness. Review
+edits autosave through the server's normal validation path. A variation is a
+**draft**, not a paid render.
 
-Public registration, customer authentication, Stripe/billing, public
-marketing or pricing pages, multi-platform publishing, and bulk variant
-generation.
+One provider job produces the hook and middle. There is no automatic extension
+chain. Provider limits, identity routing and prompt budgets come from
+[video_providers.py](backend/video_providers.py) and
+[generation_planning.py](backend/generation_planning.py). A provider refusal
+must remain visible with an actionable next step.
 
----
+After generation:
 
-## Confirmation
+- `/history` shows render state, durable playback/download, storage recovery,
+  post copy, and manually entered TikTok links, views and verdicts.
+- `/demo-cta` or `/demo-cta/:generationId` opens the **browser-side** editor.
+  Its editing document is saved on that browser/device, not as the server's
+  claim-checked plan. Preview/export share time-based drawing logic.
+- `/analytics` summarizes recorded results; it does not retrieve TikTok stats
+  automatically or report provider spend.
+- `/upscale` is a separate browser-side video tool.
 
-**The primary workflow no longer depends on frame-by-frame viral-video
-reproduction.**
+The public `/` is a landing page; sign-in/sign-up, features, terms and privacy
+also exist. Current route ownership is in [App.js](frontend/src/App.js).
+Old research/media helpers in the backend do not imply a current Research,
+Discover, face-swap, or legacy-history page.
 
-A video is produced from an approved App Profile, a content angle, and an
-abstract hook template. A test asserts that no curated template references a
-creator handle, requires a reference video, or is described as proven
-(`test_template_library.py::TestAbstractStructureGuarantee`); another asserts
-that no seed describes itself as proven, viral, or guaranteed. Templates are
-labelled "curated" or "based on recurring high-performing hook mechanics"
-until this app's own history supports more.
+## Verification
 
-The exact-match code still exists for Trend Research and legacy comparison,
-but nothing in the primary path requires it, and the Aleph editor model is
-refused because it can only work from a source clip.
+Choose checks by the changed area; see [CONTRIBUTING.md](CONTRIBUTING.md) for
+focused commands and their limits.
+
+```bash
+python -m pytest backend/ -q
+node frontend/scripts/check-imports.cjs
+node frontend/scripts/check-frontend-logic.cjs
+node frontend/scripts/check-render-smoke.cjs
+CI=true yarn --cwd frontend build
+```
+
+Backend pytest uses the repository's fixed two-worker configuration. The full
+suite needs ffmpeg. The render-smoke harness mounts real React modules with
+stubbed infrastructure; it is not a browser or a live-provider acceptance test.
+Frontend checks are currently **local gates**, not a GitHub CI job.
+
+Paid live probes exist, but do not run them as ordinary unit verification:
+[verify_chat_model.py](backend/verify_chat_model.py) makes real model calls and
+[verify_live_renders.py](backend/verify_live_renders.py) submits real videos.
+Use a funded key and explicit authorization, then inspect the clips yourself.
+Historical results are recorded in [test_reports](test_reports/); they are not
+proof that today's production revision or provider is working.
+
+## Known limits
+
+- HTTP/database/render orchestration still concentrates in
+  [server.py](backend/server.py); model workflows in
+  [ai_service.py](backend/ai_service.py); wizard request/draft state in
+  [CreateVideo.jsx](frontend/src/pages/CreateVideo.jsx). The extracted policy
+  and panel modules improve ownership but do not complete their decomposition.
+- Local SQLite and local media are not durable on ephemeral hosting. Even a
+  configured Turso connection may fall back; unsynchronized replica writes
+  also need recovery before an instance disappears.
+- Native libsql cloud behavior is not covered by the Windows SQLite test path.
+- Export depends on browser codec/device support; a mocked export does not
+  establish real-device compatibility or visual identity quality.
+- No wording rule can guarantee a provider render or platform moderation outcome.
+
+For deployment, rollback and recovery constraints, use the
+[operations runbook](docs/operations.md), not old chat notes or a local service
+snapshot.
