@@ -4473,10 +4473,22 @@ async def recommend_templates(
         "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
         (profile_id, user_id),
     )
+    # Recorded outcomes beside verdicts: posted links/views per template lift
+    # ranking within a small cap. A query failure must not break the list —
+    # an empty outcome set simply means no boost.
+    try:
+        outcome_rows = await _fetch_all(
+            "SELECT template_id, tiktok_url, tiktok_views FROM generations "
+            "WHERE brand_profile_id = ? AND user_id = ? AND template_id IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT 200",
+            (profile_id, user_id),
+        )
+    except Exception:
+        outcome_rows = []
     scored = []
     for tpl in templates:
         result = _score_template_for_angle(
-            tpl, profile, angle, norm_objective, feedback_events
+            tpl, profile, angle, norm_objective, feedback_events, outcome_rows
         )
         scored.append({
             "template": _public_library_template(tpl),

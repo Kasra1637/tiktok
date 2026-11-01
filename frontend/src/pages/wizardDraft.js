@@ -41,8 +41,23 @@ export function wizardDraftReducer(state, action) {
     }
     case "project-received":
       return { ...state, project: action.project };
-    case "plan-accepted":
-      return { ...state, project: action.project, edits: {} };
+    case "plan-accepted": {
+      // A save flight snapshots `edits` when it starts. Keystrokes that land
+      // while the flight is in the air are newer than that snapshot and must
+      // survive the adoption — clearing everything would silently drop them.
+      // Without a snapshot (legacy callers) the adoption still clears all.
+      const saved = action.savedEdits;
+      if (!saved || typeof saved !== "object") {
+        return { ...state, project: action.project, edits: {} };
+      }
+      const edits = {};
+      for (const [field, value] of Object.entries(state.edits || {})) {
+        if (!(field in saved) || saved[field] !== value) {
+          edits[field] = value;
+        }
+      }
+      return { ...state, project: action.project, edits };
+    }
     default:
       throw new Error(`Unknown wizard draft transition: ${action.type}`);
   }

@@ -12,6 +12,11 @@ export function useWizardTemplates({ profileId, angleId, objective, active }) {
   const [tailorCount, setTailorCount] = useState(0);
   const recRequestRef = useRef(0);
   const tailorKeyRef = useRef("");
+  const tailorRequestRef = useRef(0);
+  // Latest wizard identity: a tailor flight that resolves after the founder
+  // moves on must not reload recommendations for the profile/angle it left.
+  const latestRef = useRef({ profileId, angleId, objective });
+  latestRef.current = { profileId, angleId, objective };
 
   const clearRecommendations = useCallback(() => {
     setRanked((previous) => ({ ...previous, rows: [], shared: emptyFit(), error: null }));
@@ -47,22 +52,37 @@ export function useWizardTemplates({ profileId, angleId, objective, active }) {
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
     const key = `${profileId}:${objective}`;
+    const request = ++tailorRequestRef.current;
+    const startPid = profileId;
+    const startAid = angleId;
+    const startObjective = objective;
     setTailoring(true);
     setTailorError(null);
     try {
-      const res = await api.ensureObjectiveTemplates(profileId, {
-        objective, ...(regenerate ? { regenerate: true } : {}),
+      const res = await api.ensureObjectiveTemplates(startPid, {
+        objective: startObjective, ...(regenerate ? { regenerate: true } : {}),
       });
-      if (tailorKeyRef.current !== key) return;
+      if (tailorRequestRef.current !== request || tailorKeyRef.current !== key) return;
       setTailored({ key, templates: Array.isArray(res?.templates) ? res.templates : [] });
-      if (res.generated) await loadRecommendations(profileId, angleId);
+      // A generated set only refreshes the visible ranking when the wizard
+      // still shows the profile/angle/objective the tailor ran for. Without
+      // this, a slow tailor for app A reloads app B's list when it lands.
+      const latest = latestRef.current;
+      if (
+        res.generated &&
+        latest.profileId === startPid &&
+        latest.angleId === startAid &&
+        latest.objective === startObjective
+      ) {
+        await loadRecommendations(startPid, startAid);
+      }
       if (res.error) setTailorError(res.error);
     } catch (err) {
-      if (tailorKeyRef.current !== key) return;
+      if (tailorRequestRef.current !== request || tailorKeyRef.current !== key) return;
       setTailored({ key, templates: [] });
       setTailorError(getErrorMessage(err));
     } finally {
-      if (tailorKeyRef.current === key) setTailoring(false);
+      if (tailorRequestRef.current === request && tailorKeyRef.current === key) setTailoring(false);
     }
   }, [profileId, objective, angleId, loadRecommendations]);
 

@@ -66,6 +66,22 @@ test("selection edits do not silently adopt or alter the saved project", () => {
   expect(state.project).toBe(project);
 });
 
+test("keystrokes typed during a save flight survive the adoption", () => {
+  const savedEdits = { script: "Saving this" };
+  const dirty = { ...resume(), edits: { script: "Saving this", hook_line: "Typed mid-flight" } };
+  const fresh = { ...project, script_version: 3 };
+  const state = wizardDraftReducer(dirty, { type: "plan-accepted", project: fresh, savedEdits });
+  expect(state.project).toBe(fresh);
+  expect(state.edits).toEqual({ hook_line: "Typed mid-flight" });
+});
+
+test("edited-same-value during a save flight still clears (no phantom edit)", () => {
+  const savedEdits = { script: "Same words" };
+  const dirty = { ...resume(), edits: { ...savedEdits } };
+  const fresh = { ...project, script_version: 3 };
+  expect(wizardDraftReducer(dirty, { type: "plan-accepted", project: fresh, savedEdits }).edits).toEqual({});
+});
+
 test("deep-link picks initialize without inventing a project or goal", () => {
   expect(createWizardDraft({ profile: "app", angle: "angle", template: "template" })).toEqual({
     selectedProfileId: "app", angleId: "angle", templateId: "template", objective: "", tone: "",

@@ -30,6 +30,7 @@ def score_template_for_angle(
     angle: Optional[dict],
     objective: str,
     feedback_events=(),
+    outcome_rows=(),
 ) -> dict:
     """
     Score one template against an App Profile + angle + objective.
@@ -283,6 +284,28 @@ def score_template_for_angle(
             limitations.append(
                 f"Shown but not picked {feedback['impressions']} time(s) for this app.",
             )
+
+    # Recorded outcomes beside verdicts: posted clips and winner verdicts lift
+    # a template within a small cap. They never bury a template — an unposted
+    # template simply gets no boost — and views only nudge inside that budget.
+    outcome = feedback_mod.template_outcome_adjustment(
+        outcome_rows, template.get("id") or ""
+    )
+    if outcome["delta"]:
+        score += outcome["delta"]
+        if outcome["posted_clips"]:
+            views = outcome["posted_views"]
+            suffix = f", {views} views" if views else ""
+            reasons.insert(
+                0,
+                f"Posted in {outcome['posted_clips']} clip(s){suffix} for this app.",
+            )
+        if outcome["wins"]:
+            reasons.insert(
+                0,
+                f"Marked a winner {outcome['wins']} time(s) for this app.",
+            )
+    feedback["outcome"] = outcome
 
     # The 0–10 bound lives here, not in the caller: this is the single
     # return every recommendation flows through, so no consumer can ever

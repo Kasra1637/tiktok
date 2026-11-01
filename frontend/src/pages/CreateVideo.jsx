@@ -3,6 +3,7 @@ import { ReviewRevisionsPanel, DirectionSelect, PlanPhaseLine } from "../compone
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
+import { useWizardDirections } from "./useWizardDirections";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -1121,6 +1122,9 @@ export default function CreateVideo() {
   const [saveStatus, setSaveStatus] = useState("");
   const handleSaveEdits = async ({ silent = false } = {}) => {
     if (!project) return;
+    // Snapshot what this flight is saving: keystrokes that land while the
+    // two writes are in the air are newer than this object and must survive
+    // the adoption below (see wizardDraft plan-accepted).
     if (silent) {
       if (autosaving) return;
       setAutosaving(true);
@@ -1132,10 +1136,13 @@ export default function CreateVideo() {
     try {
       // Measured against the saved script, not the textarea, so a save that
       // changes nothing records nothing.
-      const editSignal = Object.prototype.hasOwnProperty.call(edits, "script")
-        ? classifyScriptEdit(project.script, edits.script)
+      const savedEdits = { ...edits };
+      // Measured against the saved script, not the textarea, so a save that
+      // changes nothing records nothing.
+      const editSignal = Object.prototype.hasOwnProperty.call(savedEdits, "script")
+        ? classifyScriptEdit(project.script, savedEdits.script)
         : "";
-      const updated = await api.updateStudioProject(project.id, edits);
+      const updated = await api.updateStudioProject(project.id, savedEdits);
       if (editSignal) {
         recordSignal("script_edited", editSignal, {
           brand_profile_id: profileId,
@@ -1167,7 +1174,7 @@ export default function CreateVideo() {
         syncedProjectsRef.current[settled.id] = settled.updated_at || "";
       }
       setError(readyError ? getErrorMessage(readyError) : null);
-      dispatchDraft({ type: "plan-accepted", project: settled });
+      dispatchDraft({ type: "plan-accepted", project: settled, savedEdits });
       setReviewThumb(0);
       if (silent) setSaveStatus("All changes saved");
     } catch (err) {
@@ -1314,112 +1321,21 @@ export default function CreateVideo() {
     dispatchDraft({ type: "tone-edited", value });
   };
 
-  // Profile-aware direction dropdowns: setting, lighting, wardrobe, voice and
-  // tone options in the app's category group. Dropdown-only by design — a
-  // list the profile chose cannot smuggle in face or body descriptions, so
-  // there is nothing to guard at save time beyond the normal claim check.
-  const [directionOptions, setDirectionOptions] = useState(null);
-  useEffect(() => {
-    if (!profileId) {
-      setDirectionOptions(null);
-      return undefined;
-    }
-    let cancelled = false;
-    api.getDirectionOptions(profileId)
-      .then((data) => {
-        if (!cancelled) setDirectionOptions(data);
-      })
-      .catch(() => {
-        if (!cancelled) setDirectionOptions(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [profileId]);
-  // The five picks. Initialized by matching the saved plan text against the
-  // options, so a legacy free-text plan preselects whatever it already
-  // names instead of silently resetting. Unmatched starts empty and stays
-  // out of the save until the founder picks — the plan default stands.
-  const [dirSel, setDirSel] = useState({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
-  // Read the latest saved values when the project/options identity changes.
-  // Ordinary draft edits must not reset a dropdown the founder just picked.
-  const savedDirectionsRef = useRef(null);
-  savedDirectionsRef.current = {
-    visual: project?.visual_direction || "",
-    voice: project?.voice_direction || "",
-    tone: project?.tone || tone || "",
-  };
-  useEffect(() => {
-    if (!directionOptions) return;
-    const { visual: savedVisual, voice: savedVoice, tone: savedTone } = savedDirectionsRef.current;
-    const matchPart = (text, list) =>
-      (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
-    const matchTone = (list) =>
-      (list || []).find((option) =>
-        savedTone &&
-        (option.toLowerCase().includes(savedTone.toLowerCase()) ||
-          savedTone.toLowerCase().includes(option.toLowerCase()))
-      ) || "";
-    setDirSel({
-      setting: matchPart(savedVisual, directionOptions.setting),
-      lighting: matchPart(savedVisual, directionOptions.lighting),
-      wardrobe: matchPart(savedVisual, directionOptions.wardrobe),
-      voice: matchPart(savedVoice, directionOptions.voice),
-      tone: matchTone(directionOptions.tone),
-    });
-  }, [project?.id, directionOptions]);
-  const pickScenePart = (field) => (value) => {
-    const next = { ...dirSel, [field]: value };
-    setDirSel(next);
-    const composed = [next.setting, next.lighting, next.wardrobe].filter(Boolean).join(", ");
-    // An empty choice keeps the saved plan default rather than erasing it.
-    dispatchDraft({ type: "edit-field", field: "visual_direction", value: composed, omitDefault: true });
-  };
-  const pickVoice = (value) => {
-    setDirSel((previous) => ({ ...previous, voice: value }));
-    dispatchDraft({ type: "edit-field", field: "voice_direction", value, omitDefault: true });
-  };
-  const pickTone = (value) => {
-    setDirSel((previous) => ({ ...previous, tone: value }));
-    editTone(value);
-  };
-  // Fresh options for one dropdown, spent deliberately: one text model call
-  // per click, grounded in the profile and the selected angle, avoiding the
-  // options already shown. The founder's current pick is never destroyed by
-  // a refresh — when it is absent from the fresh four it leads the merged
-  // list, so a deliberate choice survives seeing what else exists.
-  const [refreshingField, setRefreshingField] = useState("");
-  const [refreshError, setRefreshError] = useState("");
-  const refreshDirectionField = (field) => async () => {
-    if (!profileId || refreshingField) return;
-    setRefreshingField(field);
-    setRefreshError("");
-    try {
-      const data = await api.refreshDirectionOptions(profileId, {
-        field,
-        avoid: directionOptions?.[field] || [],
-        angleId: angle?.id || "",
-      });
-      const fresh = (data?.options || []).filter(Boolean);
-      if (fresh.length > 0) {
-        setDirectionOptions((previous) => {
-          if (!previous) return previous;
-          const pick = dirSel[field] || "";
-          const merged = pick && !fresh.includes(pick) ? [pick, ...fresh] : [...fresh];
-          return { ...previous, [field]: merged };
-        });
-      }
-    } catch (err) {
-      setRefreshError(getErrorMessage(err));
-    } finally {
-      setRefreshingField("");
-    }
-  };
-  const refreshProps = (field, testId) => ({
-    onRefresh: refreshDirectionField(field),
-    refreshing: refreshingField === field,
-    refreshTestId: testId,
-  });
+  // Direction dropdowns live in their own lifecycle owner (profile-keyed
+  // options, per-app picks, saved-plan matching, per-field refresh). See
+  // useWizardDirections: request ids ignore stale loads, picks reset on app
+  // switch, and a refresh never destroys the founder's current pick.
+  const {
+    directionOptions,
+    dirSel,
+    pickScenePart,
+    pickVoice,
+    pickTone,
+    refreshingField,
+    refreshError,
+    refreshDirectionField,
+    refreshProps,
+  } = useWizardDirections({ profileId, project, tone, angle, dispatchDraft, editTone });
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback so landing on Review with a complete

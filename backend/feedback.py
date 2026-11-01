@@ -622,6 +622,17 @@ FEEDBACK_CAPS = {
     "rejection": -6.0,
     "approval": 4.0,
 }
+# Recorded outcomes beside founder verdicts: a posted TikTok clip is audience
+# evidence, not a founder opinion, so it adds a small bounded boost that can
+# never outrank explicit verdicts. Views scale sub-linearly: the first
+# thousand views matter more than the next ten thousand.
+OUTCOME_WEIGHTS = {
+    "posted_clip": 0.6,
+    "winner_verdict": 1.0,
+}
+OUTCOME_CAPS = {
+    "approval": 2.0,
+}
 
 
 def summarize(events) -> dict:
@@ -804,6 +815,50 @@ def template_feedback_adjustment(events, template_id: str) -> dict:
     facts["top_reasons"] = facts["top_reasons"][:3]
     delta = max(FEEDBACK_CAPS["rejection"], min(0.0, rejection_delta))
     delta += max(0.0, min(FEEDBACK_CAPS["approval"], approval_delta))
+    facts["delta"] = round(delta, 2)
+    return facts
+
+
+def template_outcome_adjustment(outcome_rows, template_id: str) -> dict:
+    """Convert recorded post-render outcomes into a bounded ranking boost.
+
+    `outcome_rows` are generation-level facts the server already stores:
+    `template_id`, optional `tiktok_url`/`tiktok_views`, and optional winner
+    verdicts (`winner` True when thumbs-up plus a posted link). Only rows
+    naming this template count. Posted clips are audience evidence beside
+    founder verdicts: they lift a template but can never bury one, and the
+    boost caps so an old viral clip retires instead of ruling forever.
+    """
+    facts = {
+        "template_id": template_id or "",
+        "posted_clips": 0,
+        "posted_views": 0,
+        "wins": 0,
+    }
+    for row in outcome_rows or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("template_id") or "") != (template_id or ""):
+            continue
+        if row.get("tiktok_url"):
+            facts["posted_clips"] += 1
+            views = row.get("tiktok_views")
+            if isinstance(views, (int, float)) and views and views > 0:
+                facts["posted_views"] += int(views)
+        if row.get("winner"):
+            facts["wins"] += 1
+    delta = min(
+        OUTCOME_CAPS["approval"],
+        facts["posted_clips"] * OUTCOME_WEIGHTS["posted_clip"]
+        + facts["wins"] * OUTCOME_WEIGHTS["winner_verdict"],
+    )
+    # Views nudge within the posted-clip budget: 12.4k views reads stronger
+    # than a view-less post, but views alone never create a boost.
+    if facts["posted_clips"] and facts["posted_views"]:
+        import math
+
+        view_bonus = min(0.5, 0.1 * math.log10(1 + facts["posted_views"] / 1000.0))
+        delta = min(OUTCOME_CAPS["approval"], delta + view_bonus)
     facts["delta"] = round(delta, 2)
     return facts
 
