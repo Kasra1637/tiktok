@@ -2229,6 +2229,42 @@ class TestHookScriptContinuity:
         # The old rule stays: one problem named, one problem answered.
         assert "ONE STORY, TWO LINES" in prompt
 
+    def test_the_prompt_demands_natural_speech_a_concrete_moment_and_a_small_ending(self, monkeypatch):
+        """The script must read as one person talking to camera to a friend.
+
+        Plain sentences with contractions, no polished or poetic phrasing; one
+        concrete moment instead of a vague line like "showed me what happened
+        inside me"; the hook's own scene throughout; and a small, believable
+        shift at the end rather than a big transformation the story did not earn.
+        """
+        import ai_service
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "I could never name what I felt.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "talking to camera" in prompt
+        assert "to a friend" in prompt
+        assert "contractions" in prompt
+        assert "concrete moment" in prompt.lower()
+        assert "showed me what happened inside me" in prompt
+        assert "hook's own scene" in prompt
+        assert "big" in prompt and "transformation" in prompt
+        assert "I felt lighter" in prompt
+
     def test_continuity_flags_never_trigger_an_editorial_retry(self, monkeypatch):
         """A draft with a dangling reference is returned, not rewritten.
 
