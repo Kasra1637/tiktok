@@ -5237,6 +5237,44 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // The picked angle names the viewer's outcome, not just the feature: a
+  // card with FEATURE SHOWN and no outcome line produces feature-demo
+  // videos. The line renders only when the angle carries one, so old rows
+  // read exactly as before.
+  await check("the picked angle card names the viewer outcome beside the feature", async (ctx) => {
+    const OUTCOME_ANGLE = {
+      ...ANGLE,
+      label: "Start without stalling",
+      app_feature: "Task timer",
+      viewer_outcome: "Starting without stalling on setup",
+    };
+    await withApi(
+      { getContentAngles: async () => ({ angles: [OUTCOME_ANGLE, ANGLE_B], objective_evidence: {} }) },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const details = ctx.container.querySelector('[data-testid="angle-details-a1"]');
+          if (!details) throw new Error("the picked angle shows no detail panel");
+          if (!details.textContent.includes("Outcome")) {
+            throw new Error("the angle card names the feature but not the outcome");
+          }
+          if (!details.textContent.includes("Starting without stalling on setup")) {
+            throw new Error(`the outcome line carries no outcome: ${details.textContent}`);
+          }
+          if (!details.textContent.includes("Feature shown")) {
+            throw new Error("the outcome line replaced the feature line instead of joining it");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
 // The objective axis must not reorder the six-goal list — it annotates.
   await check("objective evidence does not reorder the goal list", async (ctx) => {
     const PROVEN_OBJ = {

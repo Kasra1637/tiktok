@@ -253,6 +253,7 @@ class CreateContentAngleRequest(BaseModel):
     hook_promise: Optional[str] = ""
     app_feature: Optional[str] = ""
     desired_emotion: Optional[str] = ""
+    viewer_outcome: Optional[str] = ""
     claims_to_respect: Optional[List[str]] = None
 
 
@@ -264,6 +265,7 @@ class UpdateContentAngleRequest(BaseModel):
     hook_promise: Optional[str] = None
     app_feature: Optional[str] = None
     desired_emotion: Optional[str] = None
+    viewer_outcome: Optional[str] = None
     claims_to_respect: Optional[List[str]] = None
 
 

@@ -74,6 +74,10 @@ const DETAIL_FIELDS = [
   ["Problem", "user_problem"],
   ["First 3 seconds promise", "hook_promise"],
   ["Feature shown", "app_feature"],
+  // The reason to care, not the thing demonstrated: a feature without its
+  // outcome is a demo. Renders only when the angle carries one, so old rows
+  // read exactly as before.
+  ["Outcome", "viewer_outcome"],
   ["Emotion by the end", "desired_emotion"],
 ];
 

@@ -628,7 +628,7 @@ async def init_db():
             -- Content angles for one App Profile. Generated per app from the
             -- approved profile, each carrying the seven planning fields the
             -- studio needs: audience, problem, hook promise, feature, emotion,
-            -- CTA, and the claims/limitations to respect.
+            -- outcome, CTA, and the claims/limitations to respect.
             CREATE TABLE IF NOT EXISTS content_angles (
                 id TEXT PRIMARY KEY,
                 brand_profile_id TEXT,
@@ -639,6 +639,7 @@ async def init_db():
                 hook_promise TEXT,
                 app_feature TEXT,
                 desired_emotion TEXT,
+                viewer_outcome TEXT,
                 recommended_cta TEXT,
                 claims_to_respect TEXT,
                 evidence TEXT,
@@ -1231,6 +1232,9 @@ async def init_db():
             # Recorded-at timestamp for pasted-back views. Additive:
             # pre-column rows read as NULL, which renders as no date.
             ("generations", "tiktok_views_at", "TEXT"),
+            # The viewer's outcome per angle. Additive: pre-column rows read
+            # as NULL, which renders as no outcome line on old cards.
+            ("content_angles", "viewer_outcome", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -3273,12 +3277,13 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
         await _execute(
             """INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
-                 hook_promise, app_feature, desired_emotion,
+                 hook_promise, app_feature, desired_emotion, viewer_outcome,
                  claims_to_respect, rank, created_at, user_id, origin)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
             (angle_id, profile.get("id"), angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
              angle["app_feature"], angle["desired_emotion"],
+             angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
     logger.info(f"Auto-generated %d content angle(s) for profile {profile.get('id')}", len(angles))
@@ -3556,7 +3561,7 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
 # nor read.
 CONTENT_ANGLE_TEXT_FIELDS = (
     "label", "target_audience", "user_problem", "hook_promise",
-    "app_feature", "desired_emotion",
+    "app_feature", "desired_emotion", "viewer_outcome",
 )
 
 
@@ -3586,6 +3591,7 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
         "hook_promise": row.get("hook_promise") or "",
         "app_feature": row.get("app_feature") or "",
         "desired_emotion": row.get("desired_emotion") or "",
+        "viewer_outcome": row.get("viewer_outcome") or "",
         "claims_to_respect": row.get("claims_to_respect") or [],
         "rank": row.get("rank") or 0,
         "goal_variant": int(row.get("goal_variant") or 0),
@@ -3824,12 +3830,13 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
         await _execute(
 """INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
-                 hook_promise, app_feature, desired_emotion,
+                 hook_promise, app_feature, desired_emotion, viewer_outcome,
                  claims_to_respect, rank, created_at, user_id, origin)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
             (angle_id, profile_id, angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
              angle["app_feature"], angle["desired_emotion"],
+             angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
     # Re-read, never echo the model rows: the wizard adopts this response
@@ -3872,13 +3879,14 @@ async def create_manual_content_angle(
     await _execute(
         """INSERT INTO content_angles
            (id, brand_profile_id, kind, label, target_audience, user_problem,
-             hook_promise, app_feature, desired_emotion,
+             hook_promise, app_feature, desired_emotion, viewer_outcome,
              claims_to_respect, rank, created_at, user_id, origin)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
         (angle_id, profile_id, template_library.normalize_angle_kind(payload.kind), label,
          (payload.target_audience or "").strip(), (payload.user_problem or "").strip(),
          (payload.hook_promise or "").strip(), (payload.app_feature or "").strip(),
          (payload.desired_emotion or "").strip(),
+         (payload.viewer_outcome or "").strip(),
          json.dumps(claims), rank, now, user_id),
     )
     row = await _fetch_one("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
@@ -3990,12 +3998,13 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
         await _execute(
             """INSERT INTO content_angles
                (id, brand_profile_id, kind, label, target_audience, user_problem,
-                 hook_promise, app_feature, desired_emotion,
+                 hook_promise, app_feature, desired_emotion, viewer_outcome,
                  claims_to_respect, rank, created_at, user_id, origin)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')""",
             (angle_id, profile_id, angle["kind"], angle["label"],
              angle["target_audience"], angle["user_problem"], angle["hook_promise"],
              angle["app_feature"], angle["desired_emotion"],
+             angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
     # Manual rows move to the back of the generated set's rank range -- the

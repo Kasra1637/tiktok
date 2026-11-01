@@ -728,6 +728,80 @@ CANNED_ANGLES = [
     },
 ]
 
+class TestAngleViewerOutcome:
+    """Angles must carry the viewer's outcome, not just the feature.
+
+    A card with FEATURE SHOWN and no outcome line produces feature-demo
+    videos: the model was never asked what changes in the viewer's life.
+    The outcome comes from the profile's outcome_statements via the
+    feature link — the same precedence the strategy already uses — never
+    invented."""
+
+    PROFILE = {
+        "brand_name": "Testly",
+        "app_category": "Productivity",
+        "brand_description": "A focus timer.",
+        "core_features": ["Task timer"],
+        "outcome_statements": [{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap",
+        }],
+        "usage_moments": ["Starting a task they have been avoiding"],
+    }
+
+    def _captured_prompt(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {"angles": [{
+                "kind": "problem_solution",
+                "label": "Stop stalling on starts",
+                "target_audience": "People who stall on starting",
+                "user_problem": "Cannot start without setup friction",
+                "hook_promise": "Start in one tap",
+                "app_feature": "Task timer",
+                "desired_emotion": "relief",
+                "viewer_outcome": "Starting without stalling on setup",
+                "claims_to_respect": [],
+            }]}
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def test_prompt_asks_for_the_viewer_outcome(self, monkeypatch):
+        import asyncio
+        import ai_service
+        captured = self._captured_prompt(monkeypatch)
+        asyncio.run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert "viewer_outcome" in captured["prompt"]
+        assert "outcome_statements" in captured["prompt"]
+
+    def test_returned_row_keeps_the_viewer_outcome(self, monkeypatch):
+        import asyncio
+        import ai_service
+        self._captured_prompt(monkeypatch)
+        angles = asyncio.run(ai_service.generate_content_angles(dict(self.PROFILE)))
+        assert angles[0]["viewer_outcome"] == "Starting without stalling on setup"
+
+    def test_manual_angle_accepts_a_viewer_outcome(self, api):
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON, name="Outcome Manual")
+        angle = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="problem_solution", label="Outcome angle",
+                target_audience="People who stall",
+                user_problem="Cannot start",
+                viewer_outcome="Starting without stalling"),
+            user_id=ANON))
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        row = next(a for a in listed["angles"] if a["id"] == angle["id"])
+        assert row["viewer_outcome"] == "Starting without stalling"
+
+
 def _failing_log(api, monkeypatch, calls=None):
     """A model layer that always fails, recording which operation asked."""
     async def fake_log(operation, modality, model, call, user_id, **refs):

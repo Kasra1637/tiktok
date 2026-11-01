@@ -523,6 +523,7 @@ ANGLE_JSON_SCHEMA = _strict_object({
     "hook_promise": _str_prop(),
     "app_feature": _str_prop(),
     "desired_emotion": _str_prop(),
+    "viewer_outcome": _str_prop(),
     "claims_to_respect": _str_array_prop(),
 })
 
@@ -1855,7 +1856,11 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         "Describe functional needs and use cases — never infer sensitive personal "
         "traits about viewers, and for health-adjacent apps describe product "
         "functionality (e.g. low-friction journaling with prompts and reminders), "
-        "never viewer diagnoses. Respond with STRICT JSON only, no markdown "
+        "never viewer diagnoses. If the app's own pages or the founder state who "
+        "it is for (e.g. built for people with ADHD), record that positioning "
+        "as a verified fact — the restriction is on inferring conditions beyond "
+        "what the sources state, not on repeating the app's own stated audience. "
+        "Respond with STRICT JSON only, no markdown "
         "fences, no extra commentary."
     )
 
@@ -2149,7 +2154,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "product facts. Describe viewers by FUNCTIONAL need and use case only — never "
         "infer sensitive personal traits (health diagnoses, mental-health labels, "
         "finances, religion, sexuality, political leaning). For health-adjacent apps, "
-        "describe the product's functionality, never a condition the viewer may have. "
+        "describe the product's functionality, never a condition the viewer may have — "
+        "but when the profile itself states who the app is for, use that positioning "
+        "in functional terms (people who lose track of tasks, not a diagnosis). "
         "Respond with STRICT JSON only, no markdown fences."
     )
 
@@ -2166,6 +2173,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         '  "hook_promise": "What the first 3 seconds promise",\n'
         '  "app_feature": "The app feature this angle demonstrates",\n'
         '  "desired_emotion": "The emotion the viewer should feel by the end",\n'
+        '  "viewer_outcome": "The concrete change in the viewer\'s life this angle promises, "\n'
+        '  "drawn from outcome_statements via its from_feature link for the chosen app_feature; "\n'
+        '  "when outcome_statements is empty, one flat desired_outcomes entry; never invented",\n'
         '  "claims_to_respect": ["Claims or limitations that bound this angle"]\n'
         "}\n"
         "Rules: use ONLY facts present in the profile. Every text field is a "
@@ -2191,6 +2201,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "line someone would actually say out loud. Never an abstract benefit.\n"
         "- app_feature: the one feature above that answers this problem.\n"
         "- desired_emotion: one word or a short phrase.\n"
+        "- viewer_outcome: what changes for the viewer because of that feature - the \n"
+        "outcome_statements outcome linked to the chosen app_feature, in the viewer's own \n"
+        "terms. A feature without its outcome is a demo, not a reason to care.\n"
         "- label: three to six words, no colon.\n\n"
         "Vary the kinds, and make the six differ in ARGUMENT -- the specific reason "
         "this viewer would care. If two angles could be swapped onto the same "
@@ -2240,6 +2253,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
             "hook_promise": (item.get("hook_promise") or "").strip()[:300],
             "app_feature": (item.get("app_feature") or "").strip()[:300],
             "desired_emotion": (item.get("desired_emotion") or "").strip()[:200],
+            "viewer_outcome": (item.get("viewer_outcome") or "").strip()[:300],
             "claims_to_respect": [],
         }
         raw_claims = item.get("claims_to_respect")
@@ -2645,6 +2659,8 @@ async def generate_brand_templates(
             "audience": angle.get("target_audience") or "",
             "problem": angle.get("user_problem") or "",
             "feature": angle.get("app_feature") or "",
+            **({"outcome": angle.get("viewer_outcome")}
+               if (angle.get("viewer_outcome") or "").strip() else {}),
         })
     categories = ", ".join(HOOK_CATEGORIES)
     want_objective = normalize_objective(objective)
@@ -2885,6 +2901,8 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
         lines.append(f"- PROMISE: the hook opens on this promise: {_text('hook_promise')}.")
     if _text("app_feature"):
         lines.append(f"- SOLUTION: the middle resolves the problem through {_text('app_feature')}, as a change in the viewer's life, never a feature list.")
+    if _text("viewer_outcome"):
+        lines.append(f"- OUTCOME: this angle promises {_text('viewer_outcome')} - the payoff beat lands exactly this.")
     if _text("desired_emotion"):
         lines.append(f"- FEELING: the viewer should feel {_text('desired_emotion')}.")
     goal = normalize_objective(objective)
@@ -3022,6 +3040,10 @@ async def generate_creative_plan(
         "duration_seconds": duration_seconds,
         "tone": tone or "(unstated)",
     }
+    # Conditional: an empty key still spends prompt budget, and old angles
+    # predate the column. Same pattern as visual_direction below.
+    if ((angle or {}).get("viewer_outcome") or "").strip():
+        brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
     if (visual_direction or "").strip():
         # Their look, not the model's: the returned visual_direction describes
         # this instead of inventing a competing one.
@@ -4681,6 +4703,10 @@ async def generate_video_strategy(
         "tone": tone or "(unstated)",
         "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
     }
+    # Same conditional key as the plan brief: no budget spent when the angle
+    # predates the outcome column.
+    if ((angle or {}).get("viewer_outcome") or "").strip():
+        brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
 
     claim_rules = {
         "approved": _list("claims_approved"),
