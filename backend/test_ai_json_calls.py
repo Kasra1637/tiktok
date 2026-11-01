@@ -2297,12 +2297,15 @@ class TestHookScriptContinuity:
         assert "big" in prompt and "transformation" in prompt
         assert "I felt lighter" in prompt
 
-    def test_the_prompt_bans_bare_message_wording_for_own_thoughts(self, monkeypatch):
-        """In a journaling app 'the unanswered message' reads as someone else's text.
+    def test_the_prompt_grounds_object_nouns_in_product_facts(self, monkeypatch):
+        """The ownership rule must work for any product, not just journaling.
 
-        The script must name the speaker's own thoughts or feelings explicitly
-        — 'what I'd been avoiding saying', 'what was on my mind' — never a
-        bare 'message' that points at another person.
+        Before naming anything the speaker acted on, the prompt must tell the
+        model to read VERIFIED APP FACTS and identify what the speaker handles
+        and who owns it — allowing 'message' only when the product receives
+        messages — and the self-review must flag any noun a viewer could
+        read as someone else's content or a different action than the product
+        supports. No journaling-specific wording may remain in the rule.
         """
         import ai_service
         captured = {}
@@ -2323,9 +2326,13 @@ class TestHookScriptContinuity:
             duration_seconds=15,
         ))
         prompt = captured["prompt"]
-        assert "unanswered message" in prompt
-        assert "what I'd been avoiding saying" in prompt
-        assert "what was on my mind" in prompt
+        assert "VERIFIED APP FACTS" in prompt
+        assert "who owns it" in prompt
+        assert "different kind of action than the product supports" in prompt
+        assert "different kind of action than VERIFIED APP FACTS supports" in prompt
+        assert "what I'd been avoiding saying" not in prompt
+        assert "what was on my mind" not in prompt
+        assert "unanswered message" not in prompt
 
     def test_the_prompt_demands_a_thumb_stopping_hook(self, monkeypatch):
         """The hook must stop a mid-scroll thumb, not introduce the topic.
