@@ -3833,42 +3833,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  await check("a failed clip check names the error and rechecks it", async (ctx) => {
+  await check("the revisions panel is gone", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
-    let fail = true;
     try {
       await withApi(
         {
-          // A planned, strategy-current draft: the revisions panel reaches
-          // the clip check instead of stopping at an earlier missing piece.
           getStudioProject: async () => ({
             ...PROJECT_WITH_STRATEGY,
             strategy_version: 1,
             strategy_script_version: 1,
           }),
-          getGenerations: async () => {
-            if (fail) throw new Error("Clip check unavailable");
-            return { generations: [] };
-          },
+          getGenerations: async () => ({ generations: [] }),
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          const status = ctx.container.querySelector('[data-testid="revisions-status"]');
-          if (!status?.textContent.includes("Clip check unavailable")) {
-            throw new Error("a failed clip check shows no named error");
-          }
-          const retry = ctx.container.querySelector('[data-testid="clip-recheck"]');
-          if (!retry) throw new Error("a failed clip check offers no recheck");
-          fail = false;
-          await clickEl(ctx, retry, "no recheck control on the clip error");
-          await act(async () => {});
-          const after = ctx.container.querySelector('[data-testid="revisions-status"]');
-          if (!after?.textContent.includes("No rendered clip yet")) {
-            throw new Error("rechecking the clip did not resolve the status");
-          }
-          if (ctx.container.querySelector('[data-testid="clip-recheck"]')) {
-            throw new Error("the recheck control survives its own success");
+          if (ctx.container.querySelector('[data-testid="review-revisions"]')) {
+            throw new Error("the revisions panel still renders");
           }
         }
       );

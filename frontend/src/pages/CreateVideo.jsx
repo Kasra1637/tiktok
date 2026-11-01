@@ -1,5 +1,5 @@
 import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker } from "../components/studio/SelectionPanels";
-import { ReviewRevisionsPanel, DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
+import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
@@ -2168,12 +2168,6 @@ export default function CreateVideo() {
                 </p>
               </div>
             )}
-            <ReviewRevisionsPanel
-              project={project}
-              edits={edits}
-              hasEdits={hasEdits}
-              onGoToHookStory={scrollToSubmit}
-            />
             <div className="inset-panel space-y-4" data-testid="review-thumb-loop">
               <span className="eyebrow block">Does this plan work?</span>
               <ThumbPair
