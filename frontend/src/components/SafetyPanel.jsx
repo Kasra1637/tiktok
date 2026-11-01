@@ -52,6 +52,27 @@ export function SafetyPanel({ report, summary, onEditClaim, onRegenerate, busy =
           {passed && flagged > 0 && " These review notes do not block rendering."}
           {!passed && " Edit the affected text and save to recheck, or regenerate the plan for review."}
           {hasEdits && " This report describes the saved plan; your edits have not been checked yet."}
+          {!passed && blocking.length > 0 && (
+            <span className="mt-2 block">
+              <span className="font-semibold">&ldquo;{blocking[0].claim}&rdquo;</span>
+              <span> — {sentenceCase(blocking[0].reason)}</span>
+            </span>
+          )}
+          {!passed && (onEditClaim || onRegenerate) && (
+            <span className="mt-3 flex flex-wrap gap-2">
+              {onEditClaim && blocking.length > 0 && (
+                <Button variant="secondary" size="sm" disabled={busy}
+                  data-testid="safety-fix-inline" onClick={() => onEditClaim(blocking[0].claim)}>
+                  Fix this wording
+                </Button>
+              )}
+              {onRegenerate && (
+                <Button variant="secondary" size="sm" disabled={busy} onClick={onRegenerate} data-testid="safety-regenerate-inline">
+                  Regenerate plan
+                </Button>
+              )}
+            </span>
+          )}
         </AlertDescription>
       </Alert>
 
