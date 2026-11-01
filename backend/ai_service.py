@@ -1886,9 +1886,9 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "core_features": ["concrete features evidenced by the sources"],\n'
         '  "primary_use_cases": ["top jobs the app helps users do"],\n'
         '  "problems_solved": ["user problems the app removes"],\n'
-        '  "target_audience": "short label for the primary audience",\n'
-        '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online",\n'
-        '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise"],\n'
+        '  "target_audience": "short label for the primary audience, repeating the sources\' stated audience verbatim when one is stated (e.g. people with ADHD)",\n'
+        '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online -- keep the sources\' stated audience (including named conditions) verbatim, never infer beyond them",\n'
+        '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise -- keep stated audiences verbatim"],\n'
         '  "desired_outcomes": ["outcomes users want from the app"],\n'
         # Objects rather than phrases, because a pitch needs the feature an
         # outcome comes from: "fall asleep without checking your phone" only
@@ -1898,8 +1898,9 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "outcome_statements": [{"outcome": "the resulting benefit, phrased as what '
         'changes in the user\'s life or how they feel after using it (e.g. helps you fall '
         'asleep without checking your phone -- never the feature spec itself, e.g. never '
-        'has a sleep timer)", "who_feels_it": "who gets this outcome, functional need '
-        'only, never a sensitive trait or diagnosis", "from_feature": "the core_features '
+        'has a sleep timer)", "who_feels_it": "who gets this outcome -- repeat the app\'s '
+        'own stated audience verbatim when the sources state it (e.g. people with ADHD); '
+        'never infer a condition beyond the sources", "from_feature": "the core_features '
         'entry this outcome comes from, named verbatim", "how_it_helps": "how the solution '
         'works, framed as the resulting benefit rather than the mechanism (e.g. the wind-down '
         'starts itself so there is no reason to pick the phone back up -- never a spec, '
@@ -2237,13 +2238,13 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     system_message = (
         "You are a short-form video strategist for mobile apps. You propose content "
         "angles that a founder can actually film, each grounded strictly in verified "
-        "product facts. Describe viewers by FUNCTIONAL need and use case only — never "
+        "product facts. Describe viewers by functional need and use case — never "
         "infer sensitive personal traits (health diagnoses, mental-health labels, "
-        "finances, religion, sexuality, political leaning). For health-adjacent apps, "
-        "describe the product's functionality, never a condition the viewer may have — "
-        "but when the profile itself states who the app is for, use that positioning "
-        "in functional terms (people who lose track of tasks, not a diagnosis). "
-        "Respond with STRICT JSON only, no markdown fences."
+        "finances, religion, sexuality, political leaning) beyond what the profile "
+        "states. When the profile itself states who the app is for (e.g. people "
+        "with ADHD), repeat that stated positioning verbatim in target_audience — "
+        "the ban is on inventing conditions, not on repeating the app's own stated "
+        "audience. Respond with STRICT JSON only, no markdown fences."
     )
 
     prompt = (
@@ -2254,7 +2255,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "{\n"
         '  "kind": "one of the kinds listed above",\n'
         '  "label": "short 3-6 word title",\n'
-        '  "target_audience": "The audience segment, described functionally",\n'
+        '  "target_audience": "The audience segment, repeating the profile audience verbatim when one is stated",\n'
         '  "user_problem": "The concrete problem this angle speaks to",\n'
         '  "hook_promise": "What the first 3 seconds promise",\n'
         '  "app_feature": "The app feature this angle demonstrates",\n'

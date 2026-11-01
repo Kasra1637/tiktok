@@ -2241,3 +2241,40 @@ class TestCompleteSentences:
         out = ai_service.normalize_strategy({"hook_line": hook})
         assert out["hook_line"] == "First complete opener here."
         assert len(out["hook_line"]) <= 200
+
+
+class TestStatedAudiencePreserved:
+    """A condition the sources state must survive research into angles.
+
+    The app's own pages say who it is for (e.g. built for people with
+    ADHD). The ban is on inferring a diagnosis beyond the sources, not on
+    repeating the app's stated positioning — otherwise every angle comes
+    out generic and the founder's real audience never reaches a video.
+    """
+
+    def test_research_prompt_keeps_stated_conditions(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({
+            k: ([] if k in set(ai_service.APP_PROFILE_LIST_KEYS) | {
+                "outcome_statements", "viewer_objections"} else "x")
+            for k in ai_service.REQUIRED_APP_PROFILE_KEYS
+        }))])
+        _run(ai_service.analyze_app_profile({"website": "built for people with ADHD"}))
+        prompt = rec.payloads[0]["messages"][1]["content"]
+        assert "never a sensitive trait or diagnosis" not in prompt
+        assert "stated" in prompt.lower()
+
+    def test_angle_prompt_repeats_stated_positioning(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({"angles": [{
+            "kind": "problem_solution", "label": "L", "target_audience": "a",
+            "user_problem": "p", "hook_promise": "h", "app_feature": "f",
+            "desired_emotion": "e", "viewer_outcome": "v", "claims_to_respect": [],
+        }]}))])
+        _run(ai_service.generate_content_angles({
+            "brand_name": "V", "target_audience": "people with ADHD",
+        }))
+        combined = " ".join(
+            m.get("content", "") for m in rec.payloads[0]["messages"]
+        )
+        assert "not a diagnosis" not in combined
