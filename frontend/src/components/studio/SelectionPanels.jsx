@@ -260,11 +260,12 @@ export function TemplateShape({ template }) {
  * never a second copy of this list: the goal picker there waits silently.
  *
  * Landing is always gated: one "Generate angles" action, never a finished list.
- * The click reveals a pre-generated set for free (the server generates on
- * approval) and generates fresh only when there is nothing to show, so no
- * step can spend a call the founder did not ask for. "Regenerate angles"
- * appears only beside a visible list, where it always has a current generation
- * to act on.
+ * The first click always generates fresh — a cached set from an earlier
+ * approval is never revealed as-is, so a new video never lands on a stale
+ * "Refreshed 9h ago" set. A set generated moments ago in-session is then
+ * revealed free on step re-entry, so returning never spends a second call.
+ * "Regenerate angles" appears only beside a visible list, where it always
+ * has a current generation to act on.
  */
 export function AngleSelector({
   angles,
@@ -292,6 +293,12 @@ export function AngleSelector({
   // fresh set at it; with none picked the set comes back broad, so the
   // step says so beside Regenerate instead of silently spending the call.
   objective = "",
+  // Whether the angles in state were generated in-session rather than
+  // loaded as cached rows. Only a fresh set is ever revealed free — the
+  // honesty rule must never label a stale-cache reveal as anything but what
+  // it costs, and a stale cache is not revealed at all: the click
+  // regenerates it instead.
+  sessionFresh = false,
 }) {
   // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
   // It answers the only question a spinner cannot — is this fresh work or a
@@ -320,15 +327,18 @@ export function AngleSelector({
       Reading angle {genCount} of 6…
     </p>
   ) : null;
-  // The gate names what the click will do: revealing a cached set is
-  // instant and free, generating from nothing is a model call with a wait.
-  // A custom label (Review's redirect off this step) always wins — the
-  // honesty rule must never rename a button that leaves the step.
+  // The gate names what the click will do: generating fresh is a model call
+  // with a wait, while revealing a set generated moments ago in-session is
+  // instant and free. A cached set from an earlier approval is never offered
+  // as a free reveal — the click regenerates it instead — so "Show" can only
+  // ever name the fresh set the founder just made. A custom label (Review's
+  // redirect off this step) always wins — the honesty rule must never rename
+  // a button that leaves the step.
   const gateButtonLabel = generating
     ? generatingLabel
     : generateLabel !== "Generate angles"
       ? generateLabel
-      : angles.length > 0
+      : angles.length > 0 && sessionFresh
         ? "Show your angles"
         : "Generate angles";
   // One line beside the refresh decision, never a number on a row: the set

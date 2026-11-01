@@ -309,6 +309,14 @@ export default function CreateVideo() {
   const revealAngles = useCallback(() => {
     setAnglesRevealed(true);
   }, []);
+  // Whether the angles in state were generated in-session (gate click or
+  // in-list regenerate) rather than loaded as cached rows from an earlier
+  // approval. A new video always starts blank: the gate generates fresh on
+  // first click instead of revealing a set timestamped hours ago. Once fresh,
+  // step re-entry re-arms the CTA as a free reveal of the set just made, so
+  // returning never spends a second call. Reset with the reveal itself
+  // whenever the app changes.
+  const [anglesSessionFresh, setAnglesSessionFresh] = useState(false);
   // Cycling goal suggestions on the selected angle. Persists server-side per
   // angle, so the re-read of the angles list is the new state.
   const [cyclingGoals, setCyclingGoals] = useState(false);
@@ -386,6 +394,7 @@ export default function CreateVideo() {
   // for one app never leaks into another app's first view.
   useEffect(() => {
     setAnglesRevealed(false);
+    setAnglesSessionFresh(false);
     setAngleRegenNotice(null);
   }, [profileId]);
   const angle = angles.find((a) => a.id === angleId) || null;
@@ -568,60 +577,22 @@ export default function CreateVideo() {
   const scrollToSubstep = (id) => {
     document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
-  // The step's single CTA: "Generate angles", shown on landing instead of any
-  // list. The click reveals a pre-generated set for free when one exists
-  // (generated on approval — no endpoint call, no spend, no pick change), and
-  // generates fresh only when there is nothing to show. Either way the list
-  // — and with it "Regenerate" — appears only after this click, so
-  // regenerating is always aimed at a current generation.
-  //
-  // Offered through this one button because the bare generate endpoint
-  // replaces the whole set: a generate affordance on a populated list could
-  // silently discard angles the founder wrote by hand on the profile page.
-  const handleGenerateAngles = useCallback(async () => {
-    if (!profileId || generatingAngles) return;
-    if (angles.length > 0) {
-      revealAngles();
-      return;
-    }
-    setGeneratingAngles(true);
-    setAngleError(null);
-    try {
-      // A picked objective aims the set at this video; nothing picked reads
-      // exactly as before.
-      const data = await api.generateContentAngles(profileId, { objective });
-      const fresh = adoptAngles(data) || [];
-      // Generated in-session at the founder's own click: there is nothing to
-      // gate, so the fresh six render immediately.
-      revealAngles();
-      // The fresh set has new row ids, so a previous pick would dangle and
-      // the goal picker would collapse to its wait state. Park the founder
-      // on the strongest new angle; an empty set clears the pick.
-      if (!fresh.some((a) => a && a.id === angleId)) {
-        dispatchDraft({ type: "angle-selected", id: fresh.length > 0 ? fresh[0].id : "" });
-      }
-      if (!data.angles?.length) {
-        setAngleError("The model returned no usable angles. Try again.");
-      }
-    } catch (err) {
-      setAngleError(getErrorMessage(err));
-    } finally {
-      setGeneratingAngles(false);
-    }
-  }, [profileId, angleId, generatingAngles, angles.length, revealAngles, objective, adoptAngles]);
-
   // Regenerating the audience angles without leaving the wizard. Offered on
-  // a populated list too, because the regenerate endpoint keeps hand-written
-  // angles server-side: what the founder wrote on the profile page survives
-  // this call. (The bare generate endpoint replaces the whole set and stays
-  // empty-list-only — that distinction is why these are two buttons.)
+  // a populated list and behind the landing gate alike, because the
+  // regenerate endpoint keeps hand-written angles server-side: what the
+  // founder wrote on the profile page survives this call. (The bare generate
+  // endpoint replaces the whole set and stays empty-list-only — that
+  // distinction is why a populated list never uses it.)
   //
   // But generated angles that have a project built on them are deleted and
   // rewritten fresh: the draft survives, the story it was planned around does
   // not. A confirm at the click — the same pattern as plan regen — names that
   // before it happens instead of two screens later.
+  //
+  // Reports success so the landing gate can open the list only on a real
+  // fresh set: a failed spend leaves the gate (and its error) in place.
   const handleRegenerateAngles = useCallback(async () => {
-    if (!profileId) return;
+    if (!profileId) return false;
     const selectedHasProject = Boolean(project && project.content_angle_id && project.content_angle_id === angleId);
     if (selectedHasProject) {
       const ok =
@@ -631,7 +602,7 @@ export default function CreateVideo() {
               "A draft on this step is built around the angle you picked. Regenerating replaces that " +
                 "angle's text with new material and the draft loses its story. Continue?"
             );
-      if (!ok) return;
+      if (!ok) return false;
     }
     setGeneratingAngles(true);
     setAngleError(null);
@@ -661,12 +632,72 @@ export default function CreateVideo() {
       if (!data.angles?.length) {
         setAngleError("The model returned no usable angles. Try again.");
       }
+      // Fresh in-session: step re-entry re-arms the gate as a free reveal
+      // of this set instead of spending again.
+      setAnglesSessionFresh(true);
+      return true;
+    } catch (err) {
+      setAngleError(getErrorMessage(err));
+      return false;
+    } finally {
+      setGeneratingAngles(false);
+    }
+  }, [profileId, angleId, project, objective, adoptAngles]);
+
+  // The step's single CTA: "Generate angles", shown on landing instead of any
+  // list. The first click always generates fresh: a cached set from an
+  // earlier approval is never revealed as-is, so a new video starts blank
+  // and lands on fresh rows instead of a "Refreshed 9h ago" line. Over a
+  // cached set the regenerate endpoint is used — it keeps hand-written angles
+  // server-side, where the bare generate endpoint would discard them — and
+  // from empty the bare generate endpoint is safe because nothing exists to
+  // discard. Either way the list — and with it "Regenerate" — appears only
+  // after this click. A set made in-session is revealed free on step re-entry
+  // (anglesSessionFresh), so returning never spends a second call.
+  const handleGenerateAngles = useCallback(async () => {
+    if (!profileId || generatingAngles) return;
+    if (angles.length > 0 && anglesSessionFresh) {
+      revealAngles();
+      return;
+    }
+    if (angles.length > 0) {
+      // Fresh over cached: the same call the Regenerate button makes, then
+      // open the list the gate was hiding. It reports its own errors and
+      // notices, so a failed spend leaves the gate and its error in place.
+      const ok = await handleRegenerateAngles();
+      if (ok) {
+        revealAngles();
+      }
+      return;
+    }
+    setGeneratingAngles(true);
+    setAngleError(null);
+    try {
+      // A picked objective aims the set at this video; nothing picked reads
+      // exactly as before.
+      const data = await api.generateContentAngles(profileId, { objective });
+      const fresh = adoptAngles(data) || [];
+      // Generated in-session at the founder's own click: there is nothing to
+      // gate, so the fresh six render immediately.
+      revealAngles();
+      setAnglesSessionFresh(true);
+      // The fresh set has new row ids, so a previous pick would dangle and
+      // the goal picker would collapse to its wait state. Park the founder
+      // on the strongest new angle; an empty set clears the pick.
+      if (!fresh.some((a) => a && a.id === angleId)) {
+        dispatchDraft({ type: "angle-selected", id: fresh.length > 0 ? fresh[0].id : "" });
+      }
+      if (!data.angles?.length) {
+        setAngleError("The model returned no usable angles. Try again.");
+      }
     } catch (err) {
       setAngleError(getErrorMessage(err));
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, project, objective, adoptAngles]);
+  }, [profileId, angleId, generatingAngles, angles.length, anglesSessionFresh, revealAngles, handleRegenerateAngles, objective, adoptAngles]);
+
+
 
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back
@@ -1675,6 +1706,7 @@ export default function CreateVideo() {
               onGenerate={handleGenerateAngles}
               onRegenerate={handleRegenerateAngles}
               objective={objective}
+              sessionFresh={anglesSessionFresh}
               notice={angleRegenNotice}
               noticeAction={
                 angleRegenNotice
@@ -2609,6 +2641,7 @@ export default function CreateVideo() {
                 error={angleError}
                 onGenerate={() => setStep(1)}
                 generateLabel="Pick an audience angle first"
+                sessionFresh={anglesSessionFresh}
                 onRegenerate={handleRegenerateAngles}
                 objective={effectiveObjective}
                 notice={angleRegenNotice}
