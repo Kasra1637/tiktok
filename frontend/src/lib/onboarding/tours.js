@@ -7,7 +7,7 @@
 // limits: a free script plan is separate from the paid render, publishing is
 // always manual, and the demo and the close are the founder's own footage.
 //
-// Tours auto-OPEN on the first arrival at their route and not again (see
+// Core tours auto-open only when a ready page requests first-run help (see
 // OnboardingProvider — a persisted seen-check, with "Show me around" as the
 // deliberate replay) — so copy is written to be skippable: every step stands
 // alone, and the shortest tour that still explains the page is the right one.

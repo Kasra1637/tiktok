@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { rememberCurrentAppId } from "../lib/currentApp";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -221,6 +222,7 @@ export default function BrandSetup() {
   const [brand, setBrand] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [loadingActive, setLoadingActive] = useState(true);
+  useTourEligibility("brand", !loadingActive && !brand && profiles.length === 0 && !analyzeError && !researching);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);

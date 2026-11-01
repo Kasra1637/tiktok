@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocation } from "react-router-dom";
 import { TOURS, getTourIdForPath } from "../../lib/onboarding/tours";
 import { readSeenTours, markTourSeen, hasSeenTour } from "../../lib/onboarding/seenTours";
+import { readRecentDraft } from "../../lib/recentDraft";
 import TourOverlay from "./TourOverlay";
 import TourHelpButton from "./TourHelpButton";
 
@@ -42,13 +43,24 @@ export function useOptionalOnboarding() {
   return useContext(OnboardingContext);
 }
 
+/** Pages register explicit readiness; no DOM guessing or loading-time ambush. */
+export function useTourEligibility(tourId, eligible) {
+  const context = useOptionalOnboarding();
+  const register = context?.registerEligibility;
+  useEffect(() => {
+    if (!register) return undefined;
+    register(tourId, Boolean(eligible));
+    return () => register(tourId, false);
+  }, [register, tourId, eligible]);
+}
+
 /**
  * App-wide onboarding tour controller.
  *
  * Wraps the routed app (must live inside <BrowserRouter> since it reads the
  * current location) and:
- *  - Auto-opens a page's tour the FIRST time that page is reached, then not
- *    again. Arriving at a section is the trigger; Escape, the close button, or a
+ *  - Auto-opens core introductions only after the page reports a first-run
+ *    state ready for help. Other tours are manual. Escape, the close button, or a
  *    click outside dismisses it. Reaching the same page later is silent, because
  *    a tour that re-greets you every time you navigate back is noise rather than
  *    onboarding — and the sidebar's "Show me around" is one click away for
@@ -61,6 +73,10 @@ export function OnboardingProvider({ children }) {
   const location = useLocation();
   const [activeTourId, setActiveTourId] = useState(null);
   const [stepIndex, setStepIndex] = useState(0);
+  const [eligibility, setEligibility] = useState({});
+  const registerEligibility = useCallback((id, eligible) => {
+    setEligibility((prev) => prev[id] === eligible ? prev : { ...prev, [id]: eligible });
+  }, []);
   // Read once at mount and then owned here, so the auto-start effect below
   // compares against a value it can also update without a storage round-trip.
   const [seenTours, setSeenTours] = useState(() => readSeenTours(window.localStorage));
@@ -134,7 +150,8 @@ export function OnboardingProvider({ children }) {
       clearTimeout(autoStartTimerRef.current);
       autoStartTimerRef.current = null;
     }
-    if (!pageTourId) return;
+    if (!["brand", "create", "history"].includes(pageTourId) || !eligibility[pageTourId]) return;
+    if (pageTourId === "create" && (new URLSearchParams(location.search).has("project") || readRecentDraft())) return;
     // Once per tour, forever. This is the whole difference between onboarding
     // and an overlay that ambushes you every time you open a page you use
     // daily; "Show me around" covers the deliberate revisit.
@@ -149,13 +166,14 @@ export function OnboardingProvider({ children }) {
       // Never clobber a tour that is already open — e.g. one the user opened
       // from the sidebar's "Show me around" button inside the delay window.
       if (activeTourIdRef.current) return;
+      if (pageTourId === "create" && readRecentDraft()) return;
       startTour(pageTourId);
     }, AUTO_START_DELAY_MS);
     return () => {
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageTourId, location.pathname, seenTours]);
+  }, [pageTourId, location.pathname, location.search, seenTours, eligibility, startTour]);
 
   // If the user navigates to a page with a different (or no) tour while one
   // is open, close the overlay rather than letting it follow them somewhere
@@ -173,6 +191,7 @@ export function OnboardingProvider({ children }) {
   const value = useMemo(
     () => ({
       activeTour,
+      registerEligibility,
       currentStep,
       stepIndex,
       totalSteps: activeTour?.steps.length || 0,
@@ -190,7 +209,7 @@ export function OnboardingProvider({ children }) {
       hasSeenPageTour: hasSeenTour(seenTours, pageTourId),
       replayCurrentPageTour,
     }),
-    [activeTour, currentStep, stepIndex, startTour, stopTour, next, back, skip, pageTourId, seenTours, replayCurrentPageTour]
+    [activeTour, currentStep, stepIndex, startTour, stopTour, next, back, skip, pageTourId, seenTours, replayCurrentPageTour, registerEligibility]
   );
 
   return (

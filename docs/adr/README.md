@@ -90,3 +90,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0074](0074-shared-template-fit-notes.md) | Fit notes shared by every template card are read once above them | accepted |
 | [0075](0075-actionable-review-checks.md) | Review findings select editable text; supporting evidence stays collapsed | accepted |
 | [0076](0076-angle-diversity-and-source-links.md) | Correct duplicate arguments and carry recorded feature/outcome links | accepted |
+| [0077](0077-intent-aware-core-tours.md) | Core tours wait for first-run page readiness; other help stays manual | accepted |

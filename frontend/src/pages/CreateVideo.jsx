@@ -13,6 +13,7 @@ import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { FitBadge } from "../components/FitBadge";
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
@@ -1472,6 +1473,7 @@ export default function CreateVideo() {
   // the URL must not re-fire this (it would re-pick the profile and drag the
   // founder back to step 1 mid-flow).
   const projectParam = params.get("project") || "";
+  useTourEligibility("create", !loading && !projectParam && !project && step === 0 && !profileId);
   const profileParam = params.get("profile") || "";
   useEffect(() => {
     setPlanBannerDismissed(false);

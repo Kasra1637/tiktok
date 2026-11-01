@@ -1975,6 +1975,66 @@ async function main() {
     } finally { dom.window.confirm = beforeConfirm; delete global.__SMOKE_PARAMS; }
   });
 
+  await check("intent onboarding waits for readiness, defers resumed work, and retains replay", async (ctx) => {
+    const { useOnboarding, useTourEligibility } = load("components/onboarding/OnboardingProvider.jsx");
+    const storage = dom.window.localStorage;
+    storage.removeItem("hookforge_seen_tours.v2");
+    storage.removeItem("vocolens.recentDraft");
+    global.__SMOKE_PATHNAME = "/create";
+    let state;
+    function Driver({ ready, eligible }) {
+      useTourEligibility("create", ready && eligible);
+      state = useOnboarding();
+      return React.createElement("button", { onClick: state.replayCurrentPageTour }, "Replay");
+    }
+    const render = async (ready, eligible) => {
+      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, null, React.createElement(Driver, { ready, eligible }))); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    };
+    try {
+      await render(false, true);
+      if (state.activeTour) throw new Error("tour interrupted loading");
+      storage.setItem("vocolens.recentDraft", JSON.stringify({ projectId: "existing", step: "review" }));
+      await render(true, true);
+      if (state.activeTour) throw new Error("tour interrupted a resumed draft");
+      if (storage.getItem("hookforge_seen_tours.v2")) throw new Error("deferred tour was marked seen");
+      await act(async () => { state.replayCurrentPageTour(); });
+      if (state.activeTour?.id !== "create") throw new Error("manual replay disappeared");
+    } finally {
+      delete global.__SMOKE_PATHNAME;
+      storage.removeItem("vocolens.recentDraft");
+      storage.removeItem("hookforge_seen_tours.v2");
+    }
+  });
+
+  await check("intent onboarding opens a ready first-run page once and leaves other tours manual", async (ctx) => {
+    const { useOnboarding, useTourEligibility } = load("components/onboarding/OnboardingProvider.jsx");
+    const storage = dom.window.localStorage;
+    storage.removeItem("hookforge_seen_tours.v2");
+    storage.removeItem("vocolens.recentDraft");
+    let state;
+    function Driver({ id }) {
+      useTourEligibility(id, true);
+      state = useOnboarding();
+      return null;
+    }
+    try {
+      global.__SMOKE_PATHNAME = "/brand";
+      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, { key: "brand" }, React.createElement(Driver, { id: "brand" }))); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+      if (state.activeTour?.id !== "brand") throw new Error("ready first-run page got no introduction");
+      await act(async () => { state.skip(); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+      if (state.activeTour) throw new Error("dismissed tour reopened");
+      global.__SMOKE_PATHNAME = "/analytics";
+      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, { key: "analytics" }, React.createElement(Driver, { id: "analytics" }))); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+      if (state.activeTour) throw new Error("secondary page auto-opened a tour");
+      await act(async () => { state.replayCurrentPageTour(); });
+      if (state.activeTour?.id !== "analytics") throw new Error("secondary page lost manual help");
+    } finally { delete global.__SMOKE_PATHNAME; storage.removeItem("hookforge_seen_tours.v2"); }
+  });
+
   await check("review checks describe warnings as nonblocking", async (ctx) => {
     await mount(SafetyPanel, { report: { passed: true, risk_warnings: [{ claim: "ADHD", reason: "needs substantiation" }] } })(ctx);
     expectText(ctx, "do not block rendering", "warnings imply a prohibition");

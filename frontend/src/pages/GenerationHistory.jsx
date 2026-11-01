@@ -33,6 +33,7 @@ import {
 } from "./historyRepair";
 import { useAwaitingHistoryPoll } from "./historyPolling";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -817,6 +818,8 @@ export default function GenerationHistory() {
     profileFilter,
     rows.some((r) => r.studio_project_id)
   );
+
+  useTourEligibility("history", !loading && !error && rows.length === 0 && !profileFilter && !statusFilter && !query && !hashId);
 
   // One banner, driven by data: selection, words, and link each have one
   // owner in historyRepair, so the two cases cannot disagree.
