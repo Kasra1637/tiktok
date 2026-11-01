@@ -103,3 +103,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0078](0078-history-check-state-and-results.md) | History names polling stops and opens existing results controls directly | accepted |
 | [0079](0079-policy-and-studio-module-ownership.md) | Isolate deterministic policies and studio panels; retain project orchestration and compatibility | accepted |
 | [0080](0080-wizard-draft-state-transitions.md) | Make coupled wizard draft changes atomic; isolate template-loading state | accepted |
+| [0081](0081-remove-claim-render-blocking.md) | No wording flag refuses a render; claim reports stay advisory | accepted |

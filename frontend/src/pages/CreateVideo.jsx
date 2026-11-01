@@ -364,7 +364,6 @@ export default function CreateVideo() {
      mounted and switch with `hidden`, so nothing unmounts mid-poll and every
      existing query keeps working; this is a focus split, never a new gate. */
   const [reviewTab, setReviewTab] = useState("plan");
-  const [repairField, setRepairField] = useState("");
   const scriptVersion = Number(project?.script_version) || 0;
   const effectiveReviewTab = scriptVersion ? reviewTab : "plan";
   // A fresh plan needs reading before it renders: whenever a new version
@@ -1095,28 +1094,6 @@ export default function CreateVideo() {
       : `Replace plan v${project?.script_version || 0} with a new one? The current plan is discarded.`;
     if (typeof window.confirm !== "function" || !window.confirm(message)) return;
     handleGeneratePlan();
-  };
-  const editFlaggedClaim = (claim) => {
-    const words = String(claim || "").match(/[\p{L}\p{N}]+/gu) || [];
-    const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[^\\p{L}\\p{N}]+");
-    const match = pattern ? new RegExp(pattern, "iu") : null;
-    const fields = ["hook_line", "script", "visual_direction", "voice_direction", "sound_direction"];
-    const field = fields.find((key) => match?.test(String(edits[key] ?? project?.[key] ?? "")));
-    if (!field) {
-      setError("The saved finding is not in the editable text. Save any changes to recheck; if it remains in the strategy, rebuild the strategy in Render & result.");
-      setReviewTab("render");
-      scrollToSubmit();
-      return;
-    }
-    setRepairField(field);
-    requestAnimationFrame(() => {
-      const input = document.getElementById(`review-${field}`);
-      if (!input) return;
-      input.scrollIntoView?.({ block: "center", behavior: "auto" });
-      input.focus();
-      const found = match.exec(input.value);
-      if (found) input.setSelectionRange(found.index, found.index + found[0].length);
-    });
   };
 
   const [autosaving, setAutosaving] = useState(false);
@@ -2277,16 +2254,7 @@ export default function CreateVideo() {
             </div>
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             <SafetyPanel report={project.safety_report} summary={project.safety_summary}
-              onEditClaim={editFlaggedClaim} onRegenerate={confirmRegeneratePlan}
               busy={busy || autosaving} hasEdits={hasEdits} />
-            {["visual_direction", "voice_direction", "sound_direction"].includes(repairField) && (
-              <div className="inset-panel space-y-2">
-                <label htmlFor={`review-${repairField}`} className="text-sm font-semibold">Edit flagged {repairField.replace(/_/g, " ")}</label>
-                <Textarea id={`review-${repairField}`} value={editValue(repairField, "")}
-                  onChange={(e) => dispatchDraft({ type: "edit-field", field: repairField, value: e.target.value })} />
-                <p className="text-sm text-muted-foreground">Save to recheck this direction. Rebuild the strategy after changing it.</p>
-              </div>
-            )}
             {/* What the middle can actually speak, and what it cannot. The middle's
                 seconds hold a fixed number of characters; anything past that is
                 dropped from the words reaching the video model, usually the

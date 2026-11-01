@@ -192,7 +192,6 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   const hasStrategy = Boolean(strategy?.hook_line);
   const assets = project?.assets || [];
   const hasCharacter = assets.some((a) => a.kind === "character_reference");
-  const blocked = project?.safety_report && project.safety_report.passed === false;
   // Same render gate as the Generate button's: words that cannot be spoken in
   // the piece's seconds refuse the render, recomputed from the live plan. The
   // founder is stopped here too, so the block has to name the Review-step fix
@@ -337,28 +336,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </AlertDescription>
         </Alert>
       )}
-      {blocked && (() => {
-        // Name the claim at the block site: the full list lives in the
-        // review step's SafetyPanel, but the founder is stopped HERE, so
-        // "fix the flagged claim" without naming it strands them.
-        const blockers = (project?.safety_report?.blocking || []).filter(
-          (b) => b && b.claim
-        );
-        return (
-        <Alert variant="destructive">
-          <AlertTitle>Prohibited claim present</AlertTitle>
-          <AlertDescription>
-            {blockers.length > 0 && (
-              <>Found in this plan: {blockers.slice(0, 2).map((b) => `“${b.claim}”`).join(", ")}
-              {blockers.length > 2 ? `, plus ${blockers.length - 2} more` : ""}. </>
-            )}
-            Fix the flagged claim in the plan above. Rendering is blocked until the claim check
-            passes.
-          </AlertDescription>
-        </Alert>
-        );
-      })()}
-      {overflowBlocked && !blocked && (
+      {overflowBlocked && (
         <Alert variant="destructive">
           <AlertTitle>Script too long for this piece</AlertTitle>
           <AlertDescription>

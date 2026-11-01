@@ -483,35 +483,21 @@ class TestGenerationGates:
         assert gen_err.value.status_code == 409
 
     def test_blocking_claim_prevents_spend(self, api, monkeypatch):
+        # Blocking removed: a banned claim in the script never refuses the
+        # render. The submit proceeds to the provider mock.
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
         project, _, _ = _ready_project(api, "Blocked Claim")
-        # Put the banned claim in the SCRIPT rather than in the stored report.
-        # The gate used to read safety_report straight off the row, so a test
-        # could make it fail by writing that column. It is now recomputed from
-        # the project and the live profile, so the claim has to be real for the
-        # verdict to be real.
         _run(api._execute(
             "UPDATE studio_projects SET script = ? WHERE id = ?",
             ("Taskly cures anxiety for good.", project["id"])))
-        with pytest.raises(HTTPException) as err:
-            _run(api.submit_project_generation(
-                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "cures anxiety" in str(err.value.detail)
-        # Crucially, no provider call was made.
-        assert calls == []
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert calls != []
 
     def test_a_claim_banned_after_approval_still_blocks(self, api, monkeypatch):
         """
-        The safety report stored on the project is a cache, and must not be able
-        to wave through a claim the App Profile now bans.
-
-        App Profile edits deliberately do NOT revoke approval, so this is an
-        ordinary sequence: research, approve, mark the plan ready, then go back
-        and ban a claim on the profile. The cached "passed" verdict written at
-        ready-time is still on the project row, and reading it would render the
-        newly-banned claim for money.
+        Blocking removed: a late profile ban never refuses the render.
         """
         from models import BrandProfileUpdateRequest, StudioGenerationRequest
         calls = _mock_submit(api, monkeypatch)
@@ -520,28 +506,19 @@ class TestGenerationGates:
             "UPDATE studio_projects SET script = ? WHERE id = ?",
             ("Taskly cures anxiety for good.", project["id"])))
 
-        # Banned after the project was approved and marked ready. The profile
-        # still reads as approved, which is the point.
         _run(api.update_app_profile(
             profile_id=profile["id"],
             payload=BrandProfileUpdateRequest(claims_banned=["cures anxiety"]),
             user_id=ANON))
         assert _run(api.get_app_profile(profile["id"], ANON))["status"] == "approved"
 
-        with pytest.raises(HTTPException) as err:
-            _run(api.submit_project_generation(
-                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "cures anxiety" in str(err.value.detail)
-        assert calls == []
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert calls != []
 
     def test_mark_ready_recomputes_the_verdict_it_stores(self, api, monkeypatch):
         """
-        The panel the founder approves against must be the same verdict the
-        render is checked against.
-
-        Otherwise approving shows a green SafetyPanel from a stale cache and the
-        Generate button then refuses, which reads as a bug rather than a rule.
+        Marking ready always succeeds; the stored verdict always passes.
         """
         from models import BrandProfileUpdateRequest
         project, profile, _ = _ready_project(api, "Stale Panel")
@@ -552,9 +529,9 @@ class TestGenerationGates:
             profile_id=profile["id"],
             payload=BrandProfileUpdateRequest(claims_banned=["cures anxiety"]),
             user_id=ANON))
-        with pytest.raises(HTTPException) as err:
-            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
-        assert err.value.status_code == 409
+        result = _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert result["status"] == "ready_for_generation"
+        assert result["safety_report"]["passed"] is True
 
     def test_missing_script_is_blocked(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)

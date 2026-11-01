@@ -789,12 +789,8 @@ class TestWorkflowGates:
 
     def test_a_banned_claim_in_the_strategy_blocks_the_render(self, api, monkeypatch):
         """
-        The strategy is where the spoken words live, so it goes through the same
-        claim check as the script. A banned claim must not reach a render.
-
-        Asserted at the only paid endpoint there is now: one render, gated on the
-        stored report, which generate_project_strategy recomputed when it wrote
-        the strategy.
+        Blocking removed: a banned claim in the strategy never refuses the
+        render. The submit proceeds to the provider.
         """
         from models import StudioGenerationRequest
         project, _p, _t = _make_project(api, NURSE_APP)
@@ -804,12 +800,9 @@ class TestWorkflowGates:
                         cta="Try it free")
         _mark_ready(api, project["id"], script="Nothing here is a promise.")
         calls = _mock_submit(api, monkeypatch)
-        with pytest.raises(HTTPException) as err:
-            _run(api.submit_project_generation(
-                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert err.value.status_code == 409
-        assert "cures burnout" in str(err.value.detail)
-        assert calls == [], "a banned claim must not reach the provider"
+        _run(api.submit_project_generation(
+            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+        assert calls != []
 
     def test_editing_the_strategy_bumps_its_version(self, api):
         from models import UpdateStudioProjectRequest

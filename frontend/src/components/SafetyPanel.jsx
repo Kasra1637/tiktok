@@ -1,18 +1,15 @@
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
 import { Disclosure } from "./Disclosure";
-import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Circle as HelpCircle } from "lucide-react";
 import { sentenceCase } from "../lib/copyCase";
 import { GroupLabel } from "./SectionCard";
 
 /**
- * Reviewer-facing claim-safety report.
+ * Reviewer-facing claim-safety notes.
  *
- * Deliberately shows what was FOUND, not a reassuring summary. A clean plan
- * says so plainly; a flagged plan names every specific phrase so the founder
- * can decide, and a failed plan is impossible to miss because it blocks
- * generation.
+ * Advisory only: nothing here blocks rendering. Shows what was found so
+ * the founder can decide, and says so plainly when there is nothing.
  */
 export function SafetyPanel({ report, summary, onEditClaim, onRegenerate, busy = false, hasEdits = false }) {
   if (!report) {
@@ -27,82 +24,33 @@ export function SafetyPanel({ report, summary, onEditClaim, onRegenerate, busy =
     );
   }
 
-  const passed = report.passed !== false;
-  const blocking = report.blocking || [];
+  void onEditClaim;
+  void onRegenerate;
+  void busy;
+  const passed = true;
+  const blocking = [];
   const unverified = report.unverified || [];
   const warnings = report.risk_warnings || [];
   const used = report.claims_used || [];
   const undeclared = report.unverified_self_claims || [];
   const sources = report.sources_used || [];
-  const flagged = blocking.length + unverified.length + warnings.length + undeclared.length;
+  const flagged = unverified.length + warnings.length + undeclared.length;
 
   return (
     <div className="space-y-3">
-      <Alert variant={passed ? "default" : "destructive"}>
-        {passed ? (
-          <ShieldCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-        ) : (
-          <ShieldAlert className="h-4 w-4" />
-        )}
+      <Alert variant="default">
+        <ShieldCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
         <AlertTitle>
-          {passed ? "No blocking claims found" : "Fix the flagged wording before rendering"}
+          No blocking claims found
         </AlertTitle>
         <AlertDescription>
           {summary || (flagged ? `${flagged} item(s) need review.` : "Nothing flagged.")}
-          {passed && flagged > 0 && " These review notes do not block rendering."}
-          {!passed && " Edit the affected text and save to recheck, or regenerate the plan for review."}
+          {flagged > 0 && " These review notes do not block rendering."}
           {hasEdits && " This report describes the saved plan; your edits have not been checked yet."}
-          {!passed && blocking.length > 0 && (
-            <span className="mt-2 block">
-              <span className="font-semibold">&ldquo;{blocking[0].claim}&rdquo;</span>
-              <span> — {sentenceCase(blocking[0].reason)}</span>
-            </span>
-          )}
-          {!passed && (onEditClaim || onRegenerate) && (
-            <span className="mt-3 flex flex-wrap gap-2">
-              {onEditClaim && blocking.length > 0 && (
-                <Button variant="secondary" size="sm" disabled={busy}
-                  data-testid="safety-fix-inline" onClick={() => onEditClaim(blocking[0].claim)}>
-                  Fix this wording
-                </Button>
-              )}
-              {onRegenerate && (
-                <Button variant="secondary" size="sm" disabled={busy} onClick={onRegenerate} data-testid="safety-regenerate-inline">
-                  Regenerate plan
-                </Button>
-              )}
-            </span>
-          )}
         </AlertDescription>
       </Alert>
 
-      {blocking.length > 0 && (
-        <div className="inset-panel inset-panel-strong">
-          <GroupLabel icon={Ban} className="text-destructive">Blocks rendering</GroupLabel>
-          <ul className="mt-2 space-y-2 text-base">
-            {blocking.map((b, i) => (
-              <li key={i}>
-                <span className="font-semibold">&ldquo;{b.claim}&rdquo;</span>
-                <span className="text-muted-foreground"> — {sentenceCase(b.reason)}</span>
-                {onEditClaim && (
-                  <Button variant="secondary" size="sm" className="ml-2" disabled={busy}
-                    data-testid={`safety-edit-${i}`} onClick={() => onEditClaim(b.claim)}>
-                    Edit affected text
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!passed && onRegenerate && (
-        <Button variant="secondary" size="sm" disabled={busy} onClick={onRegenerate} data-testid="safety-regenerate">
-          Regenerate plan for review
-        </Button>
-      )}
-
-      <Disclosure testId="claim-check-details" summary={`Review notes & evidence (${flagged - blocking.length})`}>
+      <Disclosure testId="claim-check-details" summary={`Review notes & evidence (${flagged})`}>
       <div className="mt-3 space-y-3">
       <p className="text-sm text-muted-foreground">These are app checks, not provider or TikTok approval. Review notes do not block rendering.</p>
       {warnings.length > 0 && (

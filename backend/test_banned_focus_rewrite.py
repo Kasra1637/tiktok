@@ -1,10 +1,8 @@
-"""Regression: single-word bans never surface as CHECKS errors.
+"""Blocking removed: wording never fails a draft or the render.
 
-Red: _contains did substring matching (so "focused" flagged "focus"),
-and generate_video_strategy failed loudly on a banned claim instead of
-rewriting it — the founder approved words, then met "generation blocked".
-Green: word-boundary matching plus strategy retry, so both plan and
-strategy rewrite the thought without the banned word.
+The word-boundary matcher is kept for the advisory helpers, but neither
+the plan nor the strategy retries on wording — the draft is accepted as
+written in a single attempt and the report always passes.
 """
 
 import asyncio
@@ -21,7 +19,7 @@ def test_single_word_ban_needs_whole_word():
     assert claim_safety.find_banned_violations("time to focus daily", ["focus"]) != []
 
 
-def test_strategy_rewrites_banned_claim(monkeypatch):
+def test_strategy_accepts_banned_claim_without_retry(monkeypatch):
     import ai_service
 
     calls = []
@@ -45,11 +43,10 @@ def test_strategy_rewrites_banned_claim(monkeypatch):
         }
 
     bad = _strategy("Morning rush.", "This helps you focus daily.")
-    good = _strategy("Morning rush.", "One prompt helped me start writing.")
 
     async def fake_chat_json(system_message, prompt, context, **kwargs):
         calls.append(prompt)
-        return dict(bad if len(calls) == 1 else good)
+        return dict(bad)
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
     result = _run(ai_service.generate_video_strategy(
@@ -58,5 +55,12 @@ def test_strategy_rewrites_banned_claim(monkeypatch):
         angle=None, objective="ease_daily_moment",
         hook_seconds=2, total_duration=15, tone="", brand_voice="",
         profile_feedback={}))
-    assert len(calls) == 2, "strategy should retry, not fail loudly"
-    assert "focus" not in result["segments"][1]["script"].lower()
+    assert len(calls) == 1, "wording never triggers a retry"
+    assert "focus" in result["segments"][1]["script"].lower()
+    report = claim_safety.build_safety_report(
+        {"hook_line": "Morning rush.", "script": "This helps you focus daily.",
+         "strategy": result},
+        {"brand_name": "V", "claims_banned": ["focus"]},
+    )
+    assert report["passed"] is True
+    assert report["blocking"] == []

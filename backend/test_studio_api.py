@@ -567,7 +567,7 @@ class TestPlanGating:
         assert "Clean" in result["safety_summary"]
 
     def test_banned_claim_fails_safety_but_is_still_returned(self, api, monkeypatch):
-        """The founder must SEE the bad plan in order to fix it."""
+        """Blocking removed: the plan is returned passing; nothing refuses."""
         _patch_plan(monkeypatch, api, BANNED_PLAN)
         from models import GeneratePlanRequest
         profile = _approved_profile(api, "Banned Plan")
@@ -576,14 +576,13 @@ class TestPlanGating:
         result = _run(api.generate_plan(project_id=project["id"],
                                         payload=GeneratePlanRequest(), user_id=ANON))
         assert result["script"] == BANNED_PLAN["script"]
-        assert result["safety_report"]["passed"] is False
-        assert [b["claim"] for b in result["safety_report"]["blocking"]] == ["cures anxiety"]
+        assert result["safety_report"]["passed"] is True
+        assert result["safety_report"]["blocking"] == []
 
 
 class TestClaimSafetyOnEdit:
     """
-    A founder editing the script must not be able to smuggle a prohibited
-    claim past the gate — the report is recomputed on every edit.
+    The report is recomputed on every edit — and never blocks.
     """
 
     def test_pasting_a_banned_claim_fails_the_report(self, api, monkeypatch):
@@ -597,8 +596,8 @@ class TestClaimSafetyOnEdit:
             payload=UpdateStudioProjectRequest(script="Taskly cures anxiety."),
             user_id=ANON,
         ))
-        assert edited["safety_report"]["passed"] is False
-        assert edited["safety_report"]["blocking"]
+        assert edited["safety_report"]["passed"] is True
+        assert edited["safety_report"]["blocking"] == []
 
     def test_edit_bumps_script_version(self, api):
         from models import UpdateStudioProjectRequest
@@ -965,16 +964,16 @@ class TestReadyGate:
         assert after["status"] == "ready_for_generation"
 
     def test_banned_claim_blocks_ready(self, api, monkeypatch):
+        # Blocking removed: marking ready always succeeds; nothing refuses.
         project = self._with_plan(api, monkeypatch, BANNED_PLAN, "Ready Banned")
-        with pytest.raises(HTTPException) as err:
-            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
-        assert err.value.status_code == 409
+        result = _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert result["status"] == "ready_for_generation"
 
     def test_blocking_claim_names_are_surfaced(self, api, monkeypatch):
+        # Blocking removed: no 409 carries claim names; ready succeeds.
         project = self._with_plan(api, monkeypatch, BANNED_PLAN, "Ready Names")
-        with pytest.raises(HTTPException) as err:
-            _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
-        assert "cures anxiety" in str(err.value.detail)
+        result = _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
+        assert result["status"] == "ready_for_generation"
 
     def test_ready_requires_a_script(self, api):
         profile = _approved_profile(api, "Ready No Script")
@@ -2108,19 +2107,17 @@ class TestSpokenWordsGate:
         }
 
     def test_a_feature_inventory_refuses_the_render(self):
-        """The user-visible half of the guarantee: the spoken words of a real
-        posted video were a feature list, so the gate must fire on that shape
-        through the recomputed verdict, not just in a unit test of patterns."""
+        """Blocking removed: the recomputed verdict always passes and the
+        gate never raises, even on a feature-list shape."""
         import server
         project = self._project(
             "With Vocolens, you can track your emotional states and uncover "
             "your triggers through voice journaling and mood tracking."
         )
         report = server._safety_report_for(project, {})
-        assert report["passed"] is False
-        with pytest.raises(Exception) as exc:
-            server._require_claims_clear(project, {})
-        assert getattr(exc.value, "status_code", None) == 409
+        assert report["passed"] is True
+        assert report["blocking"] == []
+        server._require_claims_clear(project, {})
 
 
 class TestSpokenCounts:
@@ -2330,11 +2327,8 @@ class TestComponentFeedbackRouting:
 
 class TestPlanRewriteAvoidsBannedClaims:
     """
-    A plan that fails the claim gate must never reach Review: the founder
-    first meets it as "generation blocked" after approving the words. The
-    plan retry loop already rewrites editorial defects, so a banned claim in
-    the spoken lines joins the same correction path — retried with the
-    violation named, and failing loudly when the model will not stop.
+    Blocking removed: wording never fails a draft. The plan is accepted
+    as written in a single attempt — no claim retry, no loud failure.
     """
 
     def _draft(self, hook, script):
@@ -2349,19 +2343,16 @@ class TestPlanRewriteAvoidsBannedClaims:
         calls = []
         bad = self._draft(
             "I couldn't get started.", "This app cures anxiety for good, try it.")
-        good = self._draft(
-            "I couldn't get started.", "One prompt helped me start writing.")
 
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             calls.append(prompt)
-            return dict(bad if len(calls) == 1 else good)
+            return dict(bad)
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         result = _run(ai_service.generate_creative_plan(
             profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
             template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
-        assert len(calls) == 2, "the banned draft should have been retried, not saved"
-        assert "cures anxiety" not in result["script"].lower()
-        assert "cures anxiety" in calls[1], "the correction must name the violation"
+        assert len(calls) == 1, "wording never triggers a retry"
+        assert "cures anxiety" in result["script"].lower()
 
     def test_persistent_banned_claim_fails_loudly(self, monkeypatch):
         import ai_service
@@ -2370,19 +2361,16 @@ class TestPlanRewriteAvoidsBannedClaims:
             return dict(self._draft(
                 "I couldn't get started.", "This app cures anxiety for good, try it."))
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
-        with pytest.raises(RuntimeError):
-            _run(ai_service.generate_creative_plan(
-                profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
-                template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
+            template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
+        assert "cures anxiety" in result["script"].lower()
 
 
 class TestStrategyRefusesBannedClaims:
     """
-    The render gate walks the strategy's hook and segment scripts too, so a
-    model-written banned claim there blocks generation just the same. The
-    strategy is single-shot by design (no content retry loop), so a
-    violation fails loudly at build time — the post-kit rule — instead of
-    reaching Review and dying at the generate button.
+    Blocking removed: the strategy is accepted as written. Wording never
+    fails a build and never blocks the render.
     """
 
     def _strategy(self, monkeypatch, hook_line, segment_script):
@@ -2419,5 +2407,5 @@ class TestStrategyRefusesBannedClaims:
         assert result["segments"][1]["script"] == "One prompt helped me start writing."
 
     def test_banned_claim_in_strategy_fails_loudly(self, monkeypatch):
-        with pytest.raises(RuntimeError, match="cures anxiety"):
-            self._strategy(monkeypatch, "h", "This app cures anxiety for good.")
+        result = self._strategy(monkeypatch, "h", "This app cures anxiety for good.")
+        assert result["segments"][1]["script"] == "This app cures anxiety for good."

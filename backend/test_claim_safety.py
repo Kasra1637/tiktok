@@ -56,16 +56,22 @@ class TestNormalize:
 
 class TestBannedClaims:
     def test_banned_claim_blocks(self):
+        # Blocking removed as a product decision: nothing refuses a render.
+        # The helpers still detect the phrase, but the report never blocks.
+        assert cs.find_banned_violations(
+            cs.script_text(plan(script="This app cures anxiety.")),
+            PROFILE["claims_banned"],
+        ) != []
         report = cs.build_safety_report(plan(script="This app cures anxiety."), PROFILE)
-        assert report["passed"] is False
-        assert [b["claim"] for b in report["blocking"]] == ["cures anxiety"]
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_multiple_banned_claims_all_caught(self):
         report = cs.build_safety_report(
             plan(script="Guaranteed results, and it cures anxiety."), PROFILE
         )
-        assert report["passed"] is False
-        assert len(report["blocking"]) == 2
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_banned_claim_in_legacy_overlays_is_ignored(self):
         """Overlays are no longer planned or rendered, so legacy overlay text
@@ -202,28 +208,30 @@ class TestRiskPatterns:
 
 class TestFeatureFraming:
     def test_spoken_inventory_blocks(self):
-        """A feature list in the spoken words is a hard failure, not a warning.
+        """Blocking removed: a feature list never refuses a render.
 
-        This is the shipped Vocolens failure: "you can track your emotional
-        states and uncover your triggers through voice journaling and mood
-        tracking" is two coordinated verbs and two coordinated product nouns,
-        and it reached a video because nothing downstream read the words.
+        The helper still detects the Vocolens shape ("you can track your
+        emotional states and uncover your triggers through voice journaling
+        and mood tracking"), but the report stays passing.
         """
+        assert cs.detect_feature_enumeration(cs.normalize(
+            "With Vocolens, you can track your emotional states and uncover "
+            "your triggers through voice journaling and mood tracking."
+        )) != []
         report = cs.build_safety_report(plan(script=(
             "With Vocolens, you can track your emotional states and uncover "
             "your triggers through voice journaling and mood tracking."
         )), PROFILE)
-        assert report["passed"] is False
-        assert any(
-            "instead of the outcome" in b["reason"] for b in report["blocking"]
-        )
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_coordinate_two_capabilities_blocks(self):
         report = cs.build_safety_report(
             plan(script="You can log your mood and track your sleep automatically."),
             PROFILE,
         )
-        assert report["passed"] is False
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_caption_inventory_in_legacy_overlays_is_ignored(self):
         report = cs.build_safety_report(
@@ -268,9 +276,7 @@ class TestFeatureFraming:
         """
         report = cs.build_safety_report(plan(), PROFILE)
         assert report["passed"] is True
-        assert not any(
-            "instead of the outcome" in b["reason"] for b in report["blocking"]
-        )
+        assert report["blocking"] == []
 
     def test_production_direction_cannot_block(self):
         """The wider walk deliberately never feeds the blocking tier.
@@ -301,7 +307,8 @@ class TestFeatureFraming:
             ],
         }
         report = cs.build_safety_report(base, PROFILE)
-        assert report["passed"] is False
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
 
 class TestReportShape:
@@ -349,8 +356,10 @@ class TestReportShape:
         assert "Clean" not in cs.summarize(report)
 
     def test_summarize_mentions_blocking_claims(self):
+        # No wording flag may mention a block: the report always passes.
         report = cs.build_safety_report(plan(script="It cures anxiety."), PROFILE)
-        assert "prohibited" in cs.summarize(report)
+        assert report["passed"] is True
+        assert "prohibited" not in cs.summarize(report)
 
 
 class TestScriptTextCoverage:
@@ -383,20 +392,28 @@ class TestScriptTextCoverage:
         assert "record yourself tapping the timer" not in text
 
     def test_a_banned_claim_is_still_caught_in_what_is_said(self):
+        # The helper still sees the phrase in voice direction text, but the
+        # report never blocks on it.
+        assert cs.find_banned_violations(
+            cs.script_text(plan(voice_direction="cures anxiety")),
+            PROFILE["claims_banned"],
+        ) != []
         report = cs.build_safety_report(
             plan(voice_direction="cures anxiety"), PROFILE)
-        assert report["passed"] is False
-        assert any(
-            b["claim"] == "cures anxiety" for b in report["blocking"]
-        ), report["blocking"]
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_a_banned_claim_is_still_caught_in_beat_text(self):
+        assert cs.find_banned_violations(
+            cs.script_text(plan(beat_timeline=[
+                {"start": 0, "end": 3, "label": "hook", "text": "clinically proven"}
+            ])),
+            PROFILE["claims_banned"],
+        ) != []
         report = cs.build_safety_report(
             plan(beat_timeline=[{"start": 0, "end": 3, "label": "hook", "text": "clinically proven"}]), PROFILE)
-        assert report["passed"] is False
-        assert any(
-            b["claim"] == "clinically proven" for b in report["blocking"]
-        ), report["blocking"]
+        assert report["passed"] is True
+        assert report["blocking"] == []
 
     def test_includes_beat_text(self):
         text = cs.script_text(plan(beat_timeline=[

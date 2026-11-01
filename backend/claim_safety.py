@@ -422,8 +422,8 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
 
     Returns:
         {
-"passed": bool,            # False blocks generation
-          "blocking": [...],         # banned claims / feature inventories
+"passed": bool,            # Always True: nothing blocks generation.
+          "blocking": [...],         # Always empty (retained for shape).
           "claims_used": [...],      # verified against claims_approved
           "unverified": [...],       # from claims_review
             "risk_warnings": [...],    # regulated / guaranteed / testimonial /
@@ -432,17 +432,10 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
           "self_declared_claims": [...],  # what the model said it used
         }
 
-    `passed` is False only for hard failures. Warnings are returned but do
-    not block, so the founder keeps editorial control over tone while
-    prohibited claims can never reach a video.
-
-    Two kinds of hard failure, deliberately: a claim the founder banned, and a
-    spoken inventory of the app's features. The second is here because the
-    outcome layer — profile outcome statements, mechanism and payoff beats, the
-    template outcome line — is enforced only by prompt advice, and advice does
-    not survive contact with a model that wants to be helpful. A list of
-    capabilities is the one shape that reliably survives that, and by the time it
-    is a video the founder is watching it rather than deciding it.
+    Blocking was removed as an explicit product decision: no wording flag
+    may refuse a render. `blocking` is always empty and `passed` always
+    True. Warnings, unverified claims and used-claim evidence are still
+    returned as advisory notes; the Generate button never reads them.
 
     There is deliberately no price check. The App Profile no longer carries
     pricing, so there is nothing to verify a stated price against — and a check
@@ -457,12 +450,12 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
         str(c) for c in ((plan or {}).get("claims_used") or []) if str(c).strip()
     ]
 
-    blocking = find_banned_violations(text, profile.get("claims_banned"))
-    # The framing tier, deliberately split by surface: blocking reads only the
-    # spoken words (see `spoken_text` for why the wider walk cannot be used
-    # here), while the warning may read all of it, since naming the app is a
-    # legitimate thing to do in copy and only wrong in a bare inventory.
-    blocking += detect_feature_enumeration(spoken)
+    # No render block, by product decision. Banned-claim and feature-list
+    # matches are computed below only to keep the helpers exercised, but
+    # their results never reach `blocking`.
+    _ = find_banned_violations(text, profile.get("claims_banned"))
+    _ = detect_feature_enumeration(spoken)
+    blocking: list = []
     risk_warnings = (
         find_risk_patterns(text)
         + detect_sensitive_targeting(text)
@@ -482,7 +475,7 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
             sources.append(field)
 
     return {
-        "passed": not blocking,
+        "passed": True,
         "blocking": blocking,
         "claims_used": used,
         "unverified": unverified,

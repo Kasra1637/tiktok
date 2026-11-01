@@ -1933,46 +1933,36 @@ async function main() {
     );
   });
 
-  await check("review checks keep blockers actionable and supporting evidence collapsed", async (ctx) => {
-    let edited = null;
-    let regenerated = false;
+  await check("review checks never block and keep supporting evidence collapsed", async (ctx) => {
+    // Blocking removed as a product decision: even a legacy failing-shape
+    // report renders the clean advisory state with no block actions.
     await mount(SafetyPanel, {
       report: { passed: false, blocking: [{ claim: "cures anxiety", reason: "listed as never-use" }],
         risk_warnings: [{ claim: "anxiety", reason: "needs substantiation" }], claims_used: ["works offline"] },
-      onEditClaim: (claim) => { edited = claim; },
-      onRegenerate: () => { regenerated = true; },
+      onEditClaim: () => { throw new Error("wording must not offer a repair action"); },
+      onRegenerate: () => { throw new Error("wording must not offer a regeneration action"); },
     })(ctx);
+    expectText(ctx, "No blocking claims found", "the panel does not render the clean state");
+    expectAbsent(ctx, "Fix the flagged wording", "the block message still renders");
+    expectAbsent(ctx, "Blocks rendering", "the block section still renders");
+    expectAbsent(ctx, "Regenerate plan for review", "the block regeneration still renders");
+    if (ctx.container.querySelector('[data-testid="safety-edit-0"]')) throw new Error("a blocker edit action still renders");
+    if (ctx.container.querySelector('[data-testid="safety-regenerate"]')) throw new Error("a block regeneration action still renders");
     const evidence = ctx.container.querySelector('[data-testid="claim-check-details"]');
     if (!evidence || evidence.open) throw new Error("supporting evidence is not collapsed");
-    const fix = ctx.container.querySelector('[data-testid="safety-edit-0"]');
-    if (!fix || fix.closest("details")) throw new Error("blocker has no visible edit action");
-    await act(async () => { fix.click(); });
-    if (edited !== "cures anxiety") throw new Error("edit action did not identify the phrase");
-    const regenerate = ctx.container.querySelector('[data-testid="safety-regenerate"]');
-    if (!regenerate) throw new Error("no regeneration action");
-    await act(async () => { regenerate.click(); });
-    if (!regenerated) throw new Error("regeneration action did not run");
   });
 
-  await check("review checks focus the flagged script and cancellation preserves the plan", async (ctx) => {
+  await check("review checks offer no flagged-text repair action", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
-    const beforeConfirm = dom.window.confirm;
-    const blockedProject = { ...PROJECT_WITH_STRATEGY, safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }] }, script: "This cures anxiety." };
-    let regenerated = false;
+    const legacyBlocked = { ...PROJECT_WITH_STRATEGY, safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }] }, script: "This cures anxiety." };
     try {
-      dom.window.confirm = () => false;
-      await withApi({ getStudioProject: async () => blockedProject, generatePlan: async () => { regenerated = true; return blockedProject; } }, async () => {
+      await withApi({ getStudioProject: async () => legacyBlocked }, async () => {
         await mount(CreateVideo)(ctx);
-        const fix = ctx.container.querySelector('[data-testid="safety-edit-0"]');
-        if (!fix) throw new Error("no integrated repair action");
-        await act(async () => { fix.click(); await new Promise((r) => setTimeout(r, 35)); });
-        const input = ctx.container.querySelector("#review-script");
-        if (dom.window.document.activeElement !== input) throw new Error("repair did not focus script");
-        if (input.value.slice(input.selectionStart, input.selectionEnd) !== "cures anxiety") throw new Error("repair did not select phrase");
-        await act(async () => { ctx.container.querySelector('[data-testid="safety-regenerate"]').click(); });
-        if (regenerated) throw new Error("cancelled regeneration replaced the plan");
+        if (ctx.container.querySelector('[data-testid="safety-edit-0"]')) throw new Error("a repair action still renders");
+        if (ctx.container.querySelector('[data-testid="safety-regenerate"]')) throw new Error("a block regeneration still renders");
+        expectAbsent(ctx, "Fix the flagged wording", "the block message still renders");
       });
-    } finally { dom.window.confirm = beforeConfirm; delete global.__SMOKE_PARAMS; }
+    } finally { delete global.__SMOKE_PARAMS; }
   });
 
   await check("intent onboarding waits for readiness, defers resumed work, and retains replay", async (ctx) => {
@@ -2041,21 +2031,21 @@ async function main() {
     expectAbsent(ctx, "generation blocked", "a warning is presented as a block");
   });
 
-  await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {
+  await check("GenerationPanel never blocks generation on wording", async (ctx) => {
     await mount(GenerationPanel, {
       project: {
         ...PROJECT_WITH_STRATEGY,
         safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }], unverified: [] },
       },
     })(ctx);
-    expectText(ctx, "Prohibited claim present", "the claim gate did not render");
-    // The render panel is where the click is stopped, so the button has to be
-    // dead here even though the project is marked ready.
+    expectAbsent(ctx, "Prohibited claim present", "the wording block still renders");
+    // Wording never touches the button: only readiness, strategy, photo,
+    // angle, length or model state may disable it.
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => /Generate/.test(b.textContent || ""));
     if (!generate) throw new Error("the generate control is missing");
-    if (!generate.disabled) {
-      throw new Error("a prohibited claim leaves the generate button enabled");
+    if (generate.disabled) {
+      throw new Error("a wording flag leaves the generate button disabled");
     }
   });
 
@@ -2256,16 +2246,15 @@ async function main() {
     expectAbsent(ctx, "The two sections", "sections rendered for a project with no strategy");
   });
 
-  await check("the strategy review names a blocking claim", async (ctx) => {
+  await check("the strategy review never names a blocking claim", async (ctx) => {
     await mount(HookContinuityPanel, {
       project: {
         ...PROJECT_WITH_STRATEGY,
-        // The panel filters on `b.claim`, so the fixture has to use that key.
+        // Legacy failing-shape report: the panel must not surface it.
         safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }], unverified: [] },
       },
     })(ctx);
-    expectText(ctx, "Prohibited claim present", "the claim block did not render");
-    expectText(ctx, "cures anxiety", "the blocking claim was not named");
+    expectAbsent(ctx, "Prohibited claim present", "the wording block still renders");
   });
 
   await check("the strategy review warns when no character reference is attached", async (ctx) => {

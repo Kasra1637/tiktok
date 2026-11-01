@@ -6674,15 +6674,8 @@ def _safety_report_for(project: dict, profile: dict) -> dict:
 
 
 def _require_claims_clear(project: dict, profile: dict) -> dict:
-    """Refuse a render whose live claim verdict is failing. Returns the report."""
-    report = _safety_report_for(project, profile)
-    if report and not report.get("passed", True):
-        blocking = [b.get("claim") for b in report.get("blocking", []) if b.get("claim")]
-        raise HTTPException(
-            status_code=409,
-            detail="Fix the wording before generating: " + ", ".join(blocking[:3]),
-        )
-    return report
+    """Return the live claim verdict without refusing. Nothing blocks render."""
+    return _safety_report_for(project, profile)
 
 
 def _require_spoken_words_fit(project: dict) -> dict:
