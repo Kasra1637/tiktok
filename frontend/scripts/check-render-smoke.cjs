@@ -5446,6 +5446,55 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // The regen notice must tell the founder what to DO, not just what
+  // happened: the story the draft was planned around is gone, and the fix
+  // lives at Review (rebuild the strategy for the new angle). A notice with
+  // no action is a dead end — the button carries the founder there.
+  await check("the regen notice names rebuilding at Review and carries the founder there", async (ctx) => {
+    const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
+      id: `n${i}`,
+      kind: "problem_solution",
+      label: `Fresh angle ${i}`,
+      target_audience: "busy professionals",
+      user_problem: "Nothing gets finished.",
+      goal_variant: 0,
+      origin: "generated",
+      goal_suggestions: [...ANGLE_GOALS.problem_solution],
+      evidence: { wins: 0, flops: 0 },
+    }));
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        regenerateContentAngles: async () => ({ angles: FRESH, objective_evidence: {}, projects_affected: 1 }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+          await new Promise((r) => setTimeout(r, 150));
+          const notice = ctx.container.querySelector('[data-testid="angle-regen-notice"]');
+          if (!notice) throw new Error("regen with an affected draft shows no notice");
+          if (!/Review/.test(notice.textContent) || !/rebuild/i.test(notice.textContent)) {
+            throw new Error(`the notice names no next step: ${notice.textContent}`);
+          }
+          const action = notice.querySelector('[data-testid="angle-regen-notice-action"]');
+          if (!action) throw new Error("the regen notice carries no action — it is a dead end");
+          await clickEl(ctx, action, "the regen notice action does nothing");
+          const review = ctx.container.querySelector('[data-testid="step-pill-review"]');
+          if (!review || review.getAttribute("aria-current") !== "step") {
+            throw new Error("the regen notice action does not land on Review & submit");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // The vertical scrollbar's gutter stays reserved, so switching between
   // steps of different heights never shifts the centred frame sideways.
   // jsdom does no layout, so this guards the rule in source: deleting the

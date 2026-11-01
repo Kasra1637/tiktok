@@ -605,6 +605,11 @@ function AngleSelector({
   onGenerate,
   onRegenerate,
   notice = "",
+  // The notice's way out, when one exists: { label, onClick, testId }. The
+  // regen notice carries "Go to Review and rebuild" — a notice that names a
+  // next step without offering it is a dead end. Rendered inside the alert so
+  // the action reads as part of the message, not a second decision.
+  noticeAction = null,
   // Steps other than Audience & template never generate inline: their red button
   // sends the founder to step 1, where selection lives, instead of spending
   // a call from a screen whose job is something else. The label names the
@@ -723,7 +728,20 @@ function AngleSelector({
       {notice && (
         <Alert data-testid="angle-regen-notice">
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
-          <AlertDescription>{notice}</AlertDescription>
+          <AlertDescription>
+            {notice}
+            {noticeAction && (
+              <Button
+                variant="accent"
+                size="sm"
+                className="mt-2 gap-1.5"
+                onClick={noticeAction.onClick}
+                data-testid={noticeAction.testId || "angle-regen-notice-action"}
+              >
+                {noticeAction.label}
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
       )}
       {/* Selection opens the angle. A closed row is its uppercase title plus
@@ -1730,8 +1748,14 @@ export default function CreateVideo() {
       }
       const affected = Number(data?.projects_affected) || 0;
       if (affected > 0) {
+        // Plain words, named next step: the angle the draft was planned
+        // around no longer exists, and the fix is rebuilding the strategy
+        // for the new angle at Review. The button below carries the founder
+        // there — a notice with no action is a dead end.
         setAngleRegenNotice(
-          `Regenerated. ${affected} ${affected === 1 ? "draft was" : "drafts were"} built on the replaced angles and lost their story — reopen ${affected === 1 ? "it" : "them"} to re-plan.`
+          affected === 1
+            ? "Regenerated. 1 draft was planned around an angle that no longer exists — its story is gone. A new angle is already picked for this draft; rebuild its strategy at Review."
+            : `Regenerated. ${affected} drafts were planned around angles that no longer exist — their stories are gone. For each affected draft: pick a new angle, then rebuild its strategy at Review. This draft already has its new angle picked.`
         );
       }
       if (!data.angles?.length) {
@@ -2882,6 +2906,15 @@ setObjective("");
               onGenerate={handleGenerateAngles}
               onRegenerate={handleRegenerateAngles}
               notice={angleRegenNotice}
+              noticeAction={
+                angleRegenNotice
+                  ? {
+                      label: "Go to Review and rebuild",
+                      testId: "angle-regen-notice-action",
+                      onClick: () => setStep(STEPS.findIndex((s) => s.key === "review")),
+                    }
+                  : null
+              }
             />
             </div>
 
