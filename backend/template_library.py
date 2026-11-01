@@ -417,7 +417,7 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
 DIRECTION_OPTIONS = {
     "wellness": {
         "setting": [
-            "Quiet bedroom corner with a cushion on the floor",
+            "Quiet garden bench at golden hour",
             "Calm living room with a plant beside the chair",
             "Sunlit balcony with a simple chair",
             "Tidy desk with a candle and notebook",
@@ -547,7 +547,7 @@ DIRECTION_OPTIONS = {
         "setting": [
             "Tidy study desk with books stacked",
             "Quiet library corner table",
-            "Bright bedroom desk with a notebook",
+            "Sunlit park table with a notebook",
             "Calm armchair with a reading lamp",
         ],
         "lighting": [
@@ -610,7 +610,7 @@ DIRECTION_OPTIONS = {
     "default": {
         "setting": [
             "Bright tidy living room",
-            "Clean bedroom corner with daylight",
+            "Airy rooftop corner with daylight",
             "Simple home office background",
             "Neutral balcony with soft light",
         ],
