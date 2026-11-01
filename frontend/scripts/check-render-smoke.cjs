@@ -959,6 +959,7 @@ function stripComments(src) {
 
 console.log("Mounting every wizard step and panel...");
 
+const { SafetyPanel } = load("components/SafetyPanel.jsx");
 const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
@@ -1930,6 +1931,54 @@ async function main() {
         expectAbsent(ctx, "Could not check", "a rate-limited poll raised the banner");
       }
     );
+  });
+
+  await check("review checks keep blockers actionable and supporting evidence collapsed", async (ctx) => {
+    let edited = null;
+    let regenerated = false;
+    await mount(SafetyPanel, {
+      report: { passed: false, blocking: [{ claim: "cures anxiety", reason: "listed as never-use" }],
+        risk_warnings: [{ claim: "anxiety", reason: "needs substantiation" }], claims_used: ["works offline"] },
+      onEditClaim: (claim) => { edited = claim; },
+      onRegenerate: () => { regenerated = true; },
+    })(ctx);
+    const evidence = ctx.container.querySelector('[data-testid="claim-check-details"]');
+    if (!evidence || evidence.open) throw new Error("supporting evidence is not collapsed");
+    const fix = ctx.container.querySelector('[data-testid="safety-edit-0"]');
+    if (!fix || fix.closest("details")) throw new Error("blocker has no visible edit action");
+    await act(async () => { fix.click(); });
+    if (edited !== "cures anxiety") throw new Error("edit action did not identify the phrase");
+    const regenerate = ctx.container.querySelector('[data-testid="safety-regenerate"]');
+    if (!regenerate) throw new Error("no regeneration action");
+    await act(async () => { regenerate.click(); });
+    if (!regenerated) throw new Error("regeneration action did not run");
+  });
+
+  await check("review checks focus the flagged script and cancellation preserves the plan", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const beforeConfirm = dom.window.confirm;
+    const blockedProject = { ...PROJECT_WITH_STRATEGY, safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }] }, script: "This cures anxiety." };
+    let regenerated = false;
+    try {
+      dom.window.confirm = () => false;
+      await withApi({ getStudioProject: async () => blockedProject, generatePlan: async () => { regenerated = true; return blockedProject; } }, async () => {
+        await mount(CreateVideo)(ctx);
+        const fix = ctx.container.querySelector('[data-testid="safety-edit-0"]');
+        if (!fix) throw new Error("no integrated repair action");
+        await act(async () => { fix.click(); await new Promise((r) => setTimeout(r, 35)); });
+        const input = ctx.container.querySelector("#review-script");
+        if (dom.window.document.activeElement !== input) throw new Error("repair did not focus script");
+        if (input.value.slice(input.selectionStart, input.selectionEnd) !== "cures anxiety") throw new Error("repair did not select phrase");
+        await act(async () => { ctx.container.querySelector('[data-testid="safety-regenerate"]').click(); });
+        if (regenerated) throw new Error("cancelled regeneration replaced the plan");
+      });
+    } finally { dom.window.confirm = beforeConfirm; delete global.__SMOKE_PARAMS; }
+  });
+
+  await check("review checks describe warnings as nonblocking", async (ctx) => {
+    await mount(SafetyPanel, { report: { passed: true, risk_warnings: [{ claim: "ADHD", reason: "needs substantiation" }] } })(ctx);
+    expectText(ctx, "do not block rendering", "warnings imply a prohibition");
+    expectAbsent(ctx, "generation blocked", "a warning is presented as a block");
   });
 
   await check("GenerationPanel blocks generation while a claim is prohibited", async (ctx) => {

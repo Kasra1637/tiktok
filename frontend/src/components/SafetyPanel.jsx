@@ -1,5 +1,7 @@
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Disclosure } from "./Disclosure";
 import { ShieldCheck, ShieldAlert, Ban, Circle as HelpCircle } from "lucide-react";
 import { sentenceCase } from "../lib/copyCase";
 import { GroupLabel } from "./SectionCard";
@@ -12,7 +14,7 @@ import { GroupLabel } from "./SectionCard";
  * can decide, and a failed plan is impossible to miss because it blocks
  * generation.
  */
-export function SafetyPanel({ report, summary }) {
+export function SafetyPanel({ report, summary, onEditClaim, onRegenerate, busy = false, hasEdits = false }) {
   if (!report) {
     return (
       <Alert>
@@ -43,30 +45,48 @@ export function SafetyPanel({ report, summary }) {
           <ShieldAlert className="h-4 w-4" />
         )}
         <AlertTitle>
-          {passed ? "Claim check passed" : "Prohibited claim detected — generation blocked"}
+          {passed ? "No blocking claims found" : "Fix the flagged wording before rendering"}
         </AlertTitle>
         <AlertDescription>
           {summary || (flagged ? `${flagged} item(s) need review.` : "Nothing flagged.")}
+          {passed && flagged > 0 && " These review notes do not block rendering."}
+          {!passed && " Edit the affected text and save to recheck, or regenerate the plan for review."}
+          {hasEdits && " This report describes the saved plan; your edits have not been checked yet."}
         </AlertDescription>
       </Alert>
 
       {blocking.length > 0 && (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
-          <GroupLabel icon={Ban} className="text-destructive">Never use — found in this script</GroupLabel>
+        <div className="inset-panel inset-panel-strong">
+          <GroupLabel icon={Ban} className="text-destructive">Blocks rendering</GroupLabel>
           <ul className="mt-2 space-y-2 text-base">
             {blocking.map((b, i) => (
               <li key={i}>
                 <span className="font-semibold">&ldquo;{b.claim}&rdquo;</span>
                 <span className="text-muted-foreground"> — {sentenceCase(b.reason)}</span>
+                {onEditClaim && (
+                  <Button variant="secondary" size="sm" className="ml-2" disabled={busy}
+                    data-testid={`safety-edit-${i}`} onClick={() => onEditClaim(b.claim)}>
+                    Edit affected text
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         </div>
       )}
 
+      {!passed && onRegenerate && (
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onRegenerate} data-testid="safety-regenerate">
+          Regenerate plan for review
+        </Button>
+      )}
+
+      <Disclosure testId="claim-check-details" summary={`Review notes & evidence (${flagged - blocking.length})`}>
+      <div className="mt-3 space-y-3">
+      <p className="text-sm text-muted-foreground">These are app checks, not provider or TikTok approval. Review notes do not block rendering.</p>
       {warnings.length > 0 && (
         <div className="inset-panel inset-panel-strong">
-          <GroupLabel icon={ShieldAlert}>Risk warnings</GroupLabel>
+          <GroupLabel icon={ShieldAlert}>Nonblocking warnings</GroupLabel>
           <ul className="mt-2 space-y-2 text-base">
             {warnings.map((w, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-2">
@@ -107,7 +127,7 @@ export function SafetyPanel({ report, summary }) {
       )}
 
       <div className="inset-panel">
-        <GroupLabel icon={ShieldCheck}>Verified claims used ({used.length})</GroupLabel>
+        <GroupLabel icon={ShieldCheck}>Approved claims found ({used.length})</GroupLabel>
         {used.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {used.map((c, i) => (
@@ -126,6 +146,8 @@ export function SafetyPanel({ report, summary }) {
           Grounded in: {sources.map((s) => s.replace(/_/g, " ")).join(", ")}.
         </p>
       )}
+      </div>
+      </Disclosure>
     </div>
   );
 }
