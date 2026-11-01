@@ -261,6 +261,16 @@ class CreateContentAngleRequest(BaseModel):
     claims_to_respect: Optional[List[str]] = None
 
 
+class GenerateContentAnglesRequest(BaseModel):
+    """Optional aim for angle generation/regeneration.
+
+    When the founder has already picked the video's objective, angles argue
+    toward it instead of hedging across every outcome. Empty (approval-time
+    generation, nothing chosen yet) reads exactly as before.
+    """
+    objective: Optional[str] = ""
+
+
 class UpdateContentAngleRequest(BaseModel):
     kind: Optional[str] = None
     label: Optional[str] = None

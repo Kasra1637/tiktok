@@ -2155,7 +2155,8 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
 
 
 async def generate_content_angles(profile: dict, max_angles: int = 6,
-                                  angle_feedback: Optional[dict] = None) -> list:
+                                  angle_feedback: Optional[dict] = None,
+                                  objective: str = "") -> list:
     """
     Generate content angles for an approved App Profile.
 
@@ -2231,6 +2232,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         # strategy prompt omits it: it is the demo the founder films
         # separately, and handing it over is how "show the app happening"
         # reached a prompt that is not allowed to show the app happening.
+        "objective": (objective or "").strip() or "(no objective chosen yet)",
     }
 
     kinds = ", ".join(CONTENT_ANGLE_KINDS)
@@ -2304,6 +2306,20 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "them is something a viewer can see.\n\n"
         "Respect must_not_show: never build an angle around anything listed there."
     )
+
+    # Objective-aware generation: the video these angles will be picked for is
+    # already built toward a chosen outcome. Without this, all six hedge across
+    # every possible outcome; with it, they argue six different cases FOR the
+    # chosen one. Empty when no objective is chosen yet (approval-time
+    # generation), so the default path reads exactly as before.
+    if (objective or "").strip():
+        prompt = (
+            "OBJECTIVE TO ARGUE TOWARD (the video this angle will be picked for is "
+            "built toward this outcome):\n"
+            f"- Every angle's viewer_outcome must serve this objective: {(objective or '').strip()}.\n"
+            "- The six arguments are six different cases FOR that objective, not six "
+            "guesses about what the founder wants.\n\n"
+        ) + prompt
 
     # Goal thumbs, when any exist. Counts and fixed kind/objective names
     # only — the same rule as every other prompt layer. Rendered always, so

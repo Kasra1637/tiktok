@@ -50,6 +50,7 @@ from models import (
     AppProfileResearchRequest, ApproveAppProfileRequest,
     BrandProfileCreateRequest, BrandProfileUpdateRequest,
     CreateContentAngleRequest, UpdateContentAngleRequest,
+    GenerateContentAnglesRequest,
     CreateStudioProjectRequest, UpdateStudioProjectRequest, GeneratePlanRequest,
     ObjectiveTemplatesRequest,
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
@@ -3856,7 +3857,7 @@ async def delete_app_profile(profile_id: str, user_id: str = Depends(get_current
 
 
 @api_router.post("/app-profiles/{profile_id}/content-angles", status_code=201)
-async def generate_profile_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+async def generate_profile_content_angles(profile_id: str, payload: Optional[GenerateContentAnglesRequest] = None, user_id: str = Depends(get_current_user_id)):
     """
     Generate content angles from an APPROVED App Profile.
 
@@ -3864,6 +3865,7 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
     verified facts, so generating them from an unreviewed draft would let
     unverified research steer the video plan. Regenerating replaces the
     existing set (they are derived data, not founder-authored content).
+    An optional objective aims the set at the video already chosen.
     """
     require_ai_configured()
     profile = await _fetch_one(
@@ -3879,9 +3881,10 @@ async def generate_profile_content_angles(profile_id: str, user_id: str = Depend
 
     try:
         angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
+        objective = ((payload.objective if payload else "") or "").strip()
         angles = await _log_model_call(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
+            lambda: generate_content_angles(profile, angle_feedback=angle_feedback, objective=objective),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -3996,9 +3999,11 @@ async def update_content_angle(
 
 
 @api_router.post("/app-profiles/{profile_id}/content-angles/regenerate")
-async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateContentAnglesRequest] = None, user_id: str = Depends(get_current_user_id)):
     """
     Regenerate the AI-derived audience angles for an APPROVED App Profile.
+
+    An optional objective aims the fresh set at the video already chosen.
 
     Same generate-then-replace flow as POST /content-angles, with one
     deliberate difference: hand-written angles survive. Rows tagged
@@ -4022,9 +4027,10 @@ async def regenerate_content_angles(profile_id: str, user_id: str = Depends(get_
 
     try:
         angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
+        objective = ((payload.objective if payload else "") or "").strip()
         angles = await _log_model_call(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: generate_content_angles(profile, angle_feedback=angle_feedback),
+            lambda: generate_content_angles(profile, angle_feedback=angle_feedback, objective=objective),
             user_id,
             brand_profile_id=profile_id,
         )

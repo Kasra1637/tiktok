@@ -1702,6 +1702,24 @@ class TestRegenerateContentAngles:
         # Manual rows move behind the fresh generated set.
         assert listed["angles"][-1]["id"] == manual["id"]
 
+    def test_regenerate_forwards_the_chosen_objective(self, api, monkeypatch):
+        """A picked objective aims the fresh set instead of hedging."""
+        from models import GenerateContentAnglesRequest
+        profile = _make_profile(api, ANON, name="Regen Aimed")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        seen = {}
+
+        async def fake_generate(profile_arg, max_angles=6, angle_feedback=None, objective=""):
+            seen["objective"] = objective
+            return [dict(a) for a in CANNED_ANGLES]
+
+        monkeypatch.setattr(api, "generate_content_angles", fake_generate)
+        _run(api.regenerate_content_angles(
+            profile_id=profile["id"],
+            payload=GenerateContentAnglesRequest(objective="Win back evenings"),
+            user_id=ANON))
+        assert seen["objective"] == "Win back evenings"
+
     def test_regenerate_model_failure_leaves_everything_intact(self, api, monkeypatch):
         """Generate-then-replace: a model failure deletes nothing."""
         from models import CreateContentAngleRequest

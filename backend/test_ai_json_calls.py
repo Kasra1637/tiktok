@@ -2294,6 +2294,34 @@ class TestStatedAudiencePreserved:
         assert "bedroom" in combined
         assert "car" in combined
 
+    def test_objective_reaches_the_angle_prompt(self, monkeypatch):
+        """Angles generated for a chosen objective must argue toward it."""
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({"angles": [{
+            "kind": "problem_solution", "label": "L", "target_audience": "a",
+            "user_problem": "p", "hook_promise": "h", "app_feature": "f",
+            "desired_emotion": "e", "viewer_outcome": "v", "claims_to_respect": [],
+        }]}))])
+        _run(ai_service.generate_content_angles(
+            {"brand_name": "V"}, objective="Win back an evening routine"))
+        combined = " ".join(
+            m.get("content", "") for m in rec.payloads[0]["messages"]
+        )
+        assert "Win back an evening routine" in combined
+
+    def test_no_objective_means_no_aim_block(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps({"angles": [{
+            "kind": "problem_solution", "label": "L", "target_audience": "a",
+            "user_problem": "p", "hook_promise": "h", "app_feature": "f",
+            "desired_emotion": "e", "viewer_outcome": "v", "claims_to_respect": [],
+        }]}))])
+        _run(ai_service.generate_content_angles({"brand_name": "V"}))
+        combined = " ".join(
+            m.get("content", "") for m in rec.payloads[0]["messages"]
+        )
+        assert "OBJECTIVE TO ARGUE TOWARD" not in combined
+
     def test_manual_audience_survives_as_verified_context(self, monkeypatch):
         import server as srv
         existing = {"notes": "", "target_audience": "people with ADHD",

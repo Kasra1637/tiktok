@@ -221,12 +221,18 @@ export const api = {
   // Content angles (per App Profile)
   getContentAngles: (profileId) =>
     client.get(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
-  generateContentAngles: (profileId) =>
-    client.post(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
+  // An objective aims the fresh set at the video already chosen; empty
+  // (nothing picked yet) reads exactly as before.
+  generateContentAngles: (profileId, { objective } = {}) =>
+    client.post(`/app-profiles/${profileId}/content-angles`, {
+      ...(objective ? { objective } : {}),
+    }).then((r) => r.data),
   // Regenerate replaces only the AI-derived angles; hand-written angles are
   // kept server-side, so this is safe to offer on a populated list.
-  regenerateContentAngles: (profileId) =>
-    client.post(`/app-profiles/${profileId}/content-angles/regenerate`).then((r) => r.data),
+  regenerateContentAngles: (profileId, { objective } = {}) =>
+    client.post(`/app-profiles/${profileId}/content-angles/regenerate`, {
+      ...(objective ? { objective } : {}),
+    }).then((r) => r.data),
   // Cycle this angle's six goal suggestions to the next deterministic variant
   // order. Free: no model call. Persisted server-side, so reloads keep it.
   regenerateContentAngleGoals: (profileId, angleId) =>

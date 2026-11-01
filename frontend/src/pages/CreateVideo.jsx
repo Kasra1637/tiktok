@@ -1708,7 +1708,9 @@ export default function CreateVideo() {
     setGeneratingAngles(true);
     setAngleError(null);
     try {
-      const data = await api.generateContentAngles(profileId);
+      // A picked objective aims the set at this video; nothing picked reads
+      // exactly as before.
+      const data = await api.generateContentAngles(profileId, { objective });
       const fresh = adoptAngles(data) || [];
       // Generated in-session at the founder's own click: there is nothing to
       // gate, so the fresh six render immediately.
@@ -1727,7 +1729,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, generatingAngles, angles.length, revealAngles]);
+  }, [profileId, angleId, generatingAngles, angles.length, revealAngles, objective]);
 
   // Regenerating the audience angles without leaving the wizard. Offered on
   // a populated list too, because the regenerate endpoint keeps hand-written
@@ -1756,7 +1758,7 @@ export default function CreateVideo() {
     setAngleError(null);
     setAngleRegenNotice(null);
     try {
-      const data = await api.regenerateContentAngles(profileId);
+      const data = await api.regenerateContentAngles(profileId, { objective });
       const fresh = adoptAngles(data) || [];
       // Replacement rows carry new ids: a pick aimed at the old set would
       // dangle and the goal picker would collapse to its wait state just
@@ -1785,7 +1787,7 @@ export default function CreateVideo() {
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, project]);
+  }, [profileId, angleId, project, objective]);
 
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back
