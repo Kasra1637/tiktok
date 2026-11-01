@@ -10692,11 +10692,34 @@ async function runDemoCtaChecks() {
     return { flush, restore, loadClip, createdVideos };
   }
 
-  await check("Demo + CTA resumes uploaded drafts and undo/redo restores editing choices", async (ctx) => {
+  await check("Demo + CTA resumes pinned drafts and undo/redo restores editing choices", async (ctx) => {
+    // The standalone route always starts blank (it waits for an upload), so
+    // resume is pinned to a render workspace: only that draft belongs to the
+    // render on screen, and only it is reapplied on reload.
     const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-9", brand_profile_id: "b1" };
     global.__SMOKE_DRAFTS = new Map();
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const loadPinnedClip = async () => {
+      await mount(Editor, { generation: GEN })(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+      const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+      if (!probe) throw new Error("the uploaded clip was never probed");
+      await act(async () => {
+        probe.onloadedmetadata();
+      });
+      await clip.flush();
+      await clip.flush();
+    };
     try {
-      await clip.loadClip(ctx);
+      await loadPinnedClip();
       const addedInput = ctx.container.querySelector('[data-testid="append-upload-input"]');
       Object.defineProperty(addedInput, "files", { configurable: true, value: [new dom.window.File(["second"], "second.mp4", { type: "video/mp4" })] });
       await act(async () => addedInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
@@ -10721,11 +10744,10 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-redo"]'), "redo text");
       if (field.value !== "Resume this exact CTA") throw new Error("Redo did not restore the edit");
       await act(async () => ctx.root.unmount());
-      const saved = global.__SMOKE_DRAFTS.get("anonymous:standalone");
+      const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-9");
       if (!saved?.baseMedia?.blob || saved.ctaHeadline !== "Resume this exact CTA") throw new Error("navigation did not flush source bytes and text");
-      const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
       ctx.root = createRoot(ctx.container);
-      await mount(Editor, {})(ctx);
+      await mount(Editor, { generation: GEN })(ctx);
       await act(async () => {});
       const button = ctx.container.querySelector('[data-testid="cta-controls"] > button');
       if (button.getAttribute("aria-expanded") !== "true") await clickEl(ctx, button);
@@ -10859,6 +10881,61 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("the standalone Demo + CTA starts blank even with a stored draft", async (ctx) => {
+    // A previous session's footage and overlay switches must not greet the
+    // founder: the standalone route waits for an upload with every overlay
+    // off, and the stored draft is left for the first edit to overwrite.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    global.__SMOKE_DRAFTS = new Map([[
+      "anonymous:standalone",
+      {
+        baseMedia: { id: "old-clip", blob: new Blob(["old"]), name: "old.mp4" },
+        hookEnabled: true, hookText: "Old hook line",
+        storyEnabled: true, storyText: "Old story line",
+        ctaEnabled: true, ctaHeadline: "Old end card",
+      },
+    ]]);
+    try {
+      await mount(Editor, {})(ctx);
+      await act(async () => {});
+      if (!ctx.container.querySelector('[data-testid="demo-cta-frame-empty"]')) {
+        throw new Error("the standalone editor did not open on its empty frame");
+      }
+      const video = ctx.container.querySelector("video");
+      if (video && video.getAttribute("src")) {
+        throw new Error("the standalone editor restored footage instead of waiting for an upload");
+      }
+      const openGroup = async (name) => {
+        const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
+          .find((b) => (b.textContent || "").trim() === name);
+        if (!header) throw new Error(`no ${name} group header`);
+        if (header.getAttribute("aria-expanded") !== "true") {
+          await clickEl(ctx, header, `open ${name}`);
+        }
+      };
+      for (const [group, testId] of [
+        ["Hook Text", "hook-toggle"],
+        ["Story Text", "story-toggle"],
+        ["End Card", "cta-toggle"],
+      ]) {
+        await openGroup(group);
+        const toggle = ctx.container.querySelector(`[data-testid="${testId}"]`);
+        if (!toggle) throw new Error(`no ${group} toggle`);
+        if (toggle.getAttribute("data-state") !== "unchecked") {
+          throw new Error(`${group} restored on for a standalone open`);
+        }
+      }
+      if (ctx.text().includes("Old hook line") || ctx.text().includes("Old end card")) {
+        throw new Error("the standalone editor painted a stored draft's copy");
+      }
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
   await check("Demo + CTA draft recovery failures block editing and retry without losing account scope", async (ctx) => {
     const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
     const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
@@ -10866,7 +10943,7 @@ async function runDemoCtaChecks() {
     let broken = true;
     global.__SMOKE_DRAFTS = { get(key) { reads.push(key); if (broken) throw new Error("Draft storage unavailable"); return null; }, set() {} };
     try {
-      await mount(Editor, { draftOwner: "account-a" })(ctx);
+      await mount(Editor, { draftOwner: "account-a", generation: COMPLETED })(ctx);
       expectText(ctx, "Draft recovery failed");
       if (!ctx.container.querySelector('[inert]')) throw new Error("editing remained enabled before recovery settled");
       broken = false;
@@ -10876,8 +10953,9 @@ async function runDemoCtaChecks() {
       await act(async () => ctx.root.unmount());
       ctx.root = createRoot(ctx.container);
       await mount(Editor, { draftOwner: "account-b", generation: COMPLETED })(ctx);
-      if (!reads.includes("account-a:standalone") || !reads.includes(`account-b:${COMPLETED.id}`)) throw new Error("draft reads were not isolated by account and source");
-      if (reads.includes("anonymous:standalone")) throw new Error("signed-in editor read the anonymous draft");
+      if (!reads.includes(`account-a:${COMPLETED.id}`) || !reads.includes(`account-b:${COMPLETED.id}`)) throw new Error("draft reads were not isolated by account and source");
+      if (reads.includes(`anonymous:${COMPLETED.id}`)) throw new Error("signed-in editor read the anonymous draft");
+      if (reads.some((key) => key.endsWith(":standalone"))) throw new Error("the standalone route read a draft instead of starting blank");
     } finally {
       await act(async () => ctx.root.unmount());
       clip.restore();

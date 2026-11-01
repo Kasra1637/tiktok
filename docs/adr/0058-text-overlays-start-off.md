@@ -1,6 +1,6 @@
 # 0058 — Text overlays start off until the founder turns one on
 
-- **Status:** accepted
+- **Status:** partially superseded by 0082 (standalone Demo + CTA entry no longer applies stored drafts; pinned workspaces still do)
 - **Date:** 2026-10-29
 - **Anchors:** `frontend/src/demoCta/constants.js` (`DEFAULTS.hookEnabled`, `hookText`); `frontend/src/demoCta/DemoCtaEditor.jsx` (`hook-toggle`, `story-toggle`, `cta-toggle`); smoke check "a new clip starts with no text overlay turned on"
 

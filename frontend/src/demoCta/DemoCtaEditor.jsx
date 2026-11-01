@@ -1247,6 +1247,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const [draftLoadAttempt, setDraftLoadAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    // The standalone route (/demo-cta) always starts blank: no restored
+    // footage, no restored overlay switches — it waits for the founder to
+    // upload a clip, with every overlay off. Reopening onto a previous
+    // session's video with text already painted is the surprise the overlay
+    // defaults were fixed to prevent, and a stored draft is exactly how it
+    // came back. The stored draft is left alone (never deleted): the first
+    // edit of the new session overwrites it through the normal session save.
+    // A pinned workspace (/demo-cta/:id) keeps restoring — that draft
+    // belongs to the render on screen.
+    if (!generation?.id && !sourceUrl) {
+      setDraftLoadError(null);
+      setDraftReady(true);
+      return undefined;
+    }
     readDraft(draftKey).then((edit) => {
       if (cancelled) return;
       if (edit) {
@@ -1260,7 +1274,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       if (!cancelled) setDraftLoadError(`Draft recovery failed: ${err.message} Retry before editing, or explicitly start without recovery.`);
     });
     return () => { cancelled = true; };
-  }, [draftKey, draftLoadAttempt]);
+  }, [draftKey, draftLoadAttempt, generation?.id, sourceUrl]);
 
   useEffect(() => {
     const key = (event) => {

@@ -80,7 +80,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0055](0055-implicit-behavior-signals.md) | Implicit behavior signals (adopted/abandoned/generated) supplement explicit thumbs | accepted |
 | [0056](0056-hero-play-control.md) | The autoplaying hero carries its own play/pause control; reduced motion loads on an explicit tap | accepted |
 | [0057](0057-preview-frame-play-button.md) | The Demo + CTA preview plays from a branded button on its own frame | accepted |
-| [0058](0058-text-overlays-start-off.md) | Hook, story and end-card text overlays all start off until the founder turns one on | accepted |
+| [0058](0058-text-overlays-start-off.md) | Hook, story and end-card text overlays all start off until the founder turns one on | partially superseded by 0082 (standalone entry starts blank) |
 | [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted |
 | [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
 | [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |
@@ -104,3 +104,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0079](0079-policy-and-studio-module-ownership.md) | Isolate deterministic policies and studio panels; retain project orchestration and compatibility | accepted |
 | [0080](0080-wizard-draft-state-transitions.md) | Make coupled wizard draft changes atomic; isolate template-loading state | accepted |
 | [0081](0081-remove-claim-render-blocking.md) | No wording flag refuses a render; claim reports stay advisory | accepted |
+| [0082](0082-standalone-demo-cta-starts-blank.md) | Standalone Demo + CTA starts blank; only pinned workspaces resume drafts | accepted |
