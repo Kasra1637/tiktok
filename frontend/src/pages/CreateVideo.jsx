@@ -635,6 +635,10 @@ function AngleSelector({
   // destination so the redirect never reads as a broken Generate.
   generateLabel = "Generate angles",
   generatingLabel = "Generating angles",
+  // The video's picked goal, when one is picked. Angle generation aims the
+  // fresh set at it; with none picked the set comes back broad, so the
+  // step says so beside Regenerate instead of silently spending the call.
+  objective = "",
 }) {
   // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
   // It answers the only question a spinner cannot — is this fresh work or a
@@ -740,6 +744,11 @@ function AngleSelector({
             {angleSetFreshness && (
               <p className="text-xs text-muted-foreground" data-testid="angle-set-freshness">
                 Refreshed {angleSetFreshness}
+              </p>
+            )}
+            {!objective && (
+              <p className="text-xs text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
+                Pick a goal first — regenerating aims fresh angles at it.
               </p>
             )}
           </div>
@@ -2963,6 +2972,7 @@ setObjective("");
               error={angleError}
               onGenerate={handleGenerateAngles}
               onRegenerate={handleRegenerateAngles}
+              objective={objective}
               notice={angleRegenNotice}
               noticeAction={
                 angleRegenNotice
@@ -3917,6 +3927,7 @@ setObjective("");
                 onGenerate={() => setStep(1)}
                 generateLabel="Pick an audience angle first"
                 onRegenerate={handleRegenerateAngles}
+                objective={effectiveObjective}
                 notice={angleRegenNotice}
               />
             ) : !canGenerate && project?.script_version ? (

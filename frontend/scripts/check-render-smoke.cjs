@@ -5484,6 +5484,41 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // Objective-aware angles only aim when a goal is picked: regenerating with
+  // no goal returns the broad set, so the step must say so beside the button
+  // instead of silently spending the call. Picking a goal retires the hint.
+  await check("regenerating without a picked goal names the aim", async (ctx) => {
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          const hint = ctx.container.querySelector('[data-testid="angles-aim-hint"]');
+          if (!hint) throw new Error("no aim hint beside Regenerate with no goal picked");
+          if (!/goal/i.test(hint.textContent)) {
+            throw new Error(`the hint names no goal: ${hint.textContent}`);
+          }
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          const goal = ctx.container.querySelector('[data-testid^="recommended-goal-"]');
+          if (!goal) throw new Error("no goal card to pick");
+          await clickEl(ctx, goal, "the goal card does nothing");
+          await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="angles-aim-hint"]')) {
+            throw new Error("the aim hint lingers after a goal is picked");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // The regen notice must tell the founder what to DO, not just what
   // happened: the story the draft was planned around is gone, and the fix
   // lives at Review (rebuild the strategy for the new angle). A notice with
