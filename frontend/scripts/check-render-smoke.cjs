@@ -10527,6 +10527,45 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("a freshly loaded clip waits paused until the founder presses play", async (ctx) => {
+    // Arriving at a clip is not pressing play: opening a pinned render used
+    // to start sound and motion on page load. The preview parks still with
+    // the branded play button up, and while it plays a small quiet pause
+    // control tucks into the frame's corner — the same togglePlayPause, so
+    // it can never disagree with the transport row below.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const basePlay = dom.window.HTMLMediaElement.prototype.play;
+    let plays = 0;
+    dom.window.HTMLMediaElement.prototype.play = function (...args) {
+      plays += 1;
+      return basePlay.apply(this, args);
+    };
+    try {
+      await clip.loadClip(ctx);
+      if (plays !== 0) throw new Error(`loading the clip started playback with no press (${plays} play call)`);
+      const play = () => ctx.container.querySelector('[data-testid="demo-cta-preview-play"]');
+      const pause = () => ctx.container.querySelector('[data-testid="demo-cta-preview-pause"]');
+      if (!play()) throw new Error("the freshly loaded clip offers no play button");
+      if (pause()) throw new Error("a paused clip shows the playing pause control");
+      await clickEl(ctx, play(), "play the clip from the frame");
+      await clip.flush();
+      if (play()) throw new Error("the frame kept a play button over footage that is playing");
+      if (!pause()) throw new Error("playing footage has no subtle pause control on the frame");
+      if (!pause().closest(".demo-cta-frame")) {
+        throw new Error("the pause control does not sit on the video frame");
+      }
+      if (pause().getAttribute("aria-label") !== "Pause the clip") {
+        throw new Error(`the pause control is not named for its action: ${pause().getAttribute("aria-label")}`);
+      }
+      const transport = ctx.container.querySelector('[data-testid="transport-play"]');
+      if (transport.getAttribute("aria-label") !== "Pause") {
+        throw new Error("pressing the frame's play button did not start the transport");
+      }
+    } finally {
+      clip.restore();
+    }
+  });
+
   await check("a new clip starts with no text overlay turned on", async (ctx) => {
     // Hook text used to start on, so a fresh clip opened with copy the founder
     // never chose painted across the face. All three overlay groups start off

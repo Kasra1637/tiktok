@@ -1310,7 +1310,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
   }, []);
 
-  // Probe metadata and ensure preview video starts playing
+  // Probe metadata and park the preview on its first frame
   useEffect(() => {
     if (!videoUrl) return;
     let cancelled = false;
@@ -1341,13 +1341,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       setPreviewMuted(true);
       refVideo.playsInline = true;
       refVideo.load();
-      if (restoredDraftRef.current) {
-        refVideo.pause();
-        setIsPlaying(false);
-      } else {
-        refVideo.play().catch(() => {});
-        setIsPlaying(true);
-      }
+      // Parked, never playing: arriving at a clip is not a press of play.
+      // Opening a pinned render used to start sound and motion on page
+      // load; the preview stays still until the founder starts it.
+      refVideo.pause();
+      setIsPlaying(false);
       setCurrentTime(0);
     }
     return () => {
@@ -2383,8 +2381,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   togglePlayPause the transport does — never a second playback
                   path — and it leaves the frame as soon as playback starts, so
                   it cannot cover the footage or claim a state the row below
-                  disagrees with. Recording hides it too: the export owns the
-                  timeline then.
+                  disagrees with. While the clip plays a small quiet pause
+                  control tucks into the frame's corner instead: the same
+                  toggle, never covering the footage. Recording hides both:
+                  the export owns the timeline then.
 
                   The wrapper is the positioned element, not the button:
                   `.btn-studio` sets `position: relative` after Tailwind's
@@ -2405,6 +2405,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                     className="pointer-events-auto h-14 w-14 rounded-full [&_svg]:size-6"
                   >
                     <Play aria-hidden="true" />
+                  </Button>
+                </div>
+              )}
+              {videoMeta && isPlaying && !recording && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    onClick={togglePlayPause}
+                    aria-label="Pause the clip"
+                    title="Pause the clip"
+                    data-testid="demo-cta-preview-pause"
+                    className="pointer-events-auto h-9 w-9 rounded-full opacity-60 shadow-none transition-opacity hover:opacity-100 focus-visible:opacity-100 [&_svg]:size-4"
+                  >
+                    <Pause aria-hidden="true" />
                   </Button>
                 </div>
               )}
@@ -2794,7 +2810,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           playsInline
           muted={previewMuted}
           loop={!appendUrl}
-          autoPlay
         />
         {/* Second-segment playback; export decodes the original bytes. */}
         {appendUrl && (
