@@ -387,6 +387,7 @@ export default function CreateVideo() {
   // for one app never leaks into another app's first view.
   useEffect(() => {
     setAnglesRevealed(false);
+    setAngleRegenNotice(null);
   }, [profileId]);
   const angle = angles.find((a) => a.id === angleId) || null;
   // The list reads revealed when the gate was clicked, or when the pick names
@@ -1707,6 +1708,7 @@ export default function CreateVideo() {
                     }
                   : null
               }
+              onDismissNotice={angleRegenNotice ? () => setAngleRegenNotice(null) : null}
             />
             </div>
 
@@ -2653,6 +2655,7 @@ export default function CreateVideo() {
                 onRegenerate={handleRegenerateAngles}
                 objective={effectiveObjective}
                 notice={angleRegenNotice}
+                onDismissNotice={angleRegenNotice ? () => setAngleRegenNotice(null) : null}
               />
             ) : !canGenerate && project?.script_version ? (
               <div className="inset-panel space-y-4">

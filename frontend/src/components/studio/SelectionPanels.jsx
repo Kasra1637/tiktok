@@ -267,6 +267,7 @@ export function AngleSelector({
   // next step without offering it is a dead end. Rendered inside the alert so
   // the action reads as part of the message, not a second decision.
   noticeAction = null,
+  onDismissNotice = null,
   // Steps other than Audience & template never generate inline: their red button
   // sends the founder to step 1, where selection lives, instead of spending
   // a call from a screen whose job is something else. The label names the
@@ -396,16 +397,30 @@ export function AngleSelector({
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>
             {notice}
-            {noticeAction && (
-              <Button
-                variant="accent"
-                size="sm"
-                className="mt-2 gap-1.5"
-                onClick={noticeAction.onClick}
-                data-testid={noticeAction.testId || "angle-regen-notice-action"}
-              >
-                {noticeAction.label}
-              </Button>
+            {(noticeAction || onDismissNotice) && (
+              <span className="mt-2 flex flex-wrap gap-2">
+                {noticeAction && (
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={noticeAction.onClick}
+                    data-testid={noticeAction.testId || "angle-regen-notice-action"}
+                  >
+                    {noticeAction.label}
+                  </Button>
+                )}
+                {onDismissNotice && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onDismissNotice}
+                    data-testid="angle-regen-notice-dismiss"
+                  >
+                    Dismiss
+                  </Button>
+                )}
+              </span>
             )}
           </AlertDescription>
         </Alert>
