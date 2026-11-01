@@ -2265,6 +2265,37 @@ class TestHookScriptContinuity:
         assert "big" in prompt and "transformation" in prompt
         assert "I felt lighter" in prompt
 
+    def test_the_prompt_demands_a_thumb_stopping_hook(self, monkeypatch):
+        """The hook must stop a mid-scroll thumb, not introduce the topic.
+
+        Cold open — mid-thought, mid-feeling, mid-scene — or a flat correction,
+        or a stake; never a calm summary from outside the problem; tension in
+        the first clause; and the self-review flags a summarizing hook.
+        """
+        import ai_service
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "I could never name what I felt.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "HOOK PUNCH" in prompt
+        assert "Open cold" in prompt
+        assert "summarizing the problem from outside it" in prompt
+        assert "could agree with without stopping" in prompt
+
     def test_continuity_flags_never_trigger_an_editorial_retry(self, monkeypatch):
         """A draft with a dangling reference is returned, not rewritten.
 
