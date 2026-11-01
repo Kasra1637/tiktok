@@ -1365,6 +1365,14 @@ export default function CreateVideo() {
   // nothing: a clean regen is not news.
   const [facets, setFacets] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  // Fit notes every visible recommendation shares, hoisted out of the cards
+  // by the server so identical bullets are read once at the section level
+  // instead of repeated on every card. Reset wherever recommendations are.
+  const [sharedFit, setSharedFit] = useState({ reasons: [], limitations: [] });
+  const clearRecommendations = () => {
+    setRecommendations([]);
+    setSharedFit({ reasons: [], limitations: [] });
+  };
   const [recError, setRecError] = useState(null);
   const [recKey, setRecKey] = useState("");
   const [tailored, setTailored] = useState({ key: "", templates: [] });
@@ -1526,7 +1534,7 @@ export default function CreateVideo() {
             setTemplateId(draft.template_id || "");
             setObjective(draft.objective || "");
             setTone(draft.tone || "");
-            setRecommendations([]);
+            clearRecommendations();
             setRecError(null);
             setEdits({});
             // A duplicate always arrives with its plan intact, so it opens on
@@ -1626,7 +1634,7 @@ export default function CreateVideo() {
       const request = ++recRequestRef.current;
       const key = `${pid || ""}:${aid || ""}:${objective || ""}`;
       setRecKey(key);
-      setRecommendations([]);
+      clearRecommendations();
       setRecError(null);
       try {
         const rec = await api.getTemplateRecommendations(pid, {
@@ -1638,6 +1646,10 @@ export default function CreateVideo() {
         const rows = rec.recommendations || [];
         setRecKey(key);
         setRecommendations(rows);
+        setSharedFit({
+          reasons: Array.isArray(rec.shared_reasons) ? rec.shared_reasons : [],
+          limitations: Array.isArray(rec.shared_limitations) ? rec.shared_limitations : [],
+        });
         setRecError(null);
         // Preselection moved to its own effect below: it must wait until the
         // tailored set for this key is ready, otherwise the top curated card
@@ -1649,7 +1661,7 @@ export default function CreateVideo() {
         // founder in front of a step that looked merely thin, so the reason is
         // shown rather than absorbed.
         setRecKey(key);
-        setRecommendations([]);
+        clearRecommendations();
         setRecError(getErrorMessage(err));
       }
     },
@@ -1955,7 +1967,7 @@ export default function CreateVideo() {
     setSelectedProfileId(id);
     setAngles([]);
     setAngleId("");
-    setRecommendations([]);
+    clearRecommendations();
     setRecError(null);
     setEdits({});
     setProject(null);
@@ -3123,6 +3135,24 @@ setObjective("");
                     </div>
                   )}
                 </div>
+                {/* Shared fit notes, read once: the scorer reasons per factor
+                    (goal, category, angle kind), so every card in this set can
+                    earn identical bullets. Repeating those on each card turned
+                    evidence into wallpaper, so the server hoists notes every
+                    visible card shares and each card keeps only what
+                    differentiates it. Renders only when the server sent shared
+                    notes — older stubbed responses without the keys read as
+                    before, per card. */}
+                {(sharedFit.reasons.length > 0 || sharedFit.limitations.length > 0) && (
+                  <div className="space-y-1 text-sm text-muted-foreground" data-testid="templates-shared-fit">
+                    {sharedFit.reasons.length > 0 && (
+                      <p>True of every template below: {sharedFit.reasons.join(" ")}</p>
+                    )}
+                    {sharedFit.limitations.length > 0 && (
+                      <p>Limits on every template below: {sharedFit.limitations.join(" ")}</p>
+                    )}
+                  </div>
+                )}
                 <div ref={templateTrackRef} id="substep-template" className="filmstrip-scroll no-scrollbar flex snap-x scroll-mt-4 gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
                 {visibleRecommendations.map((r, i) => (
                   <div key={r.template.id} className="w-[85%] shrink-0 snap-start sm:w-[calc(50%-6px)]">

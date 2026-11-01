@@ -1093,6 +1093,43 @@ class TestRecommendations:
         assert "approve" in str(err.value.detail).lower()
 
 
+class TestSharedFitNotes:
+    def test_notes_every_template_shares_are_hoisted_once(self, api):
+        recs = [
+            {"why_it_fits": ["Shared goal reason.", "Only on one."],
+             "limitations": ["Shared bound.", "Only bound one."]},
+            {"why_it_fits": ["Shared goal reason.", "Only on two."],
+             "limitations": ["Shared bound.", "Only bound two."]},
+        ]
+        shared = api._split_shared_notes(recs)
+        assert shared == {
+            "shared_reasons": ["Shared goal reason."],
+            "shared_limitations": ["Shared bound."],
+        }
+        assert recs[0]["why_it_fits"] == ["Only on one."]
+        assert recs[1]["why_it_fits"] == ["Only on two."]
+        assert recs[0]["limitations"] == ["Only bound one."]
+        assert recs[1]["limitations"] == ["Only bound two."]
+
+    def test_nothing_hoisted_from_a_single_recommendation(self, api):
+        recs = [{"why_it_fits": ["Only reason."], "limitations": ["Only bound."]}]
+        shared = api._split_shared_notes(recs)
+        assert shared == {"shared_reasons": [], "shared_limitations": []}
+        assert recs[0]["why_it_fits"] == ["Only reason."]
+        assert recs[0]["limitations"] == ["Only bound."]
+
+    def test_recommendations_response_carries_shared_notes(self, api):
+        profile = _approve_profile(api, name="Reco Shared")
+        result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
+        assert result["shared_reasons"] is not None
+        assert result["shared_limitations"] is not None
+        for r in result["recommendations"]:
+            for reason in r["why_it_fits"]:
+                assert reason not in result["shared_reasons"]
+            for lim in r["limitations"]:
+                assert lim not in result["shared_limitations"]
+
+
 class TestFeedbackInfluence:
     def _target(self, api, profile):
         baseline = _run(api.recommend_templates(

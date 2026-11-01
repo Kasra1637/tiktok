@@ -4693,6 +4693,40 @@ def _score_template_for_angle(
         "matched": matched,
     }
 
+def _split_shared_notes(recs):
+    """
+    Hoist the fit notes every visible recommendation shares.
+
+    The scorer reasons per factor (goal, category, angle kind, audience), so
+    templates ranked for the same angle and goal earn identical bullets —
+    showing those on every card turns evidence into wallpaper. Notes present
+    on every card move to the section level once; each card keeps only what
+    differentiates it. A single recommendation keeps everything: with nothing
+    to compare against, hoisting would leave a bare card.
+
+    Returns {"shared_reasons", "shared_limitations"} and strips the shared
+    strings from each rec in place, preserving each list's own order.
+    """
+    shared = {"shared_reasons": [], "shared_limitations": []}
+    if len(recs) < 2:
+        return shared
+    pairs = [
+        ("why_it_fits", "shared_reasons"),
+        ("limitations", "shared_limitations"),
+    ]
+    for rec_key, shared_key in pairs:
+        first = list(recs[0].get(rec_key) or [])
+        rest = [set(r.get(rec_key) or []) for r in recs[1:]]
+        common = [note for note in first if all(note in other for other in rest)]
+        if not common:
+            continue
+        shared[shared_key] = common
+        common_set = set(common)
+        for r in recs:
+            r[rec_key] = [note for note in (r.get(rec_key) or []) if note not in common_set]
+    return shared
+
+
 @api_router.get("/app-profiles/{profile_id}/template-recommendations")
 async def recommend_templates(
     profile_id: str,
@@ -4773,8 +4807,14 @@ async def recommend_templates(
             "feedback": result["feedback"],
         })
     scored.sort(key=lambda r: (-r["score"], r["template"]["name"]))
+    visible = scored[: max(1, min(int(limit or 8), 30))]
+    # Shared across the visible set, not the whole table: the section line
+    # must describe exactly the cards beside it.
+    shared = _split_shared_notes(visible)
     return {
-        "recommendations": scored[: max(1, min(int(limit or 8), 30))],
+        "recommendations": visible,
+        "shared_reasons": shared["shared_reasons"],
+        "shared_limitations": shared["shared_limitations"],
         "angle": _serialize_angle_row(angle) if angle else None,
         "objective": norm_objective,
     }

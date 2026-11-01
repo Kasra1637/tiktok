@@ -4523,6 +4523,70 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  await check("notes every template shares are read once above the cards", async (ctx) => {
+    // The scorer reasons per factor, so one angle and goal earns every card
+    // the same bullets. The server hoists notes every visible card shares;
+    // the section reads them once and each card keeps only what
+    // differentiates it. Repeating the shared lines per card turned evidence
+    // into wallpaper.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9,
+              why_it_fits: ["Puts the timer at the centre of the piece."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+            {
+              template: ORDERED_TEMPLATES[1],
+              score: 8,
+              why_it_fits: ["Names the habit in the first seconds."],
+              limitations: ["Framed for Productivity rather than Health — the opening will need rewording."],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+          shared_reasons: ["Built for 'ease daily moment'. Makes the daily moment feel lighter."],
+          shared_limitations: ["Needs character reference.", "Bounded by: weekly reports only."],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "ease_daily_moment",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+      }
+    );
+    const shared = ctx.container.querySelector('[data-testid="templates-shared-fit"]');
+    if (!shared) throw new Error("the shared fit notes are not read once above the cards");
+    if (!shared.textContent.includes("Built for 'ease daily moment'")) {
+      throw new Error("the section line does not carry the shared reason");
+    }
+    if (!shared.textContent.includes("Bounded by: weekly reports only.")) {
+      throw new Error("the section line does not carry the shared limitation");
+    }
+    const verdicts = [...ctx.container.querySelectorAll('[data-testid="template-fit-verdict"]')];
+    if (verdicts.length !== 2) throw new Error(`expected two differentiating verdicts, saw ${verdicts.length}`);
+    for (const verdict of verdicts) {
+      if (verdict.textContent.includes("Built for 'ease daily moment'")) {
+        throw new Error("a card repeats the shared reason beside the section line");
+      }
+    }
+    const bounds = (ctx.text().match(/Needs character reference\./g) || []).length;
+    if (bounds !== 1) throw new Error(`the shared asset need is on ${bounds} places instead of once`);
+    if (!ctx.text().includes("Framed for Productivity rather than Health")) {
+      throw new Error("the one differentiating limitation did not stay on its own card");
+    }
+  });
+
   // The objective is the heaviest signal in the template scorer and gates the
   // tailored templates, so leaving it optional meant the strongest
   // recommendation input was silently dropped whenever a founder skipped it -
