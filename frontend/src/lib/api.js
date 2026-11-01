@@ -250,6 +250,14 @@ export const api = {
   getDirectionOptions: (profileId) =>
     client.get(`/app-profiles/${profileId}/direction-options`).then((r) => r.data),
 
+  // Fresh options for ONE direction dropdown, still profile-shaped: one
+  // text model call grounded in the profile and the selected angle, avoiding
+  // the options already shown.
+  refreshDirectionOptions: (profileId, { field, avoid = [], angleId = "" } = {}) =>
+    client.post(`/app-profiles/${profileId}/direction-options/refresh`, {
+      field, avoid, angle_id: angleId || undefined,
+    }).then((r) => r.data),
+
   // Hook templates. The standalone library is gone: the wizard picks from
   // profile-scoped recommendations. Only the read endpoints the wizard needs
   // survive here.

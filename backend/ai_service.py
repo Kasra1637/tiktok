@@ -2067,6 +2067,92 @@ def _normalize_outcome_statements(result: dict) -> None:
     result["outcome_statements"] = kept
 
 
+# Review-step direction refresh: fresh dropdown options for one field, still
+# profile-shaped. The static category lists repeat themselves across videos;
+# a refresh asks the model for four NEW options for one field, grounded in
+# the profile (category, usage moments, outcomes, audience) and the selected
+# angle, avoiding the options already shown. Pre-vetted by instruction like
+# the static lists: plain language, no face or body descriptions, no claims —
+# and saving still runs the normal claim check, since the dropdown is a UX
+# constraint, not a trust boundary.
+DIRECTION_REFRESH_FIELDS = ("setting", "lighting", "wardrobe", "voice", "tone")
+
+_DIRECTION_FIELD_BRIEFS = {
+    "setting": "a concrete physical place where the presenter is, mid-activity — never a bedroom or car interior by default",
+    "lighting": "light direction, quality and colour temperature for that place",
+    "wardrobe": "one concrete outfit suited to the place — garments only, never the body wearing them",
+    "voice": "delivery direction for the on-camera talk — pace, volume, energy",
+    "tone": "the video's overall tone in two or three plain words",
+}
+
+
+async def refresh_direction_options(profile: dict, field: str, avoid: Optional[list] = None,
+                                    angle: Optional[dict] = None) -> list:
+    """Four fresh dropdown options for one direction field, profile-shaped.
+
+    `avoid` carries the options already shown so the model returns genuinely
+    new ones. Raises RuntimeError on an unknown field or an unusable reply.
+    """
+    field = (field or "").strip().lower()
+    if field not in DIRECTION_REFRESH_FIELDS:
+        raise RuntimeError(f"Unknown direction field: {field!r}.")
+    profile = profile or {}
+
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    context = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "audience": profile.get("target_audience") or "(unstated)",
+        "usage_moments": _list("usage_moments"),
+        "outcomes": [str(s.get("outcome")) for s in (profile.get("outcome_statements") or [])
+                     if isinstance(s, dict) and str(s.get("outcome") or "").strip()][:6],
+        "must_not_show": _list("must_not_show"),
+    }
+    angle_block = ""
+    if isinstance(angle, dict) and angle:
+        angle_block = (
+            "\n\nSELECTED ANGLE (suit the options to it):\n"
+            f"{json.dumps({k: angle.get(k) or '' for k in ('kind', 'label', 'user_problem', 'viewer_outcome')}, indent=2)}"
+        )
+    avoid_list = [str(a) for a in (avoid or []) if str(a or "").strip()][:12]
+    avoid_block = ("\n\nALREADY SHOWN (do not repeat any of these):\n" + "\n".join(f"- {a}" for a in avoid_list)) if avoid_list else ""
+
+    prompt = (
+        f"APP PROFILE:\n{json.dumps(context, indent=2)}{angle_block}{avoid_block}\n\n"
+        f"Propose exactly 4 DISTINCT options for the video's {field}: {_DIRECTION_FIELD_BRIEFS[field]}. "
+        "Each option is one short concrete phrase a founder can picture instantly. "
+        "Suit them to this app's category, usage moments and outcomes — a meditation app earns quiet outdoor places, not gym floors. "
+        "Never describe the presenter's face, body, age, skin, hair or build. "
+        "Never state a feature, price, rating or outcome as a fact about the app. "
+        "Return ONLY a JSON object of the form {\"options\": [\"option 1\", \"option 2\", \"option 3\", \"option 4\"]}."
+    )
+    parsed = await _chat_json(
+        system_message=(
+            "You write dropdown options for a short-form video planner. "
+            "Concrete, plain-language, filmable. Respond with STRICT JSON only, no markdown fences."
+        ),
+        prompt=prompt,
+        context="Direction options",
+        max_tokens=500,
+        timeout=60,
+        json_schema=_strict_object({"options": {"type": "array", "items": _str_prop(), "minItems": 4, "maxItems": 4}}),
+    )
+    options = parsed.get("options") if isinstance(parsed, dict) else None
+    if not isinstance(options, list):
+        raise RuntimeError("Direction refresh response was not a list.")
+    cleaned = [str(o).strip()[:200] for o in options if str(o or "").strip()][:4]
+    if len(cleaned) != 4:
+        raise RuntimeError("Direction refresh response contained no usable options.")
+    return cleaned
+
+
 async def generate_content_angles(profile: dict, max_angles: int = 6,
                                   angle_feedback: Optional[dict] = None) -> list:
     """

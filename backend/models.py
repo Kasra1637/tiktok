@@ -363,6 +363,13 @@ class GeneratePlanRequest(BaseModel):
     audience: Optional[str] = None
 
 
+class RefreshDirectionOptionsRequest(BaseModel):
+    """Fresh dropdown options for one Review-step direction field."""
+    field: str = ""
+    avoid: Optional[List[str]] = None
+    angle_id: Optional[str] = None
+
+
 class GenerateStrategyRequest(BaseModel):
     """
     Optional overrides for the app-specific video strategy.

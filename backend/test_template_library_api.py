@@ -1927,3 +1927,76 @@ class TestDirectionOptionsEndpoint:
             _run(api.profile_direction_options(
                 profile_id=str(uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
+
+
+class TestDirectionRefresh:
+    """A founder can ask for a fresh list per dropdown, still profile-shaped.
+
+    The static category lists repeat themselves across videos; a refresh
+    asks the model for four new options for ONE field, grounded in the
+    profile (category, usage moments, outcomes) and avoiding the options
+    already shown. Pre-vetted by instruction like the static lists: no
+    face or body descriptions, no claims — and saving still runs the
+    normal claim check, since the dropdown is a UX constraint, not a
+    trust boundary.
+    """
+
+    def _fake_refresh(self, monkeypatch, seen):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            seen["prompt"] = prompt
+            return {"options": [
+                "Rooftop garden at blue hour",
+                "Riverside steps with city glow",
+                "Quiet library corner, tall shelves",
+                "Open-air market aisle, morning",
+            ]}
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+
+    def test_refresh_returns_four_fresh_profile_shaped_options(
+            self, api, monkeypatch):
+        import asyncio
+        import ai_service
+        from models import RefreshDirectionOptionsRequest
+        seen = {}
+        self._fake_refresh(monkeypatch, seen)
+        profile = _make_profile(api, ANON, name="Refresh Rider",
+                                category="Meditation")
+        out = _run(api.refresh_profile_direction_options(
+            profile_id=profile["id"],
+            payload=RefreshDirectionOptionsRequest(
+                field="setting",
+                avoid=["Quiet bedroom corner with a cushion on the floor"]),
+            user_id=ANON))
+        assert out["field"] == "setting"
+        assert len(out["options"]) == 4
+        assert "Quiet bedroom corner with a cushion on the floor" \
+            not in out["options"]
+        # Grounded in THIS profile, not generic: the prompt carries the
+        # category and the usage moments the options must suit.
+        assert "Meditation" in seen["prompt"]
+        assert "Starting a task they have been avoiding" in seen["prompt"]
+
+    def test_refresh_rejects_an_unknown_field(self, api, monkeypatch):
+        from models import RefreshDirectionOptionsRequest
+        seen = {}
+        self._fake_refresh(monkeypatch, seen)
+        profile = _make_profile(api, ANON, name="Refresh Reject")
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_direction_options(
+                profile_id=profile["id"],
+                payload=RefreshDirectionOptionsRequest(field="catering"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+
+    def test_refresh_missing_profile_404s(self, api, monkeypatch):
+        from models import RefreshDirectionOptionsRequest
+        seen = {}
+        self._fake_refresh(monkeypatch, seen)
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_direction_options(
+                profile_id=str(uuid.uuid4()),
+                payload=RefreshDirectionOptionsRequest(field="setting"),
+                user_id=ANON))
+        assert err.value.status_code == 404

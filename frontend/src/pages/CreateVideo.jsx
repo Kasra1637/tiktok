@@ -561,10 +561,29 @@ function DirectionSelect({
   options,
   placeholder,
   disabled,
+  // Fresh-list generation for this dropdown alone. When provided, a small
+  // action beside the label spends one text model call for four new options
+  // grounded in the profile and the selected angle — the static category
+  // list repeats itself across videos, and a founder who has seen all four
+  // has nowhere else to go. { onRefresh, refreshing, refreshTestId }.
+  refresh = null,
 }) {
   return (
     <div className="space-y-4">
-      <label htmlFor={id} className="text-sm font-semibold">{label}</label>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-sm font-semibold">{label}</label>
+        {refresh && (
+          <button
+            type="button"
+            onClick={refresh.onRefresh}
+            disabled={disabled || refresh.refreshing}
+            data-testid={refresh.refreshTestId}
+            className="shrink-0 text-xs text-muted-foreground underline disabled:opacity-50"
+          >
+            {refresh.refreshing ? "Finding new options…" : "New options"}
+          </button>
+        )}
+      </div>
       <select
         id={id}
         data-testid={testId}
@@ -2545,6 +2564,43 @@ setObjective("");
     setDirSel((previous) => ({ ...previous, tone: value }));
     editTone(value);
   };
+  // Fresh options for one dropdown, spent deliberately: one text model call
+  // per click, grounded in the profile and the selected angle, avoiding the
+  // options already shown. The founder's current pick is never destroyed by
+  // a refresh — when it is absent from the fresh four it leads the merged
+  // list, so a deliberate choice survives seeing what else exists.
+  const [refreshingField, setRefreshingField] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const refreshDirectionField = (field) => async () => {
+    if (!profileId || refreshingField) return;
+    setRefreshingField(field);
+    setRefreshError("");
+    try {
+      const data = await api.refreshDirectionOptions(profileId, {
+        field,
+        avoid: directionOptions?.[field] || [],
+        angleId: angle?.id || "",
+      });
+      const fresh = (data?.options || []).filter(Boolean);
+      if (fresh.length > 0) {
+        setDirectionOptions((previous) => {
+          if (!previous) return previous;
+          const pick = dirSel[field] || "";
+          const merged = pick && !fresh.includes(pick) ? [pick, ...fresh] : [...fresh];
+          return { ...previous, [field]: merged };
+        });
+      }
+    } catch (err) {
+      setRefreshError(getErrorMessage(err));
+    } finally {
+      setRefreshingField("");
+    }
+  };
+  const refreshProps = (field, testId) => ({
+    onRefresh: refreshDirectionField(field),
+    refreshing: refreshingField === field,
+    refreshTestId: testId,
+  });
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback so landing on Review with a complete
@@ -3641,6 +3697,7 @@ setObjective("");
                 options={directionOptions?.setting}
                 placeholder="Choose a setting…"
                 disabled={busy}
+                refresh={refreshProps("setting", "review-setting-refresh")}
               />
               <DirectionSelect
                 id="review-lighting"
@@ -3651,6 +3708,7 @@ setObjective("");
                 options={directionOptions?.lighting}
                 placeholder="Choose lighting…"
                 disabled={busy}
+                refresh={refreshProps("lighting", "review-lighting-refresh")}
               />
               <DirectionSelect
                 id="review-wardrobe"
@@ -3661,6 +3719,7 @@ setObjective("");
                 options={directionOptions?.wardrobe}
                 placeholder="Choose wardrobe…"
                 disabled={busy}
+                refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
               />
               {project?.visual_direction && !edits.visual_direction && (
                 <p className="text-sm text-muted-foreground">
@@ -3670,6 +3729,34 @@ setObjective("");
               <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
                 Choosing replaces the plan&apos;s scene notes — pick all three for a complete scene. Camera setup still owns how it is filmed.
               </p>
+              {refreshError && (
+                <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
+                  {refreshError}
+                </p>
+              )}
+              {(editValue("visual_direction", "") || editValue("voice_direction", "") || editValue("tone", "")) && (
+                <div className="inset-panel space-y-1" data-testid="direction-live-preview">
+                  <p className="text-sm font-semibold">What will render</p>
+                  {editValue("visual_direction", "") && (
+                    <p className="text-sm text-muted-foreground">
+                      Scene: {sentenceCase(editValue("visual_direction", ""))}
+                    </p>
+                  )}
+                  {editValue("voice_direction", "") && (
+                    <p className="text-sm text-muted-foreground">
+                      Voice: {sentenceCase(editValue("voice_direction", ""))}
+                    </p>
+                  )}
+                  {editValue("tone", "") && (
+                    <p className="text-sm text-muted-foreground">
+                      Tone: {sentenceCase(editValue("tone", ""))}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground" data-subtitle="">
+                    Picks update instantly here — save edits before rendering.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Read-only, and labelled as such, because it sits among seven
@@ -3732,6 +3819,7 @@ setObjective("");
                 options={directionOptions?.tone}
                 placeholder="Choose a tone…"
                 disabled={busy}
+                refresh={refreshProps("tone", "review-tone-refresh")}
               />
             </div>
 
@@ -3744,6 +3832,7 @@ setObjective("");
               options={directionOptions?.voice}
               placeholder="Choose a voice direction…"
               disabled={busy}
+              refresh={refreshProps("voice", "review-voice-refresh")}
             />
 
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>

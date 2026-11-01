@@ -55,7 +55,7 @@ from models import (
     StudioGenerationRequest,     UpdateAssetRequest, AttachAssetRequest,
     FeedbackRequest, TikTokLinkRequest, TikTokViewsRequest,
     GenerateStrategyRequest, OpeningMessagesRequest,
-    DemoCtaUploadCompleteRequest,
+    DemoCtaUploadCompleteRequest, RefreshDirectionOptionsRequest,
     APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
@@ -4115,6 +4115,47 @@ async def profile_direction_options(
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
     return template_library.direction_options_for_profile(profile)
+
+
+@api_router.post("/app-profiles/{profile_id}/direction-options/refresh")
+async def refresh_profile_direction_options(
+    profile_id: str, payload: RefreshDirectionOptionsRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Four fresh options for one Review-step dropdown, still profile-shaped.
+
+    The static category lists repeat themselves across videos; a refresh
+    spends one text model call for four new options for ONE field, grounded
+    in the profile and the selected angle, avoiding the options already
+    shown. Pre-vetted by instruction like the static lists — and saving
+    still runs the normal claim check, since the dropdown is a UX
+    constraint, not a trust boundary.
+    """
+    require_ai_configured()
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    field = (payload.field or "").strip().lower()
+    if field not in ("setting", "lighting", "wardrobe", "voice", "tone"):
+        raise HTTPException(status_code=400, detail=f"Unknown direction field: {payload.field!r}.")
+    angle = None
+    if (payload.angle_id or "").strip():
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (payload.angle_id.strip(), profile_id, user_id),
+        )
+    try:
+        options = await _log_model_call(
+            "direction_options", "text", TEXT_MODEL,
+            lambda: ai_service.refresh_direction_options(profile, field,
+                                                          payload.avoid or [], angle),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"AI direction options failed. Please try again. ({str(e)[:150]})")
+    return {"field": field, "options": options}
 
 
 @api_router.delete("/app-profiles/{profile_id}/content-angles/{angle_id}")
