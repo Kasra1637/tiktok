@@ -1547,6 +1547,34 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
         assert stale["strategy"]["hook_line"] == "You do not have a focus problem."
         assert stale["hook_line"] == "A completely new hook line."
 
+    def test_a_generation_refuses_a_strategy_built_for_another_angle(self, api, monkeypatch):
+        """
+        Changing the audience angle leaves script_version untouched, so the
+        version stamp cannot see it — but the strategy was built around the old
+        angle's viewer and outcome. The studio buttons already refuse this case;
+        a direct caller must meet the same refusal at the spend boundary.
+        """
+        from models import StudioGenerationRequest
+        import server
+        monkeypatch.setattr(server, "generate_video_strategy", self._fake_strategy)
+        project_id = _approved_project(api, script="The original hook line.", version=2)
+        _run(api.generate_project_strategy(
+            project_id=project_id, payload=server.GenerateStrategyRequest(), user_id=ANON))
+        # The strategy was built with no angle picked; the founder picks one after.
+        _run(api._execute(
+            "UPDATE studio_projects SET content_angle_id = ? WHERE id = ?",
+            ("angle-new", project_id)))
+        _mark_ready(api, project_id)
+        calls = _mock_submit(api, monkeypatch)
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project_id, payload=StudioGenerationRequest(), user_id=ANON))
+        assert err.value.status_code == 409
+        assert "angle" in str(err.value.detail).lower()
+        # Nothing reached the provider, so nothing was spent.
+        assert calls == []
+
     def test_rebuilding_the_strategy_clears_the_stale_flag(self, api, monkeypatch):
         """The route out has to actually work, or the warning is noise."""
         from models import StudioGenerationRequest, UpdateStudioProjectRequest

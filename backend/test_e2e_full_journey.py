@@ -125,7 +125,15 @@ def journey():
         if operation == "creative_plan":
             return dict(FAKE_PLAN)
         if operation == "video_strategy":
-            return dict(FAKE_STRATEGY)
+            strat = dict(FAKE_STRATEGY)
+            # Production stamps the angle the strategy was built for; the
+            # canned strategy must carry the same stamp or the spend boundary
+            # refuses it as built for another angle.
+            proj = await server._fetch_one(
+                "SELECT content_angle_id FROM studio_projects WHERE id = ?",
+                (refs.get("studio_project_id"),))
+            strat["content_angle_id"] = (proj or {}).get("content_angle_id") or ""
+            return strat
         if operation == "brand_templates":
             # Objective-tailored templates: answer empty so the endpoint takes
             # its graceful-degradation path (curated picks keep working).

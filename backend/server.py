@@ -6750,6 +6750,22 @@ def _require_current_strategy(project: dict) -> dict:
                 "step, then generate."
             ),
         )
+    # The strategy is built around one audience angle, and the version stamp
+    # above does not track it: changing the angle leaves script_version
+    # untouched, so without this check a direct caller could render a strategy
+    # describing the wrong video. The studio buttons already refuse this case
+    # (angleStale, judged the same way); the spend boundary answers the same
+    # question rather than trusting the caller to have asked it.
+    if (strategy.get("content_angle_id") or "") != (project.get("content_angle_id") or ""):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The audience angle changed after this strategy was built, so the "
+                "strategy describes a different video than the one now picked. "
+                "Rebuild it on the Hook + Story step for the current angle, then "
+                "generate."
+            ),
+        )
     return strategy
 
 

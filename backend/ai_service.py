@@ -2343,12 +2343,16 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     # doubled instead of surfacing as unparseable JSON. The list-or-dict
     # handling below stays: a provider that ignores response_format can
     # still answer either way.
+    # 8000 starts with headroom: 3000 proved too small in production
+    # (2026-11-01) once thinking tokens and the strict schema share the
+    # budget — the reply truncated mid-object on BOTH attempts (3000, then
+    # 6000). The retry doubles to 16000, matching research/plan/strategy.
     attempt_prompt = prompt
     original_count = 0
     for attempt in range(2):
         parsed = await _chat_json(
             system_message=system_message, prompt=attempt_prompt, context="Content angles",
-            max_tokens=3000, timeout=90, json_schema=ANGLES_JSON_SCHEMA, model=ANGLE_MODEL,
+            max_tokens=8000, timeout=90, json_schema=ANGLES_JSON_SCHEMA, model=ANGLE_MODEL,
         )
         angles = _normalize_content_angles(parsed, max_angles, profile)
         original_count = original_count or len(angles)

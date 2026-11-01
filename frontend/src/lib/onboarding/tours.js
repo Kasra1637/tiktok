@@ -162,7 +162,7 @@ export const TOURS = {
         title: "Claims with guardrails",
         optional: true,
         body:
-          "Approved, needs review, banned. The script plan runs a claim check against these, and a prohibited claim blocks rendering until the script is edited. Do not publish anything you cannot back."
+          "Approved, needs review, banned. The script plan runs a claim check against these and flags anything it cannot tie to your profile — review notes, never a render block. Do not publish anything you cannot back."
       },
       {
         target: '[data-testid="pending-proposal-alert"]',

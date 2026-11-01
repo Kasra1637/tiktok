@@ -641,6 +641,38 @@ class TestAngleDiversity:
         assert result[0]["viewer_outcome"] == "Start before the kettle boils"
 
 
+class TestAngleBudget:
+    """
+    Production failure, 2026-11-01: angle generation at max_tokens=3000
+    truncated mid-object on BOTH attempts (3000, then 6000) on a thinking
+    model whose thought tokens share the completion budget, surfacing as
+    "AI content angle generation failed" with finish_reason=length.
+    Same fix as research/plan/strategy: start with headroom (8000) so the
+    retry doubles to 16000.
+    """
+
+    def test_truncated_angles_recover_on_the_doubled_retry(self, monkeypatch):
+        import ai_service
+        angle = dict(TestAngleFeedbackPromptWiring.ANGLE)
+        half = '{"angles": [{"kind": "problem_solution", "label": "Stop sta'
+        rec = _patch_client(monkeypatch, [
+            _completion(half, finish_reason="length"),
+            _completion(json.dumps({"angles": [angle]})),
+        ])
+        result = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
+        assert result[0]["label"] == angle["label"]
+        assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000]
+
+    def test_persistently_truncated_angles_name_truncation(self, monkeypatch):
+        import ai_service
+        half = '{"angles": [{"kind": "problem_solution", "label": "Stop sta'
+        _patch_client(monkeypatch, [_completion(half, finish_reason="length")])
+        with pytest.raises(ai_service.TruncatedResponse) as err:
+            _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
+        assert "cut off" in str(err.value)
+        assert "valid JSON" not in str(err.value)
+
+
 class TestAnglePromptGrounding:
     """
     Angles were the thinnest prompt in the studio. The profile already carries
