@@ -14,8 +14,8 @@ import { useAwaitingHistoryPoll } from "./historyPolling";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 function Probe({ rows, onUpdated }) {
-  useAwaitingHistoryPoll(rows, onUpdated);
-  return null;
+  const states = useAwaitingHistoryPoll(rows, onUpdated);
+  return <output>{JSON.stringify(states)}</output>;
 }
 
 const mounted = [];
@@ -79,6 +79,44 @@ describe("useAwaitingHistoryPoll", () => {
     await tick();
     expect(api.pollGeneration).toHaveBeenCalledTimes(2);
     expect(onUpdated).toHaveBeenCalledWith("a", finished);
+  });
+
+  test("successful rows settle even when another fails, with per-row stopped state", async () => {
+    api.pollGeneration.mockImplementation((id) => id === "a"
+      ? Promise.resolve({ id, status: "completed", video_url: "u" })
+      : Promise.reject({ response: { status: 500 } }));
+    const onUpdated = jest.fn();
+    const { container } = await renderProbe([{ id: "a", status: "generating" }, { id: "b", status: "generating" }], onUpdated);
+    await tick();
+    expect(onUpdated).toHaveBeenCalledWith("a", { id: "a", status: "completed", video_url: "u" });
+    expect(JSON.parse(container.textContent).b).toBe("error");
+    await tick();
+    expect(api.pollGeneration).toHaveBeenCalledTimes(2);
+  });
+
+  test("reports the attempt limit without marking the provider job failed", async () => {
+    api.pollGeneration.mockResolvedValue({ id: "a", status: "generating" });
+    const onUpdated = jest.fn();
+    const { container } = await renderProbe([{ id: "a", status: "generating" }], onUpdated);
+    for (let i = 0; i < 20; i += 1) await tick();
+    expect(JSON.parse(container.textContent).a).toBe("paused");
+    await tick();
+    expect(api.pollGeneration).toHaveBeenCalledTimes(20);
+    expect(onUpdated).not.toHaveBeenCalledWith("a", expect.objectContaining({ status: "failed" }));
+  });
+
+  test("slow requests never overlap rounds", async () => {
+    let finish;
+    api.pollGeneration.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const onUpdated = jest.fn();
+    await renderProbe([{ id: "a", status: "generating" }], onUpdated);
+    await tick();
+    await tick();
+    await tick();
+    expect(api.pollGeneration).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ id: "a", status: "generating" }); });
+    await tick();
+    expect(api.pollGeneration).toHaveBeenCalledTimes(2);
   });
 
   test("any other error stops the loop quietly", async () => {

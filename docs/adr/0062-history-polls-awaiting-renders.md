@@ -1,6 +1,6 @@
 # 0062 — History polls its awaiting renders on its own
 
-- **Status:** accepted
+- **Status:** partially superseded by 0078 (visible per-row check state and isolated errors)
 - **Date:** 2026-10-30
 - **Anchors:** `frontend/src/pages/GenerationHistory.jsx` (awaiting poll effect); smoke check "History polls a still-awaiting render on its own"
 

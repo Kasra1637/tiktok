@@ -13262,6 +13262,28 @@ async function runDemoCtaChecks() {
     });
   });
 
+  await check("History polling feedback and compact results access are actionable", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previous = global.__SMOKE_PARAMS;
+    global.__SMOKE_PARAMS = "?copy=without";
+    try {
+      await withApi({ getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "poll-job", status: "generating", video_url: null, r2_url: null, playback_url: null },
+        { ...COMPLETED, id: "results-job", tiktok_url: null },
+      ] }) }, async () => {
+        await mount(History)(ctx);
+        const poll = ctx.container.querySelector('[data-testid="history-poll-state-poll-job"]');
+        if (!poll || !poll.textContent.includes("Automatic checks are active")) throw new Error("no active polling feedback");
+        expectAbsent(ctx, "nothing has checked since", "stale polling explanation remains");
+        const record = ctx.container.querySelector('[data-testid="history-record-results-results-job"]');
+        if (!record) throw new Error("compact card has no results shortcut");
+        await act(async () => { record.click(); await new Promise((r) => setTimeout(r, 35)); });
+        const input = ctx.container.querySelector('[data-testid="history-tiktok-input-results-job"]');
+        if (dom.window.document.activeElement !== input) throw new Error("results shortcut did not focus the existing input");
+      });
+    } finally { global.__SMOKE_PARAMS = previous; }
+  });
+
   await check("History ignores stale filter successes and failures", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const pending = [];

@@ -79,7 +79,7 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted |
 | [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
 | [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |
-| [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | accepted |
+| [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | partially superseded by 0078 (visible per-row stop state) |
 | [0063](0063-two-camera-setups.md) | Handheld selfie stays default; fixed camera is wider, stationary and unzoomed | accepted |
 | [0064](0064-camera-direction-conflicts-fail-before-render.md) | Refuse conflicting fixed-camera directions before rendering; preserve reviewed scene notes | accepted |
 | [0069](0069-moved-forward-momentum.md) | Proceeding to build shows as momentum beside verdicts, never inside the fit score | accepted |
@@ -91,3 +91,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0075](0075-actionable-review-checks.md) | Review findings select editable text; supporting evidence stays collapsed | accepted |
 | [0076](0076-angle-diversity-and-source-links.md) | Correct duplicate arguments and carry recorded feature/outcome links | accepted |
 | [0077](0077-intent-aware-core-tours.md) | Core tours wait for first-run page readiness; other help stays manual | accepted |
+| [0078](0078-history-check-state-and-results.md) | History names polling stops and opens existing results controls directly | accepted |

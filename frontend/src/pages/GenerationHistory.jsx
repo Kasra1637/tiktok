@@ -135,7 +135,7 @@ function describeResults(row) {
 // deep-link state while the rows stay put. Props are stable callbacks plus
 // row objects react-query structurally shares, so untouched rows skip the
 // re-render and only the changed row pays for one.
-const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, compact = false }) {
+const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, compact = false, pollState = "active" }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -152,6 +152,15 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
     if (!linkAwaiting || !secondaryOpen) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
   }, [linkAwaiting, row.id, secondaryOpen]);
+  const openResults = () => {
+    setSecondaryOpen(true);
+    requestAnimationFrame(() => {
+      const suffix = row.tiktok_url ? "views-input" : "input";
+      const input = document.querySelector(`[data-testid="history-tiktok-${suffix}-${row.id}"]`);
+      input?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
+      input?.focus();
+    });
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -352,7 +361,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   } else if (awaitingProvider) {
     stageNotice = {
       title: "Still marked as generating",
-      body: "This render may already be finished at the provider — nothing has checked since it was submitted.",
+      body: "The last saved state is still generating. Check again to ask the provider for an update.",
     };
   } else if (!downloadUrl) {
     stageNotice = {
@@ -637,6 +646,20 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 <p className="text-sm text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
+              {awaitingProvider && (
+                <p role="status" className="text-sm text-muted-foreground" data-testid={`history-poll-state-${row.id}`}>
+                  {pollState === "paused"
+                    ? "Automatic checks paused after 20 attempts. The provider may still be rendering. Use Check again, or return later."
+                    : pollState === "error"
+                      ? "Automatic checks stopped after a request failed. This does not mean the render failed. Use Check again to retry."
+                      : "Automatic checks are active, up to 20 attempts. You can also use Check again or return later."}
+                </p>
+              )}
+              {compact && hasClip && (
+                <Button variant="secondary" size="sm" onClick={openResults} data-testid={`history-record-results-${row.id}`}>
+                  Record results
+                </Button>
+              )}
               {(retryRenderButton || recheckButton || retryStorageButton) && (
                 <div className="flex flex-wrap gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
               )}
@@ -793,7 +816,7 @@ export default function GenerationHistory() {
 
   // Awaiting rows poll themselves through one hook; the page owns nothing
   // of the timer — rows in, finished rows out through updateRow.
-  useAwaitingHistoryPoll(rows, updateRow);
+  const pollStates = useAwaitingHistoryPoll(rows, updateRow);
 
   // The app filter is a convenience: its load failing must not silently
   // narrow the page to "All apps". It names itself with its own retry.
@@ -877,6 +900,7 @@ export default function GenerationHistory() {
       onKitGenerated={() => setFilter("copy", "with")}
       deepLinked={hashId !== "" && hashId === row.id}
       draftIds={draftIds}
+      pollState={pollStates[row.id] || "active"}
     />
   );
   // Turning the page swaps the rows above the fold, so bring the list back
