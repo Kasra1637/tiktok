@@ -1897,15 +1897,10 @@ export default function CreateVideo() {
                     </Badge>
                   )}
                 </div>
-                {/* The outcome leads; the mechanic badge above stays as the
-                    secondary label. Director-speak (opening_structure) follows
-                    in muted text for the founder who wants the how. */}
-                {typeof template.outcome === "string" && template.outcome.trim() && (
-                  /* Tailored templates are model-written, so this line can open
-                     lowercase next to the hand-written copy above it. */
-                  <p className="mt-1 text-base text-foreground/90">{sentenceCase(template.outcome.trim())}</p>
-                )}
-                <p className="mt-1 text-sm text-muted-foreground">{sentenceCase(template.opening_structure)}</p>
+                {/* Trimmed: the picked card above already shows the outcome and
+                    why-it-fits, so repeating them here doubled the reading.
+                    This box keeps only what the card doesn't: the length +
+                    middle (TemplateShape) and the photo jump. */}
                 <TemplateShape template={template} />
                 {/* The requirement is stated in one line rather than as a
                     checklist. It was a fourth place the same photograph was

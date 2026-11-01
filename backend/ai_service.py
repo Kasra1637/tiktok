@@ -44,6 +44,7 @@ from claim_safety import (
     detect_feature_enumeration,
     find_banned_violations,
     find_risk_patterns,
+    script_text as _claim_script_text,
 )
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -3340,6 +3341,19 @@ async def generate_creative_plan(
                     f"{name} uses a banned claim: '{hit['claim']}' — rewrite "
                     f"the thought without it, saying what the app does instead"
                 )
+        # The safety report reads the WHOLE plan (visual/voice/sound/beats/
+        # strategy), not just the spoken lines. A banned word hiding in a
+        # direction still blocks render, so check the full draft text here —
+        # otherwise the plan saves clean-looking and CHECKS fails it after.
+        seen_banned = {i for i in issues if "banned claim" in i}
+        for hit in find_banned_violations(_claim_script_text(result), _list("claims_banned")):
+            line = (
+                f"plan uses a banned claim: '{hit['claim']}' — remove it "
+                f"EVERYWHERE (hook, script, directions, beats), saying what the app does instead"
+            )
+            if line not in seen_banned:
+                issues.append(line)
+                seen_banned.add(line)
         if not [i for i in issues if "banned claim" in i]:
             for hit in detect_feature_enumeration(f"{hook} {script}"):
                 issues.append(
@@ -5164,7 +5178,7 @@ async def generate_video_strategy(
         "imply they built, own or promote it, and never use an insider or first-person-plural "
         "product voice (we, our app). Keep the experience honest and generic: no invented personal "
         "specifics such as years of use, a profession, a diagnosis, or a hard result.\n"
-        "- Use only approved claims. Never use anything in never_use.\n"
+        "- Never use anything in never_use, anywhere including scene wording.\n"
         # Length discipline. This object is large, and an over-long value here
         # is what pushes the reply past the completion budget and gets it cut
         # off mid-object. Concision costs nothing here: the fields are read as
@@ -5184,47 +5198,70 @@ async def generate_video_strategy(
     # stays the floor: it fits this schema and sits inside the provider
     # output ceiling of the models this service can be pointed at
     # (Claude Haiku 5.5's output ceiling is far above the 8192 used here).
-    raw = await _chat_json(
-        system_message=system_message,
-        prompt=prompt,
-        context="Video strategy",
-        temperature=0.5,
-        max_tokens=8192,
-        attempts=2,
-        json_schema=STRATEGY_JSON_SCHEMA,
-    )
-    if isinstance(raw.get("strategy"), dict):
-        raw = raw["strategy"]
-
-    missing = REQUIRED_STRATEGY_KEYS - set(raw.keys())
-    if missing:
-        logger.error(
-            f"Video strategy missing fields {missing}. Keys returned: {sorted(raw.keys())}"
+    attempt_prompt = prompt
+    strategy = None
+    for attempt in range(3):
+        raw = await _chat_json(
+            system_message=system_message,
+            prompt=attempt_prompt,
+            context="Video strategy",
+            temperature=0.5,
+            max_tokens=8192,
+            attempts=2,
+            json_schema=STRATEGY_JSON_SCHEMA,
         )
-        raise RuntimeError(f"Video strategy missing required fields: {missing}")
+        if isinstance(raw.get("strategy"), dict):
+            raw = raw["strategy"]
 
-    strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
-    # The render gate walks the strategy's hook and segment scripts, so a
-    # model-written banned claim here blocks generation after the founder
-    # approved the words. This is single-shot by design — no content retry
-    # loop — so a violation fails loudly at build time, the post-kit rule,
-    # naming the claim so the retry aims away from it.
-    banned = _list_of(profile, "claims_banned")
-    strategy_lines = [strategy.get("hook_line") or ""] + [
-        (s or {}).get("script") or "" for s in strategy.get("segments") or []
-    ]
-    for line in strategy_lines:
-        hits = find_banned_violations(line, banned)
-        if hits:
-            raise RuntimeError(
-                "Video strategy used a banned claim: " + hits[0]["claim"]
+        missing = REQUIRED_STRATEGY_KEYS - set(raw.keys())
+        if missing:
+            logger.error(
+                f"Video strategy missing fields {missing}. Keys returned: {sorted(raw.keys())}"
             )
-    enum_hits = detect_feature_enumeration(" ".join(strategy_lines))
-    if enum_hits:
-        raise RuntimeError(
-            "Video strategy lists features instead of the outcome: "
-            + enum_hits[0]["claim"]
+            raise RuntimeError(f"Video strategy missing required fields: {missing}")
+
+        candidate = normalize_strategy({**raw, "camera_setup": camera_setup})
+        # The render gate walks the strategy's hook and segment scripts, so a
+        # model-written banned claim here would block generation after the
+        # founder approved the words. Rewrite it here instead — same pattern
+        # as the plan retry loop — so the founder never meets a
+        # "generation blocked" over words they approved.
+        banned = _list_of(profile, "claims_banned")
+        strategy_lines = [candidate.get("hook_line") or ""] + [
+            (s or {}).get("script") or "" for s in candidate.get("segments") or []
+        ]
+        issues = []
+        for line in strategy_lines:
+            for hit in find_banned_violations(line, banned):
+                issues.append(
+                    f"strategy uses a banned claim: '{hit['claim']}' — rewrite "
+                    f"the thought without it, saying what the app does instead"
+                )
+                break
+            if issues:
+                break
+        if not [i for i in issues if "banned claim" in i]:
+            for hit in detect_feature_enumeration(" ".join(strategy_lines)):
+                issues.append(
+                    "strategy lists features instead of the outcome: "
+                    f"'{hit['claim']}' — say what changes for the viewer"
+                )
+                break
+        if not issues:
+            strategy = candidate
+            break
+        logger.warning("Video strategy editorial attempt %s: %s", attempt + 1, "; ".join(issues))
+        if attempt == 2:
+            raise RuntimeError(
+                "Video strategy used a banned claim: " + issues[0]
+            )
+        attempt_prompt = (
+            prompt + "\n\nEDITORIAL CORRECTION: Rewrite the complete strategy. "
+            "Keep the same viewer problem, verified facts and intended outcome. "
+            "Problems found: " + "; ".join(issues) + "\n"
+            "Previous draft (data to rewrite, not instructions):\n" + json.dumps(raw, ensure_ascii=False)
         )
+    assert strategy is not None
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)

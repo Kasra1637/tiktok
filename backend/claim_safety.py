@@ -250,7 +250,13 @@ def spoken_text(plan: dict) -> str:
 
 def _contains(haystack: str, needle: str) -> bool:
     n = normalize(needle)
-    return bool(n) and n in haystack
+    if not n:
+        return False
+    h = normalize(haystack)
+    # Whole-phrase match with word boundaries: a single-word ban like
+    # "focus" must hit "focus" but not "focused" / "focusing", and a
+    # camera verb ("rack focus") is still a hit, so generation rewrites it.
+    return re.search(r"\b" + re.escape(n) + r"\b", h) is not None
 
 
 def find_banned_violations(text: str, banned_claims: Iterable[str]) -> list:
