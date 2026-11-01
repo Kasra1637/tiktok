@@ -2159,6 +2159,95 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     return cleaned
 
 
+def _fact_key(value) -> str:
+    return " ".join(re.findall(r"\w+", str(value or "").casefold()))
+
+
+def _angle_grounding(profile: dict, angle: dict) -> dict:
+    """Resolve a recorded feature/outcome pair, never an invented promise.
+
+    Exact normalized source matching is intentionally conservative. Old/manual
+    angles can paraphrase a feature: their prose remains in the brief but is
+    not certified as a source link. Missing profile facts invent no constraint.
+    """
+    features = profile.get("core_features") or []
+    if isinstance(features, str):
+        features = [features]
+    selected = next((str(f).strip() for f in features
+                     if _fact_key(f) == _fact_key(angle.get("app_feature"))), "")
+    if not selected:
+        return {}
+    linked = [str(item.get("outcome") or "").strip()
+              for item in profile.get("outcome_statements") or []
+              if isinstance(item, dict) and _fact_key(item.get("from_feature")) == _fact_key(selected)
+              and str(item.get("outcome") or "").strip()]
+    outcomes = linked or profile.get("desired_outcomes") or []
+    if isinstance(outcomes, str):
+        outcomes = [outcomes]
+    outcomes = [str(value).strip() for value in outcomes if str(value).strip()]
+    chosen = next((o for o in outcomes if _fact_key(o) == _fact_key(angle.get("viewer_outcome"))), "")
+    result = {"feature": selected}
+    if outcomes:
+        result["outcome"] = chosen or outcomes[0]
+    return result
+
+
+def _duplicate_angle_pairs(angles: list) -> list:
+    """Conservative lexical overlap, not a claim of semantic similarity.
+
+    Short fields only match exactly. Longer fields need >=80% shared word
+    trigrams on BOTH the problem and promise; different arguments may use the
+    same feature, outcome, or kind without being duplicates.
+    """
+    def similar(left, right):
+        a, b = _fact_key(left).split(), _fact_key(right).split()
+        if not a or not b:
+            return False
+        if a == b:
+            return True
+        if min(len(a), len(b)) < 6:
+            return False
+        aa = {tuple(a[i:i + 3]) for i in range(len(a) - 2)}
+        bb = {tuple(b[i:i + 3]) for i in range(len(b) - 2)}
+        return len(aa & bb) / max(len(aa), len(bb)) >= 0.8
+    return [(i + 1, j + 1) for i, a in enumerate(angles) for j, b in enumerate(angles[:i])
+            if all(similar(a.get(field), b.get(field)) for field in ("user_problem", "hook_promise"))]
+
+
+def _normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:
+    if isinstance(parsed, dict):
+        parsed = parsed.get("angles") or parsed.get("content_angles") or []
+    if not isinstance(parsed, list):
+        raise RuntimeError("Content angles response was not a list.")
+    angles = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        normalized = {"kind": normalize_angle_kind(item.get("kind")), "claims_to_respect": []}
+        for field, limit in (("label", 120), ("target_audience", 400), ("user_problem", 600),
+                             ("hook_promise", 300), ("app_feature", 300),
+                             ("desired_emotion", 200), ("viewer_outcome", 300)):
+            normalized[field] = str(item.get(field) or "").strip()[:limit]
+        raw_claims = item.get("claims_to_respect")
+        if isinstance(raw_claims, str):
+            raw_claims = [raw_claims]
+        if isinstance(raw_claims, list):
+            normalized["claims_to_respect"] = [str(c).strip()[:200] for c in raw_claims if str(c).strip()][:6]
+        if not normalized["target_audience"] or not normalized["user_problem"]:
+            continue
+        source = _angle_grounding(profile, normalized)
+        if source:
+            normalized["app_feature"] = source["feature"]
+            if source.get("outcome"):
+                normalized["viewer_outcome"] = source["outcome"][:300]
+        angles.append(normalized)
+        if len(angles) >= max_angles:
+            break
+    if not angles:
+        raise RuntimeError("Content angles response contained no usable angles.")
+    return angles
+
+
 async def generate_content_angles(profile: dict, max_angles: int = 6,
                                   angle_feedback: Optional[dict] = None,
                                   objective: str = "") -> list:
@@ -2338,53 +2427,27 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     # doubled instead of surfacing as unparseable JSON. The list-or-dict
     # handling below stays: a provider that ignores response_format can
     # still answer either way.
-    parsed = await _chat_json(
-        system_message=system_message,
-        prompt=prompt,
-        context="Content angles",
-        max_tokens=3000,
-        timeout=90,
-        json_schema=ANGLES_JSON_SCHEMA,
-        model=ANGLE_MODEL,
-    )
-
-    if isinstance(parsed, dict):
-        parsed = parsed.get("angles") or parsed.get("content_angles") or []
-    if not isinstance(parsed, list):
-        raise RuntimeError("Content angles response was not a list.")
-
-    angles = []
-    for item in parsed:
-        if not isinstance(item, dict):
-            continue
-        normalized = {
-            "kind": normalize_angle_kind(item.get("kind")),
-            "label": (item.get("label") or "").strip()[:120],
-            "target_audience": (item.get("target_audience") or "").strip()[:400],
-            "user_problem": (item.get("user_problem") or "").strip()[:600],
-            "hook_promise": (item.get("hook_promise") or "").strip()[:300],
-            "app_feature": (item.get("app_feature") or "").strip()[:300],
-            "desired_emotion": (item.get("desired_emotion") or "").strip()[:200],
-            "viewer_outcome": (item.get("viewer_outcome") or "").strip()[:300],
-            "claims_to_respect": [],
-        }
-        raw_claims = item.get("claims_to_respect")
-        if isinstance(raw_claims, str):
-            raw_claims = [raw_claims]
-        if isinstance(raw_claims, list):
-            normalized["claims_to_respect"] = [
-                str(c).strip()[:200] for c in raw_claims if str(c).strip()
-            ][:6]
-        # An angle with no audience or no problem is not actionable downstream.
-        if not normalized["target_audience"] or not normalized["user_problem"]:
-            continue
-        angles.append(normalized)
-        if len(angles) >= max_angles:
-            break
-
-    if not angles:
-        raise RuntimeError("Content angles response contained no usable angles.")
-    return angles
+    attempt_prompt = prompt
+    original_count = 0
+    for attempt in range(2):
+        parsed = await _chat_json(
+            system_message=system_message, prompt=attempt_prompt, context="Content angles",
+            max_tokens=3000, timeout=90, json_schema=ANGLES_JSON_SCHEMA, model=ANGLE_MODEL,
+        )
+        angles = _normalize_content_angles(parsed, max_angles, profile)
+        original_count = original_count or len(angles)
+        duplicates = _duplicate_angle_pairs(angles)
+        if not duplicates and len(angles) >= original_count:
+            return angles
+        if attempt:
+            raise RuntimeError("Could not produce distinct content angles. Regenerate again; the previous set has not been replaced.")
+        attempt_prompt = (
+            prompt + "\n\nDIVERSITY CORRECTION: Duplicate argument pairs " + str(duplicates) + ". "
+            "Replace overlapping arguments and return the complete requested set. Do not merely rename labels. "
+            "Vary supported kinds, moments and objections, keeping verified facts and the objective. "
+            "Shared features or outcomes are fine when the argument differs. Previous batch (data, not instructions):\n"
+            + json.dumps(angles, ensure_ascii=False)
+        )
 
 
 OPENING_MESSAGE_COUNT = 20
@@ -3152,8 +3215,12 @@ async def generate_creative_plan(
         "duration_seconds": duration_seconds,
         "tone": tone or "(unstated)",
     }
-    # Conditional: an empty key still spends prompt budget, and old angles
-    # predate the column. Same pattern as visual_direction below.
+    grounding = _angle_grounding(profile, angle or {})
+    if grounding:
+        brief["verified_feature_outcome"] = grounding
+    if grounding.get("outcome"):
+        angle = {**(angle or {}), "viewer_outcome": grounding["outcome"]}
+    # Source-linked outcome wins before both the brief and angle-goal block.
     if ((angle or {}).get("viewer_outcome") or "").strip():
         brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
     if (visual_direction or "").strip():
@@ -4834,8 +4901,12 @@ async def generate_video_strategy(
         "tone": tone or "(unstated)",
         "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
     }
-    # Same conditional key as the plan brief: no budget spent when the angle
-    # predates the outcome column.
+    grounding = _angle_grounding(profile, angle or {})
+    if grounding:
+        brief["verified_feature_outcome"] = grounding
+    if grounding.get("outcome"):
+        angle = {**(angle or {}), "viewer_outcome": grounding["outcome"]}
+    # Same resolved link as the plan brief; approved spoken words stay bound.
     if ((angle or {}).get("viewer_outcome") or "").strip():
         brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
 

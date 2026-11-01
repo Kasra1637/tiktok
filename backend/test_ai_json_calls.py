@@ -550,11 +550,95 @@ class TestAngleFeedbackPromptWiring:
 
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             assert "exactly 6" in prompt
-            return [dict(self.ANGLE) for _ in range(9)]
+            return [{**self.ANGLE, "user_problem": problem, "hook_promise": hook} for problem, hook in [
+                ("Paper rota disappears", "Where is the rota?"),
+                ("Timer setup takes too long", "Start before tea cools"),
+                ("Late bus loses focus time", "One task on the bus"),
+                ("Forgot the grocery note", "Remember dinner at checkout"),
+                ("Meetings eat the morning", "Protect the first hour"),
+                ("Inbox buries urgent work", "Which task comes first?"),
+                ("Notifications interrupt reading", "Read one quiet page"),
+                ("Handover notes are missing", "Leave the next shift ready"),
+                ("Weekend chores pile up", "Finish laundry before lunch"),
+            ]]
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         out = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
         assert len(out) == 6
+
+
+class TestAngleDiversity:
+    def test_duplicate_arguments_get_one_correction(self, monkeypatch):
+        import ai_service
+        calls = []
+        first = dict(TestAngleFeedbackPromptWiring.ANGLE)
+        other = {**first, "kind": "objection_handling", "user_problem": "Paper notes vanish before handover", "hook_promise": "Where did the shift note go?"}
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs["prompt"])
+            return [first, first] if len(calls) == 1 else [first, other]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}, max_angles=2))
+        assert len(calls) == 2
+        assert result[1]["hook_promise"] == "Where did the shift note go?"
+        assert "duplicate" in calls[1].lower()
+
+    def test_persistent_duplicates_fail_without_a_depleted_set(self, monkeypatch):
+        import ai_service
+        calls = []
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs)
+            return [dict(TestAngleFeedbackPromptWiring.ANGLE)] * 2
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError, match="distinct"):
+            _run(ai_service.generate_content_angles({"brand_name": "Taskly"}, max_angles=2))
+        assert len(calls) == 2
+
+    def test_shared_outcome_and_short_different_hooks_are_not_duplicates(self, monkeypatch):
+        import ai_service
+        calls = []
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs)
+            return [{**TestAngleFeedbackPromptWiring.ANGLE, "hook_promise": hook, "viewer_outcome": "Start today"}
+                    for hook in ["Start before tea", "Start after work"]]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_content_angles({}, max_angles=2))
+        assert len(calls) == 1
+        assert len(result) == 2
+
+    def test_near_identical_long_arguments_are_corrected(self, monkeypatch):
+        import ai_service
+        calls = []
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs)
+            return [{**TestAngleFeedbackPromptWiring.ANGLE,
+                     "user_problem": "Every morning the same long list of unfinished tasks keeps growing before breakfast " + end,
+                     "hook_promise": "I open my notebook at the kitchen table and stare at yesterday unfinished list " + end}
+                    for end in ["again", "today"]]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError, match="distinct"):
+            _run(ai_service.generate_content_angles({}, max_angles=2))
+        assert len(calls) == 2
+
+    def test_correction_cannot_return_a_silently_depleted_batch(self, monkeypatch):
+        import ai_service
+        calls = []
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs)
+            return [dict(TestAngleFeedbackPromptWiring.ANGLE)] * (2 if len(calls) == 1 else 1)
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError, match="distinct"):
+            _run(ai_service.generate_content_angles({}, max_angles=2))
+
+    def test_profile_linked_outcome_replaces_invented_outcome(self, monkeypatch):
+        import ai_service
+        async def fake_chat_json(**kwargs):
+            return [{**TestAngleFeedbackPromptWiring.ANGLE, "viewer_outcome": "Win every award"}]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_content_angles({
+            "core_features": ["Task timer"],
+            "outcome_statements": [{"from_feature": "Task timer", "outcome": "Start before the kettle boils"}],
+        }, max_angles=1))
+        assert result[0]["viewer_outcome"] == "Start before the kettle boils"
 
 
 class TestAnglePromptGrounding:
@@ -699,10 +783,12 @@ class TestAngleGoalPromptWiring:
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         args = {
-            "profile": {"id": "profile-1", "brand_name": "Taskly", "core_features": ["Task timer"]},
+            "profile": {"id": "profile-1", "brand_name": "Taskly", "core_features": ["Task timer"],
+                        "outcome_statements": [{"from_feature": "Task timer", "outcome": "Starting without setup friction"}]},
             "template": {"id": "template-1", "name": "Name the misdiagnosis", "hook_seconds": 3},
             "angle": {"id": "angle-1", "kind": "problem_solution", "label": "Too many lists",
-                      "user_problem": "Nothing gets finished", "target_audience": "Busy professionals"},
+                      "user_problem": "Nothing gets finished", "target_audience": "Busy professionals",
+                      "app_feature": "Task timer", "viewer_outcome": "Invented unsupported outcome"},
             "objective": "demonstrate_feature",
         }
         if flow == "plan":
@@ -717,6 +803,9 @@ class TestAngleGoalPromptWiring:
                          "demonstrate_feature", "founder's later demo/CTA"):
             assert required in prompt
         assert "NEVER" in prompt and "product demonstration" in prompt
+        assert '"verified_feature_outcome"' in prompt
+        assert '"outcome": "Starting without setup friction"' in prompt
+        assert "Invented unsupported outcome" not in prompt
 
 
 class TestTruncatedResearchRetriesDoubled:

@@ -89,3 +89,4 @@ the alternatives we rejected and why. Git records *what* changed; these record
 | [0073](0073-angle-carries-viewer-outcome.md) | Angles carry viewer_outcome from outcome_statements; card shows it, strategy lands it | accepted |
 | [0074](0074-shared-template-fit-notes.md) | Fit notes shared by every template card are read once above them | accepted |
 | [0075](0075-actionable-review-checks.md) | Review findings select editable text; supporting evidence stays collapsed | accepted |
+| [0076](0076-angle-diversity-and-source-links.md) | Correct duplicate arguments and carry recorded feature/outcome links | accepted |
