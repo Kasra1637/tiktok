@@ -35,7 +35,12 @@ from template_library import (
     clamp_duration,
 )
 import feedback
-from claim_safety import FIRST_PERSON_PATTERNS, find_banned_violations, find_risk_patterns
+from claim_safety import (
+    FIRST_PERSON_PATTERNS,
+    detect_feature_enumeration,
+    find_banned_violations,
+    find_risk_patterns,
+)
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -3338,6 +3343,25 @@ async def generate_creative_plan(
         # hook leaves complete middle sentences; no partial sentence surgery.
         script = strip_leading_hook(hook, str(result.get("script") or "").strip())
         issues = _generated_spoken_issues(hook, script, hook_budget, middle_budget)
+        # The generator obeying its own claim gate: a banned claim or a
+        # feature-list read in the spoken lines fails the render check, so a
+        # draft that does it is rewritten here — with the violation named —
+        # instead of accepted and then blocking generation. Same pattern as
+        # the first-person guard in _generated_spoken_issues above: the
+        # checkers are shared with claim_safety, so the two cannot disagree
+        # about what counts.
+        for name, text in (("hook_line", hook), ("script", script)):
+            for hit in find_banned_violations(text, _list("claims_banned")):
+                issues.append(
+                    f"{name} uses a banned claim: '{hit['claim']}' — rewrite "
+                    f"the thought without it, saying what the app does instead"
+                )
+        if not [i for i in issues if "banned claim" in i]:
+            for hit in detect_feature_enumeration(f"{hook} {script}"):
+                issues.append(
+                    f"spoken lines list features instead of the outcome "
+                    f"('{hit['claim']}') — say what changes for the viewer"
+                )
         if not issues:
             result["hook_line"] = hook
             result["script"] = script
@@ -5192,6 +5216,27 @@ async def generate_video_strategy(
         raise RuntimeError(f"Video strategy missing required fields: {missing}")
 
     strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
+    # The render gate walks the strategy's hook and segment scripts, so a
+    # model-written banned claim here blocks generation after the founder
+    # approved the words. This is single-shot by design — no content retry
+    # loop — so a violation fails loudly at build time, the post-kit rule,
+    # naming the claim so the retry aims away from it.
+    banned = _list_of(profile, "claims_banned")
+    strategy_lines = [strategy.get("hook_line") or ""] + [
+        (s or {}).get("script") or "" for s in strategy.get("segments") or []
+    ]
+    for line in strategy_lines:
+        hits = find_banned_violations(line, banned)
+        if hits:
+            raise RuntimeError(
+                "Video strategy used a banned claim: " + hits[0]["claim"]
+            )
+    enum_hits = detect_feature_enumeration(" ".join(strategy_lines))
+    if enum_hits:
+        raise RuntimeError(
+            "Video strategy lists features instead of the outcome: "
+            + enum_hits[0]["claim"]
+        )
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)

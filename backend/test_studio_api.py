@@ -2326,3 +2326,98 @@ class TestComponentFeedbackRouting:
         assert summary["kinds"] == [
             {"name": "founder_story", "wins": 0, "flops": 1,
              "adoptions": 0, "abandonments": 0, "posted": 0, "views": 0}]
+
+
+class TestPlanRewriteAvoidsBannedClaims:
+    """
+    A plan that fails the claim gate must never reach Review: the founder
+    first meets it as "generation blocked" after approving the words. The
+    plan retry loop already rewrites editorial defects, so a banned claim in
+    the spoken lines joins the same correction path — retried with the
+    violation named, and failing loudly when the model will not stop.
+    """
+
+    def _draft(self, hook, script):
+        return {
+            "hook_line": hook, "script": script, "beat_timeline": [],
+            "visual_direction": "v", "demo_brief": "Record the timer once.",
+            "voice_direction": "vd", "sound_direction": "sd",
+        }
+
+    def test_banned_claim_in_first_draft_is_rewritten(self, monkeypatch):
+        import ai_service
+        calls = []
+        bad = self._draft(
+            "I couldn't get started.", "This app cures anxiety for good, try it.")
+        good = self._draft(
+            "I couldn't get started.", "One prompt helped me start writing.")
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            calls.append(prompt)
+            return dict(bad if len(calls) == 1 else good)
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
+            template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
+        assert len(calls) == 2, "the banned draft should have been retried, not saved"
+        assert "cures anxiety" not in result["script"].lower()
+        assert "cures anxiety" in calls[1], "the correction must name the violation"
+
+    def test_persistent_banned_claim_fails_loudly(self, monkeypatch):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            return dict(self._draft(
+                "I couldn't get started.", "This app cures anxiety for good, try it."))
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError):
+            _run(ai_service.generate_creative_plan(
+                profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
+                template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
+
+
+class TestStrategyRefusesBannedClaims:
+    """
+    The render gate walks the strategy's hook and segment scripts too, so a
+    model-written banned claim there blocks generation just the same. The
+    strategy is single-shot by design (no content retry loop), so a
+    violation fails loudly at build time — the post-kit rule — instead of
+    reaching Review and dying at the generate button.
+    """
+
+    def _strategy(self, monkeypatch, hook_line, segment_script):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": hook_line, "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"],
+                "primary_feature": "f", "desired_outcome": "o",
+                "mechanism_beat": "mb", "payoff_beat": "pb",
+                "differentiation_beat": "b",
+                "scene": {"environment": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 2,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 13,
+                     "goal": "g2", "script": segment_script, "action": "a2"},
+                ],
+            }
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return _run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
+            template={"name": "T", "required_assets": ["character_reference"]},
+            angle=None, objective="ease_daily_moment",
+            hook_seconds=2, total_duration=15, tone="", brand_voice="",
+            profile_feedback={}))
+
+    def test_clean_strategy_passes(self, monkeypatch):
+        result = self._strategy(monkeypatch, "h", "One prompt helped me start writing.")
+        assert result["segments"][1]["script"] == "One prompt helped me start writing."
+
+    def test_banned_claim_in_strategy_fails_loudly(self, monkeypatch):
+        with pytest.raises(RuntimeError, match="cures anxiety"):
+            self._strategy(monkeypatch, "h", "This app cures anxiety for good.")
