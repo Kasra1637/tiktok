@@ -2289,7 +2289,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         'before the kettle boils."\n'
         "A strong angle names a MOMENT from usage_moments, a thing the viewer does "
         "today that fails, or an objection from viewer_objections. A weak one names "
-        "a category of person plus a benefit.\n\n"
+        "a category of person plus a benefit. "
+        "Give each angle a DIFFERENT usage moment — no two angles may share the same "
+        "moment, and every user_problem must name the moment it uses.\n\n"
         "For each angle:\n"
         "- target_audience: one functional segment per angle -- spread angles across icp_segments so a multi-condition app is represented, not every angle on the first segment.\n"
         "- user_problem: the concrete moment or cost -- a time, place, object or "

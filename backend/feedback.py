@@ -458,6 +458,23 @@ def build_angle_feedback_section(summary: dict) -> str:
 
     posted_clips = int(summary.get("posted_clips") or 0)
     lines = []
+    # Proven winners: same pair won founder thumbs AND earned posted clips.
+    # Strongest signal in the loop — tell the model to reproduce the argument,
+    # not just lean toward it. Ranked pairs already carry both axes.
+    winners = [
+        p for p in (pairs or [])
+        if int(p.get("wins") or 0) > 0 and int(p.get("posted") or 0) > 0
+    ][:3]
+    if winners:
+        names = "; ".join(
+            f"{w['name']} ({w['wins']} win(s), posted in {w['posted']} clip(s), {w.get('views', 0)} views)"
+            for w in winners
+        )
+        lines.append(
+            "PROVEN WINNERS — reproduce their argument first: " + names + ". "
+            "Keep the same kind for the same objective and vary only the moment; "
+            "do not retire a winner to try something new."
+        )
     if posted_clips:
         lines.append(
             "POSTED PERFORMANCE from TikTok clips the founder linked back "
