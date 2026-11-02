@@ -4755,6 +4755,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!shared.textContent.includes("Bounded by: weekly reports only.")) {
       throw new Error("the section line does not carry the shared limitation");
     }
+    // Each shared limit is its own line. The notes are whole sentences and not
+    // all of them end in a full stop ("Bounded by: …" is a semicolon-joined
+    // list), so joining them into one paragraph ran an unterminated note
+    // straight into the next — "…for the process Needs character reference." —
+    // and the boundary between two limits disappeared.
+    const limitLines = [...shared.querySelectorAll("li")].map((li) => li.textContent.trim());
+    for (const note of ["Needs character reference.", "Bounded by: weekly reports only."]) {
+      const holders = limitLines.filter((line) => line.includes(note));
+      if (holders.length !== 1) {
+        throw new Error(`the shared limit "${note}" is on ${holders.length} lines instead of its own`);
+      }
+      if (holders[0] !== note) {
+        throw new Error(`the shared limit "${note}" is glued to another note: ${holders[0]}`);
+      }
+    }
     const verdicts = [...ctx.container.querySelectorAll('[data-testid="template-fit-verdict"]')];
     if (verdicts.length !== 2) throw new Error(`expected two differentiating verdicts, saw ${verdicts.length}`);
     for (const verdict of verdicts) {

@@ -1847,7 +1847,27 @@ export default function CreateVideo() {
                       <p>True of every template below: {sharedFit.reasons.join(" ")}</p>
                     )}
                     {sharedFit.limitations.length > 0 && (
-                      <p>Limits on every template below: {sharedFit.limitations.join(" ")}</p>
+                      <div className="space-y-1">
+                        <p>Limits on every template below:</p>
+                        {/* One note per line. These are whole sentences from
+                            the scorer, and not all of them end in a full stop
+                            ("Bounded by: …" is a list joined with semicolons),
+                            so joining them into one paragraph ran two notes
+                            together — "…for the process Needs character
+                            reference." A list per note is what the card's own
+                            limits render, so the two read the same way. */}
+                        <ul className="space-y-1">
+                          {sharedFit.limitations.map((limitation, i) => (
+                            <li
+                              key={`sl-${i + 1}`}
+                              className="flex items-start gap-1.5 leading-relaxed"
+                            >
+                              <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                              <span>{sentenceCase(limitation)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 )}
