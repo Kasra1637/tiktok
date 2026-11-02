@@ -518,3 +518,8 @@ class DemoCtaUploadCompleteRequest(BaseModel):
     generation_id: Optional[str] = None
     filename: str = "demo-cta.mp4"
     total: int
+
+
+class RewriteHookRequest(BaseModel):
+    """The hook to sharpen; empty means the project's saved hook line."""
+    hook_line: Optional[str] = None

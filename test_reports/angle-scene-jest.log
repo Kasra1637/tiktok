@@ -1,8 +1,53 @@
 yarn run v1.22.22
 $ craco test --watchAll=false
-PASS src/demoCta/exportTikTok.test.js (12.389 s)
-PASS src/demoCta/exportFlow.test.js (12.813 s)
-PASS src/pages/GenerationHistory.test.js (13.802 s)
+PASS src/demoCta/exportFlow.test.js (5.593 s)
+PASS src/demoCta/exportTikTok.test.js (5.398 s)
+PASS src/demoCta/editSession.test.js
+PASS src/pages/historyPolling.test.js (12.794 s)
+  ● Console
+
+    console.warn
+      [HookForge] Clerk is not configured, running in no-auth mode.
+        Sign-in/sign-up are disabled and all data is stored under the shared
+        "anonymous" user.
+      
+        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+        time (CRA inlines it into the bundle):
+          • Local:  add it to frontend/.env then restart/rebuild
+          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+          • Render: add it as an Environment Variable, then redeploy
+      
+        Get the key from https://dashboard.clerk.com -> API Keys.
+
+    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
+     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
+    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
+     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
+     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
+
+      at Object.<anonymous> (src/lib/clerk.js:34:11)
+      at Object.<anonymous> (src/lib/api.js:2:1)
+      at src/pages/historyPolling.test.js:7:23
+      at Object.<anonymous> (src/pages/historyPolling.test.js:11:1)
+
+    console.error
+      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
+
+    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
+     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
+     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
+     [90m 19 |[39m   )[33m;[39m[0m
+
+      at Object.<anonymous> (src/lib/api.js:16:11)
+      at src/pages/historyPolling.test.js:7:23
+      at Object.<anonymous> (src/pages/historyPolling.test.js:11:1)
+
+PASS src/pages/GenerationHistory.test.js (12.888 s)
   ● Console
 
     console.warn
@@ -45,56 +90,101 @@ PASS src/pages/GenerationHistory.test.js (13.802 s)
       at Object.<anonymous> (src/lib/api.js:16:11)
       at Object.<anonymous> (src/pages/historyRepair.js:1:1)
       at Object.<anonymous> (src/pages/GenerationHistory.test.js:51:1)
+
+PASS src/lib/nextTake.test.js (7.897 s)
+  ● Console
+
+    console.warn
+      [HookForge] Clerk is not configured, running in no-auth mode.
+        Sign-in/sign-up are disabled and all data is stored under the shared
+        "anonymous" user.
+      
+        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+        time (CRA inlines it into the bundle):
+          • Local:  add it to frontend/.env then restart/rebuild
+          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+          • Render: add it as an Environment Variable, then redeploy
+      
+        Get the key from https://dashboard.clerk.com -> API Keys.
+
+    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
+     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
+    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
+     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
+     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
+
+      at Object.<anonymous> (src/lib/clerk.js:34:11)
+      at Object.<anonymous> (src/lib/api.js:2:1)
+      at Object.<anonymous> (src/lib/feedback.js:19:1)
+      at Object.<anonymous> (src/lib/nextTake.js:1:1)
+      at Object.<anonymous> (src/lib/nextTake.test.js:1:1)
+
+    console.error
+      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
+
+    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
+     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
+     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
+     [90m 19 |[39m   )[33m;[39m[0m
+
+      at Object.<anonymous> (src/lib/api.js:16:11)
+      at Object.<anonymous> (src/lib/feedback.js:19:1)
+      at Object.<anonymous> (src/lib/nextTake.js:1:1)
+      at Object.<anonymous> (src/lib/nextTake.test.js:1:1)
 
 PASS src/lib/angleSubtitle.test.js
-PASS src/pages/wizardDraft.test.js
-PASS src/demoCta/useOpeningMessages.test.js
-PASS src/pages/historyPolling.test.js
-  ● Console
-
-    console.warn
-      [HookForge] Clerk is not configured, running in no-auth mode.
-        Sign-in/sign-up are disabled and all data is stored under the shared
-        "anonymous" user.
-      
-        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
-        time (CRA inlines it into the bundle):
-          • Local:  add it to frontend/.env then restart/rebuild
-          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
-          • Render: add it as an Environment Variable, then redeploy
-      
-        Get the key from https://dashboard.clerk.com -> API Keys.
-
-    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
-     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
-    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
-     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
-     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
-
-      at Object.<anonymous> (src/lib/clerk.js:34:11)
-      at Object.<anonymous> (src/lib/api.js:2:1)
-      at src/pages/historyPolling.test.js:7:23
-      at Object.<anonymous> (src/pages/historyPolling.test.js:11:1)
-
-    console.error
-      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
-
-    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
-     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
-    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
-     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
-     [90m 19 |[39m   )[33m;[39m[0m
-
-      at Object.<anonymous> (src/lib/api.js:16:11)
-      at src/pages/historyPolling.test.js:7:23
-      at Object.<anonymous> (src/pages/historyPolling.test.js:11:1)
-
 PASS src/upscale/enhanceVideo.test.js
-PASS src/demoCta/useHistorySource.test.js
+PASS src/demoCta/sourceChangeClearsHistory.test.js
+PASS src/pages/GenerationHistoryRescue.test.js (15.09 s)
+  ● Console
+
+    console.warn
+      [HookForge] Clerk is not configured, running in no-auth mode.
+        Sign-in/sign-up are disabled and all data is stored under the shared
+        "anonymous" user.
+      
+        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
+        time (CRA inlines it into the bundle):
+          • Local:  add it to frontend/.env then restart/rebuild
+          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
+          • Render: add it as an Environment Variable, then redeploy
+      
+        Get the key from https://dashboard.clerk.com -> API Keys.
+
+    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
+     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
+    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
+     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
+     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
+
+      at Object.<anonymous> (src/lib/clerk.js:34:11)
+      at Object.<anonymous> (src/lib/api.js:2:1)
+      at src/pages/GenerationHistoryRescue.test.js:73:23
+      at Object.<anonymous> (src/pages/GenerationHistoryRescue.test.js:99:1)
+
+    console.error
+      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
+
+    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
+     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
+     [90m    |[39m           [31m[1m^[22m[39m
+     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
+     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
+     [90m 19 |[39m   )[33m;[39m[0m
+
+      at Object.<anonymous> (src/lib/api.js:16:11)
+      at src/pages/GenerationHistoryRescue.test.js:73:23
+      at Object.<anonymous> (src/pages/GenerationHistoryRescue.test.js:99:1)
+
+PASS src/demoCta/useHistorySource.test.js (7.898 s)
   ● Console
 
     console.warn
@@ -138,99 +228,12 @@ PASS src/demoCta/useHistorySource.test.js
       at src/demoCta/useHistorySource.test.js:10:23
       at Object.<anonymous> (src/demoCta/useHistorySource.test.js:3:1)
 
-PASS src/lib/copyClipboard.test.js
+PASS src/demoCta/overlays.test.js
 PASS src/components/ui/textarea.test.jsx
-PASS src/lib/nextTake.test.js
-  ● Console
-
-    console.warn
-      [HookForge] Clerk is not configured, running in no-auth mode.
-        Sign-in/sign-up are disabled and all data is stored under the shared
-        "anonymous" user.
-      
-        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
-        time (CRA inlines it into the bundle):
-          • Local:  add it to frontend/.env then restart/rebuild
-          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
-          • Render: add it as an Environment Variable, then redeploy
-      
-        Get the key from https://dashboard.clerk.com -> API Keys.
-
-    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
-     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
-    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
-     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
-     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
-
-      at Object.<anonymous> (src/lib/clerk.js:34:11)
-      at Object.<anonymous> (src/lib/api.js:2:1)
-      at Object.<anonymous> (src/lib/feedback.js:19:1)
-      at Object.<anonymous> (src/lib/nextTake.js:1:1)
-      at Object.<anonymous> (src/lib/nextTake.test.js:1:1)
-
-    console.error
-      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
-
-    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
-     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
-    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
-     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
-     [90m 19 |[39m   )[33m;[39m[0m
-
-      at Object.<anonymous> (src/lib/api.js:16:11)
-      at Object.<anonymous> (src/lib/feedback.js:19:1)
-      at Object.<anonymous> (src/lib/nextTake.js:1:1)
-      at Object.<anonymous> (src/lib/nextTake.test.js:1:1)
-
-PASS src/lib/api.test.js
-  ● Console
-
-    console.warn
-      [HookForge] Clerk is not configured, running in no-auth mode.
-        Sign-in/sign-up are disabled and all data is stored under the shared
-        "anonymous" user.
-      
-        To enable authentication, set REACT_APP_CLERK_PUBLISHABLE_KEY at BUILD
-        time (CRA inlines it into the bundle):
-          • Local:  add it to frontend/.env then restart/rebuild
-          • Docker: pass --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_...
-          • Render: add it as an Environment Variable, then redeploy
-      
-        Get the key from https://dashboard.clerk.com -> API Keys.
-
-    [0m [90m 32 |[39m [36mif[39m ([33m![39misClerkConfigured) {
-     [90m 33 |[39m   [90m// Loud, actionable warning — this is the #1 cause of "the app is blank".[39m
-    [31m[1m>[22m[39m[90m 34 |[39m   console[33m.[39mwarn(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 35 |[39m     [32m"[HookForge] Clerk is not configured, running in no-auth mode.\n"[39m [33m+[39m
-     [90m 36 |[39m     [32m"  Sign-in/sign-up are disabled and all data is stored under the shared\n"[39m [33m+[39m
-     [90m 37 |[39m     [32m"  \"anonymous\" user.\n\n"[39m [33m+[39m[0m
-
-      at Object.<anonymous> (src/lib/clerk.js:34:11)
-      at Object.<anonymous> (src/lib/api.js:2:1)
-      at Object.<anonymous> (src/lib/api.test.js:16:1)
-
-    console.error
-      REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
-
-    [0m [90m 14 |[39m [36mif[39m ([33m![39m[33mBACKEND_URL[39m [33m&&[39m process[33m.[39menv[33m.[39m[33mNODE_ENV[39m [33m!==[39m [32m"production"[39m) {
-     [90m 15 |[39m   [90m// eslint-disable-next-line no-console[39m
-    [31m[1m>[22m[39m[90m 16 |[39m   console[33m.[39merror(
-     [90m    |[39m           [31m[1m^[22m[39m
-     [90m 17 |[39m     [32m"REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. "[39m [33m+[39m
-     [90m 18 |[39m       [32m'From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.'[39m
-     [90m 19 |[39m   )[33m;[39m[0m
-
-      at Object.<anonymous> (src/lib/api.js:16:11)
-      at Object.<anonymous> (src/lib/api.test.js:16:1)
-
-PASS src/lib/profileSelection.test.js
-PASS src/demoCta/transitions.test.js
-PASS src/lib/videoLength.test.js
+PASS src/demoCta/useOpeningMessages.test.js
+PASS src/components/studio/HookLineEditor.test.jsx
+PASS src/lib/copyClipboard.test.js
+PASS src/pages/wizardDraft.test.js
 PASS src/demoCta/useExportErrors.test.js
   ● Console
 
@@ -298,10 +301,13 @@ PASS src/demoCta/useExportErrors.test.js
       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:1081:22)
       at Object.<anonymous> (src/demoCta/useExportErrors.test.js:80:12)
 
-PASS src/demoCta/sourceChangeClearsHistory.test.js
 PASS src/demoCta/saveOutbox.test.js
-PASS src/demoCta/editSession.test.js
-PASS src/pages/GenerationHistoryRescue.test.js (21.199 s)
+PASS src/lib/videoLength.test.js
+PASS src/components/FitBadge.test.jsx
+PASS src/demoCta/transitions.test.js
+PASS src/lib/recentDraft.test.js
+PASS src/demoCta/surpriseVariants.test.js
+PASS src/lib/api.test.js (151.788 s)
   ● Console
 
     console.warn
@@ -327,8 +333,7 @@ PASS src/pages/GenerationHistoryRescue.test.js (21.199 s)
 
       at Object.<anonymous> (src/lib/clerk.js:34:11)
       at Object.<anonymous> (src/lib/api.js:2:1)
-      at src/pages/GenerationHistoryRescue.test.js:73:23
-      at Object.<anonymous> (src/pages/GenerationHistoryRescue.test.js:99:1)
+      at Object.<anonymous> (src/lib/api.test.js:16:1)
 
     console.error
       REACT_APP_BACKEND_URL is unset, so API calls go to the dev server itself and fail. From the repo root run: echo "REACT_APP_BACKEND_URL=http://localhost:8000" > frontend/.env, then restart the dev server.
@@ -342,26 +347,56 @@ PASS src/pages/GenerationHistoryRescue.test.js (21.199 s)
      [90m 19 |[39m   )[33m;[39m[0m
 
       at Object.<anonymous> (src/lib/api.js:16:11)
-      at src/pages/GenerationHistoryRescue.test.js:73:23
-      at Object.<anonymous> (src/pages/GenerationHistoryRescue.test.js:99:1)
+      at Object.<anonymous> (src/lib/api.test.js:16:1)
 
-PASS src/lib/recentDraft.test.js
+PASS src/lib/feedback.test.js (214.095 s)
+PASS src/lib/vitals.test.js (214.112 s)
+PASS src/lib/hookTemplateCategories.test.js (214.298 s)
+FAIL src/demoCta/exportFailureNote.test.js (216.11 s)
+  ● a failed save names its stage in the banner
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long-running test."
+
+    [0m [90m 18 |[39m }
+     [90m 19 |[39m
+    [31m[1m>[22m[39m[90m 20 |[39m test([32m"a failed save names its stage in the banner"[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 21 |[39m   [36mconst[39m text [33m=[39m [36mawait[39m renderNote({
+     [90m 22 |[39m     stage[33m:[39m [32m"save"[39m[33m,[39m
+     [90m 23 |[39m     message[33m:[39m [32m"No."[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/demoCta/exportFailureNote.test.js:20:1)
+
 PASS src/lib/errorMessage.test.js
-PASS src/lib/feedback.test.js
+PASS src/lib/templateRequirements.test.js
+PASS src/lib/profileSelection.test.js
+PASS src/demoCta/clipWindow.test.js
 PASS src/lib/copyCase.test.js
 PASS src/upscale/sizing.test.js
-PASS src/lib/templateRequirements.test.js
-PASS src/lib/vitals.test.js
-PASS src/components/FitBadge.test.jsx
-PASS src/lib/hookTemplateCategories.test.js (6.804 s)
-PASS src/demoCta/overlays.test.js (10.892 s)
-PASS src/demoCta/clipWindow.test.js
-PASS src/demoCta/exportFailureNote.test.js (13.618 s)
-PASS src/demoCta/surpriseVariants.test.js (9.391 s)
 
-Test Suites: 34 passed, 34 total
-Tests:       251 passed, 251 total
+Summary of all failing tests
+FAIL src/demoCta/exportFailureNote.test.js (216.11 s)
+  ● a failed save names its stage in the banner
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long-running test."
+
+    [0m [90m 18 |[39m }
+     [90m 19 |[39m
+    [31m[1m>[22m[39m[90m 20 |[39m test([32m"a failed save names its stage in the banner"[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m    |[39m [31m[1m^[22m[39m
+     [90m 21 |[39m   [36mconst[39m text [33m=[39m [36mawait[39m renderNote({
+     [90m 22 |[39m     stage[33m:[39m [32m"save"[39m[33m,[39m
+     [90m 23 |[39m     message[33m:[39m [32m"No."[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/demoCta/exportFailureNote.test.js:20:1)
+
+
+Test Suites: 1 failed, 34 passed, 35 total
+Tests:       1 failed, 254 passed, 255 total
 Snapshots:   0 total
-Time:        44.711 s
+Time:        240.994 s
 Ran all test suites.
-Done in 46.66s.
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

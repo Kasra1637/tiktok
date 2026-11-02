@@ -2975,6 +2975,8 @@ def scene_setting_guidance(angle: Optional[dict] = None) -> str:
         "never moves it indoors, outdoors or to another time of day.\n"
         if moment else ""
     )
+    if _angle_scene_policy.scene_is_unclear(angle):
+        lead += _ANGLE_PLACE_RULE + "\n"
     return lead + (
         "- scene.setting must come from usage_moments — the only evidence of when and where "
         "it is used. Never a kitchen, desk or routine; empty stays unspecified, never invented. "
@@ -2982,6 +2984,55 @@ def scene_setting_guidance(angle: Optional[dict] = None) -> str:
         "at sunrise, a night market, a coastal trail — not a bedroom, almost never a car); "
         "prefer walking outdoors over sitting indoors.\n"
     )
+
+
+_ANGLE_PLACE_RULE = (
+    "- ANGLE PLACE: the angle's moment names no place, so name ONE concrete place where "
+    "this moment really happens for this viewer, state it in scene.setting, and keep the "
+    "whole video there. Never leave the place vague."
+)
+
+HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
+
+
+async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "") -> str:
+    """A clearer version of the founder's hook that names the real action (ADR 0084).
+
+    A suggestion only: nothing is saved here. An empty hook or a reply that
+    comes back unchanged raises, so the founder never sees a fake improvement.
+    """
+    original = str(hook_line or "").strip()
+    if not original:
+        raise RuntimeError("There is no hook line to rewrite yet.")
+    p = profile or {}
+    facts = "\n".join(
+        f"- {k}: {str(p.get(k)).strip()}"
+        for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
+        if str(p.get(k) or "").strip()
+    )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
+        f"{_angle_goal_block(angle, objective)}\n\n"
+        f"{_spoken_line_rules_block()}\n"
+        f"CURRENT HOOK: {original}\n\n"
+        "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
+        "viewer's own first-person words. Keep its meaning, its feeling and roughly its length "
+        "(one short spoken sentence). Never name the app. No quotation marks. "
+        'Return JSON: {"hook_line": "..."}'
+    )
+    raw = await _chat_json(
+        system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
+        prompt=prompt,
+        context="Hook rewrite",
+        temperature=0.6,
+        max_tokens=400,
+        attempts=2,
+        json_schema=HOOK_REWRITE_JSON_SCHEMA,
+    )
+    line = re.sub(r"\s+", " ", str((raw or {}).get("hook_line") or "")).strip().strip('"\u201c\u201d')
+    if not line or line.lower() == original.lower():
+        raise RuntimeError("The rewrite came back unchanged.")
+    return line
 
 
 def _angle_scene_moment(angle: Optional[dict]) -> str:
@@ -3028,6 +3079,8 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
             "moment or look setting moves it to another place or time of day (no bed, night or "
             "living room unless the moment says so)."
         )
+        if _angle_scene_policy.scene_is_unclear(angle):
+            lines.append(_ANGLE_PLACE_RULE)
     if _text("app_feature"):
         lines.append(f"- SOLUTION: the middle resolves the problem through {_text('app_feature')}, as a change in the viewer's life, never a feature list.")
     if _text("viewer_outcome"):

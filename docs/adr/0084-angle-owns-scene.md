@@ -33,8 +33,26 @@ the real task. Each step was internally reasonable; together they disagreed.
 - Only new or regenerated plans follow these rules. Existing drafts keep their
   stored plans; `angle_scene_note` is NULL for old rows.
 
+### Follow-up
+
+- The scene lexicon covers travel and room wording (commute, station, porch,
+  cafe; car, gym, apartment). `train`/`bus` are not indoor words, and a
+  doorway clause ("steps out of the car outside the cafe") reads as outdoors.
+- `scene_is_unclear`: when the moment names no place, strategy and plan
+  prompts carry an ANGLE PLACE rule asking the writer to state one concrete
+  place that fits the angle, instead of the system guessing.
+- One-click hook rewrite: `POST /studio/projects/{id}/rewrite-hook` returns a
+  suggested `hook_line` and writes nothing. Review shows "Suggest a clearer
+  hook" only beside a vague-hook warning; "Use this line" applies it through
+  the normal draft edit (autosave + claim check rerun), "Keep mine" dismisses.
+  A failed or unchanged rewrite returns 502 with a next step, never a silent
+  fallback line.
+- Matching voice/tone mood to the angle's emotion is deferred until a real
+  render confirms the place/time binding works end to end.
+
 ## Consequences
 
 - The strategy prompt ceiling rises by a measured 2,000 to 26,500 characters.
-- Scene detection is lexical; an angle whose moment names no place or time
-  leaves options and looks untouched rather than guessing.
+- Scene detection is lexical; an angle whose moment names no place gets the
+  ANGLE PLACE rule, and options and looks stay untouched rather than guessed.
+- The hook rewrite is one extra model call, only on founder request.

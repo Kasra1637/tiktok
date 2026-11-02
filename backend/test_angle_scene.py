@@ -1,7 +1,10 @@
 """The angle owns where and when the video happens (ADR 0084)."""
 import subprocess
 import sys
+import asyncio
 from pathlib import Path
+
+import pytest
 
 import angle_scene
 import template_library
@@ -91,3 +94,68 @@ def test_prompts_bind_the_angle_moment_and_name_the_action():
     assert "ANGLE SCENE" not in ai_service.scene_setting_guidance()
     assert "NAME THE ACTION" in ai_service._spoken_line_rules_block()
     assert "PLACE + TIME" in ai_service._angle_goal_block(OFFICE, "")
+
+
+TRAVEL_MOMENTS = [
+    ("stuck on her commute home after work", "outdoor", "evening"),
+    ("waiting on the station platform", "outdoor", ""),
+    ("sitting in her parked car before going in", "indoor", ""),
+    ("on the train at the end of the day", "", "evening"),
+    ("walks out of the office after a long meeting", "outdoor", ""),
+    ("alone in his apartment on a Sunday", "indoor", ""),
+    ("steps out of the car outside the cafe", "outdoor", ""),
+]
+
+
+def test_travel_and_room_wording_is_read():
+    for moment, place, time in TRAVEL_MOMENTS:
+        assert angle_scene.scene_of(moment) == {"place": place, "time": time}, moment
+
+
+def test_lighting_words_are_not_mistaken_for_places():
+    assert angle_scene.scene_of("Flat even studio light")["place"] == ""
+
+
+def test_unclear_place_is_detected():
+    assert angle_scene.scene_is_unclear({"hook_promise": "right after a hard conversation"})
+    assert not angle_scene.scene_is_unclear(OFFICE)
+    assert not angle_scene.scene_is_unclear(None)
+    assert not angle_scene.scene_is_unclear({"hook_promise": ""})
+
+
+def test_place_rule_only_when_the_angle_names_no_place():
+    import ai_service
+    vague = {"hook_promise": "right after a hard conversation"}
+    assert "ANGLE PLACE" in ai_service.scene_setting_guidance(vague)
+    assert "ANGLE PLACE" in ai_service._angle_goal_block(vague, "")
+    assert "ANGLE PLACE" not in ai_service.scene_setting_guidance(OFFICE)
+    assert "ANGLE PLACE" not in ai_service._angle_goal_block(OFFICE, "")
+    assert "ANGLE PLACE" not in ai_service.scene_setting_guidance()
+
+
+def test_hook_rewrite_returns_the_clearer_line(monkeypatch):
+    import ai_service
+    seen = {}
+
+    async def fake_chat(**kwargs):
+        seen.update(kwargs)
+        return {"hook_line": "I don't want to write in my journal today"}
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    line = asyncio.run(ai_service.rewrite_hook_line(
+        {"brand_name": "Voice Journal"}, OFFICE, "I don't want to type anything"))
+    assert line == "I don't want to write in my journal today"
+    assert "I don't want to type anything" in seen["prompt"]
+    assert "NAME THE ACTION" in seen["prompt"]
+    assert seen["json_schema"] is ai_service.HOOK_REWRITE_JSON_SCHEMA
+
+
+def test_hook_rewrite_refuses_empty_and_unchanged(monkeypatch):
+    import ai_service
+
+    async def same(**kwargs):
+        return {"hook_line": "I don't want to type anything"}
+    monkeypatch.setattr(ai_service, "_chat_json", same)
+    with pytest.raises(RuntimeError):
+        asyncio.run(ai_service.rewrite_hook_line({}, OFFICE, "   "))
+    with pytest.raises(RuntimeError):
+        asyncio.run(ai_service.rewrite_hook_line({}, OFFICE, "I don't want to type anything"))

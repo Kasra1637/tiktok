@@ -15,19 +15,27 @@ _OUTDOOR = (
     r"\btrail\b", r"\bpath\b", r"\bgarden\b", r"\bbalcony\b", r"\bbeach\b",
     r"\bmarket\b", r"\brooftop\b", r"\bbus stop\b", r"\bcrosswalk\b", r"\bcourtyard\b",
     r"\bplaza\b", r"\bopen air\b", r"\bwalk(?:s|ing)? (?:home|along|down|through|past|to)\b",
+    r"\bcommut(?:e|es|ing)\b", r"\bstation\b", r"\bplatform\b", r"\bporch\b",
+    r"\bstoop\b", r"\bcaf[e\u00e9]\b", r"\bhilltop\b", r"\bbridge\b", r"\bcampus\b",
+    r"\bdriveway\b", r"\bbackyard\b", r"\bwaterfront\b", r"\bon a run\b",
+    r"\bout of the (?:office|building|house|car|gym|station)\b",
 )
 _INDOOR = (
     r"\bliving room\b", r"\bbedroom\b", r"\bin bed\b", r"\bbed\b", r"\blamp\b",
     r"\bcouch\b", r"\bsofa\b", r"\bkitchen\b", r"\bdesk\b", r"\bindoors?\b",
     r"\bhome office\b", r"\barmchair\b", r"\bwindow\b", r"\bbathroom\b",
     r"\bhallway\b", r"\bat home\b", r"\bcandle\b", r"\bbookshelf\b",
+    r"\b(?:in|inside) (?:the|her|his|their|a|my) car\b", r"\bparked car\b",
+    r"\boffice\b", r"\bcubicle\b", r"\bgym\b", r"\bapartment\b",
+    r"\bdorm\b", r"\bclassroom\b", r"\blibrary\b", r"\bshower\b",
 )
 _TIMES = {
     "night": (r"\bnight\b", r"\bnighttime\b", r"\bmidnight\b", r"\bbedtime\b",
               r"\bafter dark\b", r"\beleven\b", r"\b(?:10|11|12) ?pm\b"),
     "morning": (r"\bmorning\b", r"\bsunrise\b", r"\bdawn\b", r"\bbreakfast\b",
                 r"\b[5-9] ?am\b"),
-    "evening": (r"\bevening\b", r"\bsunset\b", r"\bdusk\b"),
+    "evening": (r"\bevening\b", r"\bsunset\b", r"\bdusk\b", r"\bafter work\b",
+                r"\bend of the (?:work ?)?day\b", r"\bcommute home\b"),
     "midday": (r"\bnoon\b", r"\bmidday\b", r"\blunch\b", r"\bafternoon\b"),
 }
 _TIME_CLASH = {
@@ -86,6 +94,12 @@ def angle_scene(angle: Optional[dict]) -> dict:
     """Moment, place and time of day the selected angle fixes for the video."""
     moment = angle_moment(angle)
     return {"moment": moment, **scene_of(moment)}
+
+
+def scene_is_unclear(angle: Optional[dict]) -> bool:
+    """True when the angle has an opening moment that names no place at all."""
+    scene = angle_scene(angle)
+    return bool(scene["moment"]) and not scene["place"]
 
 
 def conflict_reason(text: str, scene: dict) -> str:

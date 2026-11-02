@@ -62,6 +62,7 @@ from models import (
     FeedbackRequest, TikTokLinkRequest, TikTokViewsRequest,
     GenerateStrategyRequest, OpeningMessagesRequest,
     DemoCtaUploadCompleteRequest, RefreshDirectionOptionsRequest,
+    RewriteHookRequest,
     APP_PROFILE_LIST_FIELDS,
     APP_PROFILE_EDITABLE_FIELDS,
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
@@ -5169,6 +5170,45 @@ async def update_studio_project(
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
+
+
+@api_router.post("/studio/projects/{project_id}/rewrite-hook")
+async def suggest_hook_rewrite(
+    project_id: str, payload: RewriteHookRequest, user_id: str = Depends(get_current_user_id)
+):
+    """A clearer hook the founder may accept (ADR 0084). Advisory: writes nothing."""
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    original = (payload.hook_line or row.get("hook_line") or "").strip()
+    if not original:
+        raise HTTPException(status_code=400, detail="Write a hook line first, then ask for a clearer one.")
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+        (row.get("brand_profile_id"), user_id),
+    ) if row.get("brand_profile_id") else None
+    angle = await _fetch_one(
+        "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
+        (row["content_angle_id"], user_id),
+    ) if row.get("content_angle_id") else None
+    try:
+        line = await _log_model_call(
+            "hook_rewrite", "text", TEXT_MODEL,
+            lambda: ai_service.rewrite_hook_line(
+                profile or {}, angle, original, row.get("objective") or ""
+            ),
+            user_id, studio_project_id=project_id,
+        )
+    except Exception as e:
+        logger.error(f"Hook rewrite failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't write a clearer hook just now. Try again, or edit the line yourself.",
+        )
+    return {"hook_line": line, "original": original}
 
 
 @api_router.post("/studio/projects/{project_id}/plan")

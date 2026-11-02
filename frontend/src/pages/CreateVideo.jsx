@@ -1,12 +1,12 @@
 import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
+import HookLineEditor from "../components/studio/HookLineEditor";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
 import { useWizardDirections } from "./useWizardDirections";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 import { CONTROL_CLASS } from "../components/formControls";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
@@ -2242,15 +2242,13 @@ export default function CreateVideo() {
                 <p className="text-base">{project.angle_scene_note}</p>
               </div>
             )}
-            <div className="space-y-4">
-              <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
-              <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
-              <Input
-                id="review-hook_line"
-                value={editValue("hook_line", "")}
-                onChange={(e) => dispatchDraft({ type: "edit-field", field: "hook_line", value: e.target.value })}
-              />
-            </div>
+            <HookLineEditor
+              projectId={project?.id}
+              value={editValue("hook_line", "")}
+              onChange={(next) => dispatchDraft({ type: "edit-field", field: "hook_line", value: next })}
+              report={project.safety_report}
+              disabled={busy}
+            />
             <div className="space-y-4">
               <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
               <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
