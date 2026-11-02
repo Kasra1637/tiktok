@@ -108,3 +108,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0083](0083-turso-outage-refuses-local-fallback.md) | A configured Turso outage fails database requests instead of accepting local SQLite writes | accepted |
 | [0084](0084-angle-owns-scene.md) | The selected angle owns where, when and what happens; later steps conform with a visible note | accepted |
 | [0085](0085-template-step-reads-strongest-shared-note.md) | The template step reads the strongest shared note, not every one; the angle keeps its own bounds | accepted |
+| [0086](0086-upscaler-exports-1080p.md) | The upscaler exports 1080p, not 4K; eligibility moves with the target | accepted |

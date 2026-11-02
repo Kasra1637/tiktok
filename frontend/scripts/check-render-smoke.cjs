@@ -10079,7 +10079,7 @@ async function runDemoCtaChecks() {
       ["AssetLibrary.jsx", "Asset Library", []],
       ["GenerationHistory.jsx", "Generation History", []],
       ["Analytics.jsx", "Analytics", ["Compare manually recorded views and your own ratings."]],
-      ["VideoUpscaler.jsx", "Video Upscaler", ["Your clip's audio stays with its 4K export."]],
+      ["VideoUpscaler.jsx", "Video Upscaler", ["Upscale a clip to 1080p; its audio stays with the export."]],
     ];
     for (const [file, title, expected] of pages) {
       const text = fs.readFileSync(path.join(SRC, "pages", file), "utf8");

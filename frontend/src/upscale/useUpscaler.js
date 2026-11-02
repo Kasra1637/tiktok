@@ -72,8 +72,12 @@ export function useUpscaler() {
       }
       if (!upscaleTarget(meta.width, meta.height)) {
         setStatus("idle");
+        // One message for both refusals: already at or above 1080p, and a wide
+        // clip whose long side already fills the ceiling. Neither can gain
+        // resolution toward a 1080p export, and naming the dimensions is what
+        // tells the founder which case they are in.
         fail(
-          `This clip is already ${formatDims(meta.width, meta.height)} — 4K, so there is nothing to upscale. Pick a clip under 4K.`
+          `This clip is already ${formatDims(meta.width, meta.height)} — upscaling to 1080p would not add resolution. Pick a smaller clip.`
         );
         return;
       }
@@ -121,7 +125,7 @@ export function useUpscaler() {
     abortRef.current?.abort();
   }, []);
 
-  const downloadName = (fileName || "file").replace(/\.[^.]+$/, "") + "-upscaled-4k.mp4";
+  const downloadName = (fileName || "file").replace(/\.[^.]+$/, "") + "-upscaled-1080p.mp4";
 
   return {
     fileName, sourceUrl, sourceMeta, status, progress, result, error,

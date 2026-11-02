@@ -53,17 +53,33 @@ beforeEach(() => {
   canEncodeAudio.mockResolvedValue(true);
 });
 
-test("the video encode path refuses already-4K dimensions at its gate", async () => {
+test("the video encode path refuses a clip that is already 1080p at its gate", async () => {
+  // 1920x1080 is already 1080p: the gate refuses before any decode work.
   await expect(
     enhanceVideo({
       blob: new Blob(["clip"]),
       canvas: fakeCanvas(),
-      sourceWidth: 3840,
-      sourceHeight: 2160,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
       duration: 5,
       signal: new AbortController().signal,
     })
-  ).rejects.toThrow(/already 4K/);
+  ).rejects.toThrow(/already 1920 × 1080 — upscaling to 1080p would not add resolution/);
+});
+
+test("the video encode path refuses a wide clip whose long side is already capped", async () => {
+  // Short side is under 1080, but the long side fills the 1920 ceiling, so the
+  // only "1080p" export would be the input's own size.
+  await expect(
+    enhanceVideo({
+      blob: new Blob(["clip"]),
+      canvas: fakeCanvas(),
+      sourceWidth: 1920,
+      sourceHeight: 800,
+      duration: 5,
+      signal: new AbortController().signal,
+    })
+  ).rejects.toThrow(/upscaling to 1080p would not add resolution/);
 });
 
 test("the video encode path refuses a missing duration before encoding", async () => {
@@ -130,12 +146,12 @@ test("upscaling preserves source color tone and shadow levels without overlay bl
       signal: new AbortController().signal,
     });
 
-    expect(out.width).toBe(2160);
-    expect(out.height).toBe(3840);
+    expect(out.width).toBe(1080);
+    expect(out.height).toBe(1920);
     expect(canvas.ctx.imageSmoothingEnabled).toBe(true);
     expect(canvas.ctx.imageSmoothingQuality).toBe("high");
     expect(canvas.ctx.drawImage).toHaveBeenCalledTimes(1);
-    expect(canvas.ctx.drawImage).toHaveBeenCalledWith(decodedFrame.canvas, 0, 0, 2160, 3840);
+    expect(canvas.ctx.drawImage).toHaveBeenCalledWith(decodedFrame.canvas, 0, 0, 1080, 1920);
     expect(canvas.ctx.globalCompositeOperation).toBe("source-over");
     expect(canvas.ctx.filter).toBe("url(#hookforge-upscale-unsharp)");
     expect(canvas.ctx.filter).not.toMatch(/contrast|saturate|brightness/);

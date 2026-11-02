@@ -49,7 +49,7 @@ function throwCancelled(signal) {
 }
 
 /**
- * Enhance one sub-4K clip: upscale to the 4K target, then MP4.
+ * Enhance one sub-1080p clip: upscale to the 1080p target, then MP4.
  *
  * Decoding is per-frame through CanvasSink and every frame is painted with
  * high-quality bicubic smoothing plus a tone-neutral zero-DC unsharp convolution
@@ -62,7 +62,7 @@ export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, du
   const target = upscaleTarget(sourceWidth, sourceHeight);
   if (!target) {
     throw new Error(
-      "This video is already 4K on its shorter side, so there is nothing to upscale. Pick a clip under 4K."
+      `This clip is already ${sourceWidth} × ${sourceHeight} — upscaling to 1080p would not add resolution. Pick a smaller clip.`
     );
   }
   if (!(duration > 0) || !Number.isFinite(duration)) {

@@ -10,7 +10,7 @@ import { formatDims } from "../upscale/sizing";
 import { useUpscaler } from "../upscale/useUpscaler";
 
 /**
- * Video Upscaler: upload a sub-4K clip, enhance it, preview, download.
+ * Video Upscaler: upload a sub-1080p clip, enhance it, preview, download.
  *
  * Presentation only — the upload/probe/enhance state machine lives in
  * useUpscaler, and the encode pipeline in upscale/enhanceVideo. Everything
@@ -30,7 +30,7 @@ export function VideoUpscaler() {
       <PageHeader
         icon={WandSparkles}
         title="Video Upscaler"
-        description="Your clip's audio stays with its 4K export."
+        description="Upscale a clip to 1080p; its audio stays with the export."
       />
 
       {error && (
@@ -44,7 +44,7 @@ export function VideoUpscaler() {
         className="page-content-enter"
         title="Your clip"
         icon={Upload}
-        description="MP4 or WebM, under 4K on its shorter side. Everything is enhanced on this device — nothing is uploaded."
+        description="MP4 or WebM, under 1080p on its shorter side. Everything is enhanced on this device — nothing is uploaded."
         actions={
           (status === "ready" || status === "done") && (
             <Button variant="secondary" size="sm" onClick={resetSelection}>
@@ -107,7 +107,7 @@ export function VideoUpscaler() {
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 text-center">
                     <WandSparkles className="h-5 w-5 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
-                      Your sharpened 4K preview appears here.
+                      Your sharpened 1080p preview appears here.
                     </p>
                   </div>
                 )}
@@ -131,7 +131,7 @@ export function VideoUpscaler() {
                 {!result && (
                   <Button variant="accent" onClick={handleEnhance} data-testid="upscaler-enhance">
                     <WandSparkles className="h-4 w-4" />
-                    Enhance to 4K
+                    Enhance to 1080p
                   </Button>
                 )}
                 {result && (
