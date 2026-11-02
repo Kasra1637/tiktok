@@ -179,13 +179,7 @@ class TestTursoBootPull:
         total_syncs = sum(c.sync_calls for c in _FakeLibsqlConnection.instances)
         assert total_syncs == 1
 
-    def test_failed_pull_falls_back_loudly_not_silently_unsynced(self, api, monkeypatch, caplog):
-        """
-        A failed pull used to warn and continue on an UNSYNCED replica — which
-        is operationally identical to local SQLite while reporting as Turso.
-        Now it falls back like a connect failure: loud, ephemeral, and retrying
-        on the next connection (the flag stays False).
-        """
+    def test_failed_pull_refuses_local_fallback_and_retries(self, api, monkeypatch):
         def boom(*a, **k):
             conn = _FakeLibsqlConnection(*a, **k)
 
@@ -196,36 +190,47 @@ class TestTursoBootPull:
         _install_fake_libsql(monkeypatch, connect=boom)
         api._TURSO_BOOT_SYNC_DONE = False
         api._ACTIVE_BACKEND = None
+        local_calls = []
+
+        async def local_connect(*a, **k):
+            local_calls.append((a, k))
+            raise AssertionError("local SQLite must not open")
+
+        monkeypatch.setattr(api.aiosqlite, "connect", local_connect)
 
         async def use():
             async with api.get_db() as conn:
-                await conn.execute("SELECT 1")  # served, from the fallback
-        with caplog.at_level(logging.ERROR, logger="server"):
-            _run(use())  # must not raise
-        assert api._TURSO_BOOT_SYNC_DONE is False
-        assert api._ACTIVE_BACKEND == "local-ephemeral-fallback"
-        assert any("EPHEMERAL" in r.message for r in caplog.records)
+                await conn.execute("SELECT 1")
 
-    def test_broken_turso_falls_back_to_local_and_says_so(self, api, monkeypatch, caplog):
-        """
-        If Turso is configured but unreachable, the app keeps serving on local
-        SQLite — but that fallback is ephemeral, so it must read as an error in
-        the logs, never as a routine warning.
-        """
+        with pytest.raises(RuntimeError, match="Turso is configured but unavailable"):
+            _run(use())
+        assert local_calls == []
+        assert api._TURSO_BOOT_SYNC_DONE is False
+        assert api._ACTIVE_BACKEND == "unavailable"
+        assert _FakeLibsqlConnection.instances[-1].closed is True
+
+    def test_broken_turso_refuses_local_fallback(self, api, monkeypatch):
         def boom(*a, **k):
             raise RuntimeError("connection refused")
         _install_fake_libsql(monkeypatch, connect=boom)
         api._TURSO_BOOT_SYNC_DONE = False
         api._ACTIVE_BACKEND = None
+        local_calls = []
+
+        async def local_connect(*a, **k):
+            local_calls.append((a, k))
+            raise AssertionError("local SQLite must not open")
+
+        monkeypatch.setattr(api.aiosqlite, "connect", local_connect)
 
         async def use():
             async with api.get_db() as conn:
                 await conn.execute("SELECT 1")
-        with caplog.at_level(logging.ERROR, logger="server"):
+
+        with pytest.raises(RuntimeError, match="Turso is configured but unavailable"):
             _run(use())
-        assert api._ACTIVE_BACKEND == "local-ephemeral-fallback"
-        assert any("EPHEMERAL" in r.message for r in caplog.records), \
-            [r.message for r in caplog.records]
+        assert local_calls == []
+        assert api._ACTIVE_BACKEND == "unavailable"
 
 
 class TestBackendDisclosure:
@@ -287,6 +292,14 @@ class TestBackendDisclosure:
             api._log_database_backend()
         assert any("EPHEMERAL" in r.message for r in caplog.records)
         assert not any("Turso cloud" in r.message for r in caplog.records)
+
+    def test_unavailable_turso_is_critical(self, api, monkeypatch, caplog):
+        self._server_with(monkeypatch, "libsql://prod-123.turso.io", "unavailable")
+        with caplog.at_level(logging.INFO, logger="server"):
+            api._log_database_backend()
+        critical = [r for r in caplog.records if r.levelno >= logging.CRITICAL]
+        assert critical
+        assert any("Refusing local SQLite fallback" in r.message for r in critical)
 
     def test_fallback_on_render_is_critical(self, api, monkeypatch, caplog):
         monkeypatch.setenv("RENDER", "true")

@@ -2,19 +2,14 @@
 The health endpoint: where user data actually is, and how much of it there is.
 
 This exists to settle a specific report that kept arriving as "the app deleted
-my profile and videos". When Turso is configured but unreachable, `get_db`
-falls back to local SQLite so the app keeps serving — and on Render that file is
-on an ephemeral disk, so it starts EMPTY. Every list renders as "no profiles",
-which is indistinguishable from deletion by looking at the UI.
+my profile and videos". A configured Turso database can be unavailable without
+the cloud copy being lost, so the endpoint must never present an empty local
+store as though it were the founder's actual data.
 
 What these tests pin is that the endpoint reports the store it is ACTUALLY
-connected to rather than the one it was configured with, because those two have
-already diverged once: a previous version logged "Turso cloud" from config
-while the connection had fallen back to ephemeral, which is backwards.
-
-The fallback path is also what would let a founder recover their data safely, so
-it is worth being able to assert the label without reaching a real cloud
-database.
+connected to rather than the one it was configured with. A failed Turso
+connection now reports `unavailable` and refuses local fallback; local-only
+development retains its explicit local label.
 """
 import asyncio
 import importlib
@@ -77,9 +72,9 @@ class TestHealthEndpoint:
         _run(api.list_brands(user_id=ANON))
         out = _run(api.health(user_id=ANON))
         assert out["status"] == "ok"
-        # Whichever it is, it must be one of the three known labels, and it
+        # Whichever it is, it must be one of the known labels, and it
         # must agree with the module's own view of itself.
-        assert out["database"] in ("turso", "local-ephemeral-fallback", "local-sqlite")
+        assert out["database"] in ("turso", "unavailable", "local-ephemeral-fallback", "local-sqlite")
         assert out["database"] == (api._ACTIVE_BACKEND or api._database_backend())
 
     def test_local_sqlite_is_reported_as_not_durable(self, api):
@@ -129,6 +124,11 @@ class TestHealthEndpoint:
         """
         out = api.health_database_report("local-ephemeral-fallback")
         assert out["database"] == "local-ephemeral-fallback"
+        assert out["durable"] is False
+
+    def test_an_unavailable_turso_is_not_durable(self, api):
+        out = api.health_database_report("unavailable")
+        assert out["database"] == "unavailable"
         assert out["durable"] is False
 
     def test_turso_is_reported_as_durable(self, api):

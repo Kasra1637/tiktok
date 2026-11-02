@@ -26,7 +26,8 @@ credits. Begin with [setup](../README.md#quick-start) and
 | `GET /api/` responds | Basic API reachability only; says nothing about DB/media durability. |
 | `GET /api/health` | Authenticated inventory. Read `database`, `durable`, `your_rows`; table-read failures may be reported inside an HTTP 200 response. |
 | `database: turso` | This process established a cloud-backed connection. Also inspect logs for sync failures: recent unsynced writes can remain only on the local replica. |
-| `database: local-ephemeral-fallback` | Turso failed and writes are going locally. Treat as a persistence incident even if the UI works. |
+| `database: unavailable` | Configured Turso could not connect or sync. Database requests fail rather than opening local SQLite; restore Turso before accepting work. |
+| `database: local-ephemeral-fallback` | Legacy state from an older revision that accepted local writes after Turso failed. Preserve and reconcile that file deliberately. |
 | `database: local-sqlite`, `durable: false` | Local development default, unsafe for durable production state on an ephemeral host. A laptop's local file is not deleted merely by restarting Python. |
 | `GET /api/metrics` | Authenticated process-local counters/uptime. Not a persistent monitoring history or provider billing meter. |
 | `GET /docs` | FastAPI's current route/schema reference; do not rely on stale endpoint lists in chat. |
@@ -42,11 +43,12 @@ normal secure HTTP client. Do not log session tokens to demonstrate access.
    `TURSO_DATABASE_URL`.
 2. Verify the deployment has both Turso variable names configured and can reach
    the database. Do not print their values.
-3. If the instance has accepted local writes, preserve the local file/replica
-   before restart. The cloud copy can be intact while the UI is reading a
-   different, empty local store.
-4. Resolve the connection and reconcile any local-only writes deliberately.
-   There is no automatic conflict-free merge runbook or backup guarantee.
+3. If health says `unavailable`, the current revision has refused local writes.
+   Restore Turso; do not unset it on a shared instance merely to make requests
+   succeed. Unset it only when deliberately choosing an isolated local database.
+4. If an older instance accepted local writes, preserve that file/replica before
+   restart and reconcile those writes deliberately. There is no automatic
+   conflict-free merge runbook or backup guarantee.
 
 Local SQLite defaults to `backend/storage/hookforge.db`. The libsql embedded
 replica uses `hookforge.db` relative to the backend process working directory.

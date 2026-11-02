@@ -104,7 +104,7 @@ URL for same-origin API calls.
 |---|---|
 | `OPENROUTER_API_KEY` | Needed for AI research, angles, plans, strategies, and renders; non-AI screens can run without it. |
 | `CLERK_JWKS_URL` + client publishable key | Optional only for isolated local development. Without backend auth all callers share `anonymous`. Set `ENVIRONMENT=production` on hosted processes so the boot guard refuses missing auth outside Render too. |
-| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Cloud database. Otherwise local SQLite; a failed cloud connection can also fall back locally. Read the active backend from health. |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Cloud database. Otherwise local SQLite. If configured Turso cannot connect or sync, database requests fail with `unavailable` rather than writing to a local fallback. Read the active backend from health. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Durable media storage. Without it, clips depend on the host's local disk. `R2_PUBLIC_URL` is optional; private buckets can use signed reads. |
 | `MEDIA_URL_SECRET` | Stable signing key for media URLs. Without one, the development process uses a temporary key and links do not survive restart. |
 | `PUBLIC_BASE_URL` | Public origin where a provider must retrieve a reference. Loopback is not reachable by an external provider. |
@@ -183,9 +183,9 @@ proof that today's production revision or provider is working.
   [ai_service.py](backend/ai_service.py); wizard request/draft state in
   [CreateVideo.jsx](frontend/src/pages/CreateVideo.jsx). The extracted policy
   and panel modules improve ownership but do not complete their decomposition.
-- Local SQLite and local media are not durable on ephemeral hosting. Even a
-  configured Turso connection may fall back; unsynchronized replica writes
-  also need recovery before an instance disappears.
+- Local SQLite and local media are not durable on ephemeral hosting. A configured
+  Turso outage now refuses database requests instead of falling back locally;
+  unsynchronized replica writes still need recovery before an instance disappears.
 - Native libsql cloud behavior is not covered by the Windows SQLite test path.
 - Export depends on browser codec/device support; a mocked export does not
   establish real-device compatibility or visual identity quality.

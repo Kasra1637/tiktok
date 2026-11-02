@@ -63,25 +63,18 @@ async def health(user_id: str = Depends(get_current_user_id)):
     """
     Where user data actually is right now, and how much of it there is.
 
-    This exists because "my profile and videos disappeared" has one cause that
-    is not deletion. When Turso is configured but unreachable, `get_db` falls
-    back to local SQLite so the app keeps serving — and on Render that file is
-    on an ephemeral disk, so it starts EMPTY. Every list then renders as "no
-    profiles", which reads exactly like the app deleting the founder's work. The
-    cloud copy is usually untouched; the process is simply pointed at the wrong
-    store.
+    When Turso is configured but cannot connect or sync, `get_db` refuses to
+    open local SQLite. The report then names `unavailable` and `durable: false`;
+    it must never present an empty local store as though the founder's cloud
+    data were deleted. Local-only development keeps its explicit local label.
 
-    That distinction is a one-glance question here and was previously only
-    answerable by digging through the deploy log, which is why the report above
-    kept arriving as "the app deleted my data". The backend is read AFTER the
-    counts below on purpose: `get_db` re-establishes the active backend on every
-    connection, so the value that matters is the store THIS request just used,
-    not whatever the previous one happened to leave behind.
+    The backend is read AFTER the counts below on purpose: `get_db` re-establishes
+    the active backend on every connection, so the value that matters is the store
+    THIS request just used, not whatever the previous one happened to leave behind.
+    Failed reads are named in their counts rather than converted to zeroes.
 
-    The counts are the other half — "ephemeral, and empty" and "ephemeral, and
-    holding 40 generations" need different responses, and only the numbers
-    distinguish them. Scoped to the caller's own rows so this cannot be used to
-    size up another account.
+    The counts are scoped to the caller's own rows so this cannot be used to size
+    up another account.
 
     Authenticated, because it reports inventory. A founder can read it from the
     browser console while signed in; an anonymous visitor learns nothing.

@@ -128,8 +128,9 @@ errors the production compiler may not report.
   sets guard one process only. Do not raise instance/worker counts without
   redesigning coordination and read freshness.
 - Health reports the **active** backend after reads; configured credentials
-  alone do not prove cloud durability. Pending replica sync can still lose
-  writes if the local host disappears.
+  alone do not prove cloud durability. A configured Turso connection/sync failure
+  reports `unavailable` and refuses local SQLite fallback. Pending replica sync
+  can still lose writes if the local host disappears.
 - The Docker image serves the CRA bundle and Python API together. Cloud Build
   deploys it to the existing Cloud Run service. Current CI and deployment run
   independently; CI is not a deploy dependency. See the

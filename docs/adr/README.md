@@ -105,3 +105,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0080](0080-wizard-draft-state-transitions.md) | Make coupled wizard draft changes atomic; isolate template-loading state | accepted |
 | [0081](0081-remove-claim-render-blocking.md) | No wording flag refuses a render; claim reports stay advisory | accepted |
 | [0082](0082-standalone-demo-cta-starts-blank.md) | Standalone Demo + CTA starts blank; only pinned workspaces resume drafts | accepted |
+| [0083](0083-turso-outage-refuses-local-fallback.md) | A configured Turso outage fails database requests instead of accepting local SQLite writes | accepted |

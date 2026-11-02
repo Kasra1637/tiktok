@@ -209,6 +209,12 @@ def _log_database_backend() -> None:
         # before any connection was opened; init_db always connects first.)
         logger.info("Database backend: Turso cloud — user data survives redeploys.")
         return
+    if actual == "unavailable":
+        logger.critical(
+            "Database unavailable: Turso could not connect or sync. Refusing local "
+            "SQLite fallback; database requests will fail until Turso recovers."
+        )
+        return
     if actual == "local-ephemeral-fallback":
         message = (
             "Database backend: EPHEMERAL local SQLite — Turso is configured but "
@@ -267,7 +273,7 @@ async def get_db():
             # exactly like "the deploy deleted everything" even when the cloud
             # copy is intact. Retried on every connection until one succeeds
             # (flag stays False), so recovery from a blip is automatic; a
-            # failed pull is FATAL to this attempt and falls back loudly below,
+            # failed pull is FATAL to this attempt and refuses local fallback,
             # because an unsynced replica is operationally identical to local
             # SQLite while reporting as Turso — the worst combination.
             if not _TURSO_BOOT_SYNC_DONE:
@@ -281,15 +287,12 @@ async def get_db():
                     conn.close()
                 except Exception:
                     pass
-            # ERROR, not warning: from here on every write lands in an ephemeral
-            # local file that the next redeploy wipes. Falling back keeps the
-            # app serving, but it must never look routine in the logs.
-            logger.error(
-                f"Turso connection failed, falling back to EPHEMERAL local SQLite "
-                f"(user data will not survive a restart): {e}"
-            )
-            use_turso = False
-            _ACTIVE_BACKEND = "local-ephemeral-fallback"
+            _ACTIVE_BACKEND = "unavailable"
+            logger.error("Turso connection failed; refusing local SQLite fallback: %s", e)
+            raise RuntimeError(
+                "Turso is configured but unavailable; refusing to write to local SQLite. "
+                "Restore Turso, or unset TURSO_DATABASE_URL intentionally for local development."
+            ) from e
     else:
         _ACTIVE_BACKEND = "local-sqlite"
 
@@ -9156,8 +9159,7 @@ async def on_startup():
                 await asyncio.sleep(2 * attempt)
     else:
         # All retries exhausted — log but do NOT re-raise. The app can still
-        # serve non-DB requests, and the next inbound request will trigger
-        # lazy table creation via get_db's fallback path.
+        # serve non-DB requests; database requests fail loudly until Turso recovers.
         logger.critical(
             f"init_db failed after 3 attempts, starting anyway: {last_error}"
         )
