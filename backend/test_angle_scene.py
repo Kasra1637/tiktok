@@ -72,3 +72,22 @@ def test_night_bed_template_ranks_lower_with_a_plain_note():
 def test_conflicting_example_is_flagged_for_replacement():
     tpl = {"opening_structure": "Names the frustration", "example_preview": "Lies in bed at eleven at night"}
     assert angle_scene.template_angle_fit(tpl, OFFICE)["example_conflicts"] is True
+
+
+def test_vague_hook_is_flagged_but_never_blocks():
+    import claim_safety
+    assert claim_safety.detect_vague_hook("I don't want to type anything")
+    assert claim_safety.detect_vague_hook("Typing is the last thing I want to do")
+    assert not claim_safety.detect_vague_hook("I don't want to write in my journal today")
+    report = claim_safety.build_safety_report({"hook_line": "I don't want to type anything"}, {})
+    assert report["passed"] is True
+    assert any("vague" in w["reason"] for w in report["risk_warnings"])
+
+
+def test_prompts_bind_the_angle_moment_and_name_the_action():
+    import ai_service
+    assert "ANGLE SCENE" in ai_service.scene_setting_guidance(OFFICE)
+    assert "steps outside an office building" in ai_service.scene_setting_guidance(OFFICE)
+    assert "ANGLE SCENE" not in ai_service.scene_setting_guidance()
+    assert "NAME THE ACTION" in ai_service._spoken_line_rules_block()
+    assert "PLACE + TIME" in ai_service._angle_goal_block(OFFICE, "")

@@ -416,6 +416,32 @@ def detect_sensitive_targeting(text: str) -> list:
     return out
 
 
+VAGUE_ACTION_PATTERNS = (
+    r"\b(?:type|write|do|deal with|handle|open|use|start|try|think about)\s+(?:anything|stuff|something|things)\b",
+    r"\b(?:typing|writing|doing)\s+(?:anything\s+)?(?:is|was)\s+the last thing\b",
+    r"\bthe last thing i want to do\b",
+)
+
+
+def detect_vague_hook(hook_line: str) -> list:
+    """Advisory only (ADR 0081): a hook that hides the real task behind a vague stand-in."""
+    line = str(hook_line or "")
+    out = []
+    for pattern in VAGUE_ACTION_PATTERNS:
+        match = re.search(pattern, line, re.IGNORECASE)
+        if match:
+            out.append({
+                "claim": match.group(0),
+                "reason": (
+                    "is vague: name the real action the viewer avoids, e.g. "
+                    "\"I don't want to write in my journal today\", not "
+                    "\"I don't want to type anything\""
+                ),
+            })
+            break
+    return out
+
+
 def build_safety_report(plan: dict, profile: dict) -> dict:
     """
     Full safety verdict for a generated plan.
@@ -460,6 +486,7 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
         find_risk_patterns(text)
         + detect_sensitive_targeting(text)
         + detect_feature_framing(spoken)
+        + detect_vague_hook((plan or {}).get("hook_line") or "")
     )
 
     used = find_used_claims(text, profile.get("claims_approved"))

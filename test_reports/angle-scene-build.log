@@ -1,5 +1,6 @@
 yarn run v1.22.22
 $ craco build
+Cannot find ESLint plugin (ESLintWebpackPlugin).
 Creating an optimized production build...
 
                     The build failed because the process exited too early.

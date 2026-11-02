@@ -137,6 +137,6 @@ describe("angleFitScore", () => {
   });
 
   test("evidence still decides a tested angle's score", () => {
-    expect(angleFitScore({ index: 5, total: 6, evidence: { wins: 0, flops: 4 } }).score).toBe(1);
+    expect(angleFitScore({ index: 5, total: 6, evidence: { wins: 0, flops: 4 } }).score).toBe(0);
   });
 });

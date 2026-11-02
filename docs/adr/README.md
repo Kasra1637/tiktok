@@ -106,3 +106,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0081](0081-remove-claim-render-blocking.md) | No wording flag refuses a render; claim reports stay advisory | accepted |
 | [0082](0082-standalone-demo-cta-starts-blank.md) | Standalone Demo + CTA starts blank; only pinned workspaces resume drafts | accepted |
 | [0083](0083-turso-outage-refuses-local-fallback.md) | A configured Turso outage fails database requests instead of accepting local SQLite writes | accepted |
+| [0084](0084-angle-owns-scene.md) | The selected angle owns where, when and what happens; later steps conform with a visible note | accepted |

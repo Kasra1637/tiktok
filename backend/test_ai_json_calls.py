@@ -1541,7 +1541,13 @@ class TestStrategyBudget:
         # a measured 2,000 to 24,500: ~250 tokens of prompt against the 8,192
         # output budget the schema already needs headroom in, which is the trade
         # this makes and the reason it is affordable.
-        CEILING = 24_500
+        #
+        # ADR 0084 raises it again, measured: 24,499 -> 25,499 (+1,000) for the
+        # ANGLE SCENE rule that pins scene, lighting and hook_action to the
+        # angle's opening moment. Without it the strategy drifted to the
+        # template's or look's indoor/night setting. 26,500 keeps ~1,000 of
+        # headroom for the next measured change.
+        CEILING = 26_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
