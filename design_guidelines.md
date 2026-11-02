@@ -107,12 +107,12 @@ safe area. See ADR 0007.
 and descriptions read at 14px (`text-sm`) and up. `text-xs` (12px) is reserved
 for non-reading chrome — badges, chips, pills, `sm` buttons, tooltips,
 eyebrows, dropdown items, dense table cells, tabular readouts, on-media
-overlays, and legal fine print — plus the wizard subtitles, which the
-render-smoke suite pins to `text-xs`.
+overlays, and legal fine print. Wizard subtitles moved to `text-sm` for this
+reason and the render-smoke suite pins that size.
 
 The workspace shell uses **4 font sizes** and **2 font weights** only. The marketing pages (`Landing`, `Features`, the shared `Marketing` chrome, `LegalPage`) share the same 2 weights and the same `xs`/`sm`/`base` body sizes, plus the display ladder `text-2xl`–`text-6xl` for editorial headings:
 
-- **4 sizes:** `text-xs` (12px — chrome only, never reading copy: badges, chips, pills, `sm` buttons, tooltips, `.eyebrow`, dropdown items, dense table cells, mono readouts, on-media overlays, wizard subtitles), `text-sm` (14px — buttons, form labels, hints, statuses, errors, descriptions, uppercase kickers like `.section-heading`, picker rows, transient status), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components. Marketing pages follow the same rule — `text-base` is the largest body size everywhere — with `text-2xl`/`3xl`/`4xl`/`5xl`/`6xl` reserved for editorial headings (pinned by the marketing display-scale smoke check).
+- **4 sizes:** `text-xs` (12px — chrome only, never reading copy: badges, chips, pills, `sm` buttons, tooltips, `.eyebrow`, dropdown items, dense table cells, mono readouts, on-media overlays), `text-sm` (14px — buttons, form labels, hints, statuses, errors, descriptions, uppercase kickers like `.section-heading`, picker rows, transient status, wizard subtitles), `text-base` (16px — body copy, text inputs, textareas, selects, OTP boxes, card/tile names, dialog/sheet/drawer titles, `EmptyState` heading), and `text-3xl` (30px — `PageHeader` `h1` and auth wordmark). Do not introduce `text-lg`, `text-xl`, `text-2xl`, or arbitrary pixel sizes (`text-[13px]`, `text-[17px]`, `text-[28px]`) in workspace pages or components. Marketing pages follow the same rule — `text-base` is the largest body size everywhere — with `text-2xl`/`3xl`/`4xl`/`5xl`/`6xl` reserved for editorial headings (pinned by the marketing display-scale smoke check).
 - Inputs sit at 16px because iOS Safari auto-zooms on focus below 16px; the `h-8` filter pills are the one exception and hold at 14px semibold so the chip stays compact.
 - **2 weights:** `font-normal` (400 — reading copy, inputs, inactive nav items) and `font-semibold` (600 — headings, labels, buttons, chips, badges, active nav items, and `PageHeader` `h1`). Do not use `font-medium` (500) or `font-bold` (700) anywhere — Space Grotesk semibold with tight tracking carries display headings without a heavier cut.
 - **Ampersands in headings & labels:** Workspace headings, titles, labels, and button copy use `&` instead of `and` (e.g., `Visual & audio direction`, `Choose a template & add your photo`, `What you have & what is left`).
@@ -172,7 +172,7 @@ card is `.inset-panel`.
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px semibold, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |
-| Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm` uppercase tracked, muted |
+| Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm font-semibold`, sentence case (angle rows) |
 | Field / detail row | label + control | none | 14px semibold label |
 
 **Record disclosures share one shape.** A collapsed section inside a record
@@ -191,14 +191,16 @@ researched description) is exempt: that is the founder's app talking, not page
 chrome. `frontend/scripts/check-render-smoke.cjs` asserts the budget for all
 six and fails on a page that drops its subtitle entirely.
 
-**Every wizard subtitle is `text-xs` and fits a 55-60 character budget.** This
+**Every wizard subtitle is `text-sm` and fits a 55-60 character budget.** This
 is the same rule one level down from the masthead budget above: the helper
 sentence under a group label or a field label inside a Create Video step. It
 existed because the Template and Presenter photo cards — which sit side by side
 in the same step — rendered their subtitles at 12px and 14px while running 53 and
 197 characters, so a different size read as a different kind of control and a
-two-sentence subtitle pushed its own card's content down. `text-xs` is the size
-because §3 assigns 12px to hints, and a subtitle is a hint.
+two-sentence subtitle pushed its own card's content down. The size was
+originally `text-xs`; it moved to `text-sm` because 12px hints were the
+smallest reading text in the app and the density critique named them. The
+budget did not move: a size change is not licence to write longer sentences.
 
 A subtitle is marked `data-subtitle=""`, and
 `frontend/scripts/check-render-smoke.cjs` asserts the size and the band for every
@@ -229,10 +231,12 @@ click target and it is what an in-place expansion opens inside. A row you
 *open* is part of a card, so it stays inside one `.surface` and is separated
 from its neighbours by a hairline. That is why the angle list draws a box per
 angle and `SectionGroup` (App Profile) does not: same bar chrome on both sides
-(`.row-pad`, 16px glyph, uppercase tracked muted title, chevron, indigo hover —
-`SectionGroup`'s own comment says it borrows the angle row's chrome), different
-container. `RecommendationCard`'s 2-up grid is the same rule as the angle list:
-picked things are objects, so they are framed.
+(`.row-pad`, 16px glyph, chevron, indigo hover — `SectionGroup`'s own comment
+says it borrows the angle row's chrome), different container. The angle row's
+own title is the exception: it is the list's reading text, so it is a
+sentence-case 14px semibold name, not the uppercase tracked group label.
+`RecommendationCard`'s 2-up grid is the same rule as the angle list: picked
+things are objects, so they are framed.
 
 A group's glyph is not decoration: on the App Profile detail page every
 `ProfileCard` and `SectionGroup` carries one, and `runIconChecks` fails the page

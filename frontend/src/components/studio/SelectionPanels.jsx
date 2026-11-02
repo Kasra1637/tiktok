@@ -18,7 +18,7 @@ import {
   clampHookSeconds,
   DEFAULT_HOOK_SECONDS,
 } from "../../lib/videoLength";
-import { Loader as Loader2, TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader as Loader2, TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown } from "lucide-react";
 
 /* The single instruction for the angle picker, shared by the empty state
    (click generates the six) and the reveal state (click shows the six).
@@ -171,7 +171,7 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           renders no disclosure at all. */}
       {(detail.length > 0 || limits.length > 0) && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-muted-foreground">
+          <summary className="cursor-pointer text-sm text-muted-foreground">
             More on this fit
           </summary>
           <div className="mt-1 space-y-1">
@@ -377,7 +377,7 @@ export function AngleSelector({
             {gateButtonLabel}
           </Button>
           {progressLine}
-      <p className="text-xs text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
+      <p className="text-sm text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
         {ANGLES_CTA_COPY}
       </p>
         </div>
@@ -405,12 +405,12 @@ export function AngleSelector({
           {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
             {angleSetFreshness && (
-              <p className="text-xs text-muted-foreground" data-testid="angle-set-freshness">
+              <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
                 Refreshed {angleSetFreshness}
               </p>
             )}
             {!objective && (
-              <p className="text-xs text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
                 Pick a goal first — regenerating aims fresh angles at it.
               </p>
             )}
@@ -449,8 +449,8 @@ export function AngleSelector({
           </AlertDescription>
         </Alert>
       )}
-      {/* Selection opens the angle. A closed row is its uppercase title plus
-          its fit pill, so the six compare without opening: the list is
+      {/* Selection opens the angle. A closed row is its sentence-case title
+          plus its fit pill, so the six compare without opening: the list is
           scanned by name, decided by score, and the picked row then shows
           what the strategy is written from — audience, problem, promise,
           feature, the emotion it aims at, and any claim bounding it. Only
@@ -507,12 +507,13 @@ export function AngleSelector({
                   picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
                 }`}
               />
-              <span className="eyebrow min-w-0 flex-1 truncate leading-[22px]">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                 {sentenceCase(a.label).replace(/\.\s*$/, "")}
               </span>
               {/* The fittest score rides on the closed row, so the list can be
-                  compared without opening every angle. Opening still shows
-                  the same pill with its basis beside the angle's fields. */}
+                  compared without opening any angle — and picking re-shows
+                  the same pill on the now-open row rather than a second
+                  titled badge, which read one number as two findings. */}
               <span className="shrink-0">
                 <FitBadge
                   score={angleFit.score}
@@ -545,23 +546,10 @@ export function AngleSelector({
                 ))}
               </dl>
             )}
-            {/* The picked angle's fit again beside its fields, in the same
-                pill as goals and templates. Rank is this list's order,
-                tally is the kind's own win share — verdicts attribute
-                through the kind, so the basis says so. */}
-            {(() => {
-              return (
-                picked && (
-                  <div className="border-t border-[color:var(--hairline)] row-pad">
-                    <FitBadge
-                      score={angleFit.score}
-                      basis={angleFitBasis}
-                      testId={`angle-fit-score-${a.id}`}
-                    />
-                  </div>
-                )
-              );
-            })()}
+            {/* The picked angle's fields above are read against the same fit
+                pill the closed row already carries. Repeating the score in a
+                second, titled row below the fields made one number look like
+                two findings and added a whole block to the tallest card. */}
           </div>
         );
       })}
@@ -624,10 +612,6 @@ export function AngleGoalPicker({
   // or error, capped at the visible total so it never over-counts.
   const [shuffleCount, setShuffleCount] = useState(0);
   const shuffleTimer = useRef(null);
-  const trackRef = useRef(null);
-  const scrollGoals = (dir) => {
-    trackRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
-  };
   const shuffleTotal = Math.max(featured.length, 1);
   useEffect(() => {
     if (!regenerating) {
@@ -661,30 +645,6 @@ export function AngleGoalPicker({
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
           <div className="flex shrink-0 items-center gap-1.5">
-            {featured.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 px-2"
-                  onClick={() => scrollGoals(-1)}
-                  aria-label="Browse goals left"
-                  data-testid="goals-browse-left"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 px-2"
-                  onClick={() => scrollGoals(1)}
-                  aria-label="Browse goals right"
-                  data-testid="goals-browse-right"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            )}
             {onRegenerate && featured.length > 0 && (
               <Button
                 variant="ghost"
@@ -719,7 +679,7 @@ export function AngleGoalPicker({
           Shuffling goal {shuffleCount} of {shuffleTotal}…
         </p>
       )}
-      <div ref={trackRef} className="filmstrip-scroll no-scrollbar flex snap-x gap-3 overflow-x-auto pb-1" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-browse-track">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-grid">
         {featured.map((goal, index) => {
           const selected = value === goal;
           // 0–10 fit for this goal under the selected angle: annotates the
@@ -742,7 +702,7 @@ export function AngleGoalPicker({
               data-testid={`recommended-goal-${goal}`}
               onClick={() => onPick(goal)}
               style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-              className={`card-pickable animate-fade-up w-[78%] shrink-0 snap-start rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] sm:w-[calc(50%-6px)] ${
+              className={`card-pickable animate-fade-up w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--indigo-35)] ${
                 selected
                   ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : "border-[color:var(--hairline)]"
@@ -778,7 +738,7 @@ export function AngleGoalPicker({
                 formatVerdicts(objectiveEvidence?.[goal]) ||
                 formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`])) && (
                 <details className="mt-1">
-                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">
                     Why this goal fits
                   </summary>
                   <div className="mt-1 space-y-1">

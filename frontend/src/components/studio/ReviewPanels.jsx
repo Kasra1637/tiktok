@@ -27,7 +27,7 @@ export function DirectionSelect({
   refresh = null,
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={id} className="text-sm font-semibold">{label}</label>
         {refresh && (
@@ -36,7 +36,7 @@ export function DirectionSelect({
             onClick={refresh.onRefresh}
             disabled={disabled || refresh.refreshing}
             data-testid={refresh.refreshTestId}
-            className="shrink-0 text-xs text-muted-foreground underline disabled:opacity-50"
+            className="shrink-0 text-sm text-muted-foreground underline disabled:opacity-50"
           >
             {refresh.refreshing ? "Finding new options…" : "New options"}
           </button>

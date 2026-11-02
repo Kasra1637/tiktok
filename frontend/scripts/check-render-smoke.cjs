@@ -5101,9 +5101,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // all came off the bar: three pieces of meta around the title made a list
   // you scan into a paragraph you read, and the picked row still opens onto
   // every field. Pinned on the rendered row, so any of the three drifting
-  // back is caught here. The title rides the shared eyebrow token (12px
-  // caps), not its own size.
-  await check("angle rows show only check, caps title and fit pill", async (ctx) => {
+  // back is caught here. The title reads as a sentence-case 14px semibold
+  // name: it is the thing the founder scans, so it takes reading size rather
+  // than the 12px caps eyebrow token, which is chrome.
+  await check("angle rows show only check, sentence-case title and fit pill", async (ctx) => {
     const PROVEN = { ...ANGLE, id: "a9", label: "Proven opener", evidence: { wins: 3, flops: 1 } };
     // Every row, not the first: the rule is the list's, and a row that kept
     // its old chrome would be the one a single-row fixture never looked at.
@@ -5125,10 +5126,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         for (const [id, label, extras] of ROWS) {
           const row = step.querySelector(`[data-testid="angle-option-${id}"]`);
           if (!row) throw new Error(`no row for angle ${id}`);
-          // Title plus the one fit pill: the title keeps the eyebrow token
-          // and the pill keeps its testid, so anything else is chrome.
-          const title = row.querySelector("span.eyebrow");
-          if (!title) throw new Error(`angle ${id} lost its eyebrow title`);
+          // Title plus the one fit pill: the title carries the reading-size
+          // semibold name and the pill keeps its testid, so anything else is
+          // chrome.
+          const title = row.querySelector("span.text-sm.font-semibold");
+          if (!title) throw new Error(`angle ${id} lost its sentence-case title`);
           const pill = row.querySelector(`[data-testid="angle-row-fit-${id}"]`);
           if (!pill) throw new Error(`angle ${id} lost its closed-row fit pill`);
           const stray = [...row.querySelectorAll("span")].filter(
@@ -5137,8 +5139,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (stray.length !== 0) {
             throw new Error(`angle ${id} renders ${stray.length} extra spans beyond title and pill`);
           }
-          if (!/uppercase|eyebrow/.test(title.className) || !/tracking-|eyebrow/.test(title.className)) {
-            throw new Error(`angle ${id}'s title is off the uppercase tracked token: ${title.className}`);
+          if (/\beyebrow\b|\buppercase\b|\btracking-/.test(title.className)) {
+            throw new Error(`angle ${id}'s title drifted back onto the caps eyebrow token: ${title.className}`);
           }
           if (title.textContent.trim() !== label) {
             throw new Error(`angle ${id} shows more than its label: ${JSON.stringify(title.textContent)}`);
@@ -5210,9 +5212,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   // Every angle row carries its fit pill, open or not: rank in this list
   // plus the kind's own win share, with the kind caveat in the basis. The
-  // closed pill compares without opening; picking adds the same pill
-  // beside the angle's fields. No more expanding just to see the score.
-  await check("every angle row shows its fit badge, open or not", async (ctx) => {
+  // pill is the whole story now: a second badge beside the opened fields
+  // read one number as two findings, so picking keeps the row's own badge
+  // and repeats nothing.
+  await check("the closed angle row carries the fit badge; picking repeats nothing", async (ctx) => {
     const PROVEN = { ...ANGLE, evidence: { wins: 2, flops: 1 } };
     await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }), regenerateContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
       global.__SMOKE_PARAMS = "";
@@ -5228,14 +5231,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`closed angle badge is not the shared pill: ${closed.textContent}`);
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
-        const badge = ctx.container.querySelector('[data-testid="angle-fit-score-a1"]');
-        if (!badge) throw new Error("the picked angle shows no fit badge");
-        if (badge.textContent.trim() !== "Fit 7/10") {
-          throw new Error(`picked angle badge is not the shared pill: ${badge.textContent}`);
+        if (ctx.container.querySelector('[data-testid="angle-fit-score-a1"]')) {
+          throw new Error("picking an angle renders a second fit badge");
         }
+        const badge = ctx.container.querySelector('[data-testid="angle-row-fit-a1"]');
+        if (!badge) throw new Error("the picked angle row lost its fit badge");
         const basis = badge.getAttribute("title") || "";
         if (!basis.includes("2 wins in 3") || !basis.includes("at this angle kind")) {
-          throw new Error(`picked angle badge names no kind basis: ${basis}`);
+          throw new Error(`angle badge names no kind basis: ${basis}`);
         }
       } finally {
         global.__SMOKE_PARAMS = "";
@@ -10015,6 +10018,10 @@ async function runDemoCtaChecks() {
   // side in the same step, and their subtitles rendered at 12px and 14px while
   // running 53 and 197 characters. A different size read as a different kind of
   // control, and a two-sentence subtitle pushed its own card's content down.
+  // All of them now read at 14px (text-sm): 12px helper copy was the smallest
+  // reading text in the app and the critique that opened this pass named it.
+  // The budget below still holds, so the size change did not become licence
+  // to write longer sentences.
   //
   // Read from source with `data-subtitle` as the selector, not from a mount:
   // these sit behind four different API states and a render would only cover
@@ -10050,7 +10057,7 @@ async function runDemoCtaChecks() {
     // only the identifier. Count it separately rather than pretending it is
     // empty: a constant that drifts out of budget must still be caught.
     const cta = /const ANGLES_CTA_COPY = "([^"]*)"/.exec(text);
-    if (cta) found.push({ cls: "text-xs", copy: cta[1] });
+    if (cta) found.push({ cls: "text-sm", copy: cta[1] });
 
     if (!found.length) {
       throw new Error(
@@ -10063,8 +10070,8 @@ async function runDemoCtaChecks() {
     const problems = [];
     for (const { cls, copy } of found) {
       const line = text.split("\n").findIndex((l) => l.includes(`data-subtitle=""`) && l.includes(cls.split(" ").pop()));
-      if (/\btext-sm\b|\btext-base\b|\btext-lg\b/.test(cls)) {
-        problems.push(`not text-xs (class "${cls.trim()}") — "${copy}"`);
+      if (!/\btext-sm\b/.test(cls) || /\btext-base\b|\btext-lg\b|\btext-xs\b/.test(cls)) {
+        problems.push(`not text-sm (class "${cls.trim()}") — "${copy}"`);
       }
       if (copy.length < MIN || copy.length > MAX) {
         problems.push(`${copy.length} chars — "${copy}"`);
@@ -10072,7 +10079,7 @@ async function runDemoCtaChecks() {
     }
     if (problems.length) {
       throw new Error(
-        `wizard subtitles outside text-xs + ${MIN}-${MAX} chars:\n        ` +
+        `wizard subtitles outside text-sm + ${MIN}-${MAX} chars:\n        ` +
           problems.join("\n        ")
       );
     }

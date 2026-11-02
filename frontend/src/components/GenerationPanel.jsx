@@ -66,7 +66,7 @@ function PaidRenderProgress({ status, modelName }) {
         {RENDER_STAGES.map((s, i) => (
           <li
             key={s.key}
-            className={`flex items-center gap-2 text-xs ${
+            className={`flex items-center gap-2 text-sm ${
               i < stageIndex
                 ? "text-muted-foreground"
                 : i === stageIndex

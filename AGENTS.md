@@ -61,7 +61,7 @@ One render path, single-pass video generation via OpenRouter.
 - Red before green: a behavior fix ships with a regression check that fails
   without it. Suites staying green proves nothing changed, not that the new
   behavior works.
-- Wizard subtitles carry `data-subtitle`, stay `text-xs` and 55–60 chars,
+- Wizard subtitles carry `data-subtitle`, stay `text-sm` and 55–60 chars,
   enforced by the smoke suite. Loading indicators narrate fresh work and
   unmount on settle *and* error; lists arrive staggered, collapsing to
   instant under reduced motion.

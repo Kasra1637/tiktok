@@ -130,7 +130,7 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
       <p className="text-base font-semibold">
         This template needs a character reference before it can generate
       </p>
-      <p className="text-xs text-muted-foreground" data-subtitle="">
+      <p className="text-sm text-muted-foreground" data-subtitle="">
         Your photograph is what the generated video is built from.
       </p>
     </div>
@@ -570,10 +570,6 @@ export default function CreateVideo() {
   // choice could be silently replaced by whatever ranked first that time, which
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
-  const templateTrackRef = useRef(null);
-  const scrollTemplates = (dir) => {
-    templateTrackRef.current?.scrollBy({ left: dir * 340, behavior: "smooth" });
-  };
   const scrollToSubstep = (id) => {
     document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
@@ -1505,7 +1501,7 @@ export default function CreateVideo() {
      goal, template, then add your photo" over "Angle, goal, template and
      photo — each one ranks the next". That ranking sentence lives in the task
      line now, so nothing here repeats it. Plain body copy, deliberately NOT a
-     data-subtitle: the subtitle budget (text-xs, 55-60 chars) covers
+     data-subtitle: the subtitle budget (text-sm, 55-60 chars) covers
      label-attached helpers only. Navigation stays free — a hint names what is
      missing, it never locks the arrows. */
   const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
@@ -1552,10 +1548,10 @@ export default function CreateVideo() {
                because the app list is the panel's content, not a gallery. */
             <div className="inset-panel space-y-4" data-testid="app-profile-picker">
               <GroupLabel icon={ListChecks}>Choose an app</GroupLabel>
-              <p className="text-xs text-muted-foreground" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-subtitle="">
                 Only approved App Profiles can make a video in this studio.
               </p>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {approved.map((p) => (
                   <button
                     key={p.id}
@@ -1603,7 +1599,7 @@ export default function CreateVideo() {
                       {unapproved.map(profileLabel).join(", ")}
                     </p>
                   )}
-                  <p className="mt-4 text-xs text-muted-foreground" data-subtitle="">
+                  <p className="mt-4 text-sm text-muted-foreground" data-subtitle="">
                     Draft profiles need review before a video can use them.
                   </p>
                   <Button variant="secondary" size="sm" asChild className="mt-4">
@@ -1776,28 +1772,20 @@ export default function CreateVideo() {
                 Pick a goal above — the templates below rank for it.
               </p>
             )}
-            {profileId && objective && (
-              <div className="flex flex-wrap items-center gap-2">
-                {tailoring ? (
-                  <>
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Tailoring templates for this goal…
-                    </p>
-                    <p className="text-sm text-muted-foreground" role="status" data-testid="templates-progress">
-                      Reading template {tailorCount} of {tailorTotal}…
-                    </p>
-                  </>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => runTailoring(true)}
-                    title="Replace this goal's tailored templates with a fresh set"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" /> Regenerate tailored templates
-                  </Button>
-                )}
+            {/* Tailoring narrates fresh work while it reads, then the cards
+                arrive. It sits above the list rather than beside a section
+                label: the list is hidden while tailoring runs (a half-set is
+                not a ranked set), so a status inside it would be invisible
+                exactly when the founder is waiting. */}
+            {objective && tailoring && (
+              <div className="inset-panel space-y-2" role="status" data-testid="templates-tailoring">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Tailoring templates for this goal…
+                </p>
+                <p className="text-sm text-muted-foreground" data-testid="templates-progress">
+                  Reading template {tailorCount} of {tailorTotal}…
+                </p>
               </div>
             )}
             {tailorError && !tailoring && (
@@ -1826,31 +1814,21 @@ export default function CreateVideo() {
             )}
             {objective && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="eyebrow block">
                     {tailoredReady ? "Tailored for this app" : "Recommended"}
                   </span>
-                  {visibleRecommendations.length > 1 && (
-                    <div className="flex shrink-0 items-center gap-1.5">
+                  {profileId && objective && (
+                    <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="gap-1 px-2"
-                        onClick={() => scrollTemplates(-1)}
-                        aria-label="Browse templates left"
-                        data-testid="templates-browse-left"
+                        className="gap-1.5"
+                        onClick={() => runTailoring(true)}
+                        disabled={tailoring}
+                        title="Replace this goal's tailored templates with a fresh set"
                       >
-                        <ChevronLeft className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 px-2"
-                        onClick={() => scrollTemplates(1)}
-                        aria-label="Browse templates right"
-                        data-testid="templates-browse-right"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
+                        <RefreshCw className="h-3.5 w-3.5" /> Regenerate
                       </Button>
                     </div>
                   )}
@@ -1873,9 +1851,9 @@ export default function CreateVideo() {
                     )}
                   </div>
                 )}
-                <div ref={templateTrackRef} id="substep-template" className="filmstrip-scroll no-scrollbar flex snap-x scroll-mt-4 gap-3 overflow-x-auto pb-1" data-testid="templates-browse-track">
+                <div id="substep-template" className="grid scroll-mt-4 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="templates-grid">
                 {visibleRecommendations.map((r, i) => (
-                  <div key={r.template.id} className="w-[85%] shrink-0 snap-start sm:w-[calc(50%-6px)]">
+                  <div key={r.template.id} className="min-w-0">
                     <RecommendationCard
                       r={r}
                       index={i}
@@ -1972,14 +1950,14 @@ export default function CreateVideo() {
             {showAngles && (
             <div id="template-photo" className="inset-panel scroll-mt-4 space-y-4">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
-              <p className="text-xs text-muted-foreground" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-subtitle="">
                 Upload one clear photo of the person you want on camera.
               </p>
               {!templateId ? (
                 /* Gated, the card would otherwise be a label and a sentence
                    with nothing under them. This says what is waiting, on the
                    same size and budget as the subtitle above. */
-                <p className="text-xs text-muted-foreground" data-subtitle="">
+                <p className="text-sm text-muted-foreground" data-subtitle="">
                   Pick a template above first; your photo attaches to it.
                 </p>
               ) : !project ? (
@@ -2104,7 +2082,7 @@ export default function CreateVideo() {
             <p className="text-base text-muted-foreground">
               The plan didn't generate. Fix what's missing below, then try again — still free.
             </p>
-            <p className="text-xs text-muted-foreground" data-subtitle="">
+            <p className="text-sm text-muted-foreground" data-subtitle="">
               Writes hook, script, shots, and demo note. Editable below.
             </p>
           </div>
@@ -2150,7 +2128,7 @@ export default function CreateVideo() {
                 {firstGap.label}
               </Button>
             )}
-            <p className="text-xs text-muted-foreground" data-subtitle="">
+            <p className="text-sm text-muted-foreground" data-subtitle="">
               Your free plan starts once all required choices are set.
             </p>
             {/* Angle and goal are chosen on step 1, not here. The red button
@@ -2210,7 +2188,7 @@ export default function CreateVideo() {
                 testId="review-thumb"
                 onChange={handleReviewThumb}
               />
-              <p className="text-xs text-muted-foreground" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-subtitle="">
                 Thumbs up moves on; thumbs down writes a fresh plan for you.
               </p>
             </div>
@@ -2228,7 +2206,7 @@ export default function CreateVideo() {
               <div className="inset-panel">
                 <GroupLabel icon={Target}>What this is aiming to leave them with</GroupLabel>
                 <p className="mt-1 text-base">{sentenceCase(template.outcome.trim())}</p>
-                <p className="mt-1 text-xs text-muted-foreground" data-subtitle="">
+                <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
                   The outcome this template is built for, in their terms.
                 </p>
                 {/* Its own line, not a clause of the subtitle above: this is the
@@ -2236,7 +2214,7 @@ export default function CreateVideo() {
                     never a promise about what the video will do. Folding it into
                     the subtitle is exactly how it got cut once already, and the
                     budget would have taken it again. */}
-                <p className="text-xs text-muted-foreground" data-subtitle="">
+                <p className="text-sm text-muted-foreground" data-subtitle="">
                   A framing to aim at, not a result this video can promise.
                 </p>
               </div>
@@ -2261,7 +2239,7 @@ export default function CreateVideo() {
             )}
             <div className="space-y-4">
               <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
-              <p className="text-xs text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
+              <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
               <Input
                 id="review-hook_line"
                 value={editValue("hook_line", "")}
@@ -2270,7 +2248,7 @@ export default function CreateVideo() {
             </div>
             <div className="space-y-4">
               <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
-              <p className="text-xs text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
+              <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
               <Textarea
                 id="review-script"
                 value={editValue("script", "")}
@@ -2359,7 +2337,7 @@ export default function CreateVideo() {
                     rewritten to fit, or shorten the script above and rebuild the strategy.
                   </p>
                 ) : (
-                  <p className="text-xs text-muted-foreground" data-subtitle="">
+                  <p className="text-sm text-muted-foreground" data-subtitle="">
                     Your whole script fits the middle — every word is spoken.
                   </p>
                 )}
@@ -2390,83 +2368,129 @@ export default function CreateVideo() {
                 className="min-h-[70px]"
                 placeholder="For example: Record yourself tapping the timer once, hands only"
               />
-              <p className="text-xs text-muted-foreground" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-subtitle="">
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
-            <div className="inset-panel space-y-2">
-              <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
-              <select
-                id="camera-setup"
-                data-testid="camera-setup"
-                className={CONTROL_CLASS}
-                value={editValue("camera_setup", "handheld")}
-                disabled={busy}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
-                }}
-              >
-                <option value="handheld">Handheld selfie</option>
-                <option value="fixed">Fixed camera</option>
-              </select>
-              <p className="text-sm text-muted-foreground">
-                {editValue("camera_setup", "handheld") === "fixed"
-                  ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
-                  : "Close handheld framing, subtle camera movement, and the current centered zoom."}
+            {/* Direction is optional refinement, and it was the densest stack
+                in the step: two section labels, a camera select, five
+                dropdowns and a live preview between the plan's words and the
+                save button. It now sits behind one disclosure whose summary
+                says what it holds, so the default read is hook → script →
+                checks → save, and a founder who wants a different scene opens
+                it deliberately. Camera setup is inside for the same reason:
+                it is a framing choice, not a step gate. */}
+            <Disclosure
+              testId="visual-audio-direction"
+              detailsClassName="group inset-panel space-y-3"
+              summaryClassName="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden"
+              summary={
+                <>
+                  <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
+                  <Badge variant="outline" className="text-xs">optional</Badge>
+                </>
+              }
+            >
+              <p className="text-sm text-muted-foreground" data-subtitle="">
+                Optional scene and voice picks; the defaults render as-is.
               </p>
-              <p className="text-sm text-muted-foreground">Camera setup controls framing and camera movement. Save changes, then rebuild and review the strategy before rendering.</p>
-            </div>
-            <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-            <div className="space-y-4">
-              <p className="text-sm font-semibold">Setting, lighting &amp; wardrobe</p>
-              <p className="text-xs text-muted-foreground" data-subtitle="">Options matched to this app; pick all three for a scene.</p>
-              <DirectionSelect
-                id="review-setting"
-                testId="review-setting"
-                label="Setting"
-                value={dirSel.setting}
-                onPick={pickScenePart("setting")}
-                options={directionOptions?.setting}
-                placeholder="Choose a setting…"
-                disabled={busy}
-                refresh={refreshProps("setting", "review-setting-refresh")}
-              />
-              <DirectionSelect
-                id="review-lighting"
-                testId="review-lighting"
-                label="Lighting"
-                value={dirSel.lighting}
-                onPick={pickScenePart("lighting")}
-                options={directionOptions?.lighting}
-                placeholder="Choose lighting…"
-                disabled={busy}
-                refresh={refreshProps("lighting", "review-lighting-refresh")}
-              />
-              <DirectionSelect
-                id="review-wardrobe"
-                testId="review-wardrobe"
-                label="Wardrobe"
-                value={dirSel.wardrobe}
-                onPick={pickScenePart("wardrobe")}
-                options={directionOptions?.wardrobe}
-                placeholder="Choose wardrobe…"
-                disabled={busy}
-                refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
-              />
-              {project?.visual_direction && !edits.visual_direction && (
+              <div className="space-y-2">
+                <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
+                <select
+                  id="camera-setup"
+                  data-testid="camera-setup"
+                  className={CONTROL_CLASS}
+                  value={editValue("camera_setup", "handheld")}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
+                  }}
+                >
+                  <option value="handheld">Handheld selfie</option>
+                  <option value="fixed">Fixed camera</option>
+                </select>
                 <p className="text-sm text-muted-foreground">
-                  Plan default: {sentenceCase(project.visual_direction)}
+                  {editValue("camera_setup", "handheld") === "fixed"
+                    ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
+                    : "Close handheld framing, subtle camera movement, and the current centered zoom."}
                 </p>
-              )}
-              <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                Choosing replaces the plan&apos;s scene notes — pick all three for a complete scene. Camera setup still owns how it is filmed.
-              </p>
-              {refreshError && (
-                <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
-                  {refreshError}
+                <p className="text-sm text-muted-foreground">Camera setup controls framing and camera movement. Save changes, then rebuild and review the strategy before rendering.</p>
+              </div>
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+                <p className="text-sm font-semibold">Setting, lighting &amp; wardrobe</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">Options matched to this app; pick all three for a scene.</p>
+                <DirectionSelect
+                  id="review-setting"
+                  testId="review-setting"
+                  label="Setting"
+                  value={dirSel.setting}
+                  onPick={pickScenePart("setting")}
+                  options={directionOptions?.setting}
+                  placeholder="Choose a setting…"
+                  disabled={busy}
+                  refresh={refreshProps("setting", "review-setting-refresh")}
+                />
+                <DirectionSelect
+                  id="review-lighting"
+                  testId="review-lighting"
+                  label="Lighting"
+                  value={dirSel.lighting}
+                  onPick={pickScenePart("lighting")}
+                  options={directionOptions?.lighting}
+                  placeholder="Choose lighting…"
+                  disabled={busy}
+                  refresh={refreshProps("lighting", "review-lighting-refresh")}
+                />
+                <DirectionSelect
+                  id="review-wardrobe"
+                  testId="review-wardrobe"
+                  label="Wardrobe"
+                  value={dirSel.wardrobe}
+                  onPick={pickScenePart("wardrobe")}
+                  options={directionOptions?.wardrobe}
+                  placeholder="Choose wardrobe…"
+                  disabled={busy}
+                  refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
+                />
+                {project?.visual_direction && !edits.visual_direction && (
+                  <p className="text-sm text-muted-foreground">
+                    Plan default: {sentenceCase(project.visual_direction)}
+                  </p>
+                )}
+                <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
+                  Choosing replaces the plan&apos;s scene notes — pick all three for a complete scene. Camera setup still owns how it is filmed.
                 </p>
-              )}
+                {refreshError && (
+                  <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
+                    {refreshError}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 border-t border-[color:var(--hairline)] pt-3 sm:grid-cols-2">
+                <DirectionSelect
+                  id="review-tone"
+                  testId="review-tone"
+                  label="Tone"
+                  value={dirSel.tone}
+                  onPick={pickTone}
+                  options={directionOptions?.tone}
+                  placeholder="Choose a tone…"
+                  disabled={busy}
+                  refresh={refreshProps("tone", "review-tone-refresh")}
+                />
+                <DirectionSelect
+                  id="review-voice-direction"
+                  testId="review-voice-direction"
+                  label="Voice direction"
+                  value={dirSel.voice}
+                  onPick={pickVoice}
+                  options={directionOptions?.voice}
+                  placeholder="Choose a voice direction…"
+                  disabled={busy}
+                  refresh={refreshProps("voice", "review-voice-refresh")}
+                />
+              </div>
               {(editValue("visual_direction", "") || editValue("voice_direction", "") || editValue("tone", "")) && (
                 <div className="inset-panel space-y-1" data-testid="direction-live-preview">
                   <p className="text-sm font-semibold">What will render</p>
@@ -2485,12 +2509,12 @@ export default function CreateVideo() {
                       Tone: {sentenceCase(editValue("tone", ""))}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground" data-subtitle="">
+                  <p className="text-sm text-muted-foreground" data-subtitle="">
                     Picks update instantly here — save edits before rendering.
                   </p>
                 </div>
               )}
-            </div>
+            </Disclosure>
 
             {/* Read-only, and labelled as such, because it sits among seven
                 editable fields in the same visual style and founders will
@@ -2531,42 +2555,17 @@ export default function CreateVideo() {
                 duration change once a plan exists precisely because the beats
                 were clamped to that number, so the only way to a different
                 length is a different template and a regenerated plan. */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-4">
+            <div className="inset-panel space-y-1" data-testid="piece-length">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-semibold">Length of the generated piece</span>
-                <p className="rounded-lg border border-[color:var(--hairline)] px-3 py-2 text-base">
-                  {pieceSeconds} seconds
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {project?.script_version
-                    ? "The timeline is written to this length. Pick a different template to change it."
-                    : "Set by the hook template you pick."}
-                </p>
+                <span className="text-base">{pieceSeconds} seconds</span>
               </div>
-              <DirectionSelect
-                id="review-tone"
-                testId="review-tone"
-                label="Tone"
-                value={dirSel.tone}
-                onPick={pickTone}
-                options={directionOptions?.tone}
-                placeholder="Choose a tone…"
-                disabled={busy}
-                refresh={refreshProps("tone", "review-tone-refresh")}
-              />
+              <p className="text-sm text-muted-foreground">
+                {project?.script_version
+                  ? "The timeline is written to this length. Pick a different template to change it."
+                  : "Set by the hook template you pick."}
+              </p>
             </div>
-
-            <DirectionSelect
-              id="review-voice-direction"
-              testId="review-voice-direction"
-              label="Voice direction"
-              value={dirSel.voice}
-              onPick={pickVoice}
-              options={directionOptions?.voice}
-              placeholder="Choose a voice direction…"
-              disabled={busy}
-              refresh={refreshProps("voice", "review-voice-refresh")}
-            />
 
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="accent" onClick={() => handleSaveEdits()} disabled={busy || !hasEdits} busy={busy}>
@@ -2603,7 +2602,7 @@ export default function CreateVideo() {
               )}
             </div>
             {hasEdits && (
-              <p className="text-xs text-muted-foreground" data-subtitle="">
+              <p className="text-sm text-muted-foreground" data-subtitle="">
                 Save your edits before rendering. Edits are claim-checked.
               </p>
             )}
