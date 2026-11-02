@@ -1,6 +1,6 @@
 # 0074 — Template fit notes shared by every card are read once above them
 
-Status: accepted
+Status: accepted (section-copy clause partially superseded by 0085)
 
 ## Context
 

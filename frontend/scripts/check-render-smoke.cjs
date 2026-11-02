@@ -4732,8 +4732,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
               suggested_duration: TEMPLATE.default_duration,
             },
           ],
-          shared_reasons: ["Built for 'ease daily moment'. Makes the daily moment feel lighter."],
-          shared_limitations: ["Needs character reference.", "Bounded by: weekly reports only."],
+          shared_reasons: [
+            "Built for 'ease daily moment'. Makes the daily moment feel lighter.",
+            "Open to anyone, so it reaches viewers outside your usual audience too.",
+          ],
+          shared_limitations: ["Needs character reference.", "No middle structure recorded; the studio will infer one."],
         }),
         ensureObjectiveTemplates: async () => ({
           templates: ORDERED_TEMPLATES,
@@ -4752,16 +4755,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!shared.textContent.includes("Built for 'ease daily moment'")) {
       throw new Error("the section line does not carry the shared reason");
     }
-    if (!shared.textContent.includes("Bounded by: weekly reports only.")) {
-      throw new Error("the section line does not carry the shared limitation");
+    // The section reads the strongest shared reason and only that one: the rest
+    // are echoes of input the founder just gave, and stacked above the grid they
+    // ran to six sentences that outread the cards they summarised.
+    const reasonLine = shared.querySelector('[data-testid="templates-shared-reason"]');
+    if (!reasonLine) throw new Error("the section renders no shared reason line");
+    if (reasonLine.textContent.includes("Open to anyone")) {
+      throw new Error("the section stacks the weaker shared reasons above the grid");
     }
     // Each shared limit is its own line. The notes are whole sentences and not
-    // all of them end in a full stop ("Bounded by: …" is a semicolon-joined
-    // list), so joining them into one paragraph ran an unterminated note
-    // straight into the next — "…for the process Needs character reference." —
-    // and the boundary between two limits disappeared.
+    // all of them end in a full stop, so joining them into one paragraph ran an
+    // unterminated note straight into the next — "…for the process Needs
+    // character reference." — and the boundary between two limits disappeared.
     const limitLines = [...shared.querySelectorAll("li")].map((li) => li.textContent.trim());
-    for (const note of ["Needs character reference.", "Bounded by: weekly reports only."]) {
+    for (const note of ["Needs character reference.", "No middle structure recorded; the studio will infer one."]) {
       const holders = limitLines.filter((line) => line.includes(note));
       if (holders.length !== 1) {
         throw new Error(`the shared limit "${note}" is on ${holders.length} lines instead of its own`);
@@ -4769,6 +4776,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (holders[0] !== note) {
         throw new Error(`the shared limit "${note}" is glued to another note: ${holders[0]}`);
       }
+    }
+    // The angle's claims bound the angle, and the angle's own panel reads them
+    // above this list. Rendering them here too put the same bounds on screen
+    // twice, the second time as writer instructions the founder cannot act on.
+    if (shared.textContent.includes("Bounded by")) {
+      throw new Error("the template step repeats the angle's own bounds");
     }
     const verdicts = [...ctx.container.querySelectorAll('[data-testid="template-fit-verdict"]')];
     if (verdicts.length !== 2) throw new Error(`expected two differentiating verdicts, saw ${verdicts.length}`);

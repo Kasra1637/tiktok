@@ -96,7 +96,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0071](0071-pair-attribution-and-exploration-guard.md) | Pair (kind × objective) attribution sharpens below each axis; thin evidence invites one untried kind | accepted |
 | [0072](0072-active-varied-settings.md) | Strategies stage active, varied settings from the usage moment; bedrooms and cars stop being the default | accepted |
 | [0073](0073-angle-carries-viewer-outcome.md) | Angles carry viewer_outcome from outcome_statements; card shows it, strategy lands it | accepted |
-| [0074](0074-shared-template-fit-notes.md) | Fit notes shared by every template card are read once above them | accepted |
+| [0074](0074-shared-template-fit-notes.md) | Fit notes shared by every template card are read once above them | accepted (section-copy clause superseded by 0085) |
 | [0075](0075-actionable-review-checks.md) | Review findings select editable text; supporting evidence stays collapsed | accepted |
 | [0076](0076-angle-diversity-and-source-links.md) | Correct duplicate arguments and carry recorded feature/outcome links | accepted |
 | [0077](0077-intent-aware-core-tours.md) | Core tours wait for first-run page readiness; other help stays manual | accepted |
@@ -107,3 +107,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0082](0082-standalone-demo-cta-starts-blank.md) | Standalone Demo + CTA starts blank; only pinned workspaces resume drafts | accepted |
 | [0083](0083-turso-outage-refuses-local-fallback.md) | A configured Turso outage fails database requests instead of accepting local SQLite writes | accepted |
 | [0084](0084-angle-owns-scene.md) | The selected angle owns where, when and what happens; later steps conform with a visible note | accepted |
+| [0085](0085-template-step-reads-strongest-shared-note.md) | The template step reads the strongest shared note, not every one; the angle keeps its own bounds | accepted |

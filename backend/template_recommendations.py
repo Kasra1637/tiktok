@@ -227,10 +227,15 @@ def score_template_for_angle(
                      f"arrives as the reason they stayed, not as a bullet.")
             matched["feature_keyword"] = hit
 
-    if angle.get("claims_to_respect"):
-        limitations.append(
-            "Bounded by: " + "; ".join(str(c) for c in angle["claims_to_respect"][:3])
-        )
+    # The angle's "claims to respect" are NOT repeated as a template limit.
+    # They bound the ANGLE, not this template, and the picked angle's own panel
+    # states them as a "Bounded by" row directly above the template list
+    # (frontend/src/lib/angleSubtitle.js:angleDetails). Carried here they
+    # duplicated that row one surface down, in the model's own imperative voice
+    # ("Do not claim clinical insight"), and since they were identical on every
+    # card they also landed in the section's shared limits — where the founder
+    # read a paragraph of writer instructions with nothing to act on. The
+    # constraint still reaches the prompt from the angle row itself.
 
     if required_assets:
         limitations.append(

@@ -576,14 +576,23 @@ class TestRecommendationScorer:
         assert foreign["score"] == plain["score"]
         assert not any("Tailored for" in r for r in foreign["reasons"])
 
-    def test_claims_to_respect_are_carried_into_limitations(self):
+    def test_angle_claims_are_not_repeated_as_template_limits(self):
+        """
+        The claims bound the ANGLE, and the angle's own panel already reads them
+        as a "Bounded by" row above the template list. Carried into the
+        template's limitations they duplicated that row on every card, in the
+        model's imperative voice, and hoisted into the section's shared limits
+        as a paragraph of instructions the founder cannot act on.
+        """
         angle = {
             "kind": "problem_solution", "target_audience": "", "app_feature": "",
             "claims_to_respect": ["Do not claim iOS support", "Trial terms unverified"],
         }
         result = _score_template_for_angle(self._template(), self._profile(), angle, "")
         joined = " ".join(result["limitations"])
-        assert "iOS" in joined and "Trial terms" in joined
+        assert "iOS" not in joined
+        assert "Trial terms" not in joined
+        assert not any(lim.startswith("Bounded by") for lim in result["limitations"])
 
     def test_unpublished_draft_is_flagged(self):
         angle = {"kind": "problem_solution", "target_audience": "", "app_feature": "",

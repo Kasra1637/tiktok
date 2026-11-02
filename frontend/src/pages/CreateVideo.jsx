@@ -1840,34 +1840,38 @@ export default function CreateVideo() {
                     visible card shares and each card keeps only what
                     differentiates it. Renders only when the server sent shared
                     notes — older stubbed responses without the keys read as
-                    before, per card. */}
+                    before, per card.
+
+                    The section reads ONE of them: the strongest, which is
+                    first because the server sorts reasons by weight. That
+                    single note answers why this set ranks at all, which is the
+                    section's whole job. The rest are echoes of input the
+                    founder just gave (their app's category, an "open to anyone"
+                    tiebreak) and cost a line each above a grid they came to
+                    pick from — this block used to run six sentences and ~90
+                    words, longer and louder than the cards it summarised.
+                    The limits stay, as their own lines: each one changes what
+                    the founder has to do (a template needing a photo, a draft
+                    that is not approved yet). "Bounded by" is not among them
+                    any more — those claims bound the ANGLE, and the picked
+                    angle's panel states them directly above this list. */}
                 {(sharedFit.reasons.length > 0 || sharedFit.limitations.length > 0) && (
                   <div className="space-y-1 text-sm text-muted-foreground" data-testid="templates-shared-fit">
                     {sharedFit.reasons.length > 0 && (
-                      <p>True of every template below: {sharedFit.reasons.join(" ")}</p>
+                      <p data-testid="templates-shared-reason">{sentenceCase(sharedFit.reasons[0])}</p>
                     )}
                     {sharedFit.limitations.length > 0 && (
-                      <div className="space-y-1">
-                        <p>Limits on every template below:</p>
-                        {/* One note per line. These are whole sentences from
-                            the scorer, and not all of them end in a full stop
-                            ("Bounded by: …" is a list joined with semicolons),
-                            so joining them into one paragraph ran two notes
-                            together — "…for the process Needs character
-                            reference." A list per note is what the card's own
-                            limits render, so the two read the same way. */}
-                        <ul className="space-y-1">
-                          {sharedFit.limitations.map((limitation, i) => (
-                            <li
-                              key={`sl-${i + 1}`}
-                              className="flex items-start gap-1.5 leading-relaxed"
-                            >
-                              <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
-                              <span>{sentenceCase(limitation)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      <ul className="space-y-1">
+                        {sharedFit.limitations.map((limitation, i) => (
+                          <li
+                            key={`sl-${i + 1}`}
+                            className="flex items-start gap-1.5 leading-relaxed"
+                          >
+                            <span aria-hidden="true" className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                            <span>{sentenceCase(limitation)}</span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 )}
