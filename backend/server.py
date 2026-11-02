@@ -27,6 +27,7 @@ import pipeline
 import storage_service
 import posters
 import template_library
+import angle_scene
 import claim_safety
 import media_signing
 import video_providers
@@ -1243,6 +1244,10 @@ async def init_db():
             # The viewer's outcome per angle. Additive: pre-column rows read
             # as NULL, which renders as no outcome line on old cards.
             ("content_angles", "viewer_outcome", "TEXT"),
+            # What the plan changed in the founder's look so it matches the
+            # angle (ADR 0084). Written only by the plan endpoint. Pre-column
+            # rows read as NULL, which shows no note: old drafts are untouched.
+            ("studio_projects", "angle_scene_note", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -4178,7 +4183,7 @@ async def angle_goal_suggestions(
 
 @api_router.get("/app-profiles/{profile_id}/direction-options")
 async def profile_direction_options(
-    profile_id: str, user_id: str = Depends(get_current_user_id)
+    profile_id: str, angle_id: str = "", user_id: str = Depends(get_current_user_id)
 ):
     """The Review-step direction dropdowns for one App Profile.
 
@@ -4193,7 +4198,16 @@ async def profile_direction_options(
     )
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
-    return template_library.direction_options_for_profile(profile)
+    options = template_library.direction_options_for_profile(profile)
+    angle = None
+    if (angle_id or "").strip():
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (angle_id.strip(), profile_id, user_id),
+        )
+    # The angle owns where and when the video happens (ADR 0084), so no option
+    # that contradicts its opening moment is ever offered.
+    return angle_scene.fit_direction_options(options, angle)
 
 
 @api_router.post("/app-profiles/{profile_id}/direction-options/refresh")
@@ -4234,6 +4248,8 @@ async def refresh_profile_direction_options(
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=f"AI direction options failed. Please try again. ({str(e)[:150]})")
+    scene = angle_scene.angle_scene(angle)
+    options = [o for o in options if not angle_scene.conflict_reason(o, scene)]
     return {"field": field, "options": options}
 
 
@@ -4505,6 +4521,7 @@ async def recommend_templates(
             "limitations": result["limitations"],
             "feedback": result["feedback"],
             "retired": result["retired"],
+            "angle_scene": result["angle_scene"],
         })
     scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
     want = max(1, min(int(limit or 8), 30))
@@ -5234,6 +5251,10 @@ async def generate_plan(
     )
     plan_feedback = await _component_feedback_for_profile(
         row.get("brand_profile_id"), user_id, "plan")
+    # The angle owns where and when the video happens (ADR 0084): a saved look
+    # naming another place or time is adjusted before the plan sees it, and the
+    # founder is told what changed.
+    look = angle_scene.reconcile_look(row.get("visual_direction") or "", angle)
     try:
         plan = await _log_model_call(
             "creative_plan", "text", TEXT_MODEL,
@@ -5252,7 +5273,7 @@ async def generate_plan(
                 # different look than the one on the project, which is the plan
                 # overwriting their decisions instead of drafting the script.
                 audience=(payload.audience or row.get("audience") or "").strip(),
-                visual_direction=(row.get("visual_direction") or "").strip(),
+                visual_direction=look["visual_direction"],
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 profile_feedback=profile_feedback,
                 component_feedback=plan_feedback,
@@ -5323,14 +5344,14 @@ async def generate_plan(
              demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
              safety_report = ?, safety_summary = ?, objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
-             plan_trimmed_chars = ?,
+             plan_trimmed_chars = ?, angle_scene_note = ?,
              status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
          plan["visual_direction"], plan["demo_brief"], json.dumps([]),
          plan["voice_direction"], plan["sound_direction"],
          json.dumps(report), summary, objective, duration, tone or None,
-         trimmed_chars, now, project_id, user_id),
+         trimmed_chars, look["note"] or None, now, project_id, user_id),
     )
     # Behavior, both directions. Writing this plan means moving forward with
     # the goal and template behind it, so both are adopted. Overwriting a
@@ -8040,7 +8061,9 @@ async def generate_project_strategy(
         approved_plan = {
             "hook_line": row.get("hook_line") or "",
             "script": row.get("script") or "",
-            "visual_direction": row.get("visual_direction") or "",
+            "visual_direction": angle_scene.reconcile_look(
+                row.get("visual_direction") or "", angle
+            )["visual_direction"],
             "voice_direction": row.get("voice_direction") or "",
             "sound_direction": row.get("sound_direction") or "",
             "beat_timeline": row.get("beat_timeline") or [],

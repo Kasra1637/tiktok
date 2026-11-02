@@ -34,6 +34,7 @@ from template_library import (
     clamp_duration,
 )
 import feedback
+import angle_scene as _angle_scene_policy
 from angle_policy import (
     angle_grounding as _angle_grounding,
     duplicate_angle_pairs as _duplicate_angle_pairs,
@@ -2128,7 +2129,11 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     if isinstance(angle, dict) and angle:
         angle_block = (
             "\n\nSELECTED ANGLE (suit the options to it):\n"
-            f"{json.dumps({k: angle.get(k) or '' for k in ('kind', 'label', 'user_problem', 'viewer_outcome')}, indent=2)}"
+            f"{json.dumps({k: angle.get(k) or '' for k in ('kind', 'label', 'user_problem', 'hook_promise', 'viewer_outcome', 'desired_emotion')}, indent=2)}"
+            "\nThe hook_promise is the video's opening moment and fixes where and when it happens: "
+            "every option must fit that exact place and time of day. Never offer a place, light or "
+            "time that contradicts it (no living room or lamp light when it opens outside, no night "
+            "when it opens in the morning)."
         )
     avoid_list = [str(a) for a in (avoid or []) if str(a or "").strip()][:12]
     avoid_block = ("\n\nALREADY SHOWN (do not repeat any of these):\n" + "\n".join(f"- {a}" for a in avoid_list)) if avoid_list else ""
@@ -2924,6 +2929,11 @@ def _spoken_line_rules_block() -> str:
         "- HOOK: open on a relatable question, a curiosity gap, or a frustration "
         "this viewer recognises, in first person. Plain power words are fine "
         "(never, still, every time). No clickbait, hype or exaggeration.\n"
+        "- NAME THE ACTION: say the real task in the viewer's own words, never a "
+        "vague stand-in. For a journaling app that is \"I don't want to write in my "
+        "journal today\", not \"I don't want to type anything\" or \"typing is the "
+        "last thing I want to do\". No \"it\", \"this\", \"that\", \"anything\" or "
+        "\"stuff\" where the activity belongs.\n"
         "- EXTENSION: the script continues the hook — it answers, finishes or "
         "develops it. One person, one story, one thought: no new problem, no "
         "second hook, no hook said again.\n"
@@ -2942,7 +2952,7 @@ def _spoken_line_rules_block() -> str:
     )
 
 
-def scene_setting_guidance() -> str:
+def scene_setting_guidance(angle: Optional[dict] = None) -> str:
     """
     Where the video happens, and what the person is doing there.
 
@@ -2956,13 +2966,31 @@ def scene_setting_guidance() -> str:
     specific, dramatic — with vivid worked examples, because the model copies
     the style of whatever examples it sees.
     """
-    return (
+    moment = _angle_scene_moment(angle)
+    lead = (
+        f"- ANGLE SCENE (outranks everything below): the video opens on the selected angle's "
+        f"moment - {moment}. scene.environment, scene.background, scene.setting (including the "
+        "time of day), the lighting and hook_action must happen exactly there and then, and the "
+        "middle stays in that same place. A template example, usage_moments or a look setting "
+        "never moves it indoors, outdoors or to another time of day.\n"
+        if moment else ""
+    )
+    return lead + (
         "- scene.setting must come from usage_moments — the only evidence of when and where "
         "it is used. Never a kitchen, desk or routine; empty stays unspecified, never invented. "
         "Stage it where the promise lives (a hilltop path "
         "at sunrise, a night market, a coastal trail — not a bedroom, almost never a car); "
         "prefer walking outdoors over sitting indoors.\n"
     )
+
+
+def _angle_scene_moment(angle: Optional[dict]) -> str:
+    """The angle's opening moment, with any place and time of day it names spelled out."""
+    scene = _angle_scene_policy.angle_scene(angle)
+    if not scene["moment"]:
+        return ""
+    where = ["outdoors" if scene["place"] == "outdoor" else "indoors"] if scene["place"] else []
+    return scene["moment"] + (f" ({', '.join(where)})" if where else "")
 
 
 def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "") -> str:
@@ -2994,6 +3022,12 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
         lines.append(f"- PROBLEM: the hook names this exact problem in the viewer's words: {_text('user_problem')}. The script develops and resolves it.")
     if _text("hook_promise"):
         lines.append(f"- PROMISE: the hook opens on this promise: {_text('hook_promise')}.")
+        lines.append(
+            f"- PLACE + TIME: the whole video happens in this opening moment: {_angle_scene_moment(angle)}. "
+            "The hook, the script and every visual line stay there; no template example, usage "
+            "moment or look setting moves it to another place or time of day (no bed, night or "
+            "living room unless the moment says so)."
+        )
     if _text("app_feature"):
         lines.append(f"- SOLUTION: the middle resolves the problem through {_text('app_feature')}, as a change in the viewer's life, never a feature list.")
     if _text("viewer_outcome"):
@@ -3305,10 +3339,11 @@ async def generate_creative_plan(
         "an instruction to the founder about what to record themselves. Keep it to one "
         "sentence, and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
-        "- If the brief states a visual_direction, that look is the founder's own: "
-        "return a visual_direction that describes it and nothing that contradicts it, and "
-        "keep both spoken lines inside a setting that look fits. Do not replace it with a "
-        "look of your own.\n"
+        "- The angle's opening moment (angle_hook_promise) fixes where and when the video "
+        "happens, and visual_direction must place the presenter exactly there. If the brief "
+        "states a visual_direction, that look is the founder's own and was already matched to "
+        "the angle: return a visual_direction that describes it inside the angle's place and "
+        "time and nothing that contradicts either. Do not replace it with a look of your own.\n"
         "- CRITICAL: nothing is composited over the footage and no text appears "
         "on screen at all — no captions, no titles, no labels. Describe the full scene — "
         "environment, setting, props and any on-screen "
@@ -5095,7 +5130,7 @@ async def generate_video_strategy(
         # the app is reached for at a specific moment, so the middle develops
         # towards that moment and stops there. That stop is the seam the
         # founder's own demo picks up from.
-        + scene_setting_guidance()
+        + scene_setting_guidance(angle)
         + "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
         "for the app, not using it. The demo is the founder's own recording, attached after "
         "this footage, so the last frame of your video should be the moment before it.\n"

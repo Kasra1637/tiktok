@@ -1,0 +1,10 @@
+yarn run v1.22.22
+$ craco build
+Creating an optimized production build...
+
+                    The build failed because the process exited too early.
+                    This probably means the system ran out of memory or someone called
+                    `kill -9` on the process.
+                
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

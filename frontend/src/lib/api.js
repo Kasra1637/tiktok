@@ -251,10 +251,13 @@ export const api = {
     client.delete(`/app-profiles/${profileId}/content-angles/${angleId}`).then((r) => r.data),
 
   // Review-step direction dropdowns for one profile: setting, lighting,
-  // wardrobe, voice and tone option lists in the profile's category group.
+  // wardrobe, voice and tone option lists in the profile's category group,
+  // minus anything that contradicts the selected angle's opening moment.
   // Deterministic mapping, no model call.
-  getDirectionOptions: (profileId) =>
-    client.get(`/app-profiles/${profileId}/direction-options`).then((r) => r.data),
+  getDirectionOptions: (profileId, angleId = "") =>
+    client.get(`/app-profiles/${profileId}/direction-options`, {
+      params: angleId ? { angle_id: angleId } : undefined,
+    }).then((r) => r.data),
 
   // Fresh options for ONE direction dropdown, still profile-shaped: one
   // text model call grounded in the profile and the selected angle, avoiding

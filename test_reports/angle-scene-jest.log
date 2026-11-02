@@ -1,0 +1,49 @@
+yarn run v1.22.22
+$ craco test --watchAll=false src/lib/angleSubtitle.test.js
+FAIL src/lib/angleSubtitle.test.js
+  formatVerdicts
+    ✓ names wins and flops as counts, never a rate (2 ms)
+    ✓ stays silent with no evidence
+    ✓ shows moved-forward momentum beside verdicts, never as a win
+    ✓ names posted clips and watched views as the strongest counts (1 ms)
+  goalFitScore
+    ✓ a proven goal suggested first with a fit reason scores high (2 ms)
+    ✓ floors instead of rounding up, and caps a perfect tally at 10
+    ✓ thin evidence caps at 6 and says early signal (1 ms)
+    ✓ no evidence is unproven, not an error — rank alone, low
+    ✓ an angle-style two-row list scores the first row from rank and kind tally
+    ✓ an all-flop goal scores at the floor (1 ms)
+    ✓ posted clips count double toward the tally and name themselves in the basis (1 ms)
+    ✓ one posted clip counts toward thin but cannot clear it alone
+  angleFitScore
+    ✓ an untested angle never reads as Fit 0/10 (1 ms)
+    ✕ evidence still decides a tested angle's score (2 ms)
+
+  ● angleFitScore › evidence still decides a tested angle's score
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 0
+
+    [0m [90m 138 |[39m
+     [90m 139 |[39m   test([32m"evidence still decides a tested angle's score"[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 140 |[39m     expect(angleFitScore({ index[33m:[39m [35m5[39m[33m,[39m total[33m:[39m [35m6[39m[33m,[39m evidence[33m:[39m { wins[33m:[39m [35m0[39m[33m,[39m flops[33m:[39m [35m4[39m } })[33m.[39mscore)[33m.[39mtoBe([35m1[39m)[33m;[39m
+     [90m     |[39m                                                                                          [31m[1m^[22m[39m
+     [90m 141 |[39m   })[33m;[39m
+     [90m 142 |[39m })[33m;[39m
+     [90m 143 |[39m[0m
+
+      at Object.<anonymous> (src/lib/angleSubtitle.test.js:140:90)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 13 passed, 14 total
+Snapshots:   0 total
+Time:        2.462 s
+Ran all test suites matching /src\/lib\/angleSubtitle.test.js/i.
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

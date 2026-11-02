@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, getErrorMessage } from "../lib/api";
 
 /**
- * Direction dropdown lifecycle: one owner for profile-keyed options,
+ * Direction dropdown lifecycle: one owner for profile- and angle-keyed options,
  * per-app picks, saved-plan matching and per-field refresh.
  *
  * Navigation safety: every load carries a request id, picks reset when the
@@ -10,6 +10,7 @@ import { api, getErrorMessage } from "../lib/api";
  */
 export function useWizardDirections({ profileId, project, tone, angle, dispatchDraft, editTone }) {
   const [directionOptions, setDirectionOptions] = useState(null);
+  const angleId = angle?.id || "";
   const directionRequestRef = useRef(0);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export function useWizardDirections({ profileId, project, tone, angle, dispatchD
       return undefined;
     }
     let cancelled = false;
-    api.getDirectionOptions(profileId)
+    api.getDirectionOptions(profileId, angleId)
       .then((data) => {
         if (!cancelled && directionRequestRef.current === request) setDirectionOptions(data);
       })
@@ -29,7 +30,7 @@ export function useWizardDirections({ profileId, project, tone, angle, dispatchD
     return () => {
       cancelled = true;
     };
-  }, [profileId]);
+  }, [profileId, angleId]);
 
   const [dirSel, setDirSel] = useState({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
 

@@ -4565,8 +4565,63 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!shape.textContent.includes(TEMPLATE.opening_structure)) {
       throw new Error("the card shape does not carry the template opening structure");
     }
-    if (!shape.textContent.includes("Final setting comes from your angle")) {
-      throw new Error("the card does not say the final setting comes from the angle");
+    // The angle owns the final setting (ADR 0084), so the card states the
+    // angle's own moment instead of a disclaimer about it.
+    if (shape.textContent.includes("Final setting comes from your angle")) {
+      throw new Error("the card still carries the old setting disclaimer");
+    }
+  });
+
+  await check("a template card is written to the selected angle's moment", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const MOMENT = "A person steps outside an office building after a call";
+    const MISFIT = "Doesn't fit this angle: its opening is set indoors, but your angle opens outdoors.";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: { ...ORDERED_TEMPLATES[0], example_preview: "Lies in bed at eleven at night, racing thoughts" },
+              score: 8,
+              why_it_fits: ["Fits."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+              angle_scene: { moment: MOMENT, fits: true, example_conflicts: true },
+            },
+            {
+              template: ORDERED_TEMPLATES[1],
+              score: 3,
+              why_it_fits: ["Close."],
+              limitations: [MISFIT],
+              suggested_duration: TEMPLATE.default_duration,
+              angle_scene: { moment: MOMENT, fits: false, example_conflicts: false },
+            },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [ORDERED_TEMPLATES[0]],
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+      }
+    );
+    const text = ctx.text();
+    if (text.includes("Lies in bed at eleven at night")) {
+      throw new Error("an example that contradicts the angle is still shown on the card");
+    }
+    const moments = ctx.container.querySelectorAll('[data-testid="template-angle-moment"]');
+    if (moments.length !== 1 || !moments[0].textContent.includes(MOMENT)) {
+      throw new Error("the fitting card does not say where the angle stages it");
+    }
+    const misfit = ctx.container.querySelector('[data-testid="template-angle-misfit"]');
+    if (misfit && !misfit.textContent.includes(MISFIT)) {
+      throw new Error("a misfit note does not carry the plain reason");
     }
   });
 

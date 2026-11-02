@@ -22,6 +22,8 @@ from contextvars import ContextVar
 import re
 from typing import Optional
 
+import angle_scene
+
 
 # Hard ceiling on the assembled render prompt, in characters.
 #
@@ -1636,11 +1638,21 @@ def _assemble_prompt(
                 )
         sections.append("\n".join(block))
 
-    if tpl.get("opening_structure"):
+    # The strategy's scene is the angle's place and time (ADR 0084); template
+    # staging that names another one is left out rather than fought over.
+    _scene = strategy.get("scene") if isinstance(strategy.get("scene"), dict) else {}
+    _locked = angle_scene.scene_of(" ".join(
+        str(_scene.get(k) or "") for k in ("environment", "setting", "background")
+    ))
+
+    def _fits_scene(text) -> bool:
+        return not angle_scene.conflict_reason(str(text or ""), _locked)
+
+    if tpl.get("opening_structure") and _fits_scene(tpl["opening_structure"]):
         sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 80)}")
-    if tpl.get("middle_structure"):
+    if tpl.get("middle_structure") and _fits_scene(tpl["middle_structure"]):
         sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 80)}")
-    if tpl.get("visual_style") and strategy.get("camera_setup") != "fixed":
+    if tpl.get("visual_style") and strategy.get("camera_setup") != "fixed" and _fits_scene(tpl["visual_style"]):
         sections.append(f"Visual style: {_clip(tpl['visual_style'], 80)}")
     if tpl.get("camera_pacing") and strategy.get("camera_setup") != "fixed":
         sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")

@@ -5,6 +5,7 @@ split_shared_notes shapes the visible comparison set in place (ADR 0074).
 """
 from typing import Optional
 
+import angle_scene
 import feedback as feedback_mod
 import recommendation_tags
 import template_library
@@ -240,6 +241,13 @@ def score_template_for_angle(
     if (template.get("review_status") or "approved") != "approved":
         limitations.append("Unpublished research draft - review before using.")
 
+    # A template whose own staging contradicts where and when the angle opens
+    # stays listed but ranks lower, with the reason first (ADR 0084).
+    scene_fit = angle_scene.template_angle_fit(template, angle)
+    if scene_fit["structure"]:
+        score -= 3.0
+        limitations.insert(0, scene_fit["structure"])
+
     # Strongest factor first. Stable sort keeps same-weight reasons in
     # insertion order, and feedback still lands at the very top below.
     weighted.sort(key=lambda item: -item[0])
@@ -326,6 +334,11 @@ def score_template_for_angle(
         "feedback": feedback,
         "matched": matched,
         "retired": retired,
+        "angle_scene": {
+            "moment": scene_fit["moment"],
+            "fits": not scene_fit["structure"],
+            "example_conflicts": scene_fit["example_conflicts"],
+        },
     }
 
 def split_shared_notes(recs):

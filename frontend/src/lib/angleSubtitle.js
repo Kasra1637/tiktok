@@ -206,3 +206,16 @@ export function goalFitScore({ index = 0, total = 6, evidence = null, hasFitReas
     : `suggested ${ordinal} of ${safeTotal} · no results yet`;
   return { score, basis, thin };
 }
+
+// Lowest score an untested angle shows. Every angle is written from this
+// app's own profile, so a rank-only 0/10 would call a grounded angle a miss
+// before any result exists; evidence can still pull a tested angle lower.
+const UNTESTED_ANGLE_FLOOR = 3;
+
+export function angleFitScore({ index = 0, total = 6, evidence = null } = {}) {
+  const tested =
+    (Number(evidence?.wins) || 0) + (Number(evidence?.flops) || 0) + (Number(evidence?.posted) || 0) > 0;
+  if (tested) return goalFitScore({ index, total, evidence, hasFitReason: false });
+  const fit = goalFitScore({ index, total, evidence, hasFitReason: true });
+  return { ...fit, score: Math.max(fit.score, UNTESTED_ANGLE_FLOOR) };
+}

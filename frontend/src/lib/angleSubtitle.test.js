@@ -1,4 +1,4 @@
-import { formatVerdicts, goalFitScore } from "./angleSubtitle";
+import { angleFitScore, formatVerdicts, goalFitScore } from "./angleSubtitle";
 
 describe("formatVerdicts", () => {
   test("names wins and flops as counts, never a rate", () => {
@@ -126,5 +126,17 @@ describe("goalFitScore", () => {
     expect(score).toBe(6);
     expect(basis).toContain("early signal");
     expect(basis).toContain("proven in 1 posted clip");
+  });
+});
+
+describe("angleFitScore", () => {
+  test("an untested angle never reads as Fit 0/10", () => {
+    expect(goalFitScore({ index: 5, total: 6 }).score).toBe(0);
+    expect(angleFitScore({ index: 5, total: 6 }).score).toBe(3);
+    expect(angleFitScore({ index: 0, total: 6 }).score).toBe(4);
+  });
+
+  test("evidence still decides a tested angle's score", () => {
+    expect(angleFitScore({ index: 5, total: 6, evidence: { wins: 0, flops: 4 } }).score).toBe(1);
   });
 });

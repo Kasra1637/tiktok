@@ -2237,6 +2237,11 @@ export default function CreateVideo() {
                 </p>
               </div>
             )}
+            {project?.angle_scene_note && (
+              <div className="rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] p-4" data-testid="angle-scene-note">
+                <p className="text-base">{project.angle_scene_note}</p>
+              </div>
+            )}
             <div className="space-y-4">
               <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
               <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>

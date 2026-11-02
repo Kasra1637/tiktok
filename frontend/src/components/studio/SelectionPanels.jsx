@@ -10,7 +10,7 @@ import { GroupLabel } from "../SectionCard";
 import { FitBadge } from "../FitBadge";
 
 import { sentenceCase } from "../../lib/copyCase";
-import { angleDetails, formatVerdicts, goalFitScore } from "../../lib/angleSubtitle";
+import { angleDetails, angleFitScore, formatVerdicts, goalFitScore } from "../../lib/angleSubtitle";
 import { angleSetAge } from "../../lib/angleFreshness";
 import {
   readPieceSeconds,
@@ -60,7 +60,15 @@ function formatTemplateUse(n) {
  */
 export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
   const reasons = Array.isArray(r.why_it_fits) ? r.why_it_fits : [];
-  const limits = Array.isArray(r.limitations) ? r.limitations : [];
+  // Where and when the selected angle opens (ADR 0084). A template whose own
+  // staging contradicts it is ranked lower server-side and says so here, in
+  // plain view rather than tucked into the disclosure.
+  const scene = r.angle_scene && typeof r.angle_scene === "object" ? r.angle_scene : {};
+  const moment = typeof scene.moment === "string" ? scene.moment.trim() : "";
+  const misfit = scene.fits === false
+    ? (Array.isArray(r.limitations) ? r.limitations : []).find((l) => String(l).startsWith("Doesn't fit this angle")) || ""
+    : "";
+  const limits = (Array.isArray(r.limitations) ? r.limitations : []).filter((l) => l !== misfit);
   const score = Number(r.score);
   // The server sorts reasons strongest-first and sends only the strings, so
   // the first reason IS the verdict and the rest is supporting detail. Shown
@@ -68,6 +76,7 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
   // unable to tell the decision from its evidence.
   const [verdict, ...detail] = reasons;
   const example =
+    !scene.example_conflicts &&
     typeof r.template.example_preview === "string" && r.template.example_preview.trim()
       ? r.template.example_preview.trim()
       : "";
@@ -80,10 +89,8 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
     typeof r.template.outcome === "string" && r.template.outcome.trim()
       ? sentenceCase(r.template.outcome.trim())
       : "";
-  // The structure is what the founder actually picks: the title above is one
-  // example framing ("Eleven pm...") while the final setting comes from
-  // their angle (park bench, desk, walk). Showing the opening shape stops the
-  // title reading as the final setting.
+  // The structure is what the founder actually picks; the angle's moment
+  // below it is where that structure is staged in their video.
   const opening =
     typeof r.template.opening_structure === "string" && r.template.opening_structure.trim()
       ? sentenceCase(r.template.opening_structure.trim())
@@ -147,7 +154,18 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
       {opening && (
         <p className="mt-1 text-sm text-muted-foreground" data-testid="template-structure">
           <span className="text-muted-foreground">Shape: </span>
-          {opening} Final setting comes from your angle.
+          {opening}
+        </p>
+      )}
+      {moment && !misfit && (
+        <p className="mt-1 text-sm text-foreground/80" data-testid="template-angle-moment">
+          <span className="text-muted-foreground">In your video: </span>
+          {moment}
+        </p>
+      )}
+      {misfit && (
+        <p className="mt-1 text-sm font-semibold text-foreground" data-testid="template-angle-misfit">
+          {misfit}
         </p>
       )}
       {reasons.length > 0 && (
@@ -462,11 +480,10 @@ export function AngleSelector({
         const details = picked ? angleDetails(a) : [];
         const angleVerdicts =
           Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
-        const angleFit = goalFitScore({
+        const angleFit = angleFitScore({
           index: i,
           total: angles.length,
           evidence: a.evidence,
-          hasFitReason: false,
         });
         const angleFitBasis = angleVerdicts
           ? `${angleFit.basis} · at this angle kind`
