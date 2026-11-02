@@ -4,14 +4,13 @@ import { api, getErrorMessage } from "../lib/api";
 const emptyFit = () => ({ reasons: [], limitations: [] });
 
 /** Template loading is a separate lifecycle from draft writes and plan saves. */
-export function useWizardTemplates({ profileId, angleId, objective, active }) {
+export function useWizardTemplates({ profileId, angleId, objective }) {
   const [ranked, setRanked] = useState({ key: "", rows: [], shared: emptyFit(), error: null });
   const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [tailoring, setTailoring] = useState(false);
   const [tailorError, setTailorError] = useState(null);
   const [tailorCount, setTailorCount] = useState(0);
   const recRequestRef = useRef(0);
-  const tailorKeyRef = useRef("");
   const tailorRequestRef = useRef(0);
   // Latest wizard identity: a tailor flight that resolves after the founder
   // moves on must not reload recommendations for the profile/angle it left.
@@ -62,7 +61,7 @@ export function useWizardTemplates({ profileId, angleId, objective, active }) {
       const res = await api.ensureObjectiveTemplates(startPid, {
         objective: startObjective, ...(regenerate ? { regenerate: true } : {}),
       });
-      if (tailorRequestRef.current !== request || tailorKeyRef.current !== key) return;
+      if (tailorRequestRef.current !== request) return;
       setTailored({ key, templates: Array.isArray(res?.templates) ? res.templates : [] });
       // A generated set only refreshes the visible ranking when the wizard
       // still shows the profile/angle/objective the tailor ran for. Without
@@ -78,21 +77,18 @@ export function useWizardTemplates({ profileId, angleId, objective, active }) {
       }
       if (res.error) setTailorError(res.error);
     } catch (err) {
-      if (tailorRequestRef.current !== request || tailorKeyRef.current !== key) return;
+      if (tailorRequestRef.current !== request) return;
       setTailored({ key, templates: [] });
       setTailorError(getErrorMessage(err));
     } finally {
-      if (tailorRequestRef.current === request && tailorKeyRef.current === key) setTailoring(false);
+      if (tailorRequestRef.current === request) setTailoring(false);
     }
   }, [profileId, objective, angleId, loadRecommendations]);
 
-  useEffect(() => {
-    if (!active || !profileId || !objective) return;
-    const key = `${profileId}:${objective}`;
-    if (tailorKeyRef.current === key) return;
-    tailorKeyRef.current = key;
-    runTailoring(false);
-  }, [active, profileId, objective, runTailoring]);
+  // Tailoring is a billed generation (ADR 0087), so it never rides an effect
+  // on the goal pick: switching goals re-keys only the free ranking and
+  // queues nothing. The page triggers it — the goals-section Generate CTA,
+  // or the header Regenerate for a deliberate fresh set.
 
   const tailorKey = profileId && objective ? `${profileId}:${objective}` : "";
   const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}`;

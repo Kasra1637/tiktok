@@ -101,7 +101,7 @@ accepts data; it must not be mistaken for an authorization check.
 | [App.js](../frontend/src/App.js) | Real route inventory, protected shell, lazy page loading. |
 | [CreateVideo.jsx](../frontend/src/pages/CreateVideo.jsx) | Three-step orchestration, URL navigation, request cancellation, autosave and plan/strategy handoffs. |
 | [wizardDraft.js](../frontend/src/pages/wizardDraft.js) | Pure named transitions for selections, saved project and pending edits. Resume/reset/save adoption are atomic; background project updates retain edits. |
-| [useWizardTemplates.js](../frontend/src/hooks/useWizardTemplates.js) | Keyed recommendation/tailoring requests, shared fit/error state, visible list and progress timer. No project writes. |
+| [useWizardTemplates.js](../frontend/src/hooks/useWizardTemplates.js) | Keyed recommendation/tailoring requests, shared fit/error state, visible list and progress timer. Tailoring fires only when the page calls `runTailoring` — the goals-section Generate CTA or the header Regenerate — never on the goal pick. No project writes. |
 | [SelectionPanels.jsx](../frontend/src/components/studio/SelectionPanels.jsx) | Angle selector, goal picker, template shape and recommendation cards. Receives callbacks/data; does not take over project writes. |
 | [ReviewPanels.jsx](../frontend/src/components/studio/ReviewPanels.jsx) | Revision inspection (including the latest-clip read), direction select and work narration. It does not own plan writes or render submission. |
 | [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. |

@@ -1372,6 +1372,9 @@ async function main() {
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        // The template arrives via the billed gate, not the goal pick — a
+        // plan needs all three: profile, template, goal.
+        await passTemplatesGate(ctx);
         await act(async () => {});
         await act(async () => {});
         await openStep(ctx, "Review & submit");
@@ -1409,6 +1412,9 @@ async function main() {
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        // The plan needs the template too, and the template arrives via the
+        // billed gate, not the goal pick.
+        await passTemplatesGate(ctx);
         // Let the eager create land before moving on, so Review sees the
         // fresh draft (script_version 0) rather than a still-null project.
         await act(async () => {});
@@ -3508,6 +3514,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openTemplateStep(ctx);
+          // The draft's template comes from the gate click, not the goal
+          // pick — Review's re-read hangs off the complete draft.
+          await passTemplatesGate(ctx);
           await act(async () => {});
           await openStep(ctx, "Review & submit");
           await act(async () => {});
@@ -4117,6 +4126,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (!picker) throw new Error("no app profile picker on the first step");
           await clickEl(ctx, picker.querySelector("button"), "no approved profile to pick");
           await openTemplateStep(ctx);
+          await passTemplatesGate(ctx);
           const card = [...ctx.container.querySelectorAll('[role="button"]')].find((el) =>
             (el.textContent || "").includes("No Photo Pick")
           );
@@ -4400,6 +4410,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const text = ctx.text();
@@ -4444,6 +4455,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
         const text = ctx.text();
         if (!text.includes("Top Pick")) {
           throw new Error("recommendation rows vanished with the library");
@@ -4500,6 +4512,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const text = ctx.text();
@@ -4651,6 +4664,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const text = ctx.text();
@@ -4691,6 +4705,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const verdict = ctx.container.querySelector('[data-testid="template-fit-verdict"]');
@@ -4748,6 +4763,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const shared = ctx.container.querySelector('[data-testid="templates-shared-fit"]');
@@ -4978,6 +4994,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           // Picked the way a founder picks: the top recommendation is
           // preselected, so angle plus goal is a complete, valid selection.
           await openTemplateStep(ctx);
+          await passTemplatesGate(ctx);
           await act(async () => {});
           await act(async () => {});
           await openStep(ctx, "Review & submit");
@@ -5933,6 +5950,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }, async () => {
       await mount(CreateVideo, {})(ctx);
       await openTemplateStep(ctx);
+      // The eager create fires on template selection, and the template
+      // arrives via the billed gate — without it no project exists for the
+      // goal switch to update.
+      await passTemplatesGate(ctx);
       await openStep(ctx, "Audience & template");
       const goal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
       await clickEl(ctx, goal);
@@ -6381,6 +6402,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
 
         // Click the second card by its rendered name.
         const second = [...ctx.container.querySelectorAll("[role=button]")]
@@ -6412,8 +6434,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await check("wizard surfaces the tailored-template error instead of failing silently", async (ctx) => {
     global.__SMOKE_PARAMS = "";
       // The override has to span the whole check, not just the mount: the
-    // tailored request does not fire until the objective is chosen and the
-    // merged step opens, which is after mount.
+    // tailored request does not fire until the goal is chosen, Generate is
+    // clicked in the goals section, and that is after mount.
     await withApi(
       {
         ensureObjectiveTemplates: async () => ({
@@ -6429,6 +6451,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await passAngleGate(ctx);
         await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
+        // The click IS the generation: the goal pick alone queues nothing.
+        await passTemplatesGate(ctx);
         const pill = stepPill(ctx, "Audience & template");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -6456,6 +6480,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await passAngleGate(ctx);
           await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
+        // Picking a goal queues nothing; the Generate click is the
+        // commitment that names the objective and the profile.
+        if (seen.length !== 0) {
+          throw new Error(`picking a goal queued ${seen.length} tailored-template requests`);
+        }
+        await passTemplatesGate(ctx);
         const pill = stepPill(ctx, "Audience & template");
         await act(async () => {
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -6463,13 +6493,43 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => {});
       }
     );
-    if (seen.length === 0) throw new Error("choosing an objective made no tailored-template request");
+    if (seen.length === 0) throw new Error("clicking Generate made no tailored-template request");
     if (seen[0].payload.objective !== "address_user_problem") {
       throw new Error(`wrong objective sent: ${JSON.stringify(seen[0].payload.objective)}`);
     }
     if (seen[0].profileId !== "b1") {
       throw new Error(`wrong profile sent: ${JSON.stringify(seen[0].profileId)}`);
     }
+  });
+
+  // The generation is billed, so the goal pick must queue exactly nothing:
+  // the goals section offers a Generate CTA carrying the objective and the
+  // profile, and only its click asks the server for a tailored set — switching
+  // goals mid-audit burns nothing a founder never asked to spend.
+  await check("template generation waits for the founder's click, not the goal pick", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const seen = [];
+    await withApi(
+      {
+        ensureObjectiveTemplates: async (profileId, payload) => {
+          seen.push({ profileId, payload });
+          return { templates: [], generated: false, objective: payload.objective, error: null };
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        if (seen.length !== 0) {
+          throw new Error(`picking an angle and a goal queued ${seen.length} tailored-template requests`);
+        }
+        const cta = ctx.container.querySelector('[data-testid="templates-generate"]');
+        if (!cta) throw new Error("the goals section offers no Generate CTA after picking a goal");
+        await passTemplatesGate(ctx);
+        if (seen.length !== 1) {
+          throw new Error(`the Generate click queued ${seen.length} tailored-template requests`);
+        }
+      }
+    );
   });
 
   await check("pre-made templates stay hidden until the tailored set is ready", async (ctx) => {
@@ -6501,6 +6561,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
         const waiting = ctx.text();
         if (!waiting.includes("Tailoring templates")) {
           throw new Error("the step does not say it is tailoring before showing templates");
@@ -6563,6 +6624,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
         const waiting = ctx.text();
         if (!waiting.includes("Tailoring templates")) {
           throw new Error("the step does not say it is tailoring before showing templates");
@@ -6643,6 +6705,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_PARAMS = "";
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        // The eager create fires on template selection, and the template
+        // arrives via the billed gate, not the opening of the merged step.
+        await passTemplatesGate(ctx);
         await act(async () => {});
 
         // The update path: with a project already in hand, generating the plan
@@ -15911,6 +15976,10 @@ async function passAngleGate(ctx) {
  * so picking the angle and goal IS arriving: no second step to open after.
  * The fixture enters via the same angle-first suggested-goal control that
  * the founder uses before the list below ranks itself.
+ *
+ * The tailored list itself still waits behind the billed Generate CTA in the
+ * goals section — tailoring never fires on the goal pick — so tests that
+ * assert on tailored cards call passTemplatesGate after this helper.
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & template");
@@ -15924,6 +15993,21 @@ async function openTemplateStep(ctx) {
   const goalButton = ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]');
   if (!goalButton) throw new Error("the audience step has no recommended goal control");
   await clickEl(ctx, goalButton, "no recommended goal control");
+}
+
+/**
+ * Ask for the tailored templates the way a founder does.
+ *
+ * Template tailoring is a billed generation, so it waits for this Generate
+ * click in the goals section instead of firing on the goal pick: switching
+ * goals costs nothing until the founder asks. Tests that pin the waiting
+ * state itself (no request, no cards) deliberately skip this.
+ */
+async function passTemplatesGate(ctx) {
+  const cta = ctx.container.querySelector('[data-testid="templates-generate"]');
+  if (!cta) throw new Error("no template Generate CTA waiting after picking a goal");
+  await clickEl(ctx, cta);
+  await act(async () => {});
 }
 
 /** Click an element the way a person would, so React's onClick fires. */

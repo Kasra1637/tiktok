@@ -389,7 +389,7 @@ export default function CreateVideo() {
     recommendations, sharedFit, recError, recKey, recRequestKey, clearRecommendations,
     runTailoring, tailoring, tailorError, tailorCount, tailorTotal,
     tailoredReady, recommendationsVisible, visibleRecommendations,
-  } = useWizardTemplates({ profileId, angleId, objective, active: step === 1 });
+  } = useWizardTemplates({ profileId, angleId, objective });
   // Every app lands gated: switching apps re-arms the CTA so a revealed set
   // for one app never leaks into another app's first view.
   useEffect(() => {
@@ -1761,6 +1761,27 @@ export default function CreateVideo() {
                   }}
                   testId="goal-feedback"
                 />
+              )}
+              {/* Tailoring reads every template for this goal and is billed,
+                  so it waits for a click instead of firing on the pick: one
+                  reflexive tap on a neighbouring goal cost a generation the
+                  founder never asked for (ADR 0087). The action leads; the
+                  line under it carries the when, not the cost. */}
+              {angle && objective && profileId && !tailoring && !recommendationsVisible && (
+                <div className="space-y-1">
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => runTailoring(false)}
+                    data-testid="templates-generate"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" /> Generate tailored templates
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    Tailoring runs only when you click it — switching goals never starts it.
+                  </p>
+                </div>
               )}
             </div>
             {/* Angle, goal, template and photo share one step now: the angle
