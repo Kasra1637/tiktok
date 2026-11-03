@@ -12,10 +12,12 @@ import { cn } from "../lib/utils";
  *
  * Two states, and only two:
  *
- * - `default` — the whole outer frame. For work and editor pages, which spend
- *   their room on grids, timelines and players.
- * - `narrow`  — 1150px, centred. For reading-heavy prose, where a card at
- *   1400px stretches a sentence across a line the eye cannot sweep.
+ * - `default` — the workspace column: 1280px, centred inside the shell frame.
+ *   Work and editor pages spend their room on grids, timelines and players,
+ *   and 1280 is the widest column that keeps record rows and reading blocks
+ *   scannable. The cap only binds past ~1610px viewports, so laptops keep the
+ *   layout a full-width frame gave them.
+ * - `narrow`  — 1150px, centred. For reading-heavy prose; no page uses it.
  *
  * `max-w-*` only binds once the viewport is wider than the cap, so narrow and
  * default are the same element on a phone and nothing about mobile changes.
@@ -25,14 +27,15 @@ import { cn } from "../lib/utils";
  * for two pages to drift apart again, so it collapsed into `default`.
  *
  * The outer frame itself (1400px plus its padding) belongs to AppShell and is
- * deliberately not touched here: this component decides what sits inside it.
+ * deliberately not touched here; this component decides the column inside it.
+ * The masthead text caps one step tighter (`PageHeader`'s `max-w-3xl`).
  *
  * `PAGE_WIDTH_CLASS` is exported so a page with a second container that must
  * line up with the first reuses the exact same class string instead of
  * re-typing a pixel value that can drift.
  */
 export const PAGE_WIDTH_CLASS = {
-  default: "w-full",
+  default: "mx-auto w-full max-w-[1280px]",
   narrow: "mx-auto w-full max-w-[1150px]",
 };
 

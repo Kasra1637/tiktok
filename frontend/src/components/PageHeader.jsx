@@ -6,6 +6,10 @@ import { IconTile } from "./IconTile";
  * Purely presentational — it exists so titles, ledes, icon tiles and the
  * optional right-hand action slot line up identically on every page instead
  * of each one hand-rolling its own heading block.
+ *
+ * The title/lede block caps at `max-w-3xl` (768px) so a heading never
+ * stretches the workspace column into an unreadable line; the action slot
+ * keeps the column's right edge.
  */
 export function PageHeader({ icon, eyebrow, title, description, actions, align = "left", ...rest }) {
   const centered = align === "center";
@@ -17,7 +21,7 @@ export function PageHeader({ icon, eyebrow, title, description, actions, align =
       }`}
       {...rest}
     >
-      <div className={`min-w-0 ${centered ? "flex flex-col items-center" : ""}`}>
+      <div className={`min-w-0 max-w-3xl ${centered ? "flex flex-col items-center" : ""}`}>
         <div className={`flex items-center gap-3 ${centered ? "justify-center" : ""}`}>
           {icon && <IconTile icon={icon} size="page" />}
           <div className="min-w-0">
