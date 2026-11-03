@@ -4622,6 +4622,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       async () => {
         await mount(CreateVideo, {})(ctx);
         await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
       }
     );
     const text = ctx.text();
