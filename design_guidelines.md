@@ -328,20 +328,19 @@ capped at two per card.
 - **Content width:** `AppShell`'s `<main>` owns the outer frame —
   `mx-auto w-full max-w-[1400px] px-4 py-6 md:px-6 md:py-8 lg:px-8`. Every page
   inside the sidebar opens with `PageFrame`, which decides only what sits inside
-  that frame. Two tokens, and only two:
-  - `default` — the workspace column: 1280px, centred. Studio and editor pages
-    spend their room on grids, players and lists, and 1280 is the widest column
-    that keeps record rows and reading blocks scannable; the cap binds only past
-    ~1610px viewports, so laptops keep the layout a full-width frame gave them.
-    Create Video, Demo + CTA, History, Analytics, App Profile and Profile Detail
-    all sit here — one value is what stops the column drifting between pages.
-  - `narrow` — 1150px, centred. Reserved for reading-heavy prose. No current
-    page uses it: the Asset Library grid uses the workspace column so the
-    standalone page matches its embedded instance in Create Video.
+  that frame. One width, and only one:
+  - `default` — the workspace column: 1150px, centred. Studio and editor pages
+    spend their room on grids, players and lists, and 1150 is the widest column
+    this app reads well at; the cap binds only past ~1480px viewports, so
+    smaller windows keep the layout a full-width frame gave them. Create Video,
+    Demo + CTA, History, Analytics, App Profile and Profile Detail all sit here
+    — one value is what stops the column drifting between pages. The unused
+    `narrow` token (1150) collapsed into it: it had become a second name for the
+    same value, and a second width only lets pages drift apart again.
 
   **The masthead text caps one step tighter.** `PageHeader`'s title/lede block
   is `max-w-3xl` (768px ≈ 60-70 characters) inside the column, so a heading
-  never stretches a 1280px line; the action slot keeps the column's right edge.
+  never stretches a 1150px line; the action slot keeps the column's right edge.
 
   **The width must not change between two pages a reader moves between**, so a
   page belongs to a family rather than to itself: Brand Setup links to Profile

@@ -10162,15 +10162,18 @@ async function runDemoCtaChecks() {
     }
   });
 
-  // One column, one cap. PageFrame's default is the 1280px workspace column
+  // One column, one cap. PageFrame's default is the 1150px workspace column
   // and PageHeader's title block is its 768px text measure; without this pin a
   // later refactor re-decides the width and the horizontal jitter the
   // un-capped frame once had comes back.
   await check("the page column and masthead measures stay pinned", async () => {
     const frame = fs.readFileSync(path.join(SRC, "components", "PageFrame.jsx"), "utf8");
     const token = frame.match(/default:\s*"([^"]+)"/);
-    if (!token || !token[1].includes("max-w-[1280px]") || !token[1].includes("mx-auto")) {
-      throw new Error("PageFrame default is not the 1280px centred column");
+    if (!token || !token[1].includes("max-w-[1150px]") || !token[1].includes("mx-auto")) {
+      throw new Error("PageFrame default is not the 1150px centred column");
+    }
+    if (/narrow\s*:/.test(frame)) {
+      throw new Error("PageFrame grew a second width token");
     }
     const header = fs.readFileSync(path.join(SRC, "components", "PageHeader.jsx"), "utf8");
     if (!/min-w-0 max-w-3xl/.test(header)) {
