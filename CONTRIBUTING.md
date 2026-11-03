@@ -49,7 +49,7 @@ DB or the operator's credentials.
 Run the full local frontend gates when the change spans their owners:
 
 ```bash
-yarn --cwd frontend check
+yarn --cwd frontend run check
 ```
 
 This includes imports, pure logic, editing-document checks, render smoke and the

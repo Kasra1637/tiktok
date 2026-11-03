@@ -7,7 +7,7 @@ One render path, single-pass video generation via OpenRouter.
 
 - Backend tests: `python -m pytest backend/ -q` (media cases need ffmpeg/ffprobe
   on PATH; a missing ffmpeg is a setup failure, not a reason to skip).
-- Frontend gates: `yarn --cwd frontend check` (imports, logic, demo-cta draft,
+- Frontend gates: `yarn --cwd frontend run check` (imports, logic, demo-cta draft,
   render smoke, tour targets — not Jest or the build). Focused smoke:
   `SMOKE_ONLY='wizard' node frontend/scripts/check-render-smoke.cjs` — a filter
   that selects zero checks verifies nothing.

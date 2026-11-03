@@ -76,7 +76,7 @@ preview and export agree.
 | `yarn --cwd frontend check:draft` | Editing-document storage/history checks. |
 | `yarn --cwd frontend check:render` | Mounts real modules with stub API/media infrastructure; includes gates, errors, copy budgets and flows. |
 | `yarn --cwd frontend check:tours` | Audits tour target references against source. |
-| `yarn --cwd frontend check` | All five checks above; not Jest or build. |
+| `yarn --cwd frontend run check` | All five checks above; not Jest or build. |
 | `CI=true yarn --cwd frontend test --watchAll=false --runInBand` | Existing Jest suites without watch mode. Prefer an affected test path for a narrow change. |
 | `CI=true yarn --cwd frontend build` | Production compilation with warnings treated as errors. |
 
