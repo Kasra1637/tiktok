@@ -260,8 +260,13 @@ class TestCameraSetup:
         assert "rebuild" in exc.value.detail.lower()
         assert not calls
         assert _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))["generations"] == []
+        # The refused submit must not rewrite the scene; reading it back still
+        # runs it through normalize_strategy (legacy `environment` merges into
+        # `location`), so compare against that normalized shape rather than
+        # the raw pre-Location input.
         saved = _run(api.get_studio_project(project["id"], ANON))
-        assert saved["strategy"]["scene"] == strategy["scene"]
+        from ai_service import normalize_strategy
+        assert saved["strategy"]["scene"] == normalize_strategy(strategy)["scene"]
 
     def test_fixed_camera_is_snapshotted_and_first_frame_models_refused(self, api, monkeypatch):
         calls = _mock_submit(api, monkeypatch)
