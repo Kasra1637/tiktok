@@ -14,6 +14,7 @@ import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { verdictFor } from "../lib/feedback";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
+import { ListenButton } from "../components/ListenButton";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown, ChevronRight } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
@@ -283,20 +284,42 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
       description="Compare reach & your judgment before choosing another take."
       data-testid="analytics-results"
       actions={
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-expanded={open}
-          aria-controls={open ? panelId : undefined}
-          onClick={() => setOpen((current) => !current)}
-          data-testid="analytics-results-toggle"
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        <div className="flex flex-wrap items-center gap-2">
+          <ListenButton
+            id="analytics-results"
+            label="Clip results"
+            testId="listen-analytics-results"
+            getBlocks={() => [
+              {
+                label: "Clip results",
+                values: [
+                  `${posted} posted. ${counted} with recorded views. ${rated} rated.`,
+                  "Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Your vote is your judgment. Winner still means thumbs up plus a posted link.",
+                  pick && pickNext
+                    ? `Suggested next take: ${clipName(pick)}. Posted, ${pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good.`
+                    : null,
+                  ...visible.slice(0, 8).map((row) =>
+                    `${clipName(row)}: ${row.tiktok_views != null ? `${row.tiktok_views.toLocaleString("en-US")} recorded views` : "no recorded views yet"}.`
+                  ),
+                ],
+              },
+            ]}
           />
-          <span>{open ? "Collapse" : "Expand"}</span>
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={open ? panelId : undefined}
+            onClick={() => setOpen((current) => !current)}
+            data-testid="analytics-results-toggle"
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            />
+            <span>{open ? "Collapse" : "Expand"}</span>
+          </Button>
+        </div>
       }
     >
       <FactList aria-label="Clip totals">
