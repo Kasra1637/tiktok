@@ -26,7 +26,7 @@ React routes (App.js)
      -> wizardDraft reducer: selections, saved project, pending Review edits
      -> useWizardTemplates: keyed recommendations/tailoring and progress
      -> studio/SelectionPanels: angle, goal, template comparison UI
-     -> studio/ReviewPanels: revision inspection, direction inputs, progress
+     -> studio/ReviewPanels: direction dropdowns, plan-phase narration
      -> GenerationPanel / HookContinuityPanel: strategy and submit controls
   -> lib/api: session token + /api transport and durable-media URL selection
      -> server: authenticated HTTP, ownership, DB, project/render orchestration
@@ -103,7 +103,7 @@ accepts data; it must not be mistaken for an authorization check.
 | [wizardDraft.js](../frontend/src/pages/wizardDraft.js) | Pure named transitions for selections, saved project and pending edits. Resume/reset/save adoption are atomic; background project updates retain edits. |
 | [useWizardTemplates.js](../frontend/src/hooks/useWizardTemplates.js) | Keyed recommendation/tailoring requests, shared fit/error state, visible list and progress timer. Tailoring fires only when the page calls `runTailoring` — the goals-section Generate CTA or the header Regenerate — never on the goal pick. No project writes. |
 | [SelectionPanels.jsx](../frontend/src/components/studio/SelectionPanels.jsx) | Angle selector, goal picker, template shape and recommendation cards. Receives callbacks/data; does not take over project writes. |
-| [ReviewPanels.jsx](../frontend/src/components/studio/ReviewPanels.jsx) | Revision inspection (including the latest-clip read), direction select and work narration. It does not own plan writes or render submission. |
+| [ReviewPanels.jsx](../frontend/src/components/studio/ReviewPanels.jsx) | Profile-matched direction dropdowns (per-dropdown refresh) and plan-phase narration. It does not own plan writes or render submission. |
 | [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. |
 | [GenerationHistory.jsx](../frontend/src/pages/GenerationHistory.jsx), [historyPolling.js](../frontend/src/pages/historyPolling.js), [historyRepair.js](../frontend/src/pages/historyRepair.js) | Confirmed row snapshots, bounded per-row polling and durable-save recovery. Stopped browser polling does not mean provider failure. |
 | [OnboardingProvider.jsx](../frontend/src/components/onboarding/OnboardingProvider.jsx), [tours.js](../frontend/src/lib/onboarding/tours.js) | First-run readiness and manual help; deferred tours are not marked completed. |

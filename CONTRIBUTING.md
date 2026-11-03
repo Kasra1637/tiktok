@@ -98,7 +98,7 @@ not fail a non-CI build.
 
 - Shared spacing comes from CSS surface/inset tokens, not new card `p-*`
   utilities. Token changes update [design_guidelines.md](design_guidelines.md).
-- Wizard subtitle text retains `data-subtitle`, `text-xs`, and the 55–60
+- Wizard subtitle text retains `data-subtitle`, `text-sm`, and the 55–60
   character budget checked by the smoke harness.
 - Loading narration must end on both success and error; list staggering must
   collapse under reduced motion.
