@@ -50,7 +50,10 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
 
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
-    const key = `${profileId}:${objective}`;
+    // The set is generated from this angle's Problem and First 3 Seconds
+    // Promise, so the angle is part of the request, not just of the ranking
+    // (ADR 0089). A set for another angle is a different set.
+    const key = `${profileId}:${objective}:${angleId || ""}`;
     const request = ++tailorRequestRef.current;
     const startPid = profileId;
     const startAid = angleId;
@@ -59,7 +62,9 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
     setTailorError(null);
     try {
       const res = await api.ensureObjectiveTemplates(startPid, {
-        objective: startObjective, ...(regenerate ? { regenerate: true } : {}),
+        objective: startObjective,
+        ...(startAid ? { angle_id: startAid } : {}),
+        ...(regenerate ? { regenerate: true } : {}),
       });
       if (tailorRequestRef.current !== request) return;
       setTailored({ key, templates: Array.isArray(res?.templates) ? res.templates : [] });
@@ -90,7 +95,12 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   // queues nothing. The page triggers it — the goals-section Generate CTA,
   // or the header Regenerate for a deliberate fresh set.
 
-  const tailorKey = profileId && objective ? `${profileId}:${objective}` : "";
+  // Scoped to the angle as well as the goal: templates are generated from the
+  // angle's Problem and First 3 Seconds Promise, so a set made for one angle
+  // must not present itself as the set for another (ADR 0089).
+  const tailorKey = profileId && objective
+    ? `${profileId}:${objective}:${angleId || ""}`
+    : "";
   const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}`;
   const tailoredReady = Boolean(tailorKey && tailored.key === tailorKey && tailored.templates.length > 0);
   const tailorFallbackVisible = Boolean(

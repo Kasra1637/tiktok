@@ -68,7 +68,8 @@ Paths below are relative to [backend](../backend/).
 | [video_providers.py](../backend/video_providers.py) | Capability enrichment, availability, allowlist/default, identity routing and ceilings. It derives records from the model catalog, so it is not independent of the AI adapter. |
 | [provider_capabilities.py](../backend/provider_capabilities.py) | Boot-time WARN-only comparison of the catalog against OpenRouter's `/v1/videos/models`; never a gate, never blocks boot. |
 | [generation_planning.py](../backend/generation_planning.py) | Single-pass prompt assembly/budgeting, camera directions and retry/error classification. Tight prompt fitting must preserve the reviewed spoken script. |
-| [angle_scene.py](../backend/angle_scene.py) | Where and when the video happens, owned by the selected angle; later steps conform, not re-decide (ADR 0084). |
+| [angle_scene.py](../backend/angle_scene.py) | Where and when the video happens, owned by the selected angle; later steps conform, not re-decide (ADR 0084). `opening_shape`/`opening_staging` build the card's two opening lines from the First 3 Seconds Promise (ADR 0089). |
+| [character_policy.py](../backend/character_policy.py) | The on-screen person is never given a gender, role or pronoun: `neutralize` rewrites, `identity_terms` proves a payload clean. Pure; applied to every video-facing field and again at prompt assembly (ADR 0089). |
 | [hook_prompting.py](../backend/hook_prompting.py) | Hook-video prompt construction (motion styles, directives, templates); extracted from server.py, which re-exports it. |
 | [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |

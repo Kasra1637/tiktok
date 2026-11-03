@@ -35,6 +35,8 @@ from template_library import (
 )
 import feedback
 import angle_scene as _angle_scene_policy
+import character_policy
+import template_recommendations
 from angle_policy import (
     angle_grounding as _angle_grounding,
     duplicate_angle_pairs as _duplicate_angle_pairs,
@@ -2302,10 +2304,14 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "repeated task. When usage_moments is empty, take the situation from "
         "problems_solved.\n"
         "- hook_promise: something a camera can SEE in the first three seconds, or a "
-        "line someone would actually say out loud. Never an abstract benefit. Never "
-        "stage it in a bedroom or car interior -- the model's lazy indoor defaults "
-        "are what make every video look the same; stage it where usage_moments "
-        "happen, preferably outdoors and mid-activity.\n"
+        "line someone would actually say out loud — ONE character doing ONE thing. Never "
+        "two events, never a montage, and never a second person. Never say 'woman', 'man', "
+        "'girl', 'guy' or any role such as 'founder': the person on camera is whoever the "
+        "founder uploads a photo of, so write 'the person' or 'the character' and describe "
+        "no face. Never an abstract benefit. Never stage it in a bedroom or car interior "
+        "unless the app is used there — the model's lazy indoor defaults are what make "
+        "every video look the same; stage it where usage_moments happen, preferably "
+        "outdoors and mid-activity.\n"
         "- app_feature: the one feature above that answers this problem.\n"
         "- desired_emotion: one word or a short phrase.\n"
         "- viewer_outcome: what changes for the viewer because of that feature - the \n"
@@ -2422,7 +2428,13 @@ async def generate_opening_messages(profile: dict, previous: list) -> list:
     for value in messages:
         if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
             raise RuntimeError("Opening messages were empty or too long. Try again.")
-        value = value.strip()
+        # An opening overlay is video-facing text, so it follows the identity
+        # rule before anything else is measured or compared: the rewrite can
+        # change a word's length and the duplicate check must compare what is
+        # actually stored (ADR 0089).
+        value = character_policy.neutralize(value.strip())
+        if not value or len(value) > 120:
+            raise RuntimeError("Opening messages were empty or too long. Try again.")
         key = value.casefold()
         if key in seen or key in excluded:
             raise RuntimeError("Opening messages repeated existing copy. Try again.")
@@ -2624,7 +2636,7 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
     # without one is still usable, so a missing field degrades to no headline
     # rather than invented copy. Never repaired — same rule as everything else.
     outcome = str(raw.get("outcome") or "").strip()[:300]
-    return {
+    draft = {
         "name": name,
         "category": normalize_category(raw.get("category")),
         "objective": normalize_objective(raw.get("objective")),
@@ -2639,6 +2651,20 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
         "default_duration": duration,
         "outcome": outcome,
     }
+    # Every string here is a line a viewer hears or reads, and the founder's
+    # uploaded photo is the only authority on who is on screen — so no field
+    # may name a gender, a role or a pronoun (ADR 0089). Normalization, not
+    # repair: the words are rewritten in place, nothing is invented.
+    draft = character_policy.neutralize_fields(
+        draft,
+        ("name", "opening_structure", "middle_structure", "visual_style",
+         "camera_pacing", "outcome"),
+    )
+    draft["content_slots"] = {
+        key: character_policy.neutralize(value)
+        for key, value in (draft.get("content_slots") or {}).items()
+    }
+    return draft
 
 
 def _component_feedback_block(component_feedback: Optional[dict], component: str) -> str:
@@ -2648,6 +2674,45 @@ def _component_feedback_block(component_feedback: Optional[dict], component: str
     section = feedback.build_component_feedback_section(
         {component: component_feedback[component]}, component)
     return f"\n\n{section}\n\n" if section else ""
+
+
+def _angle_grounding_block(angle: Optional[dict]) -> str:
+    """The selected angle restated as the source of truth for this set.
+
+    Every line of a tailored structure is built from these fields, so they are
+    stated once at the top of the prompt in the founder's own words instead of
+    being left to be inferred from the angle list below — the drift this closes
+    was a set generated from the app's topic area rather than from the moment
+    the founder picked (ADR 0089).
+    """
+    if not angle:
+        return ""
+
+    def _text(key):
+        return str(angle.get(key) or "").strip()
+
+    lines = ["SOURCE OF TRUTH FOR THIS VIDEO (every structure is built from it and cannot disagree with it):"]
+    if _text("user_problem"):
+        lines.append(f"- PROBLEM: {_text('user_problem')}")
+    if _text("hook_promise"):
+        lines.append(f"- FIRST 3 SECONDS PROMISE: {_text('hook_promise')}")
+    if _text("target_audience"):
+        lines.append(f"- AUDIENCE: {_text('target_audience')}")
+    bounds = [str(c).strip() for c in (angle.get("claims_to_respect") or []) if str(c).strip()]
+    if bounds:
+        lines.append("- BOUNDED BY (never contradict, never imply the opposite): " + "; ".join(bounds))
+    lines.append(
+        "- ONE OPENING: exactly one character does exactly one thing, in the promise's own place "
+        "and time of day. opening_structure and middle_structure describe that same opening and "
+        "what develops from it — never a second, different opening on one structure."
+    )
+    lines.append(
+        "- THE PERSON: never name the on-screen person's gender, age or role (no woman, man, girl, "
+        "guy, founder, creator, professional). Say 'the person' or 'the character', and never "
+        "describe their face, hair, body or clothes — the founder uploads a photo of the person and "
+        "that image alone decides the look."
+    )
+    return "\n".join(lines) + "\n\n"
 
 
 # Everything in the brand-template prompt after the per-call brief: the product
@@ -2661,18 +2726,20 @@ _BRAND_TEMPLATE_BODY = (
     "attached separately, and the call to action is added by them in their own editor — "
     "so a structure that pays off, demonstrates the app in use, or closes on an action is "
     "a wrong answer no matter how well it reads. "
-    "Presenter-led throughout: every video stars the founder on camera, so never design around "
-    "screenshots, recordings, app footage, or any uploaded asset. Pre-fill every "
+    "Presenter-led throughout: every video stars one person on camera, never screenshots, "
+    "recordings or app footage, and that person's look is decided only by the photo the founder "
+    "uploads — so nothing you write names a gender, an age, a role or a face. Say 'the person' or "
+    "'the character'. Pre-fill every "
     "content slot with this app's concrete specifics, not placeholders. "
     "Return ONLY a JSON array where each element is:\n"
     "{\n"
     '  "name": "short specific title naming this app\'s angle on the mechanic",\n'
     '  "category": "one of the categories listed above",\n'
     '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers | achieve_desired_outcome | overcome_viewer_doubt | ease_daily_moment | avoid_common_mistake | feel_seen_and_understood",\n'
-    '  "opening_structure": "what the first 4 seconds do, concretely for THIS app",\n'
+    '  "opening_structure": "what the first 4 seconds do: the same person doing the same thing in the FIRST 3 SECONDS PROMISE moment, plus the move that makes it this structure -- never a second opening",\n'
     '  "hook_seconds": 3,\n'
     '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
-    '  "visual_style": "the look, presenter-led",\n'
+    '  "visual_style": "the look of the FIRST 3 SECONDS PROMISE moment",\n'
     '  "camera_pacing": "camera behaviour",\n'
     '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'
     '  "default_duration": 15,\n'
@@ -2684,6 +2751,11 @@ _BRAND_TEMPLATE_BODY = (
     "Never invent a feature, price, rating, "
     "review, testimonial, or guaranteed outcome. Never use a banned claim. Vary "
     "the categories and objectives — not rewordings of one idea. "
+    "Every structure stays inside BOUNDED BY: if a bound rules a claim out, the "
+    "structure must not make it and must not imply its opposite either. "
+    "One opening per structure: opening_structure describes that opening only, "
+    "and middle_structure develops it — two different openings on one structure "
+    "is a wrong answer. "
     f"hook_seconds is {MIN_HOOK_SECONDS}-{MAX_HOOK_SECONDS}; default_duration is one of "
     f"{', '.join(str(d) for d in SUPPORTED_DURATIONS)} seconds, and it is the length of the "
     "whole generated piece, not of a video the viewer finishes. Always set "
@@ -2700,14 +2772,24 @@ async def generate_brand_templates(
     profile: dict, angles: Optional[list] = None, count: int = BRAND_TEMPLATE_COUNT,
     objective: str = "",
     component_feedback: Optional[dict] = None,
+    angle: Optional[dict] = None,
 ) -> list:
     """
-    Draft tailored hook structures for one approved App Profile AND one
-    selected objective.
+    Draft tailored hook structures for one approved App Profile, one selected
+    objective, and — when the wizard has one — ONE selected angle.
 
-    The set is always filled: `count` structures (six by default), with one
-    top-up call when the model's first reply comes back short or loses entries
-    to normalization. A shortfall is never passed on as a smaller picker.
+    The set is filled: `count` structures (six by default), with one top-up
+    call when the model's first reply comes back short, loses entries to
+    normalization, or answers with a structure about a different problem. A
+    shortfall is passed on as a smaller set rather than padded: three shapes
+    about THIS problem beat six where three are about someone else's.
+
+    `angle` is the wizard's selected angle and, when given, it is the source of
+    truth for every structure: the Problem and the First 3 Seconds Promise say
+    what the video opens on, the Audience says who it is for, and the angle's
+    own claims say what the structure may never imply. Every draft is then
+    checked against that Problem and Promise (`check_template_relevance`), and
+    an off-topic draft is dropped and replaced, never shipped (ADR 0089).
 
     The objective is caller-supplied (the founder picked it in the wizard),
     never model-chosen: every returned structure serves that goal, which is
@@ -2715,15 +2797,16 @@ async def generate_brand_templates(
     profile. This is the brand-URL-to-template link: the profile researched
     from the founder's links produces structures no generic library can —
     hooks shaped around THIS app's features, audience language, and voice.
-    Every video stars the founder on camera, so structures are designed for
-    a single on-camera presenter, never for screenshots, recordings, or app
-    footage.
+    Every video stars one on-camera person, so structures are designed for a
+    single on-camera person, never for screenshots, recordings, or app footage.
 
-    Guardrails enforced in the prompt: functional framing only (never a
-    viewer diagnosis), every structure satisfiable from verified profile
-    facts, no invented features/prices/ratings/testimonials, no guaranteed
-    outcomes. required_assets is not requested at all — the caller forces
-    face-only, so the model cannot get it wrong.
+    Guardrails enforced in the prompt: functional framing only (never a viewer
+    diagnosis), every structure satisfiable from verified profile facts, no
+    invented features/prices/ratings/testimonials, no guaranteed outcomes, no
+    gender or role for the person on screen (the founder's uploaded photo
+    decides the look), and nothing that contradicts the angle's claims.
+    required_assets is not requested at all — the caller forces face-only, so
+    the model cannot get it wrong.
     """
     def _list(name):
         val = profile.get(name)
@@ -2750,23 +2833,29 @@ async def generate_brand_templates(
         "banned_claims": _list("claims_banned"),
     }
     angle_briefs = []
-    for angle in (angles or [])[:8]:
-        if not isinstance(angle, dict):
+    for brief_source in (angles or [])[:8]:
+        if not isinstance(brief_source, dict):
             continue
         angle_briefs.append({
-            "kind": angle.get("kind") or "",
-            "label": angle.get("label") or "",
-            "audience": angle.get("target_audience") or "",
-            "problem": angle.get("user_problem") or "",
-            "feature": angle.get("app_feature") or "",
-            **({"outcome": angle.get("viewer_outcome")}
-               if (angle.get("viewer_outcome") or "").strip() else {}),
+            "kind": brief_source.get("kind") or "",
+            "label": brief_source.get("label") or "",
+            "audience": brief_source.get("target_audience") or "",
+            "problem": brief_source.get("user_problem") or "",
+            "first_3_seconds": brief_source.get("hook_promise") or "",
+            "feature": brief_source.get("app_feature") or "",
+            "emotion_by_the_end": brief_source.get("desired_emotion") or "",
+            **(dict(outcome=brief_source.get("viewer_outcome"))
+               if (brief_source.get("viewer_outcome") or "").strip() else {}),
+            **(dict(bounded_by=brief_source.get("claims_to_respect"))
+               if brief_source.get("claims_to_respect") else {}),
         })
     categories = ", ".join(HOOK_CATEGORIES)
     want_objective = normalize_objective(objective)
+    grounding = _angle_grounding_block(angle)
     head = (
         f"VERIFIED APP PROFILE:\n{json.dumps(context, indent=2)}\n\n"
         f"CONTENT ANGLES:\n{json.dumps(angle_briefs, indent=2)}\n\n"
+        f"{grounding}"
         f"Categories (use only these): {categories}\n\n"
     )
     feedback_block = _component_feedback_block(component_feedback, "template")
@@ -2783,6 +2872,12 @@ async def generate_brand_templates(
             # Defensive only: the endpoint refuses an empty objective, so this
             # path means a direct caller. Spread rather than fail.
             line = f"Design exactly {want} DISTINCT hook structures for THIS app. "
+        if angle:
+            line += (
+                "Every structure must open on the FIRST 3 SECONDS PROMISE above and answer "
+                "the PROBLEM above, in that same concrete moment and with those same words — "
+                "a structure about any other problem is a wrong answer however well it reads. "
+            )
         if avoid:
             line += (
                 "None may repeat a structure already drafted — these titles are "
@@ -2795,16 +2890,19 @@ async def generate_brand_templates(
         "structures tailored to ONE specific app, grounded strictly in its verified "
         "profile facts. Describe viewers by FUNCTIONAL need and use case only — never "
         "infer sensitive personal traits (health diagnoses, mental-health labels, "
-        "finances, religion, sexuality, political leaning). Respond with STRICT JSON "
-        "only, no markdown fences."
+        "finances, religion, sexuality, political leaning). Never name the on-screen "
+        "person's gender, age, or role: the founder uploads the photo of whoever is on "
+        "camera, so every line says 'the person' or 'the character' and describes no "
+        "face. Respond with STRICT JSON only, no markdown fences."
     )
 
     templates = []
     taken = set()
     # Two calls at most. The set is asked for whole; a second, briefed call
-    # covers a reply that came back short or lost entries to normalization.
-    # Re-asking for the same number would just re-spend the same call, so the
-    # top-up prompt names the shortfall and the titles already taken.
+    # covers a reply that came back short, lost entries to normalization, or
+    # answered about a different problem. Re-asking for the same number would
+    # just re-spend the same call, so the top-up prompt names the shortfall and
+    # the titles already taken.
     for _attempt in range(2):
         want = count - len(templates)
         if want <= 0:
@@ -2825,9 +2923,17 @@ async def generate_brand_templates(
         if not isinstance(raw, list):
             raise RuntimeError("Brand templates response was not a list.")
         added = 0
+        off_topic = 0
         for item in raw:
             normalized = normalize_brand_template(item)
             if normalized is None:
+                continue
+            # About a different problem? Then it is not a structure for this
+            # video. Dropped here rather than shipped, so the loop above asks
+            # for the shortfall instead of the picker padding itself with it
+            # (ADR 0089).
+            if not template_recommendations.check_template_relevance(normalized, angle)["passes"]:
+                off_topic += 1
                 continue
             title = normalized["name"].strip().lower()
             if title in taken:
@@ -2837,10 +2943,13 @@ async def generate_brand_templates(
             added += 1
             if len(templates) >= count:
                 break
-        if added == 0:
-            # Nothing usable came back: another ask would spend again for the
-            # same answer. Return what exists rather than raising, because one
-            # usable structure still beats none.
+        if added == 0 and not off_topic:
+            # Nothing usable came back at all: another ask would spend again for
+            # the same answer. Return what exists rather than raising, because
+            # one usable structure still beats none. A reply that WAS usable but
+            # about another problem is a different case — it gets the one
+            # briefed top-up call, because the shortfall there is something the
+            # next ask can actually fix (ADR 0089).
             break
 
     if not templates:
@@ -3030,7 +3139,11 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         json_schema=HOOK_REWRITE_JSON_SCHEMA,
     )
     line = re.sub(r"\s+", " ", str((raw or {}).get("hook_line") or "")).strip().strip('"\u201c\u201d')
-    if not line or line.lower() == original.lower():
+    # The rewrite is stored as the hook, so it passes the same identity rule as
+    # every other spoken line (ADR 0089). Comparing against the original happens
+    # after the rewrite so a purely neutral-wording change still counts as one.
+    line = character_policy.neutralize(line)
+    if not line or line.lower() == character_policy.neutralize(original).lower():
         raise RuntimeError("The rewrite came back unchanged.")
     return line
 
@@ -3087,6 +3200,15 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
         lines.append(f"- OUTCOME: this angle promises {_text('viewer_outcome')} - the payoff beat lands exactly this.")
     if _text("desired_emotion"):
         lines.append(f"- FEELING: the viewer should feel {_text('desired_emotion')}.")
+    # The angle's own bounds reach the words a viewer hears, not just the
+    # template picker (ADR 0089): a claim the angle's Bounded By rules out is
+    # never said here, and never implied either.
+    bounds = [str(c).strip() for c in (a.get("claims_to_respect") or []) if str(c).strip()]
+    if bounds:
+        lines.append(
+            "- BOUNDED BY: never say, and never imply the opposite of: "
+            + "; ".join(bounds[:6]) + "."
+        )
     goal = normalize_objective(objective)
     job = OBJECTIVE_OUTCOMES.get(goal, "")
     if goal and job:
@@ -3359,6 +3481,16 @@ async def generate_creative_plan(
         "they would reach for the app — 'I felt lighter', 'that was enough' — never a big "
         "transformation like 'I was no longer stuck'. Earn the ending; never narrate the demo "
         "or speak the CTA yourself.\n"
+        "- ONE OPENING, ONE PERSON: the hook opens on exactly one character doing exactly one "
+        "thing, inside the angle's promise moment. The script continues that same person's same "
+        "moment; it never introduces a second speaker or a second opening.\\n"
+        "- NO IDENTITY LABELS: never name the on-screen person's gender, age or role — no "
+        "'woman', 'man', 'girl', 'guy', 'founder', 'creator'. Never describe their face, hair, "
+        "body or clothes: the founder uploads the photo of the person and that image alone "
+        "decides the look. Say 'the person' or 'the character' when a third party (a "
+        "showrunner, editor, viewer guide) writes about them.\\n"
+        "- The angle's bounded claims bound the words: anything the brief's bounds forbid is "
+        "never said and never implied.\\n"
         "- COMPLETE SENTENCES: every spoken line is complete grammatical sentences, each ending "
         "in . ! or ?. The hook_line must stand alone as one complete sentence — never end it on a "
         "conjunction, preposition or article (no trailing 'because', 'like', 'and' or 'the'), and "
@@ -3441,10 +3573,14 @@ async def generate_creative_plan(
         if missing:
             logger.error("Creative plan missing fields %s.", sorted(missing))
             raise RuntimeError(f"Creative plan missing required fields: {missing}")
-        hook = str(result.get("hook_line") or "").strip()
+        hook = character_policy.neutralize(str(result.get("hook_line") or "").strip())
+        # Neutralized before the ceilings are measured, not after: a rewrite
+        # ("A woman" -> "The person") changes the character count, and a line
+        # that only fitted before the rewrite would fail the render gate later.
+        raw_script = character_policy.neutralize(str(result.get("script") or "").strip())
         # Accept a legacy whole-piece response only when removing its opening
         # hook leaves complete middle sentences; no partial sentence surgery.
-        script = strip_leading_hook(hook, str(result.get("script") or "").strip())
+        script = strip_leading_hook(hook, raw_script)
         issues = _generated_spoken_issues(hook, script, hook_budget, middle_budget)
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
@@ -3471,12 +3607,23 @@ async def generate_creative_plan(
             "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
         )
     for key in (
-        "visual_direction", "demo_brief", "voice_direction", "sound_direction",
+        "visual_direction", "voice_direction", "sound_direction",
     ):
-        result[key] = (result.get(key) or "").strip()[:1200]
+        result[key] = character_policy.neutralize(
+            (result.get(key) or "").strip()[:1200]
+        )
+    # demo_brief is deliberately not neutralized: it is the one field addressed
+    # to the founder ("record your demo like this"), not a line about the person
+    # on screen, so "the founder" is the right word there.
+    result["demo_brief"] = (result.get("demo_brief") or "").strip()[:1200]
 
     result["beat_timeline"] = _normalize_beats(result.get("beat_timeline"), duration_seconds)
     result["beat_timeline"] = _enforce_two_sections(result["beat_timeline"], hook_seconds)
+    # A beat's text is what happens on camera, so it follows the same identity
+    # rule as the spoken lines (ADR 0089).
+    for beat in result["beat_timeline"]:
+        if isinstance(beat, dict) and isinstance(beat.get("text"), str):
+            beat["text"] = character_policy.neutralize(beat["text"])
     # The middle runs to the end of the piece: it is the last thing this
     # workflow generates, and the founder's demo starts after it.
     if result["beat_timeline"]:
@@ -3691,7 +3838,11 @@ _STRATEGY_TEXT_LIMITS = {
 
 
 def _clean_strategy_text(value, limit: int) -> str:
-    return str(value or "").strip()[:limit]
+    # Every strategy field is read by a viewer or handed to the render prompt,
+    # so none of it may name the person's gender, role or a pronoun: the
+    # founder's uploaded photo is the only authority on who is on screen
+    # (ADR 0089).
+    return character_policy.neutralize(str(value or "").strip())[:limit]
 
 
 def _clean_strategy_list(value, limit: int, cap: int = 6) -> list:
@@ -5167,6 +5318,9 @@ async def generate_video_strategy(
         "recognisably the same place. The person's sameness is the photograph's job, not the "
         "text's — never describe them to achieve it. Vague terms like \"casual\" or \"a nice "
         "room\" are not acceptable.\n"
+        "- Never name the person's gender, age or role in any field — no woman, man, girl, guy, "
+        "founder, presenter, creator. Say \"the person\" or \"the character\": the founder uploads "
+        "the photo of whoever is on camera, and that image alone decides the look.\n"
         "- The scene must hold for BOTH sections. The hook and the middle are one render, so "
         "the background, lighting, framing, wardrobe, props and delivery it locks apply to the "
         "whole piece — and they hold for the clothing too: they change once, here, never "

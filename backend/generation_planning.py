@@ -23,6 +23,7 @@ import re
 from typing import Optional
 
 import angle_scene
+import character_policy
 
 
 # Hard ceiling on the assembled render prompt, in characters.
@@ -667,6 +668,9 @@ def build_single_pass_prompt(
         MIN_SCALE,
         min(1.0, (budget - SINGLE_PASS_PROMPT_FLOOR) / float(NATURAL_VARIABLE_SPACE)),
     )
+    # A plan saved before the identity rule was enforced still carries its old
+    # words; the prompt is the last place that matters (ADR 0089).
+    plan = _neutral_plan(plan)
 
     prompt = ""
     for attempt in range(MAX_FIT_ATTEMPTS):
@@ -1201,6 +1205,74 @@ def _brief_field(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit].rstrip()
 
 
+# The person-describing fields of a plan and a strategy: everything a viewer
+# hears or sees. They are neutralized again here because a project saved before
+# the identity rule was enforced still carries its old words, and the render
+# prompt is the last place that matters — the person on screen is the founder's
+# uploaded photo, so a written gender or role is the one thing the model must
+# never be told (ADR 0089). `demo_brief` is absent on purpose: it is addressed to
+# the founder, not about the person on camera.
+_PLAN_PERSON_FIELDS = (
+    "hook_line", "script", "visual_direction", "voice_direction", "sound_direction",
+)
+_STRATEGY_PERSON_FIELDS = (
+    "strategy_summary", "audience_problem", "hook_concept", "hook_line",
+    "hook_promise", "hook_action", "hook_dialogue", "primary_feature",
+    "desired_outcome", "mechanism_beat", "payoff_beat", "differentiation_beat",
+)
+_STRATEGY_PERSON_SECTIONS = ("scene", "performance")
+_STRATEGY_PERSON_LISTS = ("emotional_triggers", "messaging_pillars")
+_SEGMENT_PERSON_FIELDS = ("goal", "script", "action")
+
+
+def _neutral_plan(plan) -> dict:
+    """The plan with every line a viewer hears or sees made identity-neutral."""
+    if not isinstance(plan, dict):
+        return plan
+    out = character_policy.neutralize_fields(plan, _PLAN_PERSON_FIELDS)
+    beats = []
+    for beat in out.get("beat_timeline") or []:
+        if isinstance(beat, dict):
+            beat = dict(beat)
+            if isinstance(beat.get("text"), str):
+                beat["text"] = character_policy.neutralize(beat["text"])
+        beats.append(beat)
+    if beats:
+        out["beat_timeline"] = beats
+    return out
+
+
+def _neutral_strategy(strategy) -> dict:
+    """The strategy with every person-describing field made identity-neutral."""
+    if not isinstance(strategy, dict):
+        return strategy
+    out = character_policy.neutralize_fields(strategy, _STRATEGY_PERSON_FIELDS)
+    for name in _STRATEGY_PERSON_SECTIONS:
+        section = out.get(name)
+        if isinstance(section, dict):
+            out[name] = {
+                key: character_policy.neutralize(value) if isinstance(value, str) else value
+                for key, value in section.items()
+            }
+    for name in _STRATEGY_PERSON_LISTS:
+        values = out.get(name)
+        if isinstance(values, list):
+            out[name] = [
+                character_policy.neutralize(value) if isinstance(value, str) else value
+                for value in values
+            ]
+    segments = out.get("segments")
+    if isinstance(segments, list):
+        neutral = []
+        for segment in segments:
+            if isinstance(segment, dict):
+                segment = dict(segment)
+                for key in _SEGMENT_PERSON_FIELDS:
+                    if isinstance(segment.get(key), str):
+                        segment[key] = character_policy.neutralize(segment[key])
+            neutral.append(segment)
+        out["segments"] = neutral
+    return out
 
 
 def strategy_brief(strategy: dict) -> str:
@@ -1342,6 +1414,10 @@ def build_segment_prompt(
             withdrawal on ordinary strategies and ate the founder's own words.
     """
     require_camera_setup_directions(strategy)
+    # A strategy stored before the identity rule was enforced still carries its
+    # old words, and the prompt is the last place that matters (ADR 0089).
+    strategy = _neutral_strategy(strategy)
+    plan = _neutral_plan(plan)
     scale = 1.0
     condensed = False
     budget = 0.0

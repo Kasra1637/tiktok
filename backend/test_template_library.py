@@ -913,6 +913,61 @@ class TestBrandTemplatePrompt:
         assert "demonstrate_feature" in captured["prompt"]
         assert "must serve that objective" in captured["prompt"]
 
+    GROUNDING_ANGLE = {
+        "id": "a1",
+        "kind": "problem_solution",
+        "target_audience": "Anyone who cannot name what they feel",
+        "user_problem": (
+            "On the back step at night you type a guess like happy and delete it "
+            "because nothing fits"
+        ),
+        "hook_promise": (
+            "The person on the back step types the word tired, deletes it, and "
+            "says out loud that it is not it either"
+        ),
+        "claims_to_respect": ["Reflections are suggestions, not a verdict"],
+    }
+
+    def _grounded(self, name):
+        """One structure that IS about this angle's problem and promise."""
+        return {
+            "name": name,
+            "category": "pain-point-question",
+            "objective": "address_user_problem",
+            "opening_structure": (
+                "The person on the back step at night types the word tired, deletes it, "
+                "and says out loud that it is not it either."
+            ),
+            "hook_seconds": 3,
+            "middle_structure": "The middle names the gap between the feeling and its word.",
+        }
+
+    def test_prompt_states_the_video_source_of_truth(self, monkeypatch):
+        """
+        Every tailored structure is built from the selected angle — the Problem,
+        the First 3 Seconds Promise, the Audience and the Bounded By claims are
+        restated at the top of the prompt, so a set generated for the app's
+        general topic instead of the founder's moment is a prompt failure rather
+        than a mystery (ADR 0089).
+        """
+        import asyncio
+        import ai_service
+        captured = self._capture(monkeypatch, [self._grounded("Say the word out loud")])
+        asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Vocolens", "core_features": ["Reflections"]},
+            [self.GROUNDING_ANGLE], count=1, objective="address_user_problem",
+            angle=self.GROUNDING_ANGLE))
+        prompt = captured["prompt"]
+        assert "PROBLEM: On the back step at night" in prompt
+        assert "FIRST 3 SECONDS PROMISE: The person on the back step" in prompt
+        assert "AUDIENCE: Anyone who cannot name what they feel" in prompt
+        assert "BOUNDED BY" in prompt
+        assert "Reflections are suggestions, not a verdict" in prompt
+        # One opening, and one neutral way to name the person on screen.
+        assert "never a second, different opening" in prompt
+        assert "(no woman, man, girl" in prompt
+
+
     def test_prompt_seeds_the_schema_example_at_the_full_length(self, monkeypatch):
         """
         The failure this closes: the schema example read "default_duration": 10,
@@ -931,5 +986,75 @@ class TestBrandTemplatePrompt:
         assert '"default_duration": 15,' in prompt
         assert "Always set default_duration to 15 seconds" in prompt
         assert "silently cuts the payoff sentence" in prompt
+
+    def test_a_draft_about_another_problem_is_replaced_not_shipped(self, monkeypatch):
+        """
+        The failure this closes: the picker filled with structures about the
+        app's topic area (journaling as homework, the blank page) while the
+        founder's problem was failing to name a feeling. Such a draft is dropped
+        and the one briefed top-up call asks for the shortfall (ADR 0089).
+        """
+        import asyncio
+        import ai_service
+        off_topic = [{
+            "name": "Journaling is not homework",
+            "category": "pain-point-question",
+            "objective": "address_user_problem",
+            "opening_structure": "The person hears journaling described as schoolwork.",
+            "hook_seconds": 3,
+            "middle_structure": "The middle stops at the moment the viewer would reach for the app.",
+        }]
+        prompts = self._sequence(
+            monkeypatch, [off_topic, [self._grounded("Say the word out loud")]])
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Vocolens", "core_features": ["Reflections"]},
+            [self.GROUNDING_ANGLE], count=1, objective="address_user_problem",
+            angle=self.GROUNDING_ANGLE))
+        assert [t["name"] for t in result] == ["Say the word out loud"]
+        assert len(prompts) == 2, "a dropped draft must be replaced, not skipped"
+        assert "Design exactly 1 DISTINCT" in prompts[1]
+
+    def test_an_off_topic_set_comes_back_short_rather_than_padded(self, monkeypatch):
+        import asyncio
+        import ai_service
+        off_topic = [{
+            "name": "The blank page stall",
+            "category": "pain-point-question",
+            "objective": "address_user_problem",
+            "opening_structure": "The person recognizes the stall of an empty journal page.",
+            "hook_seconds": 3,
+            "middle_structure": "The middle stops at the moment the viewer would reach for the app.",
+        }]
+        self._sequence(monkeypatch, [off_topic, off_topic])
+        with pytest.raises(RuntimeError) as err:
+            asyncio.run(ai_service.generate_brand_templates(
+                {"brand_name": "Vocolens", "core_features": ["Reflections"]},
+                [self.GROUNDING_ANGLE], count=1, objective="address_user_problem",
+                angle=self.GROUNDING_ANGLE))
+        assert "no usable templates" in str(err.value)
+
+    def test_a_draft_that_names_the_person_is_rewritten(self, monkeypatch):
+        """
+        The founder uploads the photo of whoever is on camera, so a draft that
+        says "a woman" or "the founder" is rewritten to "the person" on the way
+        in — every video-facing field, name included (ADR 0089).
+        """
+        import asyncio
+        import json
+        import ai_service
+        draft = self._grounded("Say the word out loud")
+        draft["opening_structure"] = (
+            "A woman on the back step at night types the word tired and deletes it."
+        )
+        draft["middle_structure"] = "Then the founder says it out loud instead."
+        self._capture(monkeypatch, [draft])
+        result = asyncio.run(ai_service.generate_brand_templates(
+            {"brand_name": "Vocolens", "core_features": ["Reflections"]},
+            [self.GROUNDING_ANGLE], count=1, objective="address_user_problem",
+            angle=self.GROUNDING_ANGLE))
+        stored = json.dumps(result)
+        assert "woman" not in stored
+        assert "founder" not in stored
+        assert "The person on the back step" in result[0]["opening_structure"]
 
 

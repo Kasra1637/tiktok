@@ -2258,7 +2258,7 @@ class TestComponentFeedbackRouting:
         seen = {}
 
         async def fake_templates(profile, angles=None, count=10, objective="",
-                                 component_feedback=None):
+                                 component_feedback=None, angle=None):
             seen["component_feedback"] = component_feedback
             return []
         monkeypatch.setattr(api, "generate_brand_templates", fake_templates)

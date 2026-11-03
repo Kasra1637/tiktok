@@ -1527,7 +1527,8 @@ class TestCrossUserIsolation:
 
 def _brand_fake(names=("ZZZ Brand Hook One", "ZZZ Brand Hook Two")):
     """Stub generate_brand_templates: valid drafts, no network."""
-    async def fake(profile, angles=None, count=10, objective="", component_feedback=None):
+    async def fake(profile, angles=None, count=10, objective="", component_feedback=None,
+                   angle=None):
         return [
             {
                 "name": name,

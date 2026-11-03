@@ -5,7 +5,10 @@ split_shared_notes shapes the visible comparison set in place (ADR 0074).
 """
 from typing import Optional
 
+import re
+
 import angle_scene
+import character_policy
 import feedback as feedback_mod
 import recommendation_tags
 import template_library
@@ -23,6 +26,182 @@ def _outcome_as_sentence(outcome: str) -> str:
     if not text:
         return ""
     return text if text[-1] in ".!?" else text + "."
+
+
+# ---------------------------------------------------------------------------
+# Relevance to the selected angle (ADR 0089)
+# ---------------------------------------------------------------------------
+# A tailored template is supposed to be THIS angle's problem turned into a
+# shape. Generation is asked for that, and this is the check that proves it: a
+# set generated for one problem has no business filling the picker for another,
+# and a card about journaling-as-homework under a problem about failing to name
+# a feeling is a wrong answer however well it scores on category and goal.
+#
+# Lexical, deliberately: the Problem and the First 3 Seconds Promise are the
+# source of truth, so a template has to share their actual words. Word overlap
+# is a floor, not a similarity score — it cannot certify a good template, only
+# catch one that is about something else, which is the failure it exists for.
+_STOPWORDS = frozenset("""
+a about above after again against all almost alone along already also although
+always am among an and another any anyone anything are around as at away back
+be because been before being below beside between both but by can cannot could
+did do does doing done down during each either else enough even ever every few
+first for from further get gets getting go goes going got had has have having he
+her here hers herself him himself his how however i if in into is it its itself
+just keep keeps know last least less let like little long made make makes many
+may me might mine more most much must my myself near need needs never new next
+no nor not nothing now of off often on once one only onto or other others our
+ours ourselves out over own past per put quite rather really said same say says
+see seem seems seen several shall she should since so some something sometimes
+still such take than that the their theirs them themselves then there these they
+thing things think this those though through thus to too toward under until up
+upon us use used using very via want wants was way we well were what whatever
+when where whether which while who whom whose why will with within without would
+yet you your yours yourself
+""".split())
+
+_TOPIC_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
+
+# The words every neutralized line already contains (ADR 0089). They name who
+# is being described, never what the video is about, so they can never be
+# evidence that two sentences are about the same problem.
+_SUBJECT_WORDS = frozenset((
+    "person", "people", "character", "characters", "viewer", "viewers",
+    "someone", "anyone", "everyone",
+))
+
+# Enough shared words that a match cannot be coincidence for a longer problem;
+# a very short problem has few words to share, so one is the honest floor.
+MIN_RELEVANCE_HITS = 2
+SMALL_ANCHOR_SET = 4
+
+
+def _stem(word: str) -> str:
+    """Crude suffix fold so "type", "types" and "typing" are one word.
+
+    Not linguistics: the check only needs the same idea in two spellings to
+    count once. Anything it gets wrong makes the check more forgiving, which is
+    the safe direction for a gate that can drop a card.
+    """
+    text = re.sub(r"[^a-z0-9]", "", str(word or "").lower())
+    if len(text) <= 3:
+        return text
+    if text.endswith("ing") and len(text) > 5:
+        text = text[:-3]
+    elif text.endswith("ed") and len(text) > 4:
+        text = text[:-2]
+    elif text.endswith("es") and len(text) > 4:
+        text = text[:-2]
+    elif text.endswith("s") and not text.endswith("ss") and len(text) > 3:
+        text = text[:-1]
+    if text.endswith("e") and len(text) > 3:
+        text = text[:-1]
+    return text
+
+
+def content_stems(text) -> set:
+    """The topic words in `text`, folded so inflections match each other."""
+    stems = set()
+    for raw in _TOPIC_WORD.findall(str(text or "")):
+        word = raw.lower()
+        if len(word) < 4 or word in _STOPWORDS or word in _SUBJECT_WORDS:
+            continue
+        stems.add(_stem(word))
+    return stems
+
+
+def problem_anchors(angle) -> set:
+    """The words a template must share to be about this angle at all.
+
+    The Problem and the First 3 Seconds Promise only. The audience and the
+    feature describe who it is for and what answers it, and a template can
+    match both while depicting an entirely different problem — which is the
+    drift this check exists to catch.
+
+    The text is neutralized first: templates are written without a gender or a
+    role (ADR 0089), so "a woman on a back step" must not leave "woman" behind
+    as a word no template could ever share.
+    """
+    angle = angle or {}
+    return content_stems(
+        character_policy.neutralize(
+            f"{angle.get('user_problem') or ''} {angle.get('hook_promise') or ''}"
+        )
+    )
+
+
+def template_copy(template) -> str:
+    """Every word a template would put in front of a viewer, as one string."""
+    template = template or {}
+    parts = [
+        template.get("name"),
+        template.get("opening_structure"),
+        template.get("middle_structure") or template.get("continuation_structure"),
+        template.get("outcome"),
+        template.get("example_preview"),
+        template.get("visual_style"),
+        template.get("camera_pacing"),
+    ]
+    parts += [
+        f"{key} {value}"
+        for key, value in (template.get("content_slots") or {}).items()
+    ]
+    return " ".join(str(part) for part in parts if str(part or "").strip())
+
+
+def template_action_copy(template) -> str:
+    """What the video actually opens on and develops: name, opening and middle.
+
+    The outcome line, the content slots and the visual notes are left out on
+    purpose. They describe the payoff and the look, and a generic one ("hears
+    the exact moment a guessed word fails") would let a card about an entirely
+    different problem pass a check it should fail. What the viewer sees happen
+    is the evidence.
+    """
+    template = template or {}
+    parts = [
+        template.get("name"),
+        template.get("opening_structure"),
+        template.get("middle_structure") or template.get("continuation_structure"),
+    ]
+    return " ".join(str(part) for part in parts if str(part or "").strip())
+
+
+def check_template_relevance(template: dict, angle: Optional[dict]) -> dict:
+    """Whether `template` is about this angle's Problem and Promise, and why not.
+
+    `passes` is True when the angle states no problem or promise at all — with
+    nothing to be relevant to, the check never invents a constraint.
+    """
+    anchors = problem_anchors(angle)
+    if not anchors:
+        return {"passes": True, "hits": [], "anchor_count": 0, "reason": ""}
+    hits = sorted(anchors & content_stems(template_action_copy(template)))
+    need = 1 if len(anchors) <= SMALL_ANCHOR_SET else MIN_RELEVANCE_HITS
+    passes = len(hits) >= need
+    return {
+        "passes": passes,
+        "hits": hits,
+        "anchor_count": len(anchors),
+        "reason": "" if passes else (
+            "Opens on a different problem: it shares none of this angle's "
+            "problem or first-3-seconds wording."
+        ),
+    }
+
+
+def filter_relevant_templates(templates, angle: Optional[dict]) -> list:
+    """Only the templates grounded in this angle's Problem and Promise.
+
+    Order is preserved: the caller's ranking is the ranking. A set that comes
+    back short stays short — a picker showing three relevant shapes is honest,
+    and padding it with off-topic ones is exactly the drift this prevents.
+    """
+    return [
+        template for template in (templates or [])
+        if check_template_relevance(template, angle)["passes"]
+    ]
+
 
 
 def score_template_for_angle(
@@ -246,6 +425,21 @@ def score_template_for_angle(
     if (template.get("review_status") or "approved") != "approved":
         limitations.append("Unpublished research draft - review before using.")
 
+    # Is it about THIS problem at all (ADR 0089)? Tailored rows that fail are
+    # dropped before they reach the picker; a curated row keeps its clean card
+    # and is not penalized, because a curated template is a SHAPE the plan
+    # fills with this angle's problem (see the plan's TEMPLATE rule) rather
+    # than content about some other problem.
+    #
+    # Checked before the scene note below so that note still lands at the top
+    # of the list: where the opening happens is the plainer fact of the two,
+    # and ADR 0084 pins it there.
+    relevance = check_template_relevance(template, angle)
+    tailored_here = (template.get("brand_profile_id") or "") == (profile.get("id") or "")
+    if not relevance["passes"] and tailored_here:
+        score -= 2.0
+        limitations.insert(0, relevance["reason"])
+
     # A template whose own staging contradicts where and when the angle opens
     # stays listed but ranks lower, with the reason first (ADR 0084).
     scene_fit = angle_scene.template_angle_fit(template, angle)
@@ -339,8 +533,12 @@ def score_template_for_angle(
         "feedback": feedback,
         "matched": matched,
         "retired": retired,
+        "relevance": relevance,
         "angle_scene": {
             "moment": scene_fit["moment"],
+            "shape": scene_fit["shape"],
+            "staging": scene_fit["staging"],
+            "development": scene_fit["development"],
             "fits": not scene_fit["structure"],
             "example_conflicts": scene_fit["example_conflicts"],
         },

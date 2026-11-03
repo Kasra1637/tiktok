@@ -25,8 +25,10 @@ One render path, single-pass video generation via OpenRouter.
 - `backend/ai_service.py` — all OpenRouter calls; `VIDEO_MODELS` is the model
   catalog; `generate_video` submits, `describe_provider_refusal` classifies.
 - `backend/angle_policy.py` — pure normalization, source grounding and lexical
-  diversity. `backend/template_recommendations.py` — pure fit/shared notes.
-  Neither may import HTTP, AI, auth or persistence adapters; guarded by
+  diversity. `backend/template_recommendations.py` — pure fit/shared notes and
+  Problem/Promise relevance. `backend/character_policy.py` — pure identity rule:
+  the on-screen person is never given a gender, role or pronoun (ADR 0089).
+  None may import HTTP, AI, auth or persistence adapters; guarded by
   `backend/test_architecture.py`. Old adapter names are compatibility aliases.
 - `backend/video_providers.py` — capability source of truth (limits, identity
   routing, prompt ceilings). Swapping providers is env config, not redesign.
@@ -94,7 +96,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Eighty-eight decisions (0001–0088) now exist;
+Read `docs/adr/README.md` first. Eighty-nine decisions (0001–0089) now exist;
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
 orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused

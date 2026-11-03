@@ -236,8 +236,12 @@ class BrandProfileUpdateRequest(BaseModel):
 
 
 class ObjectiveTemplatesRequest(BaseModel):
-    """Tailored template set for one profile and one selected objective."""
+    """Tailored template set for one profile, one selected objective and one angle."""
     objective: str = ""
+    # The wizard's selected angle: the set is generated from its Problem, First
+    # 3 Seconds Promise, Audience and Bounded By, so it is part of the key
+    # (ADR 0089). Empty keeps the legacy profile+objective scope.
+    angle_id: str = ""
     regenerate: bool = False
 
 

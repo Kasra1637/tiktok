@@ -36,6 +36,8 @@ import recommendation_tags
 from template_recommendations import (
     score_template_for_angle as _score_template_for_angle,
     split_shared_notes as _split_shared_notes,
+    filter_relevant_templates as _filter_relevant_templates,
+    check_template_relevance as _check_template_relevance,
 )
 import overlays
 import provider_capabilities
@@ -630,7 +632,12 @@ async def init_db():
                 -- Brand that owns this template, for brand-tailored customs
                 -- generated on profile approval. NULL means shared or legacy
                 -- (curated rows, pre-scoping customs): visible everywhere.
-                brand_profile_id TEXT
+                brand_profile_id TEXT,
+                -- The selected content angle a tailored row was generated
+                -- from (ADR 0089). NULL on curated rows and on tailored rows
+                -- written before tailoring was grounded in an angle — those
+                -- are filtered by relevance instead of trusted.
+                angle_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_templates_brand
                 ON hook_templates (brand_profile_id, archived);
@@ -1505,6 +1512,16 @@ async def init_db():
                 "CREATE INDEX IF NOT EXISTS idx_templates_brand "
                 "ON hook_templates (brand_profile_id, archived)"
             )
+        await conn.commit()
+
+        # Migration: hook_templates gains the selected angle a tailored set was
+        # generated from (ADR 0089). Existing rows keep NULL: a set that does
+        # not record its angle is filtered by relevance at serve time rather
+        # than served as if it belonged to the angle the founder just picked.
+        cursor = await conn.execute("PRAGMA table_info(hook_templates)")
+        if "angle_id" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding angle_id column to hook_templates")
+            await conn.execute("ALTER TABLE hook_templates ADD COLUMN angle_id TEXT")
         await conn.commit()
 
         # Migration: assets gains a face count. Existing rows keep NULL
@@ -3028,28 +3045,43 @@ async def update_app_profile(
 
 
 async def _ensure_objective_templates(
-    profile: dict, objective: str, user_id: str
+    profile: dict, objective: str, user_id: str, angle: Optional[dict] = None
 ) -> list:
     """
-    Generate this profile's tailored templates for one selected objective,
-    replacing any previous set for that same (profile, objective) key.
+    Generate this profile's tailored templates for one selected objective and
+    — when the wizard has one — one selected angle.
 
     The objective comes from the founder's wizard choice, never from the
     model: every stored row carries the requested objective, which is what
     makes the set worth generating per objective rather than once per
-    profile. Generate-then-replace, never delete-then-generate — a model
-    failure must leave the previous working set intact rather than zeroing
-    it. Any failure is logged and swallowed: the caller returns the empty
-    set with a reason instead of a 500.
+    profile. The angle is the same kind of input: it is the video's own source
+    of truth (Problem, First 3 Seconds Promise, Audience, Bounded By), so a set
+    generated from it is the only set that can be right for this video
+    (ADR 0089).
+
+    Drafts about a different problem are dropped before anything is stored, and
+    a short set stays short: a picker showing three shapes about THIS problem
+    is honest, and six where three are about something else is the drift this
+    closes.
+
+    Generate-then-replace, never delete-then-generate — a model failure must
+    leave the previous working set intact rather than zeroing it. Any failure
+    is logged and swallowed: the caller returns the empty set with a reason
+    instead of a 500.
     """
     profile_id = profile.get("id") or ""
     want_objective = template_library.normalize_objective(objective)
     if not profile_id or not want_objective:
         return []
-    angles = await _fetch_all(
-        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
-        (profile_id, user_id),
-    )
+    angle_id = str((angle or {}).get("id") or "")
+    if angle_id:
+        # One angle, already fetched and scoped to this profile by the caller.
+        angles = [angle]
+    else:
+        angles = await _fetch_all(
+            "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
+            (profile_id, user_id),
+        )
     template_feedback = await _component_feedback_for_profile(
         profile_id, user_id, "template")
     try:
@@ -3057,21 +3089,25 @@ async def _ensure_objective_templates(
             "brand_templates", "text", TEXT_MODEL,
             lambda: generate_brand_templates(
                 profile, angles, objective=want_objective,
-                component_feedback=template_feedback),
+                component_feedback=template_feedback, angle=angle),
             user_id,
             brand_profile_id=profile_id,
         )
     except Exception as e:
         logger.error(
             f"Brand template generation failed for profile {profile_id} "
-            f"objective {want_objective}: {e!r}")
+            f"objective {want_objective} angle {angle_id or '-'}: {e!r}")
         return []
+    drafts = _filter_relevant_templates(drafts, angle)
     if not drafts:
         return []
     now = now_iso()
+    # Replace this (profile, objective, angle) key only: another angle's set is
+    # a different set and must survive a regeneration for this one.
     await _execute(
-        "DELETE FROM hook_templates WHERE brand_profile_id = ? AND objective = ? AND user_id = ?",
-        (profile_id, want_objective, user_id),
+        "DELETE FROM hook_templates WHERE brand_profile_id = ? AND objective = ? "
+        "AND user_id = ? AND COALESCE(angle_id, '') = ?",
+        (profile_id, want_objective, user_id, angle_id),
     )
     for draft in drafts:
         await _execute(
@@ -3081,9 +3117,9 @@ async def _ensure_objective_templates(
                  visual_style, camera_pacing, required_assets,
                  default_duration, content_slots, evidence_note, outcome, version,
                  archived, is_favorite, origin, review_status, times_used,
-                 brand_profile_id, created_at, updated_at, user_id)
+                 brand_profile_id, angle_id, created_at, updated_at, user_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
-                        'custom', 'approved', 0, ?, ?, ?, ?)""",
+                        'custom', 'approved', 0, ?, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), draft["name"], draft["category"],
              json.dumps([profile.get("app_category") or ""] if profile.get("app_category") else []),
              json.dumps([profile.get("target_audience") or ""] if profile.get("target_audience") else []),
@@ -3095,11 +3131,11 @@ async def _ensure_objective_templates(
               json.dumps(draft.get("content_slots") or {}),
               f"Generated for {profile.get('brand_name') or 'this app'} from its approved profile.",
               str(draft.get("outcome") or "")[:300],
-              profile_id, now, now, user_id),
+              profile_id, angle_id or None, now, now, user_id),
         )
     logger.info(
         f"Generated {len(drafts)} brand templates for profile {profile_id} "
-        f"objective {want_objective}")
+        f"objective {want_objective} angle {angle_id or '-'}")
     return drafts
 
 
@@ -4510,6 +4546,17 @@ async def recommend_templates(
         result = _score_template_for_angle(
             tpl, profile, angle, norm_objective, feedback_events, outcome_rows
         )
+        # A tailored row generated for a different problem is not a candidate
+        # for this video at all: dropping it is the difference between "fewer
+        # cards" and "cards about someone else's problem" (ADR 0089). Curated
+        # rows stay — a curated template is a shape the plan fills with this
+        # angle's problem — so a failed generation never leaves the picker empty.
+        if (
+            angle
+            and (tpl.get("brand_profile_id") or "") == (profile.get("id") or "")
+            and not result["relevance"]["passes"]
+        ):
+            continue
         scored.append({
             "template": _public_library_template(tpl),
             "score": result["score"],
@@ -4522,6 +4569,7 @@ async def recommend_templates(
             "limitations": result["limitations"],
             "feedback": result["feedback"],
             "retired": result["retired"],
+            "relevance": result["relevance"],
             "angle_scene": result["angle_scene"],
         })
     scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
@@ -4545,14 +4593,21 @@ async def ensure_objective_templates(
     profile_id: str, payload: ObjectiveTemplatesRequest, user_id: str = Depends(get_current_user_id)
 ):
     """
-    Tailored templates for this profile AND the founder's selected objective.
+    Tailored templates for this profile, this objective and this angle.
 
     The objective is chosen per video in the wizard — it does not exist at
-    approve time — so generation lives here, called when the template step
-    loads with both profile and objective set. A cached set returns
-    immediately without a model call; otherwise the set generates
-    synchronously (same in-request precedent as strategy and plan builds)
-    and replaces any previous set for that (profile, objective) key.
+    approve time — so generation lives here, called when the founder's click
+    asks for it. A cached set returns immediately without a model call;
+    otherwise the set generates synchronously (same in-request precedent as
+    strategy and plan builds) and replaces any previous set for that
+    (profile, objective, angle) key.
+
+    The angle is the video's own source of truth (Problem, First 3 Seconds
+    Promise, Audience, Bounded By), so a cached set only counts when it was
+    generated from this angle and still shares this Problem and Promise. A
+    legacy set that does not is regenerated rather than shown, which is what
+    stops the picker drifting away from the problem the founder picked
+    (ADR 0089).
 
     Never 500s on a model failure: the previous set (or an empty list)
     returns with the error attached, and the curated picks keep working.
@@ -4565,12 +4620,29 @@ async def ensure_objective_templates(
             status_code=400,
             detail="Pick an objective first — tailored templates are generated per objective.",
         )
-    existing = await _fetch_all(
+    angle = None
+    angle_id = str((payload.angle_id if payload else "") or "").strip()
+    if angle_id:
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (angle_id, profile_id, user_id),
+        )
+        if not angle:
+            raise HTTPException(status_code=404, detail="Content angle not found for this App Profile")
+        angle = _serialize_angle_row(angle)
+    cached = await _fetch_all(
         """SELECT * FROM hook_templates
            WHERE brand_profile_id = ? AND objective = ? AND user_id = ?
              AND archived = 0 AND review_status = 'approved'""",
         (profile_id, want_objective, user_id),
     )
+    # Only rows generated from THIS angle, and only rows still about its
+    # problem. A set with nothing left in scope is not a set.
+    existing = [
+        row for row in cached
+        if str(row.get("angle_id") or "") == angle_id
+        and _check_template_relevance(row, angle)["passes"]
+    ]
     # Regenerate means regenerate: an explicit ask replaces the set even
     # when one exists. Anything else serves the cache without a model call.
     if existing and not (payload.regenerate or False):
@@ -4578,10 +4650,11 @@ async def ensure_objective_templates(
             "templates": [_public_library_template(t) for t in existing],
             "generated": False,
             "objective": want_objective,
+            "angle_id": angle_id,
             "error": None,
         }
     try:
-        drafts = await _ensure_objective_templates(profile, want_objective, user_id)
+        drafts = await _ensure_objective_templates(profile, want_objective, user_id, angle)
     except Exception as e:  # defensive: _ensure already swallows model errors
         logger.error(f"Objective template generation failed: {e!r}")
         drafts = []
@@ -4591,10 +4664,16 @@ async def ensure_objective_templates(
              AND archived = 0 AND review_status = 'approved'""",
         (profile_id, want_objective, user_id),
     )
+    rows = [
+        row for row in rows
+        if str(row.get("angle_id") or "") == angle_id
+        and _check_template_relevance(row, angle)["passes"]
+    ]
     return {
         "templates": [_public_library_template(t) for t in rows],
         "generated": bool(drafts),
         "objective": want_objective,
+        "angle_id": angle_id,
         "error": None if drafts else (
             "Tailoring failed — the curated picks below still work. "
             "Reopening this step retries."

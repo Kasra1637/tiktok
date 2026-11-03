@@ -9,6 +9,8 @@ Pure policy: no HTTP, AI, auth or persistence imports.
 import re
 from typing import Optional
 
+import character_policy
+
 _OUTDOOR = (
     r"\boutside\b", r"\boutdoors?\b", r"\bsteps? out\b", r"\bstepping out\b",
     r"\bstreet\b", r"\bsidewalk\b", r"\bpavement\b", r"\bpark\b", r"\bparking lot\b",
@@ -18,6 +20,7 @@ _OUTDOOR = (
     r"\bcommut(?:e|es|ing)\b", r"\bstation\b", r"\bplatform\b", r"\bporch\b",
     r"\bstoop\b", r"\bcaf[e\u00e9]\b", r"\bhilltop\b", r"\bbridge\b", r"\bcampus\b",
     r"\bdriveway\b", r"\bbackyard\b", r"\bwaterfront\b", r"\bon a run\b",
+    r"\bback steps?\b", r"\bfront steps?\b",
     r"\bout of the (?:office|building|house|car|gym|station)\b",
 )
 _INDOOR = (
@@ -85,9 +88,15 @@ def scene_of(text: str) -> dict:
 
 
 def angle_moment(angle: Optional[dict]) -> str:
-    """The angle's opening moment as a plain sentence fragment, capitalised."""
+    """The angle's opening moment as a plain sentence fragment, capitalised.
+
+    Identity-neutral like every other video-facing line: the founder's uploaded
+    photo decides who is on screen, so the promise says "the person" and never
+    names a gender or a role (ADR 0089).
+    """
     text = re.sub(r"\s+", " ", str((angle or {}).get("hook_promise") or "")).strip().rstrip(".")
-    return text[:1].upper() + text[1:] if text else ""
+    text = character_policy.neutralize(text).strip()
+    return _capitalise(text)
 
 
 def angle_scene(angle: Optional[dict]) -> dict:
@@ -100,6 +109,26 @@ def scene_is_unclear(angle: Optional[dict]) -> bool:
     """True when the angle has an opening moment that names no place at all."""
     scene = angle_scene(angle)
     return bool(scene["moment"]) and not scene["place"]
+
+
+def video_scene(angle: Optional[dict]) -> dict:
+    """The angle's opening moment with its place and time of day made explicit.
+
+    The promise owns where and when (ADR 0084). When the promise names neither,
+    the Problem's own moment supplies what it leaves out: the two describe the
+    same moment by construction, and a card that cannot say where the video
+    happens tells the founder less than one that can. Neither field is ever
+    invented — both come from text the founder's angle already carries.
+    """
+    scene = angle_scene(angle)
+    if scene["place"] and scene["time"]:
+        return scene
+    from_problem = scene_of(str((angle or {}).get("user_problem") or ""))
+    return {
+        **scene,
+        "place": scene["place"] or from_problem["place"],
+        "time": scene["time"] or from_problem["time"],
+    }
 
 
 def conflict_reason(text: str, scene: dict) -> str:
@@ -121,6 +150,119 @@ def _where(scene: dict) -> str:
     if scene.get("time"):
         bits.append(_TIME_WORDS[scene["time"]])
     return " ".join(bits)
+
+
+def _capitalise(text: str) -> str:
+    text = str(text or "")
+    return text[:1].upper() + text[1:] if text else ""
+
+
+# Card lines, not paragraphs: the shape is the opening alone and the
+# development is one beat, because a founder comparing six cards reads one line
+# of each.
+_SHAPE_LIMIT = 220
+_BEAT_LIMIT = 150
+
+
+def _first_sentence(text: str) -> str:
+    """The first sentence of `text`, or the whole of it when it has no full stop."""
+    blob = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not blob:
+        return ""
+    match = re.match(r"(.+?[.!?])(?:\s|$)", blob)
+    return (match.group(1) if match else blob).strip()
+
+
+def _clip(text: str, limit: int) -> str:
+    """`text` cut at a word boundary, with an ellipsis when anything was cut."""
+    text = str(text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-\u2014")
+    return cut + "\u2026"
+
+
+def _development_beat(template: dict, scene: dict) -> str:
+    """The template's first middle beat, ready to follow the opening, or "".
+
+    Dropped when it moves the video somewhere the angle does not go: a middle
+    that relocates the story is a second opening wearing a middle's clothes.
+    """
+    template = template or {}
+    middle = _first_sentence(
+        template.get("middle_structure") or template.get("continuation_structure")
+    )
+    if not middle or conflict_reason(middle, scene):
+        return ""
+    beat = character_policy.neutralize(middle).rstrip(".")
+    # The prompt asks the middle to stop at the moment the viewer would reach
+    # for the app, and models echo that instruction back as the last clause.
+    # It is an instruction to the writer, not a second beat, so it goes.
+    beat = re.split(
+        r"[,;]?\s*(?:and |then )?(?:stops|stopping|ends|ending) at the moment\b",
+        beat,
+    )[0].rstrip(" ,;:-\u2014")
+    if not beat:
+        return ""
+    if beat[:1].isupper() and not beat.startswith(("I ", "I'")):
+        beat = beat[:1].lower() + beat[1:]
+    # The card labels the line itself ("Develops as"), and a middle that opens
+    # with "Then" would read as a second opening. A middle written in the
+    # prompt's own meta voice ("The middle names the cost") keeps the label
+    # rather than the noun, so the line describes the video and not the writing.
+    beat = re.sub(r"^then\s+", "", beat, flags=re.IGNORECASE)
+    beat = re.sub(r"^(?:the |this )?(?:middle|video|piece|rest)\s+", "", beat, flags=re.IGNORECASE)
+    if not beat:
+        return ""
+    return _clip(beat, _BEAT_LIMIT)
+
+
+def opening_shape(angle: Optional[dict], template: Optional[dict] = None) -> str:
+    """The one opening this card makes, built from the First 3 Seconds Promise.
+
+    "Shape" used to be the template's own first-seconds staging while the card
+    printed the angle's promise underneath as "In your video", so a single card
+    described two different openings (ADR 0089). The shape is now the promise
+    itself — one character doing one thing — and nothing else: a template's own
+    opening never speaks here, so nothing on the card can disagree with what the
+    render opens on. What the template adds is its development, which the card
+    prints as its own line (`opening_development`), never as a second opening.
+    """
+    promise = angle_moment(angle)
+    if not promise:
+        # No promise on this angle: the template's own staging is the only
+        # opening on record, and it is shown neutralized like everything else.
+        return character_policy.neutralize(
+            str((template or {}).get("opening_structure") or "")
+        ).strip()
+    return _clip(promise.rstrip(".") + ".", _SHAPE_LIMIT)
+
+
+def opening_development(angle: Optional[dict], template: Optional[dict] = None) -> str:
+    """How THIS template develops that one opening, or "" when it cannot.
+
+    A middle that relocates the video, or that has nothing to say, leaves the
+    card with the opening alone rather than inventing a beat. Returned without
+    a leading capital because the card prints it as a clause, not a sentence.
+    """
+    if not angle_moment(angle):
+        return ""
+    return _development_beat(template or {}, video_scene(angle))
+
+
+def opening_staging(angle: Optional[dict]) -> str:
+    """Where and when the opening happens, and where the character comes from.
+
+    The card's second line: the shape says what happens, this says where and
+    when it happens and that the person on screen is the founder's uploaded
+    photo. Never a described face or a named kind of person (ADR 0089).
+    """
+    scene = video_scene(angle)
+    if not scene["moment"]:
+        return ""
+    where = _where(scene)
+    look = "The character's look comes from the photo you upload."
+    return f"{_capitalise(where)}. {look}" if where else look
 
 
 def fit_direction_options(options: dict, angle: Optional[dict]) -> dict:
@@ -181,11 +323,14 @@ def reconcile_look(visual_direction: str, angle: Optional[dict]) -> dict:
 
 
 def template_angle_fit(template: dict, angle: Optional[dict]) -> dict:
-    """Whether a template's own staging can happen where the angle opens.
+    """How a template reads against the angle's opening.
 
     `structure` is the plain reason the template's fixed shape contradicts the
     angle (it is ranked lower and labelled); `example_conflicts` means only
     its sample wording does, so the card shows the angle's moment instead.
+    `shape` and `staging` are the two lines the card prints: one opening built
+    from the promise, and where and when that opening happens; `development` is
+    what this template does next, printed as its own line (ADR 0089).
     """
     scene = angle_scene(angle)
     structural = " ".join(
@@ -195,6 +340,9 @@ def template_angle_fit(template: dict, angle: Optional[dict]) -> dict:
     example = conflict_reason(str((template or {}).get("example_preview") or ""), scene)
     return {
         "moment": scene["moment"],
+        "shape": opening_shape(angle, template),
+        "staging": opening_staging(angle),
+        "development": opening_development(angle, template),
         "structure": (
             f"Doesn't fit this angle: its opening {reason}, but your angle opens {_where(scene)}."
             if reason else ""

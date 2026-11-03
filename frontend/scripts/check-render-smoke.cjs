@@ -4639,6 +4639,70 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  await check("a card's shape and in-your-video lines describe one opening from the promise", async (ctx) => {
+    // The failure this closes: a card's Shape described the template's own
+    // staging ("the founder says journaling is not homework") while the line
+    // under it described a different opening (the angle's promise). Two
+    // openings on one card, and a named kind of person on top. The server now
+    // builds both lines from the First 3 Seconds Promise (ADR 0089), so the
+    // card has to carry what it sends and none of the template's own opening.
+    global.__SMOKE_PARAMS = "";
+    const SHAPE = "The person on a back step at night types the word tired, deletes it, and says out loud that is not it either.";
+    const STAGING = "Outdoors at night. The character's look comes from the photo you upload.";
+    const DEVELOPMENT = "the person names the gap between the feeling and the word for it";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9,
+              why_it_fits: ["Fits."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+              angle_scene: { moment: SHAPE, shape: SHAPE, staging: STAGING, development: DEVELOPMENT, fits: true, example_conflicts: false },
+            },
+          ],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: [ORDERED_TEMPLATES[0]],
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+      }
+    );
+    const shape = ctx.container.querySelector('[data-testid="template-structure"]');
+    if (!shape || !shape.textContent.includes(SHAPE)) {
+      throw new Error("the card shape is not the opening built from the promise");
+    }
+    if (shape.textContent.includes(TEMPLATE.opening_structure)) {
+      throw new Error("the card still prints the template's own second opening");
+    }
+    // What the template adds is its development, on its own labelled line —
+    // never a second opening folded into the shape.
+    const develops = ctx.container.querySelector('[data-testid="template-development"]');
+    if (!develops || !develops.textContent.includes(DEVELOPMENT)) {
+      throw new Error("the card does not say how this template develops the opening");
+    }
+    if (!/Develops as/.test(develops.textContent)) {
+      throw new Error("the development line is not labelled as the development");
+    }
+    const moment = ctx.container.querySelector('[data-testid="template-angle-moment"]');
+    if (!moment || !moment.textContent.includes(STAGING)) {
+      throw new Error("the in-your-video line does not say where the opening happens");
+    }
+    if (moment.textContent.includes(TEMPLATE.opening_structure)) {
+      throw new Error("the in-your-video line carries a second opening");
+    }
+  });
+
   await check("a card with no reasons or limitations shows neither block", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi(
@@ -6500,6 +6564,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (seen[0].profileId !== "b1") {
       throw new Error(`wrong profile sent: ${JSON.stringify(seen[0].profileId)}`);
+    }
+    // Templates are generated from this angle's Problem and First 3 Seconds
+    // Promise, so the angle rides with the request (ADR 0089) — without it the
+    // server would generate for the app's general topic again.
+    if (seen[0].payload.angle_id !== ANGLE.id) {
+      throw new Error(`wrong angle sent: ${JSON.stringify(seen[0].payload.angle_id)}`);
     }
   });
 

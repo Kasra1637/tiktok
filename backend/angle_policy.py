@@ -5,6 +5,7 @@ briefs share these rules. Correction requests remain owned by ai_service.
 """
 import re
 
+import character_policy
 from template_library import normalize_angle_kind
 
 
@@ -76,7 +77,14 @@ def normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:
         for field, limit in (("label", 120), ("target_audience", 400), ("user_problem", 600),
                              ("hook_promise", 300), ("app_feature", 300),
                              ("desired_emotion", 200), ("viewer_outcome", 300)):
-            normalized[field] = str(item.get(field) or "").strip()[:limit]
+            # Identity-neutral (ADR 0089): the founder's uploaded photo decides
+            # who is on screen, so no angle field may name a gender, a role or a
+            # pronoun. app_feature is the app's own feature name — product text,
+            # not a description of a person — so it is left exactly as written.
+            value = str(item.get(field) or "").strip()
+            if field != "app_feature":
+                value = character_policy.neutralize(value)
+            normalized[field] = value[:limit]
         raw_claims = item.get("claims_to_respect")
         if isinstance(raw_claims, str):
             raw_claims = [raw_claims]

@@ -89,11 +89,32 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
     typeof r.template.outcome === "string" && r.template.outcome.trim()
       ? sentenceCase(r.template.outcome.trim())
       : "";
-  // The structure is what the founder actually picks; the angle's moment
-  // below it is where that structure is staged in their video.
-  const opening =
+  // The opening the founder will see (ADR 0089). It is built from the angle's
+  // First 3 Seconds Promise server-side, so this line and the "In your video"
+  // line below it describe ONE opening rather than two. A response without the
+  // server-composed shape (an older stub) falls back to the template's own
+  // opening structure, as before.
+  const shapeLine =
+    typeof scene.shape === "string" && scene.shape.trim()
+      ? scene.shape.trim()
+      : "";
+  const opening = shapeLine || (
     typeof r.template.opening_structure === "string" && r.template.opening_structure.trim()
       ? sentenceCase(r.template.opening_structure.trim())
+      : ""
+  );
+  // Where and when that one opening happens, and that the person on screen is
+  // the founder's own uploaded photo — never a described face or a named kind
+  // of person. Falls back to the bare moment when the server did not send it.
+  const staging =
+    typeof scene.staging === "string" && scene.staging.trim()
+      ? scene.staging.trim()
+      : "";
+  // What THIS template does next, as its own line: the shape is the promise,
+  // so the template's development can never read as a second opening.
+  const development =
+    typeof scene.development === "string" && scene.development.trim()
+      ? scene.development.trim()
       : "";
   return (
     // Staggered arrival like the angle and goal rows: a fresh ranking is
@@ -157,10 +178,16 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           {opening}
         </p>
       )}
+      {development && (
+        <p className="mt-1 text-sm text-foreground/80" data-testid="template-development">
+          <span className="text-muted-foreground">Develops as: </span>
+          {development}
+        </p>
+      )}
       {moment && !misfit && (
         <p className="mt-1 text-sm text-foreground/80" data-testid="template-angle-moment">
           <span className="text-muted-foreground">In your video: </span>
-          {moment}
+          {staging || moment}
         </p>
       )}
       {misfit && (

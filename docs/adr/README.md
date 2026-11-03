@@ -111,3 +111,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0086](0086-upscaler-exports-1080p.md) | The upscaler exports 1080p, not 4K; eligibility moves with the target | accepted |
 | [0087](0087-template-tailoring-waits-for-a-click.md) | Template tailoring waits for the founder's Generate click; a goal pick never bills | accepted |
 | [0088](0088-voice-reads-locally.md) | Voice reads locally through the browser's speechSynthesis; data-driven text, one dock, no text leaves the device | accepted |
+| [0089](0089-templates-follow-the-video-fields.md) | Tailored templates are generated from and checked against the Problem, Promise and Audience; one character, one opening; the person has no gender or role | accepted |

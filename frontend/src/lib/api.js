@@ -276,8 +276,10 @@ export const api = {
   // Template recommendations
   getTemplateRecommendations: (profileId, params = {}) =>
     client.get(`/app-profiles/${profileId}/template-recommendations`, { params }).then((r) => r.data),
-  // Tailored templates for one profile + objective. Called when the template
-  // step loads (fast on cache hit) and on explicit regenerate.
+  // Tailored templates for one profile + objective + angle. Called when the
+  // founder clicks Generate (ADR 0087); the set is generated from that angle's
+  // Problem, First 3 Seconds Promise and Audience, so `angle_id` is part of the
+  // request and of the cached set it returns (ADR 0089).
   ensureObjectiveTemplates: (profileId, payload) =>
     client.post(`/app-profiles/${profileId}/objective-templates`, payload).then((r) => r.data),
 
