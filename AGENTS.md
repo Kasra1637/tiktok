@@ -5,15 +5,16 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Commands (run from repo root)
 
-- Backend tests: `python -m pytest backend/ -q`
-- Frontend checks: `node frontend/scripts/check-imports.cjs` (add
-  `check-frontend-logic.cjs` and `check-render-smoke.cjs` when touching
-  generation flows)
-- Frontend tests/build: `yarn --cwd frontend test --watchAll=false` /
-  `yarn --cwd frontend build`
-- Tool shells use Bash (Git Bash on Windows); preserve failure exit status
-  when redirecting/piping checks. For a manual PowerShell terminal use its
-  environment syntax and `; if ($?) { ... }` rather than Bash assignments.
+- Backend tests: `python -m pytest backend/ -q` (media cases need ffmpeg/ffprobe
+  on PATH; a missing ffmpeg is a setup failure, not a reason to skip).
+- Frontend gates: `yarn --cwd frontend check` (imports, logic, demo-cta draft,
+  render smoke, tour targets — not Jest or the build). Focused smoke:
+  `SMOKE_ONLY='wizard' node frontend/scripts/check-render-smoke.cjs` — a filter
+  that selects zero checks verifies nothing.
+- Frontend tests/build: `CI=true yarn --cwd frontend test --watchAll=false` /
+  `yarn --cwd frontend build`.
+- Match your harness's shell (Git Bash or PowerShell); preserve failure exit
+  status when redirecting/piping. In PowerShell chain with `; if ($?) { ... }`.
 - Local setup: `README.md`; ownership: `docs/architecture.md`; change/test
   matrix: `CONTRIBUTING.md`; incidents/deploy/rollback: `docs/operations.md`.
 
@@ -38,15 +39,31 @@ One render path, single-pass video generation via OpenRouter.
   `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007.
 - `frontend/src/pages/CreateVideo.jsx` — three-step wizard orchestration:
   App Profile → Audience & template → Review & submit. Selection UI lives in
-  `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); revision
-  inspection/direction inputs in `ReviewPanels.jsx`. Project writes stay in
-  the page. `pages/wizardDraft.js` owns coupled draft transitions;
+  `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); direction
+  dropdowns and plan-phase narration in `ReviewPanels.jsx`. Project writes stay
+  in the page. `pages/wizardDraft.js` owns coupled draft transitions;
   `hooks/useWizardTemplates.js` owns recommendation/tailoring state. Other
   steps navigate to the angle control, not a second selector.
+- `frontend/src/pages/GenerationHistory.jsx` (+ `historyPolling.js`,
+  `historyRepair.js`) — confirmed row snapshots, bounded per-row polling and
+  durable-save recovery; a stopped browser check is not a provider failure.
+  `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
+  kits; routers receive DB functions from `server` and never import it back.
+- `backend/claim_safety.py` — deterministic claim checks, advisory only: no
+  wording flag refuses a render (ADR 0081). `backend/feedback.py` — signal vs
+  reason, posted-performance ranking (ADRs 0055/0070/0071).
+- Persistence: Turso refuses local SQLite writes on a configured outage
+  (ADR 0083). `backend/storage_service.py` + `backend/media_signing.py` own R2
+  durability and signed playback — a provider URL is not a durable link, and a
+  finished render can still carry `storage_error`.
+- Other surfaces: `backend/auth.py` (Clerk; authz stays at HTTP/DB entry
+  points), `frontend/src/upscale/` + `pages/VideoUpscaler.jsx`, and onboarding
+  tours in `components/onboarding/` + `lib/onboarding/tours.js`.
 
 ## Conventions
 
 - Conventional commits, imperative, with a why-body on non-trivial changes.
+- Commit or push only when requested — a push to `main` can deploy production.
 - Spacing tokens live in `frontend/src/index.css` (`.surface`, `.inset-panel`);
   never add `p-*` to card JSX. Token changes update `design_guidelines.md`
   same-commit.
@@ -55,6 +72,10 @@ One render path, single-pass video generation via OpenRouter.
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
   generic take. A refusal must name the next step. A red button that cannot
   act must navigate to what's missing instead of dying silently.
+- Claim reports are advisory: no wording flag refuses a render; banned wording
+  is rewritten during plan/strategy and gates stay at submit time (ADR 0081).
+- Review autosave is a validated server write; the Demo + CTA editing document
+  is browser-local — never call browser storage a cloud backup.
 - One logical change per commit. A behavior or default change is an explicit
   product decision named in the message, never bundled inside a fix; copy
   sync rides in its own commit so behavior stays reviewable and revertable.
@@ -70,7 +91,10 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first — decisions 0001–0007 constrain the submit
-path, identity routing, temperature handling, single-pass scope, prompt
-ceilings, Grok retirement, and overlay fonts/motion. Frontend design
-constraints live in `design_guidelines.md`.
+Read `docs/adr/README.md` first. Eighty-seven decisions (0001–0087) now exist;
+the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
+ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
+orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused
+pre-render) and 0083 (database durability). `provider_capabilities.py` compares
+the catalog to OpenRouter's live listing at boot as a warning only — never a
+gate. Frontend design constraints live in `design_guidelines.md`.
