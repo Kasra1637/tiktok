@@ -7489,6 +7489,111 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // Voice reads from the data the cards render, never from the DOM, and the
+  // shared dock owns pause/stop/rate. jsdom ships no speech engine, so this
+  // check installs a talking stub: without one the controls (correctly) do not
+  // render at all, and every assertion below would pass on nothing.
+  await check("profile sections read aloud through the listen dock", async (ctx) => {
+    const previousParams = global.__SMOKE_ROUTE_PARAMS;
+    global.__SMOKE_ROUTE_PARAMS = { profileId: "p1" };
+    const AppProfileDetail = load("pages/AppProfileDetail.jsx").default;
+    const { ListenDock } = load("components/ListenDock.jsx");
+    const speech = { spoken: [], canceled: 0 };
+    dom.window.speechSynthesis = {
+      speak: (utterance) => { speech.spoken.push(utterance.text); },
+      cancel: () => { speech.canceled += 1; },
+      pause: () => {},
+      resume: () => {},
+      getVoices: () => [{ default: true, lang: "en-US", name: "Stub English" }],
+      addEventListener: () => {},
+    };
+    dom.window.SpeechSynthesisUtterance = function StubUtterance(text) {
+      this.text = text;
+      this.rate = 1;
+      this.lang = "";
+      this.voice = null;
+      this.onend = null;
+      this.onerror = null;
+    };
+    try {
+      await withApi(
+        {
+          getAppProfile: async () => ({
+            id: "p1",
+            brand_name: "Threadly",
+            status: "approved",
+            app_category: "Journaling",
+            platforms: ["iOS"],
+            core_features: ["Voice entries", "Mood trends"],
+            claims_approved: ["Track your mood over time"],
+          }),
+          getContentAngles: async () => ({ angles: [] }),
+          getStudioProjects: async () => ({ projects: [] }),
+          getTemplateRecommendations: async () => ({ recommendations: [] }),
+        },
+        async () => {
+          await act(async () => {
+            ctx.root.render(
+              React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(AppProfileDetail),
+                React.createElement(ListenDock)
+              )
+            );
+          });
+          await act(async () => {});
+        }
+      );
+      const essentials = ctx.container.querySelector('[data-testid="listen-essentials"]');
+      if (!essentials) throw new Error("the Essentials group has no listen toggle");
+      if (essentials.getAttribute("aria-pressed") !== "false") {
+        throw new Error("a listen toggle starts pressed before anything plays");
+      }
+      if (!ctx.container.querySelector('[data-testid="listen-profile"]')) {
+        throw new Error("the header lost the read-the-profile control");
+      }
+      if (!ctx.container.querySelector('[data-testid="listen-claims"]')) {
+        throw new Error("the claim guardrails card has no listen toggle");
+      }
+      await clickEl(ctx, essentials);
+      if (!speech.spoken.length) throw new Error("the speak engine was never asked to say anything");
+      const spoken = speech.spoken.join(" ");
+      if (!/Voice entries/.test(spoken)) throw new Error("the spoken text lost the card data");
+      if (!/Core features/.test(spoken)) throw new Error("the spoken text lost its labels");
+      if (/Listen to this section|data-testid/.test(spoken)) {
+        throw new Error("the spoken text picked up chrome instead of data");
+      }
+      const pressed = ctx.container.querySelector('[data-testid="listen-essentials"]');
+      if (pressed.getAttribute("aria-pressed") !== "true") {
+        throw new Error("the toggle does not show that its section is playing");
+      }
+      const dock = ctx.container.querySelector('[data-testid="listen-dock"]');
+      if (!dock) throw new Error("the listen dock did not appear while reading");
+      if (!(dock.textContent || "").includes("Listening")) {
+        throw new Error("the dock does not name what is playing");
+      }
+      const stop = dock.querySelector('[data-testid="listen-dock-stop"]');
+      if (!stop) throw new Error("the dock has no stop control");
+      const canceledBefore = speech.canceled;
+      await clickEl(ctx, stop);
+      if (speech.canceled <= canceledBefore) {
+        throw new Error("stop never canceled the engine");
+      }
+      if (ctx.container.querySelector('[data-testid="listen-dock"]')) {
+        throw new Error("the dock stayed on screen after stop");
+      }
+      const released = ctx.container.querySelector('[data-testid="listen-essentials"]');
+      if (released.getAttribute("aria-pressed") !== "false") {
+        throw new Error("the toggle stayed pressed after stop");
+      }
+    } finally {
+      delete dom.window.speechSynthesis;
+      delete dom.window.SpeechSynthesisUtterance;
+      global.__SMOKE_ROUTE_PARAMS = previousParams;
+    }
+  });
+
   console.log("");
   console.log("Checking the App Profile research actions...");
   await runProfileResearchActionsChecks();

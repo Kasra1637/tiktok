@@ -13,6 +13,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
+import { ListenButton } from "../components/ListenButton";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
@@ -592,6 +593,17 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                         <span>Plan context</span>
                         <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
                       </summary>
+                      <div className="mt-2 flex items-center justify-end">
+                        <ListenButton
+                          id={`plan-context-${row.id}`}
+                          label="Plan context"
+                          testId={`listen-plan-context-${row.id}`}
+                          getBlocks={() => [
+                            { label: "Audience", values: [row.audience] },
+                            { label: "Your demo brief", values: [row.demo_brief] },
+                          ]}
+                        />
+                      </div>
                       <dl className="inset-panel mb-3 mt-3 divide-y divide-[color:var(--hairline)]">
                     {row.audience && (
                       <div className="post-kit-row">

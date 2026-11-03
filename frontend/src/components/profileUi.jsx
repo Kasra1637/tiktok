@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils";
 import { sentenceCase } from "../lib/copyCase";
 import { GroupLabel, SectionHeading } from "./SectionCard";
+import { ListenButton } from "./ListenButton";
 
 /**
  * Shared profile card system — the App Profile page's card language, on the
@@ -44,7 +45,7 @@ export const profileToneClass = {
   enforced: "border-[color:var(--hairline-strong)] bg-secondary/30",
 };
 
-export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default", testid, className, children }) {
+export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default", testid, className, listen = null, children }) {
   // The shared row-pad gutter (12px block, 16px inline — same values as the
   // px-4 py-3 it replaces): the group content already brings 16/24, so card
   // text lands at 32/40 from the group edge — exactly where text inside a
@@ -58,10 +59,19 @@ export function ProfileCard({ eyebrow, eyebrowClassName, icon, tone = "default",
       )}
       {...(testid ? { "data-testid": testid } : {})}
     >
-      {eyebrow && (
-        <GroupLabel as="h3" icon={icon} className={eyebrowClassName}>
-          {sentenceCase(eyebrow)}
-        </GroupLabel>
+      {(eyebrow || listen) && (
+        <div className="flex items-center justify-between gap-2">
+          {eyebrow ? (
+            <GroupLabel as="h3" icon={icon} className={eyebrowClassName}>
+              {sentenceCase(eyebrow)}
+            </GroupLabel>
+          ) : (
+            <span />
+          )}
+          {listen && (
+            <ListenButton id={listen.id} label={listen.label} getBlocks={listen.getBlocks} testId={listen.testId} />
+          )}
+        </div>
       )}
       {children}
     </section>
@@ -181,7 +191,7 @@ export function InfoListBlock({ label, items, tone = "default" }) {
  * Grid-rows animation (200ms) opens without layout jump; the overflow-hidden
  * lives on the animation wrapper, never on a card.
  */
-export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, children }) {
+export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, listen = null, children }) {
   const contentId = `profile-group-${id}`;
   return (
     <section
@@ -189,13 +199,21 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
       data-testid={`group-${id}`}
       className="surface surface-flush min-w-0 overflow-hidden rounded-2xl space-y-0"
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={contentId}
-        onClick={() => onToggle(id, !open)}
-        className="flex w-full min-w-0 items-center justify-between gap-2 row-pad text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6"
-      >
+      {/* The bar and the listen toggle are siblings: a button inside a button
+          is invalid markup, so the speaker is absolutely positioned over the
+          bar's own padding and the bar reserves that room with `pr-*` only
+          when a listen config is passed in. */}
+      <div className="relative">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={contentId}
+          onClick={() => onToggle(id, !open)}
+          className={cn(
+            "flex w-full min-w-0 items-center justify-between gap-2 row-pad text-left transition duration-150 hover:bg-[color:var(--indigo-6)] md:px-6",
+            listen && "pr-14 md:pr-16"
+          )}
+        >
         <span className="min-w-0 flex-1">
           <SectionHeading as="span" icon={Icon}>{label}</SectionHeading>
           {summary ? (
@@ -211,6 +229,12 @@ export function SectionGroup({ id, label, summary, icon: Icon, open, onToggle, c
           )}
         />
       </button>
+      {listen && (
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          <ListenButton id={listen.id} label={listen.label} getBlocks={listen.getBlocks} testId={listen.testId} />
+        </div>
+      )}
+      </div>
       <div
         id={contentId}
         className="grid transition-all duration-200 ease-out"

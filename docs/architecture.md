@@ -121,6 +121,7 @@ accepts data; it must not be mistaken for an authorization check.
 | [BrandSetup.jsx](../frontend/src/pages/BrandSetup.jsx), [AppProfileDetail.jsx](../frontend/src/pages/AppProfileDetail.jsx), [AssetLibrary.jsx](../frontend/src/pages/AssetLibrary.jsx) | App Profile research/approval and its asset library; feeds Create Video. |
 | [PostKitSection.jsx](../frontend/src/components/PostKitSection.jsx) | Frozen post kit on a finished render; copy buttons and completed-only regenerate. |
 | [components/auth/](../frontend/src/components/auth) | Clerk bridge/provider/controls; `ProtectedRoute` gates routes; anonymous local mode when auth is absent. |
+| [listen.js](../frontend/src/lib/listen.js) (+ [ListenButton](../frontend/src/components/ListenButton.jsx), [ListenDock](../frontend/src/components/ListenDock.jsx)) | Local browser voice for text-heavy surfaces; reads the data model, never the DOM; one dock owns transport; hidden without `speechSynthesis` (ADR 0088). |
 | [index.css](../frontend/src/index.css) | Card spacing/type tokens; follow [design guidelines](../design_guidelines.md). |
 
 Use effect dependencies to express the actual lifecycle. Refs may hold the

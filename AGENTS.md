@@ -59,6 +59,9 @@ One render path, single-pass video generation via OpenRouter.
 - Other surfaces: `backend/auth.py` (Clerk; authz stays at HTTP/DB entry
   points), `frontend/src/upscale/` + `pages/VideoUpscaler.jsx`, and onboarding
   tours in `components/onboarding/` + `lib/onboarding/tours.js`.
+- Voice: `frontend/src/lib/listen.js` + `ListenDock` (mounted by `AppShell`) —
+  browser `speechSynthesis` only (no text leaves the device), text built from
+  the data model, never the DOM. See ADR 0088.
 
 ## Conventions
 
@@ -91,7 +94,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Eighty-seven decisions (0001–0087) now exist;
+Read `docs/adr/README.md` first. Eighty-eight decisions (0001–0088) now exist;
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
 orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused

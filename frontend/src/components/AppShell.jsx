@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { HelpCircle, Menu, Sparkles } from "lucide-react";
 import Sidebar, { MobileSidebar } from "./Sidebar";
+import { ListenDock } from "./ListenDock";
 import { useOnboarding } from "./onboarding/OnboardingProvider";
 
 const SIDEBAR_COLLAPSED_KEY = "hookforge_sidebar_collapsed";
@@ -118,6 +119,7 @@ export function AppShell({ children }) {
         <main id="main-content" tabIndex={-1} className="relative z-10 mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 outline-none md:px-6 md:py-8 lg:px-8">
           {children}
         </main>
+        <ListenDock />
       </div>
 
     </div>

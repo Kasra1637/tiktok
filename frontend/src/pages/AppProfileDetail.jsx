@@ -23,6 +23,7 @@ import {
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import PageHeader from "../components/PageHeader";
+import { ListenButton } from "../components/ListenButton";
 import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
@@ -102,8 +103,20 @@ function ClaimPanel({ profile }) {
   const review = list(profile.claims_review);
   const banned = list(profile.claims_banned);
   if (!approved.length && !review.length && !banned.length) return null;
+  // Spoken from the same lists the blocks render; the em-dash labels become
+  // commas because a dash reads as a stumble out loud.
+  const getBlocks = () => [
+    { label: "Approved, safe to use", values: approved },
+    { label: "Needs review, verify first", values: review },
+    { label: "Never use", values: banned },
+  ];
   return (
-    <ProfileCard testid="claim-guardrails" eyebrow="Claim guardrails" icon={ShieldCheck}>
+    <ProfileCard
+      testid="claim-guardrails"
+      eyebrow="Claim guardrails"
+      icon={ShieldCheck}
+      listen={{ id: "claims", label: "Claim guardrails", getBlocks }}
+    >
       {/* The "Needs review · N" badge that sat here was the same tier the list
           below already names, said again one line above it — and this group's
           bar counts what is to review as well. It also read "Needs review · 0"
@@ -485,6 +498,74 @@ export default function AppProfileDetail() {
     claimReview.length > 0 && `${claimReview.length} to review`,
   ]);
 
+  // Spoken content is built from the same data the cards render — never from
+  // the rendered DOM — so glyphs, chips and buttons can never end up in the
+  // audio. One builder per section; the master button walks the visible
+  // sections in page order.
+  const listenEssentials = () => [
+    {
+      label: "Product facts",
+      values: [
+        basics[0] && `Category, ${basics[0]}`,
+        basics[1] && `Platforms, ${basics[1]}`,
+        basics[2] && `Tone and voice, ${basics[2]}`,
+      ],
+    },
+    { label: "Core features", values: coreFeatures },
+    { label: "Primary use cases", values: useCases },
+    { label: "Never show in the video", values: mustNotShow },
+  ];
+  const listenProblems = () => [
+    { label: "Problems solved", values: problems },
+    { label: "Desired outcomes", values: outcomes },
+  ];
+  const listenMessaging = () => [
+    { label: "Differentiators", values: [profile?.differentiation] },
+    { label: "Known limitations", values: [profile?.known_limitations] },
+    { label: "The proof moment", values: [profile?.proof_moment] },
+    {
+      label: "Feature-to-outcome statements",
+      values: (profile?.outcome_statements || []).map((statement) =>
+        [
+          statement.outcome,
+          statement.who_feels_it && `Who feels it: ${statement.who_feels_it}`,
+          statement.from_feature && `From: ${statement.from_feature}`,
+          statement.how_it_helps && `How it helps: ${statement.how_it_helps}`,
+        ]
+          .filter(Boolean)
+          .join(". ")
+      ),
+    },
+  ];
+  const listenContext = () => [
+    { label: "When the app is reached for", values: usageMoments },
+    {
+      label: "Why they would not download",
+      values: (profile?.viewer_objections || []).map((objection) =>
+        [
+          objection.objection,
+          objection.what_they_do_now && `Does now: ${objection.what_they_do_now}`,
+          objection.honest_answer && `Answer: ${objection.honest_answer}`,
+        ]
+          .filter(Boolean)
+          .join(". ")
+      ),
+    },
+  ];
+  const listenAudience = () => [
+    { label: "Approved, safe to use", values: claimApproved },
+    { label: "Needs review, verify first", values: claimReview },
+    { label: "Never use", values: claimBanned },
+  ];
+  const listenProfile = () => [
+    `${profile?.brand_name?.trim() || "This app"}, profile overview.`,
+    ...(hasEssentials ? listenEssentials() : []),
+    ...(hasProblems ? listenProblems() : []),
+    ...(hasMessaging ? listenMessaging() : []),
+    ...(hasContext ? listenContext() : []),
+    ...(hasAudience ? listenAudience() : []),
+  ];
+
 return (
     <PageFrame className="page-content-enter space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
@@ -518,6 +599,12 @@ return (
             ) : (
               <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — blocked for video</Badge>
             )}
+            <ListenButton
+              id="profile"
+              label="this app profile"
+              testId="listen-profile"
+              getBlocks={listenProfile}
+            />
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
             </Button>
@@ -674,7 +761,7 @@ return (
           expand/collapse. */}
       <div className="min-w-0 space-y-4">
         {hasEssentials && (
-        <SectionGroup id="essentials" label="Essentials" icon={Layers} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup}>
+        <SectionGroup id="essentials" label="Essentials" icon={Layers} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup} listen={{ id: "essentials", label: "Essentials", getBlocks: listenEssentials }}>
         {basics.some(Boolean) ? (
           <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Info}>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_2fr]">
@@ -717,7 +804,7 @@ return (
         </SectionGroup>
         )}
         {hasProblems && (
-        <SectionGroup id="problems" label="Problems & outcomes" icon={Target} summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup}>
+        <SectionGroup id="problems" label="Problems & outcomes" icon={Target} summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup} listen={{ id: "problems", label: "Problems & outcomes", getBlocks: listenProblems }}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
               <ProfileCard eyebrow="Problems solved" icon={CircleAlert}>
@@ -733,7 +820,7 @@ return (
         </SectionGroup>
         )}
         {hasMessaging && (
-        <SectionGroup id="messaging" label="Messaging" icon={Megaphone} summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup}>
+        <SectionGroup id="messaging" label="Messaging" icon={Megaphone} summary={messagingSummary} open={openGroup === "messaging"} onToggle={toggleGroup} listen={{ id: "messaging", label: "Messaging", getBlocks: listenMessaging }}>
         {profile?.differentiation || profile?.known_limitations || profile?.proof_moment ? (
           <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
             {profile?.differentiation ? (
@@ -780,7 +867,7 @@ return (
         </SectionGroup>
         )}
         {hasContext && (
-        <SectionGroup id="context" label="Context & objections" icon={MessagesSquare} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup}>
+        <SectionGroup id="context" label="Context & objections" icon={MessagesSquare} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup} listen={{ id: "context", label: "Context & objections", getBlocks: listenContext }}>
         {usageMoments.length > 0 ? (
           <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
             <InfoChipList items={usageMoments} />
