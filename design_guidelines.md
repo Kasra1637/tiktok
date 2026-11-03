@@ -88,12 +88,12 @@ headline treatments.
 | Display | Space Grotesk | `h1`–`h4`, `.font-display` |
 | Body | Figtree | `body` default |
 | Mono | IBM Plex Mono | `code`, `.font-mono` — JSON specs, URLs, IDs |
-| Video overlay | Anton + 9 text faces | Demo + CTA canvas captions/end cards only |
+| Video overlay | Anton + 8 text faces | Demo + CTA canvas captions/end cards only |
 
 Display text carries tight tracking (`-0.02em`, `-0.03em` on `h1`/`.font-display`).
 
 Video overlay faces are canvas paint, not page type: they live outside the
-workspace type scale above. Ten options (Anton default + nine
+workspace type scale above. Nine options (Anton default + eight
 high-legibility text faces), each vendored as latin woff2 with an `@font-face`
 rule — a face the browser must fetch is a face the export can lose. Motion is
 one of ten named entrances computed from video time only, so the recording
@@ -133,7 +133,7 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.surface-glass` | Blurred chrome that sits over content (sidebar, top bar) |
 | `.surface-sunken` | Inset wells (code panels, empty slots) |
 | `.surface-interactive` | Adds hover lift; respects `prefers-reduced-motion` |
-| `.inset-panel` | The one bordered aside allowed **inside** a card (12px radius, 16px gutter) |
+| `.inset-panel` | The one bordered aside allowed **inside** a card (12px radius, 20px gutter; 16px inside `.surface-step`) |
 | `.inset-panel-strong` | The same aside, one step louder, for a group that carries a state the reader must not miss |
 | `.surface-flush` | A card that owns its own inner padding — accordion groups and list rows |
 | `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
@@ -156,7 +156,7 @@ forgotten utility produced a square card.
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
 `20px` on phones and `28px` from 768px up; `.surface-compact` (cards that are
 items in a grid) stays `16px`; `.inset-panel` is `20px`; `.surface-flush` is `0` for a card whose first
-child is a full-bleed row. `.surface-step` is the Create Video step card: `20px` at every width, the same gutter as the `.inset-panel` asides inside it, so a step's container and its containers share one padding. Do not add `p-*` to card JSX.
+child is a full-bleed row. `.surface-step` is the Create Video step card: `20px` at every width, and its own `.inset-panel` asides tighten to `16px` (the wizard-density override) so a step reads denser than the global 20px-plus-20px stack. Do not add `p-*` to card JSX.
 
 **Never nest `.surface` inside `.surface`.** A card inside an identical card
 is a box in a box: same fill, same border, same gutter. The level inside a
@@ -170,26 +170,28 @@ card is `.inset-panel`.
 | Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
 | Wizard step | `StepShell` + `SectionHeading` | 16px outline glyph, no tile | same section heading + muted description |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
-| Aside inside a card | `.inset-panel` (12px radius, 16px gutter) | none | 14px semibold, or an `.eyebrow` |
+| Aside inside a card | `.inset-panel` (12px radius, 20px gutter; 16px in a wizard step) | none | 14px semibold, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm font-semibold`, sentence case (angle rows) |
 | Field / detail row | label + control | none | 14px semibold label |
 
 **Record disclosures share one shape.** A collapsed section inside a record
-(History post copy, plan context) is a native `<details>`: a
-`rounded-xl` hairline border, a `text-xs` muted `summary` naming its
-contents, no JS open state. Same bar as a Disclosure row, boxed.
+(History post copy, plan context) is a native `<details>`: a `rounded-xl`
+hairline border and a `text-sm` semibold muted `summary` naming its contents —
+the same bar as a Disclosure row, boxed. The record keeps at most one open at a
+time: `open` is bound to record state and `togglePanel` runs on the summary.
 
-**Every topic-page subtitle fits a 54-60 character budget.** The line under the
-page title is the first thing read on a page and it is read at a glance: one
-sentence naming what the page is for. The six topic pages — App Profile,
-Demo + CTA, Create Video, Asset Library, Generation History, Analytics — share
-one length so the subtitle never becomes a paragraph that pushes the page's own
-content below the fold, and so its length is not re-decided per page. A detail
-page whose subtitle is the user's own text (App Profile detail renders the
-researched description) is exempt: that is the founder's app talking, not page
-chrome. `frontend/scripts/check-render-smoke.cjs` asserts the budget for all
-six and fails on a page that drops its subtitle entirely.
+**A topic-page subtitle is optional, and 54-60 characters when it appears.**
+The line under the page title is read at a glance, so where it exists it is
+one sentence naming what the page is for, inside the 54-60 character budget so
+it never becomes a paragraph that pushes the page's own content below the fold.
+App Profile, Demo + CTA, Analytics and Video Upscaler carry one; Create Video,
+Asset Library and Generation History carry none, because a subtitle there would
+only repeat the controls the page opens with.
+`frontend/scripts/check-render-smoke.cjs` pins each page's intended subtitle and
+fails the page that adds a redundant description. A detail page whose subtitle
+is the user's own text (App Profile detail renders the researched description)
+is exempt: that is the founder's app talking, not page chrome.
 
 **Every wizard subtitle is `text-sm` and fits a 55-60 character budget.** This
 is the same rule one level down from the masthead budget above: the helper
@@ -279,7 +281,7 @@ step opens with — a group label, one helper line, and the red action that jump
 to the missing choice — is `space-y-4` on every step, so the same ask reads as
 the same control wherever the founder meets it. It is related blocks, not a
 field's own stack: the action is a CTA that navigates, not a control the label
-belongs to. Every step sits in the one `.surface-step` card, and every aside in it is `.inset-panel`, so the padding is identical on all five steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
+belongs to. Every step sits in the one `.surface-step` card, and every aside in it is `.inset-panel`, so the padding is identical on all three steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
 
 ---
 
@@ -363,12 +365,16 @@ capped at two per card.
 ## 6. Components
 
 Build on `frontend/src/components/ui/*` (shadcn). Before hand-rolling anything,
-check whether a shared primitive already exists:
+check whether a shared primitive already exists. The living owner list is the
+frontend table in [docs/architecture.md](docs/architecture.md); this file owns
+how the primitives look, not how many exist. The chrome you will reach for most:
 
-`AppShell` · `Sidebar` · `PageHeader` · `Chip` · `StepDots` / `StepBadge` · `EmptyState` ·
-`VideoCard` · `Filmstrip` · `HookBreakdown` · `GenerationProgress` ·
-`JsonSpecPanel` · `SideBySideCompare` · `HookStyleSelector` · `RemixChat` ·
-`PageTransition` · `ErrorBoundary` · `LegalPage`
+`AppShell` · `Sidebar` · `PageFrame` · `PageHeader` · `IconTile` · `Chip` /
+`FactChip` / `FitBadge` · `StatusBadge` · `Disclosure` · `EmptyState` ·
+`SectionCard` / `SectionHeading` / `GroupLabel` · `AppPicker` · `ThumbPair` ·
+`PageTransition` · `ErrorBoundary` · `LegalPage` · `GenerationPanel` /
+`HookContinuityPanel` · `PostKitSection` · `SelectionPanels` / `ReviewPanels` ·
+`OnboardingProvider` · `DemoCtaEditor`
 
 ### Button variants
 
@@ -409,23 +415,23 @@ accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 `indigo` and `coral` are tinted chips (`--indigo-10` / `--coral-12` fills) —
 accents, not buttons. Plus shadcn's `default` / `secondary` / `destructive` / `outline`.
 
-**One pattern per job.** `StepDots` (dot-and-rail progress for a screen's own
-linear flow) and `StepBadge` (numbered badge beside a step heading) in
-`components/Stepper.jsx` are the only progress vocabulary. Don't hand-roll a
-second model beside them.
+**One pattern per job.** Step progress is the wizard's own `pill-studio` pill row
+in Create Video (`data-testid="step-pill-*"`): the pill carries state in its ring
+and tick glyph, never in position. Generation status uses `StatusBadge`. Don't
+hand-roll a second progress model beside these.
 
 Progress is scoped to a single screen's steps, not the whole app pipeline —
 cross-page position is conveyed by the sidebar's active nav item. An earlier
 four-stage pipeline stepper (find → analyze → swap → video) was specified here
-but never imported by anything, while FaceSwap hand-rolled its own dots; the
-shipped model is the one documented above.
+but never imported by anything; the shipped model is the one documented above.
 
 ---
 
 ## 7. Motion
 
 Library: `framer-motion` (page transitions, card entrance). CSS keyframes cover
-ambient motion (`float-slow`, `fade-up`, `pulse-ring`, `shimmer-sweep`, `marquee-x`).
+ambient and entry motion (`float-slow`, `fade-up`, `shimmer-sweep`, `marquee-x`,
+`page-content-enter`).
 
 Durations: fast `150ms`, base `220ms`, slow `320ms`. Workspace route
 entrances are `120ms`; the primary page content uses the shared `150ms`
@@ -438,7 +444,7 @@ reduced motion leaves both the skeleton and page content static.
 1. **Never `transition: all`** — it breaks transforms. Enumerate properties:
    `transition-[transform,box-shadow,border-color]`.
 2. **Always honor `prefers-reduced-motion`** — in CSS via the media query, and
-   in JS via `useReducedMotion()` (see `VideoCard`).
+   in JS via `useReducedMotion()` (see `PageTransition`, `EmptyState`).
 3. Hover = 1–2px lift plus shadow tighten. Entrance = fade + 6–12px `y`.
 4. Stagger list entrance with a capped delay (`Math.min(index * 0.04, 0.32)`).
 
@@ -448,10 +454,11 @@ reduced motion leaves both the skeleton and page content static.
 
 - **Skeletons must mirror the real layout** — match the actual aspect ratios and
   rail widths so nothing reflows on load. Never a bare centered spinner.
-- Multi-stage progress via `GenerationProgress`: download → extract → analyze →
-  prepare spec → generate.
-- **Images always degrade gracefully.** `VideoCard`'s chain is direct URL →
-  backend `/api/proxy-thumb` → `ImageOff` placeholder that preserves card shape.
+- Multi-stage work narrates in place — the plan's phase line (`PlanPhaseLine`:
+  "Writing the hook…") and the tailoring count — never a bare spinner.
+- **Images always degrade gracefully.** When a thumbnail or asset cannot render,
+  keep the tile's shape with a placeholder glyph (`ImageOff` in Asset Library)
+  rather than collapsing the layout.
 - Transient errors → Sonner toast. Job failures → persistent `Alert` with retry.
 - Empty states use the shared `EmptyState` component.
 
@@ -477,7 +484,7 @@ reduced motion leaves both the skeleton and page content static.
   `components/ui/*`.
 - Icons from `lucide-react`. **Never emoji as icons.**
 - `data-testid` on every interactive and key informational element, kebab-case
-  and role-based: `niche-selector-tabs`, `analyze-hook-button`,
-  `filmstrip-frame-button-0`, `face-swap-generated-image`.
+  and role-based: `create-nav-link`, `brand-nav-link`, `demo-cta-export`,
+  `templates-generate`.
 - Duplicated instances of one nav model must not produce duplicate test ids —
   the mobile sidebar prefixes its ids with `mobile-`.
