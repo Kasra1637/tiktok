@@ -7526,6 +7526,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             platforms: ["iOS"],
             core_features: ["Voice entries", "Mood trends"],
             claims_approved: ["Track your mood over time"],
+            must_not_show: ["A doctor promising a cure"],
+            outcome_statements: [
+              {
+                outcome: "Insomnia eases",
+                who_feels_it: "People who ruminate",
+                from_feature: "Evening wind-down",
+                how_it_helps: "Ten quiet minutes close the loop",
+              },
+            ],
+            viewer_objections: [
+              {
+                objection: "The notebook always wins",
+                what_they_do_now: "A dusty paper journal",
+                honest_answer: "No writing required after a long day",
+              },
+            ],
           }),
           getContentAngles: async () => ({ angles: [] }),
           getStudioProjects: async () => ({ projects: [] }),
@@ -7555,6 +7571,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
       if (!ctx.container.querySelector('[data-testid="listen-claims"]')) {
         throw new Error("the claim guardrails card has no listen toggle");
+      }
+      for (const id of ["listen-facts", "listen-never-show", "listen-statements", "listen-objections"]) {
+        if (!ctx.container.querySelector(`[data-testid="${id}"]`)) {
+          throw new Error(`the ${id} card has no listen toggle`);
+        }
+      }
+      const objections = ctx.container.querySelector('[data-testid="listen-objections"]');
+      await clickEl(ctx, objections);
+      if (!speech.spoken.join(" ").includes("The notebook always wins")) {
+        throw new Error("the objections card did not read its own text aloud");
       }
       await clickEl(ctx, essentials);
       if (!speech.spoken.length) throw new Error("the speak engine was never asked to say anything");

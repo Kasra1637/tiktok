@@ -500,9 +500,9 @@ export default function AppProfileDetail() {
 
   // Spoken content is built from the same data the cards render — never from
   // the rendered DOM — so glyphs, chips and buttons can never end up in the
-  // audio. One builder per section; the master button walks the visible
-  // sections in page order.
-  const listenEssentials = () => [
+  // audio. One builder per card; the group bars and the master button compose
+  // these same blocks, so a read at any level says exactly the same words.
+  const listenFacts = () => [
     {
       label: "Product facts",
       values: [
@@ -511,18 +511,24 @@ export default function AppProfileDetail() {
         basics[2] && `Tone and voice, ${basics[2]}`,
       ],
     },
-    { label: "Core features", values: coreFeatures },
-    { label: "Primary use cases", values: useCases },
-    { label: "Never show in the video", values: mustNotShow },
   ];
-  const listenProblems = () => [
-    { label: "Problems solved", values: problems },
-    { label: "Desired outcomes", values: outcomes },
+  const listenCoreFeatures = () => [{ label: "Core features", values: coreFeatures }];
+  const listenUseCases = () => [{ label: "Primary use cases", values: useCases }];
+  const listenNeverShow = () => [
+    { label: "Never show in the video, enforced", values: mustNotShow },
   ];
-  const listenMessaging = () => [
+  const listenProblemsSolved = () => [{ label: "Problems solved", values: problems }];
+  const listenOutcomes = () => [{ label: "Desired outcomes", values: outcomes }];
+  const listenDifferentiators = () => [
     { label: "Differentiators", values: [profile?.differentiation] },
+  ];
+  const listenLimitations = () => [
     { label: "Known limitations", values: [profile?.known_limitations] },
+  ];
+  const listenProofMoment = () => [
     { label: "The proof moment", values: [profile?.proof_moment] },
+  ];
+  const listenStatements = () => [
     {
       label: "Feature-to-outcome statements",
       values: (profile?.outcome_statements || []).map((statement) =>
@@ -537,8 +543,10 @@ export default function AppProfileDetail() {
       ),
     },
   ];
-  const listenContext = () => [
+  const listenMoments = () => [
     { label: "When the app is reached for", values: usageMoments },
+  ];
+  const listenObjections = () => [
     {
       label: "Why they would not download",
       values: (profile?.viewer_objections || []).map((objection) =>
@@ -552,11 +560,27 @@ export default function AppProfileDetail() {
       ),
     },
   ];
-  const listenAudience = () => [
+  const listenClaims = () => [
     { label: "Approved, safe to use", values: claimApproved },
     { label: "Needs review, verify first", values: claimReview },
     { label: "Never use", values: claimBanned },
   ];
+  // Group bars speak these composed views of the same card blocks.
+  const listenEssentials = () => [
+    ...listenFacts(),
+    ...listenCoreFeatures(),
+    ...listenUseCases(),
+    ...listenNeverShow(),
+  ];
+  const listenProblems = () => [...listenProblemsSolved(), ...listenOutcomes()];
+  const listenMessaging = () => [
+    ...listenDifferentiators(),
+    ...listenLimitations(),
+    ...listenProofMoment(),
+    ...listenStatements(),
+  ];
+  const listenContext = () => [...listenMoments(), ...listenObjections()];
+  const listenAudience = () => [...listenClaims()];
   const listenProfile = () => [
     `${profile?.brand_name?.trim() || "This app"}, profile overview.`,
     ...(hasEssentials ? listenEssentials() : []),
@@ -763,7 +787,7 @@ return (
         {hasEssentials && (
         <SectionGroup id="essentials" label="Essentials" icon={Layers} summary={essentialsSummary} open={openGroup === "essentials"} onToggle={toggleGroup} listen={{ id: "essentials", label: "Essentials", getBlocks: listenEssentials }}>
         {basics.some(Boolean) ? (
-          <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Info}>
+          <ProfileCard testid="profile-facts" eyebrow="Product facts" icon={Info} listen={{ id: "facts", label: "Product facts", getBlocks: listenFacts }}>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_2fr]">
               <ProfileField label="Category" value={basics[0]} />
               <ProfileField label="Platforms" value={basics[1]} />
@@ -778,12 +802,12 @@ return (
         {coreFeatures.length > 0 || useCases.length > 0 ? (
           <CardGrid className="md:grid-cols-2">
             {coreFeatures.length > 0 ? (
-              <ProfileCard eyebrow="Core features" icon={Sparkles}>
+              <ProfileCard eyebrow="Core features" icon={Sparkles} listen={{ id: "core-features", label: "Core features", getBlocks: listenCoreFeatures }}>
                 <InfoChipList items={coreFeatures} />
               </ProfileCard>
             ) : null}
             {useCases.length > 0 ? (
-              <ProfileCard eyebrow="Primary use cases" icon={Compass}>
+              <ProfileCard eyebrow="Primary use cases" icon={Compass} listen={{ id: "use-cases", label: "Primary use cases", getBlocks: listenUseCases }}>
                 <InfoChipList items={useCases} />
               </ProfileCard>
             ) : null}
@@ -794,7 +818,7 @@ return (
             than context it may use or ignore. The wording matters — the old
             label promised the same enforcement over a field that had none. */}
         {mustNotShow.length > 0 ? (
-          <ProfileCard eyebrow="Never show in the video (enforced)" icon={Ban} tone="enforced">
+          <ProfileCard eyebrow="Never show in the video (enforced)" icon={Ban} tone="enforced" listen={{ id: "never-show", label: "Never show in the video, enforced", getBlocks: listenNeverShow }}>
             <InfoChipList
               items={mustNotShow}
               tone="enforced"
@@ -807,12 +831,12 @@ return (
         <SectionGroup id="problems" label="Problems & outcomes" icon={Target} summary={problemsSummary} open={openGroup === "problems"} onToggle={toggleGroup} listen={{ id: "problems", label: "Problems & outcomes", getBlocks: listenProblems }}>
           <CardGrid className="md:grid-cols-2">
             {problems.length > 0 ? (
-              <ProfileCard eyebrow="Problems solved" icon={CircleAlert}>
+              <ProfileCard eyebrow="Problems solved" icon={CircleAlert} listen={{ id: "problems-solved", label: "Problems solved", getBlocks: listenProblemsSolved }}>
                 <InfoChipList items={problems} />
               </ProfileCard>
             ) : null}
             {outcomes.length > 0 ? (
-              <ProfileCard eyebrow="Desired outcomes" icon={Trophy}>
+              <ProfileCard eyebrow="Desired outcomes" icon={Trophy} listen={{ id: "desired-outcomes", label: "Desired outcomes", getBlocks: listenOutcomes }}>
                 <InfoChipList items={outcomes} />
               </ProfileCard>
             ) : null}
@@ -825,7 +849,7 @@ return (
           <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
             {profile?.differentiation ? (
               <div className="h-full md:row-span-2">
-                <ProfileCard eyebrow="Differentiators" icon={BadgeCheck}>
+                <ProfileCard eyebrow="Differentiators" icon={BadgeCheck} listen={{ id: "differentiators", label: "Differentiators", getBlocks: listenDifferentiators }}>
                   <ProfileField value={profile.differentiation} />
                 </ProfileCard>
               </div>
@@ -833,12 +857,12 @@ return (
             {profile?.known_limitations || profile?.proof_moment ? (
               <div className="flex h-full min-w-0 flex-col gap-2">
                 {profile?.known_limitations ? (
-                    <ProfileCard eyebrow="Known limitations" icon={AlertTriangle}>
+                    <ProfileCard eyebrow="Known limitations" icon={AlertTriangle} listen={{ id: "limitations", label: "Known limitations", getBlocks: listenLimitations }}>
                     <ProfileField value={profile.known_limitations} />
                   </ProfileCard>
                 ) : null}
                 {profile?.proof_moment ? (
-                    <ProfileCard eyebrow="The proof moment" icon={Star}>
+                    <ProfileCard eyebrow="The proof moment" icon={Star} listen={{ id: "proof-moment", label: "The proof moment", getBlocks: listenProofMoment }}>
                     <ProfileField value={profile.proof_moment} />
                   </ProfileCard>
                 ) : null}
@@ -847,7 +871,7 @@ return (
           </div>
         ) : null}
           {Array.isArray(profile?.outcome_statements) && profile.outcome_statements.length > 0 && (
-            <ProfileCard eyebrow="Feature-to-outcome statements" icon={ListChecks}>
+            <ProfileCard eyebrow="Feature-to-outcome statements" icon={ListChecks} listen={{ id: "statements", label: "Feature-to-outcome statements", getBlocks: listenStatements }}>
               <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
               {profile.outcome_statements.map((s, i) => (
                 <StatementCard
@@ -869,12 +893,12 @@ return (
         {hasContext && (
         <SectionGroup id="context" label="Context & objections" icon={MessagesSquare} summary={contextSummary} open={openGroup === "context"} onToggle={toggleGroup} listen={{ id: "context", label: "Context & objections", getBlocks: listenContext }}>
         {usageMoments.length > 0 ? (
-          <ProfileCard eyebrow="When the app is reached for" icon={Clock}>
+          <ProfileCard eyebrow="When the app is reached for" icon={Clock} listen={{ id: "moments", label: "When the app is reached for", getBlocks: listenMoments }}>
             <InfoChipList items={usageMoments} />
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-            <ProfileCard eyebrow="Why they would not download" icon={MessageCircleQuestion}>
+            <ProfileCard eyebrow="Why they would not download" icon={MessageCircleQuestion} listen={{ id: "objections", label: "Why they would not download", getBlocks: listenObjections }}>
               <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
               {profile.viewer_objections.map((o, i) => (
                 <StatementCard

@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-02
 - **Anchors:** `frontend/src/lib/listen.js` (controller + `buildSpeechText`), `frontend/src/components/ListenButton.jsx`, `frontend/src/components/ListenDock.jsx` (mounted once by `AppShell`); smoke check "profile sections read aloud through the listen dock"
-- **Shapes:** the same read in two places — App Profile groups and History's plan context — through one controller, so a third surface is a builder, not a second player
+- **Shapes:** card, group and page-master reads on App Profile, plus History's plan context — all through one controller, so the next surface is a builder, not a second player
 
 ## Context
 

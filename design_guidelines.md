@@ -431,7 +431,8 @@ but never imported by anything; the shipped model is the one documented above.
 ### Voice (read aloud)
 
 Read-aloud controls are the `.pill-studio` icon button (`ListenButton`) placed
-once per section — in a group bar or a card header — and the single
+on every text-heavy card, on each group bar and on the page-level master
+control — plus the single
 `ListenDock` that `AppShell` mounts for the whole session (pause, stop,
 0.75/1/1.25/1.5× rate, persisted). Speech is built from the data model, never
 scraped from the DOM, the controls hide entirely where the browser cannot
