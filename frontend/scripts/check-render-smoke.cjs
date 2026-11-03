@@ -7620,6 +7620,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // The editor page is where founders stare at the same heavy text. Every
+  // labelled field and every group bar there carries a listen control; if a
+  // later refactor drops them the editor goes quiet again.
+  await check("the App Profile editor puts a speaker on every text-heavy field", async () => {
+    const src = fs.readFileSync(path.join(SRC, "pages", "BrandSetup.jsx"), "utf8");
+    const fieldSpeakers = [...src.matchAll(/listen=\{listen(?:Field|Paragraph)\(/g)].length;
+    if (fieldSpeakers < 15) {
+      throw new Error(`expected 15+ field speakers on BrandSetup, found ${fieldSpeakers}`);
+    }
+    for (const group of ["brand-basics", "brand-does", "brand-direction", "brand-audience", "brand-claims"]) {
+      if (!src.includes(`id: "${group}"`)) {
+        throw new Error(`BrandSetup lost the ${group} group speaker`);
+      }
+    }
+  });
+
   console.log("");
   console.log("Checking the App Profile research actions...");
   await runProfileResearchActionsChecks();

@@ -17,6 +17,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import PageHeader from "../components/PageHeader";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
+import { ListenButton } from "../components/ListenButton";
 import { SectionGroup } from "../components/profileUi";
 import { AppPicker } from "../components/AppPicker";
 import { Disclosure } from "../components/Disclosure";
@@ -176,11 +177,23 @@ function profileToForm(data) {
 
 /* Labelled form field wrapper. The label is the shared GroupLabel eyebrow —
    the same 12/600 uppercase muted label the angles page uses for its own
-   fields — so a form row reads like a detail row. Hint stays 12/18 muted. */
-function Field({ label, hint, children }) {
+   fields — so a form row reads like a detail row. Hint stays 12/18 muted.
+   `listen` puts a speaker on the label row for the field's current text. */
+function Field({ label, hint, listen, children }) {
   return (
     <div className="space-y-2">
-      <GroupLabel as="label">{label}</GroupLabel>
+      <div className="flex items-center justify-between gap-2">
+        <GroupLabel as="label">{label}</GroupLabel>
+        {listen && (
+          <ListenButton
+            id={listen.id}
+            label={listen.label || label}
+            getBlocks={listen.getBlocks}
+            testId={listen.testId}
+            className="h-7 w-7"
+          />
+        )}
+      </div>
       {children}
       {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
     </div>
@@ -224,6 +237,57 @@ export default function BrandSetup() {
   const [loadingActive, setLoadingActive] = useState(true);
   useTourEligibility("brand", !loadingActive && !brand && profiles.length === 0 && !analyzeError && !researching);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // Split a comma- or newline-separated field into speakable values.
+  const spokenList = (key) =>
+    String(form[key] || "")
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const listenField = (key, label) => ({
+    id: `brand-${key}`,
+    label,
+    testId: `listen-brand-${key}`,
+    getBlocks: () => [{ label, values: spokenList(key) }],
+  });
+  const listenParagraph = (key, label) => ({
+    id: `brand-${key}`,
+    label,
+    testId: `listen-brand-${key}`,
+    getBlocks: () => [{ label, values: [form[key]] }],
+  });
+  const listenBasics = () => [
+    { label: "App name", values: [form.brand_name] },
+    { label: "Description", values: [form.brand_description] },
+    { label: "App category", values: [form.app_category] },
+    { label: "Niche", values: [form.niche] },
+    { label: "Platforms", values: spokenList("platforms") },
+    { label: "Tone and voice", values: [form.tone_voice] },
+  ];
+  const listenDoes = () => [
+    { label: "Core features", values: spokenList("core_features") },
+    { label: "Primary use cases", values: spokenList("primary_use_cases") },
+    { label: "Problems solved", values: spokenList("problems_solved") },
+    { label: "Desired outcomes", values: spokenList("desired_outcomes") },
+    { label: "Feature-to-outcome statements", values: [form.outcome_statements] },
+  ];
+  const listenDirection = () => [
+    { label: "When is the app reached for", values: spokenList("usage_moments") },
+    { label: "The proof moment", values: [form.proof_moment] },
+    { label: "Never show in the video", values: spokenList("must_not_show") },
+    { label: "Why they would not download", values: [form.viewer_objections] },
+  ];
+  const listenAudience = () => [
+    { label: "Target audience", values: [form.target_audience] },
+    { label: "Ideal Customer", values: [form.ideal_customer_profile] },
+    { label: "Audience segments", values: spokenList("icp_segments") },
+    { label: "What Sets You Apart", values: [form.differentiation] },
+  ];
+  const listenClaims = () => [
+    { label: "Approved claims", values: spokenList("claims_approved") },
+    { label: "Claims needing review", values: spokenList("claims_review") },
+    { label: "Banned claims", values: spokenList("claims_banned") },
+  ];
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -975,9 +1039,9 @@ export default function BrandSetup() {
           <>
             <div className="space-y-4">
               {/* ── Basics ── */}
-              <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup}>
+              <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup} listen={{ id: "brand-basics", label: "Basics", getBlocks: listenBasics }}>
               <div className="space-y-2">
-                <Field label="App name">
+                <Field label="App name" listen={listenParagraph("brand_name", "App name")}>
                   <Input
                     value={form.brand_name}
                     onChange={handleFieldChange("brand_name")}
@@ -986,7 +1050,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Description">
+                <Field label="Description" listen={listenParagraph("brand_description", "Description")}>
                   <Textarea
                     value={form.brand_description}
                     onChange={handleFieldChange("brand_description")}
@@ -997,7 +1061,7 @@ export default function BrandSetup() {
                 </Field>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Field label="App category">
+                  <Field label="App category" listen={listenParagraph("app_category", "App category")}>
                     <Input
                       value={form.app_category}
                       onChange={handleFieldChange("app_category")}
@@ -1005,7 +1069,7 @@ export default function BrandSetup() {
                       data-testid="app-category-field"
                     />
                   </Field>
-                  <Field label="Niche">
+                  <Field label="Niche" listen={listenParagraph("niche", "Niche")}>
                     <Input
                       value={form.niche}
                       onChange={handleFieldChange("niche")}
@@ -1016,7 +1080,7 @@ export default function BrandSetup() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Field label="Platforms" hint="Comma-separated.">
+                  <Field label="Platforms" hint="Comma-separated." listen={listenField("platforms", "Platforms")}>
                     <Input
                       value={form.platforms}
                       onChange={handleFieldChange("platforms")}
@@ -1024,7 +1088,7 @@ export default function BrandSetup() {
                       data-testid="app-platforms-field"
                     />
                   </Field>
-                  <Field label="Tone / voice">
+                  <Field label="Tone / voice" listen={listenParagraph("tone_voice", "Tone / voice")}>
                     <Input
                       value={form.tone_voice}
                       onChange={handleFieldChange("tone_voice")}
@@ -1037,9 +1101,9 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── What the app does ── */}
-              <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup}>
+              <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup} listen={{ id: "brand-does", label: "What the app does", getBlocks: listenDoes }}>
               <div className="space-y-2">
-                <Field label="Core features" hint="Comma-separated — only features the app really has.">
+                <Field label="Core features" hint="Comma-separated — only features the app really has." listen={listenField("core_features", "Core features")}>
                   <Input
                     value={form.core_features}
                     onChange={handleFieldChange("core_features")}
@@ -1048,7 +1112,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Primary use cases" hint="Comma-separated.">
+                <Field label="Primary use cases" hint="Comma-separated." listen={listenField("primary_use_cases", "Primary use cases")}>
                   <Input
                     value={form.primary_use_cases}
                     onChange={handleFieldChange("primary_use_cases")}
@@ -1057,7 +1121,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Problems solved" hint="Comma-separated.">
+                <Field label="Problems solved" hint="Comma-separated." listen={listenField("problems_solved", "Problems solved")}>
                   <Input
                     value={form.problems_solved}
                     onChange={handleFieldChange("problems_solved")}
@@ -1066,7 +1130,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Desired outcomes" hint="Comma-separated.">
+                <Field label="Desired outcomes" hint="Comma-separated." listen={listenField("desired_outcomes", "Desired outcomes")}>
                   <Input
                     value={form.desired_outcomes}
                     onChange={handleFieldChange("desired_outcomes")}
@@ -1083,6 +1147,7 @@ export default function BrandSetup() {
                 <Field
                   label="Feature-to-outcome statements"
                   hint="Four lines per statement, blank line between: the benefit / who feels it / the feature it comes from / how it helps. These become the video's pitch."
+                  listen={listenParagraph("outcome_statements", "Feature-to-outcome statements")}
                 >
                   <Textarea
                     value={form.outcome_statements}
@@ -1101,7 +1166,7 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── Video direction ── */}
-              <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup}>
+              <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup} listen={{ id: "brand-direction", label: "Video direction", getBlocks: listenDirection }}>
               <div className="space-y-2">
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
@@ -1110,6 +1175,7 @@ export default function BrandSetup() {
                 <Field
                   label="When is the app reached for?"
                   hint="Concrete moments, not categories — these set the scene the video is shot in."
+                  listen={listenField("usage_moments", "When the app is reached for")}
                 >
                   <Textarea
                     value={productsToText(form.usage_moments)}
@@ -1125,6 +1191,7 @@ export default function BrandSetup() {
                 <Field
                   label="The proof moment"
                   hint="One moment the camera can film that makes the main claim believable."
+                  listen={listenParagraph("proof_moment", "The proof moment")}
                 >
                   <Input
                     value={form.proof_moment}
@@ -1141,6 +1208,7 @@ export default function BrandSetup() {
                 <Field
                   label="Never show in the video"
                   hint="One per line. Attached to every render — use it for things a camera could actually depict."
+                  listen={listenField("must_not_show", "Never show in the video")}
                 >
                   <Textarea
                     value={productsToText(form.must_not_show)}
@@ -1159,6 +1227,7 @@ export default function BrandSetup() {
                 <Field
                   label="Why they would not download"
                   hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
+                  listen={listenParagraph("viewer_objections", "Why they would not download")}
                 >
                   <Textarea
                     value={form.viewer_objections}
@@ -1177,10 +1246,10 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── Audience ── */}
-              <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
+              <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup} listen={{ id: "brand-audience", label: "Audience", getBlocks: listenAudience }}>
               <div className="space-y-2">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Field label="Target audience">
+                  <Field label="Target audience" listen={listenParagraph("target_audience", "Target audience")}>
                     <Input
                       value={form.target_audience}
                       onChange={handleFieldChange("target_audience")}
@@ -1190,7 +1259,7 @@ export default function BrandSetup() {
                   </Field>
                 </div>
 
-                <Field label="Ideal Customer">
+                <Field label="Ideal Customer" listen={listenParagraph("ideal_customer_profile", "Ideal Customer")}>
                   <Textarea
                     value={form.ideal_customer_profile}
                     onChange={handleFieldChange("ideal_customer_profile")}
@@ -1200,7 +1269,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Audience segments" hint="One segment per line.">
+                <Field label="Audience segments" hint="One segment per line." listen={listenField("icp_segments", "Audience segments")}>
                   <Textarea
                     value={form.icp_segments}
                     onChange={handleFieldChange("icp_segments")}
@@ -1210,7 +1279,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="What Sets You Apart">
+                <Field label="What Sets You Apart" listen={listenParagraph("differentiation", "What Sets You Apart")}>
                   <Textarea
                     value={form.differentiation}
                     onChange={handleFieldChange("differentiation")}
@@ -1223,9 +1292,9 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── Claim guardrails ── */}
-              <SectionGroup id="claims" label="Claim guardrails" icon={ShieldAlert} summary={claimsSummary} open={openGroup === "claims"} onToggle={toggleGroup}>
+              <SectionGroup id="claims" label="Claim guardrails" icon={ShieldAlert} summary={claimsSummary} open={openGroup === "claims"} onToggle={toggleGroup} listen={{ id: "brand-claims", label: "Claim guardrails", getBlocks: listenClaims }}>
               <div className="space-y-2">
-                <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos.">
+                <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos." listen={listenField("claims_approved", "Approved claims")}>
                   <Input
                     value={form.claims_approved}
                     onChange={handleFieldChange("claims_approved")}
@@ -1234,7 +1303,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Claims needing review" hint="Comma-separated — verify before use.">
+                <Field label="Claims needing review" hint="Comma-separated — verify before use." listen={listenField("claims_review", "Claims needing review")}>
                   <Input
                     value={form.claims_review}
                     onChange={handleFieldChange("claims_review")}
@@ -1243,7 +1312,7 @@ export default function BrandSetup() {
                   />
                 </Field>
 
-                <Field label="Banned claims" hint="Comma-separated — promos must never make these.">
+                <Field label="Banned claims" hint="Comma-separated — promos must never make these." listen={listenField("claims_banned", "Banned claims")}>
                   <Input
                     value={form.claims_banned}
                     onChange={handleFieldChange("claims_banned")}
