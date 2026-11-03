@@ -704,6 +704,7 @@ async def init_db():
                 -- means the plan fitted as written.
                 plan_trimmed_chars INTEGER DEFAULT 0,
                 beat_timeline TEXT,
+                location TEXT,
                 visual_direction TEXT,
                 feature_emphasis TEXT,
                 -- Replaces feature_emphasis: one sentence telling the founder what
@@ -841,6 +842,7 @@ async def init_db():
                 completed_at TEXT,
                 created_at TEXT,
                 updated_at TEXT,
+                location TEXT,
                 user_id TEXT DEFAULT 'anonymous'
             );
             CREATE INDEX IF NOT EXISTS idx_generations_user
@@ -1256,6 +1258,9 @@ async def init_db():
             # angle (ADR 0084). Written only by the plan endpoint. Pre-column
             # rows read as NULL, which shows no note: old drafts are untouched.
             ("studio_projects", "angle_scene_note", "TEXT"),
+            # Unified place description for Review, strategy, render and result.
+            ("studio_projects", "location", "TEXT"),
+            ("generations", "location", "TEXT"),
         ]
         for table, column, decl in influencer_migrations:
             cursor = await conn.execute(f"PRAGMA table_info({table})")
@@ -4225,7 +4230,7 @@ async def profile_direction_options(
     """The Review-step direction dropdowns for one App Profile.
 
     Deterministic category mapping, no model call: the same profile always
-    gets the same five option lists (setting, lighting, wardrobe, voice,
+    gets the same five option lists (Location, lighting, wardrobe, voice,
     tone). Options are pre-vetted by construction — none describes the
     presenter's face or body — but saving still runs the normal claim
     check, since the dropdown is a UX constraint, not a trust boundary.
@@ -4267,7 +4272,7 @@ async def refresh_profile_direction_options(
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
     field = (payload.field or "").strip().lower()
-    if field not in ("setting", "lighting", "wardrobe", "voice", "tone"):
+    if field not in ("location", "lighting", "wardrobe", "voice", "tone"):
         raise HTTPException(status_code=400, detail=f"Unknown direction field: {payload.field!r}.")
     angle = None
     if (payload.angle_id or "").strip():
@@ -4763,7 +4768,12 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
             strategy = json.loads(strategy)
         except (json.JSONDecodeError, TypeError):
             strategy = {}
+    if isinstance(strategy, dict) and strategy:
+        normalized = normalize_strategy(strategy)
+        strategy = {**strategy, **normalized}
     out["strategy"] = strategy if isinstance(strategy, dict) else {}
+    if not (out.get("location") or "").strip():
+        out["location"] = ((out["strategy"].get("scene") or {}).get("location") or "").strip()
     out["strategy_is_current"] = out["strategy_is_current"] and (
         (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
     )
@@ -4841,14 +4851,14 @@ def _project_strategy(project: dict) -> dict:
     """
     strategy = (project or {}).get("strategy")
     if isinstance(strategy, dict):
-        return strategy
+        return {**strategy, **normalize_strategy(strategy)} if strategy else {}
     if not strategy:
         return {}
     try:
         parsed = json.loads(strategy)
     except (json.JSONDecodeError, TypeError):
         return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return {**parsed, **normalize_strategy(parsed)} if isinstance(parsed, dict) and parsed else {}
 
 
 async def _require_profile_for_studio(profile_id: str, user_id: str) -> dict:
@@ -5063,9 +5073,14 @@ async def update_studio_project(
                     existing = json.loads(existing)
                 except (json.JSONDecodeError, TypeError):
                     existing = {}
-            if not isinstance(value, dict):
-                value = existing if isinstance(existing, dict) else {}
-            value = normalize_strategy({**existing, **value} if isinstance(existing, dict) else value)
+            if isinstance(existing, dict) and existing:
+                existing = {**existing, **normalize_strategy(existing)}
+            incoming = value if isinstance(value, dict) else {}
+            merged_strategy = {**existing, **incoming} if isinstance(existing, dict) else incoming
+            if isinstance(existing, dict) and isinstance(incoming.get("scene"), dict):
+                merged_strategy["scene"] = {**(existing.get("scene") or {}), **incoming["scene"]}
+            normalized = normalize_strategy(merged_strategy)
+            value = {**merged_strategy, **normalized}
             value["camera_setup"] = (existing.get("camera_setup") or "handheld") if isinstance(existing, dict) else "handheld"
             set_clauses.append("strategy_version = strategy_version + 1")
             strategy_edited = True
@@ -5392,6 +5407,7 @@ async def generate_plan(
                 # different look than the one on the project, which is the plan
                 # overwriting their decisions instead of drafting the script.
                 audience=(payload.audience or row.get("audience") or "").strip(),
+                location=(row.get("location") or "").strip(),
                 visual_direction=look["visual_direction"],
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 profile_feedback=profile_feedback,
@@ -5459,7 +5475,7 @@ async def generate_plan(
     # renders anymore).
     await _execute(
         """UPDATE studio_projects SET
-             hook_line = ?, script = ?, beat_timeline = ?, visual_direction = ?,
+             hook_line = ?, script = ?, beat_timeline = ?, location = ?, visual_direction = ?,
              demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
              safety_report = ?, safety_summary = ?, objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
@@ -5467,7 +5483,7 @@ async def generate_plan(
              status = 'draft', updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
-         plan["visual_direction"], plan["demo_brief"], json.dumps([]),
+         plan.get("location") or "", plan["visual_direction"], plan["demo_brief"], json.dumps([]),
          plan["voice_direction"], plan["sound_direction"],
          json.dumps(report), summary, objective, duration, tone or None,
          trimmed_chars, look["note"] or None, now, project_id, user_id),
@@ -6199,15 +6215,16 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
          requested, seconds, segment_role, int(segment_index or 0), strategy_version,
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, prompt, json.dumps([]), now, now, now, user_id,
-         claim_key or None, camera_setup),
+         claim_key or None, camera_setup,
+         ((strategy or {}).get("scene") or {}).get("location") or ""),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request
@@ -6454,6 +6471,13 @@ DEMO_CTA_MAX_PARTS = 64
 DEMO_CTA_PART_TTL_SECONDS = 24 * 3600  # abandoned part dirs are swept after a day
 
 
+def _write_durable_upload_cache(target: Path, payload: bytes) -> None:
+    """Stage bytes for validation/processing before the existing object upload."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as cache_file:
+        cache_file.write(payload)
+
+
 def _demo_cta_upload_dir(upload_id: str) -> Path:
     """Stage dir for one chunked save, resolved from a strict UUID."""
     # GENERATED_ID_RE is the repo's one UUID rule; anything else here is a
@@ -6524,7 +6548,7 @@ async def _store_demo_cta_result(
         parent = await _fetch_one(
             "SELECT id, studio_project_id, brand_profile_id, template_id, template_version, "
             "script_version, duration, model, model_id, segment_role, segment_index, "
-            "strategy_version, post_kit FROM generations WHERE id = ? AND user_id = ?",
+            "strategy_version, post_kit, location FROM generations WHERE id = ? AND user_id = ?",
             (generation_id, user_id),
         )
         if not parent:
@@ -6559,9 +6583,9 @@ async def _store_demo_cta_result(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, attempt,
             prompt_used, retryable, approved, post_kit,
-            requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url)
+            requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url, location)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed',
-                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
             parent.get("studio_project_id") if parent else None,
@@ -6597,6 +6621,7 @@ async def _store_demo_cta_result(
             user_id,
             stored_path,
             r2_url,
+            parent.get("location") if parent else None,
         ),
     )
 
@@ -6659,7 +6684,7 @@ async def save_demo_cta_export(
     payload = await file.read()
     if not payload:
         raise HTTPException(status_code=400, detail="That file was empty.")
-    target.write_bytes(payload)
+    _write_durable_upload_cache(target, payload)
     return await _store_demo_cta_result(
         target=target,
         filename=file.filename or "",
@@ -8180,6 +8205,7 @@ async def generate_project_strategy(
         approved_plan = {
             "hook_line": row.get("hook_line") or "",
             "script": row.get("script") or "",
+            "location": row.get("location") or "",
             "visual_direction": angle_scene.reconcile_look(
                 row.get("visual_direction") or "", angle
             )["visual_direction"],
@@ -8701,7 +8727,7 @@ async def upload_asset(
 
     asset_id = str(uuid.uuid4())
     target = _asset_dir(profile_id) / f"{asset_id}{ext}"
-    target.write_bytes(raw)
+    _write_durable_upload_cache(target, raw)
 
     # No playability probe: the only uploadable kind is a still photograph,
     # so there is no audio whose decodability would need verifying up front.
@@ -8982,7 +9008,7 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   g.post_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at,
+                   g.post_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at, g.location,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
                    p.strategy_version, ca.kind AS angle_kind
             FROM generations g

@@ -32,22 +32,23 @@ export function useWizardDirections({ profileId, project, tone, angle, dispatchD
     };
   }, [profileId, angleId]);
 
-  const [dirSel, setDirSel] = useState({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
+  const [dirSel, setDirSel] = useState({ location: "", lighting: "", wardrobe: "", voice: "", tone: "" });
 
   useEffect(() => {
-    setDirSel({ setting: "", lighting: "", wardrobe: "", voice: "", tone: "" });
+    setDirSel({ location: "", lighting: "", wardrobe: "", voice: "", tone: "" });
   }, [profileId]);
 
   const savedDirectionsRef = useRef(null);
   savedDirectionsRef.current = {
     visual: project?.visual_direction || "",
+    location: project?.location || "",
     voice: project?.voice_direction || "",
     tone: project?.tone || tone || "",
   };
 
   useEffect(() => {
     if (!directionOptions) return;
-    const { visual: savedVisual, voice: savedVoice, tone: savedTone } = savedDirectionsRef.current;
+    const { visual: savedVisual, location: savedLocation, voice: savedVoice, tone: savedTone } = savedDirectionsRef.current;
     const matchPart = (text, list) =>
       (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
     const matchTone = (list) =>
@@ -57,7 +58,7 @@ export function useWizardDirections({ profileId, project, tone, angle, dispatchD
           savedTone.toLowerCase().includes(option.toLowerCase()))
       ) || "";
     setDirSel({
-      setting: matchPart(savedVisual, directionOptions.setting),
+      location: matchPart(savedLocation, directionOptions.location) || matchPart(savedVisual, directionOptions.location),
       lighting: matchPart(savedVisual, directionOptions.lighting),
       wardrobe: matchPart(savedVisual, directionOptions.wardrobe),
       voice: matchPart(savedVoice, directionOptions.voice),
@@ -68,7 +69,11 @@ export function useWizardDirections({ profileId, project, tone, angle, dispatchD
   const pickScenePart = (field) => (value) => {
     const next = { ...dirSel, [field]: value };
     setDirSel(next);
-    const composed = [next.setting, next.lighting, next.wardrobe].filter(Boolean).join(", ");
+    if (field === "location") {
+      dispatchDraft({ type: "edit-field", field: "location", value, omitDefault: true });
+      return;
+    }
+    const composed = [next.lighting, next.wardrobe].filter(Boolean).join(", ");
     dispatchDraft({ type: "edit-field", field: "visual_direction", value: composed, omitDefault: true });
   };
 

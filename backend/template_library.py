@@ -408,7 +408,7 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
 
 # Review-step direction dropdowns, keyed by the app's category group.
 #
-# Each group offers four plain-language options per field (setting, lighting,
+# Each group offers four plain-language options per field (Location, lighting,
 # wardrobe, voice direction, tone). The options are pre-vetted by
 # construction: none describes the presenter's face or body (the character
 # reference photograph is the only authority on appearance), and none makes
@@ -416,7 +416,7 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
 # trust boundary — saving still runs the normal claim check.
 DIRECTION_OPTIONS = {
     "wellness": {
-        "setting": [
+        "location": [
             "Quiet garden bench at golden hour",
             "Calm living room with a plant beside the chair",
             "Sunlit balcony with a simple chair",
@@ -448,7 +448,7 @@ DIRECTION_OPTIONS = {
         ],
     },
     "fitness": {
-        "setting": [
+        "location": [
             "Bright home gym corner with a mat",
             "Park bench beside a running path",
             "Clean kitchen counter with a shaker bottle",
@@ -480,7 +480,7 @@ DIRECTION_OPTIONS = {
         ],
     },
     "finance": {
-        "setting": [
+        "location": [
             "Tidy home office desk with a laptop",
             "Bright kitchen table with papers neatly stacked",
             "Minimal living room with a bookshelf",
@@ -512,7 +512,7 @@ DIRECTION_OPTIONS = {
         ],
     },
     "food": {
-        "setting": [
+        "location": [
             "Home kitchen counter with ingredients laid out",
             "Cozy dining table with a finished dish",
             "Bright market aisle",
@@ -544,7 +544,7 @@ DIRECTION_OPTIONS = {
         ],
     },
     "learning": {
-        "setting": [
+        "location": [
             "Tidy study desk with books stacked",
             "Quiet library corner table",
             "Sunlit park table with a notebook",
@@ -576,7 +576,7 @@ DIRECTION_OPTIONS = {
         ],
     },
     "work": {
-        "setting": [
+        "location": [
             "Modern home office with a monitor behind",
             "Bright coworking desk corner",
             "Minimal living room workspace",
@@ -608,10 +608,10 @@ DIRECTION_OPTIONS = {
         ],
     },
     "default": {
-        "setting": [
+        "location": [
             "Bright tidy living room",
             "Airy rooftop corner with daylight",
-            "Simple home office background",
+            "Simple home office with a neutral wall",
             "Neutral balcony with soft light",
         ],
         "lighting": [

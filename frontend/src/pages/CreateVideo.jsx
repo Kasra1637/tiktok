@@ -2420,6 +2420,22 @@ export default function CreateVideo() {
                 A note to you, not the model — never reaches the render.
               </p>
             </div>
+            <div className="space-y-2" data-testid="review-location-field">
+              <label htmlFor="review-location" className="text-sm font-semibold text-foreground">
+                Location
+              </label>
+              <Textarea
+                id="review-location"
+                value={editValue("location", "")}
+                onChange={(e) => dispatchDraft({ type: "edit-field", field: "location", value: e.target.value })}
+                className="min-h-[86px]"
+                placeholder="Describe the place, visible surroundings, time of day and context."
+                data-testid="review-location-input"
+              />
+              <p className="text-sm text-muted-foreground" data-subtitle="" data-testid="review-location-help">
+                This exact Location is used by the strategy, render prompt and saved result.
+              </p>
+            </div>
             {/* Direction is optional refinement, and it was the densest stack
                 in the step: two section labels, a camera select, five
                 dropdowns and a live preview between the plan's words and the
@@ -2466,18 +2482,18 @@ export default function CreateVideo() {
                 <p className="text-sm text-muted-foreground">Camera setup controls framing and camera movement. Save changes, then rebuild and review the strategy before rendering.</p>
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <p className="text-sm font-semibold">Setting, lighting &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">Options matched to this app; pick all three for a scene.</p>
+                <p className="text-sm font-semibold">Location, lighting &amp; wardrobe</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">Location updates the field above; lighting and wardrobe refine the same scene.</p>
                 <DirectionSelect
-                  id="review-setting"
-                  testId="review-setting"
-                  label="Setting"
-                  value={dirSel.setting}
-                  onPick={pickScenePart("setting")}
-                  options={directionOptions?.setting}
-                  placeholder="Choose a setting…"
+                  id="review-location-direction"
+                  testId="review-location-direction"
+                  label="Location"
+                  value={dirSel.location}
+                  onPick={pickScenePart("location")}
+                  options={directionOptions?.location}
+                  placeholder="Choose a Location…"
                   disabled={busy}
-                  refresh={refreshProps("setting", "review-setting-refresh")}
+                  refresh={refreshProps("location", "review-location-refresh")}
                 />
                 <DirectionSelect
                   id="review-lighting"
@@ -2507,7 +2523,7 @@ export default function CreateVideo() {
                   </p>
                 )}
                 <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                  Choosing replaces the plan&apos;s scene notes — pick all three for a complete scene. Camera setup still owns how it is filmed.
+                  The final Location, lighting and wardrobe are applied together when you rebuild the strategy. Camera setup still owns how it is filmed.
                 </p>
                 {refreshError && (
                   <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">

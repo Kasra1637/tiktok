@@ -291,7 +291,7 @@ class UpdateContentAngleRequest(BaseModel):
 # Studio projects (the guided creation workflow)
 # ---------------------------------------------------------------------------
 STUDIO_TEXT_FIELDS = (
-    "audience", "tone", "hook_line", "script", "visual_direction",
+    "audience", "tone", "hook_line", "script", "location", "visual_direction",
     "demo_brief", "voice_direction", "sound_direction",
 )
 # `cta` and `feature_emphasis` used to be here. Neither is any more: a call to
@@ -352,6 +352,7 @@ class UpdateStudioProjectRequest(BaseModel):
     hook_line: Optional[str] = None
     script: Optional[str] = None
     beat_timeline: Optional[List[dict]] = None
+    location: Optional[str] = None
     visual_direction: Optional[str] = None
     # `demo_brief` replaced `feature_emphasis` here as well as on the plan. The
     # plan writes it and STUDIO_TEXT_FIELDS counts it as content, so a founder

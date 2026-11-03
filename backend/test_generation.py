@@ -868,7 +868,7 @@ class TestAppearanceIsLockedAndClothingIsNot:
         """
         import ai_service
 
-        block = ai_service.scene_setting_guidance()
+        block = ai_service.scene_location_guidance()
         lowered = block.lower()
         assert "usage_moments" in lowered
         assert "kitchen" in lowered and "desk" in lowered
@@ -902,7 +902,7 @@ class TestRenderPromptLengthCap:
             "primary_feature": big, "desired_outcome": big,
             "differentiation_beat": big,
             "scene": {
-                "environment": big, "background": big, "setting": big,
+                "location": big,
                 "camera_angle": big, "framing": big, "lighting": big,
                 "color_palette": big,
             },
@@ -1307,7 +1307,7 @@ class TestFinalPhoneFraming:
         from ai_service import normalize_strategy
 
         strategy = {"camera_setup": "fixed", "scene": {
-            "environment": "kitchen", "lighting": "soft window light", "wardrobe": "blue shirt",
+            "location": "kitchen", "lighting": "soft window light", "wardrobe": "blue shirt",
         }, "segments": [{"role": "hook", "action": "Raises her eyebrows."}]}
         target = strategy
         parts = field.split(".")
@@ -1321,7 +1321,7 @@ class TestFinalPhoneFraming:
                                     prompt_budget=prompt_budget, script_sacred=True)
         assert field in str(exc.value)
         assert "rebuild" in str(exc.value).lower()
-        assert strategy["scene"]["environment"] == "kitchen"
+        assert strategy["scene"]["location"] == "kitchen."
         assert strategy["scene"]["lighting"] == "soft window light"
         assert strategy["scene"]["wardrobe"] == "blue shirt"
 
@@ -1330,7 +1330,7 @@ class TestFinalPhoneFraming:
         prompt = gp.build_segment_prompt(
             strategy={
                 "camera_setup": "fixed", "hook_line": "I took a selfie.",
-                "scene": {"environment": "kitchen with a frying pan", "lighting": "soft window light",
+                "scene": {"location": "kitchen with a frying pan", "lighting": "soft window light",
                           "wardrobe": "blue shirt", "visual_style": "Amateur footage. No zoom, orbit or handheld sway."},
                 "performance": {"movement": "A small head tilt, then she raises a second phone into view.",
                                 "voice_delivery": "Warm and conversational."},
@@ -2523,7 +2523,7 @@ class TestOpeningPatternInterrupt:
         """
         strategy = self._strategy()
         strategy["scene"] = {
-            "environment": "a hospital corridor at night",
+            "location": "a hospital corridor at night",
             "props": "a scrunchie on the wrist, a phone in the hand",
         }
         strategy["segments"][1]["action"] = (

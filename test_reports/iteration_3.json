@@ -1,0 +1,77 @@
+{
+  "summary": "Location review completed using isolated DB-backed handler tests and React/Jest tests. Backend: 9/12 passed (new regression suite 7/10). Frontend: 51/53 passed (new regression suite 2/4). Four distinct defects found; application code was not modified. No public HTTP or Playwright tests were performed because frontend/.env and REACT_APP_BACKEND_URL are absent; local routing suggested in the request was not used under the public-endpoint-only testing constraint.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/history/generations",
+        "issue": "Location snapshot is absent from every history response. Reproduced with a stored generation whose location is 'A city rooftop at noon.'; response row has no location key. server.py:8997-9004 SELECT omits g.location, preventing History from displaying the new field.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "PATCH /api/studio/projects/{id}",
+        "issue": "Replacing strategy.scene.location on a legacy saved project retains contradictory old place data. Expected rooftop; returned 'A city rooftop at noon. A quiet kitchen at night. A wooden table.' server.py:5077-5080 merges incoming scene into unnormalized legacy scene before normalization, which appends the old place fields. Normalize existing legacy fields first, then apply explicit Location replacement."
+      },
+      {
+        "endpoint": "Legacy strategy normalization on project read/update",
+        "issue": "Non-Latin place details disappear: merge_legacy_location({'environment':'東京の公園','background':'桜の木'}) returns only '東京の公園.'. ai_service.py:3889 ASCII-only normalization turns both comparison keys into empty strings and deduplicates distinct descriptions. Use Unicode-aware comparison and guard empty normalized keys."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "History context classification and deep links",
+        "issue": "Location-only results are classified as lacking context; deep links choose the 'without' side. hasCopyContext in historyRepair.js:123-124 ignores location, while GenerationHistory.jsx includes location in its context-card condition. Two focused Jest assertions fail.",
+        "selector": "[data-testid^='history-location-']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Location in History",
+        "issue": "History UI reads row.location, but /api/history/generations never returns it. Generation detail API does return the correct immutable snapshot in isolated handler tests.",
+        "affected_selectors": ["[data-testid^='history-location-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_location_regression.py",
+    "/app/frontend/src/pages/locationRegression.test.jsx",
+    "/app/test_reports/pytest/location_regression.xml",
+    "/app/test_reports/pytest/location_existing.xml",
+    "/app/test_reports/location-frontend-regression.log",
+    "/app/test_reports/location-frontend-unit.log"
+  ],
+  "action_items": [
+    "Select and return g.location in the History endpoint; keep generation snapshot semantics rather than joining the current project's location.",
+    "Normalize old scene values before applying explicit strategy.scene.location edits, so replacement does not append retired place values.",
+    "Make legacy deduplication Unicode-safe.",
+    "Include location in History hasCopyContext and its deep-link classification.",
+    "Provide the configured public URL and then verify Review textarea editing/saving, Location selector, strategy rebuild, History display, and overflow at requested desktop/mobile sizes. These browser flows remain unverified in this run.",
+    "Rerun the two new regression files after fixing the defects."
+  ],
+  "critical_code_review_comments": [
+    "Strategy schema exposes location and excludes environment/background/setting; normalized legacy reads produce one scene Location row.",
+    "Review Location update persists and invalidates stale strategy; generation snapshots remain unchanged after later project Location edits in DB-backed tests.",
+    "HookContinuityPanel rendered one Location row and no retired rows in React DOM tests; useWizardDirections dispatched Location selection to the location edit field and lighting selection did not overwrite it.",
+    "Rebuild strategy button and its error/notice messages lack data-testid attributes (HookContinuityPanel.jsx:305-315,363-371), limiting robust browser testing.",
+    "Reference files exceed 700 lines: server.py 9975, ai_service.py 5837, CreateVideo.jsx 3054, generation_planning.py 1790, GenerationHistory.jsx 1241, template_library.py 1135. Consider extracting focused modules separately from this functional fix."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_location_regression.py",
+    "/app/frontend/src/pages/locationRegression.test.jsx",
+    "/app/test_reports/iteration_3.json"
+  ],
+  "success_rate": {
+    "backend": "75% (9/12 isolated tests; new regression coverage 70%, 7/10)",
+    "frontend": "96.2% (51/53 unit/component tests; new regression coverage 50%, 2/4); browser verification not executed"
+  },
+  "test_credentials": "No auth flows tested. /app/memory/test_credentials.md is missing.",
+  "seed_data_creation": "TEST_ profiles/projects and one TEST_location_history generation created only in the existing fixture's temporary SQLite database. Existing location-review-demo seed was not modified. No live data was written.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New backend regressions invoke real handler/database code in an isolated fixture; provider submission is MOCKED and no paid render was started. Frontend direction API and visual primitives are MOCKED in focused React DOM tests; actual strategy-row and hook-state logic run. Live AI quality, public endpoint status codes, browser navigation, Review save integration, and responsive overflow were not verified. Four unresolved bugs, not five: the two History classification failures share one root cause. Existing suites: wizardDraft and GenerationHistory passed 49 tests; filtered existing Location tests passed 2. Do not infer browser success from earlier-agent screenshots."
+}

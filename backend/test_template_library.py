@@ -373,7 +373,7 @@ the only authority on appearance."""
     def test_every_group_has_five_fields_of_four_unique_options(self):
         for group in tl.DIRECTION_OPTIONS:
             options = tl.DIRECTION_OPTIONS[group]
-            assert set(options) == {"setting", "lighting", "wardrobe", "voice", "tone"}, group
+            assert set(options) == {"location", "lighting", "wardrobe", "voice", "tone"}, group
             for field, values in options.items():
                 assert len(values) == 4, f"{group}.{field}"
                 assert len(set(values)) == 4, f"{group}.{field} repeats an option"

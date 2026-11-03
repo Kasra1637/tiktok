@@ -1065,7 +1065,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 3,
@@ -1202,7 +1202,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 3,
                               "goal": "g", "script": "s", "action": "a"},
@@ -1262,7 +1262,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 3,
                               "goal": "g", "script": "s", "action": "a"},
@@ -1335,7 +1335,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 3,
                               "goal": "g", "script": "s", "action": "a"},
@@ -1374,7 +1374,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 3,
                               "goal": "g", "script": "s", "action": "a"},
@@ -1419,7 +1419,7 @@ class TestStrategyBudget:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "cta_strategy": "c", "scene": {"environment": "kitchen"},
+                "cta_strategy": "c", "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 5,
                               "goal": "g", "script": "s", "action": "a"}],
@@ -2130,7 +2130,7 @@ class TestSpokenLineCraft:
         # And the flag is opt-in: without a name there is nothing to match.
         assert "names_the_app" not in ai_service.check_spoken_story("Hi.", "There.", 3, 15)
 
-    def test_the_founder_settings_reach_the_prompt(self, monkeypatch):
+    def test_the_founder_location_reaches_the_prompt(self, monkeypatch):
         """Rule two: a regeneration drafts for what is already selected.
 
         The audience and the look were chosen on the project; a regeneration
@@ -2157,15 +2157,17 @@ class TestSpokenLineCraft:
             angle={"target_audience": "the angle's audience", "user_problem": "p"},
             duration_seconds=15,
             audience="nurses on a night shift",
-            visual_direction="A kitchen at 2am, warm lamp light.",
+            location="A kitchen at 2am.",
+            visual_direction="Warm lamp light.",
         ))
         prompt = captured["prompt"]
         # The founder's audience beats the angle's.
         assert "nurses on a night shift" in prompt
         assert "the angle's audience" not in prompt
-        # The founder's look is one the returned visual_direction must describe.
-        assert "A kitchen at 2am, warm lamp light." in prompt
-        assert "describes it" in prompt
+        # Location and visual treatment have separate, unambiguous inputs.
+        assert "A kitchen at 2am." in prompt
+        assert "Warm lamp light." in prompt
+        assert "copy it exactly" in prompt
         # And the profile's own voice reached the prompt.
         assert "plain and tired" in prompt
 

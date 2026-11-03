@@ -880,7 +880,7 @@ class TestReadyGate:
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
                 "cta_strategy": "c",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [{"index": 0, "role": "hook", "seconds": 5,
                               "goal": "g", "script": "You do not have a focus problem.",
@@ -1105,7 +1105,7 @@ class _StrategyCapture:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 # Exactly two sections, as the schema asks for. `cta_strategy`
                 # and `continuity_contract` are gone and no longer named in the
@@ -2385,7 +2385,7 @@ class TestStrategyRefusesBannedClaims:
                 "primary_feature": "f", "desired_outcome": "o",
                 "mechanism_beat": "mb", "payoff_beat": "pb",
                 "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 2,

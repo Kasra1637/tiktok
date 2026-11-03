@@ -247,9 +247,7 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
             "camera_angle": scene["camera"],
             "framing": scene["framing"],
             "lighting": scene["lighting"],
-            "environment": scene["environment"],
-            "background": scene["background"],
-            "setting": scene["setting"],
+            "location": scene["location"],
             "visual_style": scene["style"],
             "character_positioning": scene["position"],
             "props": scene["props"],
@@ -335,9 +333,7 @@ NURSE_SCENE = {
     "camera": "eye-level, phone held at arm's length",
     "framing": "medium close-up, head and shoulders",
     "lighting": "flat overhead corridor fluorescents, cool",
-    "environment": "a hospital staff corridor outside a break room",
-    "background": "grey vinyl floor, beige wall, a fire door",
-    "setting": "late shift, 11pm",
+    "location": "a hospital staff corridor outside a break room, with a grey vinyl floor, beige wall and fire door, late shift at 11pm",
     "style": "authentic handheld UGC",
     "position": "centred, phone at chest height",
     "props": "a phone only, no coffee cup",
@@ -351,9 +347,7 @@ BUDGET_SCENE = {
     "camera": "static, laptop-height, slightly below eye level",
     "framing": "medium shot, waist up, seated",
     "lighting": "warm single bedside lamp from frame left",
-    "environment": "a small rented bedroom, evening",
-    "background": "unmade single bed, a poster, a stack of unopened post",
-    "setting": "Sunday evening, payday week",
+    "location": "a small rented bedroom with an unmade single bed, a poster and unopened post, Sunday evening in payday week",
     "style": "talking-head confession, natural",
     "position": "seated cross-legged, phone resting on the bed beside them",
     "props": "a phone and a mug of cold tea",
@@ -642,7 +636,7 @@ class TestMustNotShowIsEnforced:
             "hook_line": "h", "hook_promise": "p", "hook_action": "a",
             "messaging_pillars": ["m"], "primary_feature": "f",
             "desired_outcome": "o", "differentiation_beat": "b",
-            "scene": {"environment": "kitchen"},
+            "scene": {"location": "kitchen"},
             "performance": {"movement": "still"},
             "segments": [
                 {"index": 0, "role": "hook", "seconds": 3, "goal": "g",
@@ -841,12 +835,26 @@ class TestStrategyNormalization:
         """
         from ai_service import normalize_strategy
         strategy = normalize_strategy({"hook_line": "Hi"})
-        for field in ("camera_angle", "framing", "lighting", "environment", "background"):
+        for field in ("camera_angle", "framing", "lighting", "location"):
             assert field in strategy["scene"]
         for field in ("movement", "voice_delivery"):
             assert field in strategy["performance"]
         assert [s["role"] for s in strategy["segments"]] == ["hook", "middle"]
         assert "continuity_contract" not in strategy
+
+    def test_legacy_place_fields_merge_into_location_once(self):
+        from ai_service import normalize_strategy
+        strategy = normalize_strategy({
+            "scene": {
+                "environment": "Concrete back step of a house at night.",
+                "background": "A wooden fence and dark yard.",
+                "setting": "Concrete back step of a house at night.",
+            },
+        })
+        scene = strategy["scene"]
+        assert set(scene).isdisjoint({"environment", "background", "setting"})
+        assert scene["location"].count("Concrete back step") == 1
+        assert "wooden fence and dark yard" in scene["location"]
 
     def test_a_character_section_cannot_be_stored(self):
         """
@@ -972,7 +980,7 @@ class TestStrategyPromptDirectives:
                 "primary_feature": "f", "desired_outcome": "o",
                 "mechanism_beat": "mb", "payoff_beat": "pb",
                 "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 2,
@@ -1065,7 +1073,7 @@ class TestStrategyPromptDirectives:
 
     def test_environment_is_invented_from_facts_not_composited(self, monkeypatch):
         captured = self._run_strategy(monkeypatch)
-        assert "Invent the environment" in captured["prompt"]
+        assert "scene.location" in captured["prompt"]
         assert "composited afterwards" not in captured["prompt"]
 
     def test_generated_scene_is_framed_as_illustrative(self, monkeypatch):
@@ -1217,7 +1225,7 @@ class TestStrategyPromptDirectives:
         ))
         assert "character" not in result
         assert result["hook_dialogue"] == ""
-        assert result["scene"]["environment"] == "kitchen"
+        assert result["scene"]["location"] == "kitchen."
         assert 'There is no "character" key in this schema' in captured["prompt"]
 
 
@@ -1264,7 +1272,7 @@ class TestStrategyFollowsTheApprovedPlan:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 5,
@@ -1384,7 +1392,7 @@ class TestStrategyFollowsTheApprovedPlan:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 5,
@@ -1423,7 +1431,7 @@ class TestStrategyFollowsTheApprovedPlan:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 5,
@@ -1467,7 +1475,7 @@ class TestStrategyGoesStaleWhenTheScriptIsEdited:
             "hook_promise": "p", "hook_action": "a",
             "messaging_pillars": ["m"], "primary_feature": "f",
             "desired_outcome": "o", "differentiation_beat": "b",
-            "scene": {"environment": "kitchen"},
+            "scene": {"location": "kitchen"},
             "performance": {"movement": "still"},
             "segments": [
                 {"index": 0, "role": "hook", "seconds": 5,
@@ -1667,7 +1675,7 @@ class TestUsageMomentsAndProofMoment:
                 "messaging_pillars": ["m"], "primary_feature": "f",
                 "desired_outcome": "o", "mechanism_beat": "mb",
                 "payoff_beat": "pb", "differentiation_beat": "b",
-                "scene": {"environment": "kitchen"},
+                "scene": {"location": "kitchen"},
                 "performance": {"movement": "still"},
                 "segments": [
                     {"index": 0, "role": "hook", "seconds": 5,
@@ -1735,7 +1743,7 @@ class TestUsageMomentsAndProofMoment:
         demo picks up from, so it has to be an obligation rather than a hint.
         """
         captured = self._capture(monkeypatch)
-        assert "scene.setting must come from usage_moments" in captured["prompt"]
+        assert "scene.location must come from usage_moments" in captured["prompt"]
         assert "The middle must end AT the usage moment from usage_moments" in captured["prompt"]
         assert "not using it" in captured["prompt"]
 

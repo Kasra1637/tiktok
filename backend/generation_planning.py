@@ -173,8 +173,8 @@ CONDENSE_BELOW = 5000
 # and gesture, and final-phone visibility survive every provider squeeze.
 # Processing alone starts a zoom at 70% of hook_seconds and finishes 0.6s later;
 # no numeric timestamp or spoken-word sync is promised to the video model.
-FULL_PROMPT_FLOOR = 4269
-CONDENSED_PROMPT_FLOOR = 2373
+FULL_PROMPT_FLOOR = 4261
+CONDENSED_PROMPT_FLOOR = 2378
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -187,7 +187,7 @@ CONDENSED_PROMPT_FLOOR = 2373
 # before it builds a prompt, so this path is not the one that failed — but it is
 # the same ceiling one path had no answer for, and it now scales like its
 # sibling rather than relying on the guard.
-SINGLE_PASS_PROMPT_FLOOR = 2170
+SINGLE_PASS_PROMPT_FLOOR = 2162
 
 # The app's own name, in the prompt, clipped.
 #
@@ -325,7 +325,7 @@ def _clip(text, limit: int, protect: bool = False, sacred: bool = False,
 
 # Words the model must not attempt to draw. Listed so the instruction can be
 # explicit rather than relying on the model inferring "don't fake the facts".
-# Note what is NOT here: the environment, setting, lighting and props ARE
+# Note what is NOT here: Location, lighting and props ARE
 # invented by the model from the verified app facts — nothing is composited
 # over the footage and no text appears on screen, so the scene has to be
 # rendered, not reserved.
@@ -333,7 +333,7 @@ _UI_RENDERING_WARNING = (
     "Do NOT draw or render: app interface elements, app screenshots, button "
     "labels, prices, ratings, review counts, download counts, logos, or any "
     "small on-screen text. Nothing is composited over this footage and no text "
-    "appears on screen at all, so invent the environment, setting, lighting "
+    "appears on screen at all, so use the locked Location, lighting "
     "and props concretely from the verified app facts — but anything the "
     "viewer could read as a factual claim about the app must come from those "
     "facts, never from invention."
@@ -352,7 +352,7 @@ _UI_RENDERING_WARNING = (
 _CONDENSED_HANDOFF = (
     "Founder adds demo/close later. Do NOT film the app in use or render any "
     "interface, screenshot, button, price, rating, review/download count, logo "
-    "or text. Invent setting/light/props from verified app facts; never invent claims."
+    "or text. Use locked Location/light/props from verified app facts; never invent claims."
 )
 
 _CONDENSED_IDENTITY_CLOSE = (
@@ -578,7 +578,7 @@ def must_not_show_section(profile: dict) -> str:
     return (
         "MUST NOT APPEAR — recorded on this app's profile as things a promo must never "
         f"contradict or show: {listed}. Do not depict any of them, do not imply them, and "
-        "do not use them as background, prop, or setting detail."
+        "do not use them as a Location or prop detail."
     )
 
 
@@ -1110,9 +1110,7 @@ _SECTION_LABELS = {
         ("facial_expression", "expression"),
     ),
     "scene": (
-        ("environment", "location"),
-        ("background", "background"),
-        ("setting", "time of day and context"),
+        ("location", "Location"),
         ("camera_angle", "camera angle"),
         ("framing", "framing"),
         ("lighting", "lighting"),
@@ -1120,7 +1118,7 @@ _SECTION_LABELS = {
         ("visual_style", "visual style"),
         ("character_positioning", "position in frame"),
         # Wardrobe is the one presentational field that reaches the lock. It is
-        # chosen by the strategy to suit the setting and holds for both
+        # chosen by the strategy to suit Location and holds for both
         # sections, which is why it belongs to the scene rather than to the
         # person: everything about the person is the photograph's job.
         ("wardrobe", "wardrobe"),
@@ -1151,7 +1149,7 @@ def character_scene_lock(strategy: dict) -> str:
     block, so "character" is skipped here by name rather than trusted.
 
     Wardrobe is the deliberate exception, and it sits in the scene rather than
-    the person for a reason: the strategy chooses clothes to suit the setting,
+    the person for a reason: the strategy chooses clothes to suit Location,
     and a scene that claims someone has to keep them in the same outfit for
     both sections. Locking it here is what makes "do not re-wardrobe" in the
     trailer below enforceable — the clothing is stated once, by the thing that
@@ -1172,7 +1170,7 @@ def character_scene_lock(strategy: dict) -> str:
         if not isinstance(values, dict):
             continue
         described = [
-            f"{label}: {_clip(values.get(key), 100, protect=True)}"
+            f"{label}: {_clip(values.get(key), 300 if key == 'location' else 100, protect=True, absolute=key == 'location')}"
             for key, label in fields
             # The fixed selfie instruction replaces even an older strategy's
             # metre-based camera/framing fields, rather than contradicting them.
@@ -1717,9 +1715,7 @@ def _assemble_prompt(
     # The strategy's scene is the angle's place and time (ADR 0084); template
     # staging that names another one is left out rather than fought over.
     _scene = strategy.get("scene") if isinstance(strategy.get("scene"), dict) else {}
-    _locked = angle_scene.scene_of(" ".join(
-        str(_scene.get(k) or "") for k in ("environment", "setting", "background")
-    ))
+    _locked = angle_scene.scene_of(str(_scene.get("location") or ""))
 
     def _fits_scene(text) -> bool:
         return not angle_scene.conflict_reason(str(text or ""), _locked)

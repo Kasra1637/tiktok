@@ -106,7 +106,7 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
       </div>
       <dl className="max-w-3xl divide-y divide-[color:var(--hairline)]">
         {filled.map(([label, value]) => (
-          <div key={label} className="py-3 first:pt-0 last:pb-0">
+          <div key={label} className="py-3 first:pt-0 last:pb-0" data-testid={`strategy-${String(label).replaceAll("_", "-")}`}>
             <dt className="eyebrow">
               {strategyLabel(label)}
             </dt>
@@ -303,13 +303,13 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       </p>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" data-testid="strategy-error">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
       {notice && (
-        <Alert>
+        <Alert data-testid="strategy-notice">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
@@ -365,6 +365,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           onClick={handleGenerateStrategy}
           disabled={busy || !projectId || needsAngle}
           busy={busy}
+          data-testid="strategy-build-button"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {hasStrategy ? "Rebuild strategy" : "Build the app-specific strategy"}
@@ -493,7 +494,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               what tells the founder where to fix a disagreement. */}
           <StrategyBlock
             title="The scene"
-            description="One room, one render: the hook and the middle can't disagree. Built from your visual and voice direction — edit it above on Review & submit."
+            description="One Location, one render: the hook and the middle can't disagree. Built from your visual and voice direction — edit it above on Review & submit."
             icon={MapPin}
             rows={[
               ...Object.entries(strategy.scene || {}),

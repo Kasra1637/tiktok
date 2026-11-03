@@ -268,7 +268,7 @@ def opening_staging(angle: Optional[dict]) -> str:
 def fit_direction_options(options: dict, angle: Optional[dict]) -> dict:
     """Direction dropdowns with every option that contradicts the angle removed.
 
-    The angle's own moment leads the setting list, so the first choice is the
+    The angle's own moment leads the Location list, so the first choice is the
     place the angle opens in. Lists are topped up with place-safe fallbacks
     so a filtered dropdown is never left with one lonely option.
     """
@@ -278,14 +278,14 @@ def fit_direction_options(options: dict, angle: Optional[dict]) -> dict:
     if not scene["moment"]:
         return out
     fallbacks = {
-        "setting": [scene["moment"]],
+        "location": [scene["moment"]],
         "lighting": _LIGHTING_FALLBACKS.get((scene["place"], scene["time"]), [])
         + _LIGHTING_FALLBACKS.get((scene["place"], ""), []),
         "voice": _VOICE_FALLBACKS.get(scene["place"], []),
     }
-    for field in ("setting", "lighting", "wardrobe", "voice", "tone"):
+    for field in ("location", "lighting", "wardrobe", "voice", "tone"):
         kept = [o for o in (out.get(field) or []) if not conflict_reason(o, scene)]
-        if field == "setting":
+        if field == "location":
             kept = [scene["moment"]] + [o for o in kept if o.lower() != scene["moment"].lower()]
         for extra in fallbacks.get(field, []):
             if len(kept) >= _MIN_OPTIONS:

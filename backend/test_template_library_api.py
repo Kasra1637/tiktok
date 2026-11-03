@@ -1975,7 +1975,7 @@ class TestDirectionOptionsEndpoint:
         assert pumped_out["group"] == "fitness"
         assert calm_out["wardrobe"] != pumped_out["wardrobe"]
         for out in (calm_out, pumped_out):
-            for field in ("setting", "lighting", "wardrobe", "voice", "tone"):
+            for field in ("location", "lighting", "wardrobe", "voice", "tone"):
                 assert len(out[field]) == 4
 
     def test_missing_profile_404s(self, api):
@@ -2022,10 +2022,10 @@ class TestDirectionRefresh:
         out = _run(api.refresh_profile_direction_options(
             profile_id=profile["id"],
             payload=RefreshDirectionOptionsRequest(
-                field="setting",
+                field="location",
                 avoid=["Quiet bedroom corner with a cushion on the floor"]),
             user_id=ANON))
-        assert out["field"] == "setting"
+        assert out["field"] == "location"
         assert len(out["options"]) == 4
         assert "Quiet bedroom corner with a cushion on the floor" \
             not in out["options"]
@@ -2053,6 +2053,6 @@ class TestDirectionRefresh:
         with pytest.raises(HTTPException) as err:
             _run(api.refresh_profile_direction_options(
                 profile_id=str(uuid.uuid4()),
-                payload=RefreshDirectionOptionsRequest(field="setting"),
+                payload=RefreshDirectionOptionsRequest(field="location"),
                 user_id=ANON))
         assert err.value.status_code == 404

@@ -563,7 +563,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             <div className="min-w-0 space-y-5">
               {compactNotice && notice}
               {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
-              {(row.post_kit || row.audience || row.demo_brief) && (
+              {(row.post_kit || row.audience || row.demo_brief || row.location) && (
                 <div className="grid grid-cols-1 items-start gap-2">
                   {row.post_kit && (
                     <details
@@ -582,7 +582,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                     </details>
                   )}
 
-                  {(row.audience || row.demo_brief) && (
+                  {(row.audience || row.demo_brief || row.location) && (
                     <details
                       open={openPanel === "context"}
                       className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30"
@@ -600,6 +600,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                           testId={`listen-plan-context-${row.id}`}
                           getBlocks={() => [
                             { label: "Audience", values: [row.audience] },
+                            { label: "Location", values: [row.location] },
                             { label: "Your demo brief", values: [row.demo_brief] },
                           ]}
                         />
@@ -609,6 +610,12 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                       <div className="post-kit-row">
                         <dt className="eyebrow sm:pt-1">Audience</dt>
                         <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.audience}</dd>
+                      </div>
+                    )}
+                    {row.location && (
+                      <div className="post-kit-row" data-testid={`history-location-${row.id}`}>
+                        <dt className="eyebrow sm:pt-1">Location</dt>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.location}</dd>
                       </div>
                     )}
                     {row.demo_brief && (
@@ -1146,7 +1153,7 @@ export default function GenerationHistory() {
                   With post copy & plan context · {orderedWith.length} total
                 </SectionHeading>
                 <p className="text-sm text-muted-foreground">
-                  Clips with a saved caption, audience, or demo brief attached.
+                  Clips with a saved caption, audience, Location, or demo brief attached.
                 </p>
               </div>
               {pagedWith.map(renderRow)}

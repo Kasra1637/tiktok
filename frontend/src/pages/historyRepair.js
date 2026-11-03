@@ -116,12 +116,12 @@ export function historyAttentionLink(searchParams, attention) {
 
 /**
  * Whether a render carries anything for the copy/context section: a frozen
- * post kit, an audience, or a demo brief. Single owner for the rule the
+ * post kit, an audience, a Location, or a demo brief. Single owner for the rule the
  * list filter and the deep-link resolver share, so a linked clip and the
  * side that shows it cannot disagree.
  */
 export function hasCopyContext(row) {
-  return Boolean(row?.post_kit || row?.audience || row?.demo_brief);
+  return Boolean(row?.post_kit || row?.audience || row?.location || row?.demo_brief);
 }
 
 /**

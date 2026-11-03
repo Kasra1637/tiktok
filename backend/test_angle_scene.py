@@ -31,8 +31,8 @@ def test_office_exit_reads_as_outdoors():
 def test_dropdowns_never_offer_indoor_options_for_an_outdoor_angle():
     options = template_library.DIRECTION_OPTIONS["wellness"]
     fitted = angle_scene.fit_direction_options(options, OFFICE)
-    assert fitted["setting"][0] == "A person steps outside an office building after a call"
-    for field in ("setting", "lighting"):
+    assert fitted["location"][0] == "A person steps outside an office building after a call"
+    for field in ("location", "lighting"):
         for option in fitted[field]:
             assert "living room" not in option.lower() and "lamp" not in option.lower(), option
         assert len(fitted[field]) >= 3
@@ -41,7 +41,7 @@ def test_dropdowns_never_offer_indoor_options_for_an_outdoor_angle():
 def test_no_angle_leaves_dropdowns_unchanged():
     options = template_library.DIRECTION_OPTIONS["wellness"]
     fitted = angle_scene.fit_direction_options(options, None)
-    assert fitted["setting"] == options["setting"]
+    assert fitted["location"] == options["location"]
 
 
 def test_indoor_look_is_adjusted_with_a_note():
@@ -89,9 +89,9 @@ def test_vague_hook_is_flagged_but_never_blocks():
 
 def test_prompts_bind_the_angle_moment_and_name_the_action():
     import ai_service
-    assert "ANGLE SCENE" in ai_service.scene_setting_guidance(OFFICE)
-    assert "steps outside an office building" in ai_service.scene_setting_guidance(OFFICE)
-    assert "ANGLE SCENE" not in ai_service.scene_setting_guidance()
+    assert "ANGLE SCENE" in ai_service.scene_location_guidance(OFFICE)
+    assert "steps outside an office building" in ai_service.scene_location_guidance(OFFICE)
+    assert "ANGLE SCENE" not in ai_service.scene_location_guidance()
     assert "NAME THE ACTION" in ai_service._spoken_line_rules_block()
     assert "PLACE + TIME" in ai_service._angle_goal_block(OFFICE, "")
 
@@ -126,11 +126,11 @@ def test_unclear_place_is_detected():
 def test_place_rule_only_when_the_angle_names_no_place():
     import ai_service
     vague = {"hook_promise": "right after a hard conversation"}
-    assert "ANGLE PLACE" in ai_service.scene_setting_guidance(vague)
+    assert "ANGLE PLACE" in ai_service.scene_location_guidance(vague)
     assert "ANGLE PLACE" in ai_service._angle_goal_block(vague, "")
-    assert "ANGLE PLACE" not in ai_service.scene_setting_guidance(OFFICE)
+    assert "ANGLE PLACE" not in ai_service.scene_location_guidance(OFFICE)
     assert "ANGLE PLACE" not in ai_service._angle_goal_block(OFFICE, "")
-    assert "ANGLE PLACE" not in ai_service.scene_setting_guidance()
+    assert "ANGLE PLACE" not in ai_service.scene_location_guidance()
 
 
 def test_hook_rewrite_returns_the_clearer_line(monkeypatch):

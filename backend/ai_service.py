@@ -555,6 +555,7 @@ PLAN_JSON_SCHEMA = _strict_object({
     "hook_line": _str_prop(),
     "script": _str_prop(),
     "beat_timeline": {"type": "array", "items": PLAN_BEAT_JSON_SCHEMA},
+    "location": _str_prop(),
     "visual_direction": _str_prop(),
     "demo_brief": _str_prop(),
     "voice_direction": _str_prop(),
@@ -600,9 +601,7 @@ STRATEGY_JSON_SCHEMA = _strict_object({
         "camera_angle": _str_prop(),
         "framing": _str_prop(),
         "lighting": _str_prop(),
-        "environment": _str_prop(),
-        "background": _str_prop(),
-        "setting": _str_prop(),
+        "location": _str_prop(),
         "visual_style": _str_prop(),
         "character_positioning": _str_prop(),
         "wardrobe": _str_prop(),
@@ -2087,10 +2086,10 @@ def _normalize_outcome_statements(result: dict) -> None:
 # the static lists: plain language, no face or body descriptions, no claims —
 # and saving still runs the normal claim check, since the dropdown is a UX
 # constraint, not a trust boundary.
-DIRECTION_REFRESH_FIELDS = ("setting", "lighting", "wardrobe", "voice", "tone")
+DIRECTION_REFRESH_FIELDS = ("location", "lighting", "wardrobe", "voice", "tone")
 
 _DIRECTION_FIELD_BRIEFS = {
-    "setting": "a concrete physical place where the presenter is, mid-activity — never a bedroom or car interior by default",
+    "location": "one concrete description of the place, visible surroundings, time of day and situational context — never a bedroom or car interior by default",
     "lighting": "light direction, quality and colour temperature for that place",
     "wardrobe": "one concrete outfit suited to the place — garments only, never the body wearing them",
     "voice": "delivery direction for the on-camera talk — pace, volume, energy",
@@ -3061,7 +3060,7 @@ def _spoken_line_rules_block() -> str:
     )
 
 
-def scene_setting_guidance(angle: Optional[dict] = None) -> str:
+def scene_location_guidance(angle: Optional[dict] = None) -> str:
     """
     Where the video happens, and what the person is doing there.
 
@@ -3070,24 +3069,24 @@ def scene_setting_guidance(angle: Optional[dict] = None) -> str:
     steering every strategy comes back sitting indoors, so the guidance
     demands the opposite — a concrete, preferably outdoor place tied to the
     usage moment or the outcome, with the presenter mid-activity, not posed.
-    The existing usage_moments rule stays word for word (it is what grounds
-    the setting in verified facts); the new lines set the register — active,
+    The existing usage_moments rule stays intact (it is what grounds
+    Location in verified facts); the new lines set the register — active,
     specific, dramatic — with vivid worked examples, because the model copies
     the style of whatever examples it sees.
     """
     moment = _angle_scene_moment(angle)
     lead = (
         f"- ANGLE SCENE (outranks everything below): the video opens on the selected angle's "
-        f"moment - {moment}. scene.environment, scene.background, scene.setting (including the "
-        "time of day), the lighting and hook_action must happen exactly there and then, and the "
-        "middle stays in that same place. A template example, usage_moments or a look setting "
+        f"moment - {moment}. scene.location (the place, visible surroundings, time of day and "
+        "situational context), the lighting and hook_action must happen exactly there and then, and the "
+        "middle stays in that same place. A template example, usage_moments or a look location "
         "never moves it indoors, outdoors or to another time of day.\n"
         if moment else ""
     )
     if _angle_scene_policy.scene_is_unclear(angle):
         lead += _ANGLE_PLACE_RULE + "\n"
     return lead + (
-        "- scene.setting must come from usage_moments — the only evidence of when and where "
+        "- scene.location must come from usage_moments — the only evidence of when and where "
         "it is used. Never a kitchen, desk or routine; empty stays unspecified, never invented. "
         "Stage it where the promise lives (a hilltop path "
         "at sunrise, a night market, a coastal trail — not a bedroom, almost never a car); "
@@ -3097,7 +3096,7 @@ def scene_setting_guidance(angle: Optional[dict] = None) -> str:
 
 _ANGLE_PLACE_RULE = (
     "- ANGLE PLACE: the angle's moment names no place, so name ONE concrete place where "
-    "this moment really happens for this viewer, state it in scene.setting, and keep the "
+    "this moment really happens for this viewer, state it in scene.location, and keep the "
     "whole video there. Never leave the place vague."
 )
 
@@ -3189,7 +3188,7 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
         lines.append(
             f"- PLACE + TIME: the whole video happens in this opening moment: {_angle_scene_moment(angle)}. "
             "The hook, the script and every visual line stay there; no template example, usage "
-            "moment or look setting moves it to another place or time of day (no bed, night or "
+            "moment or look direction moves it to another place or time of day (no bed, night or "
             "living room unless the moment says so)."
         )
         if _angle_scene_policy.scene_is_unclear(angle):
@@ -3227,6 +3226,7 @@ async def generate_creative_plan(
     tone: str = "",
     brand_voice: str = "",
     audience: str = "",
+    location: str = "",
     visual_direction: str = "",
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
@@ -3251,8 +3251,8 @@ async def generate_creative_plan(
     angle's, and a stated visual direction is one the returned visual_direction
     must describe rather than replace.
 
-    The prompt directs the model to render the full scene itself — environment,
-    setting, props and on-screen context invented concretely from the verified
+    The prompt directs the model to render the full scene itself — Location,
+    props and on-screen context invented concretely from the verified
     facts — because nothing is composited over the footage and no text appears
     on screen at all. On-screen text stays out of the model's hands entirely,
     and anything the viewer could read as a factual claim about the app must
@@ -3352,6 +3352,8 @@ async def generate_creative_plan(
     # Source-linked outcome wins before both the brief and angle-goal block.
     if ((angle or {}).get("viewer_outcome") or "").strip():
         brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
+    if (location or "").strip():
+        brief["location"] = (location or "").strip()
     if (visual_direction or "").strip():
         # Their look, not the model's: the returned visual_direction describes
         # this instead of inventing a competing one.
@@ -3406,7 +3408,8 @@ async def generate_creative_plan(
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters; a shorter natural sentence is fine",\n'
         '  "script": "MIDDLE ONLY: the spoken story AFTER the hook, without repeating it, plain text, no stage directions",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
-        '  "visual_direction": "what the camera shows across both sections, as one paragraph",\n'
+        '  "location": "one complete description of the place, visible surroundings, time of day and situational context",\n'
+        '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
         '  "voice_direction": "delivery direction for the voiceover or on-camera talent — default to fast, upbeat, high-energy delivery",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
@@ -3525,13 +3528,12 @@ async def generate_creative_plan(
         "sentence, and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
         "- The angle's opening moment (angle_hook_promise) fixes where and when the video "
-        "happens, and visual_direction must place the presenter exactly there. If the brief "
-        "states a visual_direction, that look is the founder's own and was already matched to "
-        "the angle: return a visual_direction that describes it inside the angle's place and "
-        "time and nothing that contradicts either. Do not replace it with a look of your own.\n"
+        "happens. Put that complete place description in Location only. If the brief states a "
+        "Location, copy it exactly; it is the founder's choice. visual_direction covers lighting, "
+        "wardrobe and visual treatment only and must not repeat or replace Location.\n"
         "- CRITICAL: nothing is composited over the footage and no text appears "
-        "on screen at all — no captions, no titles, no labels. Describe the full scene — "
-        "environment, setting, props and any on-screen "
+        "on screen at all — no captions, no titles, no labels. Describe the full place in "
+        "Location, with props and any on-screen "
         "context — concretely from the verified facts above, and leave clean, "
         "uncluttered space in frame. Never invent interface text, button labels, prices, ratings, "
         "logos, testimonials, or anything the viewer could read as a factual claim "
@@ -3607,11 +3609,15 @@ async def generate_creative_plan(
             "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
         )
     for key in (
-        "visual_direction", "voice_direction", "sound_direction",
+        "location", "visual_direction", "voice_direction", "sound_direction",
     ):
         result[key] = character_policy.neutralize(
             (result.get(key) or "").strip()[:1200]
         )
+    if (location or "").strip():
+        result["location"] = character_policy.neutralize((location or "").strip()[:1200])
+    elif not result.get("location"):
+        result["location"] = character_policy.neutralize(_angle_scene_moment(angle)[:1200])
     # demo_brief is deliberately not neutralized: it is the one field addressed
     # to the founder ("record your demo like this"), not a line about the person
     # on screen, so "the founder" is the right word there.
@@ -3811,12 +3817,12 @@ def _two_section_schema(middle_seconds: int) -> str:
 # legitimate claim on: a founder photographed at a kitchen table in a t-shirt
 # can still be filmed at a hospital bench in scrubs, and that is the scenario
 # doing its job rather than the model inventing a person. So it is chosen here,
-# from the setting, and locked like the room. It was dropped with `character`
+# from Location, and locked like the room. It was dropped with `character`
 # and readmitting only this field is what restores that — the fabrication
 # problem above was never about clothes, it was about the face.
 STRATEGY_SCENE_FIELDS = (
-    "camera_angle", "framing", "lighting", "environment", "background",
-    "setting", "visual_style", "character_positioning", "wardrobe", "props",
+    "camera_angle", "framing", "lighting", "location",
+    "visual_style", "character_positioning", "wardrobe", "props",
     "color_palette",
 )
 STRATEGY_PERFORMANCE_FIELDS = ("movement", "voice_delivery")
@@ -3864,6 +3870,38 @@ def _normalize_strategy_section(raw, fields) -> dict:
     return {field: _clean_strategy_text(raw.get(field), 300) for field in fields}
 
 
+def merge_legacy_location(scene) -> str:
+    """Return one render-ready Location from new or legacy scene fields.
+
+    Older strategies split the place across environment, background and setting.
+    Preserve them in that order, remove exact/subsumed repeats, and expose only
+    the unified value to every current consumer.
+    """
+    scene = scene if isinstance(scene, dict) else {}
+    candidates = [scene.get("location")]
+    candidates.extend(scene.get(key) for key in ("environment", "background", "setting"))
+    kept = []
+    normalized = []
+    for value in candidates:
+        text = " ".join(str(value or "").split()).strip(" ,.;")
+        if not text:
+            continue
+        key = " ".join(
+            "".join(char.casefold() if char.isalnum() else " " for char in text).split()
+        )
+        if key and any(key == old or key in old for old in normalized if old):
+            continue
+        pairs = [
+            (part, old) for part, old in zip(kept, normalized)
+            if not (key and old and old in key)
+        ]
+        kept = [part for part, _ in pairs]
+        normalized = [old for _, old in pairs]
+        kept.append(text)
+        normalized.append(key)
+    return ". ".join(part.rstrip(".!?") for part in kept) + ("." if kept else "")
+
+
 def _normalize_camera_beat(raw) -> dict:
     """Keep only orbit direction and a short gesture; discard legacy timing/arc.
 
@@ -3902,7 +3940,10 @@ def normalize_strategy(raw: dict) -> dict:
     # No "character" section: see STRATEGY_SCENE_FIELDS for why. An existing
     # project may still carry one from before this change, so it is dropped here
     # rather than trusted — an old fabrication must not reach a new prompt.
-    result["scene"] = _normalize_strategy_section(raw.get("scene"), STRATEGY_SCENE_FIELDS)
+    raw_scene = raw.get("scene") if isinstance(raw.get("scene"), dict) else {}
+    result["scene"] = _normalize_strategy_section(
+        {**raw_scene, "location": merge_legacy_location(raw_scene)}, STRATEGY_SCENE_FIELDS
+    )
     result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
 
     # An old strategy may still carry a contract; it is dropped rather than
@@ -4939,7 +4980,7 @@ async def generate_video_strategy(
 
     A strategy describes exactly TWO sections — a hook and a middle — because
     that is what one render produces. The scene is what holds the two together:
-    once a background, a light, a camera angle and the delivery are locked, the
+    once a Location, a light, a camera angle and the delivery are locked, the
     middle is held to the same values, so the piece reads as one take. The face
     is never described anywhere in the strategy — it comes from the founder's
     photograph, which rides along as a model input.
@@ -5000,7 +5041,7 @@ async def generate_video_strategy(
         "differentiators": profile.get("differentiation") or "(unstated)",
         "limitations": profile.get("known_limitations") or "(none recorded)",
         # usage_moments exists because the schema asks for a scene and a hook
-        # action, and without it the model invents a setting (a kitchen at 7am,
+        # action, and without it the model invents a Location (a kitchen at 7am,
         # regardless of the app). It now does more: the middle develops towards
         # one of these moments and stops there, which is the seam the founder's
         # own demo continues from.
@@ -5095,6 +5136,7 @@ async def generate_video_strategy(
         beats = plan.get("beat_timeline")
         approved_plan = {
             "hook_line": str(plan.get("hook_line") or "").strip(),
+            "location": str(plan.get("location") or "").strip(),
             "visual_direction": str(plan.get("visual_direction") or "").strip(),
             "voice_direction": str(plan.get("voice_direction") or "").strip(),
             "sound_direction": str(plan.get("sound_direction") or "").strip(),
@@ -5199,12 +5241,10 @@ async def generate_video_strategy(
         f'    "camera_angle": "Use STARTING SHOT",\n'
         f'    "framing": "Use STARTING SHOT and final-phone rule",\n'
         f'    "lighting": "light direction, quality and colour temperature",\n'
-        f'    "environment": "the physical place, named concretely",\n'
-        f'    "background": "what is behind them, concretely and unchanging",\n'
-        f'    "setting": "time of day and situational context",\n'
+        f'    "location": "one complete description of the physical place, visible surroundings, time of day and situational context",\n'
         f'    "visual_style": "the overall look — natural amateur phone UGC, never polished",\n'
         f'    "character_positioning": "where they stand or sit in frame",\n'
-        f'    "wardrobe": "what they are wearing, chosen to suit the setting — the ONE thing about '
+        f'    "wardrobe": "what they are wearing, chosen to suit the Location — the ONE thing about '
         f'their appearance this render may change",\n'
         f'    "props": "objects in shot, or explicitly none",\n'
         f'    "color_palette": "the colour palette of the scene",\n'
@@ -5299,13 +5339,14 @@ async def generate_video_strategy(
         "photograph and nothing written here may contradict it; write about the audience, "
         "the problem, the app and the action instead.\n"
         "- scene.wardrobe is the ONE exception, and it is required. Fill it with what they "
-        "are wearing, chosen to suit scene.setting and the usage moment — a coat and a "
+        "are wearing, chosen to suit scene.location and the usage moment — a coat and a "
         "scarf for a cold walk, scrubs for a hospital bench, a jumper for a desk. It is "
         "the only thing about their appearance the render may change, and it must be "
         "concrete: \"a grey knit jumper\" not \"something casual\". If the founder's own "
         "clothes already suit the scene, repeat them. Never describe their body, face or "
         "hair here, even to justify the clothes.\n"
-        "- Invent the environment, setting, props and on-screen context concretely from the "
+        "- Write one scene.location containing the place, visible surroundings, time of day and "
+        "situational context, with props and on-screen context grounded concretely in the "
         "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
         "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
         "composited over the footage and no text appears on screen, so what the camera "
@@ -5322,7 +5363,7 @@ async def generate_video_strategy(
         "founder, presenter, creator. Say \"the person\" or \"the character\": the founder uploads "
         "the photo of whoever is on camera, and that image alone decides the look.\n"
         "- The scene must hold for BOTH sections. The hook and the middle are one render, so "
-        "the background, lighting, framing, wardrobe, props and delivery it locks apply to the "
+        "the Location, lighting, framing, wardrobe, props and delivery it locks apply to the "
         "whole piece — and they hold for the clothing too: they change once, here, never "
         "mid-video. Never the face, hair, skin, age, build or facial hair, which come from "
         "the founder's photograph rather than from anything written here.\n"
@@ -5333,11 +5374,11 @@ async def generate_video_strategy(
         # suggestion: a field the model may use or ignore is the same as no
         # field at all.
         #
-        # usage_moments sets the middle's setting AND is where the piece ends:
+        # usage_moments sets the middle's Location AND is where the piece ends:
         # the app is reached for at a specific moment, so the middle develops
         # towards that moment and stops there. That stop is the seam the
         # founder's own demo picks up from.
-        + scene_setting_guidance(angle)
+        + scene_location_guidance(angle)
         + "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
         "for the app, not using it. The demo is the founder's own recording, attached after "
         "this footage, so the last frame of your video should be the moment before it.\n"
@@ -5462,6 +5503,8 @@ async def generate_video_strategy(
         raise RuntimeError(f"Video strategy missing required fields: {missing}")
 
     strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
+    if approved_plan and approved_plan.get("location"):
+        strategy["scene"]["location"] = _clean_strategy_text(approved_plan["location"], 300)
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)
