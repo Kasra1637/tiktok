@@ -33,7 +33,7 @@ React routes (App.js)
         -> template_recommendations: deterministic fit + shared-note policy
         -> ai_service: OpenRouter requests and correction/retry orchestration
            -> angle_policy: normalization, recorded grounding, lexical diversity
-        -> generation_planning / claim_safety / video_providers
+        -> generation_planning / claim_safety / angle_scene / video_providers
         -> storage_service / pipeline / media_signing
 
 DemoCtaEditor -> usePreviewLoop / overlays / scene drawing
@@ -66,10 +66,14 @@ Paths below are relative to [backend](../backend/).
 | [template_library.py](../backend/template_library.py), [recommendation_tags.py](../backend/recommendation_tags.py) | Curated vocabulary/seeds and normalization/tag matching. |
 | [ai_service.py](../backend/ai_service.py) | Model request envelopes, JSON parsing/correction, research/planning/strategy and provider polling. `VIDEO_MODELS` owns model IDs/catalog data. |
 | [video_providers.py](../backend/video_providers.py) | Capability enrichment, availability, allowlist/default, identity routing and ceilings. It derives records from the model catalog, so it is not independent of the AI adapter. |
+| [provider_capabilities.py](../backend/provider_capabilities.py) | Boot-time WARN-only comparison of the catalog against OpenRouter's `/v1/videos/models`; never a gate, never blocks boot. |
 | [generation_planning.py](../backend/generation_planning.py) | Single-pass prompt assembly/budgeting, camera directions and retry/error classification. Tight prompt fitting must preserve the reviewed spoken script. |
+| [angle_scene.py](../backend/angle_scene.py) | Where and when the video happens, owned by the selected angle; later steps conform, not re-decide (ADR 0084). |
+| [hook_prompting.py](../backend/hook_prompting.py) | Hook-video prompt construction (motion styles, directives, templates); extracted from server.py, which re-exports it. |
 | [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |
 | [routers/post_kit.py](../backend/routers/post_kit.py), [routers/health.py](../backend/routers/health.py) | Endpoint-specific ownership with DB functions injected by the composition root. They must not import `server` back. |
+| [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
 | [pipeline.py](../backend/pipeline.py), [storage_service.py](../backend/storage_service.py), [media_signing.py](../backend/media_signing.py) | Local media operations, R2 durability and signed app URLs. Provider URLs are not durable browser playback links. |
 | [overlays.py](../backend/overlays.py) | Server ffmpeg composition helpers; not the current Demo + CTA browser editor. |
 
@@ -111,6 +115,12 @@ accepts data; it must not be mistaken for an authorization check.
 | [usePreviewLoop.js](../frontend/src/demoCta/usePreviewLoop.js), [exportTikTok.js](../frontend/src/demoCta/exportTikTok.js), [overlays.js](../frontend/src/demoCta/overlays.js) | Video-time rendering/transport, timestamped export and shared overlay drawing. No time-dependent randomness. |
 | [editSession.js](../frontend/src/demoCta/editSession.js), [draftStorage.js](../frontend/src/demoCta/draftStorage.js) | Undo/redo and browser-local editing document, distinct from server autosave. |
 | [api.js](../frontend/src/lib/api.js), [errorMessage.js](../frontend/src/lib/errorMessage.js) | Authenticated transport, durable media selection and actionable errors. |
+| [Analytics.jsx](../frontend/src/pages/Analytics.jsx) | Manual views and own ratings, visualised; reads recorded outcomes only. |
+| [VideoUpscaler.jsx](../frontend/src/pages/VideoUpscaler.jsx), [upscale/](../frontend/src/upscale) | Browser-side 1080p export; the clip's audio stays with the export (ADR 0086). |
+| [DemoCtaStudio.jsx](../frontend/src/pages/DemoCtaStudio.jsx) | Standalone entry to the Demo + CTA editor; pinned workspaces resume their draft, otherwise it starts blank (ADR 0082). |
+| [BrandSetup.jsx](../frontend/src/pages/BrandSetup.jsx), [AppProfileDetail.jsx](../frontend/src/pages/AppProfileDetail.jsx), [AssetLibrary.jsx](../frontend/src/pages/AssetLibrary.jsx) | App Profile research/approval and its asset library; feeds Create Video. |
+| [PostKitSection.jsx](../frontend/src/components/PostKitSection.jsx) | Frozen post kit on a finished render; copy buttons and completed-only regenerate. |
+| [components/auth/](../frontend/src/components/auth) | Clerk bridge/provider/controls; `ProtectedRoute` gates routes; anonymous local mode when auth is absent. |
 | [index.css](../frontend/src/index.css) | Card spacing/type tokens; follow [design guidelines](../design_guidelines.md). |
 
 Use effect dependencies to express the actual lifecycle. Refs may hold the

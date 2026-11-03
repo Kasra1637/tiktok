@@ -52,7 +52,7 @@ after edits. Never place a server secret in a `REACT_APP_*` variable.
 | Atomic draft/selection transitions | [src/pages/wizardDraft.js](src/pages/wizardDraft.js) |
 | Recommendation/tailoring lifecycle | [src/hooks/useWizardTemplates.js](src/hooks/useWizardTemplates.js) |
 | Angle/goal/template selection UI | [src/components/studio/SelectionPanels.jsx](src/components/studio/SelectionPanels.jsx) |
-| Revision inspection/direction inputs | [src/components/studio/ReviewPanels.jsx](src/components/studio/ReviewPanels.jsx) |
+| Plan-phase narration / direction dropdowns | [src/components/studio/ReviewPanels.jsx](src/components/studio/ReviewPanels.jsx) |
 | Render gate and strategy review | [GenerationPanel](src/components/GenerationPanel.jsx), [HookContinuityPanel](src/components/HookContinuityPanel.jsx) |
 | Transport, errors, signed/durable media | [src/lib/api.js](src/lib/api.js), [src/lib/errorMessage.js](src/lib/errorMessage.js) |
 | History snapshots/polling/repair | [GenerationHistory](src/pages/GenerationHistory.jsx), [historyPolling](src/pages/historyPolling.js), [historyRepair](src/pages/historyRepair.js) |

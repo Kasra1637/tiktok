@@ -34,7 +34,7 @@ DB or the operator's credentials.
 | Recommendation fit / shared notes | `python -m pytest backend/test_architecture.py backend/test_template_library.py backend/test_template_library_api.py -q` |
 | Angle grounding / normalization / AI envelopes | `python -m pytest backend/test_architecture.py backend/test_ai_json_calls.py -q` |
 | Studio save/readiness/version flow | `python -m pytest backend/test_studio_api.py -q` plus the relevant frontend generation checks below |
-| Render planning/provider routing | Relevant cases in `backend/test_generation.py`, `backend/test_generation_api.py` and `backend/test_influencer_workflow.py`; read ADRs 0001–0006 first |
+| Render planning/provider routing | Relevant cases in `backend/test_generation.py`, `backend/test_generation_api.py` and `backend/test_influencer_workflow.py`; read ADRs 0001–0006 and 0053/0061/0063–0064/0083 first |
 | Claim rules | `python -m pytest backend/test_claim_safety.py -q` plus the route/plan cases that consume the changed rule |
 | Any frontend import/module move | `node frontend/scripts/check-imports.cjs` |
 | Frontend generation flow | Imports, `node frontend/scripts/check-frontend-logic.cjs`, and `node frontend/scripts/check-render-smoke.cjs` |
