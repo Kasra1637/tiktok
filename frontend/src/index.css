@@ -527,10 +527,10 @@ body {
     --demo-cta-frame-w: min(100%, calc(52vh * 9 / 16));
 }
 .demo-cta-column[data-player="on"] {
-    /* With a clip loaded the column is frame + player bar (104px: scrubber 24,
-       gap 8, transport row 44, plus the row's own gap) + one 12px gap + the
-       16px of slack. */
-    --demo-cta-chrome: 140px;
+    /* With a clip loaded the column is frame + player bar (144px: trim cards,
+       scrubber 24, transport row 44, the shortcut line 16, plus gaps) + one
+       12px gap + the 16px of slack. */
+    --demo-cta-chrome: 164px;
 }
 .demo-cta-frame {
     width: var(--demo-cta-frame-w);

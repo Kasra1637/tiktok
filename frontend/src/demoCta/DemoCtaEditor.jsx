@@ -475,7 +475,7 @@ function VerticalNudge({ label, onNudge, upTestId, downTestId }) {
  * hard to hit while watching the preview. The size is on the button rather than
  * an icon so the whole square is the hit area.
  */
-function TransportButton({ label, onClick, disabled, children, testId }) {
+function TransportButton({ label, onClick, disabled, children, testId, variant = "default" }) {
   const button = (
     <button
       type="button"
@@ -483,7 +483,11 @@ function TransportButton({ label, onClick, disabled, children, testId }) {
       disabled={disabled}
       data-testid={testId}
       aria-label={label}
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--hairline)] bg-secondary/40 text-foreground transition duration-150 hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40"
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40 ${
+        variant === "accent"
+          ? "border-transparent bg-[color:var(--brand-indigo)] text-white shadow-md hover:brightness-110"
+          : "border-[color:var(--hairline)] bg-secondary/40 text-foreground hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60"
+      }`}
     >
       {children}
     </button>
@@ -2662,8 +2666,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                       label={isPlaying ? "Pause" : "Play"}
                       onClick={togglePlayPause}
                       testId="transport-play"
+                      variant="accent"
                     >
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                     </TransportButton>
                     <TransportButton
                       label="Back 1 second"
@@ -2701,11 +2706,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                       {previewMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                     </TransportButton>
                   </div>
-                  <div className="flex items-baseline gap-1.5 px-1">
-                    <span className="font-mono text-sm font-semibold tabular-nums tracking-tight">
+                  <div className="flex flex-col leading-tight">
+                    <span className="font-mono text-base font-semibold tabular-nums tracking-tight text-foreground">
                       {formatTime(currentTime)}
                     </span>
-                    <span className="font-mono text-xs text-muted-foreground">/</span>
                     <span className="font-mono text-xs tabular-nums text-muted-foreground">
                       {formatTime(duration)}
                     </span>
@@ -2796,6 +2800,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 )}
           </div>
         )}
+
+        {/* A single quiet line of transport shortcuts, under the row. Text
+            only — nothing here is a control, and the row above stays buttons. */}
+        <p className="text-xs text-muted-foreground">
+          Space play · −/→ 0.1s · Shift 1s · I / O set trim · L loop
+        </p>
 
         {/* Export moved into the player row. What is left here is the progress
             and status that outlive the click — the button itself is gone, so
