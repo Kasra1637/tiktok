@@ -3790,7 +3790,7 @@ def _two_section_schema(middle_seconds: int) -> str:
         ',\n    {"index": 0, "role": "hook", "seconds": 3, '
         '"goal": "what the opening beat must achieve to stop the scroll", '
         '"script": "the exact words spoken in the opening - the plan\'s hook line", '
-        '"action": "the opening physical performance: ordered, timed beats across face, hands, posture and props, already moving in frame one"}'
+        '"action": "the opening physical performance: the FIRST beat is a clearly visible movement, gesture or position change inside the first 1-2 seconds (step, turn, stand, sit, reach, lift, place or grab), then ordered, timed beats across face, hands, posture and props"}'
         f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
         '"goal": "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app", '
         '"script": "the words spoken in the middle - different from the hook", '
@@ -5229,7 +5229,7 @@ async def generate_video_strategy(
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
         f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
-        '  "hook_action": "the opening physical performance: ordered, timed beats across face, gaze, head, shoulders, hands and props, already moving in frame one",\n'
+        '  "hook_action": "the opening physical performance: the FIRST beat lands inside the first 1-2 seconds as a clearly visible movement, gesture or position change (they step in or away, turn, stand up, sit down, reach, lift, place or grab something), then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
         '  "messaging_pillars": ["2-4 viewer outcomes/benefits the video must land, each translated from a real feature -- what changes in the viewer\'s life or how they feel after using it, never the feature spec itself"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
@@ -5255,7 +5255,7 @@ async def generate_video_strategy(
         '  },\n'
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
-        ' "script": "words spoken in this segment", "action": "what they do in this segment"}'
+        ' "script": "words spoken in this segment", "action": "what they do in this segment; segment 0 opens with the same visible first-beat movement as hook_action, inside the first 1-2 seconds"}'
         + _two_section_schema(plan_seconds)
         + '\n  ],\n'
         + '  "camera_beat": {"direction": "left or right", '
@@ -5308,6 +5308,11 @@ async def generate_video_strategy(
         "mid-scroll, so the first frame must already be moving and "
         "the first half-second must hold ONE unmistakable physical beat. Never a neutral "
         "pose, a fade, a slow push-in standing in for action, or a greeting.\n"
+        "- THE OPENING'S FIRST BEAT IS A VISIBLE MOVE, not words: inside the first 1-2 "
+        "seconds the viewer watches them move — step in or away, turn, stand up or sit "
+        "down, reach for, lift, place or grab an object, or bring a hand to a prop or "
+        "their own face — and that move fits the scene's place and time. hook_action and "
+        "the hook section's action both open with it. Words never open the video alone.\n"
         "- Break the expected pattern on purpose, then escalate: two or three actions "
         f"inside the {hook_seconds}-second opening, each bigger or stranger than the "
         "last, ending on the strongest, aimed at the lens.\n"

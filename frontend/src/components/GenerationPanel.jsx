@@ -14,7 +14,7 @@ import {
 } from "../lib/videoLength";
 import {
   Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Smartphone, Check, Film,
+  Play, Info, Clock, Smartphone, Check, Film, MapPin, Save,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 
@@ -155,6 +155,14 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // though the vote already saved. Cleared when tracking moves to another
   // render, so one clip's vote can never highlight the next.
   const [videoOverride, setVideoOverride] = useState(null);
+  // The Location editor. The plan's `visual_direction` is the single source of
+  // truth for where the video happens; editing it here saves it (and rewrites
+  // the strategy's place-bearing lines server-side) without leaving the render
+  // step. The draft follows the saved value so a re-render never shows a stale
+  // local edit.
+  const [locationDraft, setLocationDraft] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationNote, setLocationNote] = useState(null);
   const timer = useRef(null);
 
   const projectId = project?.id;
@@ -358,6 +366,55 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     setVideoOverride(null);
   }, [trackedGenerationId]);
 
+  // The Location draft follows the saved plan's value whenever the project
+  // reloads — an autosave elsewhere, a sync, or this panel's own save — so the
+  // input never shows text that is not what will render. `location` is the
+  // canonical field; `visual_direction` is the legacy mirror.
+  useEffect(() => {
+    setLocationDraft(project?.location || project?.visual_direction || "");
+  }, [projectId, project?.location, project?.visual_direction]);
+
+  const handleSaveLocation = async () => {
+    const value = locationDraft.trim();
+    if (value === (project?.location || project?.visual_direction || "").trim()) return;
+    setSavingLocation(true);
+    setError(null);
+    setLocationNote(null);
+    try {
+      const updated = await api.updateStudioProject(projectId, { location: value });
+      // Same rule as every other saved edit on Review: a content save
+      // re-marks the project ready, because the founder reviewed the exact
+      // text they saved. A server refusal (a prohibited claim in the new
+      // location) is reported rather than hidden, and the draft state stands.
+      let settled = updated;
+      try {
+        settled = await api.markProjectReady(updated.id);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      }
+      onProjectChange?.(settled);
+      const change = updated?.location_change || {};
+      const changed = change.changed || [];
+      const blocked = change.blocked || [];
+      const parts = [];
+      if (changed.length) {
+        parts.push(`Rewritten to match: ${changed.join(", ")}.`);
+      }
+      if (blocked.length) {
+        parts.push(
+          `Your own spoken words still name another place (${blocked
+            .map((b) => `${b.field} ${b.reason}`)
+            .join("; ")}). Spoken lines are never rewritten — edit them on Review & submit, or the render will refuse.`
+        );
+      }
+      setLocationNote(parts.join(" ") || "Location saved.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
 const handleGenerate = async () => {
     // "Generate another" runs a second render on a video the founder has
     // already seen. Idempotency stops accidental duplicates of one click, not a
@@ -554,6 +611,56 @@ const handleGenerate = async () => {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Location, editable here on the render step. The plan's saved location
+          is the single source of truth for where the video happens: saving a
+          change rewrites the strategy's place-bearing lines to match on the
+          server (hook concept, position in frame, what they do, movement,
+          lighting, colour palette) and keeps the strategy current, so no
+          second tab and no paid rebuild are needed to move the video. Spoken
+          lines, wardrobe, props, voice and camera are deliberately untouched. */}
+      <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="render-location">
+        <GroupLabel icon={MapPin}>Location</GroupLabel>
+        <p className="text-sm text-muted-foreground">
+          The one place this video happens. Editing it rewrites the hook concept, position in
+          frame, what they do, movement, lighting and colour palette to match; your spoken lines,
+          wardrobe, props, voice and camera are untouched.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-0 flex-1 space-y-1">
+            <label htmlFor="render-location" className="text-sm font-semibold">Where it happens</label>
+            <input
+              id="render-location"
+              data-testid="render-location-input"
+              type="text"
+              value={locationDraft}
+              onChange={(e) => setLocationDraft(e.target.value)}
+              disabled={inFlight || savingLocation}
+              className={CONTROL_CLASS}
+              placeholder="For example: Kitchen at 7am, soft morning light"
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleSaveLocation}
+            disabled={
+              inFlight
+              || savingLocation
+              || !projectId
+              || locationDraft.trim() === (project?.location || project?.visual_direction || "").trim()
+            }
+            busy={savingLocation}
+          >
+            <Save className="h-3.5 w-3.5" /> Save location
+          </Button>
+        </div>
+        {locationNote && (
+          <p className="text-sm text-muted-foreground" data-testid="render-location-note">
+            {locationNote}
+          </p>
+        )}
+      </div>
 
       {models && (
         <div className="space-y-2">

@@ -5,7 +5,15 @@ outdoors) and time of day bind every later step: direction dropdowns, the
 founder's saved look, template examples and the render prompt. Detection is
 lexical and conservative: a text with no place or time words never conflicts.
 Pure policy: no HTTP, AI, auth or persistence imports.
+
+The founder's saved look is also the single source of truth for the place
+(ADR 0090): when it changes, `reconcile_location` rewrites the strategy's
+place-bearing lines to match it, and the render guard re-runs the same
+rewrite before the prompt is built. Spoken words are never rewritten — a
+field that still names another place in words the founder approved hearing
+is reported, and the render refuses rather than changing what they said.
 """
+import copy
 import re
 from typing import Optional
 
@@ -320,6 +328,192 @@ def reconcile_look(visual_direction: str, angle: Optional[dict]) -> dict:
         f"but your angle opens {where + ': ' if where else 'on: '}{scene['moment'][:1].lower() + scene['moment'][1:]}."
     )
     return {"visual_direction": ", ".join(kept), "note": note, "dropped": dropped}
+
+
+# ---------------------------------------------------------------------------
+#
+# The Location is the single source of truth for the place (ADR 0090).
+#
+# The angle opened the video somewhere; the founder can move it, by editing
+# the plan's Location (the `location` field; `visual_direction` is the legacy
+# mirror). When they do, every line the strategy wrote about the old place has
+# to follow, or the older copy wins at the render lock exactly as it always
+# did. `reconcile_location` is that rewrite: the scene's location becomes the
+# Location text outright (it IS the place), and every other place-bearing
+# direction line keeps its performance and loses only the clauses that name a
+# different place or time of day. Spoken words are never touched — those are
+# reported instead, and the render refuses if they still disagree, because a
+# render may not change what the founder approved hearing.
+#
+# Detection stays as conservative as the rest of this module: a clause with no
+# place or time word never conflicts, and an indoor-to-indoor move (kitchen to
+# living room) is not detectable lexically — but the prompt now names the
+# Location once and the scene lock's place field carries it verbatim, so the
+# older room text can no longer win wherever a clause CAN be detected.
+
+# The scene's place fields: replaced by the Location text outright. The
+# current schema keeps ONE place field, "location"; legacy rows split it
+# across environment/background/setting, and every one that exists is
+# overwritten so no copy of the old place survives to compete with the
+# Location at the render lock.
+_LOCATION_REPLACE_FIELDS = (
+    ("location", "Location"),
+)
+
+# Legacy place keys, kept only so an old row's split fields are overwritten
+# too. Nothing current reads them; ai_service.merge_legacy_location folds
+# them into the single location field for consumers, so leaving an old value
+# behind would resurrect it there.
+_LOCATION_LEGACY_FIELDS = (
+    ("environment", "Environment"),
+    ("background", "Background"),
+    ("setting", "Setting"),
+)
+
+# The strategy prose that reaches the prompt but is not a place line: rewritten
+# only by the render audit (thorough=True), never by the Location save, so a
+# location edit touches the enumerated place lines and the scene, and nothing
+# else the founder wrote.
+_LOCATION_THOROUGH_FIELDS = (
+    ("hook_promise", "Hook promise"),
+    ("strategy_summary", "Strategy summary"),
+    ("audience_problem", "Audience problem"),
+    ("desired_outcome", "Desired outcome"),
+    ("mechanism_beat", "Mechanism beat"),
+    ("payoff_beat", "Payoff beat"),
+    ("differentiation_beat", "Differentiation beat"),
+)
+
+# Spoken words: never rewritten, and reported when they still contradict the
+# Location. The render turns these into a refusal.
+_LOCATION_SPOKEN_FIELDS = (
+    ("hook_line", "Hook line"),
+    ("hook_dialogue", "Hook dialogue"),
+)
+
+
+def _drop_conflicting(text, scene: dict) -> tuple:
+    """`text` without the clauses that contradict `scene`, and whether it changed.
+
+    Commas and semicolons are the clause boundaries `reconcile_look` already
+    uses. A text with no contradicting clause comes back verbatim, so a
+    Location change only ever touches lines that actually disagree.
+    """
+    raw = str(text or "")
+    if not raw.strip() or not (scene.get("place") or scene.get("time")):
+        return raw, False
+    parts = [p for p in re.split(r"\s*[,;]\s*", raw) if p.strip()]
+    kept = [p for p in parts if not conflict_reason(p, scene)]
+    if len(kept) == len(parts):
+        return raw, False
+    return ", ".join(kept), True
+
+
+def _section_role(section: dict) -> str:
+    return str((section or {}).get("role") or "").strip().lower() or "hook"
+
+
+def reconcile_location(strategy: Optional[dict], location: str, thorough: bool = False) -> dict:
+    """Rewrite every place-bearing strategy field to match one Location.
+
+    `location` is the plan's visual direction: the founder's own words for
+    where and when the video happens. The scene's environment and background
+    become that text outright, and every other place-bearing direction line is
+    kept verbatim except for the clauses that name a different place or time
+    of day, which are dropped. `thorough` is the pre-render audit: it also
+    rewrites the strategy prose that reaches the prompt, and reports any field
+    whose spoken words still name another place in `blocked`.
+
+    Returns {"strategy", "changed", "blocked"} — the rewritten copy (the input
+    is never mutated), the human labels of the fields that changed, and
+    {field, reason} for every spoken field that could not be rewritten.
+    """
+    result = copy.deepcopy(strategy) if isinstance(strategy, dict) else {}
+    text = re.sub(r"\s+", " ", str(location or "")).strip()
+    changed: list = []
+    blocked: list = []
+    if not result or not text:
+        return {"strategy": result, "changed": changed, "blocked": blocked}
+    scene = scene_of(text)
+
+    def _patch(container, key, label):
+        if not isinstance(container, dict) or key not in container:
+            return
+        new, did = _drop_conflicting(container.get(key), scene)
+        if did:
+            container[key] = new
+            changed.append(label)
+
+    # The place itself: the Location takes these over verbatim, whether or not
+    # the old values contradicted it. This is the copy that used to win at the
+    # render lock.
+    scene_block = result.get("scene")
+    if isinstance(scene_block, dict):
+        for key, label in _LOCATION_REPLACE_FIELDS:
+            if scene_block.get(key) != text:
+                scene_block[key] = text
+                changed.append(label)
+        for key, label in _LOCATION_LEGACY_FIELDS:
+            if key in scene_block and scene_block.get(key) != text:
+                scene_block[key] = text
+                changed.append(label)
+        _patch(scene_block, "lighting", "Lighting")
+        _patch(scene_block, "color_palette", "Colour palette")
+        _patch(scene_block, "character_positioning", "Position in frame")
+
+    perf_block = result.get("performance")
+    if isinstance(perf_block, dict):
+        _patch(perf_block, "movement", "Movement")
+
+    _patch(result, "hook_concept", "Hook concept")
+    _patch(result, "hook_action", "Opening action")
+
+    segments = result.get("segments")
+    if isinstance(segments, list):
+        for section in segments:
+            if not isinstance(section, dict):
+                continue
+            role = _section_role(section)
+            _patch(section, "action", f"{role.capitalize()} — what they do")
+
+    if thorough:
+        for key, label in _LOCATION_THOROUGH_FIELDS:
+            _patch(result, key, label)
+        pillars = result.get("messaging_pillars")
+        if isinstance(pillars, list) and pillars:
+            rewritten = []
+            did = False
+            for item in pillars:
+                new, item_did = _drop_conflicting(item, scene)
+                did = did or item_did
+                if str(new or "").strip():
+                    rewritten.append(new)
+            if did:
+                result["messaging_pillars"] = rewritten
+                changed.append("Messaging pillars")
+        if isinstance(segments, list):
+            for section in segments:
+                if not isinstance(section, dict):
+                    continue
+                role = _section_role(section)
+                _patch(section, "goal", f"{role.capitalize()} — what it must achieve")
+
+    # Spoken words are audited in both modes and never rewritten.
+    for key, label in _LOCATION_SPOKEN_FIELDS:
+        reason = conflict_reason(result.get(key), scene)
+        if reason:
+            blocked.append({"field": label, "reason": reason})
+    if isinstance(segments, list):
+        for section in segments:
+            if not isinstance(section, dict):
+                continue
+            reason = conflict_reason(section.get("script"), scene)
+            if reason:
+                blocked.append({
+                    "field": f"{_section_role(section).capitalize()} — spoken words",
+                    "reason": reason,
+                })
+    return {"strategy": result, "changed": changed, "blocked": blocked}
 
 
 def template_angle_fit(template: dict, angle: Optional[dict]) -> dict:

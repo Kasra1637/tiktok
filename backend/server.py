@@ -5160,6 +5160,65 @@ async def update_studio_project(
         set_clauses.append("template_version = ?")
         values.append(tpl.get("version"))
 
+    # The Location is the single source of truth for where the video happens
+    # (ADR 0090). The strategy keeps its own copy of the place in
+    # scene.location and in its direction lines, and that copy is what the
+    # render lock reads — so before this rewrite existed, editing the Location
+    # could not change the video: the older strategy text won at the lock every
+    # time. A Location edit now rewrites the strategy's place-bearing lines in
+    # the same save (angle_scene.reconcile_location), and re-stamps the
+    # strategy to the new plan version, so changing one place name does not
+    # force a paid text rebuild whose only job is to repeat it. Spoken words
+    # are deliberately not rewritten; anything they still contradict is
+    # reported back for the founder to fix.
+    #
+    # `location` is the canonical field and `visual_direction` the legacy
+    # mirror; a client may send either, and both columns are kept in sync so
+    # every reader — old and new — sees the same place.
+    location_change = None
+    location_key = ""
+    if "strategy" not in updates:
+        if "location" in updates:
+            location_key = "location"
+        elif "visual_direction" in updates:
+            location_key = "visual_direction"
+    if location_key:
+        new_location = str(updates.get(location_key) or "").strip()
+        old_location = str(
+            row.get("location") or row.get("visual_direction") or ""
+        ).strip()
+        if new_location != old_location:
+            mirror_key = "visual_direction" if location_key == "location" else "location"
+            if mirror_key not in updates:
+                set_clauses.append(f"{mirror_key} = ?")
+                values.append(new_location)
+            existing_strategy = row.get("strategy")
+            if isinstance(existing_strategy, str):
+                try:
+                    existing_strategy = json.loads(existing_strategy)
+                except (json.JSONDecodeError, TypeError):
+                    existing_strategy = None
+            if isinstance(existing_strategy, dict) and existing_strategy:
+                audit = angle_scene.reconcile_location(existing_strategy, new_location)
+                if audit["changed"]:
+                    # Claim checkout walks `merged` below, so it must see the
+                    # text that was actually stored.
+                    updates["strategy"] = audit["strategy"]
+                    set_clauses.append("strategy = ?")
+                    values.append(json.dumps(audit["strategy"]))
+                    set_clauses.append("strategy_version = strategy_version + 1")
+                # The strategy now describes the saved plan: keep it current
+                # instead of blocking the render on a version number this same
+                # save has already reconciled.
+                set_clauses.append("strategy_script_version = ?")
+                values.append(
+                    int(row.get("script_version") or 0) + (1 if content_changed else 0)
+                )
+                location_change = {
+                    "changed": audit["changed"],
+                    "blocked": audit["blocked"],
+                }
+
     # Re-check claims against the profile after any edit.
     profile = await _fetch_one(
         "SELECT * FROM brand_profiles WHERE id = ?", (row.get("brand_profile_id"),)
@@ -5261,9 +5320,15 @@ async def update_studio_project(
                 brand_profile_id=row.get("brand_profile_id") or "",
                 studio_project_id=project_id,
                 detail=f"objective={_old_objective};kind={_old_kind}")
-    return _public_project(
+    result = _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
+    if location_change is not None:
+        # What the Location rewrite did, for the panel that asked for it: the
+        # labels of the fields rewritten to match, and any spoken field that
+        # still names the old place and must be edited by hand.
+        result["location_change"] = location_change
+    return result
 
 
 @api_router.post("/studio/projects/{project_id}/rewrite-hook")
@@ -6051,6 +6116,12 @@ async def _submit_generation(
             project.get("hook_seconds") or 3,
             project.get("duration_seconds") or 0,
         )
+    # One place for the whole render (ADR 0090): every place-bearing direction
+    # line is reconciled to the plan's Location before the prompt is built, and
+    # spoken words that still name another place refuse the render here — the
+    # last point where a contradiction can be caught before money is spent.
+    if strategy:
+        strategy = _guard_render_location(strategy, project)
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
     # after the founder has asked for it. The builder scales every field
@@ -6935,6 +7006,48 @@ def _require_current_strategy(project: dict) -> dict:
             ),
         )
     return strategy
+
+
+def _guard_render_location(strategy: dict, project: dict) -> dict:
+    """
+    Rewrite a strategy's place-bearing lines to the plan's Location before the
+    prompt is built, and refuse a render whose spoken words still name another
+    place.
+
+    This is the second net under the save-time rewrite (ADR 0090): a strategy
+    built before the Location existed, edited through another client, or
+    patched by a caller that skipped `update_studio_project` still renders
+    against ONE place. Direction lines that contradict the Location are
+    rewritten here — same rules as the save — because the founder already
+    chose the place and the render should show it. Spoken words are never
+    rewritten, so a hook line or a section script that still names another
+    place fails the render with the field named and nothing charged, and the
+    founder edits their own words instead.
+    """
+    # The plan's Location is the canonical field; `visual_direction` is the
+    # legacy mirror a pre-rename row still carries.
+    location = str(project.get("location") or project.get("visual_direction") or "").strip()
+    if not location or not isinstance(strategy, dict) or not strategy:
+        return strategy
+    audit = angle_scene.reconcile_location(strategy, location, thorough=True)
+    if audit["blocked"]:
+        named = "; ".join(f"{b['field']} {b['reason']}" for b in audit["blocked"])
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Your Location is \u201c{location}\u201d, but the spoken words still name another "
+                f"place: {named}. Spoken words are never rewritten automatically \u2014 edit "
+                "them on Review & submit to match the Location (or change the Location), "
+                "then generate again. Nothing has been charged."
+            ),
+        )
+    if audit["changed"]:
+        logger.info(
+            "Render for project %s: %d place-bearing strategy field(s) rewritten to the "
+            "Location: %s",
+            project.get("id"), len(audit["changed"]), ", ".join(audit["changed"]),
+        )
+    return audit["strategy"]
 
 
 async def _require_renderable_project(project_id: str, user_id: str) -> tuple:

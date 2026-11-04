@@ -1730,6 +1730,83 @@ async function main() {
     }
   });
 
+  await check("the render panel edits the Location and reports what was rewritten", async (ctx) => {
+    // The Location is the single source of truth for the place (ADR 0090), and
+    // it is editable HERE, on the render step: saving it sends one PATCH whose
+    // server-side rewrite touches only the place-bearing strategy lines, then
+    // re-marks the project ready — no trip to another tab, no paid rebuild.
+    // The fixture carries only the legacy mirror, so this also pins that the
+    // editor falls back to it for projects saved before the rename.
+    const seen = [];
+    const saved = {
+      ...PROJECT_WITH_STRATEGY,
+      location: "A park bench on a sunny afternoon",
+      visual_direction: "A park bench on a sunny afternoon",
+      location_change: { changed: ["Location", "Lighting"], blocked: [] },
+    };
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      updateStudioProject: async (id, payload) => {
+        if (id !== "p1") throw new Error(`Location saved for the wrong project: ${id}`);
+        if (payload.location !== "A park bench on a sunny afternoon") {
+          throw new Error(`the save did not carry the new Location: ${JSON.stringify(payload)}`);
+        }
+        return saved;
+      },
+      markProjectReady: async (id) => {
+        if (id !== "p1") throw new Error(`ready re-marked for the wrong project: ${id}`);
+        return saved;
+      },
+    }, async () => {
+      await mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY },
+        onProjectChange: (next) => seen.push(next),
+      })(ctx);
+      const input = ctx.container.querySelector('[data-testid="render-location-input"]');
+      if (!input) throw new Error("the render panel does not offer the Location editor");
+      if (input.value !== PROJECT_WITH_STRATEGY.visual_direction) {
+        throw new Error(`the editor does not show the saved Location: ${JSON.stringify(input.value)}`);
+      }
+      const save = buttonByText(ctx, /Save location/);
+      if (!save.disabled) throw new Error("Save location is enabled with nothing changed");
+      await typeInto(ctx, input, "A park bench on a sunny afternoon");
+      await clickEl(ctx, buttonByText(ctx, /Save location/), "no Save location button to click");
+      expectText(ctx, "Rewritten to match: Location, Lighting.", "the rewrite note did not render");
+      if (!apiCalls.includes("updateStudioProject") || !apiCalls.includes("markProjectReady")) {
+        throw new Error(`the Location save did not run the full write: ${JSON.stringify(apiCalls.slice(-4))}`);
+      }
+      if (seen[seen.length - 1]?.location !== "A park bench on a sunny afternoon") {
+        throw new Error("the saved project did not reach the page");
+      }
+    });
+  });
+
+  await check("the Location editor names spoken words it will not rewrite", async (ctx) => {
+    // Spoken lines are the founder's own words and are never rewritten: when
+    // they still name the old place, the note says which field it is and where
+    // to fix it, instead of silently rendering them against the new Location.
+    const saved = {
+      ...PROJECT_WITH_STRATEGY,
+      location: "A park bench on a sunny afternoon",
+      location_change: {
+        changed: ["Location"],
+        blocked: [{ field: "Hook line", reason: "is set indoors" }],
+      },
+    };
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      updateStudioProject: async () => saved,
+      markProjectReady: async () => saved,
+    }, async () => {
+      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
+      const input = ctx.container.querySelector('[data-testid="render-location-input"]');
+      await typeInto(ctx, input, "A park bench on a sunny afternoon");
+      await clickEl(ctx, buttonByText(ctx, /Save location/), "no Save location button to click");
+      expectText(ctx, "Hook line is set indoors", "the blocked spoken field was not named");
+      expectText(ctx, "never rewritten", "the note does not say why the words were kept");
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Per-render resolution choice (heygen-video-1 offers 480p beside 768p).
   //
@@ -4219,7 +4296,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "?project=p1";
     const OPTIONS = {
       group: "default",
-      setting: ["Setting one", "Setting two", "Setting three", "Setting four"],
+      location: ["Location one", "Location two", "Location three", "Location four"],
       lighting: ["Lighting one", "Lighting two", "Lighting three", "Lighting four"],
       wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"],
       voice: ["Voice one", "Voice two", "Voice three", "Voice four"],
@@ -4242,7 +4319,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const select = ctx.container.querySelector('#camera-setup');
         if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
-        for (const [id, list] of Object.entries({ "review-setting": OPTIONS.setting, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice, "review-tone": OPTIONS.tone })) {
+        for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice, "review-tone": OPTIONS.tone })) {
           const dropdown = ctx.container.querySelector(`#${id}`);
           if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
           if (dropdown.tagName !== "SELECT") throw new Error(`${id} is not a dropdown`);
@@ -4251,10 +4328,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           if (dropdown.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
-        expectText(ctx, "Setting, lighting & wardrobe");
+        expectText(ctx, "Location, lighting & wardrobe");
         expectText(ctx, "Plan default:");
         await selectOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
-        await selectOption(ctx, ctx.container.querySelector('#review-setting'), "Setting one");
+        await selectOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
         await selectOption(ctx, ctx.container.querySelector('#review-lighting'), "Lighting one");
         await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
         await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
@@ -4262,7 +4339,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
         expectText(ctx, "Camera setup controls framing and camera movement");
-        if (saved.visual_direction !== "Setting one, Lighting one, Wardrobe one") {
+        if (saved.location !== "Location one") {
+          throw new Error(`the Location pick was not saved: ${JSON.stringify(saved.location)}`);
+        }
+        if (saved.visual_direction !== "Lighting one, Wardrobe one") {
           throw new Error(`scene picks did not compose the saved scene notes: ${JSON.stringify(saved.visual_direction)}`);
         }
         if (saved.voice_direction !== "Voice one") throw new Error("voice pick was not saved");
@@ -4271,7 +4351,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
-        for (const [id, want] of Object.entries({ "review-setting": "Setting one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one", "review-tone": "Tone one" })) {
+        for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one", "review-tone": "Tone one" })) {
           if (ctx.container.querySelector(`#${id}`)?.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }

@@ -71,13 +71,21 @@ def test_explicit_location_replaces_legacy_scene_place(api_fixture):  # noqa: F8
     assert project["strategy"]["scene"]["location"] == "A city rooftop at noon."
 
 
-def test_review_location_edit_persists_and_invalidates_strategy(api_fixture):  # noqa: F811
+def test_review_location_edit_persists_and_rewrites_the_strategy(api_fixture):  # noqa: F811
+    # A Location edit used to make the strategy stale, forcing a paid rebuild
+    # whose only job was to repeat the new place into the strategy's own place
+    # lines. ADR 0090 replaces that: the save rewrites the place-bearing lines
+    # deterministically (angle_scene.reconcile_location), re-stamps the
+    # strategy to the plan version it now matches, and reports what changed —
+    # so the render follows the edited Location without another call.
     project_id = legacy_project(api_fixture)
     run(api_fixture._execute("UPDATE studio_projects SET script_version = 1, strategy_script_version = 1 WHERE id = ?", (project_id,)))
-    run(api_fixture.update_studio_project(project_id, UpdateStudioProjectRequest(location="A city rooftop at noon."), ANON))
+    updated = run(api_fixture.update_studio_project(project_id, UpdateStudioProjectRequest(location="A city rooftop at noon."), ANON))
     project = run(api_fixture.get_studio_project(project_id, ANON))
     assert project["location"] == "A city rooftop at noon."
-    assert project["strategy_is_current"] is False
+    assert project["strategy_is_current"] is True
+    assert project["strategy"]["scene"]["location"] == "A city rooftop at noon."
+    assert (updated.get("location_change") or {}).get("changed")
 
 
 def test_render_prompt_uses_unified_location_without_legacy_labels():

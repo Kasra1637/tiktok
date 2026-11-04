@@ -2433,7 +2433,7 @@ export default function CreateVideo() {
                 data-testid="review-location-input"
               />
               <p className="text-sm text-muted-foreground" data-subtitle="" data-testid="review-location-help">
-                This exact Location is used by the strategy, render prompt and saved result.
+                This Location feeds the strategy, the prompt and the result.
               </p>
             </div>
             {/* Direction is optional refinement, and it was the densest stack
@@ -2483,7 +2483,7 @@ export default function CreateVideo() {
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <p className="text-sm font-semibold">Location, lighting &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">Location updates the field above; lighting and wardrobe refine the same scene.</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">Updates the field above; lighting and wardrobe refine it.</p>
                 <DirectionSelect
                   id="review-location-direction"
                   testId="review-location-direction"

@@ -1547,7 +1547,14 @@ class TestStrategyBudget:
         # angle's opening moment. Without it the strategy drifted to the
         # template's or look's indoor/night setting. 26,500 keeps ~1,000 of
         # headroom for the next measured change.
-        CEILING = 26_500
+        #
+        # ADR 0090 raises it once more, measured: 26,729 -> 27,500 (+~770) for
+        # the OPENING'S FIRST BEAT IS A VISIBLE MOVE rule and its wording in
+        # the hook_action and section-action schema lines. The opening now
+        # must show a clearly visible movement inside the first 1-2 seconds,
+        # stated in the prompt rather than left to chance. 27,500 keeps ~770
+        # of headroom for the next measured change.
+        CEILING = 27_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

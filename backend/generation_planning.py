@@ -173,8 +173,13 @@ CONDENSE_BELOW = 5000
 # and gesture, and final-phone visibility survive every provider squeeze.
 # Processing alone starts a zoom at 70% of hook_seconds and finishes 0.6s later;
 # no numeric timestamp or spoken-word sync is promised to the video model.
-FULL_PROMPT_FLOOR = 4261
-CONDENSED_PROMPT_FLOOR = 2378
+#
+# The floors also fell when the opening rule was restated as what must be ON
+# SCREEN — the visible move in the first 1-2 seconds — and the redundancy that
+# bought it came out of the same paragraph, so the added constraint cost
+# nothing: the measured values below are the real ones for this text.
+FULL_PROMPT_FLOOR = 4223
+CONDENSED_PROMPT_FLOOR = 2377
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -521,31 +526,36 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
 #
 # What it forbids matters as much as what it asks for: the common failure this
 # replaces was an opening that drifts in, settles into a neutral pose and then
-# starts talking, which is exactly what a scrolling thumb ignores.
+# starts talking, which is exactly what a scrolling thumb ignores. The visible
+# move in the first 1-2 seconds is the same rule stated as what MUST be on
+# screen, not only what must not: the opening's first beat is something the
+# viewer watches happen.
 _OPENING_INTERRUPT = (
-    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion \u2014"
-    " no neutral pose before anything happens, no fade, drift or slow push-in "
-    "standing in for action, no greeting to camera. Inside the first half-second "
-    "they do ONE unmistakable thing a scrolling thumb has to pause for: a sharp "
-    "look straight into the lens, brows lifting and eyes widening, a hand snapping "
-    "up into frame, an object grabbed, moved or put down, a posture or shoulder "
-    "break. Two or three such beats, each bigger or stranger than the one before, "
-    "so the opening escalates instead of settling. The face, gaze, hands and "
-    "posture carry it; the words come second. Read the beats below as the physical "
-    "score for those seconds and play them in order.\n"
-    "Every one of those beats comes out of THIS video\u2019s own situation \u2014 its props, "
-    "its place, its problem, what the middle goes on to do \u2014 so the interrupt reads "
-    "as the first move of this story and not a random gesture, and it leaves a "
-    "question the rest of the video answers."
+    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion, "
+    "and the first 1-2 seconds show a clearly visible movement, gesture or position "
+    "change \u2014"
+    " no neutral pose, no fade, drift or slow push-in standing in for action, no "
+    "greeting to camera. Inside the first half-second, ONE unmistakable thing a "
+    "scrolling thumb must pause for: a sharp look into the lens, brows lifting and "
+    "eyes widening, a hand snapping up into frame, an object grabbed or put down, a "
+    "posture break. Two or three beats, each bigger than the one before, so the "
+    "opening escalates, never settles. The face, gaze, hands and posture carry it; "
+    "words come second. Read the beats below as the physical score and play them in "
+    "order.\n"
+    "Every beat comes out of THIS video\u2019s own situation \u2014 its props, its place, its "
+    "problem, what the middle goes on to do \u2014 so the interrupt reads as the first "
+    "move of this story, not a random gesture, and leaves a question the rest of the "
+    "video answers."
 )
 
 # The same rule for a provider whose ceiling is too low for the full set. Every
 # constraint above survives; only the examples of how to satisfy them go.
 _CONDENSED_OPENING = (
-    "Opening is a pattern interrupt: the first frame is already moving; no neutral pose, fade or "
-    "greeting. One clear beat inside the first half-second, then two or three "
-    "escalating beats via face, gaze, hands and posture, not words. Follow the physical "
-    "score below. Ground beats in this video's own situation; leave a question the rest answers."
+    "Pattern interrupt: first frame is already moving; 1-2s: clearly visible "
+    "movement, gesture or position change \u2014 no neutral pose, fade, greeting. "
+    "One clear beat in the first half-second, then escalate via face, gaze, hands, "
+    "posture, not words. Follow the score. Ground beats in this video\u2019s own "
+    "situation; leave a question the rest answers."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -1131,7 +1141,7 @@ _SECTION_LABELS = {
 }
 
 
-def character_scene_lock(strategy: dict) -> str:
+def character_scene_lock(strategy: dict, location: str = "") -> str:
     """
     Render the strategy's scene and performance as an explicit do-not-change
     block.
@@ -1156,6 +1166,13 @@ def character_scene_lock(strategy: dict) -> str:
     decided it, instead of being left to the photograph and the model to
     reconcile.
 
+    `location` is the plan's Location when one exists: the single source of
+    truth for the place (ADR 0090). The lock's own location field is then
+    skipped — the Location text above states the place once, and an older
+    strategy copy naming a room again is exactly the contradiction that used
+    to win over an edited Location. With no Location, the strategy's place
+    field is what there is, and it is stated as before.
+
     Camera setup owns position and framing. Older camera_angle/framing fields
     are omitted; fixed-camera directions are validated before prompt assembly.
     The lock still owns the room, light, wardrobe and props. Only handheld
@@ -1163,6 +1180,13 @@ def character_scene_lock(strategy: dict) -> str:
     """
     strategy = strategy or {}
     lines = []
+    # The place is named once, from the Location, whenever there is one. The
+    # current schema's place field is "location"; the other three are legacy
+    # split names an old row may still carry.
+    skip = (
+        {"location", "environment", "background", "setting"}
+        if str(location or "").strip() else set()
+    )
     for section, fields in _SECTION_LABELS.items():
         if section == "character":
             continue
@@ -1174,7 +1198,8 @@ def character_scene_lock(strategy: dict) -> str:
             for key, label in fields
             # The fixed selfie instruction replaces even an older strategy's
             # metre-based camera/framing fields, rather than contradicting them.
-            if not (section == "scene" and key in ("camera_angle", "framing"))
+            # The Location owns place when it exists (ADR 0090).
+            if not (section == "scene" and key in {"camera_angle", "framing"} | skip)
             and str(values.get(key) or "").strip()
         ]
         if described:
@@ -1643,7 +1668,22 @@ def _assemble_prompt(
     if promise:
         sections.append(f"What the hook promises: {promise}")
 
-    lock = character_scene_lock(strategy)
+    # The Location, named once. It is the plan's own Location — the single
+    # source of truth for where and when the video happens (ADR 0090) — and
+    # the lock below skips its own place field whenever this exists, so an
+    # older strategy's room text can no longer compete with it.
+    # `visual_direction` is the legacy mirror for rows written before the
+    # rename, so it is read as a fallback.
+    location = _clip(
+        plan.get("location") or plan.get("visual_direction"), 160, protect=True
+    )
+    if location:
+        sections.append(
+            "WHERE THIS HAPPENS — one place, one time, for the whole take, and "
+            f"every visual detail happens here: {location}"
+        )
+
+    lock = character_scene_lock(strategy, location)
     if lock:
         sections.append(lock)
 
