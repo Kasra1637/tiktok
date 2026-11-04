@@ -28,6 +28,7 @@ import storage_service
 import posters
 import template_library
 import angle_scene
+import scene_consistency
 import claim_safety
 import media_signing
 import video_providers
@@ -5175,6 +5176,11 @@ async def update_studio_project(
     # `location` is the canonical field and `visual_direction` the legacy
     # mirror; a client may send either, and both columns are kept in sync so
     # every reader — old and new — sees the same place.
+    #
+    # The Location is also split on the way in (ADR 0092): it stores the place
+    # only, and any lighting or time of day it carried moves into the
+    # strategy's Lighting — or, before a strategy exists, into the plan's scene
+    # notes so the strategy prompt still receives it.
     location_change = None
     location_key = ""
     if "strategy" not in updates:
@@ -5188,24 +5194,43 @@ async def update_studio_project(
             row.get("location") or row.get("visual_direction") or ""
         ).strip()
         if new_location != old_location:
+            place, moved = scene_consistency.split_location(new_location)
             mirror_key = "visual_direction" if location_key == "location" else "location"
-            if mirror_key not in updates:
-                set_clauses.append(f"{mirror_key} = ?")
-                values.append(new_location)
             existing_strategy = row.get("strategy")
             if isinstance(existing_strategy, str):
                 try:
                     existing_strategy = json.loads(existing_strategy)
                 except (json.JSONDecodeError, TypeError):
                     existing_strategy = None
-            if isinstance(existing_strategy, dict) and existing_strategy:
+            has_strategy = isinstance(existing_strategy, dict) and bool(existing_strategy)
+            # The client's own key stores the place only. Before a strategy
+            # exists there is no Lighting field yet, so a legacy
+            # visual_direction keeps the moved lighting text as scene notes.
+            own_value = place
+            if not has_strategy and moved and location_key == "visual_direction":
+                own_value = scene_consistency.append_clause(place, moved)
+            if own_value != new_location:
+                set_clauses.append(f"{location_key} = ?")
+                values.append(own_value)
+            mirror_value = (
+                place
+                if has_strategy or not moved
+                else scene_consistency.append_clause(place, moved)
+            )
+            if mirror_key not in updates:
+                set_clauses.append(f"{mirror_key} = ?")
+                values.append(mirror_value)
+            if has_strategy:
                 audit = angle_scene.reconcile_location(existing_strategy, new_location)
-                if audit["changed"]:
+                strategy_out = audit["strategy"]
+                scene_audit = scene_consistency.reconcile_scene(strategy_out, row)
+                changed = list(dict.fromkeys(audit["changed"] + scene_audit["changed"]))
+                if audit["changed"] or scene_audit["changed"]:
                     # Claim checkout walks `merged` below, so it must see the
                     # text that was actually stored.
-                    updates["strategy"] = audit["strategy"]
+                    updates["strategy"] = scene_audit["strategy"]
                     set_clauses.append("strategy = ?")
-                    values.append(json.dumps(audit["strategy"]))
+                    values.append(json.dumps(scene_audit["strategy"]))
                     set_clauses.append("strategy_version = strategy_version + 1")
                 # The strategy now describes the saved plan: keep it current
                 # instead of blocking the render on a version number this same
@@ -5215,8 +5240,8 @@ async def update_studio_project(
                     int(row.get("script_version") or 0) + (1 if content_changed else 0)
                 )
                 location_change = {
-                    "changed": audit["changed"],
-                    "blocked": audit["blocked"],
+                    "changed": changed,
+                    "blocked": audit["blocked"] + scene_audit["blocked"],
                 }
 
     # Re-check claims against the profile after any edit.
@@ -6120,8 +6145,19 @@ async def _submit_generation(
     # line is reconciled to the plan's Location before the prompt is built, and
     # spoken words that still name another place refuse the render here — the
     # last point where a contradiction can be caught before money is spent.
+    # The same guard makes Location name the place only and completes Props and
+    # Movement from the actions and the timeline (ADR 0092), so the prompt's
+    # WHERE line and the strategy lock cannot disagree.
     if strategy:
-        strategy = _guard_render_location(strategy, project)
+        strategy = _guard_render_scene(strategy, project)
+        # The prompt's WHERE line names the place only; split_location keeps the
+        # original when there is no place to keep (lighting-only text), so an
+        # emptied field can never happen here.
+        place_only, _moved = scene_consistency.split_location(
+            render_plan.get("location") or ""
+        )
+        if place_only:
+            render_plan["location"] = place_only
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
     # after the founder has asked for it. The builder scales every field
@@ -7008,21 +7044,26 @@ def _require_current_strategy(project: dict) -> dict:
     return strategy
 
 
-def _guard_render_location(strategy: dict, project: dict) -> dict:
+def _guard_render_scene(strategy: dict, project: dict) -> dict:
     """
-    Rewrite a strategy's place-bearing lines to the plan's Location before the
-    prompt is built, and refuse a render whose spoken words still name another
-    place.
+    Make a strategy's scene fields agree before the prompt is built, and refuse
+    a render that still carries a contradiction.
 
-    This is the second net under the save-time rewrite (ADR 0090): a strategy
-    built before the Location existed, edited through another client, or
-    patched by a caller that skipped `update_studio_project` still renders
-    against ONE place. Direction lines that contradict the Location are
-    rewritten here — same rules as the save — because the founder already
-    chose the place and the render should show it. Spoken words are never
-    rewritten, so a hook line or a section script that still names another
-    place fails the render with the field named and nothing charged, and the
-    founder edits their own words instead.
+    This is the second net under the save-time rewrite (ADRs 0090, 0092): a
+    strategy built before the founder's Location existed, edited through
+    another client, or patched by a caller that skipped
+    `update_studio_project` still renders ONE consistent scene.
+
+    - Direction lines that contradict the Location are rewritten — same rules
+      as the save — because the founder already chose the place and the render
+      should show it. Spoken words are never rewritten, so a hook line or a
+      section script that still names another place fails the render with the
+      field named and nothing charged.
+    - Location is split so it names the place only, with its lighting and time
+      of day moved into Lighting.
+    - Props and Movement are completed from the hook/middle actions and the
+      shot timeline; a list that cannot hold everything it must is refused
+      rather than cut.
     """
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
@@ -7041,13 +7082,25 @@ def _guard_render_location(strategy: dict, project: dict) -> dict:
                 "then generate again. Nothing has been charged."
             ),
         )
-    if audit["changed"]:
-        logger.info(
-            "Render for project %s: %d place-bearing strategy field(s) rewritten to the "
-            "Location: %s",
-            project.get("id"), len(audit["changed"]), ", ".join(audit["changed"]),
+    strategy = audit["strategy"]
+    scene_audit = scene_consistency.reconcile_scene(strategy, project)
+    if scene_audit["blocked"]:
+        named = "; ".join(f"{b['field']} {b['reason']}" for b in scene_audit["blocked"])
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This render was stopped before it cost anything: {named}. Edit the script "
+                "plan or the strategy on Review & submit so the scene fields agree, then "
+                "generate again. Nothing has been charged."
+            ),
         )
-    return audit["strategy"]
+    if audit["changed"] or scene_audit["changed"]:
+        logger.info(
+            "Render for project %s: strategy scene reconciled before prompt build: %s",
+            project.get("id"),
+            ", ".join(list(dict.fromkeys(audit["changed"] + scene_audit["changed"]))),
+        )
+    return scene_audit["strategy"]
 
 
 async def _require_renderable_project(project_id: str, user_id: str) -> tuple:

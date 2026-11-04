@@ -1783,10 +1783,11 @@ async function main() {
     });
   });
 
-  await check("the Location editor names spoken words it will not rewrite", async (ctx) => {
-    // Spoken lines are the founder's own words and are never rewritten: when
-    // they still name the old place, the note says which field it is and where
-    // to fix it, instead of silently rendering them against the new Location.
+  await check("the Location editor names what still disagrees after a save", async (ctx) => {
+    // Spoken lines are the founder's own words and are never rewritten, and a
+    // props or movement list that cannot hold everything is reported instead
+    // of cut (ADR 0092) — either way the note names the field and where to
+    // fix it, instead of silently rendering a contradiction.
     const saved = {
       ...PROJECT_WITH_STRATEGY,
       location: "A park bench on a sunny afternoon",
@@ -1804,8 +1805,8 @@ async function main() {
       const input = ctx.container.querySelector('[data-testid="render-location-input"]');
       await typeInto(ctx, input, "A park bench on a sunny afternoon");
       await clickEl(ctx, buttonByText(ctx, /Save location/), "no Save location button to click");
-      expectText(ctx, "Hook line is set indoors", "the blocked spoken field was not named");
-      expectText(ctx, "never rewritten", "the note does not say why the words were kept");
+      expectText(ctx, "Hook line is set indoors", "the blocked field was not named");
+      expectText(ctx, "the render will refuse", "the note does not say what happens if it stays");
     });
   });
 
@@ -2193,13 +2194,32 @@ async function main() {
     for (const [label, value] of [
       ["The change this supports", STRATEGY.desired_outcome],
       ["How it works, as a benefit", STRATEGY.mechanism_beat],
-      ["The last thing said", STRATEGY.payoff_beat],
+      // Renamed from "The last thing said": the row's text is unchanged, but
+      // the label now names what the viewer is left with rather than when the
+      // line is spoken (ADR 0092).
+      ["What the viewer is left with", STRATEGY.payoff_beat],
     ]) {
       if (!ctx.text().includes(label)) throw new Error(`missing outcome row label: ${label}`);
       if (!ctx.text().includes(value)) throw new Error(`missing outcome row value: ${label}`);
     }
-    // Framed as a change the app supports, never a target it is held to.
+    if (ctx.text().includes("The last thing said")) {
+      throw new Error("the outcome block still labels the payoff row by when it is spoken");
+    }
+    // Framed as a change the app supports, never a target it is held to, and
+    // written from the viewer's point of view.
+    expectText(ctx, "from the viewer's point of view", "the outcome block does not name whose point of view it is");
     expectText(ctx, "never promise it as a result", "the outcome block reads as a guarantee");
+  });
+
+  await check("the scene block points at the Location editor for its place", async (ctx) => {
+    // The helper used to say the scene was built on Review & submit, which is
+    // not where the Location can be edited: the Location editor lives on the
+    // render panel below this block (ADR 0092).
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(ctx, "Render your Hook + Story below", "the scene block does not point at the Location editor");
+    if (ctx.text().includes("Built from your visual and voice direction")) {
+      throw new Error("the scene block still sends the founder to the wrong editor");
+    }
   });
 
   // A strategy generated before these fields existed has none of them, and an

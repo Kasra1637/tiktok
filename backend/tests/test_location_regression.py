@@ -77,14 +77,18 @@ def test_review_location_edit_persists_and_rewrites_the_strategy(api_fixture):  
     # lines. ADR 0090 replaces that: the save rewrites the place-bearing lines
     # deterministically (angle_scene.reconcile_location), re-stamps the
     # strategy to the plan version it now matches, and reports what changed —
-    # so the render follows the edited Location without another call.
+    # so the render follows the edited Location without another call. ADR 0092
+    # adds the split: the Location keeps the place only, and the time of day it
+    # carried moves into the strategy's lighting.
     project_id = legacy_project(api_fixture)
     run(api_fixture._execute("UPDATE studio_projects SET script_version = 1, strategy_script_version = 1 WHERE id = ?", (project_id,)))
     updated = run(api_fixture.update_studio_project(project_id, UpdateStudioProjectRequest(location="A city rooftop at noon."), ANON))
     project = run(api_fixture.get_studio_project(project_id, ANON))
-    assert project["location"] == "A city rooftop at noon."
+    assert project["location"] == "A city rooftop"
     assert project["strategy_is_current"] is True
-    assert project["strategy"]["scene"]["location"] == "A city rooftop at noon."
+    # The display normalizer ends the merged place with a period.
+    assert project["strategy"]["scene"]["location"].rstrip(".") == "A city rooftop"
+    assert "noon" in (project["strategy"]["scene"].get("lighting") or "").lower()
     assert (updated.get("location_change") or {}).get("changed")
 
 
@@ -133,7 +137,10 @@ def test_selected_plan_location_wins_over_generated_scene_drift(monkeypatch):
             "location": "A city rooftop at noon.",
         },
     ))
-    assert strategy["scene"]["location"] == "A city rooftop at noon."
+    # The approved plan's place wins, and its time of day is stored with the
+    # lighting rather than kept inside the Location (ADR 0092).
+    assert strategy["scene"]["location"] == "A city rooftop"
+    assert "noon" in strategy["scene"]["lighting"]
 
 
 def test_generation_detail_snapshots_location(api_fixture, monkeypatch):  # noqa: F811

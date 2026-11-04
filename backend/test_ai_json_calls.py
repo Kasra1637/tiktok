@@ -1554,7 +1554,14 @@ class TestStrategyBudget:
         # must show a clearly visible movement inside the first 1-2 seconds,
         # stated in the prompt rather than left to chance. 27,500 keeps ~770
         # of headroom for the next measured change.
-        CEILING = 27_500
+        #
+        # ADR 0092 raises it again, measured: 27,932 -> 28,500 (+~570) for the
+        # scene-agreement rules: Location names the place only with lighting
+        # and time of day in Lighting, Props and Movement are complete lists
+        # built from the actions and the timeline, and the three viewer lines
+        # are written from the viewer's point of view. 28,500 keeps ~570 of
+        # headroom for the next measured change.
+        CEILING = 28_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

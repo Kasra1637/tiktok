@@ -55,6 +55,9 @@ _TIME_CLASH = {
     "evening": {"morning", "midday"},
     "midday": {"night", "evening"},
 }
+# Every time-of-day pattern, flattened, for callers that need spans rather than
+# the first hit (scene_consistency splits a Location into place and time).
+_TIME_PATTERNS = tuple(pattern for patterns in _TIMES.values() for pattern in patterns)
 _TIME_WORDS = {
     "night": "at night", "morning": "in the morning",
     "evening": "in the evening", "midday": "in the middle of the day",
@@ -93,6 +96,15 @@ def scene_of(text: str) -> dict:
     found = [(pos, name) for name, pats in _TIMES.items() for pos in [_first_hit(blob, pats)] if pos >= 0]
     time = min(found)[1] if found else ""
     return {"place": place, "time": time}
+
+
+def time_patterns() -> tuple:
+    """Every regex that names a time of day, flattened.
+
+    For callers that need spans (which words, where), not just the first hit —
+    scene_consistency moves a Location's time-of-day words into Lighting.
+    """
+    return _TIME_PATTERNS
 
 
 def angle_moment(angle: Optional[dict]) -> str:

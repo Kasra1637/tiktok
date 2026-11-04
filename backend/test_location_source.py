@@ -36,7 +36,10 @@ import generation_planning as gp
 
 ANON = "anonymous"
 
-LOCATION = "A park bench on a sunny afternoon"
+# Place-only on purpose: the split of lighting/time out of a Location is
+# covered by its own tests (backend/tests/test_scene_consistency.py), and these
+# tests are about the Location propagation itself.
+LOCATION = "A park bench by the pond"
 
 
 def _run(coro):
@@ -384,17 +387,45 @@ class TestLocationSave:
             project["id"], UpdateStudioProjectRequest(location=LOCATION), ANON))
         assert "location_change" not in updated
 
+    def test_saving_lighting_words_moves_them_out_of_the_stored_location(self, api):
+        # The Location keeps the place only; the time of day it carried is
+        # stored with the strategy's Lighting in the same save (ADR 0092).
+        from models import UpdateStudioProjectRequest
+        project = _project_with_strategy(api)
+        updated = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(location="A kitchen at 7am"), ANON))
+
+        assert updated["location"] == "A kitchen"
+        assert updated["strategy"]["scene"]["location"].rstrip(".") == "A kitchen"
+        assert "7am" in (updated["strategy"]["scene"]["lighting"] or "")
+        change = updated.get("location_change") or {}
+        assert "Location" in change["changed"] and "Lighting" in change["changed"]
+
+    def test_props_and_movement_are_completed_in_the_same_save(self, api):
+        from models import UpdateStudioProjectRequest
+        project = _project_with_strategy(api)
+        updated = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(location=LOCATION), ANON))
+
+        change = updated.get("location_change") or {}
+        assert "Props" in change["changed"] and "Movement" in change["changed"]
+        # desk_strategy's actions name the phone and the couch; the phone is a
+        # prop on camera, the couch belongs to the place.
+        props = (updated["strategy"]["scene"]["props"] or "").lower()
+        assert "phone" in props
+        assert updated["strategy"]["performance"]["movement"]
+
 
 class TestRenderGuard:
     def test_direction_lines_are_patched_before_the_prompt(self, api):
         project = {"id": "p1", "location": LOCATION}
-        patched = api._guard_render_location(desk_strategy(), project)
+        patched = api._guard_render_scene(desk_strategy(), project)
         assert patched["scene"]["location"] == LOCATION
         assert patched["hook_concept"] == "scrolling, frustrated"
 
     def test_the_legacy_mirror_can_supply_the_location(self, api):
         project = {"id": "p1", "location": "", "visual_direction": LOCATION}
-        patched = api._guard_render_location(desk_strategy(), project)
+        patched = api._guard_render_scene(desk_strategy(), project)
         assert patched["scene"]["location"] == LOCATION
 
     def test_spoken_contradictions_refuse_the_render(self, api):
@@ -402,12 +433,29 @@ class TestRenderGuard:
         strategy = desk_strategy()
         strategy["hook_line"] = "I hate being stuck in my living room"
         with pytest.raises(HTTPException) as exc:
-            api._guard_render_location(strategy, project)
+            api._guard_render_scene(strategy, project)
         assert exc.value.status_code == 409
         assert "Hook line" in exc.value.detail
         assert "Nothing has been charged" in exc.value.detail
 
+    def test_the_guard_splits_lighting_and_completes_the_scene(self, api):
+        # A Location that still carries its time of day, a strategy whose
+        # scene fields name no props, and a placeholder camera line: the guard
+        # fixes all three in memory, then the prompt is built from the result.
+        project = {"id": "p1", "location": "Home office desk at 7am"}
+        strategy = desk_strategy()
+        strategy["scene"]["props"] = "None"
+        strategy["scene"]["camera_angle"] = "Use STARTING SHOT"
+        patched = api._guard_render_scene(strategy, project)
+
+        assert patched["scene"]["location"] == "Home office desk"
+        assert "7am" in (patched["scene"]["lighting"] or "")
+        assert patched["scene"]["camera_angle"] == ""
+        props = (patched["scene"]["props"] or "").lower()
+        assert "phone" in props
+        assert patched["performance"]["movement"]
+
     def test_no_location_leaves_the_strategy_alone(self, api):
         project = {"id": "p1", "location": "", "visual_direction": ""}
         strategy = desk_strategy()
-        assert api._guard_render_location(strategy, project) is strategy
+        assert api._guard_render_scene(strategy, project) is strategy

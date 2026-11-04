@@ -463,12 +463,12 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               generated gets: nothing shown until the strategy is rebuilt. */}
           <StrategyBlock
             title="What the viewer ends up with"
-            description="How the viewer sees this app: the change, the benefit, the payoff. The render is written from this framing — aim at it, never promise it as a result."
+            description="How the viewer sees this app: the change, the benefit, and what they are left with — all from the viewer's point of view. The render is written from this framing — aim at it, never promise it as a result."
             icon={Target}
             rows={[
               ["The change this supports", strategy.desired_outcome],
               ["How it works, as a benefit", strategy.mechanism_beat],
-              ["The last thing said", strategy.payoff_beat],
+              ["What the viewer is left with", strategy.payoff_beat],
             ]}
           />
           {/* There is no "person" block, and deliberately so. It used to sit
@@ -494,7 +494,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
               what tells the founder where to fix a disagreement. */}
           <StrategyBlock
             title="The scene"
-            description="One Location, one render: the hook and the middle can't disagree. Built from your visual and voice direction — edit it above on Review & submit."
+            description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Render your Hook + Story below; lighting and wardrobe live on Review & submit."
             icon={MapPin}
             rows={[
               ...Object.entries(strategy.scene || {}),

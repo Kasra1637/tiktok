@@ -401,10 +401,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
         parts.push(`Rewritten to match: ${changed.join(", ")}.`);
       }
       if (blocked.length) {
+        // Spoken words are never rewritten; a props or movement list that
+        // cannot hold everything is reported instead of cut (ADR 0092).
         parts.push(
-          `Your own spoken words still name another place (${blocked
+          `Something still disagrees (${blocked
             .map((b) => `${b.field} ${b.reason}`)
-            .join("; ")}). Spoken lines are never rewritten — edit them on Review & submit, or the render will refuse.`
+            .join("; ")}). Fix it on Review & submit, or the render will refuse.`
         );
       }
       setLocationNote(parts.join(" ") || "Location saved.");
@@ -637,7 +639,7 @@ const handleGenerate = async () => {
               onChange={(e) => setLocationDraft(e.target.value)}
               disabled={inFlight || savingLocation}
               className={CONTROL_CLASS}
-              placeholder="For example: Kitchen at 7am, soft morning light"
+              placeholder="For example: A tidy kitchen with a coffee maker on the counter"
             />
           </div>
           <Button

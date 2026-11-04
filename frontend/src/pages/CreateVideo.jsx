@@ -2428,7 +2428,7 @@ export default function CreateVideo() {
                 value={editValue("location", "")}
                 onChange={(e) => dispatchDraft({ type: "edit-field", field: "location", value: e.target.value })}
                 className="min-h-[86px]"
-                placeholder="Describe the place, visible surroundings, time of day and context."
+                placeholder="Describe the place and its visible surroundings only — lighting and time of day live in Lighting."
                 data-testid="review-location-input"
               />
               <p className="text-sm text-muted-foreground" data-subtitle="" data-testid="review-location-help">

@@ -36,6 +36,7 @@ from template_library import (
 import feedback
 import angle_scene as _angle_scene_policy
 import character_policy
+import scene_consistency
 import template_recommendations
 from angle_policy import (
     angle_grounding as _angle_grounding,
@@ -2089,7 +2090,7 @@ def _normalize_outcome_statements(result: dict) -> None:
 DIRECTION_REFRESH_FIELDS = ("location", "lighting", "wardrobe", "voice", "tone")
 
 _DIRECTION_FIELD_BRIEFS = {
-    "location": "one concrete description of the place, visible surroundings, time of day and situational context — never a bedroom or car interior by default",
+    "location": "one concrete description of the physical place and its visible surroundings ONLY — never lighting words, never a time of day, never a bedroom or car interior by default",
     "lighting": "light direction, quality and colour temperature for that place",
     "wardrobe": "one concrete outfit suited to the place — garments only, never the body wearing them",
     "voice": "delivery direction for the on-camera talk — pace, volume, energy",
@@ -3408,7 +3409,7 @@ async def generate_creative_plan(
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters; a shorter natural sentence is fine",\n'
         '  "script": "MIDDLE ONLY: the spoken story AFTER the hook, without repeating it, plain text, no stage directions",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
-        '  "location": "one complete description of the place, visible surroundings, time of day and situational context",\n'
+        '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
         '  "voice_direction": "delivery direction for the voiceover or on-camera talent — default to fast, upbeat, high-energy delivery",\n'
@@ -3944,6 +3945,11 @@ def normalize_strategy(raw: dict) -> dict:
     result["scene"] = _normalize_strategy_section(
         {**raw_scene, "location": merge_legacy_location(raw_scene)}, STRATEGY_SCENE_FIELDS
     )
+    # Internal wording ("Use STARTING SHOT") is an instruction to the render,
+    # never a scene value the founder should read. The same rule guards the
+    # render path (scene_consistency.reconcile_scene), so the panel and the
+    # prompt can never show it again.
+    scene_consistency.clean_placeholders(result["scene"])
     result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
 
     # An old strategy may still carry a contract; it is dropped rather than
@@ -5233,24 +5239,24 @@ async def generate_video_strategy(
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
         '  "messaging_pillars": ["2-4 viewer outcomes/benefits the video must land, each translated from a real feature -- what changes in the viewer\'s life or how they feel after using it, never the feature spec itself"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
-        '  "desired_outcome": "the viewer outcome, described as a change the app supports, never a guarantee",\n'
-        '  "mechanism_beat": "how this app\'s solution works, framed entirely as the resulting benefit to the viewer (draw on the outcome_statements how_it_helps above) -- never a spec, never filmed working",\n'
-        '  "payoff_beat": "the outcome stated directly in the viewer\'s own terms (draw on the outcome_statements outcome above) -- the last thing said before the reach for the phone",\n'
+        '  "desired_outcome": "what the viewer ends up with, written from the viewer\'s point of view, described as a change the app supports, never a guarantee",\n'
+        '  "mechanism_beat": "how this app\'s solution works for the viewer, written from their point of view with the resulting benefit (draw on the outcome_statements how_it_helps above) -- never a spec, never filmed working",\n'
+        '  "payoff_beat": "what the viewer is left with, in their own terms (draw on the outcome_statements outcome above) -- the last thing said before the reach for the phone",\n'
         '  "differentiation_beat": "how this app differs from what the viewer would otherwise reach for",\n'
         '  "scene": {\n'
-        f'    "camera_angle": "Use STARTING SHOT",\n'
-        f'    "framing": "Use STARTING SHOT and final-phone rule",\n'
-        f'    "lighting": "light direction, quality and colour temperature",\n'
-        f'    "location": "one complete description of the physical place, visible surroundings, time of day and situational context",\n'
+        f'    "camera_angle": "",\n'
+        f'    "framing": "",\n'
+        f'    "lighting": "light direction, quality and colour temperature AND the time of day (morning, afternoon, evening, night)",\n'
+        f'    "location": "the physical place and visible surroundings only - never a lighting word and never a time of day; those belong in lighting",\n'
         f'    "visual_style": "the overall look — natural amateur phone UGC, never polished",\n'
         f'    "character_positioning": "where they stand or sit in frame",\n'
         f'    "wardrobe": "what they are wearing, chosen to suit the Location — the ONE thing about '
         f'their appearance this render may change",\n'
-        f'    "props": "objects in shot, or explicitly none",\n'
+        f'    "props": "every object that appears in hook_action, either section action or the timeline, named concretely in one list, or \'none\'",\n'
         f'    "color_palette": "the colour palette of the scene",\n'
         '  },\n'
         '  "performance": {\n'
-        f'    "movement": "how they move and what they do with their hands and face",\n'
+        f'    "movement": "every action from hook_action, both section actions and the timeline, in order",\n'
         f'    "voice_delivery": "tone, pace and energy of the voice — default to fast, upbeat, high-energy delivery unless the plan says otherwise",\n'
         '  },\n'
         '  "segments": [\n'
@@ -5350,12 +5356,19 @@ async def generate_video_strategy(
         "concrete: \"a grey knit jumper\" not \"something casual\". If the founder's own "
         "clothes already suit the scene, repeat them. Never describe their body, face or "
         "hair here, even to justify the clothes.\n"
-        "- Write one scene.location containing the place, visible surroundings, time of day and "
-        "situational context, with props and on-screen context grounded concretely in the "
-        "verified facts (features, use cases, problems, audience, platforms) — a kitchen "
-        "counter at 7am for an evening-reflection app, not \"a nice room\". Nothing is "
-        "composited over the footage and no text appears on screen, so what the camera "
-        "must show has to be written here, in scene, segments and hook_action.\n"
+        "- Write one scene.location that names the PLACE and its visible surroundings ONLY — "
+        "never a lighting word (light, lamp, glow, sunlight, golden hour) and never a time of day "
+        "(morning, evening, 7am, at night). Lighting and time of day are stated in scene.lighting, "
+        "and putting them in both places makes the render argue with itself. Ground the place and "
+        "the on-screen context concretely in the verified facts (features, use cases, problems, "
+        "audience, platforms) — a kitchen counter for an evening-reflection app, not \"a nice "
+        "room\". Nothing is composited over the footage and no text appears on screen, so what the "
+        "camera must show has to be written here, in scene, segments and hook_action.\n"
+        "- PROPS AND MOVEMENT ARE COMPLETE LISTS. scene.props names EVERY object that appears in "
+        "hook_action, either section action or the timeline — if a mug is picked up, a mug is in "
+        "props. performance.movement covers EVERY action those lines show, in order. The founder "
+        "reads those rows against the actions and the timeline before paying, so a missing object "
+        "or action reads as a video that does not match its own plan.\n"
         "- The generated scene is illustrative, never documentary: the script "
         "must never claim it shows real app footage or a screen recording. Anything the "
         "viewer could read as a factual claim about the app — interface text, button labels, "
@@ -5509,7 +5522,18 @@ async def generate_video_strategy(
 
     strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
     if approved_plan and approved_plan.get("location"):
-        strategy["scene"]["location"] = _clean_strategy_text(approved_plan["location"], 300)
+        # The founder's Location is the place; any lighting or time of day it
+        # still carries moves into the strategy's lighting rather than being
+        # restated as part of the place (ADR 0092).
+        place, moved = scene_consistency.split_location(approved_plan["location"])
+        strategy["scene"]["location"] = _clean_strategy_text(place, 300)
+        if moved:
+            strategy["scene"]["lighting"] = _clean_strategy_text(
+                "; ".join(
+                    part for part in (strategy["scene"].get("lighting"), moved) if part
+                ),
+                300,
+            )
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)
