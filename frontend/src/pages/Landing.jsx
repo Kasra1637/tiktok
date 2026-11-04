@@ -25,7 +25,7 @@ const FEATURES = [
     icon: Target,
     title: "Make your message specific",
     description:
-      "Pick a required audience angle and video goal. Tone is optional. These guide template suggestions and the free script plan.",
+      "Pick a required audience angle and video goal. These guide template suggestions and the free script plan.",
   },
   {
     icon: LayoutTemplate,
@@ -74,7 +74,7 @@ const FLOW_STEPS = [
   {
     step: "2",
     label: "Choose a goal and audience",
-    detail: "Pick an audience angle and set a goal for the video; both are required. Tone is optional. These choices share the Audience & template step.",
+    detail: "Pick an audience angle and set a goal for the video; both are required. These choices share the Audience & template step.",
   },
   {
     step: "3",

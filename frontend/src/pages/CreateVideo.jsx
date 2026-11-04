@@ -1318,13 +1318,13 @@ export default function CreateVideo() {
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
 
-  // Tone is editable here and also seeds the plan, so a change has to move
-  // both or going back and regenerating would silently reinstate the old value.
-  // Length has no editor on this step at all, editable or otherwise: it is the
-  // template's number, and the plan's beat timeline is built to it.
-  const editTone = (value) => {
-    dispatchDraft({ type: "tone-edited", value });
-  };
+  // Tone is deliberately NOT editable on this step any more: the video-level
+  // Tone dropdown duplicated the App Profile's "Tone / voice" and the voice
+  // direction, both collapsing into one downstream delivery field. Voice
+  // direction is the single delivery control (ADR 0091); a tone a project
+  // already carries still seeds the plan. Length has no editor on this step at
+  // all: it is the template's number, and the plan's beat timeline is built
+  // to it.
 
   // Direction dropdowns live in their own lifecycle owner (profile-keyed
   // options, per-app picks, saved-plan matching, per-field refresh). See
@@ -1335,12 +1335,11 @@ export default function CreateVideo() {
     dirSel,
     pickScenePart,
     pickVoice,
-    pickTone,
     refreshingField,
     refreshError,
     refreshDirectionField,
     refreshProps,
-  } = useWizardDirections({ profileId, project, tone, angle, dispatchDraft, editTone });
+  } = useWizardDirections({ profileId, project, angle, dispatchDraft });
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback so landing on Review with a complete
@@ -2437,7 +2436,7 @@ export default function CreateVideo() {
               </p>
             </div>
             {/* Direction is optional refinement, and it was the densest stack
-                in the step: two section labels, a camera select, five
+                in the step: two section labels, a camera select, four
                 dropdowns and a live preview between the plan's words and the
                 save button. It now sits behind one disclosure whose summary
                 says what it holds, so the default read is hook → script →
@@ -2531,18 +2530,7 @@ export default function CreateVideo() {
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-1 gap-3 border-t border-[color:var(--hairline)] pt-3 sm:grid-cols-2">
-                <DirectionSelect
-                  id="review-tone"
-                  testId="review-tone"
-                  label="Tone"
-                  value={dirSel.tone}
-                  onPick={pickTone}
-                  options={directionOptions?.tone}
-                  placeholder="Choose a tone…"
-                  disabled={busy}
-                  refresh={refreshProps("tone", "review-tone-refresh")}
-                />
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <DirectionSelect
                   id="review-voice-direction"
                   testId="review-voice-direction"
@@ -2555,7 +2543,7 @@ export default function CreateVideo() {
                   refresh={refreshProps("voice", "review-voice-refresh")}
                 />
               </div>
-              {(editValue("visual_direction", "") || editValue("voice_direction", "") || editValue("tone", "")) && (
+              {(editValue("visual_direction", "") || editValue("voice_direction", "")) && (
                 <div className="inset-panel space-y-1" data-testid="direction-live-preview">
                   <p className="text-sm font-semibold">What will render</p>
                   {editValue("visual_direction", "") && (
@@ -2566,11 +2554,6 @@ export default function CreateVideo() {
                   {editValue("voice_direction", "") && (
                     <p className="text-sm text-muted-foreground">
                       Voice: {sentenceCase(editValue("voice_direction", ""))}
-                    </p>
-                  )}
-                  {editValue("tone", "") && (
-                    <p className="text-sm text-muted-foreground">
-                      Tone: {sentenceCase(editValue("tone", ""))}
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground" data-subtitle="">

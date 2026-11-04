@@ -60,7 +60,7 @@ test("direction Location selection dispatches the same editable Location field",
   function Harness() {
     direction = useWizardDirections({
       profileId: "TEST_profile", project: { id: "TEST_project", location: "Kitchen" },
-      tone: "", angle: null, dispatchDraft, editTone: jest.fn(),
+      angle: null, dispatchDraft,
     });
     return <span data-testid="location-selection">{direction.dirSel.location}</span>;
   }

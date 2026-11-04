@@ -403,7 +403,9 @@ const apiStub = {
   getStudioProjects: async () => ({ projects: [] }),
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Profile-matched direction dropdowns. Four options per field by default;
-  // checks that exercise the picks override with their own sets.
+  // checks that exercise the picks override with their own sets. `tone` stays
+  // in the response because the API still supports it, but no control reads it:
+  // Voice direction is the one delivery pick (ADR 0091).
   getDirectionOptions: async () => ({
     group: "default",
     setting: ["Setting one", "Setting two", "Setting three", "Setting four"],
@@ -4292,6 +4294,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
+  await check("Review offers one delivery control, not two", async (ctx) => {
+    // The video-level Tone dropdown used to sit beside Voice direction and
+    // read as a duplicate: both option lists described the same delivery and
+    // both collapsed into the strategy's single voice_delivery. Voice direction
+    // is the one control now — its pick is concrete, is what the strategy
+    // consumes as approved delivery, and its options adapt to the Location
+    // (ADR 0091). A reintroduced Tone picker fails here.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one"], lighting: ["Lighting one"],
+          wardrobe: ["Wardrobe one"], voice: ["Voice one"],
+        }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        if (!ctx.container.querySelector('#review-voice-direction')) {
+          throw new Error("Review lost the Voice direction control");
+        }
+        if (ctx.container.querySelector('#review-tone')) {
+          throw new Error("Review offers a second delivery control (Tone) beside Voice direction");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("camera setup and profile-matched direction dropdowns save and survive reload", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     const OPTIONS = {
@@ -4300,7 +4333,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       lighting: ["Lighting one", "Lighting two", "Lighting three", "Lighting four"],
       wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"],
       voice: ["Voice one", "Voice two", "Voice three", "Voice four"],
-      tone: ["Tone one", "Tone two", "Tone three", "Tone four"],
     };
     // Legacy free-text scene notes match no option, so the dropdowns open
     // empty with the plan default shown read-only beside them.
@@ -4319,7 +4351,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const select = ctx.container.querySelector('#camera-setup');
         if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
-        for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice, "review-tone": OPTIONS.tone })) {
+        for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice })) {
           const dropdown = ctx.container.querySelector(`#${id}`);
           if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
           if (dropdown.tagName !== "SELECT") throw new Error(`${id} is not a dropdown`);
@@ -4335,7 +4367,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await selectOption(ctx, ctx.container.querySelector('#review-lighting'), "Lighting one");
         await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
         await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
-        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone one");
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
         expectText(ctx, "Camera setup controls framing and camera movement");
@@ -4346,12 +4377,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`scene picks did not compose the saved scene notes: ${JSON.stringify(saved.visual_direction)}`);
         }
         if (saved.voice_direction !== "Voice one") throw new Error("voice pick was not saved");
-        if (saved.tone !== "Tone one") throw new Error("tone pick was not saved");
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
-        for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one", "review-tone": "Tone one" })) {
+        for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one" })) {
           if (ctx.container.querySelector(`#${id}`)?.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }
@@ -4370,15 +4400,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // ready re-mark included), so an unpressed Save button never reads as
     // lost work. The manual button stays for an immediate, explicit save.
     global.__SMOKE_PARAMS = "?project=p1";
-    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", tone: "calm" };
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
     let saves = 0;
     try {
       await withApi({
         getStudioProject: async () => saved,
         getDirectionOptions: async () => ({
           group: "default",
-          setting: ["Setting one"], lighting: ["Lighting one"], wardrobe: ["Wardrobe one"],
-          voice: ["Voice one"], tone: ["Tone one", "Tone two"],
+          location: ["Location one"], lighting: ["Lighting one"], wardrobe: ["Wardrobe one"],
+          voice: ["Voice one", "Voice two"],
         }),
         updateStudioProject: async (_id, patch) => {
           saves += 1;
@@ -4389,20 +4419,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone two");
+        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice two");
         if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
-        if (saved.tone !== "Tone two") throw new Error("the autosave did not carry the tone pick");
+        if (saved.voice_direction !== "Voice two") throw new Error("the autosave did not carry the voice pick");
         const status = ctx.container.querySelector('[data-testid="review-autosave-status"]');
         if (!status || !status.textContent.includes("All changes saved")) {
           throw new Error("no saved confirmation after the autosave");
         }
         // A second change must schedule a second save, not reuse the first.
-        await selectOption(ctx, ctx.container.querySelector('#review-tone'), "Tone one");
+        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
-        if (saved.tone !== "Tone one") throw new Error("the second autosave did not carry the newer pick");
+        if (saved.voice_direction !== "Voice one") throw new Error("the second autosave did not carry the newer pick");
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -7009,8 +7039,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const steps = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
     if (steps.length !== 5) throw new Error("expected five workflow steps");
     const workflow = ctx.container.querySelector('[data-testid="landing-how-it-works"]').textContent;
-    for (const phrase of ["approve the facts", "set a goal", "both are required", "Tone is optional", "presenter photo", "save it", "Second clip", "publish them yourself"]) {
+    for (const phrase of ["approve the facts", "set a goal", "both are required", "presenter photo", "save it", "Second clip", "publish them yourself"]) {
       if (!workflow.includes(phrase)) throw new Error(`missing workflow action: ${phrase}`);
+    }
+    if (workflow.includes("Tone is optional")) {
+      throw new Error("Landing still promises a video Tone control that no longer exists (ADR 0091)");
     }
     for (const link of ctx.container.querySelectorAll('a[href^="#"]')) {
       const target = link.getAttribute("href").slice(1);
