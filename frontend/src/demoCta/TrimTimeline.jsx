@@ -83,11 +83,6 @@ export function TrimTimeline({ clips, onTrim, disabled }) {
           </label>)}
           {trimmed && <Button type="button" className="tap-chip ml-auto" size="sm" variant="ghost" disabled={disabled} onClick={() => onTrim(clip.id, 0, null)}>Reset</Button>}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="tap-chip" size="sm" variant="ghost" disabled={disabled || !clip.active} onClick={() => onTrim(clip.id, Math.min(run.end - minimum, Math.max(0, clip.playhead)), run.end)}>In at playhead</Button>
-          <Button className="tap-chip" size="sm" variant="ghost" disabled={disabled || !clip.active} onClick={() => onTrim(clip.id, run.start, Math.min(clip.duration, Math.max(run.start + minimum, clip.playhead)))}>Out at playhead</Button>
-          <Button className="tap-chip" size="sm" variant="ghost" disabled={disabled} onClick={() => onTrim(clip.id, 0, null)}>Full clip</Button>
-        </div>
       </div>;
     })}
   </div>;
