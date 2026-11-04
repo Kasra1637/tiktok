@@ -64,8 +64,8 @@ export function TrimTimeline({ clips, onTrim, disabled }) {
           </span>
         </div>
         <Ruler duration={clip.duration} />
-        <div className="relative h-9 overflow-hidden rounded-lg border border-[color:var(--hairline)] bg-secondary/40" role="img" aria-label={`${clip.label}: keeping ${run.duration.toFixed(1)} seconds from ${formatTime(run.start)} to ${formatTime(run.end)}`}>
-          <span className="absolute inset-y-0 rounded-md bg-[color:var(--brand-indigo)]" style={{ left: cutPct, width: keptPct }} />
+        <div className="relative h-2.5 overflow-hidden rounded-full border border-[color:var(--hairline)] bg-secondary/40" role="img" aria-label={`${clip.label}: keeping ${run.duration.toFixed(1)} seconds from ${formatTime(run.start)} to ${formatTime(run.end)}`}>
+          <span className="absolute inset-y-0 rounded-full bg-[color:var(--brand-indigo)]" style={{ left: cutPct, width: keptPct }} />
           <span className="absolute inset-y-0 left-0 w-0.5 bg-[color:var(--hairline-strong)]" style={{ left: `calc(${cutPct} - 1px)`, opacity: atStart ? 0 : 1 }} />
           <span className="absolute inset-y-0 w-0.5 bg-[color:var(--hairline-strong)]" style={{ left: `calc(${cutPct} + ${keptPct} - 1px)`, opacity: atEnd ? 0 : 1 }} />
         </div>
