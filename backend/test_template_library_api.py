@@ -995,6 +995,21 @@ class TestRecommendations:
                     "suggested_duration", "limitations"):
             assert key in top
 
+    def test_the_picker_returns_exactly_three(self, api):
+        """
+        The angle/goal step shows exactly three template cards, always (ADR
+        0096): the scored top three, from the longest list available — never
+        fewer when the library offers more, and never more when a client asks
+        for more. A limit can only ask for fewer than three.
+        """
+        profile = _approve_profile(api, name="Reco App Three")
+        result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
+        assert len(result["recommendations"]) == 3
+        asked = _run(api.recommend_templates(profile_id=profile["id"], limit=30, user_id=ANON))
+        assert len(asked["recommendations"]) == 3, "a client limit cannot offer a fourth card"
+        asked_two = _run(api.recommend_templates(profile_id=profile["id"], limit=2, user_id=ANON))
+        assert len(asked_two["recommendations"]) == 2, "asking for fewer than three is honoured"
+
     def test_only_usable_templates_recommended(self, api):
         profile = _approve_profile(api, name="Reco App 2")
         result = _run(api.recommend_templates(profile_id=profile["id"], user_id=ANON))
@@ -1068,7 +1083,7 @@ class TestRecommendations:
     def test_limit_respected(self, api):
         profile = _approve_profile(api, name="Reco App 6")
         result = _run(api.recommend_templates(profile_id=profile["id"], limit=3, user_id=ANON))
-        assert len(result["recommendations"]) <= 3
+        assert len(result["recommendations"]) == 3
 
     def test_unknown_angle_is_404(self, api):
         import uuid as _uuid
@@ -1132,8 +1147,11 @@ class TestSharedFitNotes:
 
 class TestFeedbackInfluence:
     def _target(self, api, profile):
+        # The endpoint always returns the top three (ADR 0096), so the target
+        # comes from that visible list while the verdicts are re-scored across
+        # the whole library below.
         baseline = _run(api.recommend_templates(
-            profile_id=profile["id"], limit=30, user_id=ANON
+            profile_id=profile["id"], user_id=ANON
         ))
         target = baseline["recommendations"][0]
         return baseline, target["template"]["id"], target["score"]
@@ -1152,11 +1170,36 @@ class TestFeedbackInfluence:
             ANON,
         ))
 
-    def _after(self, api, profile, template_id):
-        after = _run(api.recommend_templates(
-            profile_id=profile["id"], limit=30, user_id=ANON
+    def _scored(self, api, profile):
+        """Every template, scored, in rank order — behind the top-3 cap."""
+        rows = _run(api._fetch_all(
+            "SELECT * FROM hook_templates "
+            "WHERE (user_id = ? OR user_id = 'system') "
+            "AND archived = 0 AND review_status = 'approved' "
+            "AND opening_structure IS NOT NULL AND opening_structure != ''",
+            (ANON,),
         ))
-        return next(r for r in after["recommendations"] if r["template"]["id"] == template_id)
+        events = _run(api._fetch_all(
+            "SELECT event, signal, reason, template_id, step FROM feedback_events "
+            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
+            (profile["id"], ANON),
+        ))
+        scored = []
+        for row in rows:
+            result = api._score_template_for_angle(row, profile, None, "", events, [])
+            scored.append({
+                "template": {"id": row["id"], "name": row.get("name") or ""},
+                "score": result["score"],
+                "why_it_fits": result["reasons"],
+                "limitations": result["limitations"],
+                "feedback": result["feedback"],
+                "retired": result["retired"],
+            })
+        scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
+        return scored
+
+    def _after(self, api, profile, template_id):
+        return next(r for r in self._scored(api, profile) if r["template"]["id"] == template_id)
 
     def test_repeated_template_rejection_lowers_score_and_names_it(self, api):
         profile = _approve_profile(api, name="Feedback Penalty")

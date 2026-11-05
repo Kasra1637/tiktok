@@ -3066,10 +3066,10 @@ async def _ensure_objective_templates(
     generated from it is the only set that can be right for this video
     (ADR 0089).
 
-    Drafts about a different problem are dropped before anything is stored, and
-    a short set stays short: a picker showing three shapes about THIS problem
-    is honest, and six where three are about something else is the drift this
-    closes.
+    Drafts about a different problem are dropped before anything is stored,
+    and a short set stays short: a picker showing three shapes about THIS
+    problem is honest, and six where three are about something else is the
+    drift this closes.
 
     Generate-then-replace, never delete-then-generate — a model failure must
     leave the previous working set intact rather than zeroing it. Any failure
@@ -4479,12 +4479,17 @@ async def recommend_templates(
     profile_id: str,
     angle_id: str = "",
     objective: str = "",
-    limit: int = 8,
+    limit: int = 3,
     user_id: str = Depends(get_current_user_id),
 ):
     """
     Recommend library templates for an App Profile, optionally narrowed to one
     content angle and objective.
+
+    The picker shows exactly three rows (ADR 0096): the scored top three,
+    backfilled from the longest list available when fewer than three are
+    active — so the count below is a product rule, not a page parameter.
+    A client-supplied limit is clamped to at most three.
 
     The founder can always ignore this and pick any compatible template
     manually — recommendations are a starting point, not a gate. Only usable
@@ -4580,7 +4585,11 @@ async def recommend_templates(
             "angle_scene": result["angle_scene"],
         })
     scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
-    want = max(1, min(int(limit or 8), 30))
+    # Exactly three rows, always (ADR 0096): the scored top three from the
+    # longest list available, so the picker never shows fewer (some templates
+    # are retired) and never more — a client-supplied limit can only ask for
+    # fewer, and the product never offers a "show more".
+    want = max(1, min(int(limit or 3), 3))
     active = [r for r in scored if not r["retired"]]
     visible = (active if len(active) >= want else scored)[:want]
     # Shared across the visible set, not the whole table: the section line

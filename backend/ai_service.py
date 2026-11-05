@@ -2586,11 +2586,10 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
 
 # How many tailored structures each approved profile gets, per objective.
 #
-# Six is the size a picker step can show as one scannable band: the tailored
-# set replaces the curated rows for the selected goal, and a full six keeps the
-# choice real without turning the step into a scroll. Asked for whole, with one
+# Three: the picker is a scannable row on the angle/goal step, and the choice
+# stays real without turning the step into a scroll. Asked for whole, with one
 # top-up call for a short reply, so the picker never opens on a partial set.
-BRAND_TEMPLATE_COUNT = 6
+BRAND_TEMPLATE_COUNT = 3
 
 
 def normalize_brand_template(raw: dict) -> Optional[dict]:
@@ -2778,7 +2777,7 @@ async def generate_brand_templates(
     Draft tailored hook structures for one approved App Profile, one selected
     objective, and — when the wizard has one — ONE selected angle.
 
-    The set is filled: `count` structures (six by default), with one top-up
+    The set is filled: `count` structures (three by default), with one top-up
     call when the model's first reply comes back short, loses entries to
     normalization, or answers with a structure about a different problem. A
     shortfall is passed on as a smaller set rather than padded: three shapes

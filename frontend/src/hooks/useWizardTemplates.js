@@ -21,6 +21,8 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
     setRanked((previous) => ({ ...previous, rows: [], shared: emptyFit(), error: null }));
   }, []);
 
+  // The picker shows exactly three templates (ADR 0096). The server
+  // guarantees the count; the client asks for three so both agree.
   const loadRecommendations = useCallback(async (pid, aid) => {
     if (!pid) return;
     const request = ++recRequestRef.current;
@@ -28,7 +30,7 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
     setRanked({ key, rows: [], shared: emptyFit(), error: null });
     try {
       const rec = await api.getTemplateRecommendations(pid, {
-        angle_id: aid || undefined, objective: objective || undefined, limit: 6,
+        angle_id: aid || undefined, objective: objective || undefined, limit: 3,
       });
       if (recRequestRef.current !== request) return;
       setRanked({
@@ -109,11 +111,14 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   const recommendationsVisible = Boolean(
     objective && ranked.key && ranked.key === recRequestKey && (tailoredReady || tailorFallbackVisible)
   );
+  // Exactly three templates, always (ADR 0096): the server guarantees the
+  // count, and this slice is the display contract. A stale bundle asking for
+  // more cannot render more.
   const visibleRecommendations = useMemo(() => {
     if (!recommendationsVisible) return [];
-    if (!tailoredReady) return ranked.rows;
+    if (!tailoredReady) return ranked.rows.slice(0, 3);
     const ids = new Set(tailored.templates.map((template) => template?.id).filter(Boolean));
-    return ranked.rows.filter((row) => ids.has(row?.template?.id));
+    return ranked.rows.filter((row) => ids.has(row?.template?.id)).slice(0, 3);
   }, [recommendationsVisible, tailoredReady, tailored.templates, ranked.rows]);
 
   const tailorTotal = Math.max(visibleRecommendations.length, 1);

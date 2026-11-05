@@ -6867,8 +6867,53 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // Tailoring narrates fresh work while reading, then the cards arrive
   // staggered. The count caps at the outgoing list — the only honest total
   // mid-flight — and unmounts on settle so it never outlives the call.
-  await check("template tailoring counts up in flight, then cascades cards in", async (ctx) => {
+  //
+  // The picker shows exactly three rows, always (ADR 0096): the scored top
+  // three, never more when the library offers more and never a "show more"
+  // control. The server guarantees the count; this pins the display contract
+  // so a stale bundle asking for more cannot render more.
+  await check("the template picker shows exactly three cards", async (ctx) => {
     global.__SMOKE_PARAMS = "";
+    const cards = [1, 2, 3, 4, 5, 6].map((n) => ({
+      template: { ...TEMPLATE, id: `t-${n}`, name: `Template ${n}` },
+      score: 10 - n,
+      why_it_fits: [`fit ${n}`],
+      limitations: [],
+    }));
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: cards.map((c) => c.template) }),
+        getTemplateRecommendations: async () => ({ recommendations: cards }),
+        ensureObjectiveTemplates: async () => ({
+          templates: cards.map((c) => c.template),
+          generated: false,
+          objective: "address_user_problem",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+        const grid = ctx.container.querySelector('[data-testid="templates-grid"]');
+        if (!grid) throw new Error("the template grid did not render");
+        const shown = [...grid.querySelectorAll('[data-testid="template-fit-score"]')];
+        if (shown.length !== 3) {
+          throw new Error(`the picker shows ${shown.length} template cards, expected exactly 3`);
+        }
+        for (const n of [1, 2, 3]) {
+          if (!grid.textContent.includes(`Template ${n}`)) {
+            throw new Error(`the top-${n} scored template is not shown`);
+          }
+        }
+        if (grid.textContent.includes("Template 4")) {
+          throw new Error("a fourth template card is shown");
+        }
+      }
+    );
+  });
+
+  await check("template tailoring counts up in flight, then cascades cards in", async (ctx) => {    global.__SMOKE_PARAMS = "";
     const PREMADE = { ...TEMPLATE, id: "t-premade", name: "Premade Pick" };
     const CUSTOM = {
       ...TEMPLATE,

@@ -1895,8 +1895,10 @@ export default function CreateVideo() {
                     )}
                   </div>
                 )}
+                {/* Exactly three template cards (ADR 0096): one row, no "show
+                    more", and the grid matches the count. */}
                 <div id="substep-template" className="grid scroll-mt-4 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="templates-grid">
-                {visibleRecommendations.map((r, i) => (
+                {visibleRecommendations.slice(0, 3).map((r, i) => (
                   <div key={r.template.id} className="min-w-0">
                     <RecommendationCard
                       r={r}

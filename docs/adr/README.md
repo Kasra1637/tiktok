@@ -118,3 +118,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0093](0093-selfie-ends-on-a-physical-beat.md) | Selfie renders end on a varied physical beat, never a phone; fixed camera keeps the phone handoff | accepted |
 | [0094](0094-render-result-actions-open-explanations-collapsed.md) | Render & result keeps actions open and collapses the strategy explanations and scene spec-sheet into groups with one-line digests | accepted |
 | [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted |
+| [0096](0096-templates-exactly-three.md) | Templates: exactly three selections, no more and no less | accepted |
