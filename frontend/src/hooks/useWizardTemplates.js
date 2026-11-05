@@ -112,13 +112,24 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
     objective && ranked.key && ranked.key === recRequestKey && (tailoredReady || tailorFallbackVisible)
   );
   // Exactly three templates, always (ADR 0096): the server guarantees the
-  // count, and this slice is the display contract. A stale bundle asking for
-  // more cannot render more.
+  // count, and this list is the display contract. If ranking drops a tailored
+  // row, backfill from the current ranked rows so the picker never shows a
+  // partial choice — but only from rows that are themselves tailored/custom
+  // templates, never from pre-made ones. The bespoke list is the only
+  // promise the picker makes ("Tailored for this app"), and a pre-made card
+  // appearing alongside it is a leak of a different kind.
   const visibleRecommendations = useMemo(() => {
     if (!recommendationsVisible) return [];
     if (!tailoredReady) return ranked.rows.slice(0, 3);
     const ids = new Set(tailored.templates.map((template) => template?.id).filter(Boolean));
-    return ranked.rows.filter((row) => ids.has(row?.template?.id)).slice(0, 3);
+    const matched = ranked.rows.filter((row) => ids.has(row?.template?.id));
+    const seen = new Set(matched.map((row) => row?.template?.id).filter(Boolean));
+    const backfill = ranked.rows.filter((row) => {
+      if (seen.has(row?.template?.id)) return false;
+      const template = row?.template || {};
+      return template.origin === "custom" || template.brand_profile_id;
+    });
+    return [...matched, ...backfill].slice(0, 3);
   }, [recommendationsVisible, tailoredReady, tailored.templates, ranked.rows]);
 
   const tailorTotal = Math.max(visibleRecommendations.length, 1);

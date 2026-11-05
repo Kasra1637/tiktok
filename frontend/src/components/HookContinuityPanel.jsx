@@ -129,11 +129,19 @@ function StrategyBlock({ title, icon: Icon, rows, description, hideTitle = false
  * One line of what a collapsed group holds, so the founder can decide whether
  * to open it. Sentence-cased like every other strategy value, cut at a word
  * boundary rather than mid-thought.
+ *
+ * No lookbehind (`/(?<=[.!?])\s/`): lookbehind throws on Safari < 16.4, and the
+ * digest is read on every collapsed group. The first sentence is found by
+ * scanning for a punctuation mark followed by a space, which reads the same on
+ * every engine.
  */
 function summaryLine(text, limit = 108) {
   const full = String(text || "").trim().split(/\s+/).join(" ");
   if (!full) return "";
-  const firstSentence = full.split(/(?<=[.!?])\s/)[0];
+  const firstSentenceIndex = full.search(/[.!?] /);
+  const firstSentence = firstSentenceIndex >= 0
+    ? full.slice(0, firstSentenceIndex + 1)
+    : full;
   const clipped = firstSentence.length > limit
     ? firstSentence.slice(0, limit + 1).replace(/\s+\S*$/, "") + "…"
     : firstSentence;

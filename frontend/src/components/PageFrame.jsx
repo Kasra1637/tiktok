@@ -38,11 +38,18 @@ export const PAGE_WIDTH_CLASS = {
   default: "mx-auto w-full max-w-[1150px]",
 };
 
+// A sticky footer (the wizard arrows, `position: sticky; bottom: 1rem`) paints
+// over the end of a long page, so the frame keeps its own bottom clearance:
+// enough that the last lines of content can scroll past the bar, plus the
+// device safe-area so iOS' home indicator never clips anything either.
+export const PAGE_BOTTOM_CLEARANCE = "pb-24";
+export const PAGE_SAFE_AREA = "pb-[env(safe-area-inset-bottom)]";
+
 export function PageFrame({ width = "default", className, children }) {
   // An unknown token falls back to the full frame rather than rendering an
   // unstyled div, so a typo widens the page instead of collapsing it.
   const token = PAGE_WIDTH_CLASS[width] ? width : "default";
-  return <div className={cn(PAGE_WIDTH_CLASS[token], className)}>{children}</div>;
+  return <div className={cn(PAGE_WIDTH_CLASS[token], PAGE_BOTTOM_CLEARANCE, PAGE_SAFE_AREA, className)}>{children}</div>;
 }
 
 export default PageFrame;
