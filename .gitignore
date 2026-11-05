@@ -110,6 +110,19 @@ backend/storage/*.stale-*
 
 # Build caches
 .cache/
+.pytest_cache/
+
+# Frontend scratch logs and checker output (debug runs, never source)
+frontend/.architecture-*.log
+frontend/.camera-*.log
+frontend/.upgrade-*.log
+frontend/.wizard-*.log
+frontend/.build.log
+frontend/.logic.log
+frontend/.smoke.log
+frontend/.tests.log
+frontend/.feature-check/
+frontend/.wizard-commit-server.diff
 
 memory/test_credentials.md
 
@@ -134,6 +147,7 @@ credentials.json
 # The committed template shape (service.yaml.template) documents the structure.
 service.yaml
 
+.cloud-attachments/
 # Agent and scaffolding scratch (never commit)
 .commandcode/
 untitled-project/

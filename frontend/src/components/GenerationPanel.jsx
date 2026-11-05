@@ -657,6 +657,11 @@ const handleGenerate = async () => {
             <Save className="h-3.5 w-3.5" /> Save location
           </Button>
         </div>
+        {!locationNote && (
+          <p className="text-sm text-muted-foreground">
+            Lighting and time of day live in the strategy panel above; saving moves only what matches the place.
+          </p>
+        )}
         {locationNote && (
           <p className="text-sm text-muted-foreground" data-testid="render-location-note">
             {locationNote}
