@@ -55,7 +55,7 @@ export function PendingSaveCard({ entry, onResolved }) {
     onResolved?.();
   };
   return (
-    <Alert data-testid={`pending-save-${entry.id}`}>
+    <Alert variant="warning" data-testid={`pending-save-${entry.id}`}>
       <AlertTriangle className="h-4 w-4" />
       <AlertDescription className="flex flex-col gap-2">
         <span className="font-semibold text-foreground">

@@ -9218,6 +9218,44 @@ async function runIconChecks() {
     if (hits.length) throw new Error(`busy labels still carry dots:\n${hits.join("\n")}`);
   });
 
+  await check("warning and error messages never paint a background or a border", async (ctx) => {
+    // A failure or a blocked state is guidance, not a filled banner: the
+    // shared Alert is transparent with no border in every variant, so the
+    // page background shows through and the red/foreground text and icon
+    // carry the severity alone.
+    const src = fs.readFileSync(path.join(SRC, "components/ui/alert.jsx"), "utf8");
+    const variantClasses = {};
+    for (const match of src.matchAll(/(default|destructive|warning):\s*"([^"]*)"/g)) {
+      variantClasses[match[1]] = match[2];
+    }
+    for (const variant of ["default", "destructive", "warning"]) {
+      const cls = variantClasses[variant] || "";
+      if (/(^|\s)bg-/.test(cls) && !cls.includes("bg-transparent")) {
+        throw new Error(`Alert variant "${variant}" still paints a background: ${cls}`);
+      }
+      if (/(^|\s)border(\s|$)/.test(cls) || cls.includes("border-destructive")) {
+        throw new Error(`Alert variant "${variant}" still draws a border: ${cls}`);
+      }
+    }
+    if (!(variantClasses.destructive || "").includes("text-destructive")) {
+      throw new Error(`the destructive variant lost its red text: ${variantClasses.destructive}`);
+    }
+    // No caller paints a border back onto a warning or error message.
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      return e.isDirectory() ? walk(full) : [full];
+    });
+    const painted = [];
+    for (const file of walk(SRC)) {
+      if (!/\.(jsx|js)$/.test(file)) continue;
+      const code = fs.readFileSync(file, "utf8");
+      for (const match of code.matchAll(/<Alert\b[^>]*>/g)) {
+        if (/(bg-|border-)/.test(match[0])) painted.push(`${path.relative(SRC, file)}: ${match[0]}`);
+      }
+    }
+    if (painted.length) throw new Error(`an Alert still paints its own surface or border:\n${painted.join("\n")}`);
+  });
+
   await check("no button paints coral or red, and the destructive fill stays dark", async (ctx) => {
     // Every CTA in the app used to be the loudest surface on its screen,
     // because the palette reserved coral for "this performs the action". The

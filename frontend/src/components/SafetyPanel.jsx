@@ -14,7 +14,7 @@ import { GroupLabel } from "./SectionCard";
 export function SafetyPanel({ report, summary, onEditClaim, onRegenerate, busy = false, hasEdits = false }) {
   if (!report) {
     return (
-      <Alert>
+      <Alert variant="warning">
         <HelpCircle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
         <AlertTitle>No safety check yet</AlertTitle>
         <AlertDescription>

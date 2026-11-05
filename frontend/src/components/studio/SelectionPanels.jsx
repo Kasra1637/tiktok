@@ -462,7 +462,7 @@ export function AngleSelector({
           </div>
           {progressLine}
       {notice && (
-        <Alert data-testid="angle-regen-notice">
+        <Alert variant="warning" data-testid="angle-regen-notice">
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>
             {notice}

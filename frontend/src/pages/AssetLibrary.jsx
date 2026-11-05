@@ -830,7 +830,7 @@ export default function AssetLibrary({
         </Alert>
       )}
       {notice && (
-        <Alert>
+        <Alert variant="warning">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>{notice}</AlertDescription>
         </Alert>

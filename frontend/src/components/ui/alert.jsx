@@ -4,14 +4,23 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "relative w-full rounded-2xl border px-4 py-3.5 text-base shadow-[var(--shadow-sm)] [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>svg~*]:pl-7",
+  "relative w-full rounded-2xl px-4 py-3.5 text-base [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg~*]:pl-7",
   {
     variants: {
       variant: {
         default:
-          "border-[color:var(--hairline)] bg-card/70 text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),var(--shadow-sm)] backdrop-blur-sm",
+          "text-foreground [&>svg]:text-foreground",
+        // Destructive stays red text and icon, but never paints a surface or
+        // a border: the page background shows through so failures read as
+        // guidance, not as filled banners. Severity is carried by the
+        // colored text and icon, not by a box around them.
         destructive:
-          "border-destructive/40 bg-destructive/10 text-destructive shadow-[inset_0_1px_0_0_rgba(254,44,85,0.2),var(--shadow-sm)] backdrop-blur-sm [&>svg]:text-destructive",
+          "text-destructive [&>svg]:text-destructive",
+        // Non-error warnings (blocked, stale, awaiting action): transparent
+        // like destructive, but in the normal foreground so they do not claim
+        // danger.
+        warning:
+          "text-foreground [&>svg]:text-foreground",
       },
     },
     defaultVariants: {

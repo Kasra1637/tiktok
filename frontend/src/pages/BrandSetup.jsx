@@ -965,7 +965,7 @@ export default function BrandSetup() {
       </SectionCard>
 
       {brand?.id && pendingProposal && (
-        <Alert data-testid="pending-refresh-alert">
+        <Alert variant="warning" data-testid="pending-refresh-alert">
           <RefreshCw className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>A refreshed proposal is waiting</AlertTitle>
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -1359,7 +1359,7 @@ export default function BrandSetup() {
             )}
 
             {brand?.id && (
-              <Alert className="border-[color:var(--indigo-15)] bg-[color:var(--indigo-6)]">
+              <Alert variant="warning">
                 <CheckCircle2 className="h-4 w-4 text-[color:var(--brand-indigo)]" />
                 <AlertTitle>{status === "approved" ? "Ready for Create Video" : "Approval needed before Create Video"}</AlertTitle>
                 <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">

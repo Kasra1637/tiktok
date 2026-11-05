@@ -731,7 +731,7 @@ return (
         </Alert>
       )}
       {notice && (
-        <Alert>
+        <Alert variant="warning">
           <Lightbulb className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
@@ -740,7 +740,7 @@ return (
           until the founder applies it. Same contract as the editor's
           pending-refresh alert, reviewed here where the diff will land. */}
       {pendingProposal && (
-        <Alert data-testid="pending-proposal-alert">
+        <Alert variant="warning" data-testid="pending-proposal-alert">
           <RefreshCw className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>A refreshed proposal is waiting</AlertTitle>
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -764,7 +764,7 @@ return (
       )}
 
       {!approved && (
-        <Alert>
+        <Alert variant="warning">
           <ClipboardCheck className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>Review &amp; approve before generating</AlertTitle>
           <AlertDescription className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">

@@ -381,14 +381,14 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         </Alert>
       )}
       {notice && (
-        <Alert data-testid="strategy-notice">
+        <Alert variant="warning" data-testid="strategy-notice">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       )}
 
       {staleStrategy && (
-        <Alert>
+        <Alert variant="warning">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>Plan edited since this strategy was built</AlertTitle>
           <AlertDescription>
@@ -400,7 +400,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       )}
 
       {!hasCharacter && (
-        <Alert>
+        <Alert variant="warning">
           <ShieldQuestion className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>No character reference attached</AlertTitle>
           <AlertDescription>
@@ -421,7 +421,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       )}
 
       {angleStale && (
-        <Alert>
+        <Alert variant="warning">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertTitle>Audience angle changed since this strategy was built</AlertTitle>
           <AlertDescription>
@@ -618,7 +618,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 shorten it on Review, or regenerate the plan, then rebuild the
                 strategy here. */}
             {project?.spoken_overflow?.dropped_chars > 0 && (
-              <Alert data-testid="spoken-overflow-warning">
+              <Alert variant="warning" data-testid="spoken-overflow-warning">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Your script does not all fit in the middle</AlertTitle>
                 <AlertDescription>

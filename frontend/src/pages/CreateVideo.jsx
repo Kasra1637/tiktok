@@ -2916,7 +2916,7 @@ export default function CreateVideo() {
       )}
 
       {projectParam && (project?.script_version || 0) > 0 && !planBannerDismissed && (
-        <Alert data-testid="create-plan-banner">
+        <Alert variant="warning" data-testid="create-plan-banner">
           <CheckCircle2 className="h-4 w-4" />
           <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-2">
             <span>Plan loaded — change one thing, or generate again.</span>
