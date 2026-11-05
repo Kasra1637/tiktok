@@ -18,6 +18,7 @@ status (it only adds the echoed ``X-Request-ID`` header), and the counters
 never gate anything. Counters are process-local on purpose — this deploys as
 one worker, and a deploy resets them the same way it resets everything else.
 """
+import contextvars
 import functools
 import logging
 import time
@@ -27,11 +28,34 @@ request_logger = logging.getLogger("hookforge.requests")
 
 _boot_time = time.time()
 
+# Correlation id for the in-flight request. Set by the middleware, readable
+# anywhere (including deep in _submit_generation) via current_request_id().
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "request_id", default=""
+)
+
 _counters = {
     "requests_total": 0,
     "export_completed": 0,
     "export_failed": 0,
 }
+
+
+def current_request_id() -> str:
+    """Return the id of the in-flight request, or '' outside one."""
+    return _request_id_var.get()
+
+
+def set_request_id(request_id: str) -> contextvars.Token:
+    """Bind a request id for the current context. Returns a reset token."""
+    return _request_id_var.set(request_id or "")
+
+
+def reset_request_id(token: contextvars.Token) -> None:
+    try:
+        _request_id_var.reset(token)
+    except Exception:
+        pass
 
 
 def reset_metrics() -> None:
@@ -83,6 +107,7 @@ async def request_logging_middleware(request, call_next):
     minted. The same id is echoed back as a response header.
     """
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    token = set_request_id(request_id)
     try:
         request.state.request_id = request_id
     except Exception:
@@ -100,6 +125,8 @@ async def request_logging_middleware(request, call_next):
             duration_ms,
         )
         raise
+    finally:
+        reset_request_id(token)
     duration_ms = (time.perf_counter() - start) * 1000
     _counters["requests_total"] += 1
     request_logger.info(

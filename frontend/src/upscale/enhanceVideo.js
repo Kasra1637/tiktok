@@ -1,9 +1,8 @@
-import {
-  ALL_FORMATS, AudioSampleSource, BlobSource, BufferTarget,
-  CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo,
-} from "mediabunny";
 import { UPSCALE, upscaleTarget } from "./sizing";
 import { passthroughSegmentAudio } from "./audio";
+
+// mediabunny is loaded lazily inside enhanceVideo so the upscaler's heavy
+// media codec bundle never ships in the main chunk (G7).
 
 const UNSHARP_SVG_ID = "hookforge-upscale-unsharp";
 const UNSHARP_FILTER = `url(#${UNSHARP_SVG_ID})`;
@@ -59,6 +58,7 @@ function throwCancelled(signal) {
  */
 export async function enhanceVideo({ blob, canvas, sourceWidth, sourceHeight, duration, onProgress, signal }) {
   throwCancelled(signal);
+  const { ALL_FORMATS, AudioSampleSource, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo } = await import("mediabunny");
   const target = upscaleTarget(sourceWidth, sourceHeight);
   if (!target) {
     throw new Error(

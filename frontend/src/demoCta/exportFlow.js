@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from "mediabunny";
 import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
@@ -15,6 +14,7 @@ import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
  */
 export async function probeRecordingPlays(blob, expectedDuration, audioSegments = []) {
   if (audioSegments.length) {
+    const { ALL_FORMATS, AudioSampleSink, BlobSource, Input } = await import("mediabunny");
     const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
     try {
       const track = await input.getPrimaryAudioTrack();

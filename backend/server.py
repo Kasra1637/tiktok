@@ -112,6 +112,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _request_id() -> str:
+    """Correlation id for the in-flight request (G10)."""
+    try:
+        return observability.current_request_id()
+    except Exception:
+        return ""
+
+
+def _with_request_id(detail) -> object:
+    """Append the in-flight request id to a refusal detail so support can
+    grep the logs for the exact request (G10). Strings get a suffix; other
+    types pass through unchanged."""
+    rid = _request_id()
+    if rid and isinstance(detail, str):
+        return f"{detail} [request_id={rid}]"
+    return detail
+
 FRAME_COUNT = 8
 HOOK_DURATION_SECONDS = 3.0
 BRAND_URL_TEXT_MAX_CHARS = 8000
@@ -6072,9 +6090,10 @@ async def _submit_generation(
     continuity_frame: Optional[Path] = None,
     continuity_video_url: str = "",
     previous_summary: str = "",
-    hook_trim: int = 0,
-    idempotency_key: str = "",
-) -> dict:
+     hook_trim: int = 0,
+     idempotency_key: str = "",
+     request_id: str = "",
+ ) -> dict:
     """
     Submit ONE video generation job. This is the only render path.
 
@@ -6098,6 +6117,11 @@ async def _submit_generation(
     # return a primary/extension pair for a long request; that pair is the chain
     # this workflow no longer builds, and honouring it here would spend a second
     # generation for footage the founder is attaching themselves.
+    # Correlation id for this render (G10): logged here and threaded into every
+    # refusal so the founder's report can be matched to the server line.
+    rid = request_id or _request_id()
+    logger.info("submit_generation project=%s user=%s model=%s request_id=%s",
+                project.get("id"), user_id, model or project.get("model"), rid)
     requested = template_library.clamp_duration(
         duration or project.get("duration_seconds") or 0
     )
@@ -6105,11 +6129,11 @@ async def _submit_generation(
     cap = video_providers.capability(model_key)
     camera_setup = project.get("camera_setup") or "handheld"
     if camera_setup == "fixed" and cap.get("identity_via_first_frame"):
-        raise HTTPException(status_code=409, detail=(
-            "This model uses your face photo as its literal first frame, so it cannot "
-            "start with fixed-camera head-to-mid-thigh framing. Select a model that "
-            "accepts an identity reference image, or choose Handheld selfie."
-        ))
+            raise HTTPException(status_code=409, detail=_with_request_id(
+                "This model uses your face photo as its literal first frame, so it cannot "
+                "start with fixed-camera head-to-mid-thigh framing. Select a model that "
+                "accepts an identity reference image, or choose Handheld selfie."
+            ))
     if requested > cap["max_duration"]:
         requested = int(cap["max_duration"])
     seconds = requested
@@ -6222,7 +6246,7 @@ async def _submit_generation(
                 script_sacred=video_providers.script_is_sacred(model_key),
             )
         except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail=_with_request_id(str(exc))) from exc
     else:
         # The no-strategy fallback, and it now takes the same ceiling and the
         # same sacred-script rule as the strategy path. It used to take neither,
@@ -7296,7 +7320,8 @@ def _assert_within_single_pass_cap(model_key: str, wanted: int) -> None:
 
 @api_router.post("/studio/projects/{project_id}/generate", status_code=202)
 async def submit_project_generation(
-    project_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id)
+    project_id: str, payload: StudioGenerationRequest, user_id: str = Depends(get_current_user_id),
+    request: Request = None,
 ):
     """
     Generate the complete video as ONE job.
@@ -7342,9 +7367,10 @@ async def submit_project_generation(
         duration=int(wanted or 0) or None,
         generate_audio=payload.generate_audio,
         resolution=payload.resolution,
-        strategy=strategy or None,
-        idempotency_key=payload.idempotency_key or "",
-    )
+         strategy=strategy or None,
+         idempotency_key=payload.idempotency_key or "",
+         request_id=(request.state.request_id if request is not None and getattr(request, "state", None) else "") or _request_id(),
+     )
     generation["provider_reason"] = video_providers.resolve(payload.model or None)[1]
     return generation
 
@@ -7354,6 +7380,7 @@ async def poll_generation(
     generation_id: str,
     user_id: str = Depends(get_current_user_id),
     background_tasks: BackgroundTasks = None,
+    request: Request = None,
 ):
     """
     Refresh a generation's status and resolve a finished clip to a URL.
@@ -7362,6 +7389,8 @@ async def poll_generation(
     persistent storage, so a completed generation always has a durable copy
     even if the provider's links later expire.
     """
+    rid = (request.state.request_id if request is not None and getattr(request, "state", None) else "") or _request_id()
+    logger.info("poll_generation id=%s user=%s request_id=%s", generation_id, user_id, rid)
     row = await _fetch_one(
         "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
     )
@@ -8114,7 +8143,7 @@ async def _run_storage_repair(
 
 
 @api_router.post("/generations/{generation_id}/retry", status_code=202)
-async def retry_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
+async def retry_generation(generation_id: str, user_id: str = Depends(get_current_user_id), request: Request = None):
     """
     Replace a failed segment.
 
@@ -8141,9 +8170,9 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
 
     project_id = row.get("studio_project_id")
     if not project_id:
-        raise HTTPException(
-            status_code=409, detail="Cannot retry: this generation is not tied to a studio project."
-        )
+            raise HTTPException(
+                status_code=409, detail=_with_request_id("Cannot retry: this generation is not tied to a studio project.")
+            )
 
     # Same gates as a fresh render, and for the same reason. This path used to
     # load the project, profile and template by id and call _submit_generation
@@ -8168,7 +8197,7 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
             # recorded key verbatim and let resolve() explain the substitution.
             raise HTTPException(
                 status_code=409,
-                detail=(
+                detail=_with_request_id(
                     f"This retry was recorded on {model_key!r}, which is no longer usable "
                     f"({reason}). Pick a model and generate again rather than retrying, "
                     "so you know what the render will use."
