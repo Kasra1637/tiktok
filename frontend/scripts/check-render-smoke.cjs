@@ -2630,7 +2630,9 @@ async function main() {
 
   // Sequential arrows beside free-jump pills: Continue walks one phase
   // forward and Back walks one back, and neither is offered where it cannot
-  // go. Skipping phases stays the pills' job alone.
+  // go. Skipping phases stays the pills' job alone. The arrows are arrow-only
+  // (no Back/Continue words), centred, and sticky to the bottom of the scroll
+  // so they are always within reach on a long step.
   await check("wizard arrows walk the steps in order", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
@@ -2642,6 +2644,16 @@ async function main() {
     if (!next()) throw new Error("Continue is missing on the first step");
     if (next().getAttribute("aria-label") !== "Continue to Audience & template") {
       throw new Error(`Continue does not name its destination: ${next().getAttribute("aria-label")}`);
+    }
+    if (back().textContent.trim() || next().textContent.trim()) {
+      throw new Error("the wizard arrows carry words — they are arrow-only");
+    }
+    const arrows = ctx.container.querySelector('[data-testid="wizard-arrows"]');
+    if (!arrows || !/sticky/.test(arrows.className) || !/bottom-/.test(arrows.className)) {
+      throw new Error("the wizard arrows are not sticky to the bottom of the scroll");
+    }
+    if (!/justify-center/.test(arrows.className)) {
+      throw new Error("the wizard arrows are not centred as one cluster");
     }
     await clickEl(ctx, next(), "Continue to the angle step");
     if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
@@ -2659,13 +2671,14 @@ async function main() {
     }
   });
 
-  // One guidance line per step. The task line names what finishes the screen;
-  // the footer used to say the same thing again between the arrows, so step two
-  // read "pick the angle, goal, template, then add your photo" above "Angle,
-  // goal, template and photo — each one ranks the next". The arrows are one
-  // centred cluster now: pinned to opposite edges with a sentence between them,
-  // the pair read as two unrelated controls.
-  await check("the wizard states the step once and centres its arrows", async (ctx) => {
+  // One guidance line per step, directly under the page title. The task line
+  // names what finishes the screen; the footer used to say the same thing
+  // again between the arrows, so step two read "pick the angle, goal,
+  // template, then add your photo" above "Angle, goal, template and photo —
+  // each one ranks the next". The arrows are one centred cluster now: pinned
+  // to opposite edges with a sentence between them, the pair read as two
+  // unrelated controls.
+  await check("the wizard states the step once under the title and centres its arrows", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
@@ -2682,6 +2695,28 @@ async function main() {
     if (task.textContent.includes("then add your photo")) {
       throw new Error("the angle step is back to two sentences for one task");
     }
+    // The task line sits directly under the title, before the progress pills
+    // and every step's content. The title lives inside a masthead, so the task
+    // is a sibling of that block rather than a descendant of the h1.
+    const title = ctx.container.querySelector("h1");
+    if (!title || title.textContent.trim() !== "Create Video") {
+      throw new Error("the Create Video title is gone");
+    }
+    const headerBlock = title.closest("div[class*='flex']")?.parentElement || title.parentElement;
+    const documentOrder = Array.from(ctx.container.querySelectorAll("*"));
+    const titleIndex = documentOrder.indexOf(headerBlock);
+    const taskIndex = documentOrder.indexOf(task);
+    if (titleIndex < 0 || taskIndex < 0 || taskIndex < titleIndex) {
+      throw new Error("the task line is not below the title");
+    }
+    const pills = ctx.container.querySelector('[aria-label="Progress"]');
+    const pillsIndex = documentOrder.indexOf(pills);
+    if (!pills || pillsIndex < 0 || titleIndex > pillsIndex || taskIndex > pillsIndex) {
+      throw new Error("the task line is not between the title and the progress pills");
+    }
+    if (ctx.text().includes("Continue when ready")) {
+      throw new Error("the footer still leads with the Continue promise instead of the title");
+    }
     const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
     if (hint && hint.textContent.includes("ranks the next")) {
       throw new Error("the footer repeats the task line the founder just read");
@@ -2691,6 +2726,9 @@ async function main() {
     if (!row) throw new Error("the wizard arrows are gone");
     if (!/justify-center/.test(row.className)) {
       throw new Error("the wizard arrows are pinned to the edges again, not one cluster");
+    }
+    if (back.textContent.trim()) {
+      throw new Error("the Back arrow carries words — it is arrow-only");
     }
   });
 

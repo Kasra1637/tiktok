@@ -2820,6 +2820,19 @@ export default function CreateVideo() {
         icon={Clapperboard}
         title="Create Video"
       />
+      {/* The step task, directly under the title: the pills below show state
+          per step, and this names the one thing to do on the screen in view.
+          One guidance line stands here, and it is the only one: the sticky
+          footer no longer repeats the step's own sentence. Plain body copy,
+          not a data-subtitle, so the subtitle budget (text-sm, 55-60 chars)
+          stays for label-attached helpers. */}
+      <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
+        {step === 0
+          ? "Step 1 of 3: choose the approved app this video is for."
+          : step === 1
+            ? "Step 2 of 3: Angle, goal, template and photo \u2014 each one ranks the next."
+            : "Step 3 of 3: read the plan, then render the Hook + Story."}
+      </p>
       {/* Progress that tracks state rather than position.
           The tick used to mean "this step is to the left of the one you are on",
           which is not the same thing at all: jump straight to the last step and
@@ -2944,75 +2957,44 @@ export default function CreateVideo() {
           </div>
         </div>
 
-      {/* Sequential arrows beside free-jump pills. Back and Next lived here
-          before and were removed as pure duplication — but they duplicated
-          the jump, while these walk: the arrows move one phase at a time for
-          a founder going through in order, the pills land a returning founder
-          directly. Different jobs, so both stay. No guards, like the pills:
-          these only move. */}
-      {/* Step task, in words: the pills above show state per step, and this
-          names the one thing to do on the screen in view. It is the ONLY
-          guidance line a step gets — the footer no longer echoes it, so the
-          angle step's ranking sentence sits here and nowhere else. Colon after
-          the counter rather than a dash, because the sentence that follows
-          carries its own dash and two in one line read as a stutter. Plain
-          body copy, not a data-subtitle, for the same reason as the hint. */}
-      <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
-        {step === 0
-          ? "Step 1 of 3: choose the approved app this video is for."
-          : step === 1
-            ? "Step 2 of 3: Angle, goal, template and photo \u2014 each one ranks the next."
-            : "Step 3 of 3: read the plan, then render the Hook + Story."}
-      </p>
-
-      {/* Hint, then one centred cluster. Back and Continue used to sit on the
-          opposite edges of a full-width frame with a sentence stranded
-          between them, which read as two unrelated controls rather than one
-          pair — the arrows are the same control cluster the pills are not.
-          The hint keeps its own line (hidden on phones, where the step is the
-          only thing worth the height), and the pair keeps back-to-front order
-          with the primary on the right. On the last step the exit below is
-          the way back, so the wizard Back stays out of its way: two stacked
-          Back controls read as two different footers sharing a screen. The
-          step pills at the top still walk anywhere, including one step back. */}
-      <div className="sm:space-y-2">
-        <p
-          className="hidden text-center text-sm text-muted-foreground sm:block"
-          data-testid="wizard-footer-hint"
+      {/* Sticky sequential arrows: one step at a time, always within reach
+          however long the step is. Arrow-only — no words on the buttons, the
+          destination lives in the aria-label. Centred so the pair reads as one
+          control rather than two unrelated edges. No guards, like the pills:
+          these only move. On the last step the exit below is the way back, so
+          the wizard Back stays out of its way: two stacked Back controls read
+          as two different footers sharing a screen. The step pills at the top
+          still walk anywhere, including one step back. */}
+      <div className="sticky bottom-4 z-30 flex items-center justify-center gap-2 py-2" data-testid="wizard-arrows">
+        {!(step === STEPS.length - 1 && project) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setStep(Math.max(0, step - 1))}
+          disabled={step === 0}
+          aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+          data-testid="wizard-back-button"
+          className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
         >
-          {footerHint}
-        </p>
-        <div className="flex items-center justify-center gap-2">
-          {!(step === STEPS.length - 1 && project) && (
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        )}
+        {/* Earns prominence: a finished step turns Continue primary, so the
+            way forward lights up the moment there is somewhere to go. Never
+            disabled — a returning founder can always walk forward to look —
+            the hint above already names what is still missing. */}
+        {step < STEPS.length - 1 && (
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setStep(Math.max(0, step - 1))}
-            disabled={step === 0}
-            aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
-            data-testid="wizard-back-button"
-            className="gap-1.5"
+            variant={activeStepState?.state === "done" ? "accent" : "secondary"}
+            size="icon"
+            onClick={() => setStep(step + 1)}
+            aria-label={`Continue to ${STEPS[step + 1].label}`}
+            data-testid="wizard-continue-button"
+            className="h-11 w-11 rounded-full shadow-sm"
           >
-            <ChevronLeft className="h-3.5 w-3.5" /> Back
+            <ChevronRight className="h-5 w-5" />
           </Button>
-          )}
-          {/* Earns prominence: a finished step turns Continue primary, so the
-              way forward lights up the moment there is somewhere to go. Never
-              disabled — a returning founder can always walk forward to look —
-              the hint above already names what is still missing. */}
-          {step < STEPS.length - 1 && (
-            <Button
-              variant={activeStepState?.state === "done" ? "accent" : "secondary"}
-              size="sm"
-              onClick={() => setStep(step + 1)}
-              aria-label={`Continue to ${STEPS[step + 1].label}`}
-              data-testid="wizard-continue-button"
-              className="gap-1.5"
-            >
-              Continue <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* The one thing the pills cannot do is leave the studio, so the exit
