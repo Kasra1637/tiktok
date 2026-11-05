@@ -3229,6 +3229,7 @@ async def generate_creative_plan(
     audience: str = "",
     location: str = "",
     visual_direction: str = "",
+    camera_setup: str = "handheld",
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
 ) -> dict:
@@ -3391,6 +3392,16 @@ async def generate_creative_plan(
         "Respond with STRICT JSON only, no markdown fences."
     )
 
+    # Selfie: the camera is the phone in the character's hand, so the
+    # timeline's final beat cannot be a phone (ADR 0093). The physical ending
+    # is chosen per render and added by the render guard.
+    selfie_ending_rule = (
+        "- SELFIE ENDING: never put a phone raised, held or shown in the timeline - the "
+        "camera is the phone in their hand. The final second is a short physical ending "
+        "chosen per render; do not write one.\n"
+        if camera_setup != "fixed" else ""
+    )
+
     prompt = (
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"TEMPLATE STRUCTURE:\n{json.dumps(structure, indent=2)}\n\n"
@@ -3429,6 +3440,7 @@ async def generate_creative_plan(
         f"then the flat desired_outcomes, and only when both are "
         f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
+        f"{selfie_ending_rule}"
         # The spoken budget, in characters, is the same number the render gate
         # imposes downstream (hook spoken separately over the opening beat, the
         # rest over the middle). A script past it is not shortened gracefully at
@@ -3795,7 +3807,7 @@ def _two_section_schema(middle_seconds: int) -> str:
         f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
         '"goal": "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app", '
         '"script": "the words spoken in the middle - different from the hook", '
-        '"action": "what they do through the middle, ending on the reach for the phone"}}'
+        '"action": "what they do through the middle, ending at the handoff moment"}}'
     )
 
 # The scene is where the single render's consistency lives: it is locked for
@@ -5217,6 +5229,23 @@ async def generate_video_strategy(
         "Respond with STRICT JSON only, no markdown fences."
     )
 
+    # Selfie: the camera IS the phone in the character's hand, so the ending
+    # cannot be a phone (ADR 0093). The physical ending is chosen per render
+    # and injected by the render guard, so the model is told not to write one
+    # — a written ending would double the beat and eat time. Fixed camera
+    # keeps the phone handoff: both hands are free.
+    final_beat_rule = (
+        "- Final 1-2s (SELFIE - the camera is the phone in their hand): NEVER raise, hold "
+        "or show a phone anywhere in the video; the recording device cannot appear. Do NOT "
+        "write an ending beat into the middle action: end the middle on the handoff moment "
+        "and leave the last second for the final physical beat, which is chosen per render "
+        "and added automatically.\n"
+        if camera_setup != "fixed" else
+        "- Final 1-2s: raise the phone into view, back to camera, screen to her; whole phone, "
+        "uncropped, clear margins, never hidden, eyes on it, excited, never glancing away, "
+        "through the last frame.\n"
+    )
+
     prompt = (
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
@@ -5411,10 +5440,7 @@ async def generate_video_strategy(
             "Simultaneously perform that gesture; subtle, natural. "
             "All fields agree; no timestamp or word sync.\n"
         )
-        +
-        "- Final 1-2s: raise the phone into view, back to camera, screen to her; whole phone, "
-        "uncropped, clear margins, never hidden, eyes on it, excited, never glancing away, "
-        "through the last frame.\n"
+        + f"{final_beat_rule}"
         # proof_moment is deliberately NOT a generation input any more. It is the one moment
         # the camera must film to make the claim believable — which is the product demo, and
         # the demo is recorded by the founder. It stays on the App Profile as a brief for that

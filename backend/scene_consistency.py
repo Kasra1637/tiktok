@@ -22,6 +22,7 @@ import copy
 import re
 
 import angle_scene
+import final_beat
 
 # The same per-field cap ai_service._normalize_strategy_section applies. A
 # patch that would need more room than this is reported, not silently cut.
@@ -395,6 +396,19 @@ def reconcile_scene(strategy, plan=None) -> dict:
             changed.append("Lighting")
 
         texts = _action_texts(result) + _beat_action_texts(plan)
+        if final_beat.is_selfie(result):
+            # In a selfie video the recording phone cannot appear: beat texts
+            # and props that name one would otherwise be copied into the
+            # props/movement lists this pass completes (ADR 0093).
+            texts = [
+                kept for kept, _removed in
+                (final_beat.split_phone_clauses(text) for text in texts)
+                if kept
+            ]
+            props_kept, props_removed = final_beat.strip_props(scene.get("props"))
+            if props_removed:
+                scene["props"] = props_kept
+                changed.append("Props")
 
         missing_objects = []
         for phrase in _mentioned_objects(texts):

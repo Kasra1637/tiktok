@@ -62,6 +62,8 @@ def test_normalize_strategy_never_returns_placeholder_wording():
 
 def test_props_learn_every_object_the_actions_and_timeline_show():
     strategy = {
+        # Fixed camera: both hands are free, so a phone is a legitimate prop.
+        "camera_setup": "fixed",
         "hook_action": "She sets the mug down and picks up the phone",
         "scene": {"location": "Kitchen", "props": "A notebook"},
         "performance": {"movement": ""},
@@ -79,6 +81,21 @@ def test_props_learn_every_object_the_actions_and_timeline_show():
         assert word in props, f"{word} missing from props: {props}"
     assert out["strategy"]["performance"]["movement"]
     assert "Props" in out["changed"] and "Movement" in out["changed"]
+
+
+def test_selfie_renders_never_list_a_phone_as_a_prop():
+    # In a selfie video the camera IS the phone: a phone clause in an action
+    # cannot become a prop (ADR 0093).
+    strategy = {
+        "hook_action": "She sets the mug down and picks up the phone",
+        "scene": {"location": "Kitchen", "props": "A notebook"},
+        "performance": {"movement": "Still"},
+        "segments": [{"role": "middle", "action": "Looks up from the notebook"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    props = out["strategy"]["scene"]["props"].lower()
+    assert "phone" not in props
+    assert "mug" in props
 
 
 def test_body_parts_places_and_abstractions_are_never_props():

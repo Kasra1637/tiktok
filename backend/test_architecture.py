@@ -9,7 +9,7 @@ import pytest
 BACKEND = Path(__file__).resolve().parent
 
 
-@pytest.mark.parametrize("module", ["angle_policy", "template_recommendations", "character_policy", "scene_consistency"])
+@pytest.mark.parametrize("module", ["angle_policy", "template_recommendations", "character_policy", "scene_consistency", "final_beat"])
 def test_policy_import_does_not_load_http_or_model_adapters(module):
     result = subprocess.run(
         [sys.executable, "-c", (
@@ -38,7 +38,7 @@ def test_ai_adapter_reuses_the_same_angle_policy_for_all_briefs():
     assert ai_service._normalize_content_angles is normalize_content_angles
 
 
-@pytest.mark.parametrize("module", ["angle_policy", "template_recommendations", "character_policy", "scene_consistency"])
+@pytest.mark.parametrize("module", ["angle_policy", "template_recommendations", "character_policy", "scene_consistency", "final_beat"])
 def test_policy_never_imports_an_outer_adapter(module):
     tree = ast.parse((BACKEND / f"{module}.py").read_text(encoding="utf-8"))
     imports = set()

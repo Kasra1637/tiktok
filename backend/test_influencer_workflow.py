@@ -1132,7 +1132,7 @@ class TestStrategyPromptDirectives:
         assert "reaching for the app, not using it" in captured["prompt"]
         # And the schema says the same thing about the middle's action, so it
         # holds even if the prose rule is skimmed.
-        assert "ending on the reach for the phone" in captured["prompt"]
+        assert "ending at the handoff moment" in captured["prompt"]
 
     def test_hook_seconds_is_clamped_where_the_strategy_is_built(self, api, monkeypatch):
         """

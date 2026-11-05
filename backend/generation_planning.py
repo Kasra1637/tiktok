@@ -23,6 +23,7 @@ import re
 from typing import Optional
 
 import angle_scene
+import final_beat
 import character_policy
 
 
@@ -178,8 +179,14 @@ CONDENSE_BELOW = 5000
 # SCREEN — the visible move in the first 1-2 seconds — and the redundancy that
 # bought it came out of the same paragraph, so the added constraint cost
 # nothing: the measured values below are the real ones for this text.
-FULL_PROMPT_FLOOR = 4223
-CONDENSED_PROMPT_FLOOR = 2377
+#
+# The final-moment text became setup-dependent (ADR 0093): the floor is
+# measured on the selfie default — the phone handoff is now fixed-camera only,
+# and a selfie render gets the physical ending instead. The condensed selfie
+# ending is shorter than the condensed phone text, which is why the condensed
+# floor fell while the full one rose slightly.
+FULL_PROMPT_FLOOR = 4237
+CONDENSED_PROMPT_FLOOR = 2330
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -466,9 +473,15 @@ _CONDENSED_CAMERA_MOVE = (
     "gesture{gesture}; subtle, natural, eyes on lens."
 )
 
-# Fixed in both modes: the phone rises into view at the end and stays inside the
+# Fixed-camera only: the phone rises into view at the end and stays inside the
 # central safe area of the later processing crop (including 1.12x), without asking
 # the model to zoom or to show any screen content.
+#
+# A SELFIE render gets the physical ending instead (ADR 0093): the camera IS
+# the phone in the character's hand, so nothing at the end can be a phone
+# raised, held or shown. The beat is chosen per render (final_beat.pick) and
+# reaches this builder on the strategy as `final_beat`, so consecutive renders
+# of one project do not repeat the same ending.
 _PHONE_HANDOFF_FRAMING = (
     "Final 1-2s: she raises the phone into view as she finishes saying she found it, "
     "back to camera, screen facing her; whole phone visible, uncropped, at chest height, "
@@ -483,6 +496,21 @@ _CONDENSED_PHONE_HANDOFF_FRAMING = (
     "Final 1-2s: she raises the phone into view, back to camera, screen to her; whole "
     "phone visible, uncropped, clear margins, never behind hand/arm/face, eyes on it, "
     "excited, never glancing away, through the last frame; central 88%."
+)
+
+# The selfie ending: one short physical beat in the same final moment the
+# phone handoff used to occupy, physical only, no extra words or time, with a
+# split-second hold before the cut.
+_SELFIE_FINAL_BEAT = (
+    "Final 1-2s (selfie: the camera is the phone in their hand, so no phone is raised, "
+    "held or shown anywhere on camera): {ending} Physical only \u2014 no new words and no "
+    "extra time \u2014 and hold the last pose for a split second before the cut, face in "
+    "the central 88% through the final frame."
+)
+
+_CONDENSED_SELFIE_FINAL_BEAT = (
+    "Final 1-2s (selfie, no phone on camera): {ending} No words; split-second hold "
+    "before the cut; face central."
 )
 
 
@@ -1774,7 +1802,16 @@ def _assemble_prompt(
     # standard immediately before the material it is a standard for.
     sections.append(starting_shot(strategy.get("camera_setup")))
     sections.append(camera_move_section(strategy, hook_seconds, condensed))
-    sections.append(_CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING)
+    # The final moment: the phone handoff when both hands are free, the chosen
+    # physical ending when the camera is the phone in their hand (ADR 0093).
+    if str(strategy.get("camera_setup") or "handheld") == "fixed":
+        sections.append(_CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING)
+    else:
+        ending = " ".join(str(strategy.get("final_beat") or "").split()).strip()
+        if not ending:
+            ending = final_beat.DEFAULT_ENDING
+        template = _CONDENSED_SELFIE_FINAL_BEAT if condensed else _SELFIE_FINAL_BEAT
+        sections.append(template.format(ending=ending))
 
     sections.append(
         "No text appears on screen at all — no captions, no titles, no labels. "

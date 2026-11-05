@@ -1051,7 +1051,7 @@ class TestCreativePlanBudget:
 
 class TestStrategyBudget:
     @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
-    def test_strategy_requests_selected_camera_and_visible_final_phone(self, monkeypatch, camera_setup):
+    def test_strategy_requests_selected_camera_and_setup_specific_final_beat(self, monkeypatch, camera_setup):
         import ai_service
 
         captured = {}
@@ -1098,17 +1098,15 @@ class TestStrategyBudget:
         assert "Do not push in, pull back, or zoom" in prompt
         assert '"at":' not in prompt
         assert "Final 1-2s" in prompt
-        assert "raise the phone into view" in prompt
-        assert "back to camera" in prompt
-        assert "whole phone" in prompt
-        assert "uncropped" in prompt
-        assert "through the last frame" in prompt
-        assert "clear margins" in prompt
-        assert "never hidden" in prompt
-        assert "screen to her" in prompt
-        assert "eyes on it" in prompt
-        assert "never glancing away" in prompt
-        assert "excited" in prompt
+        # A selfie render ends on a physical beat: the camera is the phone in
+        # their hand, so no phone can be raised or shown (ADR 0093).
+        assert "the camera is the phone in their hand" in prompt
+        assert "NEVER raise, hold" in prompt
+        assert "chosen per render" in prompt
+        assert "raise the phone into view" not in prompt
+        assert "whole phone" not in prompt
+        assert "screen to her" not in prompt
+        assert "eyes on it" not in prompt
         assert "about a metre away (loose hint)" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt

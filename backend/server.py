@@ -28,6 +28,7 @@ import storage_service
 import posters
 import template_library
 import angle_scene
+import final_beat
 import scene_consistency
 import claim_safety
 import media_signing
@@ -5499,6 +5500,9 @@ async def generate_plan(
                 audience=(payload.audience or row.get("audience") or "").strip(),
                 location=(row.get("location") or "").strip(),
                 visual_direction=look["visual_direction"],
+                # Selfie plans must not write a phone ending into the timeline
+                # (ADR 0093); fixed-camera plans may.
+                camera_setup=row.get("camera_setup") or "handheld",
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 profile_feedback=profile_feedback,
                 component_feedback=plan_feedback,
@@ -6149,7 +6153,15 @@ async def _submit_generation(
     # Movement from the actions and the timeline (ADR 0092), so the prompt's
     # WHERE line and the strategy lock cannot disagree.
     if strategy:
-        strategy = _guard_render_scene(strategy, project)
+        # The selfie ending rotates with the number of renders this project
+        # already has, so consecutive renders do not repeat the same beat
+        # (ADR 0093).
+        prior_renders = await _fetch_one(
+            "SELECT COUNT(*) AS n FROM generations WHERE studio_project_id = ? AND user_id = ?",
+            (project.get("id"), user_id),
+        )
+        render_index = int((prior_renders or {}).get("n") or 0)
+        strategy = _guard_render_scene(strategy, project, render_index=render_index)
         # The prompt's WHERE line names the place only; split_location keeps the
         # original when there is no place to keep (lighting-only text), so an
         # emptied field can never happen here.
@@ -7044,7 +7056,7 @@ def _require_current_strategy(project: dict) -> dict:
     return strategy
 
 
-def _guard_render_scene(strategy: dict, project: dict) -> dict:
+def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0) -> dict:
     """
     Make a strategy's scene fields agree before the prompt is built, and refuse
     a render that still carries a contradiction.
@@ -7064,6 +7076,10 @@ def _guard_render_scene(strategy: dict, project: dict) -> dict:
     - Props and Movement are completed from the hook/middle actions and the
       shot timeline; a list that cannot hold everything it must is refused
       rather than cut.
+    - A selfie render ends on a physical beat, never a phone (ADR 0093): phone
+      clauses are removed from the strategy's fields, and `render_index` picks
+      the ending for THIS render so consecutive renders do not repeat it. A
+      fixed-camera render keeps the phone handoff.
     """
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
@@ -7083,6 +7099,16 @@ def _guard_render_scene(strategy: dict, project: dict) -> dict:
             ),
         )
     strategy = audit["strategy"]
+    # Selfie renders end on a physical beat, never a phone (ADR 0093): the
+    # phone clauses are removed from the strategy's own fields first, so the
+    # scene pass below cannot copy them back into Props or Movement, and the
+    # chosen ending is applied afterwards.
+    selfie = final_beat.is_selfie(strategy)
+    strip_changed = []
+    if selfie:
+        strip_audit = final_beat.strip_fields(strategy)
+        strategy = strip_audit["strategy"]
+        strip_changed = strip_audit["changed"]
     scene_audit = scene_consistency.reconcile_scene(strategy, project)
     if scene_audit["blocked"]:
         named = "; ".join(f"{b['field']} {b['reason']}" for b in scene_audit["blocked"])
@@ -7094,13 +7120,22 @@ def _guard_render_scene(strategy: dict, project: dict) -> dict:
                 "generate again. Nothing has been charged."
             ),
         )
-    if audit["changed"] or scene_audit["changed"]:
+    strategy = scene_audit["strategy"]
+    ending_changed = []
+    if selfie:
+        ending = final_beat.pick(strategy, index=render_index)
+        ending_audit = final_beat.apply_ending(strategy, ending)
+        strategy = ending_audit["strategy"]
+        ending_changed = ending_audit["changed"]
+    if audit["changed"] or strip_changed or scene_audit["changed"] or ending_changed:
         logger.info(
             "Render for project %s: strategy scene reconciled before prompt build: %s",
             project.get("id"),
-            ", ".join(list(dict.fromkeys(audit["changed"] + scene_audit["changed"]))),
+            ", ".join(list(dict.fromkeys(
+                audit["changed"] + strip_changed + scene_audit["changed"] + ending_changed
+            ))),
         )
-    return scene_audit["strategy"]
+    return strategy
 
 
 async def _require_renderable_project(project_id: str, user_id: str) -> tuple:

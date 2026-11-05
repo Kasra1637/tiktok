@@ -9,6 +9,7 @@ import os
 import pytest
 
 import generation_planning as gp
+import final_beat
 import video_providers as vp
 
 
@@ -1367,10 +1368,14 @@ class TestFinalPhoneFraming:
         assert len(prompt) <= prompt_budget
 
     @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
-    def test_final_phone_framing_survives_full_and_condensed_prompts(self, prompt_budget):
+    def test_selfie_final_beat_survives_full_and_condensed_prompts(self, prompt_budget):
+        # The camera is the phone in their hand, so the final moment carries
+        # the physical ending chosen for this render, never a phone (ADR 0093).
+        ending = "Eyes drop off to the side for a beat, then snap back to the lens with a small nod."
         prompt = gp.build_segment_prompt(
             strategy={"scene": {"camera_angle": "Eye-level handheld 1.1 metres away."},
-                      "camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"}},
+                      "camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"},
+                      "final_beat": ending},
             profile={}, template={}, duration=10, plan={"hook_seconds": 3},
             prompt_budget=prompt_budget,
         )
@@ -1383,30 +1388,38 @@ class TestFinalPhoneFraming:
         assert "Do not push in, pull back, or zoom" in prompt
         condensed = prompt_budget < gp.CONDENSE_BELOW
         assert "Final 1-2s" in prompt
-        assert "raises the phone into view" in prompt
-        assert "back to camera" in prompt
-        assert "whole phone" in prompt
-        assert "uncropped" in prompt
-        assert "clear margins" in prompt
-        assert "never behind hand/arm/face" in prompt
-        assert "through the last frame" in prompt
-        # Full mode names them outright; the condensed twin squeezes the same
-        # constraints shorter. Either way the screen faces her and her eyes
-        # stay on the phone.
-        assert "screen facing her" in prompt or "screen to her" in prompt
-        assert "eyes on the phone" in prompt or "eyes on it" in prompt
-        assert "central 88%" in prompt
+        assert ending in prompt
+        assert "raises the phone into view" not in prompt
+        assert "whole phone" not in prompt
+        assert "no phone on camera" in prompt or "no phone is raised, held or shown" in prompt
+        assert "split-second hold" in prompt or "split second" in prompt
         assert "about a metre away (loose hint)" in prompt
         if condensed:
-            assert "saying she found it" not in prompt
+            assert "face central" in prompt
         else:
-            assert "saying she found it" in prompt
-            assert "No screen/app use" in prompt
-            assert "head/chin/phone in central 88%" in prompt
+            assert "central 88%" in prompt
+            assert "Physical only" in prompt
         assert gp.camera_move_section(
             {"camera_beat": {"direction": "left", "gesture": "a slight puzzled head tilt"}},
             3, prompt_budget < gp.CONDENSE_BELOW,
         ) in prompt
+        assert len(prompt) <= prompt_budget
+
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    def test_fixed_camera_keeps_the_phone_handoff(self, prompt_budget):
+        # Both hands are free: the phone handoff survives in both budget modes.
+        prompt = gp.build_segment_prompt(
+            strategy={"camera_setup": "fixed",
+                      "camera_beat": {"direction": "left", "gesture": "a small relieved smile"}},
+            profile={}, template={}, duration=10, plan={"hook_seconds": 3},
+            prompt_budget=prompt_budget,
+        )
+        assert gp.FIXED_STARTING_SHOT in prompt
+        assert "Camera stays locked" in prompt
+        assert "raises the phone into view" in prompt
+        assert "whole phone" in prompt
+        assert "Final 1-2s" in prompt
+        assert "no phone on camera" not in prompt
         assert len(prompt) <= prompt_budget
 
     def test_fixed_camera_survives_a_saturated_strategy_at_every_ceiling(self):
@@ -1424,7 +1437,7 @@ class TestFinalPhoneFraming:
             assert len(prompt) <= limit
 
     @pytest.mark.parametrize("direction", ["left", "right"])
-    def test_final_phone_framing_survives_a_saturated_strategy_at_every_ceiling(self, direction):
+    def test_selfie_final_beat_survives_a_saturated_strategy_at_every_ceiling(self, direction):
         kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
         kwargs["strategy"]["camera_beat"] = {
             "direction": direction, "gesture": "a small relieved smile",
@@ -1444,16 +1457,10 @@ class TestFinalPhoneFraming:
             assert "on the hook line" not in prompt
             assert "push in and arc" not in prompt
             assert "Final 1-2s" in prompt
-            assert "raises the phone into view" in prompt
-            assert "back to camera" in prompt
-            assert "whole phone" in prompt
-            assert "uncropped" in prompt
-            assert "clear margins" in prompt
-            assert "never behind hand/arm/face" in prompt
-            assert "through the last frame" in prompt
-            assert "screen to her" in prompt or "screen facing her" in prompt
-            assert "eyes on it" in prompt or "eyes on the phone" in prompt
-            assert "central 88%" in prompt
+            assert "raises the phone into view" not in prompt
+            assert "whole phone" not in prompt
+            assert "no phone on camera" in prompt or "no phone is raised, held or shown" in prompt
+            assert final_beat.DEFAULT_ENDING in prompt
             assert "about a metre away (loose hint)" in prompt
             assert len(prompt) <= limit
 
