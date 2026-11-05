@@ -122,7 +122,11 @@ def test_a_list_that_cannot_hold_everything_is_blocked_not_cut():
     assert out["strategy"]["scene"]["props"] == "z" * 298
 
 
-def test_movement_is_completed_from_the_sections_and_the_timeline():
+def test_movement_covers_the_action_fields_and_ignores_the_narrated_beats():
+    # Only the action fields (hook_action and the section actions) are copied
+    # into Movement. The timeline's *text* beats are narration: dumping them
+    # into the movement line every render is what pushed ordinary strategies
+    # past its size cap and blocked the render.
     strategy = {
         "hook_action": "Stands up from the desk",
         "scene": {"location": "Kitchen", "props": ""},
@@ -132,8 +136,33 @@ def test_movement_is_completed_from_the_sections_and_the_timeline():
     plan = {"beat_timeline": [{"label": "middle", "text": "Sits back down and sighs"}]}
     out = scene_consistency.reconcile_scene(strategy, plan)
     movement = out["strategy"]["performance"]["movement"].lower()
-    for phrase in ("stands up from the desk", "reaches for the phone", "sits back down"):
+    for phrase in ("stands up from the desk", "reaches for the phone"):
         assert phrase in movement, f"{phrase} missing from movement: {movement}"
+    assert "sits back down and sighs" not in movement
+    assert out["blocked"] == []
+
+
+def test_a_verbose_timeline_can_no_longer_block_the_render():
+    # The regression behind "Movement cannot cover every action": two beats of
+    # narration alone are longer than the movement field can hold, so checking
+    # them against Movement refused renders that used to work.
+    strategy = {
+        "hook_action": "Looks up from the notebook",
+        "scene": {"location": "Kitchen", "props": ""},
+        "performance": {"movement": "Still"},
+        "segments": [{"role": "middle", "action": "Counts on fingers"}],
+    }
+    plan = {"beat_timeline": [
+        {"label": "hook", "text": "Stops mid-scroll and looks at the phone, then turns back "
+                                   "with a question on her face and a slow blink"},
+        {"label": "middle", "text": "The blank page loses its grip, then she taps the mug "
+                                     "and laughs once without sound"},
+    ]}
+    out = scene_consistency.reconcile_scene(strategy, plan)
+    assert out["blocked"] == []
+    movement = out["strategy"]["performance"]["movement"].lower()
+    assert "looks up from the notebook" in movement
+    assert "counts on fingers" in movement
 
 
 def test_the_viewer_rows_are_written_from_the_viewers_point_of_view():

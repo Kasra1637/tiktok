@@ -429,21 +429,32 @@ def reconcile_scene(strategy, plan=None) -> dict:
 
     performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
     if performance is not None:
-        movement = performance.get("movement")
+        movement_texts = _action_texts(result)
+        if final_beat.is_selfie(result):
+            # Beat texts and props that name one would otherwise be copied
+            # into the lists this pass completes (ADR 0093).
+            movement_texts = [
+                kept for kept, _removed in
+                (final_beat.split_phone_clauses(text) for text in movement_texts)
+                if kept
+            ]
         missing = _missing_actions(
-            _action_texts(result) + _beat_action_texts(plan), movement
+            movement_texts, performance.get("movement"),
         )
         if missing:
-            movement_text, over = _append_list(
-                movement, ["; ".join(dict.fromkeys(missing))]
+            movement = append_clause(
+                performance.get("movement"), "; ".join(dict.fromkeys(missing))
             )
-            if over:
+            if len(movement) > FIELD_LIMIT:
+                # Block instead of cutting: cutting the ending of a movement
+                # list amputates the final beat the render needs most, and a
+                # silently shortened list would disagree with the timeline.
                 blocked.append({
                     "field": "Movement",
                     "reason": "cannot cover every action the sections and timeline show within its size limit",
                 })
             else:
-                performance["movement"] = movement_text
+                performance["movement"] = movement
                 changed.append("Movement")
 
     # De-duplicate labels in first-seen order.
