@@ -2214,11 +2214,44 @@ async function main() {
   await check("the scene block points at the Location editor for its place", async (ctx) => {
     // The helper used to say the scene was built on Review & submit, which is
     // not where the Location can be edited: the Location editor lives on the
-    // render panel below this block (ADR 0092).
+    // render panel below this block (ADR 0092). The scene fields now live in
+    // one closed "Scene details" group with a one-line digest.
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(ctx, "Scene details", "the scene fields are not collapsed into one group");
     expectText(ctx, "Render your Hook + Story below", "the scene block does not point at the Location editor");
+    const group = ctx.container.querySelector('[data-testid="strategy-scene-details"]');
+    if (!group || group.open) throw new Error("Scene details is not a closed group");
+    if (!group.querySelector("summary")?.textContent.toLowerCase().includes("handheld selfie")) {
+      throw new Error("the scene digest does not name the camera setup");
+    }
     if (ctx.text().includes("Built from your visual and voice direction")) {
       throw new Error("the scene block still sends the founder to the wrong editor");
+    }
+  });
+
+  await check("the strategy panel keeps the actionable parts open and collapses the explanations", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    for (const testId of [
+      "strategy-hook-concept", "strategy-why-it-works",
+      "strategy-viewer-outcome", "strategy-scene-details",
+    ]) {
+      const group = ctx.container.querySelector(`[data-testid="${testId}"]`);
+      if (!group) throw new Error(`missing collapsed group: ${testId}`);
+      if (group.open) throw new Error(`${testId} is open by default`);
+      const summary = group.querySelector("summary");
+      if (!summary || summary.textContent.trim().length < 12) {
+        throw new Error(`${testId} has no one-line summary of what it holds`);
+      }
+    }
+    // The two sections — the spoken lines and what she does — are the parts
+    // people act on, so they stay visible outside every closed group.
+    expectText(ctx, "The two sections", "the two sections are missing");
+    expectText(ctx, "What is said here:", "the spoken lines are not visible");
+    expectText(ctx, "What they do:", "what they do is not visible");
+    for (const details of [...ctx.container.querySelectorAll("details")]) {
+      if (details.textContent.includes("What is said here:")) {
+        throw new Error("the two sections were collapsed into a closed group");
+      }
     }
   });
 

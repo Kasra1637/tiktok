@@ -12,7 +12,7 @@ jest.mock("../lib/api", () => ({
 import { api } from "../lib/api";
 jest.mock("lucide-react", () => {
   const Icon = () => null;
-  return { Loader2: Icon, AlertTriangle: Icon, Info: Icon, MapPin: Icon, ShieldQuestion: Icon, Sparkles: Icon, Target: Icon };
+  return { Loader2: Icon, AlertTriangle: Icon, Info: Icon, MapPin: Icon, ShieldQuestion: Icon, Sparkles: Icon, Target: Icon, ChevronDown: Icon };
 });
 jest.mock("../components/ui/button", () => ({ Button: ({ children }) => <button>{children}</button> }));
 jest.mock("../components/ui/badge", () => ({ Badge: ({ children }) => <span>{children}</span> }));

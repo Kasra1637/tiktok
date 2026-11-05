@@ -8,6 +8,7 @@ import { sentenceCase } from "../lib/copyCase";
 import {
   Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
+import { Disclosure } from "./Disclosure";
 import { GroupLabel } from "./SectionCard";
 
 /**
@@ -93,17 +94,23 @@ function strategyLabel(key) {
  * are long, so these rows stay stacked while short-labelled rows go two
  * columns — never the label or body itself.
  */
-function StrategyBlock({ title, icon: Icon, rows, description }) {
+function StrategyBlock({ title, icon: Icon, rows, description, hideTitle = false }) {
   const filled = rows.filter(([, value]) => String(value || "").trim());
   if (!filled.length) return null;
   return (
-    <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
-      <div className="space-y-2">
-        <GroupLabel icon={Icon}>{title}</GroupLabel>
-        {description && (
+    <div className={hideTitle ? "space-y-2" : "space-y-4 border-t border-[color:var(--hairline-strong)] pt-5"}>
+      {hideTitle ? (
+        description && (
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
-        )}
-      </div>
+        )
+      ) : (
+        <div className="space-y-2">
+          <GroupLabel icon={Icon}>{title}</GroupLabel>
+          {description && (
+            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+          )}
+        </div>
+      )}
       <dl className="max-w-3xl divide-y divide-[color:var(--hairline)]">
         {filled.map(([label, value]) => (
           <div key={label} className="py-3 first:pt-0 last:pb-0" data-testid={`strategy-${String(label).replaceAll("_", "-")}`}>
@@ -115,6 +122,51 @@ function StrategyBlock({ title, icon: Icon, rows, description }) {
         ))}
       </dl>
     </div>
+  );
+}
+
+/**
+ * One line of what a collapsed group holds, so the founder can decide whether
+ * to open it. Sentence-cased like every other strategy value, cut at a word
+ * boundary rather than mid-thought.
+ */
+function summaryLine(text, limit = 108) {
+  const full = String(text || "").trim().split(/\s+/).join(" ");
+  if (!full) return "";
+  const firstSentence = full.split(/(?<=[.!?])\s/)[0];
+  const clipped = firstSentence.length > limit
+    ? firstSentence.slice(0, limit + 1).replace(/\s+\S*$/, "") + "…"
+    : firstSentence;
+  return sentenceCase(clipped);
+}
+
+/**
+ * A collapsed strategy group: a title, a one-line digest of its contents, and
+ * the full text behind one click. The panels people ACT on (the two sections,
+ * the Location editor, the rating and the render controls) stay open; the
+ * explanations do not have to be read to use the page.
+ */
+function CollapsedGroup({ testId, title, digest, children }) {
+  return (
+    <Disclosure
+      testId={testId}
+      detailsClassName="group inset-panel space-y-3"
+      summaryClassName="flex w-full cursor-pointer list-none flex-wrap items-start justify-between gap-2 py-1 [&::-webkit-details-marker]:hidden"
+      summary={
+        <span className="flex min-w-0 flex-col gap-1 text-left">
+          <GroupLabel>{title}</GroupLabel>
+          {digest && (
+            <span className="text-sm font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {digest}
+            </span>
+          )}
+        </span>
+      }
+    >
+      <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
+        {children}
+      </div>
+    </Disclosure>
   );
 }
 
@@ -282,6 +334,26 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   }, [project?.status, hasStrategy, projectId, busy, needsAngle]);
 
   const sections = plannedSections(strategy);
+  // The one-line digest of the collapsed scene group: place, camera setup and
+  // what the person wears (or the light when the wardrobe is unset). The
+  // Location editor itself stays open on the render panel below.
+  const scene = strategy?.scene || {};
+  const sceneRows = [
+    ...Object.entries(scene),
+    ...Object.entries(strategy?.performance || {}),
+  ].filter(([, value]) => String(value || "").trim());
+  const hasOutcome = [
+    strategy?.desired_outcome, strategy?.mechanism_beat, strategy?.payoff_beat,
+  ].some((value) => String(value || "").trim());
+  const cameraLabel = project?.camera_setup === "fixed" ? "fixed camera" : "handheld selfie";
+  const sceneDigest = [
+    scene.location,
+    cameraLabel,
+    scene.wardrobe || scene.lighting,
+  ]
+    .filter((part) => String(part || "").trim())
+    .map((part) => sentenceCase(String(part).trim()))
+    .join(", ");
 
   return (
     <div className="inset-panel space-y-3">
@@ -428,84 +500,101 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       )}
 
       {hasStrategy && (
-        <div className="space-y-5 border-t border-[color:var(--hairline-strong)] pt-5">
-          <div className="max-w-3xl space-y-2 border-l-2 border-[color:var(--indigo-35)] pl-4">
-            <GroupLabel>Hook concept</GroupLabel>
-            <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.hook_concept)}</p>
-            {/* The hook line itself is NOT printed here. It is the same string as
-                the Review step's "Hook line", verbatim, because the strategy
-                prompt is told to echo the founder-approved line rather than write
-                a new one (ai_service.py, the approved-plan rules). Printing it a
-                second time read as though the two could differ, which is the one
-                thing they cannot. `strategy.hook_line` still exists on the
-                strategy and still reaches the render prompt — this is the
-                duplicate display that was removed, not the field. */}
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              What is said is the hook line you saved above, spoken as written.
-            </p>
-          </div>
-          <div className="space-y-2 border-t border-[color:var(--hairline-strong)] pt-5">
-            <GroupLabel icon={Target}>Why this works for this app</GroupLabel>
-            <p className="max-w-3xl text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.strategy_summary)}</p>
-          </div>
+        <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
+          {/* The explanations are collapsed by default: they govern the render,
+              but the founder acts on the Location editor, the two sections, the
+              rating and the render controls below. Each closed group still
+              shows one line of what it holds, so nothing is hidden without a
+              clue. */}
+          {String(strategy.hook_concept || "").trim() && (
+            <CollapsedGroup
+              testId="strategy-hook-concept"
+              title="Hook concept"
+              digest={summaryLine(strategy.hook_concept)}
+            >
+              <div className="max-w-3xl space-y-2 border-l-2 border-[color:var(--indigo-35)] pl-4">
+                <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.hook_concept)}</p>
+                {/* The hook line itself is NOT printed here. It is the same string as
+                    the Review step's "Hook line", verbatim, because the strategy
+                    prompt is told to echo the founder-approved line rather than write
+                    a new one (ai_service.py, the approved-plan rules). Printing it a
+                    second time read as though the two could differ, which is the one
+                    thing they cannot. `strategy.hook_line` still exists on the
+                    strategy and still reaches the render prompt — this is the
+                    duplicate display that was removed, not the field. */}
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  What is said is the hook line you saved above, spoken as written.
+                </p>
+              </div>
+            </CollapsedGroup>
+          )}
+
+          {String(strategy.strategy_summary || "").trim() && (
+            <CollapsedGroup
+              testId="strategy-why-it-works"
+              title="Why this works for this app"
+              digest={summaryLine(strategy.strategy_summary)}
+            >
+              <p className="max-w-3xl text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.strategy_summary)}</p>
+            </CollapsedGroup>
+          )}
+
           {/* The three outcome fields, shown because they already govern the
               whole render (generation_planning reads them into the segment
-              prompt) and were invisible here: the summary above is one
-              paragraph, so "the viewer should end up able to do X", "here is
-              how it works, as a benefit" and "here is the payoff line" were
-              written and read by the model and never by the founder.
+              prompt) and were invisible here. Framed as a change the app
+              supports, never a result it promises — the same rule the template
+              outcome line and the evidence note follow. The first row is the
+              one-line digest of the closed group: the change it supports. */}
+          {hasOutcome && (
+            <CollapsedGroup
+              testId="strategy-viewer-outcome"
+              title="What the viewer ends up with"
+              digest={summaryLine(strategy.desired_outcome || strategy.mechanism_beat || strategy.payoff_beat)}
+            >
+              <StrategyBlock
+                title="What the viewer ends up with"
+                description="How the viewer sees this app: the change, the benefit, and what they are left with — all from the viewer's point of view. The render is written from this framing — aim at it, never promise it as a result."
+                icon={Target}
+                hideTitle
+                rows={[
+                  ["The change this supports", strategy.desired_outcome],
+                  ["How it works, as a benefit", strategy.mechanism_beat],
+                  ["What the viewer is left with", strategy.payoff_beat],
+                ]}
+              />
+            </CollapsedGroup>
+          )}
 
-              Framed as a change the app supports, never a result it promises —
-              the same rule the template outcome line and the evidence note
-              follow, so the wording has to be the founder's reading of it
-              rather than a target. Rows drop out when empty (StrategyBlock),
-              which is what an existing project built before these fields were
-              generated gets: nothing shown until the strategy is rebuilt. */}
-          <StrategyBlock
-            title="What the viewer ends up with"
-            description="How the viewer sees this app: the change, the benefit, and what they are left with — all from the viewer's point of view. The render is written from this framing — aim at it, never promise it as a result."
-            icon={Target}
-            rows={[
-              ["The change this supports", strategy.desired_outcome],
-              ["How it works, as a benefit", strategy.mechanism_beat],
-              ["What the viewer is left with", strategy.payoff_beat],
-            ]}
-          />
-          {/* There is no "person" block, and deliberately so. It used to sit
-              here listing the model's guess at the founder's face, hair, age and
-              wardrobe, under a heading that called it locked for every segment —
-              while the actual photograph sat in the project's assets. It read as
-              a description of the person they uploaded, and it was invented. The
-              on-camera person is copied from the character reference image and
-              nothing is written about them.
+          {/* Scene and performance are ONE group, not two: movement and voice
+              delivery are locked by exactly the same mechanism as camera angle
+              and lighting. The digest shows the place, the camera setup and the
+              wardrobe/light — "Footbridge at dusk, handheld selfie, olive
+              jacket" — so the group reads at a glance without opening. */}
+          {sceneRows.length > 0 && (
+            <CollapsedGroup
+              testId="strategy-scene-details"
+              title="Scene details"
+              digest={sceneDigest}
+            >
+              <StrategyBlock
+                title="The scene"
+                description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Render your Hook + Story below; lighting and wardrobe live on Review & submit."
+                icon={MapPin}
+                hideTitle
+                rows={[
+                  ...Object.entries(strategy.scene || {}),
+                  ...Object.entries(strategy.performance || {}),
+                ]}
+              />
+            </CollapsedGroup>
+          )}
 
-              Scene and performance are ONE block, not two. They were separate
-              headings over four values, and the divider implied a boundary that
-              does not exist: `movement` and `voice_delivery` are locked by
-              exactly the same mechanism as camera angle and lighting, so
-              splitting them made the founder hunt for half the lock in a second
-              box. Rows are ordered scene-then-performance, which is the order
-              STRATEGY_SCENE_FIELDS and STRATEGY_PERFORMANCE_FIELDS declare.
-
-              The description credits the plan, because these twelve slots are the
-              plan's "Visual direction" and "Voice direction" decomposed for the
-              render. Nothing in the prompt obliges the model to transcribe that
-              paragraph into these fields, so the two can drift — saying so is
-              what tells the founder where to fix a disagreement. */}
-          <StrategyBlock
-            title="The scene"
-            description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Render your Hook + Story below; lighting and wardrobe live on Review & submit."
-            icon={MapPin}
-            rows={[
-              ...Object.entries(strategy.scene || {}),
-              ...Object.entries(strategy.performance || {}),
-            ]}
-          />
           {/* Exactly two rows, in render order. The old "Segments planned" list
               collapsed runs of continuation beats into ranges and closed by
               saying the hook and the call to action were the two that carried the
               video — a description of a chain with a fixed number of beats to
-              segments, none of which exists now. */}          <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
+              segments, none of which exists now. */}
+          <div className="space-y-4 border-t border-[color:var(--hairline-strong)] pt-5">
             <GroupLabel icon={Info}>The two sections</GroupLabel>
             <ol className="space-y-6 text-base">
               {sections.map((section) => (
