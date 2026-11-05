@@ -446,7 +446,7 @@ class TestRenderGuard:
         strategy = desk_strategy()
         strategy["scene"]["props"] = "None"
         strategy["scene"]["camera_angle"] = "Use STARTING SHOT"
-        patched = api._guard_render_scene(strategy, project)
+        patched = api._guard_render_scene(strategy, project, render_index=0, exclude=[])
 
         assert patched["scene"]["location"] == "Home office desk"
         assert "7am" in (patched["scene"]["lighting"] or "")

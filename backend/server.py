@@ -829,6 +829,11 @@ async def init_db():
                 -- the provider's minimum, so the record shows the real length
                 -- rather than only the length that was asked of the model.
                 trim_to_seconds INTEGER DEFAULT 0,
+                -- The physical selfie ending chosen for this render (ADR
+                -- 0093). One ending per render, never stored on the strategy:
+                -- consecutive renders read it back so the pick never repeats
+                -- a recent ending. NULL for fixed renders and older rows.
+                final_beat TEXT,
                 attempt INTEGER DEFAULT 1,
                 openrouter_job_id TEXT,
                 polling_url TEXT,
@@ -1547,6 +1552,16 @@ async def init_db():
         if "storage_error" not in {row[1] for row in await cursor.fetchall()}:
             logger.info("Migration: adding storage_error column to generations")
             await conn.execute("ALTER TABLE generations ADD COLUMN storage_error TEXT")
+        await conn.commit()
+
+        # Migration: generations gains the selfie ending chosen for this
+        # render (ADR 0093). Existing rows predate it, so they keep NULL rather
+        # than a guessed ending; the pick excludes their stored endings so
+        # consecutive renders never repeat one.
+        cursor = await conn.execute("PRAGMA table_info(generations)")
+        if "final_beat" not in {row[1] for row in await cursor.fetchall()}:
+            logger.info("Migration: adding final_beat column to generations")
+            await conn.execute("ALTER TABLE generations ADD COLUMN final_beat TEXT")
         await conn.commit()
 
         # Best-effort backfill for analyses whose local extracted frames still
@@ -6170,7 +6185,14 @@ async def _submit_generation(
             (project.get("id"), user_id),
         )
         render_index = int((prior_renders or {}).get("n") or 0)
-        strategy = _guard_render_scene(strategy, project, render_index=render_index)
+        prior_beats = await _fetch_all(
+            "SELECT final_beat FROM generations "
+            "WHERE studio_project_id = ? AND user_id = ? AND final_beat IS NOT NULL AND final_beat != '' "
+            "ORDER BY created_at DESC LIMIT 20",
+            (project.get("id"), user_id),
+        )
+        exclude = [row.get("final_beat") for row in prior_beats if row.get("final_beat")]
+        strategy = _guard_render_scene(strategy, project, render_index=render_index, exclude=exclude)
         # The prompt's WHERE line names the place only; split_location keeps the
         # original when there is no place to keep (lighting-only text), so an
         # emptied field can never happen here.
@@ -6343,8 +6365,8 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location, final_beat)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -6352,7 +6374,8 @@ async def _submit_generation(
          json.dumps(continuity) if continuity else None, trim_to_seconds,
          attempt, prompt, json.dumps([]), now, now, now, user_id,
          claim_key or None, camera_setup,
-         ((strategy or {}).get("scene") or {}).get("location") or ""),
+         ((strategy or {}).get("scene") or {}).get("location") or "",
+         ((strategy or {}).get("final_beat") or "") or None),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request
@@ -7065,7 +7088,7 @@ def _require_current_strategy(project: dict) -> dict:
     return strategy
 
 
-def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0) -> dict:
+def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, exclude=()) -> dict:
     """
     Make a strategy's scene fields agree before the prompt is built, and refuse
     a render that still carries a contradiction.
@@ -7083,12 +7106,15 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0) ->
     - Location is split so it names the place only, with its lighting and time
       of day moved into Lighting.
     - Props and Movement are completed from the hook/middle actions and the
-      shot timeline; a list that cannot hold everything it must is refused
-      rather than cut.
+      shot timeline's action clauses; a list that can be shortened without
+      losing those actions is compacted, and one that cannot hold everything
+      it must is refused rather than cut.
     - A selfie render ends on a physical beat, never a phone (ADR 0093): phone
       clauses are removed from the strategy's fields, and `render_index` picks
       the ending for THIS render so consecutive renders do not repeat it. A
-      fixed-camera render keeps the phone handoff.
+      fixed-camera render keeps the phone handoff. `exclude` carries the
+      endings this project already used, so consecutive renders do not repeat
+      a recent ending.
     """
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
@@ -7132,7 +7158,7 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0) ->
     strategy = scene_audit["strategy"]
     ending_changed = []
     if selfie:
-        ending = final_beat.pick(strategy, index=render_index)
+        ending = final_beat.pick(strategy, exclude=exclude, index=render_index)
         ending_audit = final_beat.apply_ending(strategy, ending)
         strategy = ending_audit["strategy"]
         ending_changed = ending_audit["changed"]

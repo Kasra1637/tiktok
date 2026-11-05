@@ -363,6 +363,51 @@ def _missing_actions(texts, movement) -> list:
     return missing
 
 
+def _compact_clause(text, must_cover) -> tuple:
+    """Shorten a text field to FIELD_LIMIT without losing `must_cover` content.
+
+    The field is a "; "-joined list of clauses. Clauses whose content words
+    are already covered by the clauses that stay are redundant and are
+    dropped, longest-first, until the field fits. Returns ("", True) when no
+    shortening can preserve every required action, so the caller can refuse
+    rather than cut an ending out from under the render.
+    """
+    raw = " ".join(str(text or "").split()).strip(" .;")
+    if not raw or len(raw) <= FIELD_LIMIT:
+        return raw, False
+    clauses = [clause.strip() for clause in raw.split(";") if clause.strip()]
+    if not clauses:
+        return "", True
+
+    required = set()
+    for item in must_cover or []:
+        required |= _content_tokens(item)
+
+    def preserves(candidate) -> bool:
+        covered = set()
+        for clause in candidate:
+            covered |= _content_tokens(clause)
+        return not required or required <= covered
+
+    candidate = list(clauses)
+    while len("; ".join(candidate)) > FIELD_LIMIT and len(candidate) > 1:
+        best = None
+        for index in range(len(candidate)):
+            rest = candidate[:index] + candidate[index + 1:]
+            if preserves(rest):
+                saved = len(candidate[index]) + 2
+                if best is None or saved > best[0]:
+                    best = (saved, index)
+        if best is None:
+            break
+        candidate.pop(best[1])
+    compacted = "; ".join(candidate)
+    if len(compacted) > FIELD_LIMIT:
+        return "", True
+    compacted = compacted.strip(" .;")
+    return (compacted[:1].upper() + compacted[1:] if compacted else compacted), (compacted != raw)
+
+
 def reconcile_scene(strategy, plan=None) -> dict:
     """Patch a strategy's scene fields into agreement; report what will not fit.
 
@@ -429,7 +474,7 @@ def reconcile_scene(strategy, plan=None) -> dict:
 
     performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
     if performance is not None:
-        movement_texts = _action_texts(result)
+        movement_texts = _action_texts(result) + _beat_action_texts(plan)
         if final_beat.is_selfie(result):
             # Beat texts and props that name one would otherwise be copied
             # into the lists this pass completes (ADR 0093).
@@ -446,13 +491,23 @@ def reconcile_scene(strategy, plan=None) -> dict:
                 performance.get("movement"), "; ".join(dict.fromkeys(missing))
             )
             if len(movement) > FIELD_LIMIT:
-                # Block instead of cutting: cutting the ending of a movement
-                # list amputates the final beat the render needs most, and a
-                # silently shortened list would disagree with the timeline.
-                blocked.append({
-                    "field": "Movement",
-                    "reason": "cannot cover every action the sections and timeline show within its size limit",
-                })
+                # Compact instead of refusing an ordinary render: the fields
+                # the founder actually reads (Location, Lighting, Props, the
+                # actions and the prompt) stay intact, and Movement is
+                # shortened to the actions it can still cover.
+                compacted, compacted_changed = _compact_clause(
+                    movement, movement_texts
+                )
+                if not compacted or len(compacted) > FIELD_LIMIT:
+                    blocked.append({
+                        "field": "Movement",
+                        "reason": "cannot cover every action the sections and timeline show within its size limit",
+                    })
+                else:
+                    performance["movement"] = compacted
+                    changed.append("Movement")
+                    if compacted_changed:
+                        changed.append("Movement")
             else:
                 performance["movement"] = movement
                 changed.append("Movement")
