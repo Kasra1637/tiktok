@@ -1,6 +1,6 @@
 # 0087 — Template tailoring waits for the founder's Generate click
 
-- **Status:** accepted
+- **Status:** accepted (the free ranked read on the goal pick superseded by 0098)
 - **Date:** 2026-11-01
 - **Anchors:** `frontend/src/hooks/useWizardTemplates.js` (auto-run effect removed; `runTailoring` exported), `frontend/src/pages/CreateVideo.jsx` (goals-section CTA, `data-testid="templates-generate"`); smoke checks "template generation waits for the founder's click, not the goal pick", "wizard requests tailored templates for the chosen objective"
 - **Shapes:** the visible side of 0080 (the hook owns tailored state; when the server is asked is a page decision from now on)

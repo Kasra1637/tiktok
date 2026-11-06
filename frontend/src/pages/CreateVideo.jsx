@@ -1761,17 +1761,16 @@ export default function CreateVideo() {
                   testId="goal-feedback"
                 />
               )}
-              {/* Tailoring reads every template for this goal and is billed,
-                  so it waits for a click instead of firing on the pick: one
-                  reflexive tap on a neighbouring goal cost a generation the
-                  founder never asked for (ADR 0087). The action leads; the
-                  line under it carries the when, not the cost. */}
-              {angle && objective && profileId && !tailoring && !recommendationsVisible && (
-                <div className="space-y-1">
+              {/* Nothing starts on the goal pick — no powered generation and
+                  no ranked read: every template request waits for this click
+                  (ADR 0098). One reflexive tap on a neighbouring goal must
+                  cost exactly nothing. The action leads; the line under it
+                  carries the when, not the cost. */}
+              {angle && objective && profileId && !tailoring && !(recommendationsVisible && visibleRecommendations.length > 0) && (
+                <div className="space-y-2">
                   <Button
                     variant="accent"
-                    size="sm"
-                    className="gap-1.5"
+                    className="w-full gap-1.5"
                     onClick={() => runTailoring(false)}
                     data-testid="templates-generate"
                   >
@@ -1789,7 +1788,7 @@ export default function CreateVideo() {
                 choice ranks. */}
             {!objective && angle && (
               <p className="text-sm text-muted-foreground">
-                Pick a goal above — the templates below rank for it.
+                Pick a goal above — tailored templates are one click away.
               </p>
             )}
             {/* Tailoring narrates fresh work while it reads, then the cards
@@ -1822,7 +1821,11 @@ export default function CreateVideo() {
                 That template is no longer available — pick another below.
               </p>
             )}
-            {objective && recommendationsVisible && visibleRecommendations.length === 0 && (
+            {/* The flight owns the screen: the status below is the only
+                narrator while tailoring runs, and the cards (or their
+                empty-state) wait for it to settle — a half-set is not a
+                ranked set. */}
+            {objective && !tailoring && recommendationsVisible && visibleRecommendations.length === 0 && (
               <div className="inset-panel">
                 <p className="text-base">No templates recommended for this app yet.</p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1832,7 +1835,7 @@ export default function CreateVideo() {
                 </p>
               </div>
             )}
-            {objective && recommendationsVisible && visibleRecommendations.length > 0 && (
+            {objective && !tailoring && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="eyebrow block">

@@ -22,15 +22,17 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   }, []);
 
   // The picker shows exactly three templates (ADR 0096). The server
-  // guarantees the count; the client asks for three so both agree.
-  const loadRecommendations = useCallback(async (pid, aid) => {
+  // guarantees the count; the client asks for three so both agree. Called
+  // only inside a tailoring flight — never as an effect: no template
+  // request, free or billed, fires on the goal pick (ADR 0098).
+  const loadRecommendations = useCallback(async (pid, aid, oid = objective) => {
     if (!pid) return;
     const request = ++recRequestRef.current;
-    const key = `${pid || ""}:${aid || ""}:${objective || ""}`;
+    const key = `${pid || ""}:${aid || ""}:${oid || ""}`;
     setRanked({ key, rows: [], shared: emptyFit(), error: null });
     try {
       const rec = await api.getTemplateRecommendations(pid, {
-        angle_id: aid || undefined, objective: objective || undefined, limit: 3,
+        angle_id: aid || undefined, objective: oid || undefined, limit: 3,
       });
       if (recRequestRef.current !== request) return;
       setRanked({
@@ -45,10 +47,6 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
       setRanked({ key, rows: [], shared: emptyFit(), error: getErrorMessage(err) });
     }
   }, [objective]);
-
-  useEffect(() => {
-    loadRecommendations(profileId, angleId);
-  }, [profileId, angleId, loadRecommendations]);
 
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
@@ -70,32 +68,41 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
       });
       if (tailorRequestRef.current !== request) return;
       setTailored({ key, templates: Array.isArray(res?.templates) ? res.templates : [] });
-      // A generated set only refreshes the visible ranking when the wizard
-      // still shows the profile/angle/objective the tailor ran for. Without
-      // this, a slow tailor for app A reloads app B's list when it lands.
-      const latest = latestRef.current;
-      if (
-        res.generated &&
-        latest.profileId === startPid &&
-        latest.angleId === startAid &&
-        latest.objective === startObjective
-      ) {
-        await loadRecommendations(startPid, startAid);
-      }
       if (res.error) setTailorError(res.error);
     } catch (err) {
       if (tailorRequestRef.current !== request) return;
       setTailored({ key, templates: [] });
       setTailorError(getErrorMessage(err));
-    } finally {
-      if (tailorRequestRef.current === request) setTailoring(false);
     }
+    // The display read comes after the POST settles or fails, while the
+    // founder is still watching: a fresh or cached set needs the score order
+    // for its cards (ordering and the ADR 0096 backfill), and the documented
+    // fallback on refusal is the curated list — "Your curated picks still
+    // work" — which the same read surfaces. The read is a purely-scored scan
+    // of stored rows, the billed part is the POST above, so it rides the
+    // same click without spending a second model call — and, riding no
+    // effect, it never fires on the goal pick: switching goals queues
+    // nothing at all (ADR 0098).
+    //
+    // The refresh lands only when the wizard still shows the
+    // profile/angle/objective the tailor ran for. Without this, a slow
+    // tailor for app A reloads app B's list when it lands.
+    const latest = latestRef.current;
+    if (
+      latest.profileId === startPid &&
+      latest.angleId === startAid &&
+      latest.objective === startObjective
+    ) {
+      await loadRecommendations(startPid, startAid, startObjective);
+    }
+    if (tailorRequestRef.current === request) setTailoring(false);
   }, [profileId, objective, angleId, loadRecommendations]);
 
   // Tailoring is a billed generation (ADR 0087), so it never rides an effect
-  // on the goal pick: switching goals re-keys only the free ranking and
-  // queues nothing. The page triggers it — the goals-section Generate CTA,
-  // or the header Regenerate for a deliberate fresh set.
+  // on the goal pick, and since the ranking read rides the same flight no
+  // template request of any kind queues on the pick: switching goals fires
+  // nothing until the founder asks. The page triggers it — the goals-section
+  // Generate CTA, or the header Regenerate for a deliberate fresh set.
 
   // Scoped to the angle as well as the goal: templates are generated from the
   // angle's Problem and First 3 Seconds Promise, so a set made for one angle

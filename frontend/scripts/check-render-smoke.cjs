@@ -6217,8 +6217,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // formatVerdicts prints counts and stays silent on empty evidence
-  await check("formatVerdicts prints counts and stays silent on empty evidence", async (ctx) => {
+  // Switching the goal persists it on the project and queues nothing: the
+  // only ranked read so far is the one the Generate flight made, so a pick
+  // never spends a request of any kind (ADR 0098).
+  await check("a goal switch persists the picked goal and queues no ranked read", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const rankings = [];
     const writes = [];
@@ -6247,8 +6249,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await clickEl(ctx, goal);
       if (goal.getAttribute("aria-pressed") !== "true") throw new Error("the sixth goal was not selected");
       await openStep(ctx, "Audience & template");
-      if (!rankings.some((query) => query.objective === "educate_viewers" && query.angle_id === "a1")) {
-        throw new Error("ranking did not receive the sixth suggested goal and selected angle");
+      if (rankings.some((query) => query.objective === "educate_viewers")) {
+        throw new Error("switching goals queued a ranked-template read for the pick");
+      }
+      if (!rankings.some((query) => query.objective === "address_user_problem" && query.angle_id === "a1")) {
+        throw new Error("the CTA flight ranked for the wrong goal and angle");
       }
       if (!writes.some((payload) => payload.objective === "educate_viewers" && payload.content_angle_id === "a1")) {
         throw new Error("project persistence did not receive the sixth suggested goal and selected angle");
@@ -6796,18 +6801,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The generation is billed, so the goal pick must queue exactly nothing:
-  // the goals section offers a Generate CTA carrying the objective and the
-  // profile, and only its click asks the server for a tailored set — switching
-  // goals mid-audit burns nothing a founder never asked to spend.
+  // Nothing starts on the goal pick: the generation is billed, and the ranked
+  // read rides the same flight, so the goals section offers a Generate CTA
+  // carrying the objective and the profile, and both template requests queue
+  // on its click alone — switching goals mid-audit burns nothing a founder
+  // never asked to spend.
   await check("template generation waits for the founder's click, not the goal pick", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const seen = [];
+    const seenRanked = [];
     await withApi(
       {
         ensureObjectiveTemplates: async (profileId, payload) => {
           seen.push({ profileId, payload });
           return { templates: [], generated: false, objective: payload.objective, error: null };
+        },
+        getTemplateRecommendations: async (profileId, params) => {
+          seenRanked.push({ profileId, params });
+          return { recommendations: [] };
         },
       },
       async () => {
@@ -6816,11 +6827,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (seen.length !== 0) {
           throw new Error(`picking an angle and a goal queued ${seen.length} tailored-template requests`);
         }
+        if (seenRanked.length !== 0) {
+          throw new Error(`picking an angle and a goal queued ${seenRanked.length} ranked-template reads`);
+        }
         const cta = ctx.container.querySelector('[data-testid="templates-generate"]');
         if (!cta) throw new Error("the goals section offers no Generate CTA after picking a goal");
         await passTemplatesGate(ctx);
         if (seen.length !== 1) {
           throw new Error(`the Generate click queued ${seen.length} tailored-template requests`);
+        }
+        if (seenRanked.length !== 1) {
+          throw new Error(`the Generate click queued ${seenRanked.length} ranked-template reads`);
+        }
+        const read = seenRanked[0];
+        if (read.params.objective !== "address_user_problem") {
+          throw new Error(`the ranked read carried the wrong goal: ${JSON.stringify(read.params)}`);
         }
       }
     );
@@ -16523,17 +16544,18 @@ async function passAngleGate(ctx) {
 }
 
 /**
- * Reach the ranked templates the way the workflow now requires.
+ * Reach the template picker the way the workflow now requires.
  *
- * The video goal is required, and the merged step refuses to show a ranked
+ * The video goal is required, and the merged step refuses to show a template
  * list without one. Angle, goal, templates and photo share one screen now,
  * so picking the angle and goal IS arriving: no second step to open after.
  * The fixture enters via the same angle-first suggested-goal control that
- * the founder uses before the list below ranks itself.
+ * the founder uses before the list below is generated.
  *
- * The tailored list itself still waits behind the billed Generate CTA in the
- * goals section — tailoring never fires on the goal pick — so tests that
- * assert on tailored cards call passTemplatesGate after this helper.
+ * Every template request — the billed tailoring and the ranked read that
+ * feeds the cards — waits behind the Generate CTA in the goals section.
+ * Nothing fires on the goal pick, so tests that assert on tailored cards
+ * call passTemplatesGate after this helper.
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & template");
@@ -16550,12 +16572,13 @@ async function openTemplateStep(ctx) {
 }
 
 /**
- * Ask for the tailored templates the way a founder does.
+ * Ask for the templates the way a founder does.
  *
- * Template tailoring is a billed generation, so it waits for this Generate
- * click in the goals section instead of firing on the goal pick: switching
- * goals costs nothing until the founder asks. Tests that pin the waiting
- * state itself (no request, no cards) deliberately skip this.
+ * Both template requests — the billed tailoring and the ranked read that
+ * feeds the cards — wait for this Generate click in the goals section
+ * instead of firing on the goal pick: switching goals costs nothing until
+ * the founder asks. Tests that pin the waiting state itself (no request, no
+ * cards) deliberately skip this.
  */
 async function passTemplatesGate(ctx) {
   const cta = ctx.container.querySelector('[data-testid="templates-generate"]');

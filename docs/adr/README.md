@@ -109,7 +109,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0084](0084-angle-owns-scene.md) | The selected angle owns where, when and what happens; later steps conform with a visible note | accepted |
 | [0085](0085-template-step-reads-strongest-shared-note.md) | The template step reads the strongest shared note, not every one; the angle keeps its own bounds | accepted |
 | [0086](0086-upscaler-exports-1080p.md) | The upscaler exports 1080p, not 4K; eligibility moves with the target | accepted |
-| [0087](0087-template-tailoring-waits-for-a-click.md) | Template tailoring waits for the founder's Generate click; a goal pick never bills | accepted |
+| [0087](0087-template-tailoring-waits-for-a-click.md) | Template tailoring waits for the founder's Generate click; a goal pick never bills | accepted (free ranked read on the pick superseded by 0098) |
 | [0088](0088-voice-reads-locally.md) | Voice reads locally through the browser's speechSynthesis; data-driven text, one dock, no text leaves the device | accepted |
 | [0089](0089-templates-follow-the-video-fields.md) | Tailored templates are generated from and checked against the Problem, Promise and Audience; one character, one opening; the person has no gender or role | accepted |
 | [0090](0090-location-single-source-and-opening-move.md) | Location (the plan's visual direction) is the single source of truth — one save rewrites every place-bearing strategy line, spoken words refuse rather than change; the hook's first beat is a visible move | accepted |
@@ -120,3 +120,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted |
 | [0096](0096-templates-exactly-three.md) | Templates: exactly three selections, no more and no less | accepted |
 | [0097](0097-selfie-never-shows-a-phone-or-a-reach.md) | A handheld selfie never shows a phone, a reach toward the lens, or an action needing a second free hand; the fixed camera keeps the phone handoff | accepted |
+| [0098](0098-every-template-request-waits-for-the-click.md) | Every template request — billed tailoring and the ranked read — waits for the Generate click; a goal pick queues nothing | accepted |
