@@ -1029,18 +1029,13 @@ async function main() {
     await mount(CreateVideo, {})(ctx);
     await openTemplateStep(ctx);
     const text = ctx.text();
-    if (!text.includes("Presenter photo")) {
-      throw new Error("the merged step does not offer the presenter photo upload");
+    // The photo section only renders once a template is picked, so before
+    // that the step must show no blank "Presenter photo" label at all.
+    if (text.includes("Presenter photo")) {
+      throw new Error("the presenter photo section shows before a template is picked");
     }
-    // The draft is created eagerly now (ensureProject fires on profile +
-    // template), so the photo attaches to a project without the founder
-    // pressing anything. Either the attachment UI or the pending-draft copy is
-    // the proof that this step owns the photo -- a missing project would show
-    // neither.
-    const ownsPhoto =
-      /prepar(?:e|ing).*draft/i.test(text) || /attach/i.test(text) || !!ctx.container.querySelector("input[type=file]");
-    if (!ownsPhoto) {
-      throw new Error("the merged step cannot create the draft the photo attaches to");
+    if (text.includes("Pick a template above first")) {
+      throw new Error("the blank empty-state copy still renders before a template is picked");
     }
     // No step of its own: this is the assertion that the old "Assets" pill is
     // gone rather than merely renamed.
@@ -1179,7 +1174,8 @@ async function main() {
       throw new Error("the presenter photo section shows before the audience angles are generated");
     }
     // Generating and picking an angle is what proceeds the photo: the same
-    // step now offers the section.
+    // step now offers the section. The section only renders once a template
+    // is also picked, so angle-only must not show it.
     await openStep(ctx, "Audience & template");
     await passAngleGate(ctx);
     const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
@@ -1187,8 +1183,8 @@ async function main() {
     if (!angleButton) throw new Error("the audience step has no selectable audience angle");
     await clickEl(ctx, angleButton);
     await openStep(ctx, "Audience & template");
-    if (!ctx.text().includes("Presenter photo")) {
-      throw new Error("the presenter photo section did not appear after an angle was picked");
+    if (ctx.text().includes("Pick a template above first")) {
+      throw new Error("the blank empty-state copy still renders without a template");
     }
   });
 

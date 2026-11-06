@@ -2033,43 +2033,19 @@ export default function CreateVideo() {
               />
             )}
 
-            {/* The photo upload lives here now rather than on its own step. It
-                was the only thing on that step, so a founder picked a template,
-                left, uploaded, and came back — and the template step already
-                said what was missing and offered a jump. The draft is created
-                eagerly from the profile and template (see ensureProject), so by
-                the time anyone reaches this there is almost always something to
-                attach to. */}
-            {/* Second sub-card in the same style, not a divided-off section:
-                the parent's gap separates it, the way the angle picker's
-                groups sit apart. Same one-line helper at the same size as the
-                template card above — the two sit side by side, so a different
-                type size read as a different kind of control. The gated
-                consequence moved off this line and into the empty state below,
-                which is where a founder blocked on a missing template already
-                reads why. */}
-            {/* The photo is the identity input the render needs, and there is
-                nothing for it to attach to until the audience angles have
-                been generated: landing on this step straight from the pill,
-                before any angle exists, shows the template ask alone rather
-                than a section asking for a photograph nothing can use yet.
-                The card's "Add your photo below" pointer above is gated the
-                same way, so it can never scroll to a section that is not
-                there. */}
-            {showAngles && (
+            {/* Presentational: the photo section only renders once a template
+                is picked, so the studio never shows a blank section waiting
+                for a template that was never selected. The empty-text state
+                ("Pick a template above first") was removed — with no template
+                there is nothing to attach a photo to, so the section is hidden
+                entirely rather than showing a blank label. */}
+            {showAngles && templateId && (
             <div id="template-photo" className="inset-panel scroll-mt-4 space-y-4">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Upload one clear photo of the person you want on camera.
               </p>
-              {!templateId ? (
-                /* Gated, the card would otherwise be a label and a sentence
-                   with nothing under them. This says what is waiting, on the
-                   same size and budget as the subtitle above. */
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  Pick a template above first; your photo attaches to it.
-                </p>
-              ) : !project ? (
+              {!project ? (
                 <>
                   <p className="text-base text-muted-foreground">
                     Preparing the video draft for your photo…

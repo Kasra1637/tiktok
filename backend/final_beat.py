@@ -197,6 +197,7 @@ def strip_fields(strategy):
 
     for key, label in (
         ("hook_action", "Opening action"),
+        ("hook_concept", "Hook concept"),
     ):
         kept, removed = split_phone_clauses(result.get(key))
         if removed:
@@ -214,7 +215,9 @@ def strip_fields(strategy):
 
     performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
     if performance is not None:
-        kept, removed = split_phone_clauses(performance.get("movement"))
+        movement = str(performance.get("movement") or "")
+        kept, removed = split_phone_clauses(movement)
+        kept = _fix_hand_contradictions(kept)
         if removed:
             performance["movement"] = kept
             changed.append("Movement")
@@ -224,8 +227,14 @@ def strip_fields(strategy):
         for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle"),
                            ("character_positioning", "Character positioning")):
             value = str(scene.get(key) or "")
+            fixed = _fix_selfie_camera_agreement(value, scene_direct=True)
+            if fixed != value:
+                scene[key] = fixed
+                changed.append(label)
+                continue
             if _clause_has_forbidden(value):
                 kept, _removed = split_phone_clauses(value)
+                kept = _fix_selfie_camera_agreement(kept, scene_direct=True)
                 scene[key] = kept
                 changed.append(label)
         props, removed = strip_props(scene.get("props"))
@@ -248,6 +257,8 @@ def forbidden_hits(strategy):
     hits = []
     if split_phone_clauses(result.get("hook_action"))[1]:
         hits.append("Opening action")
+    if split_phone_clauses(result.get("hook_concept"))[1]:
+        hits.append("Hook concept")
     for section in result.get("segments") or []:
         if not isinstance(section, dict):
             continue
@@ -312,3 +323,58 @@ def apply_ending(strategy, ending: str):
 
     result["final_beat"] = ending + "."
     return {"strategy": result, "changed": changed}
+
+
+def _fix_hand_contradictions(movement: str) -> str:
+    """One hand cannot hold two jobs at once.
+    If movement says one hand rests on the chest and that same hand stays
+    at the side, the side clause is dropped; the chest rest wins.
+    """
+    text = " ".join(str(movement or "").split())
+    if not text:
+        return text
+    left_on_chest = bool(re.search(
+        r"\b(?:left|her left|his left)\s+hand\s+(?:rests?|resting|on|placed|lies|pressed|flat)\s+on\s+(?:the\s+)?chest", text, re.I))
+    if left_on_chest and re.search(
+            r"\b(?:left|her left|his left)\s+hand\s+(?:stays?|hangs?|at|by)\s+(?:her|his|the|their|my|your)?\s*side", text, re.I):
+        text = re.sub(
+            r",?\s*(?:and\s+)?(?:her|his|their|my|your|the)?\s*(?:left)\s+hand\s+(?:stays?|hangs?|at|by)\s+(?:at\s+)?"
+            r"(?:her|his|their|my|your|the)?\s*side\b", "", text, flags=re.I).strip(" ,;.")
+    right_on_chest = bool(re.search(
+        r"\b(?:right|her right|his right)\s+hand\s+(?:rests?|resting|on|placed|lies|pressed|flat)\s+on\s+(?:the\s+)?chest", text, re.I))
+    if right_on_chest and re.search(
+            r"\b(?:right|her right|his right)\s+hand\s+(?:stays?|hangs?|at|by)\s+(?:her|his|the|their|my|your)?\s*side", text, re.I):
+        text = re.sub(
+            r",?\s*(?:and\s+)?(?:her|his|their|my|your|the)?\s*(?:right)\s+hand\s+(?:stays?|hangs?|at|by)\s+(?:at\s+)?"
+            r"(?:her|his|their|my|your|the)?\s*side\b", "", text, flags=re.I).strip(" ,;.")
+    return " ".join(text.split())
+
+
+_SECOND_PERSON_RE = re.compile(
+    r"(?:camera\s+(?:held|operated|manned)\s+by\s+(?:someone|another\s+person|cameraperson|cameraman|the\s+(?:viewer|operator|photographer))"
+    r"|(?:someone|another\s+person|a\s+stranger|the\s+(?:viewer|operator|photographer))\s+(?:holds?|operates?|films?|records?)\s+(?:the\s+)?camera"
+    r"|(?:walking|moving)\s+(?:beside|next\s+to)\s+(?:her|him|them|the\s+person)[^.;,]*"
+    r"\s+(?:holds?|films?|records?|operates?)[^.;,]*camera"
+    r"|(?:someone|another\s+person)\s+walks\s+beside)", re.I)
+
+
+def _fix_selfie_camera_agreement(text: str, scene_direct: bool = False) -> str:
+    """Rewrite camera direction for a selfie setup.
+    If camera_setup is handheld (non-fixed), camera fields must describe the
+    character filming herself — never a second person or outside viewer
+    holding the camera. Template wording that implies an outside camera is
+    rewritten to a selfie description.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw:
+        return raw
+    if _SECOND_PERSON_RE.search(raw):
+        replacement = "handheld selfie, filmed at arm's length by the character"
+        fixed = _SECOND_PERSON_RE.sub(replacement, raw)
+        return " ".join(fixed.split()).strip(" .;")
+    if not scene_direct and re.search(r"\b(?:walking\s+beside|next\s+to\s+(?:her|him|them)|outside\s+viewer|someone\s+else)", raw, re.I):
+        fixed = re.sub(
+            r"\b(?:walking\s+beside|next\s+to\s+(?:her|him|them)|outside\s+viewer|someone\s+else)\b",
+            "filmed at arm's length by the character", raw, flags=re.I)
+        return " ".join(fixed.split())
+    return raw

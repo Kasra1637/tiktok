@@ -1569,13 +1569,24 @@ class TestStrategyBudget:
         # or ABOUT the viewer with 'I' at most once. The plan's editorial loop
         # enforces the same line, and 29,000 keeps ~460 of headroom for the
         # next measured change.
-        CEILING = 29_000
+        #
+        # ADR 0105 raises it again, measured: 29,000 -> 31,000 (+~1,400) for
+        # the middle-voice rules: the middle continues the hook as one spoken
+        # thought, answers its question in the first clause, uses plain spoken
+        # language with one lived detail, and ends on its strongest line, with
+        # a say-it-out-loud self-check. 31,000 keeps ~600 of headroom.
+        CEILING = 31_000
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
             f"Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
+        for rule in ("THE MIDDLE IS THE HOOK, CONTINUED",
+                     "WRITE THE MIDDLE AS SPOKEN WORDS, NOT APP COPY",
+                     "SHOW ONE LIVED DETAIL, NOT A SUMMARY",
+                     "END ON THE STRONGEST LINE"):
+            assert rule in prompt, f"the middle-voice rule {rule!r} is missing from the strategy prompt"
 
     def test_the_schema_still_asks_for_a_bounded_number_of_values(self):
         """
