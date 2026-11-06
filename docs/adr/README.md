@@ -123,3 +123,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0098](0098-every-template-request-waits-for-the-click.md) | Every template request — billed tailoring and the ranked read — waits for the Generate click; a goal pick queues nothing | accepted |
 | [0099](0099-studio-canvas.md) | The studio canvas: every step on one page, the active one expanded; sticky rail with a live fill, next-action line in the arrow bar; disclosure queues nothing | accepted |
 | [0100](0100-hashtag-strategy.md) | The hashtag strategy: a fresh account gets 4 to 6 classified tags (problem anchor, community, one category), never engagement bait | accepted |
+| [0101](0101-hook-voice.md) | The hook speaks to the viewer: the hook line uses 'I' at most once; the middle stays the customer's first-person story | accepted |

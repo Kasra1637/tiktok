@@ -1509,7 +1509,7 @@ class TestGeneratedPlanEditorialFlow:
             "suggested emotion words. I felt understood.",
         )
         good = TestGeneratedStoryRepair._plan(
-            "I couldn't name what I was feeling.",
+            "Naming the feeling never worked.",
             "The suggestions helped me find the words. I understood myself better after writing the entry.",
         )
         rec = _patch_client(monkeypatch, [

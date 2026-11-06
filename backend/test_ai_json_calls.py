@@ -1021,12 +1021,12 @@ class TestCreativePlanBudget:
         """The user-visible failure becomes a result: one retry is enough."""
         import ai_service
         plan = {
-            "hook_line": "I couldn't name what I was feeling.",
+            "hook_line": "Naming the feeling never worked.",
             "script": ("The suggestions helped me find the words. "
                        "I understood myself better after writing the entry."),
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook",
-                 "text": "I couldn't name what I was feeling."},
+                 "text": "Naming the feeling never worked."},
                 {"start": 3, "end": 15, "label": "middle", "text": "script"},
             ],
             "visual_direction": "A person reflecting at their desk.",
@@ -1561,7 +1561,13 @@ class TestStrategyBudget:
         # built from the actions and the timeline, and the three viewer lines
         # are written from the viewer's point of view. 28,500 keeps ~570 of
         # headroom for the next measured change.
-        CEILING = 28_500
+        #
+        # ADR 0101 raises it once more, measured: 28,537 -> 29,000 (+~460) for
+        # the hook voice rule: the HOOK bullet now asks for the problem said TO
+        # or ABOUT the viewer with 'I' at most once. The plan's editorial loop
+        # enforces the same line, and 29,000 keeps ~460 of headroom for the
+        # next measured change.
+        CEILING = 29_000
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
@@ -1836,7 +1842,7 @@ class TestGeneratedStoryRepair:
             "you couldn’t name before and leave an entry feeling more understood.",
         )
         good = self._plan(
-            "I couldn't find words for what I felt.",
+            "Naming what I felt never worked.",
             "The suggestions helped me name the feeling. I left the entry understanding myself better.",
         )
         rec = _patch_client(monkeypatch, [
@@ -1878,7 +1884,7 @@ class TestGeneratedStoryRepair:
     def test_oversized_middle_is_rewritten_without_losing_its_resolution(self, monkeypatch):
         import ai_service
         bad = self._plan(
-            "I couldn't name what I was feeling.",
+            "Naming the feeling never worked.",
             "I tried describing the day in detail, but I kept circling around the same "
             "thoughts without getting anywhere. " * 4 + "The suggestions helped me find the words.",
         )
@@ -1923,7 +1929,7 @@ class TestGeneratedStoryRepair:
     def test_clean_connected_draft_is_unchanged_without_extra_call(self, monkeypatch):
         import ai_service
         good = self._plan(
-            "I couldn't name what I was feeling.",
+            "Naming the feeling never worked.",
             "The suggestions helped me find the words. I understood myself better after writing the entry.",
         )
         rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
@@ -1961,7 +1967,7 @@ class TestSpokenLineCraft:
         async def capture(system_message, prompt, context, **kwargs):
             prompts.append(prompt)
             return {
-                "hook_line": "I could never name what I felt.",
+                "hook_line": "Naming what I felt never worked.",
                 "script": "One sentence each night helped me understand the pattern.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
@@ -1989,7 +1995,7 @@ class TestSpokenLineCraft:
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
-        good = dict(bad, hook_line="I could never name what I felt.",
+        good = dict(bad, hook_line="Naming what I felt never worked.",
                     script="One sentence each night helped me understand the pattern.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -2012,7 +2018,7 @@ class TestSpokenLineCraft:
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
-        good = dict(bad, hook_line="I could never name what I felt.",
+        good = dict(bad, hook_line="Naming what I felt never worked.",
                     script="One sentence each night helped me understand the pattern.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -2068,7 +2074,7 @@ class TestSpokenLineCraft:
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
-        good = dict(bad, hook_line="I could never name what I felt.",
+        good = dict(bad, hook_line="Naming what I felt never worked.",
                     script="One sentence each night helped me understand the pattern.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -2156,7 +2162,7 @@ class TestSpokenLineCraft:
         async def capture(system_message, prompt, context, **kwargs):
             captured["prompt"] = prompt
             return {
-                "hook_line": "I could never name what I felt.",
+                "hook_line": "Naming what I felt never worked.",
                 "script": "One sentence each night helped me understand the pattern.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
@@ -2265,7 +2271,7 @@ class TestHookScriptContinuity:
         async def capture(system_message, prompt, context, **kwargs):
             captured["prompt"] = prompt
             return {
-                "hook_line": "I could never name what I felt.",
+                "hook_line": "Naming what I felt never worked.",
                 "script": "One sentence each night helped me understand the pattern.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
@@ -2297,7 +2303,7 @@ class TestHookScriptContinuity:
         async def capture(system_message, prompt, context, **kwargs):
             captured["prompt"] = prompt
             return {
-                "hook_line": "I could never name what I felt.",
+                "hook_line": "Naming what I felt never worked.",
                 "script": "One sentence each night helped me understand the pattern.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
@@ -2369,7 +2375,7 @@ class TestHookScriptContinuity:
         async def capture(system_message, prompt, context, **kwargs):
             captured["prompt"] = prompt
             return {
-                "hook_line": "I could never name what I felt.",
+                "hook_line": "Naming what I felt never worked.",
                 "script": "One sentence each night helped me understand the pattern.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",

@@ -3093,8 +3093,9 @@ def _spoken_line_rules_block() -> str:
     """
     return (
         "SPOKEN LINE CRAFT (both spoken lines, every draft):\n"
-        "- HOOK: open on a relatable question, a curiosity gap, or a frustration "
-        "this viewer recognises, in first person. Plain power words are fine "
+        "- HOOK: open on a question, a curiosity gap or a frustration this viewer "
+        "recognises \u2014 said TO or ABOUT them, never a diary. 'I' at most ONCE in "
+        "the hook line; zero is better. Plain power words are fine "
         "(never, still, every time). No clickbait, hype or exaggeration.\n"
         "- NAME THE ACTION: say the real task in the viewer's own words, never a "
         "vague stand-in. For a journaling app that is \"I don't want to write in my "
@@ -3183,27 +3184,38 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         f"{_spoken_line_rules_block()}\n"
         f"CURRENT HOOK: {original}\n\n"
         "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
-        "viewer's own first-person words. Keep its meaning, its feeling and roughly its length "
-        "(one short spoken sentence). Never name the app. No quotation marks. "
+        "words the viewer uses for that problem: name the problem first and use 'I' at most "
+        "once in the line \u2014 zero is better. Keep its meaning, its feeling and roughly its "
+        "length (one short spoken sentence). Never name the app. No quotation marks. "
         'Return JSON: {"hook_line": "..."}'
     )
-    raw = await _chat_json(
-        system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
-        prompt=prompt,
-        context="Hook rewrite",
-        temperature=0.6,
-        max_tokens=400,
-        attempts=2,
-        json_schema=HOOK_REWRITE_JSON_SCHEMA,
-    )
-    line = re.sub(r"\s+", " ", str((raw or {}).get("hook_line") or "")).strip().strip('"\u201c\u201d')
-    # The rewrite is stored as the hook, so it passes the same identity rule as
-    # every other spoken line (ADR 0089). Comparing against the original happens
-    # after the rewrite so a purely neutral-wording change still counts as one.
-    line = character_policy.neutralize(line)
-    if not line or line.lower() == character_policy.neutralize(original).lower():
-        raise RuntimeError("The rewrite came back unchanged.")
-    return line
+    line = ""
+    for _ in range(2):
+        raw = await _chat_json(
+            system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
+            prompt=prompt,
+            context="Hook rewrite",
+            temperature=0.6,
+            max_tokens=400,
+            attempts=2,
+            json_schema=HOOK_REWRITE_JSON_SCHEMA,
+        )
+        line = re.sub(r"\s+", " ", str((raw or {}).get("hook_line") or "")).strip().strip('"\u201c\u201d')
+        # The rewrite is stored as the hook, so it passes the same identity rule as
+        # every other spoken line (ADR 0089). Comparing against the original happens
+        # after the rewrite so a purely neutral-wording change still counts as one.
+        line = character_policy.neutralize(line)
+        if not line or line.lower() == character_policy.neutralize(original).lower():
+            raise RuntimeError("The rewrite came back unchanged.")
+        if len(_FIRST_PERSON_I.findall(line)) <= 1:
+            return line
+        # One bounded correction: the hook is the first thing a viewer hears,
+        # so a diary-open rewrite is not an improvement worth returning.
+        prompt += (
+            "\n\nCORRECTION: that rewrite narrated in first person more than once. "
+            "Rewrite it as a problem statement the viewer recognises \u2014 'I' at most once."
+        )
+    raise RuntimeError("The rewrite kept narrating in first person; try again.")
 
 
 def _angle_scene_moment(angle: Optional[dict]) -> str:
@@ -3479,7 +3491,7 @@ async def generate_creative_plan(
         f"{_spoken_line_rules_block()}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters; a shorter natural sentence is fine",\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters and at most one \'I\'; a shorter natural sentence is fine",\n'
         '  "script": "MIDDLE ONLY: the spoken story AFTER the hook, without repeating it, plain text, no stage directions",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
@@ -3677,6 +3689,8 @@ async def generate_creative_plan(
             "Use complete natural customer sentences, not feature labels or fragments. "
             "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
             "openers, never the app's name, and no claimed history with the app. "
+            "The hook line names the viewer's problem and uses 'I' at most once \u2014 never a "
+            "diary open. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
             f"{middle_budget} characters. A shorter complete thought is fine.\n"
@@ -4339,6 +4353,11 @@ def _trim_hook_line(text: str, limit: int):
     return kept, len(text) - len(kept)
 
 
+# A first-person 'I' in a hook line, contractions included ("I'm", "I've").
+# One can anchor a genuine line; two turn the opening into diary narration.
+_FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
+
+
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
 
@@ -4354,6 +4373,8 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
     the app named) and machine-sounding filler openers. Both are matched as
     whole phrases on normalized text, so a genuine customer line never trips
     them — see _PROMOTION_MARKERS for why that constraint is the whole design.
+    The hook's first-person count is the same kind of arithmetic, not taste:
+    the prompt allows at most one 'I' in the whole hook line.
     """
     issues = []
     # Prepositions/pronouns CAN end grammatical English ("look forward to",
@@ -4399,6 +4420,15 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 issues.append(f"{name} has an unfinished comparison")
         if text[0].islower():
             issues.append(f"{name} begins as a continuation rather than a standalone sentence")
+    # The hook leads with the viewer's problem, not the speaker's diary: one
+    # 'I' can anchor a real line, two make it narration ("Friday evening, and
+    # I feel off, and I cannot say why") and the draft is rewritten through
+    # the editorial loop instead.
+    if len(_FIRST_PERSON_I.findall(hook)) > 1:
+        issues.append(
+            "hook_line narrates in first person more than once; open on the "
+            "viewer's problem instead, with 'I' used at most once"
+        )
     if ";" in hook:
         issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
     return issues
@@ -5334,7 +5364,7 @@ async def generate_video_strategy(
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: the FIRST beat lands inside the first 1-2 seconds as a clearly visible movement, gesture or position change (they step in or away, turn, stand up, sit down, reach, lift, place or grab something), then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
