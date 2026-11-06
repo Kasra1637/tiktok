@@ -138,8 +138,8 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.surface-flush` | A card that owns its own inner padding — accordion groups and list rows |
 | `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
-| `.pill-studio` | Raised beveled pill (`Chip`, wizard step pills, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
-| `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Carried by the shared `Chip`, `PILL_SELECT_CLASS` (every filter bar includes `AppPicker`), the wizard step pills and in-step picks, and `ThumbPair`. A new chip control that is not already 44px tall takes it rather than opting out |
+| `.pill-studio` | Raised beveled pill (`Chip`, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
+| `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Carried by the shared `Chip`, `PILL_SELECT_CLASS` (every filter bar includes `AppPicker`), the wizard progress segments and in-step picks, and `ThumbPair`. A new chip control that is not already 44px tall takes it rather than opting out |
 | `.card-pickable` | Selectable option card (`aria-pressed`) with lit indigo top rim when selected |
 | `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
@@ -244,20 +244,18 @@ A group's glyph is not decoration: on the App Profile detail page every
 `ProfileCard` and `SectionGroup` carries one, and `runIconChecks` fails the page
 if any opens text-only (it also pins the page's 10+ cards and exactly 5 groups).
 Bars use `h-4 w-4` (16px); the card's own `.eyebrow` uses `h-3 w-3` (12px).
-Step pills (`text-xs`, `rounded-full`) encode state in the ring and a tick glyph
-— never in position, which is the only thing a reader has while a step is
-unreachable. That chrome belongs to the wizard rail alone: the picks inside the
+The wizard's step nav is one navigable progress bar (`text-xs` segments,
+`rounded-xl`): each segment states its step's cumulative third and the state in
+words, and moving to a step walks there — state is never carried by position,
+which is the only thing a reader has while a step is unreachable. That chrome
+belongs to the wizard bar alone: the picks inside the
 Audience & template step are a caption row instead — one `text-xs` line naming
 the screen and its count, then plain ticks and labels with no frame — because
 two rows of rings and ticks read as two progress bars stacked over each other.
-The pills sit in the transparent progress rail — chrome that scrolls with the
-canvas, never a pinned panel — with a scored line under them: a bar ticked at
-the third marks and the same
-score written in percent (`studio-progress-pct`), both derived from the step
-states so they can never disagree. The canvas below shows every step as a
+The canvas below shows every step as a
 section: the active one expanded, the rest collapsed to a header row with the
 same state in words (a done step shows its pick chip). Opening a collapsed
-header walks there exactly like its pill — one state machine, never a second
+header walks there exactly like its segment — one state machine, never a second
 navigation model.
 
 Spacing, in these steps and no others:
@@ -430,10 +428,10 @@ accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 `indigo` and `coral` are tinted chips (`--indigo-10` / `--coral-12` fills) —
 accents, not buttons. Plus shadcn's `default` / `secondary` / `destructive` / `outline`.
 
-**One pattern per job.** Step progress is the wizard's own `pill-studio` pill row
-in Create Video (`data-testid="step-pill-*"`), sitting in the transparent progress
-rail with its scored line: the pill carries state in its ring and tick glyph,
-never in
+**One pattern per job.** Step progress is the wizard's own navigable bar in
+Create Video (`data-testid="studio-progress-segment-*"`): each segment states its
+step's cumulative third, moving to a step walks there, and the pill carries the
+label and the pick — never in
 position, and the rail's collapsed section headers echo the same state in words.
 Generation status uses `StatusBadge`. Don't
 hand-roll a second progress model beside these.

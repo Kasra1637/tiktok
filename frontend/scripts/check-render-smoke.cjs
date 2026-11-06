@@ -1043,13 +1043,13 @@ async function main() {
     }
     // No step of its own: this is the assertion that the old "Assets" pill is
     // gone rather than merely renamed.
-    const pills = [...ctx.container.querySelectorAll("[data-testid^='step-pill-']")]
+    const segments = [...ctx.container.querySelectorAll("[data-testid^='studio-progress-segment-']")]
       .map((el) => el.textContent);
-    if (pills.length !== STEP_LABELS.length) {
-      throw new Error(`expected ${STEP_LABELS.length} steps, saw ${JSON.stringify(pills)}`);
+    if (segments.length !== STEP_LABELS.length) {
+      throw new Error(`expected ${STEP_LABELS.length} steps, saw ${JSON.stringify(segments)}`);
     }
     for (const gone of ["Assets", "Creative plan"]) {
-      if (pills.some((p) => p.trim() === gone)) {
+      if (segments.some((p) => p.trim() === gone)) {
         throw new Error(`the ${JSON.stringify(gone)} step still exists as its own step`);
       }
     }
@@ -1094,7 +1094,7 @@ async function main() {
     }
     // The wizard nav is the same physical target: on a phone these are the only
     // way to change step, and they sit well under 44px without the rule.
-    for (const pill of ctx.container.querySelectorAll("[data-testid^='step-pill-']")) {
+    for (const pill of ctx.container.querySelectorAll("[data-testid^='studio-progress-segment-']")) {
       if (!pill.className.includes("tap-chip")) {
         throw new Error(`${pill.dataset.testid} lost its coarse-pointer tap target`);
       }
@@ -1114,7 +1114,7 @@ async function main() {
     global.__SMOKE_PARAMS = "?step=angle";
     try {
       await mount(CreateVideo, {})(ctx);
-      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+      const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
       if (!pill || pill.getAttribute("aria-current") !== "step") {
         throw new Error("a ?step=angle link does not land on the angle step");
       }
@@ -1153,8 +1153,8 @@ async function main() {
     const later = { root: secondRoot, container: second, text: () => second.textContent || "" };
     try {
       for (const [legacy, testid, target] of [
-        ["template", "step-pill-angle", ctx],
-        ["hook", "step-pill-review", later],
+        ["template", "studio-progress-segment-angle", ctx],
+        ["hook", "studio-progress-segment-review", later],
       ]) {
         global.__SMOKE_PARAMS = `?step=${legacy}`;
         await mount(CreateVideo, {})(target);
@@ -2737,11 +2737,51 @@ async function main() {
     }
   });
 
-  // The rail is orientation, not an overlay: the pills, a bar ticked at the
-  // third marks, and the score in percent — all derived from the same
-  // completion states, so they can never disagree. It scrolls with the
-  // canvas (a pinned bar over the plan form read as a floating second
-  // layer), the pills keep their own state rings, and the chrome is
+  // The bar is the nav: each segment above states its step's cumulative
+  // third, moving to a step walks there, and the bar's fill tracks the same
+  // states so the readouts can never disagree. The pills are gone — the
+  // section headers already carry the picks.
+  await check("the progress bar is the nav, stated in thirds", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    // Not done even as chrome: the pills were a second nav with the same
+    // labels; the bar owns step navigation now.
+    if (ctx.container.querySelectorAll("[data-testid^='step-pill-']").length > 0) {
+      throw new Error("the step pills are back as a second nav");
+    }
+    const segments = [
+      ...ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]'),
+    ];
+    if (segments.length !== STEP_LABELS.length) {
+      throw new Error(`expected ${STEP_LABELS.length} progress segments, saw ${segments.length}`);
+    }
+    const expected = ["33%", "67%", "100%"];
+    segments.forEach((seg, i) => {
+      const label = (seg.textContent || "").trim();
+      if (!label.endsWith(expected[i])) {
+        throw new Error(
+          `segment ${i + 1} does not state its third ${expected[i]}: ${JSON.stringify(label)}`
+        );
+      }
+      if (seg.tagName !== "BUTTON") throw new Error(`progress segment ${i + 1} is not navigable`);
+      if (!seg.getAttribute("aria-label")) throw new Error(`progress segment ${i + 1} lost its state`);
+    });
+    await clickEl(ctx, segments[1], "the Audience segment");
+    const active = ctx.container.querySelector('[data-testid="wizard-section-angle"]');
+    if (!active || active.getAttribute("data-active") !== "true") {
+      throw new Error("clicking a segment did not open its section");
+    }
+    await clickEl(ctx, segments[2], "the Review segment");
+    const review = ctx.container.querySelector('[data-testid="wizard-section-review"]');
+    if (!review || review.getAttribute("data-active") !== "true") {
+      throw new Error("clicking the last segment did not open its section");
+    }
+  });
+
+  // The rail is orientation, not an overlay: the segmented bar is the nav and
+  // the score at its end states completion — both derived from the same step
+  // states, so they can never disagree. It scrolls with the canvas (a pinned
+  // bar over the plan form read as a floating second layer) and the chrome is
   // transparent, never a dark panel.
   await check("the progress rail rides the canvas with a live percentage", async (ctx) => {
     global.__SMOKE_PARAMS = "";
@@ -2757,38 +2797,25 @@ async function main() {
       throw new Error("the rail is a dark panel again instead of transparent chrome");
     }
     const nav = ctx.container.querySelector('[aria-label="Progress"]');
-    if (!nav || !rail.contains(nav)) throw new Error("the step pills are not in the rail");
-    const fill = () => ctx.container.querySelector('[data-testid="studio-progress-fill"]');
-    if (!fill()) throw new Error("the rail carries no fill track");
-    const pct = () => ctx.container.querySelector('[data-testid="studio-progress-pct"]');
-    const readPct = () => parseInt((pct()?.textContent || "").trim(), 10);
-    if (!pct() || !/^\d+%$/.test((pct().textContent || "").trim())) {
-      throw new Error("the rail carries no percentage readout");
-    }
-    // The bar and the number are one score: a rounding drift fails here.
-    const startPct = readPct();
-    if (Math.round(parseFloat(fill().style.width)) !== startPct) {
-      throw new Error(`the bar and the percent disagree: ${fill().style.width} vs ${startPct}%`);
-    }
-    // The completed step holds its third while the view walks back and forth,
-    // so both readings move with real progress rather than with position.
+    if (!nav || !rail.contains(nav)) throw new Error("the segmented nav is not in the rail");
+    const pct = () =>
+      (ctx.container.querySelector('[data-testid="studio-progress-pct"]')?.textContent || "").trim();
+    if (!/^\d+%$/.test(pct())) throw new Error("the rail carries no percentage readout");
+    // Profile done plus the step in view = 1.5 of 3 = 50%.
+    if (pct() !== "50%") throw new Error(`the mounted rail does not state 50%: ${JSON.stringify(pct())}`);
+    // Walking back to a done step holds its third whole: 1 of 3 = 33%.
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="wizard-back-button"]'),
       "Back to the profile step"
     );
-    const backPct = readPct();
-    if (!(backPct < startPct)) throw new Error("the score ignores the completed step when walking back");
+    if (pct() !== "33%") throw new Error(`the rail ignores the completed step: ${JSON.stringify(pct())}`);
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
       "Continue to the angle step"
     );
-    const grownPct = readPct();
-    if (!(grownPct > backPct)) throw new Error("the percentage did not move with the step");
-    if (Math.round(parseFloat(fill().style.width)) !== grownPct) {
-      throw new Error("the bar and the percent disagree after moving");
-    }
+    if (pct() !== "50%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
   });
 
   // The action bar names the one next action beside the arrow-only pair, so a
@@ -4501,7 +4528,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
         throw new Error("Review & submit spent an angle call instead of redirecting");
       }
-      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+      const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
       if (!pill || pill.getAttribute("aria-current") !== "step") {
         throw new Error("the red button did not land on the Audience & template step");
       }
@@ -5378,22 +5405,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("no objective is silently reported as done on the progress pills", async (ctx) => {
+  await check("no objective is silently reported as done on the progress bar", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
-    const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
-    if (!pill) throw new Error("the progress pills carry no state markers");
+    const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
+    if (!pill) throw new Error("the progress bar carries no state markers");
     if (pill.getAttribute("data-state") === "done") {
       throw new Error("the Audience step is ticked before an objective is chosen");
     }
-    if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
+    if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
       throw new Error(
-        `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
+        `the segment does not say it is blocked: ${pill.getAttribute("aria-label")}`
       );
     }
   });
 
-  await check("no angle is silently reported as done on the progress pills", async (ctx) => {
+  await check("no angle is silently reported as done on the progress bar", async (ctx) => {
     // The objective alone used to satisfy this step, so the angle was cosmetic
     // to completion. Now an objective with no picked angle is still blocked.
     await withApi({
@@ -5406,12 +5433,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       } finally {
         global.__SMOKE_PARAMS = "";
       }
-      const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+      const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
       if (!pill) throw new Error("the progress pills carry no state markers");
       if (pill.getAttribute("data-state") === "done") {
         throw new Error("the Audience step is ticked with an objective but no angle picked");
       }
-      if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
+      if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
         throw new Error(
           `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
         );
@@ -5419,7 +5446,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  await check("no template id is silently reported as done on the progress pills", async (ctx) => {
+  await check("no template id is silently reported as done on the progress bar", async (ctx) => {
     // A ?template= that names no row — a stale link, a draft adopted from a
     // row whose template is gone — used to tick this step done while the eager
     // draft sync 404ed "Template not found" into the page banner, with the
@@ -5458,12 +5485,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (ctx.text().includes("Template not found")) {
             throw new Error("a template id that names no row still reaches the server and errors the page");
           }
-          const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+          const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
           if (!pill) throw new Error("the progress pills carry no state markers");
           if (pill.getAttribute("data-state") === "done") {
             throw new Error("the Audience step is ticked for a template id that names no row");
           }
-          if (pill.getAttribute("aria-label") !== "Audience & template: needs something from you") {
+          if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
             throw new Error(
               `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
             );
@@ -5546,20 +5573,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // The profile pill names the step, not the app. Echoing the chosen app's
   // name beside "App Profile" repeated what the step's own picker card already
   // says and read as a second label on the same thing.
-  await check("the progress pill for the app does not echo the app name", async (ctx) => {
+  await check("the progress bar's first segment does not echo the app name", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
     } finally {
       global.__SMOKE_PARAMS = "";
     }
-    const pill = ctx.container.querySelector('[data-testid="step-pill-profile"]');
-    if (!pill) throw new Error("the progress pills carry no profile step");
-    if ((pill.textContent || "").trim() !== "App Profile") {
-      throw new Error(`the profile pill still names the app: ${JSON.stringify(pill.textContent)}`);
+    const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
+    if (!pill) throw new Error("the progress bar carries no profile step");
+    const text = (pill.textContent || "").trim();
+    if (!text.startsWith("App Profile")) {
+      throw new Error(`the profile segment does not lead with its label: ${JSON.stringify(text)}`);
     }
-    if (pill.getAttribute("aria-label") !== "App Profile: done") {
-      throw new Error(`the profile pill announces the app: ${pill.getAttribute("aria-label")}`);
+    if (text.includes(PROFILE.brand_name)) {
+      throw new Error(`the profile segment still names the app: ${JSON.stringify(text)}`);
+    }
+    if (!(pill.getAttribute("aria-label") || "").startsWith("App Profile: done")) {
+      throw new Error(`the profile segment announces the app: ${pill.getAttribute("aria-label")}`);
     }
   });
 
@@ -6431,7 +6462,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           const action = notice.querySelector('[data-testid="angle-regen-notice-action"]');
           if (!action) throw new Error("the regen notice carries no action — it is a dead end");
           await clickEl(ctx, action, "the regen notice action does nothing");
-          const review = ctx.container.querySelector('[data-testid="step-pill-review"]');
+          const review = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
           if (!review || review.getAttribute("aria-current") !== "step") {
             throw new Error("the regen notice action does not land on Review & submit");
           }
@@ -6513,7 +6544,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // No angle control lives here anymore: one red jump back to step 1,
         // where selection happens, then back to Review for the plan.
         await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-first-gap-button"]'), "no first-gap button on Review");
-        const pill = ctx.container.querySelector('[data-testid="step-pill-angle"]');
+        const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
           throw new Error("the red button did not land on the Audience & template step");
         }
@@ -6546,7 +6577,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`the button does not name the first gap: ${JSON.stringify(btn.textContent)}`);
         }
         await clickEl(ctx, btn);
-        const pill = ctx.container.querySelector('[data-testid="step-pill-profile"]');
+        const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
           throw new Error("the red button did not land on the App Profile step");
         }
@@ -6858,21 +6889,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     } finally {
       global.__SMOKE_PARAMS = "";
     }
-    const states = [...ctx.container.querySelectorAll("[data-testid^='step-pill-']")].map(
+    const states = [...ctx.container.querySelectorAll("[data-testid^='studio-progress-segment-']")].map(
       (el) => `${el.getAttribute("data-testid")}=${el.getAttribute("data-state")}`
     );
     // This draft has a plan, so Review is genuinely satisfied. The rest are
     // decided by the draft's own profile/template/photo.
-    const review = ctx.container.querySelector('[data-testid="step-pill-review"]');
+    const review = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
     if (review?.getAttribute("data-state") !== "done") {
       throw new Error(`Review should be done for a project with a plan: ${states.join(", ")}`);
     }
     // No render-only pill exists anymore: the render lives at the bottom of
     // Review & submit, so there is no separate step that could tick. The merge
     // is pinned by asserting the retired pills are gone rather than unticked.
-    for (const retired of ["step-pill-template", "step-pill-hook"]) {
+    for (const retired of ["studio-progress-segment-template", "studio-progress-segment-hook"]) {
       if (ctx.container.querySelector(`[data-testid="${retired}"]`)) {
-        throw new Error(`the retired ${retired} pill still exists as its own step`);
+        throw new Error(`the retired ${retired} segment still exists as its own step`);
       }
     }
   });
@@ -6894,7 +6925,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         script.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
       });
       await act(async () => {});
-      const pill = ctx.container.querySelector('[data-testid="step-pill-review"]');
+      const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
       if (pill?.getAttribute("data-state") === "done") {
         throw new Error("Review is ticked while there are unsaved edits");
       }
@@ -16714,8 +16745,13 @@ await check(
   );
 }
 
+/**
+ * The wizard's step nav is the progress bar's segments now; this helper keeps
+ * its name so every call site reads unchanged. The label check stays (each
+ * segment states its step's label), so a renamed step fails loudly here.
+ */
 function stepPill(ctx, label) {
-  const pill = [...ctx.container.querySelectorAll("button")]
+  const pill = [...ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]')]
     .find((b) => (b.textContent || "").trim().includes(label));
   if (!pill) throw new Error(`no step nav control labelled ${JSON.stringify(label)}`);
   return pill;
@@ -16756,7 +16792,7 @@ function renderButton(ctx) {
 
 /** Click through to a wizard step the way a founder would, then settle. */
 /**
- * Move to a step by its pill.
+ * Move to a step by its segment in the progress bar.
  *
  * Two flushes, not one. Entering Review mounts effects that read the project
  * from the API, so the state they set lands on the next act — with a single

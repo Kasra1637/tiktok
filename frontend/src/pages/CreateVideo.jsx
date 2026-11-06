@@ -2886,20 +2886,22 @@ export default function CreateVideo() {
           with the rest of the row — and the distinction never needed color,
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
-      {/* Progress rail: the pills and the scored line above the canvas. It
-          scrolls with the page — a pinned bar over the plan form read as a
-          second, floating layer, so the rail rides the content instead. The
-          score in percent sits beside a bar ticked at the third marks, both
-          derived from the same states, so the readouts can never disagree.
-          The rail itself is transparent: the pills and the score are the
-          chrome, not a panel. */}
+      {/* Progress rail: one navigable bar — the pills were a second nav with
+          the same labels, so the bar owns step navigation now. Each segment
+          states its step's cumulative third (33 / 67 / 100%) and the live
+          score sits at the end; all of it derives from the same step states,
+          so the readouts can never disagree. It scrolls with the page — a
+          pinned bar over the plan form read as a second, floating layer. */}
       <div data-testid="studio-progress-rail" className="space-y-2">
-        <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-2">
+        <nav aria-label="Progress" className="flex flex-1 items-stretch gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
-          const Icon = s.state === "done" ? Check : s.step.icon;
-          // Resolved once per pill: the tick, the label, and the suffix below
-          // must all agree on the same pick.
+          // Cumulative thirds: the segment states how much of the workflow
+          // finishes when this step does.
+          const cumulative = Math.round(((i + 1) / STEPS.length) * 100);
+          // Resolved once per segment: the tick, the label, and the pick below
+          // must all agree on the same selection.
           const value = s.state === "done" ? pillValue(s.step.key) : null;
           return (
             <button
@@ -2909,67 +2911,68 @@ export default function CreateVideo() {
               aria-current={active ? "step" : undefined}
               // Announced rather than shown only: the tick is a shape-only cue, and
               // this is the one place the founder looks to answer "what is left".
-              aria-label={value
-                ? `${s.step.label}: ${value}, done`
-                : `${s.step.label}: ${STEP_STATE_COPY[s.state]}`}
+              aria-label={
+                value
+                  ? `${s.step.label}: ${value}, done, ${cumulative}% complete`
+                  : `${s.step.label}: ${STEP_STATE_COPY[s.state]}, ${cumulative}% complete`
+              }
               title={STEP_STATE_COPY[s.state]}
               data-state={s.state}
-              data-testid={`step-pill-${s.step.key}`}
-              className={`pill-studio tap-chip inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              data-testid={`studio-progress-segment-${s.step.key}`}
+              className={`tap-chip flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
                 active
-                  ? "border-[color:var(--indigo-35)] bg-primary/15 text-[color:var(--brand-indigo)] shadow-[0_0_10px_var(--brand-indigo)]"
+                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
                   : s.state === "done"
-                    ? "border-[color:var(--hairline)] text-foreground/80 hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"
-                    : "border-dashed border-[color:var(--hairline)] text-muted-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                    ? "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                    : "border-dashed border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
               }`}
             >
-              {s.state === "todo" || s.state === "blocked" ? (
-                // A hollow ring for anything not done — "not started" and
-                // "needs something from you" share it. The difference between
-                // the two lives in the sentence underneath and in the announced
-                // label, not in color: an amber icon read as an error state.
+              <span
+                aria-hidden="true"
+                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                  s.state === "done"
+                    ? "bg-[color:var(--brand-indigo)] text-white"
+                    : "border border-current text-muted-foreground"
+                }`}
+              >
+                {s.state === "done" ? <Check className="h-3 w-3" /> : i + 1}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
                 <span
-                  aria-hidden="true"
-                  className="h-3 w-3 rounded-full border border-current opacity-60"
-                />
-              ) : (
-                <Icon className="h-3 w-3" />
-              )}
-              {s.step.label}
-              {value && (
-                // The pick beside the tick, truncated: an angle label can be
-                // a sentence, and the row wraps rather than scrolling. The
-                // full text lives in the title and the aria-label above.
-                <span
-                  aria-hidden="true"
-                  title={value}
-                  className="max-w-40 truncate font-normal opacity-70"
+                  className={`truncate text-xs font-semibold ${
+                    active
+                      ? "text-[color:var(--brand-indigo)]"
+                      : s.state === "done"
+                        ? "text-foreground/85"
+                        : "text-muted-foreground"
+                  }`}
                 >
-                  : {value}
+                  {s.step.label}
                 </span>
-              )}
+                {/* The pick, or the state in words — never both: a done step
+                    names what was chosen, the rest say what is owed. Truncated
+                    because an angle label can be a sentence; the full text
+                    lives in the aria-label above. */}
+                <span className="truncate text-xs text-muted-foreground" aria-hidden="true">
+                  {value || STEP_STATE_COPY[s.state]}
+                </span>
+              </span>
+              <span
+                className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                aria-hidden="true"
+              >
+                {cumulative}%
+              </span>
             </button>
           );
         })}
         </nav>
-        <div className="flex items-center gap-2">
-          <div
+          <span
             role="progressbar"
             aria-label="Studio progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={railPct}
-            className="relative h-1 flex-1 overflow-hidden rounded-full bg-[color:var(--hairline)]"
-          >
-            <span
-              data-testid="studio-progress-fill"
-              className="absolute inset-y-0 left-0 rounded-full bg-[color:var(--brand-indigo)] transition-[width] duration-300 ease-out motion-reduce:transition-none"
-              style={{ width: `${railPct}%` }}
-            />
-            <span aria-hidden="true" className="absolute inset-y-0 left-1/3 w-px bg-background" />
-            <span aria-hidden="true" className="absolute inset-y-0 left-2/3 w-px bg-background" />
-          </div>
-          <span
             data-testid="studio-progress-pct"
             className="shrink-0 text-xs tabular-nums text-muted-foreground"
           >

@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Anchors:** `frontend/src/pages/CreateVideo.jsx` (transparent
-  `studio-progress-rail` with `studio-progress-fill` and the
+- **Anchors:** `frontend/src/pages/CreateVideo.jsx` (navigable
+  `studio-progress-rail` with the `studio-progress-segment-*` buttons and the
   `studio-progress-pct` readout, one
   `wizard-section-*` section per step, next-action `wizard-footer-hint` in the
   `wizard-arrows` bar), `frontend/src/index.css` (`wizard-section-enter`);
   smoke checks "the canvas stacks all three sections and expands the active
-  one", "the progress rail rides the canvas with a live percentage",
+  one", "the progress bar is the nav, stated in thirds", "the progress rail
+  rides the canvas with a live percentage",
   "the action bar names the next action beside its arrows", "the ready review
   names no blocker and offers the render" and "the angle hint follows the
   substep the founder is on"
@@ -34,17 +35,18 @@ is open, finished parts fold down to a line.
   collapsed to a header row — number, glyph, label, and a state chip that
   carries its pick when it is done.
 - **A header is a control, not a label.** Opening a collapsed section calls
-  the same `setStep` its pill calls. One state machine, one gate set, one set
-  of arrows: progressive disclosure adds no second navigation model and
+  the same `setStep` its segment calls. One state machine, one gate set, one
+  set of arrows: progressive disclosure adds no second navigation model and
   queues no request of any kind (0098 stays whole — sections render from
   state the page already holds).
-- **The pills move into a transparent progress rail** with a scored
-  line under them: a bar ticked at the third marks and the score written in
-  percent, both derived from the step states. Done steps fill whole, the step
-  in view claims half until it is done. The rail scrolls with the canvas — a
-  pinned bar over the plan form read as a floating second layer — and the
-  pills keep their own rings and ticks; the rail line is orientation, not a
-  second state story.
+- **The progress bar is the nav.** The pills were a second nav carrying the
+  same labels, so they were removed and the bar owns step navigation: three
+  segments, each stating its step's cumulative third (33 / 67 / 100%) and the
+  state in words or the pick once done, with the live score at the end. All
+  of it derives from the same step states, so the readouts can never
+  disagree. The bar scrolls with the canvas — a pinned bar over the plan form
+  read as a floating second layer — and it is transparent chrome, never a
+  panel.
 - **The action bar carries one state-derived line.** 0095 dropped the footer
   hint because a standing sentence could not name what was missing. The bar
   gets a line back only as derived copy that names the live gate — including
@@ -84,8 +86,9 @@ is open, finished parts fold down to a line.
 - The workflow's shape is visible before any walking: a founder reads where
   they are and what is left without leaving the current section.
 - The smoke suite pins the canvas (three sections, exactly one active, header
-  click moves the step), the rail with a live percentage, and the bar's
-  state-derived line beside arrow-only controls.
+  click moves the step), the bar as the nav (three segments stating their
+  thirds, clicking one moves the step, no pills back), the live percentage,
+  and the action bar's state-derived line beside arrow-only controls.
 - Checks that scoped text to "the active step card" now select
   `.surface[data-active="true"]`, so collapsed headers cannot leak another
   step's content into the assertion.

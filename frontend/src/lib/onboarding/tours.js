@@ -43,19 +43,19 @@ export const TOURS = {
     label: "Create Video tour",
     steps: [
       {
-        target: '[data-testid="step-pill-profile"]',
+        target: '[data-testid="studio-progress-segment-profile"]',
         title: "Three steps to a finished clip",
         body:
           "Choose an approved App Profile here. If you have none, open App Profile to research and review your app first.",
       },
       {
-        target: '[data-testid="step-pill-angle"]',
+        target: '[data-testid="studio-progress-segment-angle"]',
         title: "Angle, goal, template, photo",
         body:
           "Open Audience & template when your app is selected. Pick an audience angle there to see matching goals and templates.",
       },
       {
-        target: '[data-testid="step-pill-review"]',
+        target: '[data-testid="studio-progress-segment-review"]',
         title: "Review the words, then render",
         body:
           "Open Review & submit after choosing a template and photo. Read the free plan before starting a paid render; the demo and CTA stay yours.",
