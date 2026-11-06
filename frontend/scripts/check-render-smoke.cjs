@@ -2735,34 +2735,54 @@ async function main() {
   });
 
   // The rail is the one piece of wizard chrome that stays while the canvas
-  // scrolls: the pills and a fill track that follows real completion. The
-  // pills keep their own state rings — the track is orientation, not a second
-  // state story.
-  await check("the progress rail sticks above the canvas with a live fill", async (ctx) => {
+  // scrolls: the pills, a bar ticked at the third marks, and the score in
+  // percent — all derived from the same completion states, so they can never
+  // disagree. The pills keep their own state rings; the bar is orientation,
+  // not a second state story. The rail is transparent, never a dark panel.
+  await check("the progress rail sticks above the canvas with a live percentage", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+    await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const rail = ctx.container.querySelector('[data-testid="studio-progress-rail"]');
     if (!rail) throw new Error("no progress rail above the canvas");
     if (!/sticky/.test(rail.className)) throw new Error("the progress rail does not stick");
+    if (/bg-background/.test(rail.className)) {
+      throw new Error("the rail is a dark panel again instead of transparent chrome");
+    }
     const nav = ctx.container.querySelector('[aria-label="Progress"]');
     if (!nav || !rail.contains(nav)) throw new Error("the step pills are not in the rail");
-    const fill = ctx.container.querySelector('[data-testid="studio-progress-fill"]');
-    if (!fill) throw new Error("the rail carries no fill track");
-    const width = parseFloat(fill.style.width);
-    if (!(width > 0 && width <= 100)) {
-      throw new Error(`the rail fill is not a live percentage: ${JSON.stringify(fill.style.width)}`);
+    const fill = () => ctx.container.querySelector('[data-testid="studio-progress-fill"]');
+    if (!fill()) throw new Error("the rail carries no fill track");
+    const pct = () => ctx.container.querySelector('[data-testid="studio-progress-pct"]');
+    const readPct = () => parseInt((pct()?.textContent || "").trim(), 10);
+    if (!pct() || !/^\d+%$/.test((pct().textContent || "").trim())) {
+      throw new Error("the rail carries no percentage readout");
     }
+    // The bar and the number are one score: a rounding drift fails here.
+    const startPct = readPct();
+    if (Math.round(parseFloat(fill().style.width)) !== startPct) {
+      throw new Error(`the bar and the percent disagree: ${fill().style.width} vs ${startPct}%`);
+    }
+    // The completed step holds its third while the view walks back and forth,
+    // so both readings move with real progress rather than with position.
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="wizard-back-button"]'),
+      "Back to the profile step"
+    );
+    const backPct = readPct();
+    if (!(backPct < startPct)) throw new Error("the score ignores the completed step when walking back");
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
       "Continue to the angle step"
     );
-    const grown = parseFloat(
-      ctx.container.querySelector('[data-testid="studio-progress-fill"]').style.width
-    );
-    if (!(grown > width)) throw new Error("the rail fill did not move with the step");
+    const grownPct = readPct();
+    if (!(grownPct > backPct)) throw new Error("the percentage did not move with the step");
+    if (Math.round(parseFloat(fill().style.width)) !== grownPct) {
+      throw new Error("the bar and the percent disagree after moving");
+    }
   });
 
   // The action bar names the one next action beside the arrow-only pair, so a

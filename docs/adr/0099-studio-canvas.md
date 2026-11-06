@@ -3,11 +3,12 @@
 - **Status:** accepted
 - **Date:** 2026-11-06
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (sticky
-  `studio-progress-rail` with `studio-progress-fill`, one
+  `studio-progress-rail` with `studio-progress-fill` and the
+  `studio-progress-pct` readout, one
   `wizard-section-*` section per step, next-action `wizard-footer-hint` in the
   `wizard-arrows` bar), `frontend/src/index.css` (`wizard-section-enter`);
   smoke checks "the canvas stacks all three sections and expands the active
-  one", "the progress rail sticks above the canvas with a live fill" and "the
+  one", "the progress rail sticks above the canvas with a live percentage" and "the
   action bar names the next action beside its arrows"
 - **Shapes:** extends 0095 (arrows, arrow-only bodies, sticky placement and
   the task line stay) and keeps 0098 whole (disclosure queues no request);
@@ -35,10 +36,11 @@ is open, finished parts fold down to a line.
   of arrows: progressive disclosure adds no second navigation model and
   queues no request of any kind (0098 stays whole — sections render from
   state the page already holds).
-- **The pills move into a sticky progress rail** with a 2px fill line that
-  tracks real completion: done steps fill whole, the step in view claims half
-  until it is done. The pills keep their own rings and ticks; the rail line is
-  orientation, not a second state story.
+- **The pills move into a sticky, transparent progress rail** with a scored
+  line under them: a bar ticked at the third marks and the score written in
+  percent, both derived from the step states. Done steps fill whole, the step
+  in view claims half until it is done. The pills keep their own rings and
+  ticks; the rail line is orientation, not a second state story.
 - **The action bar carries one state-derived line.** 0095 dropped the footer
   hint because a standing sentence could not name what was missing. The bar
   gets a line back only as derived copy that names the step's live gate —
@@ -66,7 +68,7 @@ is open, finished parts fold down to a line.
 - The workflow's shape is visible before any walking: a founder reads where
   they are and what is left without leaving the current section.
 - The smoke suite pins the canvas (three sections, exactly one active, header
-  click moves the step), the sticky rail with a live fill, and the bar's
+  click moves the step), the sticky rail with a live percentage, and the bar's
   state-derived line beside arrow-only controls.
 - Checks that scoped text to "the active step card" now select
   `.surface[data-active="true"]`, so collapsed headers cannot leak another

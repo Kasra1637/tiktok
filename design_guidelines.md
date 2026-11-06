@@ -250,11 +250,14 @@ unreachable. That chrome belongs to the wizard rail alone: the picks inside the
 Audience & template step are a caption row instead — one `text-xs` line naming
 the screen and its count, then plain ticks and labels with no frame — because
 two rows of rings and ticks read as two progress bars stacked over each other.
-The pills sit in the sticky progress rail, with a 2px fill line under them that
-tracks real completion, and the canvas below shows every step as a section: the
-active one expanded, the rest collapsed to a header row with the same state in
-words (a done step shows its pick chip). Opening a collapsed header walks there
-exactly like its pill — one state machine, never a second navigation model.
+The pills sit in the sticky progress rail — transparent chrome, never a panel —
+with a scored line under them: a bar ticked at the third marks and the same
+score written in percent (`studio-progress-pct`), both derived from the step
+states so they can never disagree. The canvas below shows every step as a
+section: the active one expanded, the rest collapsed to a header row with the
+same state in words (a done step shows its pick chip). Opening a collapsed
+header walks there exactly like its pill — one state machine, never a second
+navigation model.
 
 Spacing, in these steps and no others:
 

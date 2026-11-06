@@ -1497,12 +1497,16 @@ export default function CreateVideo() {
   } else {
     footerHint = "Save your edits and attach a photo before rendering.";
   }
-  // The rail fill: done steps fill theirs whole, the step in view claims half
-  // until it is done. Derived like every state here, so it can never disagree
-  // with the ticks above it.
-  const railFill = Math.min(
-    100,
-    ((step + (activeStepState?.state === "done" ? 1 : 0.5)) / STEPS.length) * 100
+  // The rail score, derived per segment so the bar, the thirds and the
+  // number can never disagree: a done step claims its full third, the step
+  // in view claims half until it is done, the rest claim nothing.
+  const railPct = Math.round(
+    (stepStates.reduce(
+      (sum, s, i) => sum + (s.state === "done" ? 1 : i === step ? 0.5 : 0),
+      0
+    ) /
+      STEPS.length) *
+      100
   );
 
   function renderStep() {
@@ -2835,13 +2839,13 @@ export default function CreateVideo() {
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
       {/* Sticky progress rail: the pills stay in reach while the canvas
-          scrolls, and the fill line under them reads real completion — the
-          one piece of orientation chrome the page keeps. The pills keep
-          their own state rings; the line is a second read of the same
-          state, not a second state story. */}
+          scrolls, and the line under them states real completion — the score
+          in percent beside a bar ticked at the third marks, both derived from
+          the same states, so the readouts can never disagree. The rail itself
+          is transparent: the pills and the score are the chrome, not a panel. */}
       <div
         data-testid="studio-progress-rail"
-        className="sticky top-14 z-30 space-y-1.5 rounded-2xl border border-[color:var(--hairline)] bg-background/85 p-1.5 shadow-sm backdrop-blur lg:top-0"
+        className="sticky top-14 z-30 space-y-2 lg:top-0"
       >
         <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
         {stepStates.map((s, i) => {
@@ -2901,15 +2905,29 @@ export default function CreateVideo() {
           );
         })}
         </nav>
-        <div
-          aria-hidden="true"
-          className="relative mx-1 h-0.5 overflow-hidden rounded-full bg-[color:var(--hairline)]"
-        >
+        <div className="flex items-center gap-2">
+          <div
+            role="progressbar"
+            aria-label="Studio progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={railPct}
+            className="relative h-1 flex-1 overflow-hidden rounded-full bg-[color:var(--hairline)]"
+          >
+            <span
+              data-testid="studio-progress-fill"
+              className="absolute inset-y-0 left-0 rounded-full bg-[color:var(--brand-indigo)] transition-[width] duration-300 ease-out motion-reduce:transition-none"
+              style={{ width: `${railPct}%` }}
+            />
+            <span aria-hidden="true" className="absolute inset-y-0 left-1/3 w-px bg-background" />
+            <span aria-hidden="true" className="absolute inset-y-0 left-2/3 w-px bg-background" />
+          </div>
           <span
-            data-testid="studio-progress-fill"
-            className="absolute inset-y-0 left-0 rounded-full bg-[color:var(--brand-indigo)] transition-[width] duration-300 ease-out motion-reduce:transition-none"
-            style={{ width: `${railFill}%` }}
-          />
+            data-testid="studio-progress-pct"
+            className="shrink-0 text-xs tabular-nums text-muted-foreground"
+          >
+            {railPct}%
+          </span>
         </div>
       </div>
 
