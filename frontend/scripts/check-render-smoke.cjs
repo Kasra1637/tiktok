@@ -1784,6 +1784,34 @@ async function main() {
     });
   });
 
+  await check("the Location editor wraps a long place instead of cutting it off", async (ctx) => {
+    // A place is a sentence, not a line. The old <input> clipped a long
+    // Location at the edge, so the founder could not read the description
+    // they were about to save. The editor is a Textarea and holds the whole
+    // value, including a long one typed after mount.
+    const longPlace =
+      "A narrow corner of a busy neighbourhood cafe, with a wooden counter, "
+      + "a chalkboard sign by the door and a window onto the street";
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, location: longPlace, visual_direction: longPlace },
+      })(ctx)
+    );
+    const field = ctx.container.querySelector('[data-testid="render-location-input"]');
+    if (!field) throw new Error("the render panel does not offer the Location editor");
+    if (field.tagName !== "TEXTAREA") {
+      throw new Error("the Location editor is a single-line input, so a long place is cut off");
+    }
+    if (field.value !== longPlace) {
+      throw new Error("the Location editor does not hold the whole saved place");
+    }
+    const longer = `${longPlace} and a second table by the window`;
+    await typeInto(ctx, field, longer);
+    if (field.value !== longer) {
+      throw new Error("the Location editor did not keep a long typed place");
+    }
+  });
+
   await check("the Location editor names what still disagrees after a save", async (ctx) => {
     // Spoken lines are the founder's own words and are never rewritten, and a
     // props or movement list that cannot hold everything is reported instead
@@ -16909,9 +16937,10 @@ async function openMenu(ctx, triggerTestId, itemTestId) {
  */
 async function typeInto(ctx, input, text, why) {
   if (!input) throw new Error(why || "no input to type into");
-  const setter = Object.getOwnPropertyDescriptor(
-    dom.window.HTMLInputElement.prototype, "value"
-  ).set;
+  const proto = input.tagName === "TEXTAREA"
+    ? dom.window.HTMLTextAreaElement.prototype
+    : dom.window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
   await act(async () => {
     setter.call(input, text);
     input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));

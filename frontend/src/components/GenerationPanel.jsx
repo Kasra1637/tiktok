@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { Textarea } from "./ui/textarea";
 import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
@@ -631,14 +632,17 @@ const handleGenerate = async () => {
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-0 flex-1 space-y-1">
             <label htmlFor="render-location" className="text-sm font-semibold">Where it happens</label>
-            <input
+            {/* A place is a sentence, not a single line: a text input cut a
+                long Location off at the edge, so the founder could never read
+                the whole description they were about to save. The shared
+                Textarea wraps and grows with the text. */}
+            <Textarea
               id="render-location"
               data-testid="render-location-input"
-              type="text"
+              rows={2}
               value={locationDraft}
               onChange={(e) => setLocationDraft(e.target.value)}
               disabled={inFlight || savingLocation}
-              className={CONTROL_CLASS}
               placeholder="For example: A tidy kitchen with a coffee maker on the counter"
             />
           </div>
