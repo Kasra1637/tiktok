@@ -29,6 +29,7 @@ import posters
 import template_library
 import angle_scene
 import final_beat
+import opening_move
 import scene_consistency
 import claim_safety
 import media_signing
@@ -7218,6 +7219,29 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
                     "can do, then generate again. Nothing has been charged."
                 ),
             )
+    # Opening movement (ADR 0090, enforced): every setup — selfie or fixed —
+    # must open on a visible movement, gesture or position change, never on
+    # standing still or speaking alone. A static opening is repaired
+    # additively here; only an opening that names no action at all is
+    # refused.
+    opening_changed = []
+    opening_verdict = opening_move.validate_opening(strategy)
+    if not opening_verdict["ok"]:
+        repaired = opening_move.repair(strategy)
+        strategy = repaired["strategy"]
+        opening_changed = repaired["changed"]
+        if not opening_move.validate_opening(strategy)["ok"]:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This render was stopped before it cost anything: the "
+                    "opening names no physical action, so the first beat cannot "
+                    "be filmed as a visible move. Edit the opening action on "
+                    "Review & submit so the viewer watches the person move first, "
+                    "then generate again. Nothing has been charged."
+                ),
+            )
+
     ending_changed = []
     if selfie:
         ending = final_beat.pick(strategy, exclude=exclude, index=render_index)
@@ -7237,12 +7261,12 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
                     "filming hand, then generate again. Nothing has been charged."
                 ),
             )
-    if audit["changed"] or strip_changed or scene_audit["changed"] or ending_changed:
+    if audit["changed"] or strip_changed or scene_audit["changed"] or ending_changed or opening_changed:
         logger.info(
             "Render for project %s: strategy scene reconciled before prompt build: %s",
             project.get("id"),
             ", ".join(list(dict.fromkeys(
-                audit["changed"] + strip_changed + scene_audit["changed"] + ending_changed
+                audit["changed"] + strip_changed + scene_audit["changed"] + ending_changed + opening_changed
             ))),
         )
     return strategy
@@ -8327,9 +8351,8 @@ async def _sweep_stranded_generations(
         datetime.now(timezone.utc) - timedelta(seconds=max(0, int(min_age_seconds)))
     ).isoformat()
     rows = await _fetch_all(
-        "SELECT id, user_id, openrouter_job_id FROM generations "
+        "SELECT id, user_id, openrouter_job_id, status, created_at FROM generations "
         "WHERE status IN ('submitted', 'generating') "
-        "AND openrouter_job_id IS NOT NULL AND openrouter_job_id != '' "
         "AND COALESCE(created_at, requested_at, started_at) < ? "
         "ORDER BY COALESCE(created_at, requested_at, started_at) ASC LIMIT ?",
         (cutoff, max(1, int(limit))),
@@ -8346,6 +8369,27 @@ async def _sweep_stranded_generations(
     fixed = 0
     for row in rows:
         generation_id = row.get("id")
+        # A `submitted` row with no job id was never submitted to the
+        # provider — the container died between the insert and the call.
+        # Mark it failed/retryable here so idempotency's next attempt with
+        # the same intent key reconciles to a fresh provider call instead
+        # of keeping the zombie row.
+        if not (row.get("openrouter_job_id") or "").strip():
+            if row.get("status") == "submitted":
+                await _execute(
+                    "UPDATE generations SET status = 'failed', "
+                    "error = ?, retryable = 1, completed_at = ? WHERE id = ?",
+                    ("Stranded before provider submission (container died between "
+                     "row insert and provider call). This row never reached the "
+                     "provider and was never charged. Retrying this render is safe.",
+                     now_iso(), generation_id),
+                )
+                fixed += 1
+                logger.info(
+                    "Stranded sweep: marked %s failed (submitted, no job id)",
+                    generation_id,
+                )
+            continue
         # Skip anything a founder is already repairing by hand. _run_storage_repair
         # holds this set for the same reason; two passes over one clip is how a
         # good download becomes a half-written file.

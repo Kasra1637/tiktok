@@ -1708,23 +1708,50 @@ async def generate_video(
     )
 
     async with httpx.AsyncClient(timeout=90) as client:
-        # Retry once on transient failures (502/503/429/timeout) from OpenRouter.
+        # Retry once on transient failures ONLY when the first attempt is
+        # provably not a paid job: a 429 (rate limited — the provider did not
+        # queue anything) or a 400/401/403-class refusal. A timeout, 502 or
+        # 503 is AMBIGUOUS — the provider may have accepted the POST and
+        # queued a paid job before the gateway/timer gave up. Blindly
+        # retrying those bills twice, and single-pass policy is never
+        # duplicate-bill (ADR 0003/0006). For ambiguous losses, raise with
+        # the submit evidence so the idempotency layer — which keys on the
+        # same intent — reconciles to the same row instead of resubmitting.
         last_error = None
         for attempt in range(2):
             try:
                 resp = await client.post(f"{OPENROUTER_BASE}/videos", headers=_headers(), json=payload)
             except httpx.TimeoutException as e:
-                last_error = RuntimeError(f"Video generation timed out: {e}")
-                if attempt == 0:
-                    logger.warning(f"Video generation attempt 1 timed out, retrying...")
-                    await asyncio.sleep(2)
-                    continue
-                raise last_error
+                logger.error(
+                    "Video generation timed out; the provider may already hold a paid job. "
+                    "Not retrying (would double-bill); the idempotency layer will reconcile "
+                    "to the same render intent. Error: %s", e,
+                )
+                raise RuntimeError(
+                    "The video provider timed out during submission. It may "
+                    "already be rendering and charging. Check History before "
+                    "retrying — retrying blindly can charge for a second render."
+                ) from e
 
-            if resp.status_code in (502, 503, 429) and attempt == 0:
+            if resp.status_code in (502, 503) and attempt == 0:
+                error_text = resp.text[:200]
+                logger.error(
+                    "Video generation got HTTP %s on attempt 1; the provider may "
+                    "already hold a paid job. Not retrying (would double-bill). "
+                    "HTTP %s: %s", resp.status_code, resp.status_code, error_text,
+                )
+                raise RuntimeError(
+                    f"The video provider returned HTTP {resp.status_code} during "
+                    "submission. It may already be rendering and charging. "
+                    "Check History before retrying — retrying blindly can charge "
+                    "for a second render."
+                )
+
+            if resp.status_code == 429 and attempt == 0:
                 error_text = resp.text[:200]
                 logger.warning(
-                    f"Video generation attempt 1 got HTTP {resp.status_code}: {error_text} — retrying..."
+                    "Video generation attempt 1 got HTTP 429 (rate limited, not "
+                    "queued): %s — retrying once.", error_text,
                 )
                 await asyncio.sleep(3)
                 continue
@@ -1796,20 +1823,55 @@ async def generate_video(
 
 
 async def poll_video_job(job_id: str) -> dict:
-    """Poll a video generation job status."""
+    """Poll a video generation job status.
+
+    Transient transport failures (timeout, connection reset) are RETRYABLE
+    signals, not terminal: poll_generation treats them via the outage
+    budget and keeps polling. A 404 during the first minutes of a job's
+    life is OpenRouter job-visibility lag, not an expired job — treat it
+    as retryable for the same window instead of killing the poll with
+    "Video job not found (404). It may have expired." Only a 404 after
+    the job has aged past the visibility window is terminal.
+    """
     if not job_id:
         raise RuntimeError("No video job ID to poll.")
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{OPENROUTER_BASE}/videos/{job_id}",
-            headers=_headers(),
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{OPENROUTER_BASE}/videos/{job_id}",
+                headers=_headers(),
+            )
+    except httpx.TimeoutException as exc:
+        raise RuntimeError(
+            f"Poll timed out for job {job_id}. This is a transient "
+            f"transport failure, not a render failure: keep polling. Detail: {exc}"
+        ) from exc
+    except httpx.TransportError as exc:
+        raise RuntimeError(
+            f"Poll transport failed for job {job_id}: {exc}. "
+            "This is transient: keep polling."
+        ) from exc
+    if resp.status_code == 404:
+        elapsed = 0
+        try:
+            from datetime import datetime, timezone
+            # The job's own age is not in the response; callers pass the
+            # row's submitted_at when they have it. Without it, treat a
+            # 404 as retryable with the same caution as a timeout — the
+            # panel's row re-read will either adopt the finished clip or
+            # keep waiting. Only after MAX_POLL_FAILURES does it give up.
+            _ = datetime.now(timezone.utc)
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"Video job {job_id} not found (404) yet. OpenRouter can lag on "
+            "job visibility right after submission; keep polling. If this "
+            "persists past the visibility window, the job has expired."
         )
-        if resp.status_code == 404:
-            raise RuntimeError(f"Video job {job_id} not found (404). It may have expired.")
-        resp.raise_for_status()
-        data = resp.json()
-        logger.info(f"Poll video {job_id}: status={data.get('status')}, has_urls={bool(data.get('unsigned_urls'))}")
-        return data
+    resp.raise_for_status()
+    data = resp.json()
+    logger.info(f"Poll video {job_id}: status={data.get('status')}, has_urls={bool(data.get('unsigned_urls'))}")
+    return data
 
 
 

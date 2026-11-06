@@ -456,9 +456,12 @@ def reconcile_location(strategy: Optional[dict], location: str, thorough: bool =
             container[key] = new
             changed.append(label)
 
-    # The place itself: the Location takes these over verbatim, whether or not
-    # the old values contradicted it. This is the copy that used to win at the
-    # render lock.
+    # The place itself: the Location takes these over verbatim, whether or
+    # not the old values contradicted it. This is the copy that used to win
+    # at the render lock — the founder already chose the place, and every
+    # place-bearing line agrees with it. Conflict-scoping this overwrite
+    # was tried and reverted: it left scene fields carrying stale times
+    # ("7am") in Lighting and broke the guard's split contract.
     scene_block = result.get("scene")
     if isinstance(scene_block, dict):
         for key, label in _LOCATION_REPLACE_FIELDS:

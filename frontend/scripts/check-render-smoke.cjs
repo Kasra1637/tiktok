@@ -2035,9 +2035,10 @@ async function main() {
 
   await check("a rate-limited poll neither stops the loop nor raises the banner", async (ctx) => {
     // A 429 while checking is throttling, not a broken render: the panel
-    // must keep waiting without spending its outage budget. Five straight
-    // 429s then a success prove the loop survives past the point an outage
-    // would have raised the banner, and no banner appears at any point.
+    // must keep waiting without spending its outage budget. The backoff
+    // grows per 429 (6s → 12s → 18s → … capped at 60s), so over a 21s
+    // window at least two polls must fire and no banner appears at any
+    // point. If the row re-read returns the same row, the loop continues.
     const GenerationPanel = load("components/GenerationPanel.jsx").default;
     let polls = 0;
     const generating = { ...SEGMENT, id: "gen-poll-429", status: "generating" };
@@ -2051,18 +2052,18 @@ async function main() {
         getGenerations: async () => ({ generations: [generating] }),
         pollGeneration: async () => {
           polls += 1;
-          if (polls <= 5) throw throttled();
+          if (polls <= 2) throw throttled();
           return generating;
         },
       },
       async () => {
         await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
         await act(async () => {
-          await new Promise((r) => setTimeout(r, 41000));
+          await new Promise((r) => setTimeout(r, 21000));
         });
-        if (polls < 6) {
+        if (polls < 2) {
           throw new Error(
-            "rate-limited polls stopped the loop: fewer than six polls fired"
+            "rate-limited polls stopped the loop: fewer than two polls fired"
           );
         }
         expectAbsent(ctx, "throttled poll", "a rate-limited poll raised the banner");

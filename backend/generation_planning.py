@@ -1019,13 +1019,15 @@ def is_recoverable_error(message: str) -> bool:
         "frame_images",
         "aspect_ratio",
         "validation",
-        "not found (404)",
         "expired",
         "prompt is too long",
         "rejected this render before it started",
     )
     if any(marker in text for marker in permanent_markers):
         return False
+    # A 404 during poll-visibility lag is retryable; only an expired job is
+    # terminal. The poll layer phrases visibility lag as "not found (404)
+    # yet" so it never matches the terminal expiry marker above.
     return _has_recoverable_marker(text)
 
 
@@ -1485,6 +1487,31 @@ def build_segment_prompt(
     # old words, and the prompt is the last place that matters (ADR 0089).
     strategy = _neutral_strategy(strategy)
     plan = _neutral_plan(plan)
+    # The plan's Location is the single source of truth for the place
+    # (ADR 0090). If the strategy's own scene still names a different room
+    # — a pasted template Venue — the lock would carry both places and the
+    # model would pick the pasted one. Overwrite the strategy's place
+    # fields with the plan's Location so the lock states the place once.
+    plan_location = (plan.get("location") if isinstance(plan, dict) else "") or ""
+    plan_location = " ".join(str(plan_location).split()).strip()
+    if plan_location and isinstance(strategy, dict):
+        scene = strategy.get("scene")
+        if isinstance(scene, dict):
+            stale = scene.get("location")
+            if stale and " ".join(str(stale).split()).strip() != plan_location:
+                import re as _re
+                def _conflict(val):
+                    text = _re.sub(r"\s+", " ", str(val or "")).strip()
+                    if not text:
+                        return False
+                    # Location here is the plan's full precise phrase; a pasted
+                    # Venue is a different room. Treat any non-empty strategy
+                    # place that is not a substring of the plan Location (or
+                    # vice versa) as a conflict.
+                    return text.lower() not in plan_location.lower() and \
+                           plan_location.lower() not in text.lower()
+                if _conflict(stale):
+                    scene["location"] = plan_location
     scale = 1.0
     condensed = False
     budget = 0.0

@@ -267,26 +267,36 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // on every route. scripts/check-render-smoke.cjs mounts this component, so
   // that class of ordering mistake fails the gate instead of shipping.
   // Consecutive poll failures and the generation they belong to. One failed
-  // poll used to kill the loop outright: a single 502 during a container
-  // restart left the Generating label frozen beside a message promising the page
-  // checks back on its own — while nothing checked anything. Transient
-  // failures now stay silent and keep polling; only a sustained outage (five
-  // in a row) escalates to the error banner. The id guard resets the count
-  // when tracking moves to a different generation, so an old outage cannot
-  // spend a new render's tolerance.
+  // Polling budget. A rate-limited poll is NEVER counted as an outage
+  // failure and NEVER escalates the banner — 429 means the render is healthy
+  // at the provider (see server ADR 0061: 429 is throttling, never a render
+  // failure). Sustained 429s are still BOUNDED: after MAX_POLL_429s the
+  // panel surfaces a visible "still rendering — check History once" state
+  // instead of looping silently at 85% forever. Polling stops permanently
+  // ONLY on a terminal row status; a transient network/5xx failure walks
+  // the outage budget and, once spent, names History as the next step —
+  // never a frozen progress bar.
   const pollFailures = useRef(0);
+  const poll429s = useRef(0);
   const pollingId = useRef(null);
+  const pollTimedOut = useRef(false);
   const MAX_POLL_FAILURES = 5;
+  const MAX_POLL_429s = 20;
   const schedulePoll = useCallback((id) => {
     if (pollingId.current !== id) {
       pollingId.current = id;
       pollFailures.current = 0;
+      poll429s.current = 0;
+      pollTimedOut.current = false;
     }
+    if (pollTimedOut.current) return;
     if (timer.current) clearTimeout(timer.current);
+    const delay = poll429s.current > 0 ? Math.min(POLL_INTERVAL_MS * (1 + poll429s.current), 60_000) : POLL_INTERVAL_MS;
     timer.current = setTimeout(async () => {
       try {
         const updated = await api.pollGeneration(id);
         pollFailures.current = 0;
+        poll429s.current = 0;
         setGeneration(updated);
         onGenerationChange?.(updated);
         if (updated.status === "submitted" || updated.status === "generating") {
@@ -294,15 +304,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
         }
       } catch (err) {
         if (err?.response?.status === 429) {
-          // Rate limited, not broken: the render is still going at the
-          // provider, so keep waiting without spending the outage budget
-          // or raising the banner on a healthy render. Before re-queueing
-          // the same provider check, re-read the newest generation row
-          // (a cheap DB read, never a provider call): History may already
-          // hold the finished clip — a retry child or a render finished
-          // by another tab — while this loop still hammers the old id.
-          // Adopting the newest row snaps the panel to the clip instead
-          // of looping at 85% forever behind a wall of 429s.
+          poll429s.current += 1;
           try {
             const data = await api.getGenerations({ studio_project_id: projectId, limit: 1 });
             const newest = data.generations?.[0] || null;
@@ -320,19 +322,31 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
               return;
             }
           } catch {
-            /* the row re-read is best-effort; the retry below still fires */
+            /* best-effort */
+          }
+          if (poll429s.current >= MAX_POLL_429s) {
+            pollTimedOut.current = true;
+          setError(
+            "The render is still in progress at the video provider but the studio is being rate-limited. The clip is not lost; it will appear in History once the provider finishes. Check History for this project; the panel will not loop forever."
+          );
+            return;
           }
           schedulePoll(id);
           return;
         }
         pollFailures.current += 1;
         if (pollFailures.current >= MAX_POLL_FAILURES) {
-          setError(getErrorMessage(err));
+          pollTimedOut.current = true;
+          setError(
+            `We couldn't check the render status after ${MAX_POLL_FAILURES} tries: `
+            + `${getErrorMessage(err)}. The render may still be running — check `
+            + "History for this project. The panel will not loop forever."
+          );
         } else {
           schedulePoll(id);
         }
       }
-    }, POLL_INTERVAL_MS);
+    }, delay);
   }, [onGenerationChange, projectId]);
 
   // Adopt the newest generation for this project, and stop polling a
