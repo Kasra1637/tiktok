@@ -2886,15 +2886,14 @@ export default function CreateVideo() {
           with the rest of the row — and the distinction never needed color,
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
-      {/* Sticky progress rail: the pills stay in reach while the canvas
-          scrolls, and the line under them states real completion — the score
-          in percent beside a bar ticked at the third marks, both derived from
-          the same states, so the readouts can never disagree. The rail itself
-          is transparent: the pills and the score are the chrome, not a panel. */}
-      <div
-        data-testid="studio-progress-rail"
-        className="sticky top-14 z-30 space-y-2 lg:top-0"
-      >
+      {/* Progress rail: the pills and the scored line above the canvas. It
+          scrolls with the page — a pinned bar over the plan form read as a
+          second, floating layer, so the rail rides the content instead. The
+          score in percent sits beside a bar ticked at the third marks, both
+          derived from the same states, so the readouts can never disagree.
+          The rail itself is transparent: the pills and the score are the
+          chrome, not a panel. */}
+      <div data-testid="studio-progress-rail" className="space-y-2">
         <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;

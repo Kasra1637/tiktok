@@ -2737,19 +2737,22 @@ async function main() {
     }
   });
 
-  // The rail is the one piece of wizard chrome that stays while the canvas
-  // scrolls: the pills, a bar ticked at the third marks, and the score in
-  // percent — all derived from the same completion states, so they can never
-  // disagree. The pills keep their own state rings; the bar is orientation,
-  // not a second state story. The rail is transparent, never a dark panel.
-  await check("the progress rail sticks above the canvas with a live percentage", async (ctx) => {
+  // The rail is orientation, not an overlay: the pills, a bar ticked at the
+  // third marks, and the score in percent — all derived from the same
+  // completion states, so they can never disagree. It scrolls with the
+  // canvas (a pinned bar over the plan form read as a floating second
+  // layer), the pills keep their own state rings, and the chrome is
+  // transparent, never a dark panel.
+  await check("the progress rail rides the canvas with a live percentage", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const rail = ctx.container.querySelector('[data-testid="studio-progress-rail"]');
     if (!rail) throw new Error("no progress rail above the canvas");
-    if (!/sticky/.test(rail.className)) throw new Error("the progress rail does not stick");
+    if (/sticky/.test(rail.className)) {
+      throw new Error("the rail is pinned to the page instead of scrolling with the canvas");
+    }
     if (/bg-background/.test(rail.className)) {
       throw new Error("the rail is a dark panel again instead of transparent chrome");
     }

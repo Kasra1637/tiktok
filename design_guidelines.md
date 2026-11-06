@@ -250,8 +250,9 @@ unreachable. That chrome belongs to the wizard rail alone: the picks inside the
 Audience & template step are a caption row instead — one `text-xs` line naming
 the screen and its count, then plain ticks and labels with no frame — because
 two rows of rings and ticks read as two progress bars stacked over each other.
-The pills sit in the sticky progress rail — transparent chrome, never a panel —
-with a scored line under them: a bar ticked at the third marks and the same
+The pills sit in the transparent progress rail — chrome that scrolls with the
+canvas, never a pinned panel — with a scored line under them: a bar ticked at
+the third marks and the same
 score written in percent (`studio-progress-pct`), both derived from the step
 states so they can never disagree. The canvas below shows every step as a
 section: the active one expanded, the rest collapsed to a header row with the
@@ -430,8 +431,9 @@ accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 accents, not buttons. Plus shadcn's `default` / `secondary` / `destructive` / `outline`.
 
 **One pattern per job.** Step progress is the wizard's own `pill-studio` pill row
-in Create Video (`data-testid="step-pill-*"`), sitting in the sticky progress rail
-with its fill line: the pill carries state in its ring and tick glyph, never in
+in Create Video (`data-testid="step-pill-*"`), sitting in the transparent progress
+rail with its scored line: the pill carries state in its ring and tick glyph,
+never in
 position, and the rail's collapsed section headers echo the same state in words.
 Generation status uses `StatusBadge`. Don't
 hand-roll a second progress model beside these.
