@@ -168,7 +168,7 @@ card is `.inset-panel`.
 |---|---|---|---|
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
-| Wizard step | one `.surface surface-step` section per step in the studio canvas; the header row is the step toggle — number, 16px glyph, `text-sm` label, state chip | `h2`-equivalent label from the section toggle; no separate heading |
+| Wizard step | one `.surface surface-step` section per step in the studio canvas; the header row is the step toggle — number, filled indigo glyph disc (the step's own icon in every state), `text-sm` label, state chip | the state chip names done/blocked; the disc carries identity, never state |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 20px gutter; 16px in a wizard step) | none | 14px semibold, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |

@@ -2962,7 +2962,7 @@ export default function CreateVideo() {
           const active = i === step;
           const state = stepStates.find((x) => x.step.key === s.key)?.state || "todo";
           const value = state === "done" ? pillValue(s.key) : null;
-          const SectionIcon = state === "done" ? Check : s.icon;
+          const SectionIcon = s.icon;
           return (
             <section
               key={s.key}
@@ -2986,10 +2986,17 @@ export default function CreateVideo() {
                 >
                   {i + 1}
                 </span>
-                <SectionIcon
+                {/* One fill for the three step glyphs: a filled indigo disc,
+                    the same treatment in every state. The chip carries
+                    done/blocked, so the glyph stays the step's own identity
+                    instead of swapping to a check on one step and not another. */}
+                <span
                   aria-hidden="true"
-                  className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]"
-                />
+                  data-testid={`wizard-section-icon-${s.key}`}
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--brand-indigo)] text-white"
+                >
+                  <SectionIcon className="h-3 w-3" />
+                </span>
                 <span className="font-display text-sm font-semibold">{s.label}</span>
                 <span
                   data-testid={`wizard-section-chip-${s.key}`}
