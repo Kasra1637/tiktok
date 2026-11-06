@@ -2,16 +2,19 @@
 
 In a selfie-style video the camera IS the phone in the character's hand, so
 nothing at the end — or anywhere on camera — can be a phone being raised,
-held or shown: the recording device cannot appear as a prop. Fixed-camera
-renders (phone on a stand, both hands free) keep the phone handoff.
+held or shown, and the character can never reach toward, hold, raise or show
+a phone or camera at any point. One hand holds the camera, so no action may
+need a second free hand. Fixed-camera renders (phone on a stand, both
+hands free) keep the phone handoff.
 
 For selfie, the ending is ONE short physical beat in the same final moment:
 physical only, no extra words or time, with a split-second hold before the
 cut. A curated list is rotated per render so consecutive renders do not
 repeat, preferring beats whose mood matches the strategy's emotional
-triggers. Detection of phone mentions is lexical and conservative: a phone
-that is only reached for is the story's handoff moment, not a device on
-camera, so it is left alone.
+triggers. Detection of forbidden clauses is lexical and conservative: a
+negated mention (``no phone on camera``, ``never raises the phone``) is a
+rule, not an action, so it is left alone. Spoken words are never rewritten
+here — this module strips direction/action wording only.
 
 Pure policy: no HTTP, AI, auth or persistence imports.
 """
@@ -52,19 +55,65 @@ ENDINGS = (
 
 DEFAULT_ENDING = ENDINGS[0]["text"]
 
-# A phone being held, raised, shown, lifted or pointed at — the recording
-# device cannot appear in a selfie frame. Reaching for a phone is the story's
-# handoff moment, not a device on camera, so it is deliberately not matched.
+# A phone or camera being held, raised, shown, lifted, pointed at or reached
+# for — the recording device cannot appear in a selfie frame, and a hand
+# cannot reach toward the lens/phone/camera either. Reaching toward the lens
+# is also matched: in a selfie that gesture is the old handoff reframed.
 _PHONE_ENDING_RE = re.compile(
     r"(?:rais\w+|hold\w*|show\w*|lift\w*|point\w*|bring\w*|push\w*|pick\w*"
-    r"|tak\w*|pull\w*|get\w*|grab\w*)\s+(?:\w+\s+){0,2}?"
-    r"(?:the|her|his|their|my|your|a)\s+phone"
-    r"|(?:the|her|his|their|my|your|a)\s+phone\s+"
+    r"|tak\w*|pull\w*|get\w*|grab\w*|extend\w*|stretch\w*|wave\w*)"
+    r"\s+(?:\w+\s+){0,2}?(?:the|her|his|their|my|your|a)\s+(?:phone|camera)\b(?!\s+call)"
+    r"|(?:the|her|his|their|my|your|a)\s+(?:phone|camera)\s+"
     r"(?:into|up|toward|towards|out|appears?|shows?|comes?)"
     r"|screen\s+(?:facing|to)\s+(?:the\s+)?(?:camera|lens|her|him|them)"
-    r"|\bphone\s+(?:into view|up to|to the)",
+    r"|\bphone\s+(?:into view|up to|to the)"
+    r"|\b(?:phone|camera)\s+in\s+(?:her|his|their|my|your|the)\s+hands?\b"
+    r"|\breach\w*\s+(?:out\s+)?for\s+"
+    r"(?:the\s+|her\s+|his\s+|their\s+|my\s+|your\s+|a\s+)?"
+    r"(?:phone|camera)\b"
+    r"|\breach\w*\s+(?:\w+\s+){0,4}?towards?\s+(?:the\s+)?(?:phone|camera|lens)\b"
+    r"|\breach\w*\s+(?:a\s+|her\s+|his\s+|their\s+|my\s+|your\s+|the\s+)?"
+    r"(?:hands?|arms?)\s+(?:towards?|to|at)\s+(?:the\s+)?(?:lens|camera|phone)\b"
+    r"|\b(?:hands?|arms?)\s+(?:reach\w+|extend\w*|stretch\w*|push\w*|go\w*|move\w*)"
+    r"\s+(?:\w+\s+){0,3}?(?:towards?|to|at)\s+(?:the\s+)?(?:lens|camera|phone)\b",
     re.I,
 )
+
+# A phone or camera named as an OBJECT of the action. In a selfie the camera
+# IS the phone in the character's hand, so a second phone in the frame is the
+# recording device appearing as a prop (ADR 0093) — the shot would contradict
+# its own premise. "A phone call" is not a phone on camera, so it is spared.
+_PHONE_OBJECT_RE = re.compile(
+    r"\b(?:the|her|his|their|my|your|a|an)\s+(?:phone|camera)\b(?!\s+call)",
+    re.I,
+)
+
+# One hand holds the camera in a selfie, so an action that needs a second
+# free hand cannot be filmed. ``both hands in frame`` is visibility, not an
+# action, so the pattern needs a using/with/in before the second hand.
+_SECOND_HAND_RE = re.compile(
+    r"\b(?:with|using|uses|use|in)\s+(?:\w+\s+){0,2}?(?:both|two|other|second|free)\s+hands?\b"
+    r"|\bclaps?\b|\bclapping\b",
+    re.I,
+)
+
+_NEGATION_RE = re.compile(r"\b(?:no|never|not|without)\b", re.I)
+
+
+def _clause_has_forbidden(clause) -> bool:
+    """True when a clause directs a selfie-forbidden action.
+
+    A negated mention (``never raises the phone``) is a rule rather than an
+    action, so a match whose prefix carries a negation is not forbidden.
+    """
+    text = str(clause or "")
+    for pattern in (_PHONE_ENDING_RE, _PHONE_OBJECT_RE, _SECOND_HAND_RE):
+        for match in pattern.finditer(text):
+            prefix = text[max(0, match.start() - 70):match.start()]
+            if _NEGATION_RE.search(prefix):
+                continue
+            return True
+    return False
 
 
 def is_selfie(strategy) -> bool:
@@ -102,41 +151,44 @@ def pick(strategy, exclude=(), index: int = 0) -> str:
 
 
 def split_phone_clauses(text):
-    """`text` as (kept, removed): clauses that hold or show a phone are removed.
+    """`text` as (kept, removed): clauses that reach for, hold, raise or show
+    a phone or camera, reach toward the lens/phone/camera, or need a second
+    free hand are removed for selfie.
 
-    A text made entirely of phone clauses comes back as ("", removed) so the
-    caller can replace it whole.
+    A text made entirely of forbidden clauses comes back as ("", removed) so
+    the caller can replace it whole.
     """
     raw = " ".join(str(text or "").split())
-    if not raw or not _PHONE_ENDING_RE.search(raw):
+    if not raw or not _clause_has_forbidden(raw):
         return raw, ""
     clauses = [c.strip() for c in re.split(
         r"(?<=[.!?])\s+|,\s+|;\s+|\s+and\s+(?=[a-z])", raw, flags=re.I,
     ) if c.strip()]
-    kept = [c for c in clauses if not _PHONE_ENDING_RE.search(c)]
-    removed = [c for c in clauses if _PHONE_ENDING_RE.search(c)]
+    kept = [c for c in clauses if not _clause_has_forbidden(c)]
+    removed = [c for c in clauses if _clause_has_forbidden(c)]
     if not kept:
         return "", ", ".join(removed)
     return ", ".join(kept), ", ".join(removed)
 
 
 def strip_props(props):
-    """Props without the phone; returns (text, changed)."""
+    """Props without the phone or camera; returns (text, changed)."""
     parts = [p.strip() for p in re.split(r"\s*[,;]\s*", str(props or "")) if p.strip()]
     if not parts:
         return str(props or ""), False
-    kept = [p for p in parts if not re.search(r"\bphones?\b", p, re.I)]
+    kept = [p for p in parts if not re.search(r"\b(?:phones?|cameras?)\b", p, re.I)]
     if len(kept) == len(parts):
         return ", ".join(parts), False
     return ", ".join(kept), True
 
 
 def strip_fields(strategy):
-    """Remove every phone held or shown from a selfie strategy's own fields.
+    """Remove every selfie-forbidden clause from a selfie strategy's own fields.
 
-    Returns {"strategy", "changed"}: a copy with the phone clauses dropped
-    from the hook action, section actions, movement, props and the camera
-    fields. The chosen ending is applied afterwards by the caller.
+    Returns {"strategy", "changed"}: a copy with the reaching/phone/camera/
+    second-hand clauses dropped from the hook action, section actions,
+    movement, props and the camera fields. The chosen ending is applied
+    afterwards by the caller.
     """
     result = copy.deepcopy(strategy) if isinstance(strategy, dict) else {}
     changed = []
@@ -145,7 +197,6 @@ def strip_fields(strategy):
 
     for key, label in (
         ("hook_action", "Opening action"),
-        ("hook_dialogue", "Hook dialogue"),
     ):
         kept, removed = split_phone_clauses(result.get(key))
         if removed:
@@ -170,9 +221,10 @@ def strip_fields(strategy):
 
     scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
     if scene is not None:
-        for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle")):
+        for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle"),
+                           ("character_positioning", "Character positioning")):
             value = str(scene.get(key) or "")
-            if _PHONE_ENDING_RE.search(value):
+            if _clause_has_forbidden(value):
                 kept, _removed = split_phone_clauses(value)
                 scene[key] = kept
                 changed.append(label)
@@ -181,6 +233,39 @@ def strip_fields(strategy):
             scene["props"] = props
             changed.append("Props")
     return {"strategy": result, "changed": changed}
+
+
+def forbidden_hits(strategy):
+    """Labels of fields that still carry a selfie-forbidden clause.
+
+    The render guard runs this after stripping: any hit is a clause the
+    strip could not remove without losing the field, so it blocks rather
+    than rendering it. Spoken words are deliberately not checked — the hook
+    dialogue may be the founder's own line, and a script is never rewritten
+    or refused for this.
+    """
+    result = strategy if isinstance(strategy, dict) else {}
+    hits = []
+    if split_phone_clauses(result.get("hook_action"))[1]:
+        hits.append("Opening action")
+    for section in result.get("segments") or []:
+        if not isinstance(section, dict):
+            continue
+        if split_phone_clauses(section.get("action"))[1]:
+            role = str(section.get("role") or "hook").strip().capitalize()
+            hits.append(f"{role} — what they do")
+    performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
+    if performance is not None and split_phone_clauses(performance.get("movement"))[1]:
+        hits.append("Movement")
+    scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
+    if scene is not None:
+        for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle"),
+                           ("character_positioning", "Character positioning")):
+            if _clause_has_forbidden(scene.get(key)):
+                hits.append(label)
+        if strip_props(scene.get("props"))[1]:
+            hits.append("Props")
+    return hits
 
 
 def apply_ending(strategy, ending: str):

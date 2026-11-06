@@ -127,6 +127,10 @@ def test_movement_covers_the_action_fields_and_ignores_the_narrated_beats():
     # into Movement. The timeline's *text* beats are narration: dumping them
     # into the movement line every render is what pushed ordinary strategies
     # past its size cap and blocked the render.
+    # Selfie (the default here): "reaches for the phone" is a forbidden
+    # clause (ADR 0093 as superseded), so it is stripped before the
+    # completion pass and must never re-enter Movement. What survives is
+    # still covered.
     strategy = {
         "hook_action": "Stands up from the desk",
         "scene": {"location": "Kitchen", "props": ""},
@@ -136,8 +140,9 @@ def test_movement_covers_the_action_fields_and_ignores_the_narrated_beats():
     plan = {"beat_timeline": [{"label": "middle", "text": "Sits back down and sighs"}]}
     out = scene_consistency.reconcile_scene(strategy, plan)
     movement = out["strategy"]["performance"]["movement"].lower()
-    for phrase in ("stands up from the desk", "reaches for the phone"):
-        assert phrase in movement, f"{phrase} missing from movement: {movement}"
+    assert "stands up from the desk" in movement
+    assert "reaches for the phone" not in movement
+    assert "phone" not in movement
     assert "sits back down and sighs" not in movement
     assert out["blocked"] == []
 

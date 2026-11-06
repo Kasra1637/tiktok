@@ -427,8 +427,9 @@ class TestAppSpecificity:
     def test_the_render_tells_the_model_not_to_show_the_app_working(self, api, monkeypatch):
         """
         The one directive the whole two-section architecture exists to enforce:
-        the generated footage stops at the reach, because the product demo and
-        the call to action are the founder's own.
+        the generated footage stops at the payoff words, because the product demo
+        and the call to action are the founder's own. For the default handheld
+        selfie the stop is never filmed as a reach (one hand holds the camera).
 
         Stated up front rather than left to the beat list, since a video model has
         a strong prior towards resolving a promo on camera.
@@ -442,7 +443,8 @@ class TestAppSpecificity:
         assert "do not film the app being used" in lowered
         assert "do not show a screen or interface" in lowered
         assert "do not ask the viewer to download" in lowered
-        assert "reaches for their phone" in lowered
+        assert "never reach toward" in lowered
+        assert "reaches for their phone" not in lowered
 
     def test_the_two_sections_are_present_and_distinct(self, api, monkeypatch):
         """
@@ -461,7 +463,7 @@ class TestAppSpecificity:
         # ("its job is to stops the scroll") is read as a broken instruction
         # rather than a short one.
         assert "HOOK — 3s, and its job is to stop the scroll" in prompt
-        assert "MIDDLE — 12s, and its job is to develop the hook and end at the reach" in prompt
+        assert "MIDDLE — 12s, and its job is to develop the hook and end before the last second" in prompt
         # The hook's own words and the middle's own words are both present, and
         # they are not the same line.
         assert "I clocked out at 11:40. Every single night." in prompt
@@ -1123,16 +1125,20 @@ class TestStrategyPromptDirectives:
 
         usage_moments is the specific moment this app is reached for, and it is
         the seam the founder's own demo continues from. So the middle develops
-        towards that moment and ends on the reach — and the prompt has to say so,
-        or the middle spends its whole budget resolving a problem the demo is
-        supposed to resolve.
+        towards that moment — and the prompt has to say so, or the middle spends
+        its whole budget resolving a problem the demo is supposed to resolve.
+        For the default handheld selfie the stop is stated in words but never
+        filmed as a reach (one hand holds the camera), which is what this
+        default case now pins.
         """
         captured = self._run_strategy(monkeypatch)
-        assert "The middle must end AT the usage moment" in captured["prompt"]
-        assert "reaching for the app, not using it" in captured["prompt"]
+        assert "The middle must end BEFORE the last second at the usage moment" in captured["prompt"]
+        assert "never filmed as a reach" in captured["prompt"]
         # And the schema says the same thing about the middle's action, so it
         # holds even if the prose rule is skimmed.
-        assert "ending at the handoff moment" in captured["prompt"]
+        assert "ending before the final physical beat" in captured["prompt"]
+        assert "NEVER reach toward" in captured["prompt"]
+        assert "second free hand" in captured["prompt"]
 
     def test_hook_seconds_is_clamped_where_the_strategy_is_built(self, api, monkeypatch):
         """
@@ -1739,12 +1745,15 @@ class TestUsageMomentsAndProofMoment:
 
         usage_moments now does double duty: it grounds the middle's setting AND
         it is where the piece ends. The middle develops towards one of these
-        moments and stops at the reach — that stop is the seam the founder's own
+        moments and stops there — that stop is the seam the founder's own
         demo picks up from, so it has to be an obligation rather than a hint.
+        For the default handheld selfie the stop is stated in the words and
+        never filmed as a reach (one hand holds the camera).
         """
         captured = self._capture(monkeypatch)
         assert "scene.location must come from usage_moments" in captured["prompt"]
-        assert "The middle must end AT the usage moment from usage_moments" in captured["prompt"]
+        assert "The middle must end BEFORE the last second at the usage moment from usage_moments" in captured["prompt"]
+        assert "never filmed as a reach" in captured["prompt"]
         assert "not using it" in captured["prompt"]
 
     def test_an_empty_profile_does_not_invent_a_setting_silently(self, monkeypatch):

@@ -182,16 +182,17 @@ CONDENSE_BELOW = 5000
 #
 # The final-moment text became setup-dependent (ADR 0093): the floor is
 # measured on the selfie default — the phone handoff is now fixed-camera only,
-# and a selfie render gets the physical ending instead. The condensed selfie
-# ending is shorter than the condensed phone text, which is why the condensed
-# floor fell while the full one rose slightly.
-FULL_PROMPT_FLOOR = 4237
-CONDENSED_PROMPT_FLOOR = 2330
+# and a selfie render gets the physical ending instead. The reach/phone/camera
+# and second-free-hand prohibitions (ADR 0093, as superseded) are part of the
+# fixed text, which is why both floors rose.
+FULL_PROMPT_FLOOR = 4268
+CONDENSED_PROMPT_FLOOR = 2395
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
-# text has no duration-dependent beat layout, so 2,170 holds across the supported
-# set. A test rebuilds and pins it for the same reason the two above are pinned.
+# text has no duration-dependent beat layout, so the measured value holds
+# across the supported set. A test rebuilds and pins it for the same reason
+# the two above are pinned.
 #
 # This builder used to take no budget at all, so nothing in it could fit a tight
 # provider and a prompt that did not fit could only be refused. That is not how
@@ -199,7 +200,7 @@ CONDENSED_PROMPT_FLOOR = 2330
 # before it builds a prompt, so this path is not the one that failed — but it is
 # the same ceiling one path had no answer for, and it now scales like its
 # sibling rather than relying on the guard.
-SINGLE_PASS_PROMPT_FLOOR = 2162
+SINGLE_PASS_PROMPT_FLOOR = 2308
 
 # The app's own name, in the prompt, clipped.
 #
@@ -500,17 +501,22 @@ _CONDENSED_PHONE_HANDOFF_FRAMING = (
 
 # The selfie ending: one short physical beat in the same final moment the
 # phone handoff used to occupy, physical only, no extra words or time, with a
-# split-second hold before the cut.
+# split-second hold before the cut. The character can never reach toward,
+# hold, raise or show a phone or camera, and one hand holds the camera so no
+# action needs a second free hand. This is where the rule is stated: it is
+# the only place in the prompt that has to carry it, so the rest of the fixed
+# text can stay short enough for the tightest provider ceiling.
 _SELFIE_FINAL_BEAT = (
-    "Final 1-2s (selfie: the camera is the phone in their hand, so no phone is raised, "
-    "held or shown anywhere on camera): {ending} Physical only \u2014 no new words and no "
+    "Final 1-2s (selfie: the camera is the phone in their hand, so never reach toward, "
+    "hold, raise or show a phone or camera, and never need a second free hand): "
+    "{ending} Physical only \u2014 no new words and no "
     "extra time \u2014 and hold the last pose for a split second before the cut, face in "
     "the central 88% through the final frame."
 )
 
 _CONDENSED_SELFIE_FINAL_BEAT = (
-    "Final 1-2s (selfie, no phone on camera): {ending} No words; split-second hold "
-    "before the cut; face central."
+    "Final 1-2s (selfie, never reach toward or show a phone/camera; one hand holds it): "
+    "{ending} No words; split-second hold before the cut; face central."
 )
 
 
@@ -786,6 +792,7 @@ def _assemble_single_pass_prompt(
         f"no black frames, and no title card."
     )
 
+    fixed = str(plan.get("camera_setup") or "handheld") == "fixed"
     if is_extension:
         # Unreachable in the shipped flow: a video is one render, so nothing
         # extends anything. Kept so an old project saved with extend_intent set
@@ -808,10 +815,19 @@ def _assemble_single_pass_prompt(
             f"The rest of the {duration} seconds are the middle: they develop the hook through "
             f"the situation, the friction, or the reaction, then the mechanism as the resulting "
             f"benefit, then the payoff stating the outcome directly — in that order — and they end "
-            f"on the moment the presenter reaches for their phone. This is the last thing in the "
-            f"video — the founder records their own product demo and adds their own call to action "
-            f"after it, so do not film the app being used, do not show a screen, and do not ask the "
-            f"viewer to do anything."
+            + (
+                f"on the moment the presenter reaches for their phone. This is the last thing in the "
+                f"video — the founder records their own product demo and adds their own call to action "
+                f"after it, so do not film the app being used, do not show a screen, and do not ask the "
+                f"viewer to do anything."
+                if fixed else
+                f"before the last second on the payoff words, then one short physical ending \u2014 "
+                f"never reach toward, hold, raise or show a phone or camera, and never need a second "
+                f"free hand (one hand holds the camera). This is the last thing in the "
+                f"video — the founder records their own product demo and adds their own call to action "
+                f"after it, so do not film the app being used, do not show a screen, and do not ask the "
+                f"viewer to do anything."
+            )
         )
 
     if script:
@@ -1650,6 +1666,7 @@ def _assemble_prompt(
     # Condensed, the section structure is not restated here: the two headings
     # below carry the real durations and jobs, so this sentence would be saying
     # it a third time in shorter words.
+    fixed = str(strategy.get("camera_setup") or "handheld") == "fixed"
     if not condensed:
         sections.append(
             f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
@@ -1665,13 +1682,23 @@ def _assemble_prompt(
             "attaches it after this footage, and adds their own call to action. So: do NOT film the "
             "app being used, do NOT show a screen or interface, do NOT describe the app working "
             "while something unrelated happens on camera, and do NOT ask the viewer to download, "
-            "install or try anything. End on the moment the presenter reaches for their phone."
+            + (
+                "install or try anything. End on the moment the presenter reaches for their phone."
+                if fixed else
+                "install or try anything. End before the last second."
+            )
         )
     else:
         sections.append(
             f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
-            f"mobile app {app_name}, in two sections. End on the moment the presenter reaches "
-            f"for their phone, and do not ask the viewer to download or install anything."
+            f"mobile app {app_name}, in two sections. "
+            + (
+                "End on the moment the presenter reaches for their phone, and do not ask the viewer "
+                "to download or install anything."
+                if fixed else
+                "End before the last second, then one short physical ending, and do not ask "
+                "the viewer to download or install anything."
+            )
         )
         sections.append(_CONDENSED_HANDOFF)
 
@@ -1748,9 +1775,14 @@ def _assemble_prompt(
     # Per-role budgets for goal and action, because the two sections are not
     # the same job: the opening's action is the physical score for the seconds
     # that have to stop the scroll, so it is given room the middle does not need.
+    middle_job = (
+        "develop the hook and end at the reach"
+        if fixed else
+        "develop the hook and end before the last second"
+    )
     for role, label, budget, purpose, goal_budget, action_budget in (
         ("hook", "HOOK", hook_seconds, "stop the scroll", 110, 220),
-        ("middle", "MIDDLE", middle_seconds, "develop the hook and end at the reach", 85, 120),
+        ("middle", "MIDDLE", middle_seconds, middle_job, 85, 120),
     ):
         section = sections_by_role.get(role) or {}
         goal = _clip(section.get("goal"), goal_budget, protect=True)

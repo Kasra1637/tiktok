@@ -96,12 +96,13 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Ninety-six decisions (0001–0096) now exist;
+Read `docs/adr/README.md` first. Ninety-seven decisions (0001–0097) now exist;
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
 orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused
 pre-render), 0083 (database durability), 0090 (Location is the single source
-of truth; the hook opens on a visible move) and 0092 (Render & result scene
-fields agree — fix or block). `provider_capabilities.py` compares
+of truth; the hook opens on a visible move), 0092 (Render & result scene
+fields agree — fix or block) and 0097 (a selfie never shows a phone, a reach
+toward the lens, or a second free hand). `provider_capabilities.py` compares
 the catalog to OpenRouter's live listing at boot as a warning only — never a
 gate. Frontend design constraints live in `design_guidelines.md`.

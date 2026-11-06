@@ -119,3 +119,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0094](0094-render-result-actions-open-explanations-collapsed.md) | Render & result keeps actions open and collapses the strategy explanations and scene spec-sheet into groups with one-line digests | accepted |
 | [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted |
 | [0096](0096-templates-exactly-three.md) | Templates: exactly three selections, no more and no less | accepted |
+| [0097](0097-selfie-never-shows-a-phone-or-a-reach.md) | A handheld selfie never shows a phone, a reach toward the lens, or an action needing a second free hand; the fixed camera keeps the phone handoff | accepted |

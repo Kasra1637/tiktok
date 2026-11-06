@@ -2183,6 +2183,28 @@ async function main() {
     expectText(ctx, "Develop it, stop at the reach", "the middle's goal did not render");
   });
 
+  // The middle's ending has to be described by what the render can actually
+  // film (ADR 0097). A handheld selfie cannot show a reach for the phone --
+  // the camera IS the phone in their hand -- so the panel must not promise
+  // one; a fixed camera can, and keeps the handoff.
+  await check("the strategy review names the ending the camera setup can film", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    expectText(
+      ctx,
+      "never a reach for your phone",
+      "the handheld selfie still promises a phone handoff it cannot film",
+    );
+
+    await mount(HookContinuityPanel, {
+      project: { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed" },
+    })(ctx);
+    expectText(
+      ctx,
+      "ends at the moment you'd reach for your phone",
+      "the fixed camera lost the phone handoff it can film",
+    );
+  });
+
   // The three outcome fields already govern the whole render -- the segment
   // prompt is assembled from them -- and this panel printed none of them, so
   // the framing that produced the video was invisible to the founder reading

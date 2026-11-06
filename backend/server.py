@@ -7133,12 +7133,18 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       shot timeline's action clauses; a list that can be shortened without
       losing those actions is compacted, and one that cannot hold everything
       it must is refused rather than cut.
-    - A selfie render ends on a physical beat, never a phone (ADR 0093): phone
-      clauses are removed from the strategy's fields, and `render_index` picks
-      the ending for THIS render so consecutive renders do not repeat it. A
-      fixed-camera render keeps the phone handoff. `exclude` carries the
-      endings this project already used, so consecutive renders do not repeat
-      a recent ending.
+    - A selfie render ends on a physical beat, never a phone (ADR 0093): the
+      character can never reach toward, hold, raise or show a phone or camera
+      at any point, and no action may need a second free hand — one hand
+      holds the camera. Clauses that do are removed from the strategy's
+      fields, and `render_index` picks the ending for THIS render so
+      consecutive renders do not repeat it. A fixed-camera render keeps the
+      phone handoff. `exclude` carries the endings this project already
+      used, so consecutive renders do not repeat a recent ending. If
+      stripping would empty the opening or middle action, or a forbidden
+      clause still remains, the render is refused with the field named
+      instead of sending it to the provider; spoken words are never
+      rewritten or refused for this.
     """
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
@@ -7159,11 +7165,17 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
         )
     strategy = audit["strategy"]
     # Selfie renders end on a physical beat, never a phone (ADR 0093): the
-    # phone clauses are removed from the strategy's own fields first, so the
-    # scene pass below cannot copy them back into Props or Movement, and the
-    # chosen ending is applied afterwards.
+    # forbidden clauses are removed from the strategy's own fields first,
+    # so the scene pass below cannot copy them back into Props or Movement,
+    # and the chosen ending is applied afterwards.
     selfie = final_beat.is_selfie(strategy)
     strip_changed = []
+    orig_hook_action = str(strategy.get("hook_action") or "").strip()
+    orig_middle_action = ""
+    for section in strategy.get("segments") or []:
+        if isinstance(section, dict) and str(section.get("role") or "").lower() == "middle":
+            orig_middle_action = str(section.get("action") or "").strip()
+            break
     if selfie:
         strip_audit = final_beat.strip_fields(strategy)
         strategy = strip_audit["strategy"]
@@ -7180,12 +7192,51 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
             ),
         )
     strategy = scene_audit["strategy"]
+    if selfie:
+        # Fix only what survives as an action: a field whose entire content
+        # was the forbidden reach/phone has nothing left to film, so refuse
+        # with the field named instead of rendering an empty action.
+        emptied = []
+        if orig_hook_action and not str(strategy.get("hook_action") or "").strip():
+            emptied.append("Opening action")
+        middle_action = ""
+        for section in strategy.get("segments") or []:
+            if isinstance(section, dict) and str(section.get("role") or "").lower() == "middle":
+                middle_action = str(section.get("action") or "").strip()
+                break
+        if orig_middle_action and not middle_action:
+            emptied.append("Middle — what they do")
+        if emptied:
+            named = ", ".join(emptied)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This render was stopped before it cost anything: {named} only "
+                    "named a phone or camera, or reached toward the lens, which a "
+                    "handheld selfie cannot film (one hand holds the camera). Edit that "
+                    "line on Review & submit to name a physical action the filming hand "
+                    "can do, then generate again. Nothing has been charged."
+                ),
+            )
     ending_changed = []
     if selfie:
         ending = final_beat.pick(strategy, exclude=exclude, index=render_index)
         ending_audit = final_beat.apply_ending(strategy, ending)
         strategy = ending_audit["strategy"]
         ending_changed = ending_audit["changed"]
+        hits = final_beat.forbidden_hits(strategy)
+        if hits:
+            named = ", ".join(sorted(set(hits)))
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This render was stopped before it cost anything: {named} still "
+                    "reaches toward, holds, raises or shows a phone or camera, or "
+                    "needs a second free hand, which a handheld selfie cannot film. "
+                    "Edit that line on Review & submit so the action needs only the "
+                    "filming hand, then generate again. Nothing has been charged."
+                ),
+            )
     if audit["changed"] or strip_changed or scene_audit["changed"] or ending_changed:
         logger.info(
             "Render for project %s: strategy scene reconciled before prompt build: %s",

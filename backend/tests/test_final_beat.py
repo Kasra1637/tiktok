@@ -105,8 +105,125 @@ def test_the_final_prompt_has_no_phone_for_selfie_and_keeps_it_for_fixed():
     )
     assert final_beat.ENDINGS[0]["text"] in selfie
     assert "raises the phone into view" not in selfie
-    assert "no phone on camera" not in selfie or "no phone is raised" in selfie
+    assert "never reach toward" in selfie
+    assert "reaches for their phone" not in selfie
     assert "raises the phone into view" in fixed
+
+
+def test_reach_camera_and_second_hand_clauses_are_removed_but_action_survives():
+    kept, removed = final_beat.split_phone_clauses(
+        "Counts on fingers and reaches a hand toward the lens with her other hand"
+    )
+    assert "counts on fingers" in kept.lower()
+    assert "lens" not in kept.lower()
+    assert "other hand" not in kept.lower()
+    assert removed
+    for text, args in [
+        ("Reaches for the phone", ("", "Reaches for the phone")),
+        ("Holds the camera up", ("", "Holds the camera up")),
+        ("Types with both hands", ("", "Types with both hands")),
+        ("Reaches toward the camera", ("", "Reaches toward the camera")),
+    ]:
+        _kept, _removed = final_beat.split_phone_clauses(text)
+        assert _kept == args[0], (text, _kept)
+        assert _removed, text
+    kept, removed = final_beat.split_phone_clauses("No phone on camera, eyes on the lens")
+    assert kept
+    assert not removed
+    assert final_beat.strip_props("A mug, her phone, the camera, a notebook") == ("A mug, a notebook", True)
+
+
+def test_selfie_guard_strips_reach_and_second_hand_end_to_end():
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Steps in and turns to the lens",
+        "scene": {"location": "A kitchen", "props": "A mug, her phone"},
+        "performance": {"movement": "Counts on fingers, then reaches toward the lens"},
+        "segments": [{"role": "hook", "action": "Looks up"},
+                     {"role": "middle", "action": "Counts on fingers, then reaches a hand toward the lens with her other hand"}],
+    }
+    project = {"id": "p1", "location": "A kitchen", "beat_timeline": []}
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    blob = json.dumps(patched).lower()
+    assert "toward the lens" not in blob
+    assert "other hand" not in blob
+    assert "reaches for" not in blob
+    assert "her phone" not in (patched["scene"]["props"] or "").lower()
+    assert "counts on fingers" in patched["segments"][1]["action"].lower()
+    assert patched["final_beat"]
+
+
+def test_selfie_guard_blocks_when_middle_is_only_the_reach():
+    import pytest
+    from fastapi import HTTPException
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Steps in and turns to the lens",
+        "scene": {"location": "A kitchen"},
+        "performance": {"movement": "Still"},
+        "segments": [{"role": "hook", "action": "Looks up"},
+                     {"role": "middle", "action": "Reaches a hand toward the lens"}],
+    }
+    project = {"id": "p1", "location": "A kitchen", "beat_timeline": []}
+    with pytest.raises(HTTPException) as exc:
+        server._guard_render_scene(strategy, project, render_index=0)
+    assert exc.value.status_code == 409
+    assert "Middle" in exc.value.detail
+    assert "Nothing has been charged" in exc.value.detail
+
+
+def test_a_phone_named_as_an_object_leaves_a_selfie_frame():
+    # The camera IS the phone in their hand, so a second phone in the frame is
+    # the recording device appearing as a prop (ADR 0093). It cannot be a prop
+    # for a selfie, and it must not come back through the Props completion.
+    kept, removed = final_beat.split_phone_clauses(
+        "Sits at the desk and slams the phone down"
+    )
+    assert kept.strip().lower() == "sits at the desk"
+    assert removed
+    # A phone CALL is not a phone on camera, so the clause survives.
+    kept, removed = final_beat.split_phone_clauses("Takes a phone call and laughs")
+    assert "phone call" in kept.lower()
+    assert not removed
+
+
+def test_the_guard_strips_the_phone_out_of_the_middle_action():
+    # The founder's own words keep the reach; the render sees the action
+    # without it, and the phone never becomes a prop.
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Sits at the desk",
+        "scene": {"location": "A kitchen", "props": "A mug"},
+        "performance": {"movement": "Stands up from the desk"},
+        "segments": [{"role": "hook", "action": "Looks up"},
+                     {"role": "middle", "action": "Counts on fingers and reaches for the phone"}],
+    }
+    project = {"id": "p1", "location": "A kitchen", "beat_timeline": []}
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    action = patched["segments"][1]["action"].lower()
+    assert "reaches for the phone" not in action
+    assert "counts on fingers" in action
+    assert "phone" not in (patched["scene"]["props"] or "").lower()
+    assert "phone" not in patched["performance"]["movement"].lower()
+
+
+def test_the_spoken_words_are_never_rewritten():
+    # The hook dialogue may BE the founder's spoken line, so a phone word in it
+    # is theirs and stays: only the on-camera action wording is stripped.
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Turns to the lens and reaches for the phone",
+        "hook_dialogue": "I reached for my phone at that point",
+        "scene": {"location": "A kitchen", "props": "A mug"},
+        "performance": {"movement": "Stands up from the desk"},
+        "segments": [{"role": "hook", "action": "Looks up",
+                      "script": "I reached for my phone at that point"},
+                     {"role": "middle", "action": "Counts on fingers"}],
+    }
+    project = {"id": "p1", "location": "A kitchen", "beat_timeline": []}
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    assert patched["hook_dialogue"] == "I reached for my phone at that point"
+    assert patched["segments"][0]["script"] == "I reached for my phone at that point"
 
 
 def test_consecutive_renders_get_different_endings():

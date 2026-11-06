@@ -408,11 +408,14 @@ class TestLocationSave:
             project["id"], UpdateStudioProjectRequest(location=LOCATION), ANON))
 
         change = updated.get("location_change") or {}
-        assert "Props" in change["changed"] and "Movement" in change["changed"]
-        # desk_strategy's actions name the phone and the couch; the phone is a
-        # prop on camera, the couch belongs to the place.
+        assert "Movement" in change["changed"]
+        # desk_strategy's actions name the phone and the couch; the couch
+        # belongs to the place, and the phone is NOT a prop: this is a
+        # handheld selfie, where the camera IS the phone in their hand, so a
+        # phone on camera is the recording device appearing as a prop
+        # (ADR 0093). It must not come back through the completion pass.
         props = (updated["strategy"]["scene"]["props"] or "").lower()
-        assert "phone" in props
+        assert "phone" not in props
         assert updated["strategy"]["performance"]["movement"]
 
 
@@ -452,8 +455,12 @@ class TestRenderGuard:
         assert "7am" in (patched["scene"]["lighting"] or "")
         assert patched["scene"]["camera_angle"] == ""
         props = (patched["scene"]["props"] or "").lower()
-        assert "phone" in props
+        # Handheld selfie: the camera is the phone in their hand, so no phone
+        # may appear as a prop — not the one the founder's action names
+        # (ADR 0093).
+        assert "phone" not in props
         assert patched["performance"]["movement"]
+        assert "phone" not in patched["performance"]["movement"].lower()
 
     def test_no_location_leaves_the_strategy_alone(self, api):
         project = {"id": "p1", "location": "", "visual_direction": ""}

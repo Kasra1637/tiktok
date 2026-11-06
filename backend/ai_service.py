@@ -3392,12 +3392,16 @@ async def generate_creative_plan(
     )
 
     # Selfie: the camera is the phone in the character's hand, so the
-    # timeline's final beat cannot be a phone (ADR 0093). The physical ending
-    # is chosen per render and added by the render guard.
+    # timeline can never reach toward, hold, raise or show a phone or camera
+    # and no action may need a second free hand (ADR 0093, as superseded).
+    # The physical ending is chosen per render and added by the render guard.
     selfie_ending_rule = (
-        "- SELFIE ENDING: never put a phone raised, held or shown in the timeline - the "
-        "camera is the phone in their hand. The final second is a short physical ending "
-        "chosen per render; do not write one.\n"
+        "- SELFIE: never put a phone or camera reached toward, raised, held or shown "
+        "in the timeline - the camera is the phone in their hand. One hand holds "
+        "it, so no timeline action may need a second free hand (never both hands, "
+        "the other hand, or the free hand). The final second is a short physical "
+        "ending chosen per render; do not write one, and do not end the middle "
+        "with a reach toward the lens/phone/camera.\n"
         if camera_setup != "fixed" else ""
     )
 
@@ -3789,24 +3793,32 @@ GENERATED_SECTIONS = 2
 SECTION_ROLES = ("hook", "middle")
 
 
-def _two_section_schema(middle_seconds: int) -> str:
+def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> str:
     """
     Emit the two generated sections as JSON schema text.
 
     Exactly two segments, roles "hook" and "middle". The middle is the last
     thing this product generates, so it carries the whole remainder of the piece
     and its only obligation is to bring the viewer to the edge of wanting the
-    app — not to satisfy them.
+    app — not to satisfy them. Its closing action is setup-dependent: the
+    fixed-camera handoff for fixed, and the physical ending (never a reach
+    for the app/phone/camera) for selfie.
     """
+    if camera_setup == "fixed":
+        middle_goal = "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app"
+        middle_action = "what they do through the middle, ending at the handoff moment"
+    else:
+        middle_goal = "what the middle must achieve: develop the hook and end before the last second"
+        middle_action = "what they do through the middle, ending before the final physical beat - never a reach toward a phone or camera, and never a second free hand"
     return (
         ',\n    {"index": 0, "role": "hook", "seconds": 3, '
         '"goal": "what the opening beat must achieve to stop the scroll", '
         '"script": "the exact words spoken in the opening - the plan\'s hook line", '
         '"action": "the opening physical performance: the FIRST beat is a clearly visible movement, gesture or position change inside the first 1-2 seconds (step, turn, stand, sit, reach, lift, place or grab), then ordered, timed beats across face, hands, posture and props"}'
         f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
-        '"goal": "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app", '
+        f'"goal": "{middle_goal}", '
         '"script": "the words spoken in the middle - different from the hook", '
-        '"action": "what they do through the middle, ending at the handoff moment"}}'
+        f'"action": "{middle_action}"}}'
     )
 
 # The scene is where the single render's consistency lives: it is locked for
@@ -5228,17 +5240,19 @@ async def generate_video_strategy(
         "Respond with STRICT JSON only, no markdown fences."
     )
 
-    # Selfie: the camera IS the phone in the character's hand, so the ending
-    # cannot be a phone (ADR 0093). The physical ending is chosen per render
-    # and injected by the render guard, so the model is told not to write one
-    # — a written ending would double the beat and eat time. Fixed camera
-    # keeps the phone handoff: both hands are free.
+    # Selfie: the camera IS the phone in the character's hand, so the
+    # character can never reach toward, hold, raise or show a phone or
+    # camera, and one hand holds the camera so no action needs a second
+    # free hand (ADR 0093, as superseded). The physical ending is chosen
+    # per render and injected by the render guard, so the model is told
+    # not to write one — a written ending would double the beat and eat
+    # time. Fixed camera keeps the phone handoff: both hands are free.
     final_beat_rule = (
-        "- Final 1-2s (SELFIE - the camera is the phone in their hand): NEVER raise, hold "
-        "or show a phone anywhere in the video; the recording device cannot appear. Do NOT "
-        "write an ending beat into the middle action: end the middle on the handoff moment "
-        "and leave the last second for the final physical beat, which is chosen per render "
-        "and added automatically.\n"
+        "- Final 1-2s (SELFIE - the camera is the phone in their hand): NEVER reach toward, "
+        "hold, raise or show a phone or camera, and never need a second free hand (one hand "
+        "holds the camera). Do NOT write an ending beat into the middle action, and do not "
+        "end the middle with a reach: end it on the payoff words and leave the last second "
+        "for the final physical beat, which is chosen per render and added automatically.\n"
         if camera_setup != "fixed" else
         "- Final 1-2s: raise the phone into view, back to camera, screen to her; whole phone, "
         "uncropped, clear margins, never hidden, eyes on it, excited, never glancing away, "
@@ -5290,7 +5304,7 @@ async def generate_video_strategy(
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
         ' "script": "words spoken in this segment", "action": "what they do in this segment; segment 0 opens with the same visible first-beat movement as hook_action, inside the first 1-2 seconds"}'
-        + _two_section_schema(plan_seconds)
+        + _two_section_schema(plan_seconds, camera_setup)
         + '\n  ],\n'
         + '  "camera_beat": {"direction": "left or right", '
         '"gesture": "short story-specific actor action (max 90 chars)"},\n'
@@ -5327,14 +5341,15 @@ async def generate_video_strategy(
         "viewer, the second answering the first. If the two sections would not read as one "
         "thought, rewrite the middle until they do.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
-        "transition — and its job is to end at the moment the viewer would reach for the app. It "
+        "transition — and its job is to end at the moment the viewer would reach for the app (for "
+        "a selfie, stated in words but never filmed as a reach toward the phone/camera/lens). It "
         "does NOT satisfy them, and it does not continue past that point.\n"
         "- NEVER put a product demonstration in either section. Do not film the app being used, do "
         "not show a screen, do not describe the app working while something unrelated happens on "
         "camera. The founder records the demo themselves and attaches it after this footage ends.\n"
         "- NEVER write a call to action, a request to download, or any closing beat. The founder "
         "adds the call to action in their own editor. There is no ending to write towards beyond "
-        "the moment they reach for the phone.\n"
+        "the final physical beat (fixed camera only: the moment they reach for the phone).\n"
         +         f"- The opening section lasts {hook_seconds} seconds and must be the strongest {hook_seconds} seconds "
         f"for THIS app. Write a real hook for this app's real audience, not a generic influencer opening with "
         "the app name dropped in.\n"
@@ -5425,10 +5440,18 @@ async def generate_video_strategy(
         # towards that moment and stops there. That stop is the seam the
         # founder's own demo picks up from.
         + scene_location_guidance(angle)
-        + "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
-        "for the app, not using it. The demo is the founder's own recording, attached after "
-        "this footage, so the last frame of your video should be the moment before it.\n"
-        f"- STARTING SHOT: {starting_shot(camera_setup)}\n"
+        + (
+            "- The middle must end AT the usage moment from usage_moments — the presenter reaching "
+            "for the app, not using it. The demo is the founder's own recording, attached after "
+            "this footage, so the last frame of your video should be the moment before it.\n"
+            if camera_setup == "fixed" else
+            "- The middle must end BEFORE the last second at the usage moment from usage_moments "
+            "— the presenter reaching for the app, not using it — and never filmed as a reach: "
+            "end on the payoff words and leave the last second for the final physical beat, "
+            "which is chosen per render and added automatically. The demo is the founder's own "
+            "recording, attached after this footage.\n"
+        )
+        + f"- STARTING SHOT: {starting_shot(camera_setup)}\n"
         + (
             f"- {camera_move_section({'camera_setup': 'fixed'})} "
             "All scene, action and performance fields must agree with this setup; "
@@ -5471,8 +5494,12 @@ async def generate_video_strategy(
         "benefit (use the outcome_statements how_it_helps): never a spec, never the app "
         "filmed working. The PAYOFF moment states the outcome directly in the viewer's "
         "own terms (use the outcome_statements outcome) and is the last thing said "
-        "before the reach for the phone. "
-        "The hook stays attention-only: no outcome and no feature language in the opening.\n"
+        + (
+            "before the reach for the phone. "
+            if camera_setup == "fixed" else
+            "before the final physical beat. "
+        )
+        + "The hook stays attention-only: no outcome and no feature language in the opening.\n"
         # Source precedence. The profile already links outcomes to features,
         # so the only honest order is linked statements first, flat list
         # second, derivation last — and derivation is still derivation, never

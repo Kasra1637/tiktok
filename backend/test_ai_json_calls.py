@@ -1099,9 +1099,11 @@ class TestStrategyBudget:
         assert '"at":' not in prompt
         assert "Final 1-2s" in prompt
         # A selfie render ends on a physical beat: the camera is the phone in
-        # their hand, so no phone can be raised or shown (ADR 0093).
+        # their hand, so no phone or camera can be reached toward, held, raised
+        # or shown, and no action needs a second free hand (ADR 0093, 0097).
         assert "the camera is the phone in their hand" in prompt
-        assert "NEVER raise, hold" in prompt
+        assert "NEVER reach toward, hold, raise or show a phone or camera" in prompt
+        assert "second free hand" in prompt
         assert "chosen per render" in prompt
         assert "raise the phone into view" not in prompt
         assert "whole phone" not in prompt

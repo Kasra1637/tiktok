@@ -184,6 +184,18 @@ const SECTION_COPY = {
     "Everything after the hook. It develops the point and ends at the moment you'd reach for your phone — which is where your own demo takes over.",
 };
 
+// A handheld selfie cannot film a reach for the phone: the camera IS the
+// phone in their hand. The middle ends on the words instead, and the last
+// second is one short physical beat. The copy says which one it is, so the
+// founder is never told to expect a handoff the render will not contain.
+const SELFIE_MIDDLE_COPY =
+  "Everything after the hook. It develops the point and ends on the payoff words — one short physical beat closes it, never a reach for your phone — which is where your own demo takes over.";
+
+function sectionCopy(role, cameraSetup) {
+  if (role !== "middle") return SECTION_COPY[role];
+  return cameraSetup === "fixed" ? SECTION_COPY.middle : SELFIE_MIDDLE_COPY;
+}
+
 /**
  * One of the two generated sections, described as what it is.
  *
@@ -211,7 +223,7 @@ function StrategyBuildLine() {
   );
 }
 
-function SectionRow({ section }) {
+function SectionRow({ section, cameraSetup }) {
   // Model-written, so normalized at display like every other generated field.
   const goal = sentenceCase(section.goal);
   return (
@@ -220,7 +232,7 @@ function SectionRow({ section }) {
         <span className="font-display text-base font-semibold capitalize">{section.role}</span>
         <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
       </div>
-      <p className="text-sm leading-relaxed text-muted-foreground">{SECTION_COPY[section.role]}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{sectionCopy(section.role, cameraSetup)}</p>
       {goal && <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{goal}</p>}
       {section.action && (
         <p className="text-base leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">What they do: {sentenceCase(section.action)}</p>
@@ -354,6 +366,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
     strategy?.desired_outcome, strategy?.mechanism_beat, strategy?.payoff_beat,
   ].some((value) => String(value || "").trim());
   const cameraLabel = project?.camera_setup === "fixed" ? "fixed camera" : "handheld selfie";
+  // Which ending the render can actually film: a fixed camera can show the
+  // phone handoff, a handheld selfie cannot (the camera is the phone in their
+  // hand), so the copy follows the setup rather than promising one take.
+  const cameraSetup = project?.camera_setup === "fixed" ? "fixed" : "handheld";
   const sceneDigest = [
     scene.location,
     cameraLabel,
@@ -484,12 +500,14 @@ export function HookContinuityPanel({ project, onProjectChange }) {
                 <li key={role} className="space-y-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold capitalize">{role}</span>
-                    <span className="text-sm text-muted-foreground">{SECTION_COPY[role]}</span>
+                    <span className="text-sm text-muted-foreground">{sectionCopy(role, cameraSetup)}</span>
                   </span>
                   <p className="text-sm text-muted-foreground">
                     {role === "hook"
                       ? "The opening concept and the words, from the plan you approved."
-                      : "What the presenter does next, ending where you would reach for your phone."}
+                      : cameraSetup === "fixed"
+                        ? "What the presenter does next, ending where you would reach for your phone."
+                        : "What the presenter does next, ending on the payoff words and one short physical beat."}
                   </p>
                 </li>
               ))}
@@ -606,7 +624,11 @@ export function HookContinuityPanel({ project, onProjectChange }) {
             <GroupLabel icon={Info}>The two sections</GroupLabel>
             <ol className="space-y-6 text-base">
               {sections.map((section) => (
-                <SectionRow key={section.role} section={section} />
+                <SectionRow
+                  key={section.role}
+                  section={section}
+                  cameraSetup={cameraSetup}
+                />
               ))}
             </ol>
             {/* The "no demo, no closing card" restatement is gone: the list
