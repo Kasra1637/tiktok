@@ -8903,8 +8903,16 @@ async function runIconChecks() {
     if (!skeleton?.className.includes("motion-safe:after:animate-[shimmer-sweep_1.1s_ease-in-out_infinite]") || skeleton.className.includes("motion-reduce:animate-pulse")) {
       throw new Error("loading skeletons must use the shared shimmer and stay still under reduced motion");
     }
-    if (!/initial=\{reduceMotion \? false/.test(transition) || !/duration: reduceMotion \? 0 : 0\.12/.test(transition)) {
+    // The route entrance moved from framer-motion to CSS keyframes (it was
+    // the dependency's last two uses, which is why framer-motion left the
+    // bundle). The motion contract it must still keep: a SHORT keyframe -
+    // not the 0.5s entrance the landing cards share - and the JS belt that
+    // shows the page instantly when the preference is on.
+    if (!/className="route-entry"/.test(transition) || !/style=\{reduceMotion \? \{ animation: "none" \} : undefined\}/.test(transition)) {
       throw new Error("route entry must be brief and instant under reduced motion");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.route-entry\s*\{\s*animation:\s*route-entry 120ms/.test(css)) {
+      throw new Error("route entry must stay at the documented 120ms and run only when motion is allowed");
     }
     if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.page-content-enter\s*\{\s*animation:\s*page-content-enter 150ms/.test(css)) {
       throw new Error("primary content reveal must be brief and run only when motion is allowed");

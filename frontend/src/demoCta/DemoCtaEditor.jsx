@@ -32,7 +32,7 @@ import { Slider } from "../components/ui/slider";
 import { Switch } from "../components/ui/switch";
 import { Checkbox } from "../components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { useReducedMotion } from "framer-motion";
+import { useReducedMotionPreference } from "../lib/reducedMotion";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
@@ -646,7 +646,7 @@ function AccentPicker({ testPrefix, accent, onAccentChange }) {
 export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, draftOwner = "anonymous" }) {
   // A programmatic scroll cannot be switched off by a Tailwind motion-reduce
   // variant, so the preference is read here and honoured in JS.
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionPreference();
   // At most ONE group is open at a time. This panel describes one clip, and
   // eleven groups open at once made the settings column taller than the video
   // they were describing — the preview shrank to fit a wall of controls. One

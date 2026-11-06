@@ -443,22 +443,28 @@ or an error needs naming. See ADR 0088.
 
 ## 7. Motion
 
-Library: `framer-motion` (page transitions, card entrance). CSS keyframes cover
-ambient and entry motion (`float-slow`, `fade-up`, `shimmer-sweep`, `marquee-x`,
-`page-content-enter`).
+Library: none — every UI motion is a CSS keyframe in `index.css`
+(`route-entry`, `card-enter`, `page-content-enter`, `fade-up`,
+`shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`, `tour-fade`), so
+the bundle carries no animation library. The reduced-motion preference is the
+browser hook `useReducedMotionPreference` (`lib/reducedMotion.jsx`).
 
 Durations: fast `150ms`, base `220ms`, slow `320ms`. Workspace route
-entrances are `120ms`; the primary page content uses the shared `150ms`
-`page-content-enter` fade and 4px rise when it mounts, including after loading.
-Skeletons shimmer while real work is pending, never for an artificial minimum;
-reduced motion leaves both the skeleton and page content static.
+entrances are `120ms` (`route-entry`, 4px rise); a card or empty state
+enters at `150ms` (`card-enter`, 8px rise); the primary page content uses the
+shared `150ms` `page-content-enter` fade and 4px rise when it mounts,
+including after loading. Skeletons shimmer while real work is pending, never
+for an artificial minimum; reduced motion leaves both the skeleton and page
+content static.
 
 **Hard rules:**
 
 1. **Never `transition: all`** — it breaks transforms. Enumerate properties:
    `transition-[transform,box-shadow,border-color]`.
-2. **Always honor `prefers-reduced-motion`** — in CSS via the media query, and
-   in JS via `useReducedMotion()` (see `PageTransition`, `EmptyState`).
+2. **Always honor `prefers-reduced-motion`** — in CSS via the media query or
+   the `no-preference` gate around every entrance utility, and in JS via
+   `useReducedMotionPreference()` (see `PageTransition`, `EmptyState`,
+   `TourOverlay`).
 3. Hover = 1–2px lift plus shadow tighten. Entrance = fade + 6–12px `y`.
 4. Stagger list entrance with a capped delay (`Math.min(index * 0.04, 0.32)`).
 

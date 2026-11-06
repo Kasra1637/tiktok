@@ -1010,6 +1010,30 @@ h1,
 @media (prefers-reduced-motion: no-preference) {
     .page-content-enter { animation: page-content-enter 150ms ease-out both; }
 }
+
+/* Route and card entrances are brief on purpose: they run on every path
+   change and empty section, so they are never the thing the founder waits
+   for. Both run only when motion is allowed, and reduced motion leaves them
+   static without any JS. */
+@keyframes route-entry {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes card-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .route-entry { animation: route-entry 120ms ease-out both; }
+    .card-enter { animation: card-enter 150ms ease-out both; }
+}
+
+/* The open tour fades its backdrop; name runs as an inline animation in
+   TourOverlay.jsx under the same reduced-motion guard. */
+@keyframes tour-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
 @keyframes marquee-x {
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }

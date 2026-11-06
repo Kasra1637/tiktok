@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Button } from "../ui/button";
+import { useReducedMotionPreference } from "../../lib/reducedMotion";
 import { useOnboarding } from "./OnboardingProvider";
 import { X, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 
@@ -71,7 +71,7 @@ function computeTooltipPosition(rect, preferredPlacement) {
 
 export default function TourOverlay() {
   const { activeTour, currentStep, stepIndex, totalSteps, next, back, skip } = useOnboarding();
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionPreference();
 
   const [rect, setRect] = useState(null);
   const [tooltipPos, setTooltipPos] = useState(null);
@@ -274,62 +274,42 @@ export default function TourOverlay() {
       };
 
   return createPortal(
-    <AnimatePresence>
-      <motion.div
-        key={`tour-backdrop-${activeTour.id}`}
-        className="fixed inset-0 z-[100]"
-        initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        data-testid="onboarding-tour-overlay"
-      >
-        {/* Dimming layer — click outside the card to skip the tour */}
+    <div
+      key={`tour-backdrop-${activeTour.id}`}
+      className="fixed inset-0 z-[100]"
+      style={reduceMotion ? undefined : { animation: "tour-fade 0.18s ease-out" }}
+      data-testid="onboarding-tour-overlay"
+    >
+      <div
+        className="absolute inset-0 bg-black/55"
+        onClick={skip}
+        data-testid="onboarding-tour-backdrop"
+      />
+      {rect && (
         <div
-          className="absolute inset-0 bg-black/55"
-          onClick={skip}
-          data-testid="onboarding-tour-backdrop"
+          key={`spotlight-${stepIndex}`}
+          className="absolute rounded-xl pointer-events-none border-2 border-[color:var(--brand-indigo)]"
+          style={{
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.55), 0 0 0 3px rgba(13,148,136,0.25)",
+          }}
         />
-
-        {/* Spotlight ring around the current target, cut out of the dim layer via box-shadow */}
-        {rect && (
-          <motion.div
-            key={`spotlight-${stepIndex}`}
-            className="absolute rounded-xl pointer-events-none border-2 border-[color:var(--brand-indigo)]"
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              top: rect.top,
-              left: rect.left,
-              width: rect.width,
-              height: rect.height,
-              boxShadow: "0 0 0 9999px rgba(0,0,0,0.55), 0 0 0 3px rgba(13,148,136,0.25)",
-            }}
-          />
-        )}
-
-        {/* Tooltip / welcome card. A trapped dialog (aria-modal: Tab cycles
-            inside the card while the tour is open) with focus moved in so
-            screen readers announce each step, and returned to the trigger on
-            dismiss. The backdrop still dismisses on click — the trap is for
-            the keyboard, not the pointer. */}
-        <motion.div
-          key={`tour-card-${stepIndex}`}
-          ref={cardRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label={currentStep.title}
-          tabIndex={-1}
-          className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4 focus-ring"
-          style={{ width: isCentered ? 360 : TOOLTIP_WIDTH, ...tooltipStyle }}
-          initial={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
-          onClick={(e) => e.stopPropagation()}
-          data-testid="onboarding-tour-tooltip"
-        >
+      )}
+      <div
+        key={`tour-card-${stepIndex}`}
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={currentStep.title}
+        tabIndex={-1}
+        className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4 focus-ring animate-fade-up"
+        style={{ width: isCentered ? 360 : TOOLTIP_WIDTH, ...tooltipStyle, ...(reduceMotion ? { animation: "none" } : undefined) }}
+        onClick={(e) => e.stopPropagation()}
+        data-testid="onboarding-tour-tooltip"
+      >
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-indigo)] shrink-0">
@@ -383,9 +363,8 @@ export default function TourOverlay() {
               </Button>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>,
+        </div>
+      </div>,
     document.body
   );
 }

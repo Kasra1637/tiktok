@@ -1,15 +1,14 @@
-import { motion, useReducedMotion } from "framer-motion";
 import { IconTile } from "./IconTile";
+import { useReducedMotionPreference } from "../lib/reducedMotion";
 
 export function EmptyState({ icon, title, description, action, headingLevel = "h2" }) {
   const Heading = headingLevel;
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionPreference();
 
   return (
-    <motion.div
-      initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.15, ease: "easeOut" }}
+    <div
+      className="card-enter"
+      style={reduceMotion ? { animation: "none" } : undefined}
     >
       <div className="relative overflow-hidden rounded-2xl border border-dashed border-[color:var(--hairline-strong)] bg-card/40 px-6 py-14 text-center backdrop-blur-sm">
         {/* Soft indigo pool behind the icon keeps the dashed box from reading
@@ -23,13 +22,12 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
         />
         <div className="relative flex flex-col items-center justify-center gap-4">
           {icon && (
-            <motion.span
-              initial={reduceMotion ? { scale: 1 } : { scale: 0.85 }}
-              animate={{ scale: 1 }}
-              transition={{ duration: reduceMotion ? 0 : 0.15, ease: "easeOut" }}
+            <span
+              className="card-enter"
+              style={reduceMotion ? { animation: "none" } : undefined}
             >
               <IconTile icon={icon} size="empty" />
-            </motion.span>
+            </span>
           )}
           <Heading className="font-display text-base font-semibold tracking-tight">{title}</Heading>
           {description && (
@@ -38,7 +36,7 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
           {action && <div>{action}</div>}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 export default EmptyState;
