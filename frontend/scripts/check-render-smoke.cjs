@@ -2708,6 +2708,9 @@ async function main() {
       ctx.container.querySelector(`[data-testid="wizard-section-${key}"]`)
     );
     if (sections.some((s) => !s)) throw new Error("the canvas is missing a step section");
+    if (sections.some((s) => !/scroll-mt-/.test(s.className))) {
+      throw new Error("a section would scroll under the sticky rail");
+    }
     const open = sections.filter((s) => s.getAttribute("data-active") === "true");
     if (open.length !== 1 || open[0] !== sections[0]) {
       throw new Error("the canvas does not open exactly the step in view");
@@ -2819,6 +2822,107 @@ async function main() {
     }
     if (!/click/i.test(angleHint)) {
       throw new Error("the angle step's bar does not name its gate");
+    }
+  });
+
+  // The bar must name only the real blocker. A ready review (plan, photo,
+  // no edits) used to fall through to the blocked copy and ask for a save and
+  // a photo that were already done.
+  await check("the ready review names no blocker and offers the render", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Review & submit");
+      const hint = () =>
+        (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+      if (/attach a photo|save your edits/i.test(hint())) {
+        throw new Error(`the ready review still names a blocker: ${JSON.stringify(hint())}`);
+      }
+      if (!/ready/i.test(hint())) throw new Error("the ready review bar does not say it is ready");
+      const go = ctx.container.querySelector('[data-testid="wizard-goto-render"]');
+      if (!go) throw new Error("the ready review offers no way to the render from the bar");
+      await clickEl(ctx, go, "Go to render");
+      const renderTab = ctx.container.querySelector('[data-testid="review-tab-render"]');
+      if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
+        throw new Error("Go to render did not switch to the render half");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  // A review missing only the photo says exactly that — never a save it does
+  // not owe — and a blocked review never offers the render shortcut.
+  await check("a review missing only the photo names only the photo", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, assets: [] }) },
+        () => mount(CreateVideo, {})(ctx)
+      );
+      await openStep(ctx, "Review & submit");
+      const hint = (
+        ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || ""
+      ).trim();
+      if (!/attach a photo/i.test(hint)) {
+        throw new Error(`the photo-only blocker is not named: ${JSON.stringify(hint)}`);
+      }
+      if (/save your edits/i.test(hint)) {
+        throw new Error("the photo-only blocker asks for a save it does not owe");
+      }
+      if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+        throw new Error("a blocked review offers the render shortcut anyway");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  // The angle hint follows the substep the founder is on, not a standing
+  // sentence: the angle first, then the goal the moment a pick exists, then
+  // the template. Generating parks the pick on the strongest new angle
+  // (handleRegenerateAngles), so "parked" already counts as picked.
+  await check("the angle hint follows the substep the founder is on", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await mount(CreateVideo, {})(ctx);
+    await openStep(ctx, "Audience & template");
+    const hint = () =>
+      (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+    if (!/pick an angle/i.test(hint())) {
+      throw new Error(`the bar does not name the angle first: ${JSON.stringify(hint())}`);
+    }
+    await passAngleGate(ctx);
+    if (/pick an angle/i.test(hint())) {
+      throw new Error("the bar still asks for an angle after one is parked");
+    }
+    if (!/goal/i.test(hint())) {
+      throw new Error(`the bar does not move to the goal phase: ${JSON.stringify(hint())}`);
+    }
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'),
+      "the goal"
+    );
+    if (/pick a goal/i.test(hint())) {
+      throw new Error("the bar still asks for a goal after one is picked");
+    }
+    if (!/template/i.test(hint())) {
+      throw new Error(`the bar does not move to the template phase: ${JSON.stringify(hint())}`);
+    }
+  });
+
+  // Moving without finishing stays allowed — the arrows never lock — but the
+  // unfinished step's Continue wears the same dashed "not done" language the
+  // pills use, instead of reading like a finished step's primary.
+  await check("the action bar cues an unfinished step without locking the arrows", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (!next || next.disabled) throw new Error("Continue is locked on an unfinished step");
+    if (!/border-dashed/.test(next.className)) {
+      throw new Error("the unfinished step's Continue carries no unfinished cue");
     }
   });
 

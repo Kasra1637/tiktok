@@ -8,8 +8,10 @@
   `wizard-section-*` section per step, next-action `wizard-footer-hint` in the
   `wizard-arrows` bar), `frontend/src/index.css` (`wizard-section-enter`);
   smoke checks "the canvas stacks all three sections and expands the active
-  one", "the progress rail sticks above the canvas with a live percentage" and "the
-  action bar names the next action beside its arrows"
+  one", "the progress rail sticks above the canvas with a live percentage",
+  "the action bar names the next action beside its arrows", "the ready review
+  names no blocker and offers the render" and "the angle hint follows the
+  substep the founder is on"
 - **Shapes:** extends 0095 (arrows, arrow-only bodies, sticky placement and
   the task line stay) and keeps 0098 whole (disclosure queues no request);
   supersedes only 0095's hint-free bar and its single-card focus view
@@ -43,10 +45,22 @@ is open, finished parts fold down to a line.
   ticks; the rail line is orientation, not a second state story.
 - **The action bar carries one state-derived line.** 0095 dropped the footer
   hint because a standing sentence could not name what was missing. The bar
-  gets a line back only as derived copy that names the step's live gate —
-  including "templates wait for your click" on the angle step — and it never
-  restates the task line under the title. The arrow-only pair, the sticky
-  placement and the last step's single exit are unchanged.
+  gets a line back only as derived copy that names the live gate — including
+  "templates wait for your click" on the angle step — and it never restates
+  the task line under the title. It follows the substep the founder is on,
+  and on a blocked review it names only the blocker that is actually true
+  (a photo already attached is never asked for again). The arrow-only pair,
+  the sticky placement and the last step's single exit are unchanged.
+- **A ready review gets its forward action back.** The last step has no
+  Continue arrow, so when the review is done (plan, photo, no edits) the bar
+  carries a primary "Go to render" button that opens the Render & result
+  half and scrolls to it. Navigation only: the render itself stays
+  GenerationPanel's, the single render path unchanged.
+- **Walking the canvas lands where it went.** A step change scrolls the
+  opened section into view (`scroll-mt-24` clears the sticky rail), after the
+  paint; mount never scrolls. An unfinished step's Continue wears the same
+  dashed "not done" cue the pills use instead of locking — moving stays
+  free.
 - **Disclosure motion is brief and optional.** An opened section body rises
   `150ms` (`wizard-section-enter`, 4px) only under
   `prefers-reduced-motion: no-preference`; reduced motion is instant. The

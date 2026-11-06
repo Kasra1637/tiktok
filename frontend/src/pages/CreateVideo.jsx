@@ -358,6 +358,22 @@ export default function CreateVideo() {
   useEffect(() => {
     if (scriptVersion) setReviewTab("plan");
   }, [scriptVersion]);
+  // Walking the canvas leaves the opened section under the sticky rail, so a
+  // step change scrolls its section into view after the paint, not before:
+  // the element must exist first. The rail's height lives in the sections'
+  // `scroll-mt-24`. Mount never scrolls — the page starts at the top.
+  const steppedOnceRef = useRef(false);
+  useEffect(() => {
+    if (!steppedOnceRef.current) {
+      steppedOnceRef.current = true;
+      return;
+    }
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`wizard-section-${STEPS[step].key}`)
+        ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    });
+  }, [step]);
   // Consecutive AI refinements per saved plan version. Capped so a thumbs-down
   // loop can never spin the text model unboundedly on one plan.
   const reviewRefinesRef = useRef({});
@@ -1482,20 +1498,52 @@ export default function CreateVideo() {
      label-attached helpers only. Navigation stays free — a hint names what is
      missing, it never locks the arrows. */
   const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
-  /* The action bar's one line: what the step in view is waiting on. It never
-     restates the task line under the title, and it names the click where a
-     click is the gate (ADR 0098). */
+  /* The action bar's one line: what the step in view is waiting on, derived
+     from the same states the pills and the rail read. It never restates the
+     task line under the title, names only a blocker that is actually true —
+     a photo already attached is never asked for again — and says the click
+     where a click is the gate (ADR 0098). */
   let footerHint;
   if (STEPS[step].key === "profile") {
     footerHint = profileId
       ? "Ready \u2014 continue to Audience & template."
       : "Pick the app this video is for.";
   } else if (STEPS[step].key === "angle") {
-    footerHint = "Pick an angle and a goal \u2014 templates wait for your click.";
+    // One line per substep, in the order they finish the screen: the
+    // standing sentence still asked for the angle at 4 of 4 done.
+    if (!angleId) {
+      footerHint = "Pick an angle \u2014 templates wait for your click.";
+    } else if (!objective) {
+      footerHint = "Pick a goal \u2014 the templates rank for it.";
+    } else if (!template?.id) {
+      footerHint = "Generate and pick a template when ready.";
+    } else if (missingIdentity.length > 0) {
+      footerHint = "Attach the presenter photo this template needs.";
+    } else {
+      footerHint = "Ready \u2014 continue to Review & submit.";
+    }
   } else if (activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
+  } else if (activeStepState?.state === "blocked") {
+    // Name only what is owed: the lumped copy asked for a save and a photo
+    // even when one of them was already done, and a save in flight says so
+    // instead of demanding one the autosave is already writing.
+    const needsPhoto = missingIdentity.length > 0;
+    if (hasEdits && needsPhoto) {
+      footerHint = "Save your edits and attach a photo before rendering.";
+    } else if (hasEdits) {
+      footerHint = autosaving
+        ? "Saving your edits \u2014 one moment before rendering."
+        : "Save your edits before rendering.";
+    } else if (needsPhoto) {
+      footerHint = "Attach a photo before rendering.";
+    } else {
+      footerHint = "Finish this step before rendering.";
+    }
   } else {
-    footerHint = "Save your edits and attach a photo before rendering.";
+    // The review is done: nothing left to ask, so the bar states readiness
+    // and the button beside it opens the render half.
+    footerHint = "Ready \u2014 review the render below.";
   }
   // The rail score, derived per segment so the bar, the thirds and the
   // number can never disagree: a done step claims its full third, the step
@@ -2973,7 +3021,7 @@ export default function CreateVideo() {
               key={s.key}
               data-testid={`wizard-section-${s.key}`}
               data-active={active ? "true" : "false"}
-              className={`surface surface-step rounded-2xl ${
+              className={`surface surface-step scroll-mt-24 rounded-2xl ${
                 active ? "ring-1 ring-[color:var(--indigo-35)]" : ""
               }`}
             >
@@ -3059,10 +3107,28 @@ export default function CreateVideo() {
           >
             {footerHint}
           </span>
+          {/* A ready review has no arrow left to walk: the bar carries the
+              one forward action itself, opening the render half the plan was
+              read for. Navigation only — the render stays GenerationPanel's. */}
+          {STEPS[step].key === "review" && activeStepState?.state === "done" && (
+            <Button
+              variant="accent"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                setReviewTab("render");
+                scrollToSubmit();
+              }}
+              data-testid="wizard-goto-render"
+            >
+              <Clapperboard className="h-3.5 w-3.5" /> Go to render
+            </Button>
+          )}
           {/* Earns prominence: a finished step turns Continue primary, so the
               way forward lights up the moment there is somewhere to go. Never
               disabled — a returning founder can always walk forward to look —
-              the line beside it already names what is still missing. */}
+              an unfinished step wears the dashed "not done" cue instead of
+              locking, and the line beside it names what is still missing. */}
           {step < STEPS.length - 1 && (
             <Button
               variant={activeStepState?.state === "done" ? "accent" : "secondary"}
@@ -3070,7 +3136,11 @@ export default function CreateVideo() {
               onClick={() => setStep(step + 1)}
               aria-label={`Continue to ${STEPS[step + 1].label}`}
               data-testid="wizard-continue-button"
-              className="h-11 w-11 rounded-full shadow-sm"
+              className={`h-11 w-11 rounded-full shadow-sm ${
+                activeStepState?.state === "done"
+                  ? ""
+                  : "border border-dashed border-[color:var(--hairline)]"
+              }`}
             >
               <ChevronRight className="h-5 w-5" />
             </Button>
