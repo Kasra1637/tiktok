@@ -5162,9 +5162,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({
       getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
     }, async () => {
-  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1";
-    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      try {
         await mount(CreateVideo, {})(ctx);
         await act(async () => {});
       } finally {
@@ -6454,6 +6453,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       );
     }
   });
+
+  // A kind the goal map predates still gets the same picking surface: six
+  // fallback goals and no all-goals selector. An unknown kind must not shrink
+  // the list or resurrect the control the six cards replaced.
+  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {
