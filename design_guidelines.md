@@ -156,7 +156,7 @@ forgotten utility produced a square card.
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
 `20px` on phones and `28px` from 768px up; `.surface-compact` (cards that are
 items in a grid) stays `16px`; `.inset-panel` is `20px`; `.surface-flush` is `0` for a card whose first
-child is a full-bleed row. `.surface-step` is the Create Video step card: `20px` at every width, and its own `.inset-panel` asides tighten to `16px` (the wizard-density override) so a step reads denser than the global 20px-plus-20px stack. Do not add `p-*` to card JSX.
+child is a full-bleed row. `.surface-step` is the Create Video canvas's step card — one per step, `20px` at every width — and its own `.inset-panel` asides tighten to `16px` (the wizard-density override) so a step reads denser than the global 20px-plus-20px stack. Do not add `p-*` to card JSX.
 
 **Never nest `.surface` inside `.surface`.** A card inside an identical card
 is a box in a box: same fill, same border, same gutter. The level inside a
@@ -168,7 +168,7 @@ card is `.inset-panel`.
 |---|---|---|---|
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
-| Wizard step | `StepShell` + `SectionHeading` | 16px outline glyph, no tile | same section heading + muted description |
+| Wizard step | one `.surface surface-step` section per step in the studio canvas; the header row is the step toggle — number, 16px glyph, `text-sm` label, state chip | `h2`-equivalent label from the section toggle; no separate heading |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 20px gutter; 16px in a wizard step) | none | 14px semibold, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |
@@ -246,10 +246,15 @@ if any opens text-only (it also pins the page's 10+ cards and exactly 5 groups).
 Bars use `h-4 w-4` (16px); the card's own `.eyebrow` uses `h-3 w-3` (12px).
 Step pills (`text-xs`, `rounded-full`) encode state in the ring and a tick glyph
 — never in position, which is the only thing a reader has while a step is
-unreachable. That chrome belongs to the wizard nav alone: the picks inside the
+unreachable. That chrome belongs to the wizard rail alone: the picks inside the
 Audience & template step are a caption row instead — one `text-xs` line naming
 the screen and its count, then plain ticks and labels with no frame — because
 two rows of rings and ticks read as two progress bars stacked over each other.
+The pills sit in the sticky progress rail, with a 2px fill line under them that
+tracks real completion, and the canvas below shows every step as a section: the
+active one expanded, the rest collapsed to a header row with the same state in
+words (a done step shows its pick chip). Opening a collapsed header walks there
+exactly like its pill — one state machine, never a second navigation model.
 
 Spacing, in these steps and no others:
 
@@ -281,7 +286,10 @@ step opens with — a group label, one helper line, and the red action that jump
 to the missing choice — is `space-y-4` on every step, so the same ask reads as
 the same control wherever the founder meets it. It is related blocks, not a
 field's own stack: the action is a CTA that navigates, not a control the label
-belongs to. Every step sits in the one `.surface-step` card, and every aside in it is `.inset-panel`, so the padding is identical on all three steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared token.
+belongs to. Every step sits in its own `.surface-step` section card on the
+canvas, and every aside in it is `.inset-panel`, so the padding is identical on
+all three steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared
+token.
 
 ---
 
@@ -419,8 +427,10 @@ accent, and `--glow-coral` stays with the brand tokens, unused by buttons.
 accents, not buttons. Plus shadcn's `default` / `secondary` / `destructive` / `outline`.
 
 **One pattern per job.** Step progress is the wizard's own `pill-studio` pill row
-in Create Video (`data-testid="step-pill-*"`): the pill carries state in its ring
-and tick glyph, never in position. Generation status uses `StatusBadge`. Don't
+in Create Video (`data-testid="step-pill-*"`), sitting in the sticky progress rail
+with its fill line: the pill carries state in its ring and tick glyph, never in
+position, and the rail's collapsed section headers echo the same state in words.
+Generation status uses `StatusBadge`. Don't
 hand-roll a second progress model beside these.
 
 Progress is scoped to a single screen's steps, not the whole app pipeline —
@@ -444,8 +454,9 @@ or an error needs naming. See ADR 0088.
 ## 7. Motion
 
 Library: none — every UI motion is a CSS keyframe in `index.css`
-(`route-entry`, `card-enter`, `page-content-enter`, `fade-up`,
-`shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`, `tour-fade`), so
+(`route-entry`, `card-enter`, `page-content-enter`, `wizard-section-enter`,
+`fade-up`, `shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`,
+`tour-fade`), so
 the bundle carries no animation library. The reduced-motion preference is the
 browser hook `useReducedMotionPreference` (`lib/reducedMotion.jsx`).
 
@@ -453,7 +464,9 @@ Durations: fast `150ms`, base `220ms`, slow `320ms`. Workspace route
 entrances are `120ms` (`route-entry`, 4px rise); a card or empty state
 enters at `150ms` (`card-enter`, 8px rise); the primary page content uses the
 shared `150ms` `page-content-enter` fade and 4px rise when it mounts,
-including after loading. Skeletons shimmer while real work is pending, never
+including after loading; an opened canvas section rises `150ms`
+(`wizard-section-enter`, 4px). Skeletons shimmer while real work is pending,
+never
 for an artificial minimum; reduced motion leaves both the skeleton and page
 content static.
 

@@ -14,7 +14,7 @@ import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
-import { GroupLabel, SectionHeading } from "../components/SectionCard";
+import { GroupLabel } from "../components/SectionCard";
 import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import SafetyPanel from "../components/SafetyPanel";
@@ -45,7 +45,7 @@ import { sentenceCase } from "../lib/copyCase";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -139,19 +139,6 @@ function MissingRequirements({ identity, onGoToTemplatePhoto }) {
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function StepShell({ icon: Icon, title, children }) {
-  return (
-    <div className="space-y-3">
-      {Icon && (
-        <div className="space-y-1">
-          {title && <SectionHeading icon={Icon}>{title}</SectionHeading>}
-        </div>
-      )}
-      {children}
-    </div>
-  );
 }
 
 /** What each progress state means, in words. Used for the pill tooltip and
@@ -266,15 +253,6 @@ export default function CreateVideo() {
       { replace: true }
     );
   }, [step, setSearchParams, params]);
-  // Slide direction for the step transition, derived rather than tracked: the
-  // ref still holds the previous step during the render where `step` changed,
-  // so the incoming screen slides in from the side the founder moved toward.
-  // The effect below then catches the ref up for the next move.
-  const prevStepRef = useRef(step);
-  const slideDir = step - prevStepRef.current;
-  useEffect(() => {
-    prevStepRef.current = step;
-  }, [step]);
   const [profiles, setProfiles] = useState([]);
   const [angles, setAngles] = useState([]);
   // The GOAL axis of the verdict tally, keyed by objective name and fetched
@@ -1504,14 +1482,28 @@ export default function CreateVideo() {
      label-attached helpers only. Navigation stays free — a hint names what is
      missing, it never locks the arrows. */
   const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
-  let footerHint = "Continue when ready \u2014 you can always go back.";
-  if (STEPS[step].key === "profile" && !profileId) {
-    footerHint = "Choose an app above \u2014 everything downstream builds on it.";
-  } else if (STEPS[step].key === "review" && activeStepState?.state === "todo") {
+  /* The action bar's one line: what the step in view is waiting on. It never
+     restates the task line under the title, and it names the click where a
+     click is the gate (ADR 0098). */
+  let footerHint;
+  if (STEPS[step].key === "profile") {
+    footerHint = profileId
+      ? "Ready \u2014 continue to Audience & template."
+      : "Pick the app this video is for.";
+  } else if (STEPS[step].key === "angle") {
+    footerHint = "Pick an angle and a goal \u2014 templates wait for your click.";
+  } else if (activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
-  } else if (STEPS[step].key === "review" && activeStepState?.state === "blocked") {
+  } else {
     footerHint = "Save your edits and attach a photo before rendering.";
   }
+  // The rail fill: done steps fill theirs whole, the step in view claims half
+  // until it is done. Derived like every state here, so it can never disagree
+  // with the ticks above it.
+  const railFill = Math.min(
+    100,
+    ((step + (activeStepState?.state === "done" ? 1 : 0.5)) / STEPS.length) * 100
+  );
 
   function renderStep() {
     if (step === 0) {
@@ -1523,10 +1515,7 @@ export default function CreateVideo() {
            rail's own sentence names the one thing to do here, and a second
            sentence restating it is the duplication step 3's title-only shell
            already avoids. */
-        <StepShell
-          icon={Briefcase}
-          title="App Profile"
-        >
+        <div className="space-y-3">
           {approved.length === 0 ? (
             <EmptyState
               icon={Briefcase}
@@ -1608,7 +1597,7 @@ export default function CreateVideo() {
               </div>
             </div>
           )}
-        </StepShell>
+        </div>
       );
     }
 
@@ -1637,10 +1626,7 @@ export default function CreateVideo() {
       const substepsDone = substeps.filter((s) => s.done).length;
 
       return (
-        <StepShell
-          icon={Target}
-          title="Audience & template"
-        >
+        <div className="space-y-3">
           <div className="space-y-4" data-testid="audience-goal-step">
             {/* The caption names the scope the nav cannot: these four are one
                 screen, not four more steps. No eyebrow — the section heading
@@ -2038,16 +2024,13 @@ export default function CreateVideo() {
             </div>
             )}
           </div>
-        </StepShell>
+        </div>
       );
     }
 
     if (step === 2) {
       return (
-        <StepShell
-          icon={CheckCircle2}
-          title="Review & submit"
-        >
+        <div className="space-y-3">
         {/* The two halves of this step, once a plan exists to read. Before
             that the plan states below (failed / generating / missing) are the
             whole step and there is nothing to render yet, so no tabs. */}
@@ -2784,7 +2767,7 @@ export default function CreateVideo() {
               </>
             ))}
             </div>
-        </StepShell>
+        </div>
       );
     }
 
@@ -2851,7 +2834,16 @@ export default function CreateVideo() {
           with the rest of the row — and the distinction never needed color,
           because the sentence underneath already names what is waiting and the
           pills already announce it. */}
-      <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
+      {/* Sticky progress rail: the pills stay in reach while the canvas
+          scrolls, and the fill line under them reads real completion — the
+          one piece of orientation chrome the page keeps. The pills keep
+          their own state rings; the line is a second read of the same
+          state, not a second state story. */}
+      <div
+        data-testid="studio-progress-rail"
+        className="sticky top-14 z-30 space-y-1.5 rounded-2xl border border-[color:var(--hairline)] bg-background/85 p-1.5 shadow-sm backdrop-blur lg:top-0"
+      >
+        <nav aria-label="Progress" className="flex flex-wrap items-center gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
           const Icon = s.state === "done" ? Check : s.step.icon;
@@ -2908,7 +2900,18 @@ export default function CreateVideo() {
             </button>
           );
         })}
-      </nav>
+        </nav>
+        <div
+          aria-hidden="true"
+          className="relative mx-1 h-0.5 overflow-hidden rounded-full bg-[color:var(--hairline)]"
+        >
+          <span
+            data-testid="studio-progress-fill"
+            className="absolute inset-y-0 left-0 rounded-full bg-[color:var(--brand-indigo)] transition-[width] duration-300 ease-out motion-reduce:transition-none"
+            style={{ width: `${railFill}%` }}
+          />
+        </div>
+      </div>
 
       {error && (
         <Alert variant="destructive">
@@ -2935,71 +2938,126 @@ export default function CreateVideo() {
         </Alert>
       )}
 
-<div className="surface surface-step page-content-enter rounded-2xl">
-          {/* The step card is the ONLY card on a step. Its blocks — the angle
-              picker, "What you get", and the goal list — were
-              `.surface` too, so a card sat inside an identical card: same fill,
-              same border, same 24px gutter, 48px of inset before any text and a
-              third 24px inside. They are `.inset-panel` asides now (12px
-              radius, 16px gutter), which is the level SectionCard's own header
-              comment reserves for "a small bordered aside inside a card".
-
-              Full width: the card's own surface padding is the gutter, so the
-              step gets the whole frame like the rest of this editor page and
-              no second width value is introduced here. */}
-          {/* One focused screen at a time: the step card holds a single step
-              full width like every other page, and the key remounts it on every step change so
-              the incoming screen slides in from the side the founder moved
-              toward (forward slides left, back slides right). Free-jump pills
-              above land directly; the arrows below walk one phase at a time. */}
-          <div className="w-full">
-            <div
-              key={step}
-              className={slideDir < 0 ? "wizard-slide-back" : "wizard-slide-forward"}
+      {/* The canvas: every step stands on the page as a section, the one in
+          view expanded and the rest collapsed to a header and a state chip.
+          Opening a header walks there exactly like its pill — one state
+          machine, one gate set, no second navigation model. The sections
+          render from state the page already holds: disclosure queues no
+          request of any kind (ADR 0098). */}
+      <div className="page-content-enter space-y-3">
+        {STEPS.map((s, i) => {
+          const active = i === step;
+          const state = stepStates.find((x) => x.step.key === s.key)?.state || "todo";
+          const value = state === "done" ? pillValue(s.key) : null;
+          const SectionIcon = state === "done" ? Check : s.icon;
+          return (
+            <section
+              key={s.key}
+              data-testid={`wizard-section-${s.key}`}
+              data-active={active ? "true" : "false"}
+              className={`surface surface-step rounded-2xl ${
+                active ? "ring-1 ring-[color:var(--indigo-35)]" : ""
+              }`}
             >
-              {stepContent}
-            </div>
-          </div>
-        </div>
+              <button
+                type="button"
+                onClick={() => setStep(i)}
+                aria-expanded={active}
+                aria-controls={`wizard-section-body-${s.key}`}
+                data-testid={`wizard-section-toggle-${s.key}`}
+                className="flex w-full items-center gap-2.5 pb-3 text-left"
+              >
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--hairline)] text-xs font-semibold text-muted-foreground"
+                >
+                  {i + 1}
+                </span>
+                <SectionIcon
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]"
+                />
+                <span className="font-display text-sm font-semibold">{s.label}</span>
+                <span
+                  data-testid={`wizard-section-chip-${s.key}`}
+                  title={value || STEP_STATE_COPY[state]}
+                  className={`ml-auto max-w-44 truncate rounded-full border px-2 py-0.5 text-xs ${
+                    state === "done"
+                      ? "border-[color:var(--indigo-35)] text-foreground"
+                      : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
+                  }`}
+                >
+                  {value || STEP_STATE_COPY[state]}
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${
+                    active ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {active && (
+                <div
+                  id={`wizard-section-body-${s.key}`}
+                  data-testid={`wizard-section-body-${s.key}`}
+                  className="wizard-section-enter border-t border-[color:var(--hairline)] pt-4"
+                >
+                  {stepContent}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
 
-      {/* Sticky sequential arrows: one step at a time, always within reach
-          however long the step is. Arrow-only — no words on the buttons, the
-          destination lives in the aria-label. Centred so the pair reads as one
-          control rather than two unrelated edges. No guards, like the pills:
-          these only move. On the last step the exit below is the way back, so
-          the wizard Back stays out of its way: two stacked Back controls read
-          as two different footers sharing a screen. The step pills at the top
-          still walk anywhere, including one step back. */}
-      <div className="sticky bottom-4 z-30 flex items-center justify-center gap-2 py-2" data-testid="wizard-arrows">
-        {!(step === STEPS.length - 1 && project) && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setStep(Math.max(0, step - 1))}
-          disabled={step === 0}
-          aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
-          data-testid="wizard-back-button"
-          className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        )}
-        {/* Earns prominence: a finished step turns Continue primary, so the
-            way forward lights up the moment there is somewhere to go. Never
-            disabled — a returning founder can always walk forward to look —
-            the hint above already names what is still missing. */}
-        {step < STEPS.length - 1 && (
-          <Button
-            variant={activeStepState?.state === "done" ? "accent" : "secondary"}
-            size="icon"
-            onClick={() => setStep(step + 1)}
-            aria-label={`Continue to ${STEPS[step + 1].label}`}
-            data-testid="wizard-continue-button"
-            className="h-11 w-11 rounded-full shadow-sm"
+      {/* Sticky action bar: the arrow-only pair and the one line naming what
+          the step in view is waiting on, in one glass cluster that stays
+          within reach however long the canvas runs. Arrow-only — the
+          destination lives in the aria-label, never words on the button. No
+          guards, like the pills: these only move. On the last step the exit
+          below is the way back, so the wizard Back stays out of its way: two
+          stacked Back controls read as two different footers sharing a
+          screen. The pills in the rail above still walk anywhere. */}
+      <div className="sticky bottom-4 z-30 flex justify-center px-2" data-testid="wizard-arrows">
+        <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
+          {!(step === STEPS.length - 1 && project) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setStep(Math.max(0, step - 1))}
+              disabled={step === 0}
+              aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+              data-testid="wizard-back-button"
+              className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          {/* The one line the task line does not duplicate: what this step is
+              waiting on right now, beside the controls that move. */}
+          <span
+            data-testid="wizard-footer-hint"
+            className="max-w-[46ch] px-1 text-sm text-muted-foreground"
           >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
-        )}
+            {footerHint}
+          </span>
+          {/* Earns prominence: a finished step turns Continue primary, so the
+              way forward lights up the moment there is somewhere to go. Never
+              disabled — a returning founder can always walk forward to look —
+              the line beside it already names what is still missing. */}
+          {step < STEPS.length - 1 && (
+            <Button
+              variant={activeStepState?.state === "done" ? "accent" : "secondary"}
+              size="icon"
+              onClick={() => setStep(step + 1)}
+              aria-label={`Continue to ${STEPS[step + 1].label}`}
+              data-testid="wizard-continue-button"
+              className="h-11 w-11 rounded-full shadow-sm"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* The one thing the pills cannot do is leave the studio, so the exit

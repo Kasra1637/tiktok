@@ -1,6 +1,7 @@
 # 0095 — Wizard: step task under the title, sticky arrow navigation
 
-- **Status:** accepted
+- **Status:** accepted (the hint-free bar superseded by 0099; task line,
+  arrow-only bodies and sticky placement retained)
 - **Date:** 2026-11-04
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (`wizard-step-task` under
   `PageHeader`, `wizard-arrows` sticky bar, `wizard-back-button` /

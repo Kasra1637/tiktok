@@ -2693,6 +2693,115 @@ async function main() {
     }
   });
 
+  // The wizard reads as one canvas now: all three step sections stand on the
+  // page at once, and exactly the active one is expanded. A section header is
+  // a control, not a label — opening a collapsed one walks there the same way
+  // its pill does, so progressive disclosure adds no second navigation model
+  // and queues nothing.
+  await check("the canvas stacks all three sections and expands the active one", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const keys = ["profile", "angle", "review"];
+    const sections = keys.map((key) =>
+      ctx.container.querySelector(`[data-testid="wizard-section-${key}"]`)
+    );
+    if (sections.some((s) => !s)) throw new Error("the canvas is missing a step section");
+    const open = sections.filter((s) => s.getAttribute("data-active") === "true");
+    if (open.length !== 1 || open[0] !== sections[0]) {
+      throw new Error("the canvas does not open exactly the step in view");
+    }
+    if (!ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
+      throw new Error("the active section renders no body");
+    }
+    if (ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
+      throw new Error("a collapsed section renders its body");
+    }
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="wizard-section-toggle-angle"]'),
+      "the angle section header"
+    );
+    if (!ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
+      throw new Error("clicking a collapsed section header did not open it");
+    }
+    if (ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
+      throw new Error("opening a section left the last one expanded");
+    }
+    if (stepPill(ctx, "Audience & template").getAttribute("aria-current") !== "step") {
+      throw new Error("opening a section did not move the step");
+    }
+  });
+
+  // The rail is the one piece of wizard chrome that stays while the canvas
+  // scrolls: the pills and a fill track that follows real completion. The
+  // pills keep their own state rings — the track is orientation, not a second
+  // state story.
+  await check("the progress rail sticks above the canvas with a live fill", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const rail = ctx.container.querySelector('[data-testid="studio-progress-rail"]');
+    if (!rail) throw new Error("no progress rail above the canvas");
+    if (!/sticky/.test(rail.className)) throw new Error("the progress rail does not stick");
+    const nav = ctx.container.querySelector('[aria-label="Progress"]');
+    if (!nav || !rail.contains(nav)) throw new Error("the step pills are not in the rail");
+    const fill = ctx.container.querySelector('[data-testid="studio-progress-fill"]');
+    if (!fill) throw new Error("the rail carries no fill track");
+    const width = parseFloat(fill.style.width);
+    if (!(width > 0 && width <= 100)) {
+      throw new Error(`the rail fill is not a live percentage: ${JSON.stringify(fill.style.width)}`);
+    }
+    await clickEl(
+      ctx,
+      ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
+      "Continue to the angle step"
+    );
+    const grown = parseFloat(
+      ctx.container.querySelector('[data-testid="studio-progress-fill"]').style.width
+    );
+    if (!(grown > width)) throw new Error("the rail fill did not move with the step");
+  });
+
+  // The action bar names the one next action beside the arrow-only pair, so a
+  // founder never has to guess what the wizard is waiting on. The line never
+  // repeats the task line above and never carries the old "Continue when
+  // ready" promise the task line replaced.
+  await check("the action bar names the next action beside its arrows", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const bar = ctx.container.querySelector('[data-testid="wizard-arrows"]');
+    const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
+    if (!bar || !hint || !bar.contains(hint)) {
+      throw new Error("the action bar carries no next-action line");
+    }
+    if (!/app/i.test(hint.textContent || "")) {
+      throw new Error("the first step's bar does not name what it needs");
+    }
+    if (/continue when ready/i.test(ctx.text())) {
+      throw new Error("the bar brings back the old Continue promise");
+    }
+    const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (back.textContent.trim() || next.textContent.trim()) {
+      throw new Error("the action bar arrows carry words");
+    }
+    await clickEl(ctx, next, "Continue to the angle step");
+    const angleHint = (
+      ctx.container.querySelector('[data-testid="wizard-footer-hint"]').textContent || ""
+    ).trim();
+    if (/ranks the next/.test(angleHint)) {
+      throw new Error("the action bar repeats the task line");
+    }
+    if (!/click/i.test(angleHint)) {
+      throw new Error("the angle step's bar does not name its gate");
+    }
+  });
+
   // One guidance line per step, directly under the page title. The task line
   // names what finishes the screen; the footer used to say the same thing
   // again between the arrows, so step two read "pick the angle, goal,
@@ -4562,10 +4671,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        const stepContent = ctx.container.querySelector(".surface.rounded-2xl");
+        const stepContent = ctx.container.querySelector('.surface[data-active="true"]');
         const stepText = stepContent?.textContent || "";
-        // Only test text inside the active step. Shared page guidance outside the
-        // step truthfully names the separate editor without offering a control.
+        // Only test text inside the active step card. Shared page guidance
+        // outside the step — and the collapsed section headers of the canvas —
+        // truthfully name the rest of the wizard without offering a control.
         const withoutEntry = stepText.replace(/demo \+ cta/gi, "");
         if (/CTA/.test(withoutEntry)) {
           throw new Error(`step ${JSON.stringify(label)} offers a CTA affordance`);
@@ -8941,6 +9051,9 @@ async function runIconChecks() {
     }
     if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.page-content-enter\s*\{\s*animation:\s*page-content-enter 150ms/.test(css)) {
       throw new Error("primary content reveal must be brief and run only when motion is allowed");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.wizard-section-enter\s*\{\s*animation:\s*wizard-section-enter 150ms/.test(css)) {
+      throw new Error("canvas disclosure must be brief and run only when motion is allowed");
     }
     for (const file of ["CreateVideo.jsx", "BrandSetup.jsx", "AppProfileDetail.jsx", "AssetLibrary.jsx", "Analytics.jsx", "GenerationHistory.jsx", "DemoCtaStudio.jsx", "VideoUpscaler.jsx"]) {
       if (!fs.readFileSync(path.join(SRC, "pages", file), "utf8").includes("page-content-enter")) {

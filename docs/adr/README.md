@@ -117,7 +117,8 @@ come from the architecture map and code, not an old record's UI description.
 | [0092](0092-render-result-scene-fields-agree.md) | Render & result scene fields must agree: Location is the place only (lighting and time in Lighting), Props and Movement cover the actions and timeline, no internal wording, viewer rows from the viewer's point of view — fix or block | accepted |
 | [0093](0093-selfie-ends-on-a-physical-beat.md) | Selfie renders end on a varied physical beat, never a phone; fixed camera keeps the phone handoff | accepted |
 | [0094](0094-render-result-actions-open-explanations-collapsed.md) | Render & result keeps actions open and collapses the strategy explanations and scene spec-sheet into groups with one-line digests | accepted |
-| [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted |
+| [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted (hint-free bar superseded by 0099) |
 | [0096](0096-templates-exactly-three.md) | Templates: exactly three selections, no more and no less | accepted |
 | [0097](0097-selfie-never-shows-a-phone-or-a-reach.md) | A handheld selfie never shows a phone, a reach toward the lens, or an action needing a second free hand; the fixed camera keeps the phone handoff | accepted |
 | [0098](0098-every-template-request-waits-for-the-click.md) | Every template request — billed tailoring and the ranked read — waits for the Generate click; a goal pick queues nothing | accepted |
+| [0099](0099-studio-canvas.md) | The studio canvas: every step on one page, the active one expanded; sticky rail with a live fill, next-action line in the arrow bar; disclosure queues nothing | accepted |
