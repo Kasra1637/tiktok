@@ -4046,6 +4046,18 @@ def normalize_strategy(raw: dict) -> dict:
     # render path (scene_consistency.reconcile_scene), so the panel and the
     # prompt can never show it again.
     scene_consistency.clean_placeholders(result["scene"])
+    # Render & result reads these rows before money is spent, so the scene is
+    # cleaned on the way to the panel, not only at the save/render guard:
+    # Camera angle and Visual style call the filming device "the camera", and
+    # Props lists objects the person carries, wears or uses — never furniture,
+    # buildings or signs the Location already names. Spoken lines are untouched.
+    for field in ("camera_angle", "visual_style"):
+        result["scene"][field] = scene_consistency.camera_wording(
+            result["scene"].get(field)
+        )[:300]
+    result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
+        result["scene"].get("props"), result["scene"].get("location")
+    )
     result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
 
     # An old strategy may still carry a contract; it is dropped rather than
@@ -5379,11 +5391,11 @@ async def generate_video_strategy(
         f'    "framing": "",\n'
         f'    "lighting": "light direction, quality and colour temperature AND the time of day (morning, afternoon, evening, night)",\n'
         f'    "location": "the physical place and visible surroundings only - never a lighting word and never a time of day; those belong in lighting",\n'
-        f'    "visual_style": "the overall look — natural amateur phone UGC, never polished",\n'
+        f'    "visual_style": "the overall look — natural amateur handheld camera footage (UGC), never polished",\n'
         f'    "character_positioning": "where they stand or sit in frame",\n'
         f'    "wardrobe": "what they are wearing, chosen to suit the Location — the ONE thing about '
         f'their appearance this render may change",\n'
-        f'    "props": "every object that appears in hook_action, either section action or the timeline, named concretely in one list, or \'none\'",\n'
+        f'    "props": "only the objects the person physically carries, wears or uses in the actions (a mug they pick up, a coat they wear, a notebook they open), named concretely in one list, or \'none\' — never furniture, buildings or signs already named in location",\n'
         f'    "color_palette": "the colour palette of the scene",\n'
         '  },\n'
         '  "performance": {\n'
@@ -5496,11 +5508,14 @@ async def generate_video_strategy(
         "audience, platforms) — a kitchen counter for an evening-reflection app, not \"a nice "
         "room\". Nothing is composited over the footage and no text appears on screen, so what the "
         "camera must show has to be written here, in scene, segments and hook_action.\n"
-        "- PROPS AND MOVEMENT ARE COMPLETE LISTS. scene.props names EVERY object that appears in "
-        "hook_action, either section action or the timeline — if a mug is picked up, a mug is in "
-        "props. performance.movement covers EVERY action those lines show, in order. The founder "
-        "reads those rows against the actions and the timeline before paying, so a missing object "
-        "or action reads as a video that does not match its own plan.\n"
+        "- PROPS ARE OBJECTS THE PERSON CARRIES, WEARS OR USES; MOVEMENT IS A COMPLETE LIST. "
+        "scene.props names ONLY the objects the person physically holds, wears or uses in "
+        "hook_action, either section action or the timeline — a mug they pick up, a coat they "
+        "wear, a notebook they open. It never repeats scenery the Location already names: tables, "
+        "counters, chairs, walls, windows, buildings, signs and other fixed furniture or structures "
+        "are the place, not props. performance.movement covers EVERY action those lines show, in "
+        "order. The founder reads those rows against the actions and the timeline before paying, "
+        "so a missing object or action reads as a video that does not match its own plan.\n"
         "- The generated scene is illustrative, never documentary: the script "
         "must never claim it shows real app footage or a screen recording. Anything the "
         "viewer could read as a factual claim about the app — interface text, button labels, "

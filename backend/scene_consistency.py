@@ -86,6 +86,46 @@ _BODY_WORDS = frozenset((
     "skin", "smile", "expression", "mouth", "lips", "breath", "voice",
 ))
 
+# Fixed things that belong to the place, not to the person. A props list that
+# names one is repeating Location and telling the model to put scenery in the
+# character's hands. Signage lives in a second set: a sign can be carried, so
+# it is scenery only when the Location already names it.
+_FIXED_SCENERY_WORDS = frozenset((
+    # Furniture
+    "table", "counter", "countertop", "desk", "chair", "stool", "bench",
+    "couch", "sofa", "armchair", "bed", "bookcase", "bookshelf", "shelf",
+    "shelves", "cabinet", "cupboard", "dresser", "nightstand", "wardrobe",
+    "closet", "sideboard", "drawer", "drawers",
+    # Rooms, buildings and structures
+    "wall", "floor", "ceiling", "window", "door", "doorway", "staircase",
+    "stairway", "stairs", "stair", "step", "steps", "hallway", "room",
+    "kitchen", "bedroom", "bathroom", "office", "building", "house", "home",
+    "apartment", "shop", "store", "storefront", "street", "road", "sidewalk",
+    "pavement", "fence", "gate", "bridge", "station", "platform", "park",
+    "tree", "plant", "roof", "porch", "balcony", "driveway", "garage",
+    "corridor", "lobby",
+    # Fixtures, decor and screens
+    "lamp", "rug", "carpet", "curtain", "mirror", "painting", "frame", "sink",
+    "stove", "oven", "fridge", "refrigerator", "microwave", "toilet",
+    "bathtub", "shower", "clock", "vase", "television", "tv", "monitor",
+    "screen",
+    # Outdoor ground
+    "ground", "grass", "sky",
+))
+_SIGNAGE_WORDS = frozenset((
+    "sign", "billboard", "poster", "banner", "logo", "placard",
+))
+
+# A prop entry sometimes trails into the place it rests in ("a mug on the
+# counter"). The object is the part before that place phrase; the place is
+# Location's job, never a prop's.
+_PROP_PLACE_TAIL_RE = re.compile(
+    r"\s+(?:on|at|in|under|behind|beside|next\s+to|near|by|against|inside|"
+    r"outside|above|below|over|around|across|across\s+from|in\s+front\s+of)\s+"
+    r"(?:the|a|an|my|your|her|his|their|its)\s+.+$",
+    re.I,
+)
+
 # Abstract nouns the determiner pattern would otherwise catch ("the moment",
 # "the problem"). None of these is an object on camera.
 _ABSTRACT_WORDS = frozenset((
@@ -254,6 +294,41 @@ def clean_placeholders(scene) -> list:
     return changed
 
 
+# The filming device, when Camera angle or Visual style names it. A phone in
+# either field reads as a phone in the scene, and a handheld selfie cannot film
+# one (ADR 0097) — the video model draws what the direction calls it.
+_FILMING_DEVICE_RE = re.compile(
+    r"(?P<det>\b(?:the|a|an|my|your|her|his|their|its)\s+)?"
+    r"(?P<device>smart\s*phones?|cell\s*phones?|mobile\s*phones?|iphones?|"
+    r"phone\s*cameras?|camera\s*phones?|phones?)\b",
+    re.I,
+)
+
+
+def camera_wording(text) -> str:
+    """Camera angle / visual style with the filming device called the camera.
+
+    "Handheld phone footage" becomes "handheld camera footage"; a determiner or
+    possessive becomes "the camera" ("shot on her phone" -> "shot on the
+    camera"), so the direction never puts a phone in the character's hand.
+    Spoken lines live in other fields and are never passed here.
+    """
+    def _replace(match):
+        device = match.group("device")
+        plural = bool(re.search(r"s$", device, re.I))
+        if match.group("det"):
+            replacement = "the cameras" if plural else "the camera"
+            if match.group("det")[:1].isupper():
+                replacement = replacement[:1].upper() + replacement[1:]
+            return replacement
+        replacement = "cameras" if plural else "camera"
+        if device[:1].isupper():
+            replacement = replacement[:1].upper() + replacement[1:]
+        return replacement
+
+    return _FILMING_DEVICE_RE.sub(_replace, str(text or ""))
+
+
 def _action_texts(strategy: dict) -> list:
     texts = [str(strategy.get("hook_action") or "").strip()]
     for section in strategy.get("segments") or []:
@@ -278,8 +353,20 @@ def _beat_action_texts(plan) -> list:
     return out
 
 
+# A conjunction ends the object: "the counter and looks" is the counter, not
+# an object called "counter and looks".
+_OBJECT_STOPS = frozenset((
+    "and", "or", "then", "but", "so", "that", "this", "these", "those",
+    "it", "is", "are", "was", "were", "while", "when",
+))
+
+
 def _trim_object(phrase: str) -> str:
     words = str(phrase or "").split()
+    for index, word in enumerate(words):
+        if word.strip(" .,;:'\u2019").lower() in _OBJECT_STOPS:
+            words = words[:index]
+            break
     while words and words[-1].strip(" .,;:'\u2019").lower() in _OBJECT_TRAILERS:
         words.pop()
     return " ".join(words)
@@ -306,12 +393,15 @@ def _is_object(phrase: str) -> str:
     return phrase
 
 
-def _mentioned_objects(texts) -> list:
+def _mentioned_objects(texts, location: str = "") -> list:
     found = []
     for text in texts:
         for match in _OBJECT_RE.finditer(str(text or "")):
             phrase = _is_object(match.group(1))
-            if phrase:
+            # An object the action only places ON something is the place, not
+            # a prop: "sets the mug on the counter" puts the mug in Props and
+            # leaves the counter to Location.
+            if phrase and not _is_scenery_entry(phrase, location):
                 found.append(phrase)
     return found
 
@@ -322,6 +412,78 @@ def _field_mentions(field_text, phrase: str) -> bool:
         return False
     core = phrase.split()[-1].casefold()
     return bool(re.search(r"\b" + re.escape(core) + r"s?\b", blob))
+
+
+def _prop_item(entry) -> str:
+    """The carried/worn/used object in one props entry, without its place tail."""
+    text = " ".join(str(entry or "").split()).strip(" ,;.")
+    text = _PROP_PLACE_TAIL_RE.sub("", text)
+    return text.strip(" ,;.")
+
+
+def _prop_head(entry) -> str:
+    words = re.findall(r"[A-Za-z][A-Za-z'\u2019-]*", str(entry or ""))
+    return words[-1].casefold() if words else ""
+
+
+def _scenery_word(word: str, words) -> bool:
+    word = str(word or "").casefold().strip(" \t\r\n.,;:'\u2019\"")
+    if not word:
+        return False
+    if word in words:
+        return True
+    # Plural forms: "counters", "benches", "shelves" (the irregular is listed).
+    for suffix in ("es", "s"):
+        if word.endswith(suffix) and word[:-len(suffix)] in words:
+            return True
+    return False
+
+
+def _is_scenery_entry(entry, location: str = "") -> bool:
+    """True when a props entry names the place, not an object the person uses.
+
+    Furniture, rooms, buildings, fixtures and decor are always scenery. A sign,
+    poster or billboard could be carried, so it is scenery only when the
+    Location already names it — the duplication this removes.
+    """
+    item = _prop_item(entry)
+    head = _prop_head(item)
+    if not head:
+        return False
+    if _scenery_word(head, _FIXED_SCENERY_WORDS):
+        return True
+    return _scenery_word(head, _SIGNAGE_WORDS) and _field_mentions(location, item)
+
+
+def prune_scenery_props(props, location: str = ""):
+    """Props as (text, changed): objects only, never the place they rest in.
+
+    A generated props list that names a counter, window or building is telling
+    the model to draw scenery as a hand-held object, and it repeats what
+    Location already says. Every entry is reduced to the object before any
+    place phrase ("a mug on the counter" -> "a mug"), and scenery entries are
+    dropped. A list that becomes empty comes back as "" so the row disappears.
+    """
+    raw = " ".join(str(props or "").split()).strip()
+    if not raw:
+        return raw, False
+    parts = [part.strip() for part in re.split(r"\s*[,;]\s*", raw) if part.strip()]
+    if not parts:
+        return raw, False
+    if len(parts) == 1 and parts[0].casefold() in ("none", "no props", "n/a", "-"):
+        return raw, False
+    kept, changed = [], False
+    for part in parts:
+        item = _prop_item(part)
+        if not item or _is_scenery_entry(item, location):
+            changed = True
+            continue
+        if item != part:
+            changed = True
+        kept.append(item)
+    if not changed:
+        return raw, False
+    return ", ".join(kept), True
 
 
 def append_clause(existing, addition) -> str:
@@ -426,6 +588,16 @@ def reconcile_scene(strategy, plan=None) -> dict:
     if scene is not None:
         changed.extend(clean_placeholders(scene))
 
+        # Camera angle and Visual style describe how the camera films, never
+        # what the person holds: a filming phone is always "the camera" there.
+        for key, label in (("camera_angle", "Camera angle"),
+                           ("visual_style", "Visual style")):
+            before = str(scene.get(key) or "")
+            after = camera_wording(before)
+            if after != before:
+                scene[key] = after
+                changed.append(label)
+
         # Location names the place; the lighting and time it still carries move
         # into Lighting. The legacy split copies (environment/background/
         # setting) follow it, or their longer text wins the time of day back
@@ -439,6 +611,15 @@ def reconcile_scene(strategy, plan=None) -> dict:
             scene["lighting"] = append_clause(scene.get("lighting"), moved)
             changed.append("Location")
             changed.append("Lighting")
+
+        # Props are objects the person carries, wears or uses — never the
+        # furniture, buildings or signs Location already names.
+        props_text, props_pruned = prune_scenery_props(
+            scene.get("props"), scene.get("location")
+        )
+        if props_pruned:
+            scene["props"] = props_text
+            changed.append("Props")
 
         texts = _action_texts(result) + _beat_action_texts(plan)
         if final_beat.is_selfie(result):
@@ -456,7 +637,7 @@ def reconcile_scene(strategy, plan=None) -> dict:
                 changed.append("Props")
 
         missing_objects = []
-        for phrase in _mentioned_objects(texts):
+        for phrase in _mentioned_objects(texts, scene.get("location")):
             if not _field_mentions(scene.get("props"), phrase):
                 missing_objects.append(phrase)
         if missing_objects:

@@ -1350,15 +1350,16 @@ class TestStrategyBudget:
         ))
         assert "this video's objective, audience and angle emotion" in captured["prompt"]
 
-    def test_the_strategy_schema_defaults_to_unpolished_phone_shot_look(self, monkeypatch):
+    def test_the_strategy_schema_defaults_to_unpolished_handheld_look(self, monkeypatch):
         """
         The visual_style schema hint is the only lever on the look: whatever it
         names, the model writes into scene.visual_style, and the scene lock
         then enforces exactly that on the render. Polished studio footage
         reads as an ad on TikTok and dies there, so the hint must ask for a
-        natural, amateur, phone-shot look up front. Otherwise every strategy
+        natural, amateur, handheld look up front. Otherwise every strategy
         defaults to polished UGC and the founder pays for a render that looks
-        like marketing.
+        like marketing. The filming device is called the camera, never the
+        phone, so the model does not draw one in the character's hand.
         """
         import ai_service
 
@@ -1389,6 +1390,8 @@ class TestStrategyBudget:
         ))
         assert "polished UGC" not in captured["prompt"]
         assert "never polished" in captured["prompt"]
+        assert "natural amateur handheld camera footage" in captured["prompt"]
+        assert "phone UGC" not in captured["prompt"]
 
     def test_a_fully_populated_prompt_stays_under_a_ceiling(self, monkeypatch):
         """

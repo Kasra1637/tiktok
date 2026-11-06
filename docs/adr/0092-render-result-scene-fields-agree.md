@@ -1,6 +1,6 @@
 # 0092 — Render & result scene fields agree before render
 
-- **Status:** accepted
+- **Status:** accepted (props scope refined by 0103: Props names what the person carries, wears or uses, never scenery)
 - **Date:** 2026-11-04
 - **Anchors:** `backend/scene_consistency.py` (`split_location`,
   `reconcile_scene`, `clean_placeholders`), `backend/server.py`

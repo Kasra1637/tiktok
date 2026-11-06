@@ -81,7 +81,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0056](0056-hero-play-control.md) | The autoplaying hero carries its own play/pause control; reduced motion loads on an explicit tap | accepted |
 | [0057](0057-preview-frame-play-button.md) | The Demo + CTA preview plays from a branded button on its own frame | accepted |
 | [0058](0058-text-overlays-start-off.md) | Hook, story and end-card text overlays all start off until the founder turns one on | partially superseded by 0082 (standalone entry starts blank) |
-| [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted |
+| [0059](0059-natural-amateur-default-look.md) | The default look is natural amateur phone footage, never polished | accepted (device naming refined by 0103) |
 | [0060](0060-kitless-post-copy-offer.md) | Kit-less finished renders offer post-copy generation in History | accepted |
 | [0061](0061-rate-limit-is-throttling.md) | Provider 429 is throttling: poll waits quietly, submit names the retry | accepted |
 | [0062](0062-history-polls-awaiting-renders.md) | History polls its awaiting renders on its own | partially superseded by 0078 (visible per-row stop state) |
@@ -114,7 +114,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0089](0089-templates-follow-the-video-fields.md) | Tailored templates are generated from and checked against the Problem, Promise and Audience; one character, one opening; the person has no gender or role | accepted |
 | [0090](0090-location-single-source-and-opening-move.md) | Location (the plan's visual direction) is the single source of truth — one save rewrites every place-bearing strategy line, spoken words refuse rather than change; the hook's first beat is a visible move | accepted |
 | [0091](0091-voice-direction-is-the-one-delivery-control.md) | Voice direction is the single delivery control on Review; the video-level Tone dropdown is removed, brand "Tone / voice" remains | accepted |
-| [0092](0092-render-result-scene-fields-agree.md) | Render & result scene fields must agree: Location is the place only (lighting and time in Lighting), Props and Movement cover the actions and timeline, no internal wording, viewer rows from the viewer's point of view — fix or block | accepted |
+| [0092](0092-render-result-scene-fields-agree.md) | Render & result scene fields must agree: Location is the place only (lighting and time in Lighting), Props and Movement cover the actions and timeline, no internal wording, viewer rows from the viewer's point of view — fix or block | partially superseded by 0103 (props scope: carried objects, not scenery) |
 | [0093](0093-selfie-ends-on-a-physical-beat.md) | Selfie renders end on a varied physical beat, never a phone; fixed camera keeps the phone handoff | accepted |
 | [0094](0094-render-result-actions-open-explanations-collapsed.md) | Render & result keeps actions open and collapses the strategy explanations and scene spec-sheet into groups with one-line digests | accepted |
 | [0095](0095-wizard-sticky-arrow-navigation.md) | Wizard task line under the title; back/continue are arrow-only, centred and sticky | accepted (hint-free bar superseded by 0099) |
@@ -125,3 +125,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0100](0100-hashtag-strategy.md) | The hashtag strategy: a fresh account gets 4 to 6 classified tags (problem anchor, community, one category), never engagement bait | accepted |
 | [0101](0101-hook-voice.md) | The hook speaks to the viewer: the hook line uses 'I' at most once; the middle stays the customer's first-person story | accepted |
 | [0102](0102-voice-and-lighting-auto.md) | Voice and lighting are set from each video's own context; no founder control owns delivery; lighting stays a scene field written by the model | accepted |
+| [0103](0103-props-are-carried-and-the-camera-is-never-a-phone.md) | Props names only what the person carries, wears or uses — never scenery Location already names; Camera angle and Visual style call the filming device "the camera", never the phone | accepted |

@@ -1,13 +1,19 @@
 """
-Scene fields that must agree with each other before the render reads them (ADR 0092).
+Scene fields that must agree with each other before the render reads them
+(ADRs 0092 and 0103).
 
-Four rules are pinned here:
+Six rules are pinned here:
 
 1. Location names the place only; lighting and time of day move into Lighting.
-2. Props lists every object the hook/middle actions and the shot timeline show.
+2. Props lists every object the person carries, wears or uses in the
+   hook/middle actions and the shot timeline — never scenery Location names.
 3. Movement covers every action those lines show.
 4. Internal wording ("Use STARTING SHOT") never survives as a scene value, and
    a list that cannot hold everything it must is reported, never cut.
+5. Camera angle and Visual style call the filming device "the camera", never
+   the phone, and never rewrite a spoken line.
+6. The read path normalizes the same scene wording the save/render path does,
+   so Render & result never shows a phone or a counter in Props.
 """
 import sys
 from pathlib import Path
@@ -98,6 +104,136 @@ def test_selfie_renders_never_list_a_phone_as_a_prop():
     assert "mug" in props
 
 
+def test_props_never_list_scenery_the_location_already_names():
+    # A counter and a window are the place. Listing them in Props repeats
+    # Location and tells the model to put scenery in the person's hands; the
+    # mug they lift is the prop.
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_action": "Sets the mug on the kitchen counter and glances at the window",
+        "scene": {
+            "location": "A tidy kitchen with a wooden counter and a bright window",
+            "props": "The kitchen counter, a bright window, a ceramic mug",
+        },
+        "performance": {"movement": ""},
+        "segments": [{"role": "middle", "action": "Lifts the mug"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    props = out["strategy"]["scene"]["props"].lower()
+    assert "counter" not in props
+    assert "window" not in props
+    assert "mug" in props
+    assert "Props" in out["changed"]
+    assert out["blocked"] == []
+
+
+def test_scenery_an_action_only_places_something_on_is_not_added_to_props():
+    # Completing the list from the actions must not copy "the counter" or the
+    # sign the Location already names back into Props.
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_action": "Sets the mug down on the counter and looks at the sign",
+        "scene": {
+            "location": "A cafe with a chalkboard sign by the door",
+            "props": "",
+        },
+        "performance": {"movement": "Sits"},
+        "segments": [{"role": "middle", "action": "Picks up the mug"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    props = (out["strategy"]["scene"]["props"] or "").lower()
+    assert "counter" not in props
+    assert "sign" not in props
+    assert "mug" in props
+    assert out["blocked"] == []
+
+
+def test_a_carried_sign_is_still_a_prop_when_location_does_not_name_one():
+    # Signage is not banned outright: a sign the person picks up is an object,
+    # and only the sign already named in Location is scenery.
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_action": "Lifts the protest sign and steps forward",
+        "scene": {"location": "A city street", "props": ""},
+        "performance": {"movement": "Steps forward"},
+        "segments": [{"role": "middle", "action": "Holds the sign steady"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert "sign" in (out["strategy"]["scene"]["props"] or "").lower()
+
+
+def test_props_drop_the_place_tail_but_keep_the_object():
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_action": "Picks up the mug",
+        "scene": {
+            "location": "A tidy kitchen with a wooden counter",
+            "props": "a notebook on the counter, a mug on the desk",
+        },
+        "performance": {"movement": "Picks up the mug"},
+        "segments": [{"role": "middle", "action": "Lifts the mug"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    props = out["strategy"]["scene"]["props"].lower()
+    assert props == "a notebook, a mug"
+    assert "counter" not in props and "desk" not in props
+
+
+def test_camera_angle_and_visual_style_call_the_filming_device_the_camera():
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_line": "I keep reaching for my phone",
+        "hook_action": "Picks up the mug",
+        "scene": {
+            "location": "Kitchen",
+            "props": "A mug",
+            "camera_angle": "Handheld phone camera at eye level",
+            "visual_style": "Shot on her smartphone, amateur phone footage",
+        },
+        "performance": {"movement": "Picks up the mug"},
+        "segments": [{
+            "role": "hook",
+            "script": "My phone is where the evening goes",
+            "action": "Picks up the mug",
+        }],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    scene = out["strategy"]["scene"]
+    assert "phone" not in scene["camera_angle"].lower()
+    assert "smartphone" not in scene["visual_style"].lower()
+    assert "camera" in scene["camera_angle"].lower()
+    assert "the camera" in scene["visual_style"].lower()
+    assert {"Camera angle", "Visual style"} <= set(out["changed"])
+    # Spoken words are not direction: they are read back exactly as written.
+    assert out["strategy"]["hook_line"] == strategy["hook_line"]
+    assert out["strategy"]["segments"][0]["script"] == strategy["segments"][0]["script"]
+
+
+def test_normalize_strategy_cleans_scene_wording_for_the_panel():
+    normalized = ai_service.normalize_strategy({
+        "hook_line": "I keep reaching for my phone",
+        "scene": {
+            "location": "A kitchen with a wooden counter",
+            "camera_angle": "Shot on her phone at eye level",
+            "visual_style": "iPhone footage, phone-camera look",
+            "props": "The kitchen counter, a ceramic mug",
+        },
+        "segments": [{
+            "index": 0, "role": "hook", "seconds": 3, "goal": "g",
+            "script": "My phone is where the evening goes",
+            "action": "Picks up the mug",
+        }],
+    })
+    scene = normalized["scene"]
+    assert "phone" not in scene["camera_angle"].lower()
+    assert "phone" not in scene["visual_style"].lower()
+    assert "camera" in scene["camera_angle"].lower()
+    assert "camera" in scene["visual_style"].lower()
+    assert scene["props"] == "a ceramic mug"
+    assert normalized["hook_line"] == "I keep reaching for my phone"
+    assert normalized["segments"][0]["script"] == "My phone is where the evening goes"
+
+
 def test_body_parts_places_and_abstractions_are_never_props():
     strategy = {
         "hook_action": "Turns her face to the window with a smile in the moment",
@@ -178,4 +314,6 @@ def test_the_viewer_rows_are_written_from_the_viewers_point_of_view():
     assert "written from the viewer" in src
     assert "what the viewer is left with" in src
     assert "never a lighting word and never a time of day" in src
-    assert "PROPS AND MOVEMENT ARE COMPLETE LISTS" in src
+    assert "PROPS ARE OBJECTS THE PERSON CARRIES, WEARS OR USES" in src
+    assert "never furniture, buildings or signs already named in location" in src
+    assert "natural amateur handheld camera footage" in src

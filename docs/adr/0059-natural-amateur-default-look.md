@@ -1,8 +1,8 @@
 # 0059 — The default look is natural amateur phone footage, never polished
 
-- **Status:** accepted
+- **Status:** accepted (device naming refined by 0103: the hint says camera footage, not phone UGC; the look is unchanged)
 - **Date:** 2026-10-30
-- **Anchors:** `backend/ai_service.py` (`visual_style` in the strategy schema); test `test_the_strategy_schema_defaults_to_unpolished_phone_shot_look`
+- **Anchors:** `backend/ai_service.py` (`visual_style` in the strategy schema); test `test_the_strategy_schema_defaults_to_unpolished_handheld_look`
 
 ## Context
 
