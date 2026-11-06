@@ -1,7 +1,7 @@
 # 0095 — Wizard: step task under the title, sticky arrow navigation
 
-- **Status:** accepted (the hint-free bar superseded by 0099; task line,
-  arrow-only bodies and sticky placement retained)
+- **Status:** accepted (the hint-free bar superseded by 0099; the
+  "Back to your app" exit removed — the arrow Back covers every step)
 - **Date:** 2026-11-04
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (`wizard-step-task` under
   `PageHeader`, `wizard-arrows` sticky bar, `wizard-back-button` /
@@ -28,9 +28,9 @@ templates + photo) the way forward was only reachable after scrolling.
   line; nothing in the sticky footer repeats it.
 - **The arrows are sticky.** The Back/Continue cluster sticks to the bottom
   of the scroll (`sticky bottom-4, z-30`) for the whole step, centred as one
-  control. It always renders on steps 1 and 2, and stays on step 3 as the
-  single escape when a draft exists — the "Back to your app" exit is still
-  the only other back control there.
+  control. The Back arrow renders on **every** step, the last one included;
+  the worded "Back to your app" exit was removed, so leaving the studio is the
+  sidebar's job and no second back control stacks under the bar.
 - **Arrow-only.** No words on either button; the destination remains in the
   aria-label and the `aria-label`-based checks are unchanged. The hint is
   dropped from the sticky bar entirely: it was a standing sentence that
@@ -57,5 +57,6 @@ templates + photo) the way forward was only reachable after scrolling.
 - The smoke suite pins the task line's position (below the title, above the
   pills), the stickiness, the centred cluster and the empty button bodies, so
   a word or a scroll-away control fails the gate.
-- No backend, data or workflow change: the arrows still only move, the pills
-  still jump, and the last step's single-exit rule is unchanged.
+- No backend, data or workflow change: the arrows still only move and the rail
+  still jumps. The last step's separate exit is gone (its own later change):
+  the arrow Back covers every step now.

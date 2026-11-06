@@ -53,8 +53,9 @@ is open, finished parts fold down to a line.
   "templates wait for your click" on the angle step — and it never restates
   the task line under the title. It follows the substep the founder is on,
   and on a blocked review it names only the blocker that is actually true
-  (a photo already attached is never asked for again). The arrow-only pair,
-  the sticky placement and the last step's single exit are unchanged.
+  (a photo already attached is never asked for again). The arrow-only pair and
+  the sticky placement are unchanged; the last-step exit was removed later, so
+  the arrow Back covers every step.
 - **A ready review gets its forward action back.** The last step has no
   Continue arrow, so when the review is done (plan, photo, no edits) the bar
   carries a primary "Go to render" button that opens the Render & result

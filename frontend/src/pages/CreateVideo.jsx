@@ -5,7 +5,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
 import { useWizardDirections } from "./useWizardDirections";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { CONTROL_CLASS } from "../components/formControls";
 import { Textarea } from "../components/ui/textarea";
@@ -217,7 +217,6 @@ function hasSpokenPartition(project) {
 
 export default function CreateVideo() {
   const [params, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   // The server's updated_at for each project this wizard has adopted from a
   // server response, so a row that is already current is never re-read or
@@ -3058,25 +3057,23 @@ export default function CreateVideo() {
           the step in view is waiting on, in one glass cluster that stays
           within reach however long the canvas runs. Arrow-only — the
           destination lives in the aria-label, never words on the button. No
-          guards, like the pills: these only move. On the last step the exit
-          below is the way back, so the wizard Back stays out of its way: two
-          stacked Back controls read as two different footers sharing a
-          screen. The pills in the rail above still walk anywhere. */}
+          guards, like the pills: these only move. The Back arrow stays on
+          every step, the last one included — the wizard has no separate exit
+          control, so leaving the studio is the sidebar's job. The pills in the
+          rail above still walk anywhere. */}
       <div className="sticky bottom-4 z-30 flex justify-center px-2" data-testid="wizard-arrows">
         <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
-          {!(step === STEPS.length - 1 && project) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setStep(Math.max(0, step - 1))}
-              disabled={step === 0}
-              aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
-              data-testid="wizard-back-button"
-              className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setStep(Math.max(0, step - 1))}
+            disabled={step === 0}
+            aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+            data-testid="wizard-back-button"
+            className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
           {/* The one line the task line does not duplicate: what this step is
               waiting on right now, beside the controls that move. */}
           <span
@@ -3125,24 +3122,6 @@ export default function CreateVideo() {
           )}
         </div>
       </div>
-
-      {/* The one thing the pills cannot do is leave the studio, so the exit
-          stays — on the last step only, which is where it already was. It is
-          the single back control there: the wizard Back above hides on this
-          step while a draft exists, because the two stacked together read as
-          two different footers sharing a screen. The pills still walk back. */}
-      {step === STEPS.length - 1 && project && (
-        <div className="flex items-center justify-center">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/app-profiles")}
-            aria-label="Back to your app"
-            data-testid="wizard-exit-button"
-          >
-            Back to your app
-          </Button>
-        </div>
-      )}
     </PageFrame>
   );
 }

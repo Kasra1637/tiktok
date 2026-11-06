@@ -3018,25 +3018,32 @@ async function main() {
     }
   });
 
-  // Review & submit offers one way back, not two. The wizard Back and the
-  // "Back to your app" exit stacked as two centred controls that read as two
-  // different footers sharing a screen. A drafted project (?project=) is what
-  // renders the exit, so that is the state this asserts on.
-  await check("review shows a single back control", async (ctx) => {
+  // The wizard keeps one way back on every step: the arrow in the action bar.
+  // The last-step "Back to your app" exit is gone, so leaving the studio is the
+  // sidebar's job and no second, worded back control can stack under the bar.
+  await check("review's way back is the wizard arrow, never a separate exit", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Review & submit");
       await act(async () => {});
       await act(async () => {});
-      const backs = [...ctx.container.querySelectorAll("button")].filter((b) =>
+      if (ctx.container.querySelector('[data-testid="wizard-exit-button"]')) {
+        throw new Error("Review still offers the Back-to-your-app exit");
+      }
+      const words = [...ctx.container.querySelectorAll("button")].filter((b) =>
         /\bback\b/i.test(b.textContent || "")
       );
-      if (backs.length !== 1) {
-        throw new Error(`Review shows ${backs.length} back controls instead of one`);
+      if (words.length !== 0) {
+        throw new Error(`Review shows a worded back control again: ${words.length}`);
       }
-      if (!/your app/i.test(backs[0].textContent || "")) {
-        throw new Error("the single back control is not the exit to the app");
+      const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+      if (!back || back.disabled) {
+        throw new Error("Review has no working Back arrow");
+      }
+      await clickEl(ctx, back, "Back to the angle step");
+      if (!ctx.container.querySelector('[data-testid="wizard-section-angle"][data-active="true"]')) {
+        throw new Error("the Back arrow did not return to the angle step");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
