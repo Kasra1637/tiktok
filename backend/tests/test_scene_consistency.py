@@ -306,6 +306,81 @@ def test_a_verbose_timeline_can_no_longer_block_the_render():
     assert "counts on fingers" in movement
 
 
+def test_verbose_actions_no_longer_block_the_render():
+    # ADR 0104: hook_action (cap 700) plus segment actions easily exceed the
+    # old 300-char Movement cap, so ordinary strategies blocked with
+    # "Movement cannot cover every action". The Movement cap is now 600.
+    strategy = {
+        # Fixed camera: both hands are free, so "both hands" is never stripped as a selfie-impossible action.
+        "camera_setup": "fixed",
+        "hook_action": (
+            "Stands at the counter, picks up the mug with both hands, "
+            "brings it to the lips and takes a slow sip while glancing "
+            "toward the window, then sets it down, picks up the notebook, "
+            "opens the cover and flips through the first pages before "
+            "closing it and placing it beside the mug"
+        ),
+        "scene": {"location": "Kitchen", "props": ""},
+        "performance": {"movement": "Still"},
+        "segments": [
+            {"role": "middle", "action": (
+                "Walks to the desk, sits down at the chair, opens the notebook, "
+                "picks up a pen and starts writing while nodding, "
+                "tapping the page, glancing at the window and "
+                "turning the page before closing the notebook"
+            )},
+        ],
+    }
+    plan = {"beat_timeline": [
+        {"label": "middle", "text": "Stands up and stretches arms overhead, reaches for the keys, picks them up and walks toward the door"},
+    ]}
+    out = scene_consistency.reconcile_scene(strategy, plan)
+    assert out["blocked"] == [], out["blocked"]
+    movement = out["strategy"]["performance"]["movement"].lower()
+    assert len(movement) > 300
+    for phrase in ("picks up the mug", "opens the notebook", "stretches"):
+        assert phrase in movement or "picks up" in movement, \
+            f"{phrase!r} missing from movement: {movement[:400]}"
+    assert "Movement" in out["changed"]
+
+
+def test_movement_over_600_is_advisory_not_a_block():
+    # ADR 0104: beyond 600 chars, Movement is compacted best-effort and the
+    # render proceeds with a warning, rather than refusing with a 409.
+    long_actions = "; ".join(
+        f"Stands and {verb} the item{i} carefully and then {verb} it again "
+        f"while glancing toward the far corner of the room"
+        for i, verb in enumerate(
+            ["picks", "places", "taps", "slides", "opens", "closes",
+             "lifts", "sets", "picks", "places", "taps", "slides"]
+        )
+    )
+    strategy = {
+        "hook_action": long_actions,
+        "scene": {"location": "Kitchen", "props": ""},
+        "performance": {"movement": "Still"},
+        "segments": [{"role": "middle", "action": long_actions}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert out["blocked"] == [], out["blocked"]
+    movement = out["strategy"]["performance"]["movement"]
+    assert movement and len(movement) <= 600
+    assert "Movement" in out["changed"]
+    assert out.get("warnings"), "expected a warning for the truncated Movement"
+
+
+def test_props_still_block_rather_than_cut():
+    # Props keeps the stricter ADR 0092 rule: a list that cannot hold every
+    # object is reported, never silently trimmed.
+    strategy = {
+        "hook_action": "Picks up the mug",
+        "scene": {"location": "Kitchen", "props": "z" * 298},
+        "performance": {"movement": "stands"},
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert [b["field"] for b in out["blocked"]] == ["Props"]
+
+
 def test_the_viewer_rows_are_written_from_the_viewers_point_of_view():
     # Source pins on the strategy prompt: these three fields are the panel's
     # "What the viewer ends up with" block, so the wording that generates them

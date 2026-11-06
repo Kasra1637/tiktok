@@ -28,6 +28,13 @@ import final_beat
 # patch that would need more room than this is reported, not silently cut.
 FIELD_LIMIT = 300
 
+# Movement covers every action from hook_action (cap 700), both section
+# actions and the timeline action clauses. The old 300-char cap guaranteed
+# ordinary strategies would overflow it, so the render guard refused them.
+# 600 chars holds a normal set with headroom; beyond it Movement is compacted
+# best-effort and reported as an advisory warning (ADR 0104), never a block.
+MOVEMENT_LIMIT = 600
+
 # Words that mean "this clause is about light or time of day, not the place".
 # Multi-word phrases come first so "golden hour" wins over "hour".
 _LIGHT_WORDS = (
@@ -525,17 +532,17 @@ def _missing_actions(texts, movement) -> list:
     return missing
 
 
-def _compact_clause(text, must_cover) -> tuple:
-    """Shorten a text field to FIELD_LIMIT without losing `must_cover` content.
+def _compact_clause(text, must_cover, limit=FIELD_LIMIT) -> tuple:
+    """Shorten a text field to `limit` without losing `must_cover` content.
 
     The field is a "; "-joined list of clauses. Clauses whose content words
     are already covered by the clauses that stay are redundant and are
     dropped, longest-first, until the field fits. Returns ("", True) when no
-    shortening can preserve every required action, so the caller can refuse
-    rather than cut an ending out from under the render.
+    shortening can preserve every required action, so the caller can decide:
+    Props refuses rather than cut, Movement truncates with a warning.
     """
     raw = " ".join(str(text or "").split()).strip(" .;")
-    if not raw or len(raw) <= FIELD_LIMIT:
+    if not raw or len(raw) <= limit:
         return raw, False
     clauses = [clause.strip() for clause in raw.split(";") if clause.strip()]
     if not clauses:
@@ -552,7 +559,7 @@ def _compact_clause(text, must_cover) -> tuple:
         return not required or required <= covered
 
     candidate = list(clauses)
-    while len("; ".join(candidate)) > FIELD_LIMIT and len(candidate) > 1:
+    while len("; ".join(candidate)) > limit and len(candidate) > 1:
         best = None
         for index in range(len(candidate)):
             rest = candidate[:index] + candidate[index + 1:]
@@ -564,25 +571,42 @@ def _compact_clause(text, must_cover) -> tuple:
             break
         candidate.pop(best[1])
     compacted = "; ".join(candidate)
-    if len(compacted) > FIELD_LIMIT:
+    if len(compacted) > limit:
         return "", True
     compacted = compacted.strip(" .;")
     return (compacted[:1].upper() + compacted[1:] if compacted else compacted), (compacted != raw)
 
 
+def _truncate_to_limit(text: str, limit: int) -> str:
+    """Best-effort fit: cut at the last clause boundary at or under limit."""
+    raw = " ".join(str(text or "").split()).strip(" .;")
+    if len(raw) <= limit:
+        return raw[:1].upper() + raw[1:] if raw else raw
+    head = raw[:limit]
+    cut = head.rfind("; ")
+    if cut > 0:
+        trimmed = head[:cut].strip(" .;")
+        if trimmed:
+            return trimmed[:1].upper() + trimmed[1:]
+    trimmed = head.rsplit(" ", 1)[0].strip(" .;")
+    return (trimmed[:1].upper() + trimmed[1:]) if trimmed else head.strip(" .;")
+
+
 def reconcile_scene(strategy, plan=None) -> dict:
     """Patch a strategy's scene fields into agreement; report what will not fit.
 
-    Returns {"strategy", "changed", "blocked"}. `changed` lists the labels of
-    the fields the patch rewrote; `blocked` lists {field, reason} for a field
-    that still cannot hold its requirement (a props or movement list over its
-    size cap), which the render guard turns into a refusal. The input strategy
-    is never mutated.
+    Returns {"strategy", "changed", "blocked", "warnings"}. `changed` lists the
+    labels of the fields the patch rewrote; `blocked` lists {field, reason} for
+    a field that still cannot hold its requirement (only Props can block now),
+    which the render guard turns into a refusal; `warnings` lists advisory
+    fields (Movement over MOVEMENT_LIMIT) that were compacted best-effort so
+    the render can proceed. The input strategy is never mutated.
     """
     result = copy.deepcopy(strategy) if isinstance(strategy, dict) else {}
-    changed, blocked = [], []
+    changed, blocked, warnings = [], [], []
     if not result:
-        return {"strategy": result, "changed": changed, "blocked": blocked}
+        return {"strategy": result, "changed": changed, "blocked": blocked,
+                "warnings": warnings}
 
     scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
     if scene is not None:
@@ -671,28 +695,32 @@ def reconcile_scene(strategy, plan=None) -> dict:
             movement = append_clause(
                 performance.get("movement"), "; ".join(dict.fromkeys(missing))
             )
-            if len(movement) > FIELD_LIMIT:
+            if len(movement) > MOVEMENT_LIMIT:
                 # Compact instead of refusing an ordinary render: the fields
                 # the founder actually reads (Location, Lighting, Props, the
                 # actions and the prompt) stay intact, and Movement is
-                # shortened to the actions it can still cover.
+                # shortened to the actions it can still cover. Movement is a
+                # summary lock — the source actions are still sent verbatim —
+                # so beyond MOVEMENT_LIMIT it is truncated best-effort with a
+                # warning, never a block (ADR 0104).
                 compacted, compacted_changed = _compact_clause(
-                    movement, movement_texts
+                    movement, movement_texts, MOVEMENT_LIMIT
                 )
-                if not compacted or len(compacted) > FIELD_LIMIT:
-                    blocked.append({
+                if not compacted or len(compacted) > MOVEMENT_LIMIT:
+                    compacted = _truncate_to_limit(movement, MOVEMENT_LIMIT)
+                    warnings.append({
                         "field": "Movement",
-                        "reason": "cannot cover every action the sections and timeline show within its size limit",
+                        "reason": "movement exceeds its size limit and was shortened to fit",
                     })
-                else:
-                    performance["movement"] = compacted
+                performance["movement"] = compacted
+                changed.append("Movement")
+                if compacted_changed:
                     changed.append("Movement")
-                    if compacted_changed:
-                        changed.append("Movement")
             else:
                 performance["movement"] = movement
                 changed.append("Movement")
 
     # De-duplicate labels in first-seen order.
     changed = list(dict.fromkeys(changed))
-    return {"strategy": result, "changed": changed, "blocked": blocked}
+    return {"strategy": result, "changed": changed, "blocked": blocked,
+            "warnings": warnings}

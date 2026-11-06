@@ -3956,7 +3956,7 @@ def _clean_strategy_list(value, limit: int, cap: int = 6) -> list:
     return [str(v).strip()[:limit] for v in value if str(v).strip()][:cap]
 
 
-def _normalize_strategy_section(raw, fields) -> dict:
+def _normalize_strategy_section(raw, fields, limits=None) -> dict:
     """Coerce a nested strategy section to known keys, all non-empty strings.
 
     A missing key becomes "" rather than vanishing, so the continuity prompt
@@ -3964,7 +3964,11 @@ def _normalize_strategy_section(raw, fields) -> dict:
     were pinned and which were left open.
     """
     raw = raw if isinstance(raw, dict) else {}
-    return {field: _clean_strategy_text(raw.get(field), 300) for field in fields}
+    limits = limits if isinstance(limits, dict) else {}
+    return {
+        field: _clean_strategy_text(raw.get(field), limits.get(field, 300))
+        for field in fields
+    }
 
 
 def merge_legacy_location(scene) -> str:
@@ -4058,7 +4062,10 @@ def normalize_strategy(raw: dict) -> dict:
     result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
         result["scene"].get("props"), result["scene"].get("location")
     )
-    result["performance"] = _normalize_strategy_section(raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS)
+    result["performance"] = _normalize_strategy_section(
+        raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS,
+        {"movement": scene_consistency.MOVEMENT_LIMIT},
+    )
 
     # An old strategy may still carry a contract; it is dropped rather than
     # trusted, because a seam contract describes a chain that no longer exists.
@@ -5399,7 +5406,7 @@ async def generate_video_strategy(
         f'    "color_palette": "the colour palette of the scene",\n'
         '  },\n'
         '  "performance": {\n'
-        f'    "movement": "every action from hook_action, both section actions and the timeline, in order",\n'
+        f'    "movement": "every action from hook_action, both section actions and the timeline, in order (600 chars max)",\n'
         f'    "voice_delivery": "tone, pace and energy of the voice, set from this video\'s objective, audience and angle emotion \u2014 never a generic default",\n'
         '  },\n'
         '  "segments": [\n'

@@ -126,3 +126,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0101](0101-hook-voice.md) | The hook speaks to the viewer: the hook line uses 'I' at most once; the middle stays the customer's first-person story | accepted |
 | [0102](0102-voice-and-lighting-auto.md) | Voice and lighting are set from each video's own context; no founder control owns delivery; lighting stays a scene field written by the model | accepted |
 | [0103](0103-props-are-carried-and-the-camera-is-never-a-phone.md) | Props names only what the person carries, wears or uses — never scenery Location already names; Camera angle and Visual style call the filming device "the camera", never the phone | accepted |
+| [0104](0104-movement-cap-600-advisory.md) | Movement's cap rises to 600 characters and overflow becomes an advisory truncation with a warning, not a render block; Props keeps the hard block | accepted |
