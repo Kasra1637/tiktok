@@ -3711,11 +3711,12 @@ async function main() {
     );
   });
 
-  // Both spoken lines, counted against the length each aims at. The hook line
-  // used to be the one count nothing showed: the middle had a budget and the
-  // opening line had none. The numbers come from the server's own measurement
-  // of the saved plan, which is the plan a render validates.
-  await check("Review shows both spoken counts against their targets", async (ctx) => {
+  // Real-time counts beside the two fields. The old "Script fit details"
+  // disclosure reported the saved plan behind a click; the budget belongs
+  // beside the words it measures and moves as they are typed. The targets and
+  // ceilings are still the server's own (spoken_check), so the live count
+  // agrees with the clamp the render applies.
+  await check("Review counts both spoken lines live against their targets", async (ctx) => {
     await withApi(
       {
         getStudioProject: async () => ({
@@ -3723,13 +3724,6 @@ async function main() {
           spoken_check: {
             hook: { chars: 40, target: 60, ceiling: 60, verdict: "on_target" },
             script: { chars: 71, target: 140, ceiling: 140, verdict: "under_target" },
-            story: {
-              problem_in_hook: true,
-              resolution_in_script: true,
-              restates_hook: false,
-              coherent: true,
-            },
-            over_ceiling: false,
           },
         }),
       },
@@ -3738,65 +3732,43 @@ async function main() {
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          expectText(
+          expectNone(
             ctx,
-            "Hook line: 40 characters, aiming for about 60",
-            "the hook count and its target are not shown"
+            ["Script fit details", "How the two lines measure up", "What the middle will say"],
+            "the Script fit details disclosure is back"
           );
-          expectText(
-            ctx,
-            "Script: 71 characters, aiming for about 140",
-            "the script count and its target are not shown"
-          );
-          expectText(
-            ctx,
-            "The hook names the problem and the script closes it.",
-            "the story verdict is not shown"
-          );
-        } finally {
-          global.__SMOKE_PARAMS = "";
-        }
-      }
-    );
-  });
-
-  // The partition the render actually speaks: what it says, and how much of the
-  // script is not spoken. There is deliberately no trim control. A generated
-  // script is measured and cut to fit before it is stored, so the founder is
-  // never handed a broken plan to repair by hand — and the overflow this block
-  // reports can now only come from their own edit, which the copy names as such.
-  await check("Review shows the spoken partition without offering a manual trim", async (ctx) => {
-    const kept = "Most evenings blur together.";
-    await withApi(
-      {
-        getStudioProject: async () => ({
-          ...PROJECT_WITH_STRATEGY,
-          script: `${kept} ${"x".repeat(200)}`,
-          spoken_middle: kept,
-          spoken_overflow: { dropped_chars: 200, budget: 105, middle_seconds: 7 },
-        }),
-      },
-      async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
-        try {
-          await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review & submit");
-          expectText(ctx, "What the middle will say", "the spoken partition is not shown");
-          expectText(ctx, kept, "the kept spoken line is not shown");
-          // The dropped words are no longer a tail sliced out of the script:
-          // an over-long middle gives up the sentences in the middle of itself
-          // and keeps the one that resolves the hook. So the block reports the
-          // COUNT the server dropped, which is the only honest number left.
-          expectText(
-            ctx,
-            "200 characters of the script are past",
-            "the dropped count is not shown"
-          );
-          expectText(
-            ctx,
-            "Regenerate the plan",
-            "the overflow does not name the automatic fix",
-          );
+          const hookCount = ctx.container.querySelector('[data-testid="hook-live-count"]');
+          const scriptCount = ctx.container.querySelector('[data-testid="script-live-count"]');
+          if (!hookCount || !scriptCount) throw new Error("a spoken line has no live count");
+          const hookLen = String(PROJECT_WITH_STRATEGY.hook_line || "").trim().length;
+          if (
+            !hookCount.textContent.includes(`${hookLen} characters`) ||
+            !hookCount.textContent.includes("aiming for about 60")
+          ) {
+            throw new Error(`the hook count is not live against its target: ${hookCount.textContent}`);
+          }
+          if (!scriptCount.textContent.includes("aiming for about 140")) {
+            throw new Error(`the script count is not live against its target: ${scriptCount.textContent}`);
+          }
+          // Typing moves the count at once, and outgrowing the ceiling names
+          // the fix instead of hiding it behind a disclosure.
+          const box = ctx.container.querySelector("#review-script");
+          const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set;
+          const long = "word ".repeat(40).trim();
+          await act(async () => {
+            setter.call(box, long);
+            box.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+          });
+          await act(async () => {});
+          const after = ctx.container.querySelector('[data-testid="script-live-count"]').textContent;
+          if (!after.includes(String(long.length))) {
+            throw new Error(`the count did not follow the typing: ${after}`);
+          }
+          if (!/past the 140/.test(after)) throw new Error(`the over-budget count is missing: ${after}`);
+          const fix = ctx.container.querySelector('[data-testid="script-over-budget"]');
+          if (!fix || !/Regenerate the plan/.test(fix.textContent)) {
+            throw new Error("the over-budget script does not name the fix");
+          }
           if (ctx.container.querySelector('[data-testid="spoken-trim"]')) {
             throw new Error("Review still offers a manual trim control");
           }

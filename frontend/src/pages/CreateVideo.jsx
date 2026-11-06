@@ -45,7 +45,7 @@ import { sentenceCase } from "../lib/copyCase";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Ruler, X } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -141,6 +141,30 @@ function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * The live count for one spoken line.
+ *
+ * The browser counts the field as it is typed; the server's own targets and
+ * ceiling (project.spoken_check, measured on the saved plan a render
+ * validates) say what fits. The old "Script fit details" disclosure reported
+ * the saved plan behind a click — the budget belongs beside the words it
+ * measures, moving on every keystroke.
+ */
+function spokenCountNote(text, spec) {
+  const chars = String(text || "").trim().length;
+  const target = Number(spec?.target) || 0;
+  const ceiling = Number(spec?.ceiling) || 0;
+  if (ceiling && chars > ceiling) {
+    return `${chars} characters \u2014 past the ${ceiling} these seconds can speak.`;
+  }
+  if (target) {
+    return chars > target
+      ? `${chars} characters, aiming for about ${target} \u2014 longer is a choice, not a fault.`
+      : `${chars} characters, aiming for about ${target}.`;
+  }
+  return `${chars} characters.`;
+}
+
 /** What each progress state means, in words. Used for the pill tooltip and
  *  the aria-label, because both a tick and a dashed border are shape-only. */
 const STEP_STATE_COPY = {
@@ -205,14 +229,6 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
     }
     return { step, state };
   });
-}
-
-/* One owner per half of the Script fit details disclosure. */
-function hasSpokenCounts(project) {
-  return Boolean(project?.spoken_check);
-}
-function hasSpokenPartition(project) {
-  return Boolean(project?.strategy?.hook_line && typeof project?.spoken_middle === "string" && project.spoken_middle);
 }
 
 export default function CreateVideo() {
@@ -1311,6 +1327,14 @@ export default function CreateVideo() {
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
 
+  // The live script budget: the count that follows the field, and whether it
+  // has outgrown what the middle's seconds can speak. The ceiling is the
+  // server's own (spoken_check.script), so the warning agrees with the clamp
+  // the render applies.
+  const scriptChars = String(editValue("script", "") || "").trim().length;
+  const scriptCeiling = Number(project?.spoken_check?.script?.ceiling) || 0;
+  const scriptOverBudget = scriptCeiling > 0 && scriptChars > scriptCeiling;
+
   // Tone is deliberately NOT editable on this step any more: the video-level
   // Tone dropdown duplicated the App Profile's "Tone / voice" and the voice
   // direction, both collapsing into one downstream delivery field. Delivery is
@@ -2331,6 +2355,12 @@ export default function CreateVideo() {
               report={project.safety_report}
               disabled={busy}
             />
+            {/* Real-time, not a saved-plan readout: the count follows the field
+                as it is typed, against the same targets and ceilings the render
+                validates. */}
+            <p className="text-sm text-muted-foreground" data-testid="hook-live-count">
+              {spokenCountNote(editValue("hook_line", ""), project?.spoken_check?.hook)}
+            </p>
             <div className="space-y-4">
               <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
               <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
@@ -2340,6 +2370,15 @@ export default function CreateVideo() {
                 onChange={(e) => dispatchDraft({ type: "edit-field", field: "script", value: e.target.value })}
                 className="min-h-[160px]"
               />
+              <p className="text-sm text-muted-foreground" data-testid="script-live-count">
+                {spokenCountNote(editValue("script", ""), project?.spoken_check?.script)}
+              </p>
+              {scriptOverBudget && (
+                <p className="text-sm text-muted-foreground" data-testid="script-over-budget">
+                  The extra words are not spoken. Regenerate the plan to have them rewritten to fit,
+                  or shorten the script above.
+                </p>
+              )}
             </div>
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             <SafetyPanel report={project.safety_report} summary={project.safety_summary}
@@ -2356,80 +2395,11 @@ export default function CreateVideo() {
                 never handed a broken plan to repair by hand — and if they write
                 their own over-length words, regenerating the plan is the fix,
                 not a second button beside their own editor. */}
-            {/* Both spoken lines counted, against the length each one aims at.
-                The hook line used to be the one count nothing showed: the middle
-                had a budget and the opening line had none, so an over-long hook
-                was stored, sent and cut mid-sentence with nothing on screen
-                saying so. The numbers here are the server's own
-                (spoken_check), measured on the saved plan — which is the plan a
-                render validates — rather than a second arithmetic in the
-                browser that could disagree with what the render does. */}
-            {(hasSpokenCounts(project) || hasSpokenPartition(project)) && (
-              <Disclosure
-                testId="script-fit-details"
-                detailsClassName="inset-panel space-y-4"
-                summaryClassName="flex cursor-pointer flex-wrap items-center gap-2"
-                summary={<GroupLabel icon={Ruler}>Script fit details</GroupLabel>}
-              >
-                <p className="text-sm text-muted-foreground">
-                  Character counts and what the middle speaks. If Generate is disabled over words that do not fit, the reason is in here.
-                </p>
-              {hasSpokenCounts(project) && (
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-counts">
-                <GroupLabel>How the two lines measure up</GroupLabel>
-                {[
-                  { key: "hook", label: "Hook line" },
-                  { key: "script", label: "Script" },
-                ].map(({ key, label }) => {
-                  const line = project.spoken_check[key] || {};
-                  const chars = Number(line.chars) || 0;
-                  const target = Number(line.target) || 0;
-                  const ceiling = Number(line.ceiling) || 0;
-                  const overCeiling = line.verdict === "over_ceiling";
-                  return (
-                    <p key={key} className="text-sm text-muted-foreground">
-                      <span className="font-semibold">{label}: </span>
-                      {chars} characters{target ? `, aiming for about ${target}` : ""}
-                      {overCeiling
-                        ? ` — past the ${ceiling} characters these seconds can speak, so it is cut back before the render.`
-                        : chars > target
-                          ? " — longer than the target, which is a choice, not a fault."
-                          : "."}
-                    </p>
-                  );
-                })}
-                <p className="text-sm text-muted-foreground">
-                  {project.spoken_check.story?.coherent
-                    ? "The hook names the problem and the script closes it."
-                    : "The two lines should read as one thought: the hook naming the problem this viewer has, the script answering it."}
-                </p>
-              </div>
-            )}
-            {hasSpokenPartition(project) && (
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="spoken-partition">
-                <GroupLabel>What the middle will say</GroupLabel>
-                <p className="text-base">{sentenceCase(project.spoken_middle)}</p>
-                {/* What is not spoken is counted by the server, not sliced out
-                    of the script here. The kept words are no longer always a
-                    prefix of the script — an over-long middle gives up the
-                    sentences in the MIDDLE of itself and keeps the one that
-                    resolves the hook — so a browser slice would name words that
-                    are in fact spoken and miss the ones that are not. */}
-                {(Number(project?.spoken_overflow?.dropped_chars) || 0) > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {project.spoken_overflow.dropped_chars} characters of the script are past the
-                    middle&apos;s spoken budget and are not spoken. Regenerate the plan to have it
-                    rewritten to fit, or shorten the script above and rebuild the strategy.
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground" data-subtitle="">
-                    Your whole script fits the middle — every word is spoken.
-                  </p>
-                )}
-              </div>
-            )}
-              </Disclosure>
-            )}
+            {/* The "Script fit details" disclosure is gone: the two counts and
+                the over-budget fix ride beside the fields they measure, live.
+                The saved-plan measurement still reaches the page as
+                `project.spoken_check` (it sizes those live counts) and as the
+                arrival-trim note above. */}
             {/* `cta` and `feature_emphasis` used to sit here as two editable
                 fields. Neither is writable any more and neither is returned, so
                 leaving the inputs would have looked like editing something and
