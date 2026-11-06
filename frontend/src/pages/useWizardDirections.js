@@ -8,12 +8,13 @@ import { api, getErrorMessage } from "../lib/api";
  * Navigation safety: every load carries a request id, picks reset when the
  * profile changes, and a refresh never destroys the founder's current pick.
  *
- * There is deliberately no Tone pick here. The video-level Tone dropdown
- * duplicated the App Profile's "Tone / voice" and the voice direction, and both
- * collapsed into the strategy's single `voice_delivery` downstream — so the
- * Voice direction pick is the one delivery control (ADR 0091). A saved tone on
- * an existing project still rides into plan and strategy generation untouched;
- * only the second control is gone.
+ * There is deliberately no Tone or Voice pick here: the plan and the strategy
+ * write this video's delivery from its own objective, audience and angle
+ * emotion, so voice direction is set per video, never from a control (ADR 0102,
+ * superseding 0091). Nor is Lighting a pick: the strategy's scene states it
+ * from the video's own context — only Location and Wardrobe stay pickable. A
+ * saved tone or voice on an existing project still rides into plan and
+ * strategy generation untouched.
  */
 export function useWizardDirections({ profileId, project, angle, dispatchDraft }) {
   const [directionOptions, setDirectionOptions] = useState(null);
@@ -39,29 +40,29 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
     };
   }, [profileId, angleId]);
 
-  const [dirSel, setDirSel] = useState({ location: "", lighting: "", wardrobe: "", voice: "" });
+  const [dirSel, setDirSel] = useState({ location: "", lighting: "", wardrobe: "" });
 
   useEffect(() => {
-    setDirSel({ location: "", lighting: "", wardrobe: "", voice: "" });
+    setDirSel({ location: "", lighting: "", wardrobe: "" });
   }, [profileId]);
 
   const savedDirectionsRef = useRef(null);
   savedDirectionsRef.current = {
     visual: project?.visual_direction || "",
     location: project?.location || "",
-    voice: project?.voice_direction || "",
   };
 
   useEffect(() => {
     if (!directionOptions) return;
-    const { visual: savedVisual, location: savedLocation, voice: savedVoice } = savedDirectionsRef.current;
+    const { visual: savedVisual, location: savedLocation } = savedDirectionsRef.current;
     const matchPart = (text, list) =>
       (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
     setDirSel({
       location: matchPart(savedLocation, directionOptions.location) || matchPart(savedVisual, directionOptions.location),
+      // No Lighting control reads this slot any more; it is kept so a wardrobe
+      // pick recomposes the strategy's own lighting word instead of dropping it.
       lighting: matchPart(savedVisual, directionOptions.lighting),
       wardrobe: matchPart(savedVisual, directionOptions.wardrobe),
-      voice: matchPart(savedVoice, directionOptions.voice),
     });
   }, [project?.id, directionOptions]);
 
@@ -74,11 +75,6 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
     }
     const composed = [next.lighting, next.wardrobe].filter(Boolean).join(", ");
     dispatchDraft({ type: "edit-field", field: "visual_direction", value: composed, omitDefault: true });
-  };
-
-  const pickVoice = (value) => {
-    setDirSel((previous) => ({ ...previous, voice: value }));
-    dispatchDraft({ type: "edit-field", field: "voice_direction", value, omitDefault: true });
   };
 
   const [refreshingField, setRefreshingField] = useState("");
@@ -120,7 +116,6 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
     directionOptions,
     dirSel,
     pickScenePart,
-    pickVoice,
     refreshingField,
     refreshError,
     refreshDirectionField,

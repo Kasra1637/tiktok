@@ -1314,11 +1314,11 @@ export default function CreateVideo() {
 
   // Tone is deliberately NOT editable on this step any more: the video-level
   // Tone dropdown duplicated the App Profile's "Tone / voice" and the voice
-  // direction, both collapsing into one downstream delivery field. Voice
-  // direction is the single delivery control (ADR 0091); a tone a project
-  // already carries still seeds the plan. Length has no editor on this step at
-  // all: it is the template's number, and the plan's beat timeline is built
-  // to it.
+  // direction, both collapsing into one downstream delivery field. Delivery is
+  // written per video from its own plan now — no control owns it (ADR 0102,
+  // superseding 0091); a tone a project already carries still seeds the plan.
+  // Length has no editor on this step at all: it is the template's number, and
+  // the plan's beat timeline is built to it.
 
   // Direction dropdowns live in their own lifecycle owner (profile-keyed
   // options, per-app picks, saved-plan matching, per-field refresh). See
@@ -1328,7 +1328,6 @@ export default function CreateVideo() {
     directionOptions,
     dirSel,
     pickScenePart,
-    pickVoice,
     refreshingField,
     refreshError,
     refreshDirectionField,
@@ -2468,7 +2467,7 @@ export default function CreateVideo() {
                 value={editValue("location", "")}
                 onChange={(e) => dispatchDraft({ type: "edit-field", field: "location", value: e.target.value })}
                 className="min-h-[86px]"
-                placeholder="Describe the place and its visible surroundings only — lighting and time of day live in Lighting."
+                placeholder="Describe the place and its visible surroundings."
                 data-testid="review-location-input"
               />
               <p className="text-sm text-muted-foreground" data-subtitle="" data-testid="review-location-help">
@@ -2495,7 +2494,7 @@ export default function CreateVideo() {
               }
             >
               <p className="text-sm text-muted-foreground" data-subtitle="">
-                Optional scene and voice picks; the defaults render as-is.
+                Optional scene picks; the plan's defaults render as-is.
               </p>
               <div className="space-y-2">
                 <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
@@ -2518,11 +2517,11 @@ export default function CreateVideo() {
                     ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
                     : "Close handheld framing, subtle camera movement, and the current centered zoom."}
                 </p>
-                <p className="text-sm text-muted-foreground">Camera setup controls framing and camera movement. Save changes, then rebuild and review the strategy before rendering.</p>
+                <p className="text-sm text-muted-foreground">Camera setup controls framing; save, then rebuild the strategy before rendering.</p>
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <p className="text-sm font-semibold">Location, lighting &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">Updates the field above; lighting and wardrobe refine it.</p>
+                <p className="text-sm font-semibold">Location &amp; wardrobe</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">Updates the field above; wardrobe refines the saved look.</p>
                 <DirectionSelect
                   id="review-location-direction"
                   testId="review-location-direction"
@@ -2533,17 +2532,6 @@ export default function CreateVideo() {
                   placeholder="Choose a Location…"
                   disabled={busy}
                   refresh={refreshProps("location", "review-location-refresh")}
-                />
-                <DirectionSelect
-                  id="review-lighting"
-                  testId="review-lighting"
-                  label="Lighting"
-                  value={dirSel.lighting}
-                  onPick={pickScenePart("lighting")}
-                  options={directionOptions?.lighting}
-                  placeholder="Choose lighting…"
-                  disabled={busy}
-                  refresh={refreshProps("lighting", "review-lighting-refresh")}
                 />
                 <DirectionSelect
                   id="review-wardrobe"
@@ -2562,26 +2550,14 @@ export default function CreateVideo() {
                   </p>
                 )}
                 <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                  The final Location, lighting and wardrobe are applied together when you rebuild the strategy. Camera setup still owns how it is filmed.
+                  Location and wardrobe apply together when you rebuild the strategy. Lighting
+                  is set from this video's scene.
                 </p>
                 {refreshError && (
                   <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
                     {refreshError}
                   </p>
                 )}
-              </div>
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <DirectionSelect
-                  id="review-voice-direction"
-                  testId="review-voice-direction"
-                  label="Voice direction"
-                  value={dirSel.voice}
-                  onPick={pickVoice}
-                  options={directionOptions?.voice}
-                  placeholder="Choose a voice direction…"
-                  disabled={busy}
-                  refresh={refreshProps("voice", "review-voice-refresh")}
-                />
               </div>
               {(editValue("visual_direction", "") || editValue("voice_direction", "")) && (
                 <div className="inset-panel space-y-1" data-testid="direction-live-preview">
@@ -2597,7 +2573,7 @@ export default function CreateVideo() {
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground" data-subtitle="">
-                    Picks update instantly here — save edits before rendering.
+                    Set from this video's plan; save edits before rendering.
                   </p>
                 </div>
               )}

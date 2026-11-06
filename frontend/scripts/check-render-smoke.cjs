@@ -403,9 +403,10 @@ const apiStub = {
   getStudioProjects: async () => ({ projects: [] }),
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Profile-matched direction dropdowns. Four options per field by default;
-  // checks that exercise the picks override with their own sets. `tone` stays
-  // in the response because the API still supports it, but no control reads it:
-  // Voice direction is the one delivery pick (ADR 0091).
+  // checks that exercise the picks override with their own sets. `lighting`,
+  // `voice` and `tone` stay in the response because the API still supports
+  // them, but no control reads them: delivery and lighting are set from each
+  // video's own plan and scene (ADR 0102), never picked on Review.
   getDirectionOptions: async () => ({
     group: "default",
     setting: ["Setting one", "Setting two", "Setting three", "Setting four"],
@@ -4670,32 +4671,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
-  await check("Review offers one delivery control, not two", async (ctx) => {
-    // The video-level Tone dropdown used to sit beside Voice direction and
-    // read as a duplicate: both option lists described the same delivery and
-    // both collapsed into the strategy's single voice_delivery. Voice direction
-    // is the one control now — its pick is concrete, is what the strategy
-    // consumes as approved delivery, and its options adapt to the Location
-    // (ADR 0091). A reintroduced Tone picker fails here.
+  await check("Review sets delivery from the video, never from a control", async (ctx) => {
+    // Voice direction and Lighting were founder picks; both are set from each
+    // video's own plan and scene now (ADR 0102, superseding 0091), so any
+    // delivery control coming back fails here. The value itself still reaches
+    // the panel as read-only copy in the live preview.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
-      await withApi({
-        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
-        getDirectionOptions: async () => ({
-          group: "default",
-          location: ["Location one"], lighting: ["Lighting one"],
-          wardrobe: ["Wardrobe one"], voice: ["Voice one"],
-        }),
-      }, async () => {
-        await mount(CreateVideo, {})(ctx);
-        await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        if (!ctx.container.querySelector('#review-voice-direction')) {
-          throw new Error("Review lost the Voice direction control");
+      await mount(CreateVideo, {})(ctx);
+      await clickEl(ctx, stepPill(ctx, "Review & submit"));
+      for (const gone of ["#review-voice-direction", "#review-lighting", "#review-tone"]) {
+        if (ctx.container.querySelector(gone)) {
+          throw new Error(`Review still offers a delivery control: ${gone}`);
         }
-        if (ctx.container.querySelector('#review-tone')) {
-          throw new Error("Review offers a second delivery control (Tone) beside Voice direction");
-        }
-      });
+      }
+      expectText(ctx, "Voice: Calm.", "the video's own voice direction is not shown");
+      expectText(ctx, "Location & wardrobe", "the scene group lost its label");
     } finally {
       global.__SMOKE_PARAMS = "";
     }
@@ -4706,9 +4697,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const OPTIONS = {
       group: "default",
       location: ["Location one", "Location two", "Location three", "Location four"],
-      lighting: ["Lighting one", "Lighting two", "Lighting three", "Lighting four"],
       wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"],
-      voice: ["Voice one", "Voice two", "Voice three", "Voice four"],
     };
     // Legacy free-text scene notes match no option, so the dropdowns open
     // empty with the plan default shown read-only beside them.
@@ -4727,7 +4716,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const select = ctx.container.querySelector('#camera-setup');
         if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
-        for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-lighting": OPTIONS.lighting, "review-wardrobe": OPTIONS.wardrobe, "review-voice-direction": OPTIONS.voice })) {
+        for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
           const dropdown = ctx.container.querySelector(`#${id}`);
           if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
           if (dropdown.tagName !== "SELECT") throw new Error(`${id} is not a dropdown`);
@@ -4736,28 +4725,25 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           if (dropdown.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
-        expectText(ctx, "Location, lighting & wardrobe");
+        expectText(ctx, "Location & wardrobe");
         expectText(ctx, "Plan default:");
         await selectOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
         await selectOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
-        await selectOption(ctx, ctx.container.querySelector('#review-lighting'), "Lighting one");
         await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
-        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
-        expectText(ctx, "Camera setup controls framing and camera movement");
+        expectText(ctx, "Camera setup controls framing");
         if (saved.location !== "Location one") {
           throw new Error(`the Location pick was not saved: ${JSON.stringify(saved.location)}`);
         }
-        if (saved.visual_direction !== "Lighting one, Wardrobe one") {
-          throw new Error(`scene picks did not compose the saved scene notes: ${JSON.stringify(saved.visual_direction)}`);
+        if (saved.visual_direction !== "Wardrobe one") {
+          throw new Error(`the wardrobe pick did not compose the saved scene notes: ${JSON.stringify(saved.visual_direction)}`);
         }
-        if (saved.voice_direction !== "Voice one") throw new Error("voice pick was not saved");
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
-        for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-lighting": "Lighting one", "review-wardrobe": "Wardrobe one", "review-voice-direction": "Voice one" })) {
+        for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-wardrobe": "Wardrobe one" })) {
           if (ctx.container.querySelector(`#${id}`)?.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }
@@ -4783,8 +4769,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         getStudioProject: async () => saved,
         getDirectionOptions: async () => ({
           group: "default",
-          location: ["Location one"], lighting: ["Lighting one"], wardrobe: ["Wardrobe one"],
-          voice: ["Voice one", "Voice two"],
+          location: ["Location one"], wardrobe: ["Wardrobe one", "Wardrobe two"],
         }),
         updateStudioProject: async (_id, patch) => {
           saves += 1;
@@ -4795,20 +4780,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice two");
+        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe two");
         if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
-        if (saved.voice_direction !== "Voice two") throw new Error("the autosave did not carry the voice pick");
+        if (saved.visual_direction !== "Wardrobe two") throw new Error("the autosave did not carry the wardrobe pick");
         const status = ctx.container.querySelector('[data-testid="review-autosave-status"]');
         if (!status || !status.textContent.includes("All changes saved")) {
           throw new Error("no saved confirmation after the autosave");
         }
         // A second change must schedule a second save, not reuse the first.
-        await selectOption(ctx, ctx.container.querySelector('#review-voice-direction'), "Voice one");
+        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
-        if (saved.voice_direction !== "Voice one") throw new Error("the second autosave did not carry the newer pick");
+        if (saved.visual_direction !== "Wardrobe one") throw new Error("the second autosave did not carry the newer pick");
       });
     } finally {
       global.__SMOKE_PARAMS = "";

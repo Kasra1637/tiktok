@@ -1621,12 +1621,12 @@ class TestPlanPromptSeedsVoiceDefault:
         monkeypatch.setattr(ai_service.httpx, "AsyncClient", _AsyncClient)
         return captured
 
-    def test_plan_prompt_seeds_energetic_voice_default(self, monkeypatch):
+    def test_plan_prompt_sets_voice_from_this_video(self, monkeypatch):
         """
-        Same no-knob problem one step earlier: the plan's voice_direction is
-        what the founder sees and edits on Review, and what the strategy model
-        later copies into voice_delivery — so the seed has to ask for fast and
-        energetic here, or flat delivery is baked in two steps before the render.
+        The plan's voice_direction is what the strategy model later copies into
+        voice_delivery, so it is written from this video's own objective,
+        audience and angle emotion — never one energetic default baked into
+        every clip (ADR 0102).
         """
         import ai_service
         captured = self._capture(monkeypatch)
@@ -1637,7 +1637,7 @@ class TestPlanPromptSeedsVoiceDefault:
             duration_seconds=20,
         ))
         prompt = json.dumps(captured["messages"])
-        assert "fast, upbeat, high-energy delivery" in prompt
+        assert "this video's objective, audience and angle emotion" in prompt
 
 
 class TestSpokenBudgetReachesThePlanPrompt:

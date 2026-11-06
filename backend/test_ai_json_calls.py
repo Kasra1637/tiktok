@@ -1314,13 +1314,12 @@ class TestStrategyBudget:
         # not pitch it.
         assert '"primary_feature": "the ONE feature this video shows' in prompt
 
-    def test_the_strategy_schema_defaults_to_energetic_delivery(self, monkeypatch):
+    def test_the_strategy_schema_sets_delivery_from_this_video(self, monkeypatch):
         """
         Delivery has no numeric knob on any provider — the only lever is the
-        prose the strategy model writes into voice_delivery, so the schema
-        must ask for fast and energetic up front. Otherwise every strategy
-        invents its own pace, usually slow and flat, and the scene lock then
-        enforces exactly that.
+        prose the strategy model writes into voice_delivery. It is set from
+        this video's own objective, audience and angle emotion now, never from
+        one energetic default baked into every clip (ADR 0102).
         """
         import ai_service
 
@@ -1349,7 +1348,7 @@ class TestStrategyBudget:
             template={"name": "T", "hook_seconds": 3},
             hook_seconds=3,
         ))
-        assert "fast, upbeat, high-energy" in captured["prompt"]
+        assert "this video's objective, audience and angle emotion" in captured["prompt"]
 
     def test_the_strategy_schema_defaults_to_unpolished_phone_shot_look(self, monkeypatch):
         """

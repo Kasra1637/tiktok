@@ -3497,7 +3497,7 @@ async def generate_creative_plan(
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
         '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
-        '  "voice_direction": "delivery direction for the voiceover or on-camera talent — default to fast, upbeat, high-energy delivery",\n'
+        '  "voice_direction": "delivery for the voiceover or on-camera talent, set from this video\'s objective, audience and angle emotion \u2014 never a generic default",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
         '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
         "}\n"
@@ -5388,7 +5388,7 @@ async def generate_video_strategy(
         '  },\n'
         '  "performance": {\n'
         f'    "movement": "every action from hook_action, both section actions and the timeline, in order",\n'
-        f'    "voice_delivery": "tone, pace and energy of the voice — default to fast, upbeat, high-energy delivery unless the plan says otherwise",\n'
+        f'    "voice_delivery": "tone, pace and energy of the voice, set from this video\'s objective, audience and angle emotion \u2014 never a generic default",\n'
         '  },\n'
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'

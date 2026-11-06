@@ -1,6 +1,7 @@
 # 0091 — Voice direction is the one delivery control
 
-- **Status:** accepted
+- **Status:** accepted (superseded by ADR 0102 — voice direction is now set
+  from each video's own context; no founder control owns delivery)
 - **Date:** 2026-11-04
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (Review's *Visual & audio
   direction* disclosure — the removed `review-tone` pick, the kept
