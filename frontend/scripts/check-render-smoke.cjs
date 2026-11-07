@@ -2804,38 +2804,21 @@ async function main() {
     }
   });
 
-  // One fill for the three step glyphs. Each header renders its step's own
-  // icon inside the same filled indigo disc, in every state — a done step keeps
-  // its briefcase/target/check-circle instead of swapping to a tick, which is
-  // what made the three look like different styles depending on progress. State
-  // stays in the chip.
-  await check("the three step glyphs share one fill style", async (ctx) => {
+  // Step headers carry no glyph disc: the digit + label is the identity,
+  // and the chip at the end of the row carries done/blocked state.
+  await check("the three step headers carry no glyph disc", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    const discs = ["profile", "angle", "review"].map((key) => ({
-      key,
-      el: ctx.container.querySelector(`[data-testid="wizard-section-icon-${key}"]`),
-    }));
-    const styles = discs.map(({ el }) => (el ? el.className : ""));
-    if (styles.some((s) => !s)) throw new Error("a step header has no glyph disc");
-    if (new Set(styles).size !== 1) {
-      throw new Error(`the step glyph discs do not share one fill: ${JSON.stringify(styles)}`);
-    }
-    if (!/bg-\[color:var\(--brand-indigo\)\]/.test(styles[0]) || !/text-white/.test(styles[0])) {
-      throw new Error("the step glyph disc is not the shared filled style");
-    }
-    for (const { key, el } of discs) {
-      const glyph = el.querySelector("svg");
-      if (!glyph) throw new Error(`the ${key} step disc carries no glyph`);
-      if (/lucide-check\b/.test([...glyph.classList].join(" "))) {
-        throw new Error(`the ${key} step swapped its glyph for a tick instead of keeping its own`);
+    for (const key of ["profile", "angle", "review"]) {
+      const el = ctx.container.querySelector(`[data-testid="wizard-section-icon-${key}"]`);
+      if (el) throw new Error(`the ${key} step header still renders a glyph disc`);
+      const toggle = ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
+      if (!toggle) throw new Error(`the ${key} step header is missing`);
+      if (!toggle.textContent.includes(["profile", "angle", "review"].indexOf(key) + 1)) {
+        throw new Error(`the ${key} step header lost its digit`);
       }
-    }
-    // The done step in this fixture is the profile: its own glyph, not a tick.
-    if (!/lucide-briefcase/.test([...discs[0].el.querySelector("svg").classList].join(" "))) {
-      throw new Error("the done profile step lost its briefcase glyph");
     }
   });
 
