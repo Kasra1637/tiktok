@@ -6362,6 +6362,105 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // Live goals wait for the founder's click: picking an angle shows the
+  // facet-ordered list and calls nothing; only Generate goals calls the
+  // billed endpoint, and its six replace the list with live copy/fits.
+  await check("live goals generate only on the Generate click", async (ctx) => {
+    const SIX = ANGLE_GOALS.problem_solution;
+    const LIVE = [
+      { name: "educate_viewers", description: "Leaves them with one thing they got wrong.", why_it_fits: "Fits this angle's correction.", fit_score: 9 },
+      { name: "address_user_problem", description: "Gets them naming the problem out loud.", why_it_fits: "Fits this angle's problem.", fit_score: 8 },
+      { name: "ease_daily_moment", description: "Makes the daily moment feel lighter.", why_it_fits: "Fits this angle's moment.", fit_score: 7 },
+      { name: "create_curiosity", description: "Leaves them wanting the answer.", why_it_fits: "Fits this angle's promise.", fit_score: 6 },
+      { name: "demonstrate_feature", description: "Keeps them watching long enough to see it work.", why_it_fits: "Fits this angle's feature.", fit_score: 5 },
+      { name: "explain_app", description: "Walks them into what the app is.", why_it_fits: "Fits this angle's outcome.", fit_score: 4 },
+    ];
+    const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
+      .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
+    apiCalls.length = 0;
+    await withApi(
+      {
+        getContentAngles: async () => ({
+          angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
+          objective_evidence: {},
+        }),
+        generateAngleGoals: async () => ({ angle_id: "a1", goals: LIVE }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await act(async () => {});
+          if (apiCalls.includes("generateAngleGoals")) {
+            throw new Error("live goals fired on angle pick instead of waiting for the founder click");
+          }
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`facet list is not the fallback before the click: ${orderOf().join(", ")}`);
+          }
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
+          await new Promise((r) => setTimeout(r, 150));
+          const order = orderOf();
+          if (order.join("|") !== LIVE.map((g) => g.name).join("|")) {
+            throw new Error(`live goals did not replace the list: ${order.join(", ")}`);
+          }
+          const picker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
+          if (!picker.textContent.includes("Fits this angle's correction")) {
+            throw new Error("live why_it_fits copy is not rendered");
+          }
+          if (!picker.textContent.includes("Leaves them with one thing they got wrong")) {
+            throw new Error("live description copy is not rendered");
+          }
+          if (!apiCalls.includes("generateAngleGoals")) {
+            throw new Error("Generate goals never called the live endpoint");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // A failed live-goal call keeps the facet list and names the retry:
+  // the goal step is never blank.
+  await check("live goal failure keeps the facet list and names the retry", async (ctx) => {
+    const SIX = ANGLE_GOALS.problem_solution;
+    const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
+      .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
+    await withApi(
+      {
+        getContentAngles: async () => ({
+          angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
+          objective_evidence: {},
+        }),
+        generateAngleGoals: async () => { throw new Error("goal generation unavailable"); },
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
+          await new Promise((r) => setTimeout(r, 150));
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the facet list moved after a failed live-goal call: ${orderOf().join(", ")}`);
+          }
+          const error = ctx.container.querySelector('[data-testid="goals-generation-error"]');
+          if (!error) throw new Error("a failed live-goal call shows no error");
+          if (!error.textContent.includes("unchanged")) {
+            throw new Error("the error does not say the suggested goals are unchanged");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // Regenerate angles replaces the list with six fresh serialized rows and
   // keeps the goal step populated: the old pick's id is gone, so the wizard
   // parks on the strongest new angle instead of collapsing to the wait

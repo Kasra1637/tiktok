@@ -313,6 +313,11 @@ export default function CreateVideo() {
   // Cycling goal suggestions on the selected angle. Persists server-side per
   // angle, so the re-read of the angles list is the new state.
   const [cyclingGoals, setCyclingGoals] = useState(false);
+  // Live goals for the selected angle, generated only on the founder's
+  // click. Null until then: the facet-ordered list shows in the meantime.
+  const [liveGoals, setLiveGoals] = useState(null);
+  const [liveGoalsLoading, setLiveGoalsLoading] = useState(false);
+  const [liveGoalsError, setLiveGoalsError] = useState(null);
   const [angleRegenNotice, setAngleRegenNotice] = useState(null);
   // What a completed angle regen cost: how many of the profile's drafts were
   // built on angles it replaced. Shown as a one-line notice after the fact —
@@ -434,6 +439,12 @@ export default function CreateVideo() {
   const objectiveFitReasons = angle
     ? facets?.angle_goal_fit_reasons?.[angle.kind] || {}
     : {};
+  // Live goals replace the facet lookup only after the founder's click;
+  // a new angle starts back on the facet list.
+  useEffect(() => {
+    setLiveGoals(null);
+    setLiveGoalsError(null);
+  }, [angleId]);
 
   // The deep-link inputs as plain strings, so the load below depends on what
   // it reads rather than on the params object: the ?step= mirror rewriting
@@ -720,6 +731,24 @@ export default function CreateVideo() {
       setCyclingGoals(false);
     }
   }, [profileId, angleId, adoptAngles]);
+
+  // Live goals for the selected angle. Billed, so this runs only on the
+  // founder's click — never on angle pick. On failure the facet-ordered
+  // list stays and the error names the retry; the step is never blank.
+  const handleGenerateGoals = useCallback(async () => {
+    if (!profileId || !angleId || liveGoalsLoading) return;
+    setLiveGoalsLoading(true);
+    setLiveGoalsError(null);
+    try {
+      const data = await api.generateAngleGoals(profileId, angleId);
+      setLiveGoals(Array.isArray(data?.goals) ? data.goals : []);
+    } catch (err) {
+      setLiveGoals(null);
+      setLiveGoalsError(getErrorMessage(err));
+    } finally {
+      setLiveGoalsLoading(false);
+    }
+  }, [profileId, angleId, liveGoalsLoading]);
 
   // Preselect the top pick only once its key is displayable. Deliberately not
   // "on every reload": a reload must never move a selection the founder made,
@@ -1803,6 +1832,10 @@ export default function CreateVideo() {
               objectiveEvidence={objectiveEvidence}
               pairEvidence={pairEvidence}
               suggestions={angle?.goal_suggestions}
+              liveGoals={liveGoals}
+              onGenerate={handleGenerateGoals}
+              generating={liveGoalsLoading}
+              generationError={liveGoalsError}
               onRegenerate={handleRegenerateGoals}
               regenerating={cyclingGoals}
             />
@@ -2149,6 +2182,10 @@ export default function CreateVideo() {
                 outcomes={objectiveOutcomes}
                   fitReasons={objectiveFitReasons}
                   suggestions={angle?.goal_suggestions}
+                  liveGoals={liveGoals}
+                  onGenerate={handleGenerateGoals}
+                  generating={liveGoalsLoading}
+                  generationError={liveGoalsError}
                   onRegenerate={handleRegenerateGoals}
                   regenerating={cyclingGoals}
                 />
@@ -2227,6 +2264,10 @@ export default function CreateVideo() {
                 outcomes={objectiveOutcomes}
                 fitReasons={objectiveFitReasons}
                 suggestions={angle?.goal_suggestions}
+                liveGoals={liveGoals}
+                onGenerate={handleGenerateGoals}
+                generating={liveGoalsLoading}
+                generationError={liveGoalsError}
                 onRegenerate={handleRegenerateGoals}
                 regenerating={cyclingGoals}
               />

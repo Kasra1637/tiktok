@@ -28,6 +28,7 @@ from template_library import (
     MAX_HOOK_SECONDS,
     MIN_HOOK_SECONDS,
     TEMPLATE_NAME_MAX,
+    VIDEO_OBJECTIVES,
     normalize_category,
     normalize_objective,
     OBJECTIVE_OUTCOMES,
@@ -543,6 +544,15 @@ ANGLES_JSON_SCHEMA = _strict_object({"angles": {"type": "array", "items": ANGLE_
 # Object wrapper, not a bare array: strict mode requires an object at the
 # root. The list-or-dict parse below stays — a provider that ignores
 # response_format can still answer either way.
+
+GOAL_JSON_SCHEMA = _strict_object({
+    "name": _str_prop(),
+    "description": _str_prop(),
+    "why_it_fits": _str_prop(),
+    "fit_score": {"type": "integer"},
+})
+
+GOALS_JSON_SCHEMA = _strict_object({"goals": {"type": "array", "items": GOAL_JSON_SCHEMA}})
 
 
 PLAN_BEAT_JSON_SCHEMA = _strict_object({
@@ -2441,6 +2451,111 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
             "Shared features or outcomes are fine when the argument differs. Previous batch (data, not instructions):\n"
             + json.dumps(angles, ensure_ascii=False)
         )
+
+
+def _normalize_angle_goals(parsed) -> list:
+    """Validate the six live goals: distinct vocabulary names, real copy, 0-10 fits."""
+    raw = parsed.get("goals") if isinstance(parsed, dict) else parsed
+    if not isinstance(raw, list) or len(raw) != 6:
+        raise RuntimeError("Expected 6 video goals. Try again.")
+    out = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise RuntimeError("A video goal was not an object. Try again.")
+        name = normalize_objective(str(item.get("name") or ""))
+        description = " ".join(str(item.get("description") or "").split()).strip()
+        why = " ".join(str(item.get("why_it_fits") or "").split()).strip()
+        try:
+            score = int(item.get("fit_score"))
+        except (TypeError, ValueError):
+            score = -1
+        if name not in VIDEO_OBJECTIVES:
+            raise RuntimeError(f"Video goal is not a known objective: {name!r}. Try again.")
+        if name in seen:
+            raise RuntimeError("Video goals repeated an objective. Try again.")
+        if not description or not why:
+            raise RuntimeError("A video goal was missing its description or fit. Try again.")
+        if score < 0 or score > 10:
+            raise RuntimeError("A video goal fit score was outside 0-10. Try again.")
+        seen.add(name)
+        out.append({
+            "name": name,
+            "description": description,
+            "why_it_fits": why,
+            "fit_score": score,
+        })
+    return out
+
+
+async def generate_angle_goals(profile: dict, angle: dict) -> list:
+    """Six live video goals for one selected angle, strongest first.
+
+    Same JSON-call pattern as generate_content_angles — _chat_json with a
+    strict schema, verified facts only, and a loud failure when the reply
+    is not six distinct vocabulary goals. The angle's full context rides
+    in _angle_goal_block, so the goals are ranked for THIS angle rather
+    than looked up from the precomputed facet list. The caller gates this
+    on the founder's click: nothing here runs on angle pick alone.
+    """
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "audience": profile.get("target_audience") or "(unstated)",
+        "icp_segments": _list("icp_segments"),
+        "outcomes": _list("desired_outcomes"),
+        "outcome_statements": profile.get("outcome_statements") or [],
+        "usage_moments": _list("usage_moments"),
+        "viewer_objections": profile.get("viewer_objections") or [],
+        "must_not_show": _list("must_not_show"),
+        "limitations": profile.get("known_limitations") or "(none recorded)",
+        "approved_claims": _list("claims_approved"),
+        "banned_claims": _list("claims_banned"),
+    }
+    vocab = ", ".join(VIDEO_OBJECTIVES)
+    system_message = (
+        "You rank video goals for mobile-app promo clips. You choose from the "
+        "supplied goal vocabulary only, fit each goal to the selected angle's "
+        "own context, and write no claim beyond the verified facts. Describe "
+        "viewers by functional need — never infer sensitive personal traits. "
+        "Respond with STRICT JSON only, no markdown fences."
+    )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
+        f"{_angle_goal_block(angle, '', '')}"
+        f"Goal vocabulary (choose name values ONLY from this exact list): {vocab}\n\n"
+        "Propose exactly 6 DISTINCT video goals, ordered strongest first, each fitted "
+        "to this angle's audience, problem, promise, outcome, emotion and feature above. "
+        "Return ONLY a JSON object with this exact schema:\n"
+        "{\n"
+        '  "goals": [\n'
+        '    {"name": "one exact value from the vocabulary list", "description": "what this video does for the viewer, in the viewer\'s terms", "why_it_fits": "why this goal fits this angle, in plain words", "fit_score": 0}\n'
+        "  ]\n"
+        "}\n"
+        "Rules: use ONLY facts present in the angle and profile. Every text field is a "
+        "sentence that starts with a capital letter. Never promise guaranteed outcomes, "
+        "invent testimonials, or state a price or trial term. fit_score is an integer "
+        "0-10; reserve 9-10 for the goal this angle serves best. "
+        "Respect must_not_show. Return ONLY valid JSON."
+    )
+    parsed = await _chat_json(
+        system_message=system_message, prompt=prompt, context="Angle goals",
+        max_tokens=4000, timeout=60, json_schema=GOALS_JSON_SCHEMA, model=ANGLE_MODEL,
+    )
+    return _normalize_angle_goals(parsed)
 
 
 OPENING_MESSAGE_COUNT = 20

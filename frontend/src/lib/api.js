@@ -239,6 +239,13 @@ export const api = {
     client
       .post(`/app-profiles/${profileId}/content-angles/${angleId}/regenerate-goals`)
       .then((r) => r.data),
+  // Six live video goals for one selected angle, generated from the
+  // angle's full context. Billed — the wizard only calls this on the
+  // founder's Generate click, never on angle pick.
+  generateAngleGoals: (profileId, angleId) =>
+    client
+      .post(`/app-profiles/${profileId}/content-angles/${angleId}/live-goals`)
+      .then((r) => r.data),
   getContentAngleGoalSuggestions: (profileId, angleId) =>
     client
       .get(`/app-profiles/${profileId}/content-angles/${angleId}/goal-suggestions`)

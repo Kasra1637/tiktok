@@ -637,19 +637,51 @@ export function AngleGoalPicker({
   // order, from the server (angle.goal_suggestions). Falls back to the
   // static facet list when the angle row carries none.
   suggestions,
+  // Live goals generated on the founder's click, each
+  // {name, description, why_it_fits, fit_score}. Null until generated: the
+  // facet-ordered list shows in the meantime and on failure.
+  liveGoals = null,
+  onGenerate,
+  generating = false,
+  generationError = null,
   onRegenerate,
   regenerating = false,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
-  const orderedGoals =
-    Array.isArray(suggestions) && suggestions.length > 0
-      ? suggestions.filter((goal) => knownGoals.includes(goal))
+  const liveByName = {};
+  if (Array.isArray(liveGoals)) {
+    liveGoals.forEach((g) => {
+      if (g && g.name) liveByName[g.name] = g;
+    });
+  }
+  const liveOrdered =
+    Array.isArray(liveGoals) && liveGoals.length > 0
+      ? liveGoals.map((g) => g.name).filter((goal) => knownGoals.includes(goal))
       : [];
+  const orderedGoals =
+    liveOrdered.length > 0
+      ? liveOrdered
+      : Array.isArray(suggestions) && suggestions.length > 0
+        ? suggestions.filter((goal) => knownGoals.includes(goal))
+        : [];
   const rankedGoals = orderedGoals.length > 0
     ? orderedGoals
     : (recommendations || []).filter((goal) => knownGoals.includes(goal));
   const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
   const outsideRecommendation = Boolean(value && !featured.includes(value));
+  const liveOutcomes = {};
+  const liveFitReasons = {};
+  const liveScores = {};
+  if (Array.isArray(liveGoals)) {
+    liveGoals.forEach((g) => {
+      if (!g || !g.name) return;
+      if (g.description) liveOutcomes[g.name] = g.description;
+      if (g.why_it_fits) liveFitReasons[g.name] = g.why_it_fits;
+      if (Number.isFinite(Number(g.fit_score))) liveScores[g.name] = g.fit_score;
+    });
+  }
+  const shownOutcomes = { ...(outcomes || {}), ...liveOutcomes };
+  const shownFitReasons = { ...(fitReasons || {}), ...liveFitReasons };
 
   // Live count-up while the six reshuffle ("Shuffling goal 3 of 6…"). Same
   // contract as the angle count-up: narrates fresh work, unmounts on settle
@@ -689,6 +721,25 @@ export function AngleGoalPicker({
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
           <div className="flex shrink-0 items-center gap-1.5">
+            {onGenerate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={onGenerate}
+                disabled={generating}
+                busy={generating}
+                title="Generate six goals fitted to this angle's audience, problem, promise, outcome, emotion and feature. Runs only when you click it."
+                data-testid="generate-goals-button"
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {generating ? "Generating goals" : "Generate goals"}
+              </Button>
+            )}
             {onRegenerate && featured.length > 0 && (
               <Button
                 variant="ghost"
@@ -718,6 +769,16 @@ export function AngleGoalPicker({
           The angle shapes this video — the goal shapes the campaign it serves.
         </p>
       </div>
+      {generating && (
+        <p className="text-sm text-muted-foreground" role="status" data-testid="goals-generating">
+          Generating goals for this angle…
+        </p>
+      )}
+      {generationError && (
+        <p className="text-sm text-destructive" role="alert" data-testid="goals-generation-error">
+          {generationError} The suggested goals below are unchanged.
+        </p>
+      )}
       {regenerating && (
         <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
           Shuffling goal {shuffleCount} of {shuffleTotal}…
@@ -728,13 +789,20 @@ export function AngleGoalPicker({
           const selected = value === goal;
           // 0–10 fit for this goal under the selected angle: annotates the
           // card, never reorders the six. Rank is this angle's persisted
-          // suggestion order, tally is the goal's own win share.
-          const fit = goalFitScore({
-            index,
-            total: featured.length,
-            evidence: objectiveEvidence?.[goal],
-            hasFitReason: Boolean(fitReasons?.[goal]),
-          });
+          // suggestion order, tally is the goal's own win share. A live-goal
+          // fit_score, when present, replaces the computed score.
+          const liveScore = liveScores?.[goal];
+          const fit = Number.isFinite(Number(liveScore))
+            ? {
+                score: Math.min(10, Math.max(0, Math.floor(Number(liveScore)))),
+                basis: `fit ${Math.min(10, Math.max(0, Math.floor(Number(liveScore))))} of 10 for this angle`,
+              }
+            : goalFitScore({
+                index,
+                total: featured.length,
+                evidence: objectiveEvidence?.[goal],
+                hasFitReason: Boolean(shownFitReasons?.[goal]),
+              });
           return (
             // Staggered arrival, same language as the angle rows: a fresh
             // order is watched arriving instead of blinking in at once. Keyed
@@ -759,9 +827,9 @@ export function AngleGoalPicker({
                   {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                 </span>
               </span>
-              {outcomes?.[goal] && (
+              {shownOutcomes?.[goal] && (
                 <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
-                  {sentenceCase(outcomes[goal])}
+                  {sentenceCase(shownOutcomes[goal])}
                 </span>
               )}
               {/* One descriptive line stays visible: the outcome when there is
@@ -769,15 +837,15 @@ export function AngleGoalPicker({
                   outcome, plus both verdict counts, tuck into a disclosure so
                   six cards scan instead of shouting. Every testid stays in the
                   DOM either way. */}
-              {!outcomes?.[goal] && fitReasons?.[goal] && (
+              {!shownOutcomes?.[goal] && shownFitReasons?.[goal] && (
                 <span
                   data-testid={`goal-fit-${goal}`}
                   className="mt-1 block text-sm leading-relaxed text-muted-foreground"
                 >
-                  {sentenceCase(fitReasons[goal])}
+                  {sentenceCase(shownFitReasons[goal])}
                 </span>
               )}
-              {(Boolean(outcomes?.[goal] && fitReasons?.[goal]) ||
+              {(Boolean(shownOutcomes?.[goal] && shownFitReasons?.[goal]) ||
                 formatVerdicts(angle?.evidence) ||
                 formatVerdicts(objectiveEvidence?.[goal]) ||
                 formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`])) && (
@@ -786,12 +854,12 @@ export function AngleGoalPicker({
                     Why this goal fits
                   </summary>
                   <div className="mt-1 space-y-1">
-                    {outcomes?.[goal] && fitReasons?.[goal] && (
+                    {shownOutcomes?.[goal] && shownFitReasons?.[goal] && (
                       <span
                         data-testid={`goal-fit-${goal}`}
                         className="block text-sm leading-relaxed text-muted-foreground"
                       >
-                        {sentenceCase(fitReasons[goal])}
+                        {sentenceCase(shownFitReasons[goal])}
                       </span>
                     )}
                     {/* Founder verdicts for the selected angle's KIND, carried on the

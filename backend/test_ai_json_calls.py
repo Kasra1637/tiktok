@@ -497,6 +497,79 @@ class TestChatModelRequestShape:
             assert "temperature" not in payload
 
 
+class TestLiveAngleGoals:
+    ANGLE = {
+        "kind": "problem_solution", "label": "Too many lists",
+        "target_audience": "Busy professionals", "user_problem": "Nothing gets finished",
+        "hook_promise": "Finish one thing", "app_feature": "Task timer",
+        "desired_emotion": "Relief", "viewer_outcome": "Starting without setup friction",
+        "claims_to_respect": [],
+    }
+    GOALS = [
+        {"name": "address_user_problem", "description": "Gets them naming the problem out loud.", "why_it_fits": "Fits this angle's problem.", "fit_score": 9},
+        {"name": "feel_seen_and_understood", "description": "Makes them feel described, not sold to.", "why_it_fits": "Fits this angle's feeling.", "fit_score": 8},
+        {"name": "avoid_common_mistake", "description": "Catches them before the mistake.", "why_it_fits": "Fits this angle's promise.", "fit_score": 7},
+        {"name": "create_curiosity", "description": "Leaves them wanting the answer.", "why_it_fits": "Fits this angle's outcome.", "fit_score": 6},
+        {"name": "ease_daily_moment", "description": "Makes the daily moment feel lighter.", "why_it_fits": "Fits this angle's moment.", "fit_score": 5},
+        {"name": "educate_viewers", "description": "Leaves them with one thing they got wrong.", "why_it_fits": "Fits this angle's feature.", "fit_score": 4},
+    ]
+
+    def _capture(self, monkeypatch, reply=None):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            captured["context"] = context
+            captured["kwargs"] = kwargs
+            return reply if reply is not None else {"goals": [dict(g) for g in self.GOALS]}
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return captured
+
+    def test_goals_are_generated_from_the_angle_context(self, monkeypatch):
+        import ai_service
+        captured = self._capture(monkeypatch)
+        out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS]
+        assert captured["context"] == "Angle goals"
+        for fragment in ("Busy professionals", "Nothing gets finished", "Finish one thing",
+                         "Task timer", "Relief", "Starting without setup friction",
+                         "address_user_problem"):
+            assert fragment in captured["prompt"]
+
+    def test_goals_must_be_six_vocabulary_objectives(self, monkeypatch):
+        import ai_service
+        bad = {"goals": [dict(g) for g in self.GOALS]}
+        bad["goals"][0] = dict(bad["goals"][0], name="not_a_goal")
+        self._capture(monkeypatch, reply=bad)
+        with pytest.raises(RuntimeError, match="known objective"):
+            _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+
+    def test_goals_must_be_distinct_and_scored(self, monkeypatch):
+        import ai_service
+        bad = {"goals": [dict(g) for g in self.GOALS]}
+        bad["goals"][1] = dict(bad["goals"][1], name=bad["goals"][0]["name"])
+        self._capture(monkeypatch, reply=bad)
+        with pytest.raises(RuntimeError, match="repeated"):
+            _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+
+    def test_goals_must_be_exactly_six(self, monkeypatch):
+        import ai_service
+        self._capture(monkeypatch, reply={"goals": [dict(g) for g in self.GOALS[:5]]})
+        with pytest.raises(RuntimeError, match="6 video goals"):
+            _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+
+    def test_hook_and_middle_rules_stay_out_of_the_goal_prompt(self, monkeypatch):
+        # The goal call ranks objectives only: it must not carry the spoken-line
+        # targets, which stay in the plan and strategy prompts.
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert "TWO BEATS MAX" not in captured["prompt"]
+        assert "70 characters" not in captured["prompt"]
+
+
 class TestAngleFeedbackPromptWiring:
     ANGLE = {
         "kind": "problem_solution", "label": "Too many lists",

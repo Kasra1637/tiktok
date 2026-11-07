@@ -50,7 +50,7 @@ import observability
 from ai_service import (
     generate_video,
     poll_video_job, analyze_app_profile,
-    generate_content_angles, generate_creative_plan,
+    generate_content_angles, generate_angle_goals, generate_creative_plan,
     page_text_with_metadata,
     TEXT_MODEL, ANGLE_MODEL,
     generate_video_strategy, normalize_strategy, generate_brand_templates,
@@ -4232,6 +4232,49 @@ async def regenerate_angle_goal_suggestions(
         "goal_variant": next_variant,
         "suggestions": suggestions,
     }
+
+
+@api_router.post("/app-profiles/{profile_id}/content-angles/{angle_id}/live-goals")
+async def live_angle_goals(
+    profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Six live video goals for one selected angle, generated from the angle's
+    full context (audience, problem, promise, outcome, emotion, feature).
+
+    Billed and click-gated: the wizard only calls this when the founder
+    clicks Generate goals — switching goals or picking an angle queues
+    nothing (ADR 0098). The goals are returned, never persisted; the
+    facet-ordered suggestions remain the fallback when this fails.
+    """
+    require_ai_configured()
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    if profile.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Review and approve this App Profile before generating goals.",
+        )
+    angle = await _fetch_one(
+        "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+        (angle_id, profile_id, user_id),
+    )
+    if not angle:
+        raise HTTPException(status_code=404, detail="Content angle not found")
+    try:
+        goals = await _log_model_call(
+            "angle_goals", "text", ANGLE_MODEL,
+            lambda: generate_angle_goals(profile, angle),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except Exception as e:
+        logger.error(f"Live goal generation failed for angle {angle_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI goal generation failed. Please try again. ({str(e)[:150]})")
+    return {"angle_id": angle_id, "goals": goals}
 
 
 @api_router.get("/app-profiles/{profile_id}/content-angles/{angle_id}/goal-suggestions")

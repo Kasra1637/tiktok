@@ -2004,6 +2004,70 @@ class TestGoalSuggestionsCycle:
         assert err.value.status_code == 404
 
 
+class TestLiveAngleGoalsEndpoint:
+    GOALS = [
+        {"name": "address_user_problem", "description": "Gets them naming the problem out loud.", "why_it_fits": "Fits this angle.", "fit_score": 9},
+        {"name": "feel_seen_and_understood", "description": "Makes them feel described.", "why_it_fits": "Fits this angle.", "fit_score": 8},
+        {"name": "avoid_common_mistake", "description": "Catches them before the mistake.", "why_it_fits": "Fits this angle.", "fit_score": 7},
+        {"name": "create_curiosity", "description": "Leaves them wanting the answer.", "why_it_fits": "Fits this angle.", "fit_score": 6},
+        {"name": "ease_daily_moment", "description": "Makes the daily moment feel lighter.", "why_it_fits": "Fits this angle.", "fit_score": 5},
+        {"name": "educate_viewers", "description": "Leaves them with one correction.", "why_it_fits": "Fits this angle.", "fit_score": 4},
+    ]
+
+    def _angle(self, api, profile_id):
+        import uuid as _uuid
+        angle_id = str(_uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO content_angles (id, brand_profile_id, kind, label, "
+            "target_audience, user_problem, hook_promise, app_feature, "
+            "desired_emotion, viewer_outcome, created_at, user_id, origin) "
+            "VALUES (?, ?, 'problem_solution', 'Too many lists', 'Nurses', "
+            "'Paperwork', 'Less admin', 'One-tap logging', 'Relief', "
+            "'Less admin', '2026-10-29T00:00:00', ?, 'generated')",
+            (angle_id, profile_id, ANON),
+        ))
+        return angle_id
+
+    def test_live_goals_require_approved_profile(self, api, monkeypatch):
+        import ai_service
+        profile = _make_profile(api, ANON, name="Live Goals Unapproved")
+        angle_id = self._angle(api, profile["id"])
+
+        async def fake_goals(profile, angle):
+            raise AssertionError("generated without approval")
+
+        monkeypatch.setattr(ai_service, "generate_angle_goals", fake_goals)
+        with pytest.raises(HTTPException) as err:
+            _run(api.live_angle_goals(profile_id=profile["id"], angle_id=angle_id, user_id=ANON))
+        assert err.value.status_code == 409
+
+    def test_live_goals_return_angles_goals_for_approved_profile(self, api, monkeypatch):
+        import ai_service
+        profile = _make_profile(api, ANON, name="Live Goals Approved")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        angle_id = self._angle(api, profile["id"])
+        seen = {}
+
+        async def fake_goals(profile, angle):
+            seen["audience"] = angle.get("target_audience")
+            return [dict(g) for g in self.GOALS]
+
+        monkeypatch.setattr(api, "generate_angle_goals", fake_goals)
+        out = _run(api.live_angle_goals(profile_id=profile["id"], angle_id=angle_id, user_id=ANON))
+        assert out["angle_id"] == angle_id
+        assert [g["name"] for g in out["goals"]] == [g["name"] for g in self.GOALS]
+        assert seen["audience"] == "Nurses"
+
+    def test_live_goals_404_for_missing_angle(self, api, monkeypatch):
+        import ai_service
+        profile = _make_profile(api, ANON, name="Live Goals Missing")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        monkeypatch.setattr(ai_service, "generate_angle_goals", lambda p, a: self.GOALS)
+        with pytest.raises(HTTPException) as err:
+            _run(api.live_angle_goals(profile_id=profile["id"], angle_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404
+
+
 class TestDirectionOptionsEndpoint:
     """Review-step dropdowns follow the profile's category group."""
 
