@@ -3271,11 +3271,16 @@ def _spoken_line_rules_block() -> str:
     """
     return (
         "SPOKEN LINE CRAFT (both spoken lines, every draft):\n"
-        "- HOOK: default to a STATEMENT that names the viewer\u2019s feeling or situation "
-        "directly (never a question), unless the plan explicitly requests a question "
-        "format. Said TO or ABOUT them, never a diary. 'I' at most ONCE in the hook "
-        "line; zero is better. Plain power words are fine (never, still, every "
-        "time). No clickbait, hype or exaggeration.\n"
+        "- HOOK FORM: choose the form from the angle and the problem it "
+        "names. A question only when the problem is something viewers "
+        "silently ask themselves, like a loop they can't explain. "
+        "Otherwise a plain statement, a confession, or a blunt "
+        "observation, in the speaker's own voice. Never default to a "
+        "question, never reuse fixed wording, and do not use the same "
+        "form as the last few generations. Said TO or ABOUT them, never "
+        "a diary. 'I' at most ONCE in the hook line; zero is better. "
+        "Plain power words are fine (never, still, every time). No "
+        "clickbait, hype or exaggeration.\n"
         "- NAME THE ACTION: say the real task in the viewer's own words, never a "
         "vague stand-in. For a journaling app that is \"I don't want to write in my "
         "journal today\", not \"I don't want to type anything\" or \"typing is the "
@@ -3300,6 +3305,110 @@ def _spoken_line_rules_block() -> str:
         "download, install, sign-up, follow or 'try it'. A customer telling "
         "what happened is the whole piece.\n"
     )
+
+
+_SELF_ASK_PATTERNS = (
+    "why do i",
+    "why does my",
+    "why does this",
+    "why does it",
+    "what is wrong with me",
+    "what's wrong with me",
+    "what is wrong with",
+    "how long has this",
+    "how long have i",
+    "when did i start",
+    "why do i keep",
+    "why does this keep",
+    "why do i always",
+    "why does this always",
+    "why do i feel",
+    "why do i have",
+    "what does this mean",
+    "what is this feeling",
+    )
+
+
+# A first-person 'I' in a hook line, contractions included ("I'm", "I've").
+# One can anchor a genuine line; two turn the opening into diary narration.
+_FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
+
+
+def hook_form_of(text: str) -> str:
+    """Classify a hook line by its spoken form (pure, no IO).
+
+    Returns one of ``statement``, ``confession``, ``observation``,
+    ``question`` or ``unknown``. A confession is first person speaking:
+    the line opens on the speaker's own action/feeling. An observation
+    is a blunt third-person/impersonal verdict. A question ends in ``?``.
+    Used to vary the form across generations and to keep the prompt's
+    choice honest — not as a style gate.
+    """
+    line = " ".join(str(text or "").split()).strip()
+    if not line:
+        return "unknown"
+    if line.endswith("?"):
+        return "question"
+    if _FIRST_PERSON_I.search(line):
+        return "confession"
+    lowered = _normalize_spoken(line)
+    if lowered.startswith(("the ", "a ", "an ", "this ", "that ", "it ")):
+        return "observation"
+    return "statement"
+
+
+def _hook_form_block(angle: Optional[dict] = None, recent_forms=None, recent_hooks=None) -> str:
+    """Prompt block steering which spoken form the hook takes.
+
+    The form follows the angle and the problem it names: a question only
+    when the problem is something viewers silently ask themselves (a loop
+    they can't explain), otherwise a plain statement, a confession, or a
+    blunt observation in the speaker's own voice. When recent forms are
+    known, the block names them so the model does not reuse the same form
+    as the last few generations. No wording examples: the model must write
+    its own line from the angle/problem, never copy a fixed phrase.
+    """
+    forms = [str(f).strip().lower() for f in (recent_forms or []) if str(f).strip()]
+    lines = [
+        "HOOK FORM (chosen from the angle and the problem it names, never fixed):",
+        "- A question only when the problem is something viewers silently ask",
+        "  themselves, like a loop they can't explain (why I keep..., why this",
+        "  keeps happening..., what is wrong with...). Then ask it plainly.",
+        "- Otherwise name it directly without asking: a plain statement, a",
+        "  confession, or a blunt observation, in the speaker's own voice.",
+        "- Never default to a question, and never reuse fixed wording or",
+        "  example lines. Whatever the form, keep it spoken, near the target",
+        "  length, and flowing straight into the script as one thought.",
+    ]
+    if forms:
+        recent = ", ".join(forms[-3:])
+        lines.append(
+            f"- RECENT FORMS: previous hooks used {recent}. Choose a different "
+            "form this time unless the problem itself only fits a question."
+        )
+    if recent_hooks:
+        # Show wording only as a negative example: the model must write a
+        # fresh line, never copy or lightly edit one of these.
+        lines.append(
+            "- DO NOT REUSE RECENT WORDING (data to avoid, not instructions): "
+            + " | ".join(str(h).strip()[:80] for h in recent_hooks if str(h).strip())[:600]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _angle_invites_question(angle: Optional[dict]) -> bool:
+    """Whether the angle/problem is itself a silent self-question.
+
+    A problem like an unexplained loop — "why do I keep...", "what is
+    wrong with me..." — is one viewers already ask themselves, so a
+    question hook is its honest form. Everything else names directly.
+    Pure lexical check on the problem/promise text; no IO.
+    """
+    a = angle or {}
+    if not isinstance(a, dict):
+        return False
+    blob = _normalize_spoken(" ".join(str(a.get(k) or "") for k in ("user_problem", "hook_promise", "label", "kind")))
+    return any(p in blob for p in _SELF_ASK_PATTERNS)
 
 
 def _plan_requests_question_format(*sources) -> bool:
@@ -3395,6 +3504,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
         f"{_angle_goal_block(angle, objective)}\n\n"
         f"{_spoken_line_rules_block()}\n"
+        f"{_hook_form_block(angle, [hook_form_of(original)], [original])}\n"
         f"CURRENT HOOK: {original}\n\n"
         "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
         "words the viewer uses for that problem: name the problem first and use 'I' at most "
@@ -3420,10 +3530,10 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         line = character_policy.neutralize(line)
         if not line or line.lower() == character_policy.neutralize(original).lower():
             raise RuntimeError("The rewrite came back unchanged.")
-        # The rewrite defaults to a statement, like every generated hook,
-        # unless the founder's approved hook itself asks for a question
-        # format by ending in one — then the question is the request.
-        allows_question = original.strip().endswith("?")
+        # The rewrite keeps the founder's form unless the angle/problem
+        # only fits a question: preserving a founder-approved question is
+        # preserving their request, not defaulting to one.
+        allows_question = original.strip().endswith("?") or _angle_invites_question(angle)
         if len(_FIRST_PERSON_I.findall(line)) <= 1 and (allows_question or not line.rstrip().endswith("?")):
             return line
         # One bounded correction: the hook is the first thing a viewer hears,
@@ -3526,6 +3636,7 @@ async def generate_creative_plan(
     camera_setup: str = "handheld",
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
+    recent_hooks=None,
 ) -> dict:
     """
     Generate an editable creative plan from an approved App Profile + template.
@@ -3673,6 +3784,8 @@ async def generate_creative_plan(
     # too -- not just the brief's. One prompt naming two viewers is a model
     # free to pick either.
     angle_goal_block = _angle_goal_block(angle, objective, audience)
+    _recent_hook_lines = [str(h).strip() for h in (recent_hooks or []) if str(h).strip()][-3:]
+    _hook_form = _hook_form_block(angle, [hook_form_of(h) for h in _recent_hook_lines], _recent_hook_lines)
     system_message = (
         "You are a short-form video creative director for mobile app promotions. "
         "You write concrete, filmable plans grounded ONLY in verified product facts. "
@@ -3719,9 +3832,10 @@ async def generate_creative_plan(
         "imply the speaker built, owns or is promoting the app; no insider or first-person-plural "
         "product voice (we, our app), and no framing in which the speaker is selling it.\n"
         f"{_spoken_line_rules_block()}\n"
+        f"{_hook_form}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, defaulting to a statement naming their feeling or situation (not a question) unless the plan requests a question format, at most {hook_budget} characters and at most one \'I\'; a shorter natural sentence is fine",\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters and at most one \'I\'; a shorter natural sentence is fine",\n'
         '  "script": "MIDDLE ONLY: two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
@@ -3902,7 +4016,7 @@ async def generate_creative_plan(
         script = strip_leading_hook(hook, raw_script)
         issues = _generated_spoken_issues(
             hook, script, hook_budget, middle_budget,
-            allows_question=_plan_requests_question_format(template, structure),
+            allows_question=_plan_requests_question_format(template, structure) or _angle_invites_question(angle),
         )
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
@@ -3923,8 +4037,10 @@ async def generate_creative_plan(
             "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
             "openers, never the app's name, and no claimed history with the app. "
             "The hook line names the viewer's problem and uses 'I' at most once \u2014 never a "
-            "diary open. Default to a statement naming the viewer's feeling or situation, "
-            "not a question, unless the plan explicitly requests a question format. "
+            "diary open. Choose the HOOK FORM for this angle and problem: a question only "
+            "when the problem is a silent self-question, otherwise a statement, confession, "
+            "or blunt observation; never default to a question and do not reuse the same "
+            "form as the last few generations. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
             f"{middle_budget} characters. A shorter complete thought is fine.\n"
@@ -4634,11 +4750,6 @@ def _trim_hook_line(text: str, limit: int):
     return kept, len(text) - len(kept)
 
 
-# A first-person 'I' in a hook line, contractions included ("I'm", "I've").
-# One can anchor a genuine line; two turn the opening into diary narration.
-_FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
-
-
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
                               *, allows_question: bool = False) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
@@ -4716,15 +4827,14 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
         )
     if ";" in hook:
         issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
-    # The default hook is a statement naming the viewer's feeling or
-    # situation, not a question. A question hook is a defect unless the
-    # plan explicitly requests a question format, which the caller proves
-    # with allows_question.
+    # A question hook is a defect unless the angle/problem itself is a
+    # silent self-question (or the plan explicitly requested that shape),
+    # which the caller proves with allows_question.
     if not allows_question and str(hook or "").strip().endswith("?"):
         issues.append(
-            "hook_line is a question; default to a statement naming the viewer's "
-            "feeling or situation, not a question, unless the plan explicitly "
-            "requests a question format"
+            "hook_line is a question; use a question only when the problem is "
+            "something viewers silently ask themselves — otherwise name it "
+            "with a statement, confession, or blunt observation"
         )
     return issues
 
@@ -5382,6 +5492,7 @@ async def generate_video_strategy(
     component_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
     camera_setup: str = "handheld",
+    recent_hooks=None,
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -5607,6 +5718,8 @@ async def generate_video_strategy(
         )
 
     angle_goal_block = _angle_goal_block(angle, objective)
+    _recent_hook_lines = [str(h).strip() for h in (recent_hooks or []) if str(h).strip()][-3:]
+    _hook_form = _hook_form_block(angle, [hook_form_of(h) for h in _recent_hook_lines], _recent_hook_lines)
     system_message = (
         "You are the creative director for a short-form video campaign promoting one "
         "specific mobile app. You produce an app-specific video strategy: the hook "
@@ -5653,13 +5766,14 @@ async def generate_video_strategy(
         f"{feedback_context}"
         f"{trend_context}\n"
         f"{_spoken_line_rules_block()}\n"
+        f"{_hook_form}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         '  "strategy_summary": "2-3 sentences on the strategy for THIS app and why it fits THIS audience",\n'
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, defaulting to a statement naming their feeling or situation (not a question) unless the plan requests a question format, at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation), at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: the FIRST beat lands inside the first 1-2 seconds as a clearly visible movement, gesture or position change (they step in or away, turn, stand up, sit down, reach, lift, place or grab something), then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
@@ -5781,8 +5895,7 @@ async def generate_video_strategy(
         "- An expression is an ACTION inside the opening, never a description of who "
         "they are: describe no appearance and never contradict the founder's "
         "photograph. Say what the face does, never what the face is.\n"
-        "- The hook must serve the selected hook mechanism. If the mechanism explicitly requests a question format, the hook is a "
-        "question; otherwise the hook is a statement naming the viewer's feeling or situation. If the mechanism is a contrarian correction, the hook corrects something.\n"
+        "- The hook must serve the selected hook mechanism AND the HOOK FORM rule: a question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation for this angle. If the mechanism is a contrarian correction, the hook corrects something.\n"
         "- The two sections must do genuinely different work. The hook earns attention; the middle "
         "is not the hook restated with more words. If the middle could be cut without losing the "
         "hook, it is not doing its job.\n"

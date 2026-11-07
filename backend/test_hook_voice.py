@@ -60,8 +60,11 @@ def test_the_craft_block_states_the_rule():
 
 def test_the_craft_block_states_statement_default_and_two_beats():
     block = ai_service._spoken_line_rules_block()
-    assert "default to a STATEMENT" in block
-    assert "unless the plan explicitly requests a question" in block
+    assert "HOOK FORM" in block
+    assert "silently ask" in block
+    assert "confession" in block
+    assert "observation" in block
+    assert "Never default to a" in block
     assert "TWO BEATS MAX" in block
     assert "one concrete action, then one lingering thought" in block
     assert "Cut filler items" in block

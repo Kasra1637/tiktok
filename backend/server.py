@@ -5611,6 +5611,19 @@ async def generate_plan(
     )
     plan_feedback = await _component_feedback_for_profile(
         row.get("brand_profile_id"), user_id, "plan")
+    # Recent hook forms constrain the next draft: the model varies the form
+    # instead of repeating the last few generations. Wording is data to
+    # avoid, never instructions.
+    recent_hooks = []
+    try:
+        recent_rows = await _fetch_all(
+            "SELECT hook_line FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
+            "AND hook_line IS NOT NULL AND TRIM(hook_line) != '' ORDER BY created_at DESC LIMIT 3",
+            (row.get("brand_profile_id"), user_id),
+        )
+        recent_hooks = [str(r.get("hook_line") or "").strip() for r in recent_rows]
+    except Exception:
+        recent_hooks = []
     # The angle owns where and when the video happens (ADR 0084): a saved look
     # naming another place or time is adjusted before the plan sees it, and the
     # founder is told what changed.
@@ -5641,6 +5654,7 @@ async def generate_plan(
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 profile_feedback=profile_feedback,
                 component_feedback=plan_feedback,
+                recent_hooks=recent_hooks,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
@@ -8729,6 +8743,16 @@ async def generate_project_strategy(
         }
     script_feedback = await _component_feedback_for_profile(
         row.get("brand_profile_id"), user_id, "script")
+    recent_hooks = []
+    try:
+        recent_rows = await _fetch_all(
+            "SELECT hook_line FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
+            "AND hook_line IS NOT NULL AND TRIM(hook_line) != '' ORDER BY created_at DESC LIMIT 3",
+            (row.get("brand_profile_id"), user_id),
+        )
+        recent_hooks = [str(r.get("hook_line") or "").strip() for r in recent_rows]
+    except Exception:
+        recent_hooks = []
 
     try:
         strategy = await _log_model_call(
@@ -8746,6 +8770,7 @@ async def generate_project_strategy(
                 component_feedback=script_feedback,
                 plan=approved_plan,
                 camera_setup=row.get("camera_setup") or "handheld",
+                recent_hooks=recent_hooks,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
