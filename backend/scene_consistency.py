@@ -84,9 +84,11 @@ _OBJECT_TRAILERS = frozenset((
     "is", "are", "was", "were", "while",
 ))
 
-# A body part is never a prop; the person comes from the photograph.
+# A body part is never a prop; the person comes from the photograph. A
+# glance/look/stare is the eyes doing something, never a carried object.
 _BODY_WORDS = frozenset((
-    "face", "head", "hair", "eye", "eyes", "gaze", "brow", "brows",
+    "face", "head", "hair", "eye", "eyes", "gaze", "glance", "glances",
+    "stare", "blink", "brow", "brows",
     "eyebrow", "eyebrows", "jaw", "chin", "hand", "hands", "arm", "arms",
     "shoulder", "shoulders", "chest", "torso", "body", "posture", "leg",
     "legs", "knee", "knees", "finger", "fingers", "thumb", "thumbs",
@@ -105,7 +107,7 @@ _FIXED_SCENERY_WORDS = frozenset((
     "closet", "sideboard", "drawer", "drawers",
     # Rooms, buildings and structures
     "wall", "floor", "ceiling", "window", "door", "doorway", "staircase",
-    "stairway", "stairs", "stair", "step", "steps", "hallway", "room",
+    "stairway", "stairs", "stair", "step", "steps", "stoop", "hallway", "room",
     "kitchen", "bedroom", "bathroom", "office", "building", "house", "home",
     "apartment", "shop", "store", "storefront", "street", "road", "sidewalk",
     "pavement", "fence", "gate", "bridge", "station", "platform", "park",
@@ -116,8 +118,11 @@ _FIXED_SCENERY_WORDS = frozenset((
     "stove", "oven", "fridge", "refrigerator", "microwave", "toilet",
     "bathtub", "shower", "clock", "vase", "television", "tv", "monitor",
     "screen",
-    # Outdoor ground
-    "ground", "grass", "sky",
+    # Outdoor ground: bare "yard"/"lawn" never match angle_scene's backyard
+    # pattern, so without these the location strip would read the yard as a
+    # carried object.
+    "ground", "grass", "sky", "yard", "lawn", "patio", "deck", "field",
+    "meadow", "woods", "forest",
 ))
 _SIGNAGE_WORDS = frozenset((
     "sign", "billboard", "poster", "banner", "logo", "placard",
@@ -336,6 +341,366 @@ def camera_wording(text) -> str:
     return _FILMING_DEVICE_RE.sub(_replace, str(text or ""))
 
 
+# ---------------------------------------------------------------------------
+# One camera setup, one set of camera words (ADR 0108).
+#
+# The setup dropdown is the source of truth: a handheld strategy cannot say
+# "fixed camera", "locked shot" or "steady framing", and a fixed strategy
+# cannot say "handheld" or "arm's length". The render prompt and the panel
+# both read these fields, so a contradiction here is a video that films
+# something other than the setup the founder picked.
+# ---------------------------------------------------------------------------
+_LOCATION_CLAUSE_SPLIT_RE = re.compile(
+    r"\s*,\s*|\s+(?:and|with)\s+(?=(?:a|an|the|my|his|her|their|your|its)\b)",
+    re.I,
+)
+
+# Words that describe who is in the place, not an object they carry. Defined
+# below the body/abstract vocabularies it builds on.
+def _location_non_objects():
+    return _BODY_WORDS | _ABSTRACT_WORDS | frozenset((
+        "person", "people", "character", "characters", "viewer", "viewers",
+        "someone", "anyone", "everyone",
+    ))
+
+
+def _location_clause_names_object(clause) -> bool:
+    """True when a Location clause names a carried/used object, not the place.
+
+    A clause that only names scenery ("a closed front door behind the step")
+    is a place clause and is kept. A clause that names a carried object is
+    removed even when it also names the place it rests on ("a mug on the
+    counter") — the object is the deciding phrase, not every word in the
+    clause — because Location must name the place only.
+    """
+    text = " ".join(str(clause or "").split()).strip(" ,;.")
+    if not text:
+        return False
+    if _FILMING_DEVICE_RE.search(text):
+        return True
+    for match in _OBJECT_RE.finditer(text):
+        phrase = _is_object(match.group(1))
+        if not phrase:
+            continue
+        # The determiner capture overshoots ("a dark yard stretching"), so the
+        # noun that decides place-vs-object is not always the last word. Any
+        # scenery word anywhere in the phrase makes it a place phrase.
+        words = {w.casefold().strip(" .,;:'\u2019") for w in phrase.split() if w.strip()}
+        if words & (_FIXED_SCENERY_WORDS | _SIGNAGE_WORDS):
+            continue
+        core = phrase.split()[-1].casefold()
+        if core in _location_non_objects():
+            continue
+        return True
+    return False
+
+
+def strip_location_objects(text):
+    """Location as (place only, removed clauses): never an object on camera.
+
+    "A porch step ... and the phone lying face-down beside the person" keeps
+    the porch, the yard and the door and drops the phone. A clause that names
+    scenery stays; a clause that names a carried object goes, in every camera
+    setup (a fixed camera may keep the phone in the action and Props, never in
+    the place). A text with no removable clause comes back untouched.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw:
+        return raw, []
+    parts = [part.strip() for part in _LOCATION_CLAUSE_SPLIT_RE.split(raw) if part.strip()]
+    if len(parts) <= 1:
+        return raw, []
+    kept, removed = [], []
+    for part in parts:
+        if _location_clause_names_object(part):
+            removed.append(part)
+        else:
+            kept.append(part)
+    if not removed:
+        return raw, []
+    place = ", ".join(kept).strip(" ,;.")
+    if not re.search(r"[A-Za-z]", place):
+        return raw, []
+    return place, removed
+
+
+def _match_case(original: str, replacement: str) -> str:
+    if str(original or "")[:1].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
+
+
+def _apply_rewrites(text, rewrites) -> str:
+    out = str(text or "")
+    for pattern, replacement in rewrites:
+        if callable(replacement):
+            out = pattern.sub(replacement, out)
+        else:
+            out = pattern.sub(
+                lambda match, repl=replacement: _match_case(match.group(0), repl),
+                out,
+            )
+    return out
+
+
+def _handheld_shot(match) -> str:
+    size = (match.group(1) or "").strip()
+    replacement = f"handheld {size + ' ' if size else ''}selfie shot"
+    return _match_case(match.group(0), replacement)
+
+
+_HANDHELD_CAMERA_REWRITES = (
+    (re.compile(r"\bfixed(?:[- ]positioned)?\s+camera\b", re.I), "handheld selfie camera"),
+    (re.compile(r"\blocked(?:[- ]off)?\s+camera\b", re.I), "handheld selfie camera"),
+    (re.compile(r"\bstatic\s+camera\b", re.I), "handheld selfie camera"),
+    (re.compile(r"\bcamera\s+(?:is\s+)?(?:fixed|locked|static)\b", re.I), "camera is handheld"),
+    (re.compile(
+        r"\b(?:locked|static|fixed)(?:[- ]off)?\s+"
+        r"(?:(medium|wide|close(?:-up)?|full|tight|loose)\s+)?shot\b",
+        re.I,
+    ), _handheld_shot),
+    (re.compile(r"\bsteady\s+framing\b", re.I), "handheld framing"),
+    (re.compile(r"\bsteady\s+(?:camera|shots?)\b", re.I), "handheld camera"),
+    (re.compile(r"\btripod\b", re.I), "handheld selfie"),
+)
+
+_FIXED_CAMERA_REWRITES = (
+    (re.compile(r"\bhandheld\s+selfie\s+camera\b", re.I), "fixed camera"),
+    (re.compile(r"\bhandheld\s+selfie\b", re.I), "fixed camera"),
+    (re.compile(r"\bhandheld\s+camera\b", re.I), "fixed camera"),
+    (re.compile(r"\bhandheld\b", re.I), "fixed camera"),
+    (re.compile(r"\bselfie\s+camera\b", re.I), "fixed camera"),
+    (re.compile(r"\bselfie\b", re.I), "fixed camera"),
+    # "At arm's length" names a handheld camera distance. Rewriting the bare
+    # noun to "fixed camera" after "handheld selfie" would leave "fixed
+    # camera at fixed camera"; the prepositional phrase becomes a fixed
+    # position instead.
+    (re.compile(r"\bat\s+arm(?:['\u2019]s)?[- ]length\b", re.I), "from a fixed position"),
+    (re.compile(r"\barm(?:['\u2019]s)?[- ]length\b", re.I), "a fixed position"),
+    (re.compile(r"\bthe person holds the camera\b", re.I), "the camera is fixed in place"),
+    (re.compile(r"\bholds the camera\b", re.I), "the camera is fixed in place"),
+)
+
+# A handheld camera cannot physically push in, pull back or zoom: the phone
+# is in the character's hand. The move becomes the person's lean, which is
+# what the selfie prompt can actually film.
+_HANDHELD_MOVEMENT_REWRITES = (
+    (re.compile(r"\bthe camera (?:slowly |gently )?pushes? in\b", re.I), "they lean in toward the lens"),
+    (re.compile(r"\bthe camera (?:slowly |gently )?pulls? (?:back|out)\b", re.I), "they ease back from the lens"),
+    (re.compile(r"\bthe camera (?:slowly |gently )?zooms? in\b", re.I), "they lean closer to the lens"),
+    (re.compile(r"\bthe camera (?:slowly |gently )?zooms? out\b", re.I), "they ease back from the lens"),
+    (re.compile(r"\bthe camera (?:slowly |gently )?(?:pans?|tilts?|orbits?|tracks?)\b[^.;,]*", re.I), "the selfie frame follows their movement"),
+)
+
+
+def camera_setup_wording(strategy) -> list:
+    """Rewrite camera wording to the setup the strategy declares; return labels.
+
+    The setup is the source of truth, so this is deterministic rather than a
+    refusal: a handheld strategy's "fixed camera" becomes "handheld selfie
+    camera", and a fixed strategy's "handheld" becomes "fixed camera". Spoken
+    words are never touched.
+    """
+    result = strategy if isinstance(strategy, dict) else {}
+    if not result:
+        return []
+    fixed = str(result.get("camera_setup") or "handheld").strip().lower() == "fixed"
+    rewrites = _FIXED_CAMERA_REWRITES if fixed else _HANDHELD_CAMERA_REWRITES
+    changed = []
+    scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
+    if scene is not None:
+        for key, label in (
+            ("camera_angle", "Camera angle"),
+            ("framing", "Framing"),
+            ("visual_style", "Visual style"),
+            ("character_positioning", "Character positioning"),
+        ):
+            before = str(scene.get(key) or "")
+            after = _apply_rewrites(before, rewrites)
+            if after != before:
+                scene[key] = after
+                changed.append(label)
+    performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
+    if performance is not None:
+        before = str(performance.get("movement") or "")
+        # Movement for a fixed setup is left for the render's fixed-camera
+        # refusal (require_camera_setup_directions): rewriting an actor's
+        # "holds the recording phone at arm's length" by word substitution
+        # would hide the conflict and leave nonsense ("at fixed camera").
+        # Handheld movement is rewritten, including the push-in translation,
+        # because no handheld check exists to catch it later.
+        if not fixed:
+            after = _apply_rewrites(before, rewrites)
+            after = _apply_rewrites(after, _HANDHELD_MOVEMENT_REWRITES)
+        else:
+            after = before
+        if after != before:
+            performance["movement"] = after
+            changed.append("Movement")
+    return changed
+
+
+# ---------------------------------------------------------------------------
+# Carry the plan's camera movement into Framing and Movement.
+#
+# The plan's visual direction is the render's default look, and a movement
+# named there ("a slow push in during the middle") used to live only in the
+# plan text: Framing showed the locked opening shot and Movement never named
+# the move at all. The same move now appears in both fields. Handheld
+# translates it to a lean, because the selfie camera cannot push in.
+# ---------------------------------------------------------------------------
+_CAMERA_MOVE_PATTERNS = (
+    ("push_in", re.compile(
+        r"\b(?:slow(?:ly)?\s+)?push(?:es|ing|ed)?[ -]?in\b"
+        r"|\bcamera\s+(?:slowly\s+)?pushes?\s+in\b", re.I)),
+    ("pull_back", re.compile(
+        r"\b(?:slow(?:ly)?\s+)?pull(?:s|ing|ed)?[ -]?(?:back|out)\b"
+        r"|\bcamera\s+(?:slowly\s+)?pulls?\s+(?:back|out)\b", re.I)),
+    ("zoom_in", re.compile(
+        r"\b(?:slow(?:ly)?\s+)?zoom(?:s|ing|ed)?[ -]?in\b"
+        r"|\bcamera\s+(?:slowly\s+)?zooms?\s+in\b", re.I)),
+    ("zoom_out", re.compile(
+        r"\b(?:slow(?:ly)?\s+)?zoom(?:s|ing|ed)?[ -]?out\b"
+        r"|\bcamera\s+(?:slowly\s+)?zooms?\s+out\b", re.I)),
+    ("pan", re.compile(r"\b(?:camera\s+)?pan(?:s|ning|ned)?\b", re.I)),
+    ("tilt", re.compile(r"\b(?:camera\s+)?tilt(?:s|ing|ed)?\b", re.I)),
+    ("orbit", re.compile(r"\borbit(?:s|ing|ed)?\b", re.I)),
+    ("track", re.compile(r"\btrack(?:s|ing|ed)?\b", re.I)),
+)
+
+_FIXED_FRAMING_MOVES = {
+    "push_in": ("a push-in during the middle", "a slow push-in during the middle"),
+    "pull_back": ("a pull-back during the middle", "a slow pull-back during the middle"),
+    "zoom_in": ("a zoom-in during the middle", "a slow zoom-in during the middle"),
+    "zoom_out": ("a zoom-out during the middle", "a slow zoom-out during the middle"),
+    "pan": ("a pan during the middle", "a slow pan during the middle"),
+    "tilt": ("a tilt during the middle", "a slow tilt during the middle"),
+    "orbit": ("an orbit during the middle", "a slow orbit during the middle"),
+    "track": ("a tracking move during the middle", "a slow tracking move during the middle"),
+}
+
+_FIXED_MOVEMENT_MOVES = {
+    "push_in": ("the camera pushes in during the middle", "the camera slowly pushes in during the middle"),
+    "pull_back": ("the camera pulls back during the middle", "the camera slowly pulls back during the middle"),
+    "zoom_in": ("the camera zooms in during the middle", "the camera slowly zooms in during the middle"),
+    "zoom_out": ("the camera zooms out during the middle", "the camera slowly zooms out during the middle"),
+    "pan": ("the camera pans during the middle", "the camera slowly pans during the middle"),
+    "tilt": ("the camera tilts during the middle", "the camera slowly tilts during the middle"),
+    "orbit": ("the camera orbits during the middle", "the camera slowly orbits during the middle"),
+    "track": ("the camera tracks during the middle", "the camera slowly tracks during the middle"),
+}
+
+_HANDHELD_FRAMING_MOVES = {
+    "push_in": ("the selfie frame tightens as they lean in", "the selfie frame slowly tightens as they lean in"),
+    "pull_back": ("the selfie frame eases back as they lean away", "the selfie frame slowly eases back as they lean away"),
+    "zoom_in": ("the selfie frame tightens as they lean closer", "the selfie frame slowly tightens as they lean closer"),
+    "zoom_out": ("the selfie frame eases back as they lean away", "the selfie frame slowly eases back as they lean away"),
+    "pan": ("the selfie frame follows their movement", "the selfie frame slowly follows their movement"),
+    "tilt": ("the selfie frame follows their movement", "the selfie frame slowly follows their movement"),
+    "orbit": ("the selfie frame follows their movement", "the selfie frame slowly follows their movement"),
+    "track": ("the selfie frame follows their movement", "the selfie frame slowly follows their movement"),
+}
+
+_HANDHELD_MOVEMENT_MOVES = {
+    "push_in": ("they lean in toward the lens", "they slowly lean in toward the lens"),
+    "pull_back": ("they lean away from the lens", "they slowly lean away from the lens"),
+    "zoom_in": ("they lean closer to the lens", "they slowly lean closer to the lens"),
+    "zoom_out": ("they lean away from the lens", "they slowly lean away from the lens"),
+    "pan": ("they turn their body through the space", "they slowly turn their body through the space"),
+    "tilt": ("they move their gaze through the space", "they slowly move their gaze through the space"),
+    "orbit": ("they turn slowly toward the lens", "they turn slowly toward the lens"),
+    "track": ("they move with the frame", "they slowly move with the frame"),
+}
+
+_MOVE_HINTS = {
+    "push_in": ("push in", "push-in", "lean in", "lean closer"),
+    "pull_back": ("pull back", "pull-back", "lean away"),
+    "zoom_in": ("zoom in", "zoom-in", "lean closer"),
+    "zoom_out": ("zoom out", "zoom-out", "lean away"),
+    "pan": ("pan", "follows their movement", "turn their body"),
+    "tilt": ("tilt", "follows their movement", "move their gaze"),
+    "orbit": ("orbit", "turn slowly toward"),
+    "track": ("track", "move with the frame", "follows their movement"),
+}
+
+
+def plan_camera_movements(plan) -> list:
+    """Camera moves named by the plan's default look or shot timeline.
+
+    The project row calls the timeline `beat_timeline`; `generate_video_strategy`
+    hands the strategy builder an `approved_plan` whose same list is called
+    `beats`. Both spellings name the same shots.
+    """
+    plan = plan if isinstance(plan, dict) else {}
+    texts = [
+        str(plan.get("visual_direction") or ""),
+        str(plan.get("camera_pacing") or ""),
+    ]
+    beats = plan.get("beat_timeline") or plan.get("beats") or []
+    for beat in beats:
+        if isinstance(beat, dict):
+            texts.append(str(beat.get("text") or beat.get("beat") or ""))
+    found = []
+    for kind, pattern in _CAMERA_MOVE_PATTERNS:
+        hits = [text for text in texts if text and pattern.search(text)]
+        if not hits:
+            continue
+        found.append({
+            "kind": kind,
+            "slow": any(re.search(r"\bslow(?:ly)?\b", text, re.I) for text in hits),
+        })
+    return found
+
+
+def _append_movement(existing, addition, limit) -> tuple:
+    text = " ".join(str(existing or "").split()).strip(" .;")
+    if not text:
+        return addition[:1].upper() + addition[1:] + ".", True
+    if addition.casefold() in text.casefold():
+        return text, False
+    joined = append_clause(text, addition)
+    if len(joined) > limit:
+        joined = _truncate_to_limit(joined, limit)
+    return joined, True
+
+
+def carry_camera_movement(strategy, plan) -> list:
+    """Put the plan's camera move into Framing and Movement; return labels."""
+    result = strategy if isinstance(strategy, dict) else {}
+    movements = plan_camera_movements(plan)
+    if not result or not movements:
+        return []
+    fixed = str(result.get("camera_setup") or "handheld").strip().lower() == "fixed"
+    scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
+    performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
+    changed = []
+    for move in movements:
+        kind = move["kind"]
+        slow = bool(move["slow"])
+        if fixed:
+            framing_text = _FIXED_FRAMING_MOVES[kind][1 if slow else 0]
+            movement_text = _FIXED_MOVEMENT_MOVES[kind][1 if slow else 0]
+        else:
+            framing_text = _HANDHELD_FRAMING_MOVES[kind][1 if slow else 0]
+            movement_text = _HANDHELD_MOVEMENT_MOVES[kind][1 if slow else 0]
+        hints = _MOVE_HINTS[kind]
+        if scene is not None:
+            framing = str(scene.get("framing") or "")
+            if not any(hint in framing.casefold() for hint in hints):
+                scene["framing"], did = _append_movement(framing, framing_text, FIELD_LIMIT)
+                if did:
+                    changed.append("Framing")
+        if performance is not None:
+            movement = str(performance.get("movement") or "")
+            if not any(hint in movement.casefold() for hint in hints):
+                performance["movement"], did = _append_movement(
+                    movement, movement_text, MOVEMENT_LIMIT
+                )
+                if did:
+                    changed.append("Movement")
+    return list(dict.fromkeys(changed))
+
+
 def _action_texts(strategy: dict) -> list:
     texts = [str(strategy.get("hook_action") or "").strip()]
     for section in strategy.get("segments") or []:
@@ -361,10 +726,21 @@ def _beat_action_texts(plan) -> list:
 
 
 # A conjunction ends the object: "the counter and looks" is the counter, not
-# an object called "counter and looks".
+# an object called "counter and looks". A pronoun at the end is the next
+# clause's subject, not the noun ("the first second they" is a second, not
+# an object called "first second they") — the cut keeps only the noun phrase.
 _OBJECT_STOPS = frozenset((
     "and", "or", "then", "but", "so", "that", "this", "these", "those",
     "it", "is", "are", "was", "were", "while", "when",
+    "they", "them", "he", "him", "she", "her", "we", "us", "you", "i", "me",
+    "my", "his", "their", "its", "the", "a", "an",
+))
+
+# An adverb or determiner at the end is the verb's manner ("the line slowly",
+# "glance toward the"), never the object noun itself.
+_OBJECT_END_WORDS = frozenset((
+    "the", "a", "an", "they", "them", "he", "him", "she", "her", "we", "us",
+    "you", "i", "me", "my", "his", "their", "its",
 ))
 
 
@@ -391,6 +767,17 @@ def _is_object(phrase: str) -> str:
     if len(core) < 3 or core in _BODY_WORDS or core in _ABSTRACT_WORDS:
         return ""
     if any(word in _BODY_WORDS for word in words):
+        return ""
+    # An abstract noun anywhere in the phrase marks the whole phrase as
+    # abstract ("the last line lands", "the day in rough"): the determiner
+    # capture picks up the verb or adverb that follows the abstract noun,
+    # so the head noun check above cannot see it.
+    if any(word in _ABSTRACT_WORDS for word in words):
+        return ""
+    # An adverb, pronoun or determiner at the end ("the line slowly",
+    # "glance toward the") means the noun came earlier and the capture ran
+    # past it; the phrase names no object.
+    if core in _OBJECT_END_WORDS or core.endswith("ly"):
         return ""
     if _LIGHT_RE.search(phrase):
         return ""
@@ -608,6 +995,26 @@ def reconcile_scene(strategy, plan=None) -> dict:
         return {"strategy": result, "changed": changed, "blocked": blocked,
                 "warnings": warnings}
 
+    # The setup the founder picked is the source of truth (ADR 0108): the plan
+    # carries it when the caller saved one, and the strategy's own field is
+    # the fallback. Syncing first keeps every rewrite below honest about
+    # which phone/camera words are allowed.
+    if isinstance(plan, dict):
+        planned_setup = str(plan.get("camera_setup") or "").strip().lower()
+        if planned_setup in ("handheld", "fixed"):
+            result["camera_setup"] = planned_setup
+
+    # A handheld selfie names no phone anywhere (ADR 0093): Phone clauses are
+    # removed from the strategy's own action/concept/movement fields before
+    # any completion pass below can copy them back into Props or Movement.
+    # Running the same strip the render guard runs keeps the panel and the
+    # prompt agreeing on read as well as on render. A fixed camera keeps the
+    # phone in the action and Props.
+    if final_beat.is_selfie(result):
+        strip_audit = final_beat.strip_fields(result)
+        result = strip_audit["strategy"]
+        changed.extend(strip_audit["changed"])
+
     scene = result.get("scene") if isinstance(result.get("scene"), dict) else None
     if scene is not None:
         changed.extend(clean_placeholders(scene))
@@ -622,6 +1029,18 @@ def reconcile_scene(strategy, plan=None) -> dict:
                 scene[key] = after
                 changed.append(label)
 
+        # Location names the place only, in every camera setup: a phone may
+        # stay in the action and Props for a fixed camera, never in the place
+        # (ADR 0108). Object clauses are dropped before the lighting split
+        # below, so lighting text is never read as an object either.
+        place_only, objects_removed = strip_location_objects(scene.get("location"))
+        if objects_removed:
+            scene["location"] = place_only
+            for key in ("environment", "background", "setting"):
+                if key in scene and scene[key] != place_only:
+                    scene[key] = place_only
+            changed.append("Location")
+
         # Location names the place; the lighting and time it still carries move
         # into Lighting. The legacy split copies (environment/background/
         # setting) follow it, or their longer text wins the time of day back
@@ -635,6 +1054,19 @@ def reconcile_scene(strategy, plan=None) -> dict:
             scene["lighting"] = append_clause(scene.get("lighting"), moved)
             changed.append("Location")
             changed.append("Lighting")
+
+        # One setup, one set of camera words: a handheld strategy cannot say
+        # "fixed camera"/"locked shot"/"steady framing", and a fixed strategy
+        # cannot say "handheld"/"arm's length". The setup is rewritten, never
+        # refused, because the plan/strategy already disagreed and a rewrite
+        # is the deterministic repair (ADR 0108). Movement is included so a
+        # handheld "the camera pushes in" becomes the lean it can film.
+        changed.extend(camera_setup_wording(result))
+
+        # A camera move the plan's default look names ("a slow push in during
+        # the middle") lives in Framing and Movement as well as in the plan
+        # text, translated to a lean for handheld (ADR 0108).
+        changed.extend(carry_camera_movement(result, plan))
 
         # Props are objects the person carries, wears or uses — never the
         # furniture, buildings or signs Location already names.

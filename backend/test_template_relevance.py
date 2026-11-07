@@ -161,6 +161,36 @@ class TestOpeningShape:
             "The person holds both hands away from the keyboard."
         )
 
+    def test_an_approved_hook_line_is_the_shape_exactly_as_written(self):
+        # ADR 0108: once a plan exists, the shape quotes what the video
+        # actually opens with — never the promise's unspoken words.
+        hook = "Waiting for the right words means the day goes unsaid."
+        shape = angle_scene.opening_shape(ANGLE, _template("Name it", "ignored"), hook_line=hook)
+        assert shape == hook
+        assert "I will write it when they have the words" not in shape
+
+    def test_an_approved_middle_is_the_development(self):
+        development = angle_scene.opening_development(
+            ANGLE,
+            _template("Name it", "ignored",
+                      "Then they pick up the phone and open the app."),
+            middle=("On the porch step, I stopped waiting and just talked, "
+                    "messy and out of order. Afterward, the reflection helped me see "
+                    "what had happened inside me."),
+        )
+        assert development == "on the porch step, I stopped waiting and just talked, messy and out of order"
+        assert "pick up the phone" not in development
+
+    def test_the_scored_card_quotes_the_plan_when_one_exists(self):
+        profile = {"id": "p1", "brand_name": "Vocolens", "app_category": "Health"}
+        hook = "Waiting for the right words means the day goes unsaid."
+        result = score_template_for_angle(
+            ON_TOPIC, profile, ANGLE, "address_user_problem",
+            hook_line=hook, middle="I talked and the day went unsaid.",
+        )
+        assert result["angle_scene"]["shape"] == hook
+        assert result["angle_scene"]["development"] == "I talked and the day went unsaid"
+
 
 class TestOpeningStaging:
     def test_staging_names_place_and_time_and_the_photo(self):

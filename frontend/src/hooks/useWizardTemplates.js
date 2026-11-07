@@ -4,7 +4,7 @@ import { api, getErrorMessage } from "../lib/api";
 const emptyFit = () => ({ reasons: [], limitations: [] });
 
 /** Template loading is a separate lifecycle from draft writes and plan saves. */
-export function useWizardTemplates({ profileId, angleId, objective }) {
+export function useWizardTemplates({ profileId, angleId, objective, hookLine = "", middle = "" }) {
   const [ranked, setRanked] = useState({ key: "", rows: [], shared: emptyFit(), error: null });
   const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [tailoring, setTailoring] = useState(false);
@@ -14,8 +14,8 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   const tailorRequestRef = useRef(0);
   // Latest wizard identity: a tailor flight that resolves after the founder
   // moves on must not reload recommendations for the profile/angle it left.
-  const latestRef = useRef({ profileId, angleId, objective });
-  latestRef.current = { profileId, angleId, objective };
+  const latestRef = useRef({ profileId, angleId, objective, hookLine, middle });
+  latestRef.current = { profileId, angleId, objective, hookLine, middle };
 
   const clearRecommendations = useCallback(() => {
     setRanked((previous) => ({ ...previous, rows: [], shared: emptyFit(), error: null }));
@@ -25,14 +25,19 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   // guarantees the count; the client asks for three so both agree. Called
   // only inside a tailoring flight — never as an effect: no template
   // request, free or billed, fires on the goal pick (ADR 0098).
-  const loadRecommendations = useCallback(async (pid, aid, oid = objective) => {
+  const loadRecommendations = useCallback(async (pid, aid, oid = objective, hook = hookLine, mid = middle) => {
     if (!pid) return;
     const request = ++recRequestRef.current;
-    const key = `${pid || ""}:${aid || ""}:${oid || ""}`;
+    // The approved spoken words shape each card's display (ADR 0108), so
+    // they ride the same request and key: a new plan is a new set of cards.
+    const key = `${pid || ""}:${aid || ""}:${oid || ""}:${hook || ""}:${mid || ""}`;
     setRanked({ key, rows: [], shared: emptyFit(), error: null });
     try {
       const rec = await api.getTemplateRecommendations(pid, {
-        angle_id: aid || undefined, objective: oid || undefined, limit: 3,
+        angle_id: aid || undefined, objective: oid || undefined,
+        ...(String(hook || "").trim() ? { hook_line: String(hook).trim() } : {}),
+        ...(String(mid || "").trim() ? { middle: String(mid).trim() } : {}),
+        limit: 3,
       });
       if (recRequestRef.current !== request) return;
       setRanked({
@@ -46,7 +51,7 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
       if (recRequestRef.current !== request) return;
       setRanked({ key, rows: [], shared: emptyFit(), error: getErrorMessage(err) });
     }
-  }, [objective]);
+  }, [objective, hookLine, middle]);
 
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
@@ -93,7 +98,7 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
       latest.angleId === startAid &&
       latest.objective === startObjective
     ) {
-      await loadRecommendations(startPid, startAid, startObjective);
+      await loadRecommendations(startPid, startAid, startObjective, latest.hookLine, latest.middle);
     }
     if (tailorRequestRef.current === request) setTailoring(false);
   }, [profileId, objective, angleId, loadRecommendations]);
@@ -110,7 +115,7 @@ export function useWizardTemplates({ profileId, angleId, objective }) {
   const tailorKey = profileId && objective
     ? `${profileId}:${objective}:${angleId || ""}`
     : "";
-  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}`;
+  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}:${hookLine || ""}:${middle || ""}`;
   const tailoredReady = Boolean(tailorKey && tailored.key === tailorKey && tailored.templates.length > 0);
   const tailorFallbackVisible = Boolean(
     tailorKey && tailored.key === tailorKey && !tailored.templates.length && tailorError && !tailoring

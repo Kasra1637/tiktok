@@ -37,6 +37,7 @@ from template_library import (
 import feedback
 import angle_scene as _angle_scene_policy
 import character_policy
+import final_beat
 import scene_consistency
 import template_recommendations
 from angle_policy import (
@@ -4292,6 +4293,13 @@ def normalize_strategy(raw: dict) -> dict:
         result["scene"][field] = scene_consistency.camera_wording(
             result["scene"].get(field)
         )[:300]
+    # Location names the place only, in every camera setup: a phone may stay
+    # in the action and Props for a fixed camera, never in the place.
+    place_only, objects_removed = scene_consistency.strip_location_objects(
+        result["scene"].get("location")
+    )
+    if objects_removed:
+        result["scene"]["location"] = place_only
     result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
         result["scene"].get("props"), result["scene"].get("location")
     )
@@ -4313,6 +4321,15 @@ def normalize_strategy(raw: dict) -> dict:
     result["camera_setup"] = raw.get("camera_setup") or "handheld"
     if result["camera_setup"] not in ("handheld", "fixed"):
         raise ValueError("Camera setup must be handheld or fixed; rebuild the strategy.")
+    # One setup, one set of camera words, cleaned on the way to the panel
+    # (ADR 0108): a handheld selfie names no phone in its action/concept/
+    # movement lines, and its camera wording describes a handheld selfie
+    # rather than a fixed camera. The plan's camera-move carry needs the
+    # plan timeline this normalizer does not have, so it runs on the read
+    # and render paths that do.
+    if final_beat.is_selfie(result):
+        result = final_beat.strip_fields(result)["strategy"]
+    scene_consistency.camera_setup_wording(result)
     return result
 
 
@@ -5957,6 +5974,7 @@ async def generate_video_strategy(
         # still carries moves into the strategy's lighting rather than being
         # restated as part of the place (ADR 0092).
         place, moved = scene_consistency.split_location(approved_plan["location"])
+        place, _objects = scene_consistency.strip_location_objects(place)
         strategy["scene"]["location"] = _clean_strategy_text(place, 300)
         if moved:
             strategy["scene"]["lighting"] = _clean_strategy_text(
@@ -5965,6 +5983,13 @@ async def generate_video_strategy(
                 ),
                 300,
             )
+    # The plan's default look is the render's look (ADR 0108): a camera move
+    # it names ("a slow push in during the middle") is carried into Framing
+    # and Movement here so the plan and the strategy cannot disagree, and the
+    # setup wording is re-applied after the location overwrite above.
+    if approved_plan:
+        scene_consistency.camera_setup_wording(strategy)
+        scene_consistency.carry_camera_movement(strategy, approved_plan)
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)

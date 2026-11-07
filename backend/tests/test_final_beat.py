@@ -239,3 +239,48 @@ def test_consecutive_renders_get_different_endings():
         for index in range(3)
     ]
     assert len(set(endings)) == 3
+
+
+def test_a_bare_phone_without_a_determiner_is_still_stripped_for_selfie():
+    # "Phone stays face-down" names the recording device without "the", so
+    # the determiner pattern cannot see it — the bare-phone rule can.
+    kept, removed = final_beat.split_phone_clauses(
+        "Phone stays face-down on the step while they look out at the yard"
+    )
+    assert removed
+    assert "phone" not in kept.lower()
+    assert "look out at the yard" in kept.lower()
+    # The same bare mention in camera direction is never a phone in frame.
+    kept, removed = final_beat.split_phone_mentions("Handheld selfie camera, the camera pushes in")
+    assert not removed
+    assert "camera" in kept.lower()
+
+
+def test_the_final_line_is_refused_when_it_breaks_the_bounded_by():
+    # ADR 0108: spoken words are never rewritten, so a last line promising
+    # self-understanding the angle forbids is refused with the line named.
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Sits on the step",
+        "scene": {"location": "A porch step", "props": ""},
+        "performance": {"movement": "Sits on the step"},
+        "segments": [
+            {"role": "hook", "action": "Sits on the step", "script": "Waiting for the right words means the day goes unsaid."},
+            {"role": "middle", "action": "Rests hands on knees",
+             "script": "On the porch step, I stopped waiting and just talked, messy and out of order. Afterward, the reflection helped me see what had happened inside me."},
+        ],
+    }
+    project = {"id": "p1", "location": "A porch step", "beat_timeline": [],
+               "script": "On the porch step, I stopped waiting and just talked, messy and out of order. Afterward, the reflection helped me see what had happened inside me."}
+    angle = {"claims_to_respect": [
+        "Reflections are suggestions, not a verdict on your inner life",
+        "Do not claim the app makes you understand yourself or improves emotional intelligence",
+    ]}
+    try:
+        server._guard_render_scene(strategy, project, render_index=0, content_angle=angle)
+    except Exception as exc:
+        detail = str(getattr(exc, "detail", exc))
+        assert "Afterward, the reflection helped me see what had happened inside me" in detail
+        assert "Nothing has been charged" in detail
+    else:
+        raise AssertionError("expected the bounded-by refusal")

@@ -1298,7 +1298,6 @@ class TestFinalPhoneFraming:
     @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
     @pytest.mark.parametrize("field, direction", [
         ("scene.visual_style", "Handheld selfie, close framing."),
-        ("scene.visual_style", "Not polished, handheld selfie."),
         ("performance.movement", "No zoom, but the camera pans left."),
         ("performance.movement", "Holds the recording phone at arm’s length."),
         ("scene.character_positioning", "Tight close-up of her face."),
@@ -1327,6 +1326,24 @@ class TestFinalPhoneFraming:
         assert strategy["scene"]["location"] == "kitchen."
         assert strategy["scene"]["lighting"] == "soft window light"
         assert strategy["scene"]["wardrobe"] == "blue shirt"
+
+    @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
+    def test_fixed_camera_rewrites_handheld_style_wording(self, prompt_budget):
+        # ADR 0108: simple setup wording in scene direction is rewritten to
+        # the setup the founder picked, so the model never films the wrong
+        # setup for a bare style phrase. Action wording that cannot be
+        # rewritten by substitution still refuses above.
+        from ai_service import normalize_strategy
+
+        strategy = normalize_strategy({"camera_setup": "fixed", "scene": {
+            "location": "kitchen", "lighting": "soft window light", "wardrobe": "blue shirt",
+            "visual_style": "Not polished, handheld selfie.",
+        }, "segments": [{"role": "hook", "action": "Raises her eyebrows."}]})
+        assert strategy["scene"]["visual_style"] == "Not polished, fixed camera."
+        prompt = gp.build_segment_prompt(strategy=strategy, profile={}, duration=10,
+                                         prompt_budget=prompt_budget, script_sacred=True)
+        assert "selfie" not in prompt.lower()
+        assert strategy["scene"]["location"] == "kitchen."
 
     @pytest.mark.parametrize("prompt_budget", [gp.RENDER_PROMPT_LIMIT, 4090])
     def test_fixed_camera_keeps_scene_delivery_gestures_and_spoken_words(self, prompt_budget):

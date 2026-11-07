@@ -403,7 +403,13 @@ export default function CreateVideo() {
     recommendations, sharedFit, recError, recKey, recRequestKey, clearRecommendations,
     runTailoring, tailoring, tailorError, tailorCount, tailorTotal,
     tailoredReady, recommendationsVisible, visibleRecommendations,
-  } = useWizardTemplates({ profileId, angleId, objective });
+  } = useWizardTemplates({
+    profileId, angleId, objective,
+    // The approved spoken words shape each card's display when a plan
+    // already exists, so cards never promise words nobody speaks (ADR 0108).
+    hookLine: project?.hook_line || "",
+    middle: project?.script || project?.spoken_middle || "",
+  });
   // Every app lands gated: switching apps re-arms the CTA so a revealed set
   // for one app never leaks into another app's first view.
   useEffect(() => {
@@ -1791,6 +1797,7 @@ export default function CreateVideo() {
               onRegenerate={handleRegenerateAngles}
               objective={objective}
               sessionFresh={anglesSessionFresh}
+              hookLine={project?.hook_line || ""}
               notice={angleRegenNotice}
               noticeAction={
                 angleRegenNotice
@@ -2029,8 +2036,10 @@ export default function CreateVideo() {
                 {/* Trimmed: the picked card above already shows the outcome and
                     why-it-fits, so repeating them here doubled the reading.
                     This box keeps only what the card doesn't: the length +
-                    middle (TemplateShape) and the photo jump. */}
-                <TemplateShape template={template} />
+                    middle (TemplateShape) and the photo jump. Once a plan
+                    exists the middle is the approved script, never the
+                    template's generic middle (ADR 0108). */}
+                <TemplateShape template={template} middle={project?.script || project?.spoken_middle || ""} />
                 {/* The requirement is stated in one line rather than as a
                     checklist. It was a fourth place the same photograph was
                     reported — template card, upload panel, asset row, and the
@@ -2690,6 +2699,7 @@ export default function CreateVideo() {
                 onGenerate={() => setStep(1)}
                 generateLabel="Pick an audience angle first"
                 sessionFresh={anglesSessionFresh}
+                hookLine={project?.hook_line || ""}
                 onRegenerate={handleRegenerateAngles}
                 objective={effectiveObjective}
                 notice={angleRegenNotice}

@@ -237,8 +237,8 @@ def _development_beat(template: dict, scene: dict) -> str:
     return _clip(beat, _BEAT_LIMIT)
 
 
-def opening_shape(angle: Optional[dict], template: Optional[dict] = None) -> str:
-    """The one opening this card makes, built from the First 3 Seconds Promise.
+def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_line=None, middle=None) -> str:
+    """The one opening this card makes, built from what the video opens with.
 
     "Shape" used to be the template's own first-seconds staging while the card
     printed the angle's promise underneath as "In your video", so a single card
@@ -247,7 +247,18 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None) -> str
     opening never speaks here, so nothing on the card can disagree with what the
     render opens on. What the template adds is its development, which the card
     prints as its own line (`opening_development`), never as a second opening.
+
+    Once the founder has approved a plan, the opening IS the approved hook
+    line, exactly as written (ADR 0108): the shape quotes it rather than
+    paraphrasing a promise into words the hook never speaks. The line is
+    never neutralized or re-cased — it is the founder's own spoken words.
     """
+    hook = " ".join(str(hook_line or "").split()).strip()
+    if hook:
+        text = hook.rstrip()
+        if text and text[-1] not in ".!?":
+            text += "."
+        return _clip(text, _SHAPE_LIMIT)
     promise = angle_moment(angle)
     if not promise:
         # No promise on this angle: the template's own staging is the only
@@ -258,13 +269,30 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None) -> str
     return _clip(promise.rstrip(".") + ".", _SHAPE_LIMIT)
 
 
-def opening_development(angle: Optional[dict], template: Optional[dict] = None) -> str:
+def opening_development(angle: Optional[dict], template: Optional[dict] = None, hook_line=None, middle=None) -> str:
     """How THIS template develops that one opening, or "" when it cannot.
 
     A middle that relocates the video, or that has nothing to say, leaves the
     card with the opening alone rather than inventing a beat. Returned without
     a leading capital because the card prints it as a clause, not a sentence.
+
+    Once the founder has approved a plan, the development is the approved
+    middle's first sentence (ADR 0108): the card then describes what THIS
+    video does next, never the template's generic middle about a different
+    video. The plan is the truth here, so the place/time conflict drop that
+    guards template middles does not apply to the founder's own words.
     """
+    middle_text = " ".join(str(middle or "").split()).strip()
+    if middle_text:
+        first = _first_sentence(middle_text)
+        if not first:
+            return ""
+        beat = first.rstrip(".")
+        if beat[:1].isupper() and not beat.startswith(("I ", "I'")):
+            beat = beat[:1].lower() + beat[1:]
+        if not beat:
+            return ""
+        return _clip(beat, _BEAT_LIMIT)
     if not angle_moment(angle):
         return ""
     return _development_beat(template or {}, video_scene(angle))
@@ -531,15 +559,17 @@ def reconcile_location(strategy: Optional[dict], location: str, thorough: bool =
     return {"strategy": result, "changed": changed, "blocked": blocked}
 
 
-def template_angle_fit(template: dict, angle: Optional[dict]) -> dict:
+def template_angle_fit(template: dict, angle: Optional[dict], hook_line=None, middle=None) -> dict:
     """How a template reads against the angle's opening.
 
     `structure` is the plain reason the template's fixed shape contradicts the
     angle (it is ranked lower and labelled); `example_conflicts` means only
     its sample wording does, so the card shows the angle's moment instead.
     `shape` and `staging` are the two lines the card prints: one opening built
-    from the promise, and where and when that opening happens; `development` is
-    what this template does next, printed as its own line (ADR 0089).
+    from the promise (or the approved hook line, when a plan exists), and
+    where and when that opening happens; `development` is what this template
+    does next (the approved middle, when a plan exists), printed as its own
+    line (ADRs 0089, 0108).
     """
     scene = angle_scene(angle)
     structural = " ".join(
@@ -549,9 +579,9 @@ def template_angle_fit(template: dict, angle: Optional[dict]) -> dict:
     example = conflict_reason(str((template or {}).get("example_preview") or ""), scene)
     return {
         "moment": scene["moment"],
-        "shape": opening_shape(angle, template),
+        "shape": opening_shape(angle, template, hook_line=hook_line, middle=middle),
         "staging": opening_staging(angle),
-        "development": opening_development(angle, template),
+        "development": opening_development(angle, template, hook_line=hook_line, middle=middle),
         "structure": (
             f"Doesn't fit this angle: its opening {reason}, but your angle opens {_where(scene)}."
             if reason else ""

@@ -1,6 +1,6 @@
 """
 Scene fields that must agree with each other before the render reads them
-(ADRs 0092 and 0103).
+(ADRs 0092, 0103 and 0108).
 
 Six rules are pinned here:
 
@@ -392,3 +392,136 @@ def test_the_viewer_rows_are_written_from_the_viewers_point_of_view():
     assert "PROPS ARE OBJECTS THE PERSON CARRIES, WEARS OR USES" in src
     assert "never furniture, buildings or signs already named in location" in src
     assert "natural amateur handheld camera footage" in src
+
+
+# ---------------------------------------------------------------------------
+# One camera setup, one set of camera words (ADR 0108): a handheld strategy
+# cannot say "fixed camera"/"locked shot"/"steady framing", a fixed strategy
+# cannot say "handheld", Location never names a carried object in either
+# setup, and the plan's camera move reaches Framing and Movement.
+# ---------------------------------------------------------------------------
+def _vocolens_strategy(camera_setup="handheld"):
+    return {
+        "camera_setup": camera_setup,
+        "hook_concept": "Opens with a sudden sit-down onto the step and the phone flipped face-down, turning a still pause into visible action.",
+        "hook_action": "Within the first second they lower themselves onto the wooden step and set the phone face-down beside them. Then their gaze drops to the yard.",
+        "scene": {
+            "location": "A wooden porch step outside a house, with a dark yard stretching out in front, a closed front door behind the step, and the phone lying face-down on the wood beside the person.",
+            "camera_angle": "Eye-level, fixed camera slightly off-axis from the step",
+            "framing": "Locked medium shot showing upper body, the step, and open yard space",
+            "visual_style": "Natural amateur UGC footage, unpolished, no on-screen text, steady framing",
+            "character_positioning": "Seated on the wooden step, body slightly angled, holding phone",
+            "props": "Phone",
+        },
+        "performance": {
+            "movement": "Sits down onto the wooden step and sets the phone face-down beside them. Gaze drops to the yard. Phone stays face-down on the step.",
+        },
+        "segments": [
+            {"role": "hook", "action": "Lowers themselves onto the step and sets the phone face-down"},
+            {"role": "middle", "action": "Phone stays face-down on the step while they rest hands on knees and look out at the yard."},
+        ],
+    }
+
+
+VOCOLENS_PLAN = {
+    "visual_direction": "Locked medium shot for the opening, then a slow push in during the middle.",
+    "beat_timeline": [{"label": "middle", "text": "The camera slowly pushes in as they talk."}],
+    "camera_setup": "handheld",
+}
+
+
+def test_handheld_reconcile_removes_every_phone_mention():
+    out = scene_consistency.reconcile_scene(_vocolens_strategy("handheld"), VOCOLENS_PLAN)
+    strategy = out["strategy"]
+    blob = (
+        strategy["hook_concept"] + strategy["hook_action"]
+        + strategy["segments"][1]["action"]
+        + strategy["performance"]["movement"]
+        + strategy["scene"]["character_positioning"]
+        + strategy["scene"]["props"]
+    ).lower()
+    assert "phone" not in blob
+    assert out["blocked"] == []
+
+
+def test_handheld_camera_words_describe_a_handheld_selfie():
+    out = scene_consistency.reconcile_scene(_vocolens_strategy("handheld"), VOCOLENS_PLAN)
+    scene = out["strategy"]["scene"]
+    for key in ("camera_angle", "framing", "visual_style"):
+        assert "fixed" not in scene[key].lower()
+        assert "locked" not in scene[key].lower()
+        assert "steady" not in scene[key].lower()
+    assert "handheld" in scene["camera_angle"].lower()
+    assert "handheld" in scene["framing"].lower()
+
+
+def test_location_names_the_place_only_in_every_setup():
+    for setup in ("handheld", "fixed"):
+        out = scene_consistency.reconcile_scene(_vocolens_strategy(setup), VOCOLENS_PLAN)
+        location = out["strategy"]["scene"]["location"].lower()
+        assert "phone" not in location
+        assert "porch step" in location
+        assert "dark yard" in location
+
+
+def test_fixed_keeps_the_phone_in_action_and_props_but_not_location():
+    out = scene_consistency.reconcile_scene(_vocolens_strategy("fixed"), {"visual_direction": "", "beat_timeline": []})
+    strategy = out["strategy"]
+    assert "phone" in strategy["hook_action"].lower()
+    assert "phone" in strategy["scene"]["props"].lower()
+    assert "phone" not in strategy["scene"]["location"].lower()
+
+
+def test_fixed_camera_words_never_say_handheld():
+    strategy = {
+        "camera_setup": "fixed",
+        "hook_action": "Picks up the mug",
+        "scene": {
+            "location": "Kitchen",
+            "camera_angle": "Handheld selfie at arm's length",
+            "framing": "Handheld shot",
+            "visual_style": "Handheld footage",
+            "character_positioning": "Holds the camera",
+            "props": "A mug",
+        },
+        "performance": {"movement": "Picks up the mug"},
+        "segments": [{"role": "middle", "action": "Holds the mug"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    scene = out["strategy"]["scene"]
+    for key in ("camera_angle", "framing", "visual_style", "character_positioning"):
+        assert "handheld" not in scene[key].lower()
+        assert "selfie" not in scene[key].lower()
+        assert "arm's length" not in scene[key].lower()
+
+
+def test_the_plan_push_in_is_carried_as_a_lean_for_handheld():
+    out = scene_consistency.reconcile_scene(_vocolens_strategy("handheld"), VOCOLENS_PLAN)
+    framing = out["strategy"]["scene"]["framing"].lower()
+    movement = out["strategy"]["performance"]["movement"].lower()
+    assert "lean in" in framing
+    assert "lean in toward the lens" in movement
+
+
+def test_the_plan_push_in_is_carried_as_a_camera_move_for_fixed():
+    plan = {"visual_direction": "A slow push in during the middle.", "beat_timeline": [], "camera_setup": "fixed"}
+    out = scene_consistency.reconcile_scene(_vocolens_strategy("fixed"), plan)
+    assert "push-in" in out["strategy"]["scene"]["framing"].lower()
+    assert "pushes in" in out["strategy"]["performance"]["movement"].lower()
+
+
+def test_normalize_strategy_applies_the_handheld_repairs_for_the_panel():
+    normalized = ai_service.normalize_strategy({
+        "camera_setup": "handheld",
+        "hook_concept": "Opens with a sit-down and the phone flipped",
+        "scene": {
+            "location": "A porch step and the phone lying face-down beside the person.",
+            "camera_angle": "Eye-level, fixed camera",
+            "framing": "Locked medium shot",
+            "visual_style": "steady framing",
+        },
+    })
+    assert "phone" not in normalized["hook_concept"].lower()
+    assert "phone" not in normalized["scene"]["location"].lower()
+    assert "handheld" in normalized["scene"]["camera_angle"].lower()
+    assert "handheld" in normalized["scene"]["framing"].lower()

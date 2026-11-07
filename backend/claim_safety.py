@@ -513,6 +513,90 @@ def build_safety_report(plan: dict, profile: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# The final line must stay inside the angle's "bounded by" limits (ADR 0108).
+#
+# The closing sentence of the script is the one line the failure lives on: an
+# early line can describe a hard day, but a last line that says the app helped
+# the speaker understand themselves turns a reflection into a verdict. The
+# check is deterministic and lexical: the final line is read for a
+# self-understanding benefit, and a bound is read for forbidding that same
+# benefit. A benefit with no forbidding bound, or a bound about something
+# else, never blocks — the gate is the intersection, never a vibe.
+# ---------------------------------------------------------------------------
+
+# Final-line wording that claims the app delivered self-understanding, by
+# domain. The gate is the intersection per domain: a self-understanding line
+# is blocked by a self-understanding bound, never by a diagnostic-only bound
+# about something else — and a bound about pricing never matches at all.
+_SELF_UNDERSTANDING_DOMAINS = (
+    ("self_understanding",
+     (r"\bhelp(?:ed|s|ing)?\s+(?:me|you|them|us)\s+(?:to\s+)?"
+      r"(?:see|understand|realize|realise|recognize|recognise)\b",
+      r"\bunderstand\s+(?:yourself|yourselves|themselves|myself|ourselves)\b"),
+     (r"\bunderstand\s+(?:yourself|yourselves|themselves|myself|ourselves)\b",)),
+    ("inside",
+     (r"\b(?:see|understand|realize|realise|recognize|recognise)\s+what\s+"
+      r"(?:had\s+)?(?:happened|was\s+happening)\s+inside\b",
+      r"\bwhat\s+had\s+happened\s+inside\b"),
+     (r"\bwhat\s+had\s+happened\s+inside\b", r"\binner\s+life\b")),
+    ("emotional_intelligence",
+     (r"\bimprove[sd]?\s+emotional\s+intelligence\b",),
+     (r"\bemotional\s+intelligence\b",)),
+    ("verdict",
+     (r"\bverdict\s+on\s+(?:your|my|their|the)\s+inner\s+life\b",),
+     (r"\bverdict\b.*\binner\s+life\b", r"\binner\s+life\b")),
+    ("diagnosis",
+     (r"\b(?:diagnos(?:e|es|ed|is|ing)|diagnostic)\b",),
+     (r"\bdiagnostic\b", r"\bdiagnos(?:e|es|ed|is|ing)\b")),
+)
+
+
+def last_sentence(text: str) -> str:
+    """The final spoken sentence of `text`, or "" when there is none."""
+    blob = " ".join(str(text or "").split()).strip()
+    if not blob:
+        return ""
+    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+", blob) if part.strip()]
+    if not parts:
+        return blob
+    return parts[-1].strip()
+
+
+def bounded_by_conflict(sentence: str, claims_to_respect: Iterable[str]) -> list:
+    """Bounds the final line breaks, as [{claim, reason}] — empty when it keeps them.
+
+    Only the intersection blocks: the final line must name a self-understanding
+    benefit AND a bound must forbid that same benefit. Spoken words are never
+    rewritten here; the caller refuses with the line named.
+    """
+    blob = normalize(sentence)
+    if not blob:
+        return []
+    benefit_domains = {
+        domain for domain, benefits, _bounds in _SELF_UNDERSTANDING_DOMAINS
+        if any(re.search(pattern, blob) for pattern in benefits)
+    }
+    if not benefit_domains:
+        return []
+    hits = []
+    for claim in claims_to_respect or []:
+        bound = str(claim or "").strip()
+        if not bound:
+            continue
+        bound_blob = normalize(bound)
+        bound_domains = {
+            domain for domain, _benefits, bounds in _SELF_UNDERSTANDING_DOMAINS
+            if any(re.search(pattern, bound_blob) for pattern in bounds)
+        }
+        if benefit_domains & bound_domains:
+            hits.append({
+                "claim": bound,
+                "reason": "the final line promises self-understanding this angle forbids",
+            })
+    return hits
+
+
 def summarize(report: dict) -> str:
     """One-line reviewer-facing summary. Never claims safety it did not find."""
     if report.get("passed") and not (

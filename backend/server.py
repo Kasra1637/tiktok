@@ -4556,12 +4556,20 @@ async def recommend_templates(
     profile_id: str,
     angle_id: str = "",
     objective: str = "",
+    hook_line: str = "",
+    middle: str = "",
     limit: int = 3,
     user_id: str = Depends(get_current_user_id),
 ):
     """
     Recommend library templates for an App Profile, optionally narrowed to one
     content angle and objective.
+
+    `hook_line` and `middle` carry the approved plan's spoken words when a
+    plan exists, so each card's shape and development quote what this video
+    actually opens and develops with instead of paraphrasing a promise into
+    words nobody speaks (ADR 0108). They only shape the display; ranking is
+    unchanged.
 
     The picker shows exactly three rows (ADR 0096): the scored top three,
     backfilled from the longest list available when fewer than three are
@@ -4633,7 +4641,8 @@ async def recommend_templates(
     scored = []
     for tpl in templates:
         result = _score_template_for_angle(
-            tpl, profile, angle, norm_objective, feedback_events, outcome_rows
+            tpl, profile, angle, norm_objective, feedback_events, outcome_rows,
+            hook_line=hook_line or None, middle=middle or None,
         )
         # A tailored row generated for a different problem is not a candidate
         # for this video at all: dropping it is the difference between "fewer
@@ -4859,9 +4868,23 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     if isinstance(strategy, dict) and strategy:
         normalized = normalize_strategy(strategy)
         strategy = {**strategy, **normalized}
+    # The plan's camera move is carried into the panel's Framing and Movement
+    # (ADR 0108), so Render & result shows the push-in the plan promises. The
+    # lighting split stays a save/render repair — splitting time out of
+    # Location on read would rewrite the founder's Location before they ever
+    # edited it (the legacy-read contract).
+    if isinstance(strategy, dict) and strategy:
+        scene_consistency.carry_camera_movement(strategy, out)
     out["strategy"] = strategy if isinstance(strategy, dict) else {}
     if not (out.get("location") or "").strip():
         out["location"] = ((out["strategy"].get("scene") or {}).get("location") or "").strip()
+    # The Location editor shows the place only: object clauses ("a phone
+    # beside the person") are dropped from the display even though the
+    # lighting split still only runs on save and render.
+    if (out.get("location") or "").strip():
+        displayed_location, _objects = scene_consistency.strip_location_objects(out["location"])
+        if _objects:
+            out["location"] = displayed_location
     out["strategy_is_current"] = out["strategy_is_current"] and (
         (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
     )
@@ -4936,17 +4959,27 @@ def _project_strategy(project: dict) -> dict:
     is treated as no strategy rather than crashing a real render: the fallback
     path produces a working video from the plan, and a hard failure here would
     strand a project the founder has already paid to review.
+
+    The plan's camera move is carried into Framing and Movement here (ADR
+    0108), matching what the Review panel showed. The lighting split and the
+    fuller scene repair stay with the render guard, which re-runs them before
+    the prompt is built and refuses anything repair cannot fix.
     """
     strategy = (project or {}).get("strategy")
     if isinstance(strategy, dict):
-        return {**strategy, **normalize_strategy(strategy)} if strategy else {}
-    if not strategy:
+        merged = {**strategy, **normalize_strategy(strategy)} if strategy else {}
+    elif not strategy:
         return {}
-    try:
-        parsed = json.loads(strategy)
-    except (json.JSONDecodeError, TypeError):
+    else:
+        try:
+            parsed = json.loads(strategy)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        merged = {**parsed, **normalize_strategy(parsed)} if isinstance(parsed, dict) and parsed else {}
+    if not merged:
         return {}
-    return {**parsed, **normalize_strategy(parsed)} if isinstance(parsed, dict) and parsed else {}
+    scene_consistency.carry_camera_movement(merged, project)
+    return merged
 
 
 async def _require_profile_for_studio(profile_id: str, user_id: str) -> dict:
@@ -5282,6 +5315,10 @@ async def update_studio_project(
         ).strip()
         if new_location != old_location:
             place, moved = scene_consistency.split_location(new_location)
+            # The Location column itself names the place only, in every
+            # camera setup: object clauses ("a phone beside the person") are
+            # dropped on save, not only in the strategy copy.
+            place, _objects = scene_consistency.strip_location_objects(place)
             mirror_key = "visual_direction" if location_key == "location" else "location"
             existing_strategy = row.get("strategy")
             if isinstance(existing_strategy, str):
@@ -6276,13 +6313,18 @@ async def _submit_generation(
             (project.get("id"), user_id),
         )
         exclude = [row.get("final_beat") for row in prior_beats if row.get("final_beat")]
-        strategy = _guard_render_scene(strategy, project, render_index=render_index, exclude=exclude)
+        strategy = _guard_render_scene(
+            strategy, project, render_index=render_index, exclude=exclude,
+            content_angle=content_angle,
+        )
         # The prompt's WHERE line names the place only; split_location keeps the
         # original when there is no place to keep (lighting-only text), so an
-        # emptied field can never happen here.
+        # emptied field can never happen here. Object clauses ("a phone
+        # beside the person") are dropped as well, in every camera setup.
         place_only, _moved = scene_consistency.split_location(
             render_plan.get("location") or ""
         )
+        place_only, _objects = scene_consistency.strip_location_objects(place_only)
         if place_only:
             render_plan["location"] = place_only
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
@@ -7173,7 +7215,7 @@ def _require_current_strategy(project: dict) -> dict:
     return strategy
 
 
-def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, exclude=()) -> dict:
+def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, exclude=(), content_angle=None) -> dict:
     """
     Make a strategy's scene fields agree before the prompt is built, and refuse
     a render that still carries a contradiction.
@@ -7206,7 +7248,47 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       clause still remains, the render is refused with the field named
       instead of sending it to the provider; spoken words are never
       rewritten or refused for this.
+    - The final script line stays inside the angle's "bounded by" limits
+      (ADR 0108): spoken words are never rewritten or auto-fixed, so a last
+      line promising self-understanding the angle forbids refuses the render
+      with the line named. Checked even when the project carries no Location,
+      because the spoken words are the risk here, not the place.
     """
+    # Bounded-by final line (ADR 0108): see above. Runs before the Location
+    # early return so a project with no Location still cannot render a
+    # forbidden closing line.
+    if content_angle is not None and isinstance(strategy, dict) and strategy:
+        raw_bounds = (content_angle or {}).get("claims_to_respect")
+        if isinstance(raw_bounds, str):
+            try:
+                parsed_bounds = json.loads(raw_bounds)
+                raw_bounds = parsed_bounds if isinstance(parsed_bounds, list) else [raw_bounds]
+            except (json.JSONDecodeError, TypeError):
+                raw_bounds = [raw_bounds]
+        bounds = [str(b).strip() for b in (raw_bounds or []) if str(b).strip()]
+        if bounds:
+            candidates = [(project or {}).get("script")]
+            for section in strategy.get("segments") or []:
+                if isinstance(section, dict) and str(section.get("role") or "").lower() == "middle":
+                    candidates.append(section.get("script"))
+                    break
+            for candidate in candidates:
+                final_line = claim_safety.last_sentence(candidate)
+                if not final_line:
+                    continue
+                hits = claim_safety.bounded_by_conflict(final_line, bounds)
+                if hits:
+                    bound = hits[0]["claim"]
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"This render was stopped before it cost anything: the final line "
+                            f"\u201c{final_line}\u201d promises self-understanding the audience "
+                            f"angle forbids (\u201c{bound}\u201d). Spoken words are never rewritten "
+                            "automatically \u2014 edit the script on Review & submit so the last line "
+                            "stays inside that bound, then generate again. Nothing has been charged."
+                        ),
+                    )
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
     location = str(project.get("location") or project.get("visual_direction") or "").strip()

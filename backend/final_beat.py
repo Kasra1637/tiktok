@@ -99,6 +99,52 @@ _SECOND_HAND_RE = re.compile(
 
 _NEGATION_RE = re.compile(r"\b(?:no|never|not|without)\b", re.I)
 
+# A bare "phone" is still the recording device on camera: "Phone stays
+# face-down on the step" names it without a determiner, which the object
+# pattern above cannot see. The selfie strip reads this separately so camera
+# direction ("handheld camera", "the camera pushes in") is never mistaken for
+# a phone in the frame.
+_PHONE_WORD_RE = re.compile(
+    r"\b(?:phones?|smartphones?|cell\s*phones?|mobile\s*phones?|iphones?)\b",
+    re.I,
+)
+_PHONE_CALL_RE = re.compile(r"\bphone\s+call\b", re.I)
+
+
+def _clause_mentions_phone(clause) -> bool:
+    """True when a clause names a phone as an object, even without "the"."""
+    text = str(clause or "")
+    if _PHONE_CALL_RE.search(text):
+        return False
+    for match in _PHONE_WORD_RE.finditer(text):
+        prefix = text[max(0, match.start() - 70):match.start()]
+        if _NEGATION_RE.search(prefix):
+            continue
+        return True
+    return False
+
+
+def _split_clauses(text) -> list:
+    return [c.strip() for c in re.split(
+        r"(?<=[.!?])\s+|,\s+|;\s+|\s+while\s+|\s+and\s+(?=[a-z])",
+        str(text or ""), flags=re.I,
+    ) if c.strip()]
+
+
+def _join_clauses(kept) -> str:
+    """Join action clauses back into one line, without a stray capital."""
+    if not kept:
+        return ""
+    parts = [str(clause).strip(" ,;.") for clause in kept if str(clause).strip(" ,;.")]
+    if not parts:
+        return ""
+    text = ", ".join(parts)
+    # A removed clause leaves "step, Then their gaze" behind. Lower a leading
+    # capital that starts a continuation, but never a standalone "I".
+    text = re.sub(r",\s+([A-Z])(?=[a-z])", lambda m: ", " + m.group(1).lower(), text)
+    text = " ".join(text.split()).strip(" ,;.")
+    return (text[:1].upper() + text[1:]) if text else text
+
 
 def _clause_has_forbidden(clause) -> bool:
     """True when a clause directs a selfie-forbidden action.
@@ -118,7 +164,7 @@ def _clause_has_forbidden(clause) -> bool:
 
 def is_selfie(strategy) -> bool:
     """True when the camera is held by the character (handheld selfie)."""
-    return str((strategy or {}).get("camera_setup") or SELFIE) != FIXED
+    return str((strategy or {}).get("camera_setup") or SELFIE).strip().lower() != FIXED
 
 
 def examples(count: int = 3) -> str:
@@ -152,23 +198,38 @@ def pick(strategy, exclude=(), index: int = 0) -> str:
 
 def split_phone_clauses(text):
     """`text` as (kept, removed): clauses that reach for, hold, raise or show
-    a phone or camera, reach toward the lens/phone/camera, or need a second
-    free hand are removed for selfie.
+    a phone or camera, name a phone as an object, reach toward the
+    lens/phone/camera, or need a second free hand are removed for selfie.
 
     A text made entirely of forbidden clauses comes back as ("", removed) so
     the caller can replace it whole.
     """
     raw = " ".join(str(text or "").split())
-    if not raw or not _clause_has_forbidden(raw):
+    if not raw or not (_clause_has_forbidden(raw) or _clause_mentions_phone(raw)):
         return raw, ""
-    clauses = [c.strip() for c in re.split(
-        r"(?<=[.!?])\s+|,\s+|;\s+|\s+and\s+(?=[a-z])", raw, flags=re.I,
-    ) if c.strip()]
-    kept = [c for c in clauses if not _clause_has_forbidden(c)]
-    removed = [c for c in clauses if _clause_has_forbidden(c)]
+    clauses = _split_clauses(raw)
+    kept = [c for c in clauses if not (_clause_has_forbidden(c) or _clause_mentions_phone(c))]
+    removed = [c for c in clauses if _clause_has_forbidden(c) or _clause_mentions_phone(c)]
     if not kept:
         return "", ", ".join(removed)
-    return ", ".join(kept), ", ".join(removed)
+    return _join_clauses(kept), ", ".join(removed)
+
+
+def split_phone_mentions(text):
+    """`text` as (kept, removed): only clauses naming a phone as an object.
+
+    Camera direction ("handheld camera", "the camera pushes in") is not a
+    phone in frame, so framing and camera-angle fields use this narrower rule.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw or not _clause_mentions_phone(raw):
+        return raw, ""
+    clauses = _split_clauses(raw)
+    kept = [c for c in clauses if not _clause_mentions_phone(c)]
+    removed = [c for c in clauses if _clause_mentions_phone(c)]
+    if not kept:
+        return "", ", ".join(removed)
+    return _join_clauses(kept), ", ".join(removed)
 
 
 def strip_props(props):
@@ -226,16 +287,18 @@ def strip_fields(strategy):
     if scene is not None:
         for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle"),
                            ("character_positioning", "Character positioning")):
+            # Camera direction IS the camera: "Shot on the camera" is the
+            # filming device, never a phone in frame, so only phone mentions
+            # (and a second-person holder) are stripped here. The broader
+            # reach/hold/raise rule governs the action fields, where "the
+            # camera" names a second device in the frame.
             value = str(scene.get(key) or "")
+            kept, phone_removed = split_phone_mentions(value)
+            if phone_removed:
+                value = kept
             fixed = _fix_selfie_camera_agreement(value, scene_direct=True)
-            if fixed != value:
+            if fixed != str(scene.get(key) or ""):
                 scene[key] = fixed
-                changed.append(label)
-                continue
-            if _clause_has_forbidden(value):
-                kept, _removed = split_phone_clauses(value)
-                kept = _fix_selfie_camera_agreement(kept, scene_direct=True)
-                scene[key] = kept
                 changed.append(label)
         props, removed = strip_props(scene.get("props"))
         if removed:
@@ -272,7 +335,9 @@ def forbidden_hits(strategy):
     if scene is not None:
         for key, label in (("framing", "Framing"), ("camera_angle", "Camera angle"),
                            ("character_positioning", "Character positioning")):
-            if _clause_has_forbidden(scene.get(key)):
+            # Narrow rule only, matching strip_fields: camera direction names
+            # the filming device and is never a phone in frame.
+            if split_phone_mentions(scene.get(key))[1]:
                 hits.append(label)
         if strip_props(scene.get("props"))[1]:
             hits.append("Props")

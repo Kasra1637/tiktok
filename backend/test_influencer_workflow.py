@@ -518,14 +518,18 @@ class TestAppSpecificity:
         # lock's last fields rather than the founder's spoken words or a
         # prohibition. ADR 0053 records that trade deliberately; both halves of
         # it are pinned here so the loss stays visible and bounded.
+        # The handheld position names nobody's phone (ADR 0108): the
+        # "phone at chest height" clause is stripped, leaving the
+        # centering that reaches the render.
         for attribute in (
             "corridor fluorescents",        # lighting
             "hospital staff corridor",      # environment / setting
             "grey vinyl floor",             # background
             "authentic handheld UGC",       # visual style
-            "phone at chest height",        # character positioning
+            "Centred",                      # character positioning
         ):
             assert attribute in prompt, f"render prompt is missing: {attribute}"
+        assert "phone at chest height" not in prompt
 
         # With room, the lock emits the tail too — it is lost to the squeeze,
         # never to the builder. This is the half that would catch a change that

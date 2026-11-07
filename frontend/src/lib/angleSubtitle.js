@@ -106,10 +106,20 @@ export function angleSubtitle(angle) {
  * more sentence about the angle, so it joins into a single "Bounded by" line
  * and is skipped entirely when there is nothing bounding the angle.
  */
-export function angleDetails(angle) {
+export function angleDetails(angle, hookLine = "") {
   if (!angle) return [];
   const rows = [];
   for (const [label, field] of DETAIL_FIELDS) {
+    // Once the founder has approved a plan, the opening IS the approved hook
+    // line, exactly as written: the angle's promise is then a paraphrase that
+    // can only promise words nobody speaks, so the row quotes the line
+    // instead (ADR 0108). Display case and the terminal period are the only
+    // formatting applied — the words themselves never change.
+    if (field === "hook_promise" && String(hookLine || "").trim()) {
+      const value = stripTrailingPeriod(String(hookLine || "").trim());
+      if (value) rows.push({ label, value });
+      continue;
+    }
     const value = stripTrailingPeriod(sentenceCaseTrimmed(String(angle[field] || "")));
     if (value) rows.push({ label, value });
   }

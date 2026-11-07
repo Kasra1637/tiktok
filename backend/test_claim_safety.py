@@ -420,3 +420,43 @@ class TestScriptTextCoverage:
             {"start": 0, "end": 3, "label": "hook", "text": "the promised thing"}
         ]))
         assert "the promised thing" in text
+
+
+class TestBoundedByFinalLine:
+    VERDICT_BOUND = "Reflections are suggestions, not a verdict on your inner life"
+    UNDERSTAND_BOUND = "Do not claim the app makes you understand yourself or improves emotional intelligence"
+    DIAGNOSTIC_BOUND = "The app is not a medical or diagnostic tool"
+
+    def test_last_sentence_is_the_final_spoken_sentence(self):
+        script = ("On the porch step, I stopped waiting and just talked, messy and out of order. "
+                  "Afterward, the reflection helped me see what had happened inside me.")
+        assert cs.last_sentence(script) == ("Afterward, the reflection helped me see "
+                                            "what had happened inside me.")
+
+    def test_a_self_understanding_close_breaks_its_bound(self):
+        hits = cs.bounded_by_conflict(
+            "Afterward, the reflection helped me see what had happened inside me.",
+            [self.VERDICT_BOUND, self.UNDERSTAND_BOUND],
+        )
+        assert [h["claim"] for h in hits] == [self.VERDICT_BOUND, self.UNDERSTAND_BOUND]
+
+    def test_a_plain_close_keeps_every_bound(self):
+        assert cs.bounded_by_conflict(
+            "I talked out loud, messy and out of order.",
+            [self.VERDICT_BOUND, self.UNDERSTAND_BOUND, self.DIAGNOSTIC_BOUND],
+        ) == []
+
+    def test_a_bound_about_something_else_never_blocks(self):
+        assert cs.bounded_by_conflict(
+            "Afterward, the reflection helped me see what had happened inside me.",
+            ["Do not claim free shipping"],
+        ) == []
+
+    def test_a_diagnostic_bound_never_blocks_a_self_understanding_close_alone(self):
+        # The gate is the intersection per domain: the diagnostic bound only
+        # stops a diagnosing line, not every benefit-shaped close.
+        assert cs.bounded_by_conflict(
+            "Afterward, the reflection helped me see what had happened inside me.",
+            [self.DIAGNOSTIC_BOUND],
+        ) == []
+        assert cs.bounded_by_conflict("It diagnosed my anxiety.", [self.DIAGNOSTIC_BOUND])

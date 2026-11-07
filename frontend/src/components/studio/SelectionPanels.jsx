@@ -282,11 +282,16 @@ function middleStructure(template) {
  * independent. The numbers are the ones the project will be seeded with, so
  * nothing on the later steps can quietly disagree.
  */
-export function TemplateShape({ template }) {
+export function TemplateShape({ template, middle: actualMiddle = "" }) {
   const total = readPieceSeconds(null, template);
   const hook = clampHookSeconds(template?.hook_seconds) || DEFAULT_HOOK_SECONDS;
   const split = sectionSplit(total, hook);
-  const middle = middleStructure(template);
+  // Once a plan exists, the middle THIS video speaks is the approved script,
+  // never the template's generic middle about a different video (ADR 0108).
+  const spokenMiddle = String(actualMiddle || "").trim();
+  const middle = spokenMiddle
+    ? spokenMiddle.split(/(?<=[.!?])\s+/)[0]
+    : middleStructure(template);
   return (
     <div className="mt-2 space-y-1">
       <p className="text-sm">
@@ -344,6 +349,10 @@ export function AngleSelector({
   // it costs, and a stale cache is not revealed at all: the click
   // regenerates it instead.
   sessionFresh = false,
+  // The approved hook line, when a plan already exists. The picked angle's
+  // "First 3 seconds promise" row then quotes what the video actually opens
+  // with, never the angle's paraphrase promising unspoken words (ADR 0108).
+  hookLine = "",
 }) {
   // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
   // It answers the only question a spinner cannot — is this fresh work or a
@@ -504,7 +513,7 @@ export function AngleSelector({
           downstream is held to. */}
       {angles.map((a, i) => {
         const picked = angleId === a.id;
-        const details = picked ? angleDetails(a) : [];
+        const details = picked ? angleDetails(a, hookLine) : [];
         const angleVerdicts =
           Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
         const angleFit = angleFitScore({

@@ -211,6 +211,8 @@ def score_template_for_angle(
     objective: str,
     feedback_events=(),
     outcome_rows=(),
+    hook_line=None,
+    middle=None,
 ) -> dict:
     """
     Score one template against an App Profile + angle + objective.
@@ -441,8 +443,11 @@ def score_template_for_angle(
         limitations.insert(0, relevance["reason"])
 
     # A template whose own staging contradicts where and when the angle opens
-    # stays listed but ranks lower, with the reason first (ADR 0084).
-    scene_fit = angle_scene.template_angle_fit(template, angle)
+    # stays listed but ranks lower, with the reason first (ADR 0084). The
+    # card's shape and development come from the approved hook line and
+    # middle when a plan exists, so they never promise words the video never
+    # speaks (ADR 0108).
+    scene_fit = angle_scene.template_angle_fit(template, angle, hook_line=hook_line, middle=middle)
     if scene_fit["structure"]:
         score -= 3.0
         limitations.insert(0, scene_fit["structure"])
