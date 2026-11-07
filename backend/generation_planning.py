@@ -1434,6 +1434,7 @@ def build_segment_prompt(
     plan: Optional[dict] = None,
     prompt_budget: Optional[int] = None,
     script_sacred: bool = False,
+    angle: Optional[dict] = None,
 ) -> str:
     """
     Build the prompt for the whole generated piece: a hook and a middle.
@@ -1481,6 +1482,10 @@ def build_segment_prompt(
             above is withdrawn after the first attempt; sacred never is. The
             server sets this for heygen-video-1, whose 4,090 ceiling tripped the
             withdrawal on ordinary strategies and ate the founder's own words.
+        angle: the stored content-angle row for this project, when the caller
+            has it. It carries the opening moment the plan Location must agree
+            with. The server resolves it from the database and passes it here;
+            this module stays pure. Absent means there is no row to compare.
     """
     require_camera_setup_directions(strategy)
     # A strategy stored before the identity rule was enforced still carries its
@@ -1505,13 +1510,13 @@ def build_segment_prompt(
     if plan_location and isinstance(strategy, dict):
         from angle_scene import angle_scene as _angle_scene_fn
         from angle_scene import conflict_reason as _conflict_fn
-        angle = plan.get("angle") if isinstance(plan, dict) else None
-        angle_id = str(strategy.get("content_angle_id") or "") if isinstance(strategy, dict) else ""
-        # Legacy plans may carry the angle rows inside the strategy itself.
+        angle = angle or (plan.get("angle") if isinstance(plan, dict) else None)
+        # Legacy strategy rows carry the angle itself. Current callers pass
+        # the stored row explicitly, because this module is pure and cannot
+        # read the database. Missing both means there is no angle to compare
+        # with the Location — not a reason to crash an otherwise ready render.
         if angle is None and isinstance(strategy.get("content_angle"), dict):
             angle = strategy.get("content_angle")
-        if angle is None and angle_id:
-            angle = _find_angle_by_id(angle_id)
         if isinstance(angle, dict) and angle.get("hook_promise"):
             reason = _conflict_fn(plan_location, _angle_scene_fn(angle))
             if reason:

@@ -198,6 +198,33 @@ class TestPromptCarriesTheLocation:
         )
         assert LOCATION in prompt
 
+    def test_an_angle_row_is_checked_against_the_location(self):
+        # The stored angle is the third place carrier: its opening moment must
+        # agree with the plan Location, or the render would carry two places.
+        angle = {
+            "hook_promise": "A desk in a dark bedroom at midnight",
+            "user_problem": "Days vanish at the desk",
+        }
+        with pytest.raises(ValueError, match="stopped before it cost anything"):
+            gp.build_segment_prompt(
+                strategy=desk_strategy(), profile={}, template={}, duration=12,
+                assets=[], plan={"location": LOCATION, "hook_seconds": 3},
+                angle=angle,
+            )
+
+    def test_a_content_angle_id_alone_never_crashes_the_prompt(self):
+        # Production 2026-11-07: every render with a Location raised NameError
+        # because the builder tried to resolve the stored row itself. The row
+        # now arrives as a parameter; an absent row is simply nothing to
+        # compare, never a crash on an otherwise ready render.
+        strategy = desk_strategy()
+        strategy["content_angle_id"] = "angle-1"
+        prompt = gp.build_segment_prompt(
+            strategy=strategy, profile={}, template={}, duration=12,
+            assets=[], plan={"location": LOCATION, "hook_seconds": 3},
+        )
+        assert LOCATION in prompt
+
     def test_both_budget_modes_state_the_visible_first_move(self):
         empty = dict(strategy={}, profile={}, template={}, duration=10,
                      assets=[], plan={"hook_seconds": 3})

@@ -6225,6 +6225,22 @@ async def _submit_generation(
     render_plan = {**project, **plan_words}
 
     strategy = strategy or _project_strategy(project)
+    # The stored angle is the third carrier of the place (see
+    # build_segment_prompt): its opening moment must agree with the plan
+    # Location before the prompt locks the scene. Resolve it here, where the
+    # database is, so the pure prompt builder only has to compare two values.
+    # A missing row means the angle was regenerated after this strategy was
+    # built; there is nothing to compare, and the strategy's own Location audit
+    # still runs.
+    content_angle = None
+    content_angle_id = str(
+        (strategy or {}).get("content_angle_id") or project.get("content_angle_id") or ""
+    )
+    if strategy and content_angle_id:
+        content_angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
+            (content_angle_id, user_id),
+        )
     # The strategy carries the spoken words too — the hook in section 0 and the
     # middle in section 1 — so the same repaired words are bound into it. Only
     # when something was rewritten: an untouched plan needs no rebinding, and a
@@ -6288,6 +6304,7 @@ async def _submit_generation(
                 plan=render_plan,
                 prompt_budget=prompt_budget,
                 script_sacred=video_providers.script_is_sacred(model_key),
+                angle=content_angle,
             )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=_with_request_id(str(exc))) from exc

@@ -241,6 +241,43 @@ class TestSinglePassGeneration:
         assert result["openrouter_job_id"]
 
 
+class TestAngleLocationConflict:
+    def test_the_stored_angle_is_checked_before_the_provider_call(self, api, monkeypatch):
+        """Production 2026-11-07: renders 500'd on a missing helper.
+
+        The plan Location and the stored angle's opening moment are two
+        carriers of the place. The server must resolve the angle row from the
+        database and hand it to the prompt builder; the builder refusing a
+        conflict is the reason the check exists at all.
+        """
+        calls = _mock_submit(api, monkeypatch)
+        from models import StudioGenerationRequest, now_iso
+        project, profile, _ = _ready_project(api, "Angle location conflict")
+        angle_id = str(uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO content_angles (id, brand_profile_id, kind, label, "
+            "target_audience, user_problem, hook_promise, rank, created_at, user_id) "
+            "VALUES (?, ?, 'problem_solution', 'Desk at midnight', 'Nurses', "
+            "'Paperwork piles up', 'A desk in a dark bedroom at midnight', 1, ?, ?)",
+            (angle_id, profile["id"], now_iso(), ANON),
+        ))
+        strategy = {**FAKE_STRATEGY, "content_angle_id": angle_id}
+        _run(api._execute(
+            "UPDATE studio_projects SET content_angle_id = ?, location = ?, "
+            "visual_direction = ?, strategy = ? WHERE id = ?",
+            (angle_id, "A park bench by the pond", "A park bench by the pond",
+             json.dumps(strategy), project["id"]),
+        ))
+
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+
+        assert err.value.status_code == 409
+        assert "stopped before it cost anything" in err.value.detail
+        assert calls == []
+
+
 class TestCameraSetup:
     def test_fixed_camera_conflict_is_refused_before_a_provider_call(self, api, monkeypatch):
         calls = _mock_submit(api, monkeypatch)
