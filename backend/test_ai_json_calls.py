@@ -799,9 +799,9 @@ class TestAngleGoalPromptWiring:
 
         captured = {}
         plan = {
-            "hook_line": "Too many lists?", "script": "Too many lists? Start with one task.",
-            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Too many lists?"},
-                              {"start": 3, "end": 15, "label": "middle", "text": "Start with one task."}],
+            "hook_line": "Too many lists pile up before work.", "script": "One timer makes the list feel smaller.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Too many lists pile up before work."},
+                              {"start": 3, "end": 15, "label": "middle", "text": "One timer makes the list feel smaller."}],
             "visual_direction": "Desk", "demo_brief": "Record the timer afterwards.",
             "voice_direction": "Calm", "sound_direction": "Room tone", "claims_used": [],
         }
@@ -1233,7 +1233,7 @@ class TestStrategyBudget:
             "brows",
             "aimed at the lens",
             "own situation",
-            "only the middle closes",
+            "only the middle resolves",
         ):
             assert requirement in prompt, f"opening rule missing: {requirement}"
         # The appearance prohibition still governs: expression is an action, and
@@ -1575,14 +1575,21 @@ class TestStrategyBudget:
         # thought, answers its question in the first clause, uses plain spoken
         # language with one lived detail, and ends on its strongest line, with
         # a say-it-out-loud self-check. 31,000 keeps ~600 of headroom.
-        CEILING = 31_000
+        #
+        # ADR 0106 raises it once more, measured: 31,000 -> 32,000 (+~950) for
+        # the statement-hook default and the two-beat middle: the HOOK bullet
+        # now defaults to a statement naming the viewer's feeling or situation,
+        # unless the plan requests a question format, and the middle is two
+        # beats max (one action, then one lingering thought) on the arc
+        # problem, then insight, then the shift. 32,000 keeps ~950 of headroom.
+        CEILING = 32_000
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
             f"Every field added here is a value the model must "
             f"write back, and a truncated strategy is a 502 the founder cannot fix."
         )
-        for rule in ("THE MIDDLE IS THE HOOK, CONTINUED",
+        for rule in ("THE MIDDLE IS TWO BEATS MAX",
                      "WRITE THE MIDDLE AS SPOKEN WORDS, NOT APP COPY",
                      "SHOW ONE LIVED DETAIL, NOT A SUMMARY",
                      "END ON THE STRONGEST LINE"):

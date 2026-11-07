@@ -3155,10 +3155,11 @@ def _spoken_line_rules_block() -> str:
     """
     return (
         "SPOKEN LINE CRAFT (both spoken lines, every draft):\n"
-        "- HOOK: open on a question, a curiosity gap or a frustration this viewer "
-        "recognises \u2014 said TO or ABOUT them, never a diary. 'I' at most ONCE in "
-        "the hook line; zero is better. Plain power words are fine "
-        "(never, still, every time). No clickbait, hype or exaggeration.\n"
+        "- HOOK: default to a STATEMENT that names the viewer\u2019s feeling or situation "
+        "directly (never a question), unless the plan explicitly requests a question "
+        "format. Said TO or ABOUT them, never a diary. 'I' at most ONCE in the hook "
+        "line; zero is better. Plain power words are fine (never, still, every "
+        "time). No clickbait, hype or exaggeration.\n"
         "- NAME THE ACTION: say the real task in the viewer's own words, never a "
         "vague stand-in. For a journaling app that is \"I don't want to write in my "
         "journal today\", not \"I don't want to type anything\" or \"typing is the "
@@ -3166,7 +3167,10 @@ def _spoken_line_rules_block() -> str:
         "\"stuff\" where the activity belongs.\n"
         "- EXTENSION: the script continues the hook — it answers, finishes or "
         "develops it. One person, one story, one thought: no new problem, no "
-        "second hook, no hook said again.\n"
+        "second hook, no hook said again. The middle is TWO BEATS MAX: one "
+        "concrete action, then one lingering thought. Cut filler items from "
+        "lists. Keep the emotional arc: problem, then insight, then the shift "
+        "in feeling.\n"
         "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
         "understood or ended up doing. Describe the change in their life, never "
         "a feature or a screen.\n"
@@ -3180,6 +3184,37 @@ def _spoken_line_rules_block() -> str:
         "download, install, sign-up, follow or 'try it'. A customer telling "
         "what happened is the whole piece.\n"
     )
+
+
+def _plan_requests_question_format(*sources) -> bool:
+    """Whether a plan explicitly requests a question-format hook.
+
+    The statement default is lifted only when the plan's own words ask
+    for a question: the template's category or name is a question shape
+    and its opening structure says to ask, or any source field carries
+    that explicit ask. A middle line that merely mentions a question
+    ("resolve it into the product question") is not a request — the hook
+    stays a statement.
+    """
+    for source in sources:
+        if not source:
+            continue
+        if isinstance(source, str):
+            blob = source.lower()
+            if "ask" in blob and "question" in blob:
+                return True
+            continue
+        if not isinstance(source, dict):
+            continue
+        category = str(source.get("category") or "").lower()
+        name = str(source.get("name") or "").lower()
+        opening = str(source.get("opening_structure") or "").lower()
+        if "question" in category or "question" in name:
+            if "ask" in opening or "question" in opening or "question" in category:
+                return True
+        if "ask" in opening and "question" in opening:
+            return True
+    return False
 
 
 def scene_location_guidance(angle: Optional[dict] = None) -> str:
@@ -3269,15 +3304,26 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         line = character_policy.neutralize(line)
         if not line or line.lower() == character_policy.neutralize(original).lower():
             raise RuntimeError("The rewrite came back unchanged.")
-        if len(_FIRST_PERSON_I.findall(line)) <= 1:
+        # The rewrite defaults to a statement, like every generated hook,
+        # unless the founder's approved hook itself asks for a question
+        # format by ending in one — then the question is the request.
+        allows_question = original.strip().endswith("?")
+        if len(_FIRST_PERSON_I.findall(line)) <= 1 and (allows_question or not line.rstrip().endswith("?")):
             return line
         # One bounded correction: the hook is the first thing a viewer hears,
-        # so a diary-open rewrite is not an improvement worth returning.
-        prompt += (
-            "\n\nCORRECTION: that rewrite narrated in first person more than once. "
-            "Rewrite it as a problem statement the viewer recognises \u2014 'I' at most once."
-        )
-    raise RuntimeError("The rewrite kept narrating in first person; try again.")
+        # so a diary-open or question rewrite is not an improvement worth
+        # returning.
+        if len(_FIRST_PERSON_I.findall(line)) > 1:
+            prompt += (
+                "\n\nCORRECTION: that rewrite narrated in first person more than once. "
+                "Rewrite it as a problem statement the viewer recognises \u2014 'I' at most once."
+            )
+        else:
+            prompt += (
+                "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
+                "names the viewer's feeling or situation directly, not a question."
+            )
+    raise RuntimeError("The rewrite kept narrating in first person or asking a question; try again.")
 
 
 def _angle_scene_moment(angle: Optional[dict]) -> str:
@@ -3559,8 +3605,8 @@ async def generate_creative_plan(
         f"{_spoken_line_rules_block()}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, at most {hook_budget} characters and at most one \'I\'; a shorter natural sentence is fine",\n'
-        '  "script": "MIDDLE ONLY: the spoken story AFTER the hook, without repeating it, plain text, no stage directions",\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, defaulting to a statement naming their feeling or situation (not a question) unless the plan requests a question format, at most {hook_budget} characters and at most one \'I\'; a shorter natural sentence is fine",\n'
+        '  "script": "MIDDLE ONLY: two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
@@ -3738,7 +3784,10 @@ async def generate_creative_plan(
         # Accept a legacy whole-piece response only when removing its opening
         # hook leaves complete middle sentences; no partial sentence surgery.
         script = strip_leading_hook(hook, raw_script)
-        issues = _generated_spoken_issues(hook, script, hook_budget, middle_budget)
+        issues = _generated_spoken_issues(
+            hook, script, hook_budget, middle_budget,
+            allows_question=_plan_requests_question_format(template, structure),
+        )
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
         if not issues:
@@ -3758,7 +3807,8 @@ async def generate_creative_plan(
             "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
             "openers, never the app's name, and no claimed history with the app. "
             "The hook line names the viewer's problem and uses 'I' at most once \u2014 never a "
-            "diary open. "
+            "diary open. Default to a statement naming the viewer's feeling or situation, "
+            "not a question, unless the plan explicitly requests a question format. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
             f"{middle_budget} characters. A shorter complete thought is fine.\n"
@@ -4445,7 +4495,8 @@ def _trim_hook_line(text: str, limit: int):
 _FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
 
 
-def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int) -> list:
+def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
+                              *, allows_question: bool = False) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
 
     This is not a general grammar parser or a semantic coherence score. It
@@ -4461,7 +4512,10 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
     whole phrases on normalized text, so a genuine customer line never trips
     them — see _PROMOTION_MARKERS for why that constraint is the whole design.
     The hook's first-person count is the same kind of arithmetic, not taste:
-    the prompt allows at most one 'I' in the whole hook line.
+    the prompt allows at most one 'I' in the whole hook line. So is the
+    statement default: a hook-line question is detectable (it ends in '?'),
+    so a non-question plan that drafts one is rewritten through the editorial
+    loop instead of shipped.
     """
     issues = []
     # Prepositions/pronouns CAN end grammatical English ("look forward to",
@@ -4518,6 +4572,16 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
         )
     if ";" in hook:
         issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
+    # The default hook is a statement naming the viewer's feeling or
+    # situation, not a question. A question hook is a defect unless the
+    # plan explicitly requests a question format, which the caller proves
+    # with allows_question.
+    if not allows_question and str(hook or "").strip().endswith("?"):
+        issues.append(
+            "hook_line is a question; default to a statement naming the viewer's "
+            "feeling or situation, not a question, unless the plan explicitly "
+            "requests a question format"
+        )
     return issues
 
 
@@ -5451,7 +5515,7 @@ async def generate_video_strategy(
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, defaulting to a statement naming their feeling or situation (not a question) unless the plan requests a question format, at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: the FIRST beat lands inside the first 1-2 seconds as a clearly visible movement, gesture or position change (they step in or away, turn, stand up, sit down, reach, lift, place or grab something), then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
@@ -5513,13 +5577,15 @@ async def generate_video_strategy(
         "is refused. A script far under its target leaves dead air the video has to stretch "
         "across the full duration.\n"
         "- ONE STORY, TWO LINES: the hook's script names ONE problem this viewer actually has, in "
-        "their own words, and the middle's script resolves that same problem — same subject, same "
-        "viewer, the second answering the first. If the two sections would not read as one "
+        "their own words, and the middle's script develops that same problem — same subject, same "
+        "viewer, the second continuing the first. If the two sections would not read as one "
         "thought, rewrite the middle until they do.\n"
-        "- THE MIDDLE IS THE HOOK, CONTINUED: it picks up the hook's last words and answers "
-        "the hook's open question within its first clause. Do not recap the hook, restate its "
-        "problem, or make the viewer wait for the answer. The hook earns the question; the "
-        "middle is the one thought that closes it.\n"
+        "- THE MIDDLE IS TWO BEATS MAX: one concrete action, then one lingering thought. "
+        "Beat one grounds the story in a single concrete moment from this video's own angle, "
+        "facts or usage moments — one object, one place, one routine the viewer recognises. "
+        "Beat two is the lingering thought, the strongest line, written as spoken words in "
+        "the customer's own terms. Cut filler items from lists. Keep the emotional arc: "
+        "problem, then insight, then the shift in feeling.\n"
         "- WRITE THE MIDDLE AS SPOKEN WORDS, NOT APP COPY: short clauses and contractions "
         "in the speaker's own voice, as said aloud. No marketing verbs (discover, elevate, "
         "transform, journey, solution), no feature list, no spec-sheet phrasing. Where one fits "
@@ -5530,10 +5596,10 @@ async def generate_video_strategy(
         "the viewer recognises — rather than describing the benefit in general terms. If the "
         "middle could fit any app with the name changed, rewrite it until that detail pins it "
         "to this one.\n"
-        "- END ON THE STRONGEST LINE: the middle's last sentence is its strongest line. If the "
+        "- END ON THE STRONGEST LINE: the middle's last sentence is its lingering thought. If the "
         "strongest line appears earlier, move or rewrite it to the end; never bury it mid-script "
         "where a weaker line follows. Before you finish, say the middle aloud in your head: if "
-        "any sentence reads as written copy, restates the hook, delays the answer, or sounds "
+        "any sentence reads as written copy, restates the hook, or sounds "
         "generic, rewrite that sentence and re-check until every line sounds said, not written.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
         "transition — and its job is to end at the moment the viewer would reach for the app (for "
@@ -5566,13 +5632,13 @@ async def generate_video_strategy(
         "open). Ambiguity is the enemy: name the brow, the eye, the second.\n"
         "- Every beat above comes out of THIS video's own situation — its props, place, "
         "problem, or what the middle develops — not a gesture the rest must apologise "
-        "for. Leave one question open that only the middle closes: what they grabbed, "
+        "for. Leave one tension open that only the middle resolves: what they grabbed, "
         "what happened, what happens next.\n"
         "- An expression is an ACTION inside the opening, never a description of who "
         "they are: describe no appearance and never contradict the founder's "
         "photograph. Say what the face does, never what the face is.\n"
-        "- The hook must serve the selected hook mechanism. If the mechanism is a question, the hook is a "
-        "question; if it is a contrarian correction, the hook corrects something.\n"
+        "- The hook must serve the selected hook mechanism. If the mechanism explicitly requests a question format, the hook is a "
+        "question; otherwise the hook is a statement naming the viewer's feeling or situation. If the mechanism is a contrarian correction, the hook corrects something.\n"
         "- The two sections must do genuinely different work. The hook earns attention; the middle "
         "is not the hook restated with more words. If the middle could be cut without losing the "
         "hook, it is not doing its job.\n"
