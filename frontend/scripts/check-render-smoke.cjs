@@ -15615,8 +15615,108 @@ async function runDemoCtaChecks() {
           await act(async () => {
             del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
+          // The trash opens the confirmation first; nothing is deleted yet.
+          if (deleted !== null) {
+            throw new Error("the trash deleted without a confirmation dialog");
+          }
+          const doc = ctx.container.ownerDocument;
+          const dialog = doc.querySelector('[data-testid="delete-render-dialog-gen-failed"]');
+          if (!dialog) {
+            throw new Error("the trash did not open a delete confirmation dialog");
+          }
+          if (!dialog.textContent.includes("cannot be undone")) {
+            throw new Error("the delete dialog does not say the deletion cannot be undone");
+          }
+          const cancel = dialog.querySelector('[data-testid="delete-render-cancel-gen-failed"]');
+          if (!cancel) throw new Error("the delete dialog has no Cancel");
+          await act(async () => {
+            cancel.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          if (deleted !== null) {
+            throw new Error("Cancel in the delete dialog still deleted the render");
+          }
+          await act(async () => {
+            del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          const confirm = doc.querySelector('[data-testid="delete-render-confirm-gen-failed"]');
+          if (!confirm) throw new Error("the reopened delete dialog has no confirm");
+          await act(async () => {
+            confirm.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
           if (deleted !== "gen-failed") {
             throw new Error("the failed-row Delete does not reach the delete endpoint");
+          }
+        }
+      );
+    }
+  );
+  await check(
+    "the delete dialog names what deletion removes and keeps",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-dlg", status: "completed", objective: "address_user_problem", audience: "Night scrollers" }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const del = ctx.container.querySelector('button[aria-label="Delete this render"]');
+          await act(async () => {
+            del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          const dialog = ctx.container.ownerDocument.querySelector('[data-testid="delete-render-dialog-gen-dlg"]');
+          if (!dialog) throw new Error("the delete dialog did not open");
+          const html = dialog.textContent;
+          for (const phrase of [
+            "Delete this render?",
+            "cannot be undone",
+            "removes this render from History",
+            "post copy is removed",
+            "project plan stays untouched",
+            "Download it first",
+            "Delete permanently",
+            "Cancel",
+          ]) {
+            if (!html.includes(phrase)) {
+              throw new Error(`the delete dialog is missing ${JSON.stringify(phrase)}`);
+            }
+          }
+        }
+      );
+    }
+  );
+  await check(
+    "a failed delete stays in the dialog with the error named",
+    async (ctx) => {
+      const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+      await withApi(
+        {
+          getGenerationHistory: async () => ({
+            generations: [{ ...COMPLETED, id: "gen-err", status: "failed", video_url: null, playback_url: null, r2_url: null, error: "boom", audience: "Night scrollers" }],
+          }),
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          deleteGeneration: async () => { throw new Error("storage refused the delete"); },
+        },
+        async () => {
+          await mount(GenerationHistory, { onChanged: () => {} })(ctx);
+          const del = ctx.container.querySelector('button[aria-label="Delete this render"]');
+          await act(async () => {
+            del.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          const confirm = ctx.container.ownerDocument.querySelector('[data-testid="delete-render-confirm-gen-err"]');
+          if (!confirm) throw new Error("the delete dialog has no confirm");
+          await act(async () => {
+            confirm.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          const error = ctx.container.ownerDocument.querySelector('[data-testid="delete-render-error-gen-err"]');
+          if (!error) {
+            throw new Error("a failed delete did not keep the dialog open with an error");
+          }
+          if (!error.textContent.includes("storage refused")) {
+            throw new Error("the delete error does not name the failure");
           }
         }
       );

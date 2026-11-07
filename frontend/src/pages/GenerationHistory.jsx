@@ -2,6 +2,14 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
@@ -164,6 +172,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Destructive confirmation: the trash icon's first click opens the
+  // branded dialog, and only an explicit confirm calls the endpoint.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   // Set when the clip cannot be played inline, so the row can say so instead of
   // leaving a player that looks loaded and does nothing.
@@ -254,6 +267,23 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
       setError(historyActionError(err, action));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Confirming the delete dialog: the failure lands inside the dialog,
+  // named, and the dialog stays open so the row is never silently
+  // removed or silently kept.
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteGeneration(row.id);
+      setConfirmDelete(false);
+      onChanged?.();
+    } catch (err) {
+      setDeleteError(historyActionError(err, "delete this render"));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -498,13 +528,18 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             )}
             {/* Delete sits beside the file that saves the render, never over
                 the footage: the same icon-only square for playable and dead
-                rows, and never a "Delete" label competing with Download. */}
+                rows, and never a "Delete" label competing with Download.
+                Its first click only opens the confirmation dialog — nothing
+                is removed until the founder confirms. */}
             <Button
               variant="ghost"
               size="icon"
               className={`shrink-0 text-muted-foreground hover:text-destructive${compact ? " h-11 w-11" : " h-9 w-9"}`}
               disabled={busy}
-              onClick={() => act(() => api.deleteGeneration(row.id))}
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmDelete(true);
+              }}
               data-testid={`history-delete-${row.id}`}
               title="Remove this render from history"
               aria-label="Delete this render"
@@ -741,6 +776,65 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={confirmDelete}
+        onOpenChange={(open) => {
+          if (deleting) return;
+          setConfirmDelete(open);
+          if (!open) setDeleteError(null);
+        }}
+      >
+        <DialogContent data-testid={`delete-render-dialog-${row.id}`}>
+          <DialogHeader>
+            <DialogTitle>Delete this render?</DialogTitle>
+            <DialogDescription>
+              This cannot be undone. It removes this render from History and deletes its video file and post copy.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground" data-testid={`delete-render-consequences-${row.id}`}>
+            <li>The clip leaves History and cannot be played or downloaded here anymore.</li>
+            <li>Its post copy is removed with it.</li>
+            <li>Your project plan stays untouched.</li>
+          </ul>
+
+          {saveUrl && (
+            <p className="text-sm text-muted-foreground" data-testid={`delete-render-download-hint-${row.id}`}>
+              Download it first if you want to keep a copy.
+            </p>
+          )}
+
+          {deleteError && (
+            <Alert variant="destructive" data-testid={`delete-render-error-${row.id}`}>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              autoFocus
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              data-testid={`delete-render-cancel-${row.id}`}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              busy={deleting}
+              data-testid={`delete-render-confirm-${row.id}`}
+            >
+              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 });
