@@ -510,6 +510,74 @@ def test_the_plan_push_in_is_carried_as_a_camera_move_for_fixed():
     assert "pushes in" in out["strategy"]["performance"]["movement"].lower()
 
 
+import pytest
+
+
+def _carry_strategy(camera_setup="handheld"):
+    return {
+        "camera_setup": camera_setup,
+        "hook_action": "Sits on the step",
+        "scene": {
+            "location": "Porch step",
+            "camera_angle": "Eye-level",
+            "framing": "Medium shot",
+            "visual_style": "Natural",
+            "props": "",
+        },
+        "performance": {"movement": "Sits on the step."},
+        "segments": [{"role": "middle", "action": "Sits on the step"}],
+    }
+
+
+@pytest.mark.parametrize("plan_text,framing_bit,movement_bit", [
+    ("A slow pull back during the middle.", "eases back as they lean away", "they slowly lean away from the lens"),
+    ("A slow zoom in during the middle.", "tightens as they lean closer", "they slowly lean closer to the lens"),
+    ("A slow zoom out during the middle.", "eases back as they lean away", "they slowly lean away from the lens"),
+    ("The camera pans during the middle.", "follows their movement", "they turn their body through the space"),
+    ("The camera tilts during the middle.", "follows their movement", "they move their gaze through the space"),
+    ("The camera orbits during the middle.", "follows their movement", "they turn slowly toward the lens"),
+    ("The camera tracks during the middle.", "follows their movement", "they move with the frame"),
+])
+def test_every_plan_move_is_carried_as_a_lean_for_handheld(plan_text, framing_bit, movement_bit):
+    plan = {"visual_direction": plan_text, "beat_timeline": []}
+    out = scene_consistency.reconcile_scene(_carry_strategy("handheld"), plan)
+    framing = out["strategy"]["scene"]["framing"].lower()
+    movement = out["strategy"]["performance"]["movement"].lower()
+    assert framing_bit in framing
+    assert movement_bit in movement
+    assert "pushes in" not in movement
+    assert "camera pans" not in movement
+    assert "camera tracks" not in movement
+
+
+@pytest.mark.parametrize("plan_text,framing_bit,movement_bit", [
+    ("A slow pull back during the middle.", "pull-back", "pulls back"),
+    ("A slow zoom in during the middle.", "zoom-in", "zooms in"),
+    ("A slow zoom out during the middle.", "zoom-out", "zooms out"),
+    ("The camera pans during the middle.", "a pan", "pans"),
+    ("The camera tilts during the middle.", "a tilt", "tilts"),
+    ("The camera orbits during the middle.", "an orbit", "orbits"),
+    ("The camera tracks during the middle.", "tracking move", "tracks"),
+])
+def test_every_plan_move_is_carried_as_a_camera_move_for_fixed(plan_text, framing_bit, movement_bit):
+    plan = {"visual_direction": plan_text, "beat_timeline": [], "camera_setup": "fixed"}
+    out = scene_consistency.reconcile_scene(_carry_strategy("fixed"), plan)
+    framing = out["strategy"]["scene"]["framing"].lower()
+    movement = out["strategy"]["performance"]["movement"].lower()
+    assert framing_bit in framing
+    assert movement_bit in movement
+    assert "lean in" not in movement
+
+
+def test_carrying_the_same_move_twice_adds_nothing():
+    plan = {"visual_direction": "A slow push in during the middle.", "beat_timeline": []}
+    strategy = _carry_strategy("handheld")
+    first = scene_consistency.reconcile_scene(strategy, plan)["strategy"]
+    second = scene_consistency.reconcile_scene(first, plan)["strategy"]
+    assert second["scene"]["framing"] == first["scene"]["framing"]
+    assert second["performance"]["movement"] == first["performance"]["movement"]
+
+
 def test_normalize_strategy_applies_the_handheld_repairs_for_the_panel():
     normalized = ai_service.normalize_strategy({
         "camera_setup": "handheld",

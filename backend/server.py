@@ -4874,7 +4874,13 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # Location on read would rewrite the founder's Location before they ever
     # edited it (the legacy-read contract).
     if isinstance(strategy, dict) and strategy:
-        scene_consistency.carry_camera_movement(strategy, out)
+        _carry = scene_consistency.carry_camera_movement(strategy, out)
+        if _carry:
+            logger.debug(
+                "Project %s panel carry: %s",
+                out.get("id"),
+                ", ".join(_carry),
+            )
     out["strategy"] = strategy if isinstance(strategy, dict) else {}
     if not (out.get("location") or "").strip():
         out["location"] = ((out["strategy"].get("scene") or {}).get("location") or "").strip()
@@ -4978,7 +4984,13 @@ def _project_strategy(project: dict) -> dict:
         merged = {**parsed, **normalize_strategy(parsed)} if isinstance(parsed, dict) and parsed else {}
     if not merged:
         return {}
-    scene_consistency.carry_camera_movement(merged, project)
+    _carry = scene_consistency.carry_camera_movement(merged, project)
+    if _carry:
+        logger.debug(
+            "Project %s render-path carry: %s",
+            (project or {}).get("id"),
+            ", ".join(_carry),
+        )
     return merged
 
 

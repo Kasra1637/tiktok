@@ -4295,11 +4295,13 @@ def normalize_strategy(raw: dict) -> dict:
         )[:300]
     # Location names the place only, in every camera setup: a phone may stay
     # in the action and Props for a fixed camera, never in the place.
+    _repairs = []
     place_only, objects_removed = scene_consistency.strip_location_objects(
         result["scene"].get("location")
     )
     if objects_removed:
         result["scene"]["location"] = place_only
+        _repairs.append("Location")
     result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
         result["scene"].get("props"), result["scene"].get("location")
     )
@@ -4328,8 +4330,18 @@ def normalize_strategy(raw: dict) -> dict:
     # plan timeline this normalizer does not have, so it runs on the read
     # and render paths that do.
     if final_beat.is_selfie(result):
-        result = final_beat.strip_fields(result)["strategy"]
-    scene_consistency.camera_setup_wording(result)
+        strip_audit = final_beat.strip_fields(result)
+        result = strip_audit["strategy"]
+        _repairs.extend(strip_audit["changed"])
+    _repairs.extend(scene_consistency.camera_setup_wording(result))
+    # Audit trail at debug (ADR 0108): pure modules return `changed`, the
+    # caller logs it. Debug, not info — this normalizer runs on every panel
+    # read, and the spend-time audit lives in the render guard's info log.
+    if _repairs:
+        logger.debug(
+            "normalize_strategy scene repaired: %s",
+            ", ".join(dict.fromkeys(_repairs)),
+        )
     return result
 
 
@@ -5969,12 +5981,15 @@ async def generate_video_strategy(
         raise RuntimeError(f"Video strategy missing required fields: {missing}")
 
     strategy = normalize_strategy({**raw, "camera_setup": camera_setup})
+    _gen_repairs = []
     if approved_plan and approved_plan.get("location"):
         # The founder's Location is the place; any lighting or time of day it
         # still carries moves into the strategy's lighting rather than being
         # restated as part of the place (ADR 0092).
         place, moved = scene_consistency.split_location(approved_plan["location"])
         place, _objects = scene_consistency.strip_location_objects(place)
+        if _objects:
+            _gen_repairs.append("Location")
         strategy["scene"]["location"] = _clean_strategy_text(place, 300)
         if moved:
             strategy["scene"]["lighting"] = _clean_strategy_text(
@@ -5988,8 +6003,13 @@ async def generate_video_strategy(
     # and Movement here so the plan and the strategy cannot disagree, and the
     # setup wording is re-applied after the location overwrite above.
     if approved_plan:
-        scene_consistency.camera_setup_wording(strategy)
-        scene_consistency.carry_camera_movement(strategy, approved_plan)
+        _gen_repairs.extend(scene_consistency.camera_setup_wording(strategy))
+        _gen_repairs.extend(scene_consistency.carry_camera_movement(strategy, approved_plan))
+    if _gen_repairs:
+        logger.info(
+            "Video strategy scene repaired before save: %s",
+            ", ".join(dict.fromkeys(_gen_repairs)),
+        )
     strategy["duration_seconds"] = int(total_duration or 0)
     strategy["hook_seconds"] = int(hook_seconds or 0)
     strategy["objective"] = normalize_objective(objective)

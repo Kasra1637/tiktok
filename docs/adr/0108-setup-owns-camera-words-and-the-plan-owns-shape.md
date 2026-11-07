@@ -103,6 +103,12 @@ visible before money was spent, all sent to the provider as written.
   approved words, not a model paraphrase: deterministic quoting cannot
   promise unspoken words, while a prompt can.
 
+- **Repairs leave an audit trail.** Pure modules return `changed`; the
+  callers log it — `normalize_strategy` at debug (it runs on every panel
+  read), `generate_video_strategy` at info (one persisted repair), the
+  read-path carry at debug, and `_guard_render_scene` at info before the
+  prompt is built. No repair is silent at spend time.
+
 ## Consequences
 
 - One logical change per commit still holds: display and render repairs
@@ -114,3 +120,6 @@ visible before money was spent, all sent to the provider as written.
   correctly-stated video instead of refusing for a one-word style phrase;
   action conflicts (pans, close-ups, walks toward the lens, gestures
   pushing in) still refuse with "rebuild" as before.
+- Move carry is pinned for every move kind (push-in, pull-back,
+  zoom-in/out, pan, tilt, orbit, track) in both setups, including the
+  non-slow variants and the no-duplicate-on-second-carry idempotence.
