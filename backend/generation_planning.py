@@ -1492,8 +1492,38 @@ def build_segment_prompt(
     # — a pasted template Venue — the lock would carry both places and the
     # model would pick the pasted one. Overwrite the strategy's place
     # fields with the plan's Location so the lock states the place once.
+    # The angle's own scene is the third carrier: its hook_promise names
+    # the opening moment, and scene_location_guidance repeats it as
+    # "ANGLE SCENE (outranks everything below)". When the founder edits
+    # the Location, the angle rows themselves do not change, so a
+    # Location garden-path-vs-sidewalk divergence would otherwise reach
+    # the model as two places. Check the stored angle row against the
+    # plan Location here and refuse when they contradict, rather than
+    # rendering a two-place prompt.
     plan_location = (plan.get("location") if isinstance(plan, dict) else "") or ""
     plan_location = " ".join(str(plan_location).split()).strip()
+    if plan_location and isinstance(strategy, dict):
+        from angle_scene import angle_scene as _angle_scene_fn
+        from angle_scene import conflict_reason as _conflict_fn
+        angle = plan.get("angle") if isinstance(plan, dict) else None
+        angle_id = str(strategy.get("content_angle_id") or "") if isinstance(strategy, dict) else ""
+        # Legacy plans may carry the angle rows inside the strategy itself.
+        if angle is None and isinstance(strategy.get("content_angle"), dict):
+            angle = strategy.get("content_angle")
+        if angle is None and angle_id:
+            angle = _find_angle_by_id(angle_id)
+        if isinstance(angle, dict) and angle.get("hook_promise"):
+            reason = _conflict_fn(plan_location, _angle_scene_fn(angle))
+            if reason:
+                raise ValueError(
+                    f"This render was stopped before it cost anything: the Location "
+                    f"is \u201c{plan_location}\u201d, but the selected angle opens "
+                    f"\u201c{str(angle.get('hook_promise') or '')[:90]}\u201d, "
+                    f"which {reason}. The angle's opening moment and the Location "
+                    "must name the same place. Pick a different angle, or edit "
+                    "the Location back to the angle's moment, then generate again. "
+                    "Nothing has been charged."
+                )
     if plan_location and isinstance(strategy, dict):
         scene = strategy.get("scene")
         if isinstance(scene, dict):
