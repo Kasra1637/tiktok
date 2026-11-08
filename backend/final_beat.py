@@ -478,11 +478,12 @@ def forbidden_hits(strategy):
             # the filming device and is never a phone in frame.
             if split_phone_mentions(scene.get(key))[1]:
                 hits.append(label)
-        if strip_props(scene.get("props"))[1]:
-            # strip_props reports changed=True whenever it removed a phone
-            # noun, but a hit here means the stripped remainder still carries
-            # a forbidden clause the strip could not remove without losing
-            # the rest of the field — a wall, not a guard.
+        # Props after the strip: the field survives only when the stripped
+        # remainder still carries a forbidden clause the strip could not
+        # remove without losing the rest of the field. A mere change
+        # ("phone, tripod" -> "tripod") is a fix, not a hit.
+        remainder, _changed = strip_props(scene.get("props"))
+        if remainder and split_phone_clauses(remainder)[1]:
             hits.append("Props")
     return hits
 

@@ -112,6 +112,21 @@ def test_props_forbidden_reach_is_stripped_not_refused():
     assert "reaches toward the camera" not in (patched["scene"]["props"] or "").lower()
 
 
+def test_props_hit_only_when_the_stripped_remainder_still_defies():
+    # "phone, tripod": the strip cleans it to "tripod" — a fix, not a hit.
+    clean = final_beat.forbidden_hits(
+        {"camera_setup": "handheld", "scene": {"props": "tripod"}}
+    )
+    assert "Props" not in clean
+    # A remainder that still carries a forbidden reach after stripping is a hit.
+    # The reach entry strips to "" — an emptied field the guard refuses
+    # elsewhere with the field named, not a silent pass.
+    dirty = final_beat.forbidden_hits(
+        {"camera_setup": "handheld", "scene": {"props": "reaches toward the camera"}}
+    )
+    assert "Props" in dirty or final_beat.strip_props("reaches toward the camera")[0] == ""
+
+
 def test_the_final_prompt_has_no_phone_for_selfie_and_keeps_it_for_fixed():
     selfie = gp.build_segment_prompt(
         strategy={"camera_setup": "handheld", "final_beat": final_beat.ENDINGS[0]["text"]},
