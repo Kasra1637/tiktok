@@ -1749,6 +1749,11 @@ async function main() {
       "The audience angle changed after this strategy was built",
       "the angle drift has no warning on the render panel"
     );
+    expectText(
+      ctx,
+      "Rebuild the strategy for the angle now picked",
+      "the angle drift remedy did not render as a jump"
+    );
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => (b.textContent || "").includes("Generate the video"));
     if (!generate) throw new Error("no Generate button to gate");

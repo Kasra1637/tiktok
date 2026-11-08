@@ -221,7 +221,15 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // through with no jump — the button is still disabled with the reason.
   const remedies = [];
   if (noAngle) remedies.push({ label: "Pick an audience angle first", action: "goto-angle" });
+  else if (angleStale) {
+    remedies.push({ label: "Rebuild the strategy for the angle now picked", action: "rebuild-strategy" });
+  } else if (staleStrategy) {
+    remedies.push({ label: "Rebuild the strategy so it matches your saved plan", action: "rebuild-strategy" });
+  }
   if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
+  if (!ready && !noPhoto && !noAngle && !staleStrategy && !angleStale) {
+    remedies.push({ label: "Review and save the plan", action: "save-edits" });
+  }
 
   // One click, one render. The key identifies a single INTENT to render and is
   // reused for every retry of that intent, then cleared the moment a render
