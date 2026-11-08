@@ -28,6 +28,14 @@ import { Loader as Loader2, TriangleAlert as AlertTriangle, Target, Check, Spark
    revealing pre-generated ones, so the line never disagrees with its button. */
 const ANGLES_CTA_COPY = "Get your six audience angles, then pick one to move forward.";
 
+/* The single instruction for the goal picker, shared by the empty state
+   (click generates the six) and the reveal state (click shows the six).
+   One line on purpose: three stacked explanations said the same thing in
+   different words, and the step stalled on reading instead of moving. The
+   verb is deliberately neutral — "get" covers generating fresh goals and
+   revealing pre-generated ones, so the line never disagrees with its button. */
+const GOALS_CTA_COPY = "Get your six video goals for this angle, then pick one to move forward.";
+
 function formatTemplateUse(n) {
   if (!n) return "Never used";
   return n === 1 ? "Used once" : `Used ${n} times`;
@@ -619,9 +627,18 @@ export function AngleSelector({
   );
 }
 
-/**  * Goal picker shared by the Audience & template step and Review recovery. Its
+/**
+ * Goal picker shared by the Audience & template step and Review recovery. Its
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
+ *
+ * Landing is always gated: one "Generate goals" action, never a finished
+ * list. The first click always generates fresh — the facet-ordered
+ * `suggestions` fallback from the server is never rendered as the initial
+ * list, so a new video never lands on auto-populated goals. A set generated
+ * moments ago in-session is then revealed free on step re-entry, so returning
+ * never spends a second call. "Shuffle" appears only beside a visible list,
+ * where it always has a current generation to act on.
  *
  * Each card shows the goal's general outcome plus an optional angle-specific
  * fit line explaining why that goal suits the selected angle. The fit line is
@@ -644,12 +661,15 @@ export function AngleGoalPicker({
   pairEvidence = {},
   // The six suggestions in the angle's profile-tailored PERSISTED variant
   // order, from the server (angle.goal_suggestions). Falls back to the
-  // static facet list when the angle row carries none.
+  // static facet list when the angle row carries none. Kept for the Review
+  // recovery call sites and for the pre-generate fallback copy inspection,
+  // but never rendered as the initial list — the gate owns first view.
   suggestions,
   // Live goals generated on the founder's click, each
   // {name, description, why_it_fits, fit_score}. Null until generated: the
-  // facet-ordered list shows in the meantime and on failure.
+  // panel shows the gate in the meantime (and on failure keeps it).
   liveGoals = null,
+  showGoals = false,
   onGenerate,
   generating = false,
   generationError = null,
@@ -676,7 +696,18 @@ export function AngleGoalPicker({
   const rankedGoals = orderedGoals.length > 0
     ? orderedGoals
     : (recommendations || []).filter((goal) => knownGoals.includes(goal));
-  const featured = [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6);
+  // The reveal gate (the goals analogue of the angles gate above): the list
+  // is visible only when the founder clicked Generate (showGoals / liveGoals)
+  // or when a goal is already picked (a draft or deep link that already names
+  // one has been viewed by definition). The facet-ordered `suggestions` /
+  // `recommendations` lists are never shown on first view — they are the
+  // auto-populated output the gate exists to withhold. A draft whose only
+  // goals come from the facet list still renders them once a goal is picked,
+  // so resuming never strands the founder on an empty required control.
+  const revealed = showGoals || Boolean(value) || (Array.isArray(liveGoals) && liveGoals.length > 0);
+  const featured = revealed
+    ? [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6)
+    : [];
   const outsideRecommendation = Boolean(value && !featured.includes(value));
   const liveOutcomes = {};
   const liveFitReasons = {};
@@ -722,77 +753,62 @@ export function AngleGoalPicker({
     return <div data-testid="goal-waits-for-angle" />;
   }
 
-  return (
-    <section className="space-y-4" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
-      <div className="space-y-1">
-        <div className="flex items-start justify-between gap-2">
-          <GroupLabel as="h3" icon={Target} id="video-goal-label">
-            Video goal <span className="text-muted-foreground">(required)</span>
-          </GroupLabel>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {onGenerate && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={onGenerate}
-                disabled={generating}
-                busy={generating}
-                title="Generate six goals fitted to this angle's audience, problem, promise, outcome, emotion and feature. Runs only when you click it."
-                data-testid="generate-goals-button"
-              >
-                {generating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                {generating ? "Generating goals" : "Generate goals"}
-              </Button>
-            )}
-            {onRegenerate && featured.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={onRegenerate}
-                disabled={regenerating}
-                busy={regenerating}
-                progress={regenerating ? shuffleCount / shuffleTotal : null}
-                title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
-                data-testid="regenerate-goals-button"
-              >
-                {regenerating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {regenerating ? "Shuffling goals" : "Shuffle"}
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {featured.length > 0
-            ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
-            : `Goal suggestions for “${angle.label}” are unavailable. Try reloading the page.`}{" "}
-          The angle shapes this video — the goal shapes the campaign it serves.
-        </p>
-      </div>
+  // The gate names what the click will do: generating fresh is a model call
+  // with a wait. The label is intentionally neutral — "Get your six video
+  // goals" covers generating fresh goals and revealing an in-session set, so
+  // the line never disagrees with its button. A custom label (Review's
+  // redirect off this step) is not used by the goal picker call sites, but
+  // the honesty rule would always win.
+  const gateButtonLabel = generating ? "Generating goals" : "Generate goals";
+
+  const body = !revealed ? (
+    <div className="space-y-4">
+      {generationError && (
+        <Alert variant="destructive" data-testid="goals-generation-error">
+          <AlertDescription>{generationError}</AlertDescription>
+        </Alert>
+      )}
+      <Button
+        variant="accent"
+        className="gap-1.5"
+        onClick={onGenerate}
+        disabled={generating}
+        busy={generating}
+        data-testid="generate-goals-button"
+      >
+        {generating ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" />
+        )}
+        {gateButtonLabel}
+      </Button>
       {generating && (
         <p className="text-sm text-muted-foreground" role="status" data-testid="goals-generating">
           Generating goals for this angle…
         </p>
       )}
-      {generationError && (
-        <p className="text-sm text-destructive" role="alert" data-testid="goals-generation-error">
-          {generationError} The suggested goals below are unchanged.
-        </p>
-      )}
-      {regenerating && (
-        <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
-          Shuffling goal {shuffleCount} of {shuffleTotal}…
-        </p>
-      )}
+      <p className="text-sm text-muted-foreground" data-testid="goals-cta-copy" data-subtitle="">
+        {GOALS_CTA_COPY}
+      </p>
+    </div>
+  ) : (
+  <div className="space-y-4">
+    {generating && (
+      <p className="text-sm text-muted-foreground" role="status" data-testid="goals-generating">
+        Generating goals for this angle…
+      </p>
+    )}
+    {generationError && (
+      <p className="text-sm text-destructive" role="alert" data-testid="goals-generation-error">
+        {generationError} The suggested goals below are unchanged.
+      </p>
+    )}
+    {regenerating && (
+      <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
+        Shuffling goal {shuffleCount} of {shuffleTotal}…
+      </p>
+    )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-grid">
         {featured.map((goal, index) => {
           const selected = value === goal;
@@ -917,6 +933,66 @@ export function AngleGoalPicker({
           Your current goal, {humanize(value)}, is outside these six suggestions. It stays selected unless you choose a suggested goal.
         </p>
       )}
+  </div>
+  );
+
+  return (
+    <section className="space-y-4" aria-labelledby="video-goal-label" data-testid="angle-goal-picker">
+      <div className="space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <GroupLabel as="h3" icon={Target} id="video-goal-label">
+            Video goal <span className="text-muted-foreground">(required)</span>
+          </GroupLabel>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onGenerate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={onGenerate}
+                disabled={generating}
+                busy={generating}
+                title="Generate six goals fitted to this angle's audience, problem, promise, outcome, emotion and feature. Runs only when you click it."
+                data-testid="generate-goals-button"
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {generating ? "Generating goals" : "Generate goals"}
+              </Button>
+            )}
+            {onRegenerate && revealed && featured.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={onRegenerate}
+                disabled={regenerating}
+                busy={regenerating}
+                progress={regenerating ? shuffleCount / shuffleTotal : null}
+                title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
+                data-testid="regenerate-goals-button"
+              >
+                {regenerating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {regenerating ? "Shuffling goals" : "Shuffle"}
+              </Button>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {revealed && featured.length > 0
+            ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
+            : `Goal suggestions for “${angle.label}” are ready when you click.`}{" "}
+          The angle shapes this video — the goal shapes the campaign it serves.
+        </p>
+      </div>
+      {body}
     </section>
   );
 }

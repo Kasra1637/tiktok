@@ -418,6 +418,24 @@ const apiStub = {
   // Empty by default: the base stub has angles, so this only answers checks
   // that override the read to empty and then exercise the generate button.
   generateContentAngles: async () => ({ angles: [] }),
+  // The goal gate generates fresh live goals on click. Default answers with
+  // the facet order for the angle, so gate-passing checks land on the six
+  // cards in the order the old facet-fallback checks asserted. Name-only:
+  // description/fit/why fall back to the facet outcomes so evidence, fit
+  // scores and disclosures read as before. Checks that pin live-vs-facet
+  // behavior override this with their own set.
+  generateAngleGoals: async (profileId, angleId) => {
+    const names = angleId === "a2"
+      ? ANGLE_GOALS.feature_demonstration
+      : ANGLE_GOALS.problem_solution;
+    return {
+      angle_id: angleId,
+      goals: names.map((name) => ({
+        name,
+        description: OBJECTIVE_OUTCOMES[name] || "",
+      })),
+    };
+  },
   // The gate regenerates over a cached set (never a free reveal of stale
   // rows), so the default answers with rows: gate-passing checks land on a
   // list, and checks asserting the spend override this with their own set.
@@ -1524,6 +1542,10 @@ async function main() {
           }
           const goalPicker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
           if (!goalPicker) throw new Error("Review does not offer its missing goal picker");
+          const gen = goalPicker.querySelector('[data-testid="generate-goals-button"]');
+          if (!gen) throw new Error("Review goal gate offers no Generate button");
+          await clickEl(ctx, gen);
+          await act(async () => {});
           const goalButton = goalPicker.querySelector('[data-testid="recommended-goal-address_user_problem"]');
           if (!goalButton) throw new Error("Review does not offer the goal for its selected audience angle");
           await clickEl(ctx, goalButton);
@@ -2978,6 +3000,7 @@ async function main() {
     if (!/goal/i.test(hint())) {
       throw new Error(`the bar does not move to the goal phase: ${JSON.stringify(hint())}`);
     }
+    await passGoalGate(ctx);
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'),
@@ -4349,6 +4372,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       failFacets = false;
       await clickEl(ctx, retry, "no retry control on the goal-options error");
       await act(async () => {});
+      await passGoalGate(ctx);
       if (!ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]')) {
         throw new Error("retrying the goal options did not render the goals");
       }
@@ -5648,6 +5672,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (angleButtons.length !== 1) throw new Error(`expected one angle control, saw ${angleButtons.length}`);
     const angleButton = angleButtons[0];
     await clickEl(ctx, angleButton);
+    await passGoalGate(ctx);
     const featured = [...step.querySelectorAll('[data-testid^="recommended-goal-"]')];
     if (featured.length !== 6) throw new Error(`expected six featured goals, saw ${featured.length}`);
     const expected = ANGLE_GOALS.problem_solution;
@@ -5672,6 +5697,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
     const buttons = [...step.querySelectorAll("button")];
     await clickEl(ctx, buttons.find((button) => button.textContent.includes(ANGLE.label)));
+    await passGoalGate(ctx);
     await clickEl(ctx, step.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
     await act(async () => {});
     await act(async () => {});
@@ -5925,6 +5951,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        await passGoalGate(ctx);
         const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
         if (!line) throw new Error("the goal card shows no angle-kind count");
         if (!line.textContent.includes("2 wins") || !line.textContent.includes("1 flop")) {
@@ -5954,6 +5981,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        await passGoalGate(ctx);
         const line = ctx.container.querySelector('[data-testid="goal-angle-evidence-address_user_problem"]');
         if (!line) throw new Error("the goal card shows no angle-kind count");
         if (!line.textContent.includes("2 moved forward")) {
@@ -6041,6 +6069,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
           const objLine = ctx.container.querySelector('[data-testid="goal-objective-evidence-address_user_problem"]');
           if (!objLine) throw new Error("the goal card shows no objective-level count");
           if (!objLine.textContent.includes("3 wins") || !objLine.textContent.includes("1 flop")) {
@@ -6092,6 +6121,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
           const pairLine = ctx.container.querySelector('[data-testid="goal-pair-evidence-address_user_problem"]');
           if (!pairLine) throw new Error("the goal card shows no pairing count");
           if (!pairLine.textContent.includes("4 wins") || !pairLine.textContent.includes("for this pairing")) {
@@ -6211,6 +6241,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await clickEl(ctx, angleEl, "no angle row to pick");
           await act(async () => {});
           await new Promise((r) => setTimeout(r, 200));
+          await passGoalGate(ctx);
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
             .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
           if (goals.length === 0) {
@@ -6268,6 +6299,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
           const first = orderOf();
           if (first.length !== 6) throw new Error(`expected six goal cards, saw ${first.length}`);
           if (first.join("|") !== SIX.join("|")) throw new Error(`initial goal order moved: ${first.join(", ")}`);
@@ -6321,6 +6353,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
           const progress = ctx.container.querySelector('[data-testid="goals-progress"]');
           if (!progress) throw new Error("no live count while goals reshuffle");
@@ -6386,9 +6419,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (apiCalls.includes("generateAngleGoals")) {
             throw new Error("live goals fired on angle pick instead of waiting for the founder click");
           }
-          if (orderOf().join("|") !== SIX.join("|")) {
-            throw new Error(`facet list is not the fallback before the click: ${orderOf().join(", ")}`);
+          // Gated: no cards before the click, one CTA with copy.
+          if (orderOf().length !== 0) {
+            throw new Error(`goal cards shown before the click: ${orderOf().join(", ")}`);
           }
+          const gateCta = ctx.container.querySelector('[data-testid="generate-goals-button"]');
+          if (!gateCta) throw new Error("the goal gate offers no Generate button");
+          const gateCopy = ctx.container.querySelector('[data-testid="goals-cta-copy"]');
+          if (!gateCopy) throw new Error("the goal gate shows no instruction line");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
           await new Promise((r) => setTimeout(r, 150));
           const order = orderOf();
@@ -6412,8 +6450,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // A failed live-goal call keeps the facet list and names the retry:
-  // the goal step is never blank.
+  // A failed live-goal call keeps the gate and names the retry:
+  // the goal step is never blank and never resurrects the facet list.
   await check("live goal failure keeps the facet list and names the retry", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
@@ -6435,13 +6473,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
           await new Promise((r) => setTimeout(r, 150));
-          if (orderOf().join("|") !== SIX.join("|")) {
-            throw new Error(`the facet list moved after a failed live-goal call: ${orderOf().join(", ")}`);
+          if (orderOf().length !== 0) {
+            throw new Error(`goal cards shown after a failed live-goal call: ${orderOf().join(", ")}`);
           }
+          const gate = ctx.container.querySelector('[data-testid="generate-goals-button"]');
+          if (!gate || gate.disabled) throw new Error("the gate is not retryable after a failed live-goal call");
           const error = ctx.container.querySelector('[data-testid="goals-generation-error"]');
           if (!error) throw new Error("a failed live-goal call shows no error");
-          if (!error.textContent.includes("unchanged")) {
-            throw new Error("the error does not say the suggested goals are unchanged");
+          if (!error.textContent.includes("goal generation unavailable")) {
+            throw new Error(`the error does not name the failure: ${error.textContent}`);
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -6478,6 +6518,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
+          await passGoalGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
           await new Promise((r) => setTimeout(r, 150));
           const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
@@ -6522,6 +6563,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error(`the hint names no goal: ${hint.textContent}`);
           }
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
           const goal = ctx.container.querySelector('[data-testid^="recommended-goal-"]');
           if (!goal) throw new Error("no goal card to pick");
           await clickEl(ctx, goal, "the goal card does nothing");
@@ -7127,6 +7169,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Audience & template");
         await passAngleGate(ctx);
         await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
+        await passGoalGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         // The click IS the generation: the goal pick alone queues nothing.
         await passTemplatesGate(ctx);
@@ -7156,6 +7199,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, [...ctx.container.querySelectorAll("button")].find((button) => button.textContent.includes(ANGLE.label)));
+        await passGoalGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'));
         // Picking a goal queues nothing; the Generate click is the
         // commitment that names the objective and the profile.
@@ -17036,6 +17080,21 @@ async function passAngleGate(ctx) {
 }
 
 /**
+ * Pass the goal gate the way a founder does.
+ *
+ * Landing on an angle shows one Generate CTA, never the six. Clicking it
+ * generates fresh live goals (or reveals the in-session set) and reveals the
+ * list. Tests that assert on goal cards call this after picking an angle;
+ * tests that assert on the gate itself do not. No-op when the gate is
+ * already bypassed (a picked goal, e.g. via ?objective=).
+ */
+async function passGoalGate(ctx) {
+  const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+  const cta = step && step.querySelector('[data-testid="generate-goals-button"]');
+  if (cta) await clickEl(ctx, cta);
+}
+
+/**
  * Reach the template picker the way the workflow now requires.
  *
  * The video goal is required, and the merged step refuses to show a template
@@ -17058,6 +17117,7 @@ async function openTemplateStep(ctx) {
     .find((button) => button.textContent.includes(ANGLE.label));
   if (!angleButton) throw new Error("the audience step has no selectable audience angle");
   await clickEl(ctx, angleButton);
+  await passGoalGate(ctx);
   const goalButton = ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]');
   if (!goalButton) throw new Error("the audience step has no recommended goal control");
   await clickEl(ctx, goalButton, "no recommended goal control");

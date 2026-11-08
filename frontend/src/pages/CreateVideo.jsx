@@ -449,7 +449,11 @@ export default function CreateVideo() {
   useEffect(() => {
     if (STEPS[step]?.key === "angle" && !angle) setAnglesRevealed(false);
     if (STEPS[step]?.key === "angle" && !objective) setGoalsRevealed(false);
-  }, [step, angle, objective]);
+    // angle is an object derived from angles[]: depending on it re-arms the
+    // gates on every angles refresh (e.g. shuffle), collapsing a revealed
+    // list to the CTA. Depend on the resolved id instead; a dangling pick
+    // (id set, row gone) still reads as no angle.
+  }, [step, angle?.id, objective]);
   // The detail card prefers the full library, but a failed library fetch must
   // not blank a chosen template the recommendation rows already carry.
   const template = templates.find((t) => t.id === templateId)
@@ -750,6 +754,10 @@ export default function CreateVideo() {
       await api.regenerateContentAngleGoals(profileId, angleId);
       const data = await api.getContentAngles(profileId);
       adoptAngles(data);
+      // Shuffle rotates the persisted suggestions; the angle's live set must
+      // not keep shadowing them (AngleGoalPicker prefers liveOrdered). The
+      // reveal stays (goalsRevealed) so the rotated six show immediately.
+      setLiveGoals(null);
     } catch (err) {
       setAngleError(getErrorMessage(err));
     } finally {
@@ -2213,6 +2221,7 @@ export default function CreateVideo() {
                 outcomes={objectiveOutcomes}
                   fitReasons={objectiveFitReasons}
                   suggestions={angle?.goal_suggestions}
+                  showGoals={showGoals}
                   liveGoals={liveGoals}
                   onGenerate={handleGenerateGoals}
                   generating={liveGoalsLoading}
@@ -2295,6 +2304,7 @@ export default function CreateVideo() {
                 outcomes={objectiveOutcomes}
                 fitReasons={objectiveFitReasons}
                 suggestions={angle?.goal_suggestions}
+                showGoals={showGoals}
                 liveGoals={liveGoals}
                 onGenerate={handleGenerateGoals}
                 generating={liveGoalsLoading}
