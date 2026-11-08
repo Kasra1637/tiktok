@@ -1701,6 +1701,12 @@ async function main() {
     );
     expectText(ctx, "No audience angle picked", "the missing-angle gate did not render");
     expectText(ctx, "Audience & template", "the gate did not name the step that fixes it");
+    // The remedies bar names the fix as a jump — a block with no jump is a
+    // wall, not a guard. It must appear whenever the block is present.
+    if (!ctx.container.querySelector('[data-testid="render-remedies"]')) {
+      throw new Error("the remedies jump did not render for a missing angle");
+    }
+    expectText(ctx, "Pick an audience angle first", "the angle remedy label is missing");
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => (b.textContent || "").includes("Generate the video"));
     if (!generate) throw new Error("no Generate button to gate");

@@ -135,7 +135,7 @@ function resolutionStorageKey(projectId) {
   return `studio-video-resolution:${projectId}`;
 }
 
-export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate }) {
   const [models, setModels] = useState(null);
   const [modelError, setModelError] = useState(null);
   const [modelRetry, setModelRetry] = useState(0);
@@ -203,6 +203,25 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const noPhoto = !(project?.assets || []).some(
     (a) => String(a?.kind || "").trim().toLowerCase() === "character_reference"
   );
+
+  // Every refusal the panel can name must also name its remedy: the step and
+  // the control that fixes it. A block with no jump button is a wall, not a
+  // guard — the founders who hit it stop trusting the panel and ask whether
+  // the app broke. The wizard can only jump within this page, so the remedies
+  // are:
+  //   noAngle        -> Audience & template (angle pick)
+  //   blockedOnAssets -> Audience & template (photo requirement)
+  //   hasUnsavedEdits -> save edits on Review & submit (same page)
+  //   angleStale      -> rebuild the strategy on Review & submit (same page)
+  //   staleStrategy   -> rebuild the strategy on Review & submit (same page)
+  //   !ready          -> Review & submit (same page, save the plan)
+  // Anything the panel cannot name here (overflow, camera-incompatible,
+  // tooLong, model load) is self-evident from its own alert, so it needs no
+  // jump. When this page cannot navigate between steps, the block falls
+  // through with no jump — the button is still disabled with the reason.
+  const remedies = [];
+  if (noAngle) remedies.push({ label: "Pick an audience angle first", action: "goto-angle" });
+  if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
 
   // One click, one render. The key identifies a single INTENT to render and is
   // reused for every retry of that intent, then cleared the moment a render
@@ -826,6 +845,23 @@ const handleGenerate = async () => {
             ? "Generate another"
             : "Generate the video"}
       </Button>
+
+      {remedies.length > 0 && (
+        <div className="flex flex-wrap gap-2" data-testid="render-remedies">
+          {remedies.map((remedy) => (
+            <Button
+              key={remedy.label}
+              variant="accent"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => onNavigate?.(remedy.action)}
+            >
+              <Play className="h-3.5 w-3.5" />
+              {remedy.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {hasUnsavedEdits && (
         <p role="status" className="text-base text-muted-foreground" data-testid="render-unsaved-edits">

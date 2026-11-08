@@ -314,10 +314,23 @@ export default function CreateVideo() {
   // angle, so the re-read of the angles list is the new state.
   const [cyclingGoals, setCyclingGoals] = useState(false);
   // Live goals for the selected angle, generated only on the founder's
-  // click. Null until then: the facet-ordered list shows in the meantime.
+  // click. Null until then: the panel shows the gate in the meantime.
   const [liveGoals, setLiveGoals] = useState(null);
   const [liveGoalsLoading, setLiveGoalsLoading] = useState(false);
   const [liveGoalsError, setLiveGoalsError] = useState(null);
+  // Click-to-view gate for goals, the goals analogue of the angles gate
+  // above. This step always starts gated for goals: one "Generate goals"
+  // CTA, never the facet-ordered list. The reveal lasts for the visit:
+  // entering the step without a pick re-arms the CTA (see below), so
+  // navigating away and back never greets an unpicked founder with a stale
+  // list. A pick bypasses the gate entirely — a draft or deep link that
+  // already names a goal has been viewed by definition. A set generated
+  // in-session is revealed free on step re-entry, so returning never spends
+  // a second call.
+  const [goalsRevealed, setGoalsRevealed] = useState(false);
+  const revealGoals = useCallback(() => {
+    setGoalsRevealed(true);
+  }, []);
   const [angleRegenNotice, setAngleRegenNotice] = useState(null);
   // What a completed angle regen cost: how many of the profile's drafts were
   // built on angles it replaced. Shown as a one-line notice after the fact —
@@ -414,6 +427,7 @@ export default function CreateVideo() {
   // for one app never leaks into another app's first view.
   useEffect(() => {
     setAnglesRevealed(false);
+    setGoalsRevealed(false);
     setAnglesSessionFresh(false);
     setAngleRegenNotice(null);
   }, [profileId]);
@@ -423,16 +437,18 @@ export default function CreateVideo() {
   // A pick alone is deliberately not enough: a stale ?angle= param or a draft
   // pointing at a deleted angle must not open a list of strangers on first
   // view, which is the exact screenshot this rule fixes.
-  const showAngles = anglesRevealed || Boolean(angle);
+  const showGoals = goalsRevealed || Boolean(objective);
   // The reveal lasts for the visit, not the mount. Entering the angle step
-  // without a resolved pick re-arms the CTA, so a list revealed earlier
+  // without a resolved pick re-arms both CTAs, so a list revealed earlier
   // never greets a founder who navigated away and back unpicked. A resolved
-  // angle still bypasses the gate — a reopened draft shows its own angle,
-  // never an empty gate — while a dangling pick re-gates like any other
-  // visit with nothing to show.
+  // angle still bypasses the angle gate — a reopened draft shows its own
+  // angle, never an empty gate — while a dangling pick re-gates like any
+  // other visit with nothing to show. The goal gate follows the same rule:
+  // a resolved objective bypasses it, otherwise the step re-arms it.
   useEffect(() => {
     if (STEPS[step]?.key === "angle" && !angle) setAnglesRevealed(false);
-  }, [step, angle]);
+    if (STEPS[step]?.key === "angle" && !objective) setGoalsRevealed(false);
+  }, [step, angle, objective]);
   // The detail card prefers the full library, but a failed library fetch must
   // not blank a chosen template the recommendation rows already carry.
   const template = templates.find((t) => t.id === templateId)
@@ -445,11 +461,13 @@ export default function CreateVideo() {
   const objectiveFitReasons = angle
     ? facets?.angle_goal_fit_reasons?.[angle.kind] || {}
     : {};
-  // Live goals replace the facet lookup only after the founder's click;
-  // a new angle starts back on the facet list.
+  // Live goals replace the facet lookup only after the founder's click.
+  // A new angle starts gated again — the facet list is never the initial
+  // view any more.
   useEffect(() => {
     setLiveGoals(null);
     setLiveGoalsError(null);
+    setGoalsRevealed(false);
   }, [angleId]);
 
   // The deep-link inputs as plain strings, so the load below depends on what
@@ -739,8 +757,9 @@ export default function CreateVideo() {
   }, [profileId, angleId, adoptAngles]);
 
   // Live goals for the selected angle. Billed, so this runs only on the
-  // founder's click — never on angle pick. On failure the facet-ordered
-  // list stays and the error names the retry; the step is never blank.
+  // founder's click — never on angle pick. On failure the gate stays (with
+  // its error) and the step is never blank; the facet list is not resurrected
+  // as a fallback any more.
   const handleGenerateGoals = useCallback(async () => {
     if (!profileId || !angleId || liveGoalsLoading) return;
     setLiveGoalsLoading(true);
@@ -748,6 +767,7 @@ export default function CreateVideo() {
     try {
       const data = await api.generateAngleGoals(profileId, angleId);
       setLiveGoals(Array.isArray(data?.goals) ? data.goals : []);
+      setGoalsRevealed(true);
     } catch (err) {
       setLiveGoals(null);
       setLiveGoalsError(getErrorMessage(err));
@@ -1839,6 +1859,7 @@ export default function CreateVideo() {
               objectiveEvidence={objectiveEvidence}
               pairEvidence={pairEvidence}
               suggestions={angle?.goal_suggestions}
+              showGoals={showGoals}
               liveGoals={liveGoals}
               onGenerate={handleGenerateGoals}
               generating={liveGoalsLoading}
@@ -2784,6 +2805,22 @@ export default function CreateVideo() {
                         onGenerationChange={() => {}}
                         onProjectChange={receiveProject}
                         hasUnsavedEdits={hasEdits}
+                        onNavigate={(action) => {
+                          if (action === "goto-angle" || action === "goto-photo") {
+                            scrollToTemplatePhoto();
+                          } else if (action === "save-edits") {
+                            document
+                              .getElementById("review-submit")
+                              ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+                          } else if (action === "rebuild-strategy") {
+                            document
+                              .getElementById("strategy-build-button")
+                              ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                          } else if (action === "goto-review") {
+                            setReviewTab("plan");
+                            scrollToSubmit();
+                          }
+                        }}
                       />
                     </div>
                   </>
