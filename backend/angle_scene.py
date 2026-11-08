@@ -18,6 +18,7 @@ import re
 from typing import Optional
 
 import character_policy
+import final_beat
 
 _OUTDOOR = (
     r"\boutside\b", r"\boutdoors?\b", r"\bsteps? out\b", r"\bstepping out\b",
@@ -112,10 +113,20 @@ def angle_moment(angle: Optional[dict]) -> str:
 
     Identity-neutral like every other video-facing line: the founder's uploaded
     photo decides who is on screen, so the promise says "the person" and never
-    names a gender or a role (ADR 0089).
+    names a gender or a role (ADR 0089). A screen-interaction clause
+    ("scrolls a weekly chart", "looks at the screen") names no filmable first
+    three seconds in any setup — the generated clip never shows app content —
+    so it is stripped and the place/task clause in the same moment carries
+    the shape instead.
     """
     text = re.sub(r"\s+", " ", str((angle or {}).get("hook_promise") or "")).strip().rstrip(".")
     text = character_policy.neutralize(text).strip()
+    kept, removed = final_beat.split_screen_clauses(text)
+    if removed and kept:
+        text = kept
+    elif removed and not kept:
+        return ""
+    text = text.rstrip(".")
     return _capitalise(text)
 
 
@@ -207,11 +218,16 @@ def _development_beat(template: dict, scene: dict) -> str:
 
     Dropped when it moves the video somewhere the angle does not go: a middle
     that relocates the story is a second opening wearing a middle's clothes.
+    A screen-interaction clause is stripped as unfilmable (no generated
+    clip shows app content) before the echo clause is removed.
     """
     template = template or {}
     middle = _first_sentence(
         template.get("middle_structure") or template.get("continuation_structure")
     )
+    if not middle or conflict_reason(middle, scene):
+        return ""
+    middle, _screen_removed = final_beat.split_screen_clauses(middle)
     if not middle or conflict_reason(middle, scene):
         return ""
     beat = character_policy.neutralize(middle).rstrip(".")
@@ -263,9 +279,15 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_l
     if not promise:
         # No promise on this angle: the template's own staging is the only
         # opening on record, and it is shown neutralized like everything else.
-        return character_policy.neutralize(
+        opening = character_policy.neutralize(
             str((template or {}).get("opening_structure") or "")
         ).strip()
+        kept, removed = final_beat.split_screen_clauses(opening)
+        if removed and kept:
+            return kept.rstrip(".") + "."
+        if removed:
+            return ""
+        return opening
     return _clip(promise.rstrip(".") + ".", _SHAPE_LIMIT)
 
 

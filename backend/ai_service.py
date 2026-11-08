@@ -47,8 +47,10 @@ from angle_policy import (
 )
 from claim_safety import (
     FIRST_PERSON_PATTERNS,
+    bounded_by_conflict,
     find_banned_violations,
     find_risk_patterns,
+    _is_light_week_mention,
 )
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -2381,7 +2383,11 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "two events, never a montage, and never a second person. Never say 'woman', 'man', "
         "'girl', 'guy' or any role such as 'founder': the person on camera is whoever the "
         "founder uploads a photo of, so write 'the person' or 'the character' and describe "
-        "no face. Never an abstract benefit. Never stage it in a bedroom or car interior "
+        "no face. Never an abstract benefit. Never describe scrolling, swiping, tapping, "
+        "or looking at a chart, graph, screen, report, or dashboard — no generated clip "
+        "shows app content in any setup. The lean, the grip, the exhale and the glance "
+        "are EXAMPLES of what a clip can show, not a fixed shot: pick a fresh physical "
+        "moment for this angle instead of copying one. Never stage it in a bedroom or car interior "
         "unless the app is used there — the model's lazy indoor defaults are what make "
         "every video look the same; stage it where usage_moments happen, preferably "
         "outdoors and mid-activity.\n"
@@ -3294,7 +3300,9 @@ def _spoken_line_rules_block() -> str:
         "in feeling.\n"
         "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
         "understood or ended up doing. Describe the change in their life, never "
-        "a feature or a screen.\n"
+        "a feature or a screen, and never narrate scrolling, reading, or "
+        "seeing a chart, week, screen or app — the generated clip never "
+        "shows app content and the founder's demo does.\n"
         "- CONVERSATIONAL: words you would actually say out loud, in short spoken "
         "sentences. No corporate language, jargon or filler, and none of the "
         "AI-sounding openers: 'in today's fast-paced world', 'imagine a world "
@@ -3807,11 +3815,18 @@ async def generate_creative_plan(
         "- SELFIE: never put a phone or camera reached toward, raised, held or shown "
         "in the timeline - the camera is the phone in their hand. One hand holds "
         "it, so no timeline action may need a second free hand (never both hands, "
-        "the other hand, or the free hand). The final second is a short physical "
+        "the other hand, or the free hand), and never scroll, swipe, or tap a "
+        "chart, graph, app, screen, report, or dashboard or look at one — the "
+        "thumb has no job left once one hand holds the camera and the other "
+        "grips the rail. The final second is a short physical "
         "ending chosen per render; do not write one, and do not end the middle "
         "with a reach toward the lens/phone/camera. The same rule governs every "
         "other field on the page - hook concept, Props, Movement, Position in "
         "Frame and both What they do lines - so the page and the render agree. "
+        "Speak the same limit: never narrate scrolling, reading, or seeing a "
+        "chart, week, screen, or app (the founder's demo shows the app) and "
+        "never promise a knowledge result the angle forbids (now I know how "
+        "long) — land on naming and speaking instead. "
         "Each hand keeps one job for the whole clip: if one hand rests on the "
         "chest it cannot also stay at her side. Camera fields describe her "
         "filming herself at arm's length for a handheld selfie; never a camera "
@@ -4017,6 +4032,7 @@ async def generate_creative_plan(
         issues = _generated_spoken_issues(
             hook, script, hook_budget, middle_budget,
             allows_question=_plan_requests_question_format(template, structure) or _angle_invites_question(angle),
+            claims_to_respect=[str(c).strip() for c in ((angle or {}).get("claims_to_respect") or []) if str(c).strip()],
         )
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
@@ -4057,6 +4073,12 @@ async def generate_creative_plan(
         result["location"] = character_policy.neutralize((location or "").strip()[:1200])
     elif not result.get("location"):
         result["location"] = character_policy.neutralize(_angle_scene_moment(angle)[:1200])
+    # A continuation fragment ("with grass and trees behind") is never a
+    # place. Prepend the angle moment's own anchor rather than store the
+    # tail of someone else's sentence.
+    result["location"] = scene_consistency.repair_location_fragment(
+        result.get("location"), _angle_scene_moment(angle)
+    )
     # demo_brief is deliberately not neutralized: it is the one field addressed
     # to the founder ("record your demo like this"), not a line about the person
     # on screen, so "the founder" is the right word there.
@@ -4232,7 +4254,7 @@ def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> 
         middle_action = "what they do through the middle, ending at the handoff moment"
     else:
         middle_goal = "what the middle must achieve: develop the hook and end before the last second"
-        middle_action = "what they do through the middle, ending before the final physical beat - never a reach toward a phone or camera, and never a second free hand"
+        middle_action = "what they do through the middle, ending before the final physical beat - never a reach toward a phone or camera, never a second free hand, never scrolling, swiping, or tapping a chart, graph, app, screen, report, or dashboard or looking at one"
     return (
         ',\n    {"index": 0, "role": "hook", "seconds": 3, '
         '"goal": "what the opening beat must achieve to stop the scroll", '
@@ -4418,6 +4440,18 @@ def normalize_strategy(raw: dict) -> dict:
     if objects_removed:
         result["scene"]["location"] = place_only
         _repairs.append("Location")
+    # A continuation fragment ("with grass and trees behind") names no
+    # place head. Prepend the angle promise's own anchor ("A park
+    # railing") — never for a deliberate founder place, which is not a
+    # fragment and is therefore never repaired here.
+    _anchor_text = " ".join(str(result.get(k) or "") for k in ("hook_promise", "hook_concept", "strategy_summary"))
+    repaired = scene_consistency.repair_location_fragment(
+        result["scene"].get("location"), _anchor_text
+    )
+    if repaired != str(result["scene"].get("location") or ""):
+        result["scene"]["location"] = repaired
+        if "Location" not in _repairs:
+            _repairs.append("Location")
     result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
         result["scene"].get("props"), result["scene"].get("location")
     )
@@ -4751,7 +4785,7 @@ def _trim_hook_line(text: str, limit: int):
 
 
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
-                              *, allows_question: bool = False) -> list:
+                              *, allows_question: bool = False, claims_to_respect=None) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
 
     This is not a general grammar parser or a semantic coherence score. It
@@ -4805,6 +4839,33 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                     f"('{match.group(0).strip()}'), which no record can substantiate"
                 )
                 break
+        # The generated clip never shows app content, so the spoken lines
+        # never narrate working a chart/graph/screen ("I scrolled my week",
+        # "saw the worry come back on Monday" from the app). The demo the
+        # founder records shows the app; the clip's voice stays on leaning,
+        # speaking and breathing instead.
+        if final_beat._clause_has_screen_action(_normalize_spoken(text)):
+            issues.append(
+                f"{name} narrates scrolling or reading a chart/screen the "
+                f"generated clip never shows — speak on leaning, breathing and naming "
+                f"the worry instead; the founder's demo shows the app"
+            )
+        # The angle's bounded-by limits fence knowledge claims too: when a
+        # bound forbids diagnosis (trends shown, not diagnosed), a sentence
+        # like "Now I know how long it's been there" promises the very
+        # result the angle forbids. Rejected here per sentence, so the
+        # editorial rewrite lands on speaking — a light mention of the week
+        # ("I looked back over the week") keeps the handoff to the demo's
+        # weekly view without claiming that result. A sentence that carries
+        # the knowledge claim stays rejected even when it mentions the week.
+        if claims_to_respect:
+            for sentence in _split_sentences(text):
+                hits = [] if _is_light_week_mention(sentence) else bounded_by_conflict(sentence, list(claims_to_respect))
+                if hits:
+                    issues.append(
+                        f"{name} promises a result the angle forbids "
+                        f"('{sentence.strip()}': '{hits[0]['claim']}')"
+                    )
         for sentence in _split_sentences(text):
             plain = sentence.rstrip('\"\u201d\u2019')
             if not plain.endswith((".", "!", "?")):
@@ -5747,7 +5808,8 @@ async def generate_video_strategy(
     final_beat_rule = (
         "- Final 1-2s (SELFIE - the camera is the phone in their hand): NEVER reach toward, "
         "hold, raise or show a phone or camera, and never need a second free hand (one hand "
-        "holds the camera). Do NOT write an ending beat into the middle action, and do not "
+        "holds the camera), and never scroll, swipe, or tap a chart, graph, app, screen, "
+        "report, or dashboard or look at one. Do NOT write an ending beat into the middle action, and do not "
         "end the middle with a reach: end it on the payoff words and leave the last second "
         "for the final physical beat, which is chosen per render and added automatically.\n"
         if camera_setup != "fixed" else
@@ -6103,6 +6165,11 @@ async def generate_video_strategy(
         place, _objects = scene_consistency.strip_location_objects(place)
         if _objects:
             _gen_repairs.append("Location")
+        place = scene_consistency.repair_location_fragment(
+            place, str(((angle or {}).get("hook_promise") or ""))
+            + " " + str(strategy.get("hook_promise") or "")
+            + " " + str(strategy.get("hook_concept") or "")
+        )
         strategy["scene"]["location"] = _clean_strategy_text(place, 300)
         if moved:
             strategy["scene"]["lighting"] = _clean_strategy_text(

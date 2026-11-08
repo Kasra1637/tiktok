@@ -99,6 +99,61 @@ _SECOND_HAND_RE = re.compile(
 
 _NEGATION_RE = re.compile(r"\b(?:no|never|not|without)\b", re.I)
 
+# An app surface on camera is impossible in a selfie for the same reason a
+# phone is: the camera IS the phone, so there is no second device showing a
+# chart, and one hand holds the camera while the other may grip the rail —
+# a thumb has no job left to scroll with. Clauses that look at, scroll, swipe
+# or tap a chart/graph/screen/report/dashboard — or thumb-tap/scroll on the
+# phone's behalf ("thumb taps once to scroll", "scrolls my week") — are
+# therefore forbidden in action/direction wording for selfie, never in
+# spoken words (never rewritten here). "Stop the scroll" (the viewer
+# scrolling past) is not a clause this matches on its own: "scroll" there
+# has no surface noun and no thumb, and is only caught when paired with a
+# chart/screen/app/phone/week noun, which that idiom never carries.
+# Detection works by keywords, so paraphrases that never repeat those
+# keywords ("looks at the screen", "a thumb on the display") are covered by
+# looking verb + surface noun pairs, never by one fixed wording.
+_SCREEN_SURFACE_RE = re.compile(
+    r"\b(?:charts?|graphs?|dashboards?|reports?|screens?|displays?|timelines?|"
+    r"calendars?|histories|summaries|logs?|entries|trackers?)\b",
+    re.I,
+)
+_SCREEN_LOOK_RE = re.compile(
+    r"\b(?:looks?|looking|glances?|glancing|stares?|staring|peers?|peering|"
+    r"checks?|checking|reads?|reading|views?|viewing|opens?|opening|"
+    r"pulls?|shows?|taps?)\b[^.;,]{0,24}?\b(?:screen|display|chart|graph|"
+    r"dashboard|report|phone|app|timeline|calendar|history|summary|log|"
+    r"entry|tracker|feed|app screen|display panel)\b"
+    r"|\b(?:eyes?|gaze)\s+(?:drop|drops|dropped|fall|falls|fell|land|lands|"
+    r"locked|fixed|on|down)\b[^.;,]{0,16}?\b(?:screen|display|chart|phone|app)\b"
+    r"|\b(?:thumb|finger)\s+(?:on|over|against)\s+(?:the\s+)?"
+    r"(?:screen|display|chart|graph|app|phone|trackpad)\b"
+    r"|\bthumb\s+(?:taps?|presses|hits|slides|swipes|scrolls)\b",
+    re.I,
+)
+_SCREEN_OTHER_RE = re.compile(
+    r"\b(?:taps?|tapping|presses|pressing|hits|hitting|flicks|flicking|"
+    r"drags|dragging)\b[^.;,]{0,24}?\b(?:screen|display|app|phone|chart|graph|"
+    r"button|icon|tab|menu)\b"
+    r"|\b(?:thumb|finger)s?\s+(?:slides?|sliding|flicks?|flicking|drags?|"
+    r"dragging|presses|pressing|hits|hitting)\b"
+    r"|\b(?:thumb|finger)s?\s+(?:taps?|tapping|scrolls?|scrolled|scrolling|"
+    r"swipes?|swiping)\b",
+    re.I,
+)
+_SCREEN_INTERACTION_RE = re.compile(
+    r"\b(?:charts?|graphs?|dashboards?|reports?|screens?|displays?|timelines?|"
+    r"calendars?|histories|entries|logs?|trackers?)\b"
+    r"|\b(?:scrolls|scrolled|scrolling|swipes|swiped|swiping)\b"
+    r"(?:\s+(?:it|this|that|the|my|your|their|screen|display|chart|graph|"
+    r"app|phone|week|timeline|calendar|history|summary|log|entry|tracker))?"
+    r"|\b(?:thumb|finger)s?\s+(?:taps?|tapping|scrolls?|scrolled|scrolling|"
+    r"swipes?|swiping)\b"
+    r"|\b(?:taps?|tapping|presses|pressing|hits|hitting)\b[^.;,]{0,24}?"
+    r"\b(?:screen|display|app|phone|chart|graph|button|icon|tab|menu)\b",
+    re.I,
+)
+
 # A bare "phone" is still the recording device on camera: "Phone stays
 # face-down on the step" names it without a determiner, which the object
 # pattern above cannot see. The selfie strip reads this separately so camera
@@ -117,6 +172,38 @@ def _clause_mentions_phone(clause) -> bool:
     if _PHONE_CALL_RE.search(text):
         return False
     for match in _PHONE_WORD_RE.finditer(text):
+        prefix = text[max(0, match.start() - 70):match.start()]
+        if _NEGATION_RE.search(prefix):
+            continue
+        return True
+    return False
+
+
+def _clause_has_screen_action(clause) -> bool:
+    """True when a clause looks at or works a chart/graph/screen surface.
+
+    Negated mentions ("no chart on camera") are rules, not actions, so a
+    match whose prefix carries a negation is spared, mirroring the phone
+    and second-hand checks above.
+    """
+    text = str(clause or "")
+    for pattern in (_SCREEN_INTERACTION_RE, _SCREEN_LOOK_RE, _SCREEN_OTHER_RE):
+        for match in pattern.finditer(text):
+            prefix = text[max(0, match.start() - 70):match.start()]
+            if _NEGATION_RE.search(prefix):
+                continue
+            return True
+    return False
+
+
+def _clause_mentions_phone_or_screen(clause) -> bool:
+    """True when a camera-field clause names a phone or a screen surface."""
+    text = str(clause or "")
+    if _clause_mentions_phone(text):
+        return True
+    if _clause_has_screen_action(text):
+        return True
+    for match in _SCREEN_SURFACE_RE.finditer(text):
         prefix = text[max(0, match.start() - 70):match.start()]
         if _NEGATION_RE.search(prefix):
             continue
@@ -153,7 +240,7 @@ def _clause_has_forbidden(clause) -> bool:
     action, so a match whose prefix carries a negation is not forbidden.
     """
     text = str(clause or "")
-    for pattern in (_PHONE_ENDING_RE, _PHONE_OBJECT_RE, _SECOND_HAND_RE):
+    for pattern in (_PHONE_ENDING_RE, _PHONE_OBJECT_RE, _SECOND_HAND_RE, _SCREEN_INTERACTION_RE, _SCREEN_LOOK_RE, _SCREEN_OTHER_RE):
         for match in pattern.finditer(text):
             prefix = text[max(0, match.start() - 70):match.start()]
             if _NEGATION_RE.search(prefix):
@@ -167,9 +254,22 @@ def is_selfie(strategy) -> bool:
     return str((strategy or {}).get("camera_setup") or SELFIE).strip().lower() != FIXED
 
 
-def examples(count: int = 3) -> str:
-    """A few ending beats, for the generation prompts' examples."""
-    return "; ".join(entry["text"].rstrip(".") for entry in ENDINGS[:count])
+def examples(count: int = 3, exclude=()) -> str:
+    """A few ending beats, for the generation prompts' examples.
+
+    Examples only: the render guard picks the actual ending per render via
+    `pick`, excluding what this project already used, so consecutive renders
+    never repeat the same beat. Passing `exclude` keeps these prompt
+    examples from anchoring the model on the endings that are about to be
+    added — they illustrate the class, not the instance.
+    """
+    used = {" ".join(str(text or "").split()).strip(" .").casefold()
+            for text in exclude if str(text or "").strip()}
+    pool = [entry for entry in ENDINGS
+            if " ".join(entry["text"].split()).strip(" .").casefold() not in used]
+    if not pool:
+        pool = list(ENDINGS)
+    return "; ".join(entry["text"].rstrip(".") for entry in pool[:count])
 
 
 def pick(strategy, exclude=(), index: int = 0) -> str:
@@ -198,8 +298,9 @@ def pick(strategy, exclude=(), index: int = 0) -> str:
 
 def split_phone_clauses(text):
     """`text` as (kept, removed): clauses that reach for, hold, raise or show
-    a phone or camera, name a phone as an object, reach toward the
-    lens/phone/camera, or need a second free hand are removed for selfie.
+    a phone or camera, name a phone as an object, look at or work a
+    chart/graph/screen surface, reach toward the lens/phone/camera, or need
+    a second free hand are removed for selfie.
 
     A text made entirely of forbidden clauses comes back as ("", removed) so
     the caller can replace it whole.
@@ -216,28 +317,52 @@ def split_phone_clauses(text):
 
 
 def split_phone_mentions(text):
-    """`text` as (kept, removed): only clauses naming a phone as an object.
+    """`text` as (kept, removed): only clauses naming a phone or a screen
+    surface as an object.
 
     Camera direction ("handheld camera", "the camera pushes in") is not a
-    phone in frame, so framing and camera-angle fields use this narrower rule.
+    phone or a screen in frame, so framing and camera-angle fields use this
+    narrower rule.
     """
     raw = " ".join(str(text or "").split())
-    if not raw or not _clause_mentions_phone(raw):
+    if not raw or not _clause_mentions_phone_or_screen(raw):
         return raw, ""
     clauses = _split_clauses(raw)
-    kept = [c for c in clauses if not _clause_mentions_phone(c)]
-    removed = [c for c in clauses if _clause_mentions_phone(c)]
+    kept = [c for c in clauses if not _clause_mentions_phone_or_screen(c)]
+    removed = [c for c in clauses if _clause_mentions_phone_or_screen(c)]
+    if not kept:
+        return "", ", ".join(removed)
+    return _join_clauses(kept), ", ".join(removed)
+
+
+def split_screen_clauses(text):
+    """`text` as (kept, removed): only clauses working a chart/screen surface.
+
+    Used where no camera_setup is available (a stored angle promise or a
+    template middle that the generated clip can never film in any setup,
+    because no generated clip shows app content). Spoken lines are never
+    passed here.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw or not _clause_has_screen_action(raw):
+        return raw, ""
+    clauses = _split_clauses(raw)
+    kept = [c for c in clauses if not _clause_has_screen_action(c)]
+    removed = [c for c in clauses if _clause_has_screen_action(c)]
     if not kept:
         return "", ", ".join(removed)
     return _join_clauses(kept), ", ".join(removed)
 
 
 def strip_props(props):
-    """Props without the phone or camera; returns (text, changed)."""
+    """Props without the phone, camera or a screen surface; (text, changed)."""
     parts = [p.strip() for p in re.split(r"\s*[,;]\s*", str(props or "")) if p.strip()]
     if not parts:
         return str(props or ""), False
-    kept = [p for p in parts if not re.search(r"\b(?:phones?|cameras?)\b", p, re.I)]
+    kept = [p for p in parts
+            if not re.search(
+                r"\b(?:phones?|cameras?|charts?|graphs?|dashboards?|reports?|screens?)\b",
+                p, re.I)]
     if len(kept) == len(parts):
         return ", ".join(parts), False
     return ", ".join(kept), True

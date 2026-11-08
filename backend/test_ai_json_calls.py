@@ -1655,7 +1655,12 @@ class TestStrategyBudget:
         # unless the plan requests a question format, and the middle is two
         # beats max (one action, then one lingering thought) on the arc
         # problem, then insight, then the shift. 32,000 keeps ~950 of headroom.
-        CEILING = 32_000
+        #
+        # HOOK FORM raises it again, measured: 32,000 -> 33,500 (+~1,300) for
+        # choosing the hook's spoken form from the angle/problem and naming
+        # the last few generations' forms so the next one varies. 33,500
+        # keeps ~1,200 of headroom for the next measured change.
+        CEILING = 33_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

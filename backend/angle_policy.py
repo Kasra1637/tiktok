@@ -6,6 +6,7 @@ briefs share these rules. Correction requests remain owned by ai_service.
 import re
 
 import character_policy
+import final_beat
 from template_library import normalize_angle_kind
 
 
@@ -84,6 +85,14 @@ def normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:
             value = str(item.get(field) or "").strip()
             if field != "app_feature":
                 value = character_policy.neutralize(value)
+            # A generated clip never shows app content in any setup, so a
+            # screen-interaction clause ("scrolls a weekly chart") is not
+            # a filmable opening moment. Strip it here so it is never
+            # stored; emptying the promise is left for the fallback path.
+            if field == "hook_promise" and value:
+                kept, removed = final_beat.split_screen_clauses(value)
+                if removed and kept:
+                    value = kept
             normalized[field] = value[:limit]
         raw_claims = item.get("claims_to_respect")
         if isinstance(raw_claims, str):

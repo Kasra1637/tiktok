@@ -578,6 +578,119 @@ def test_carrying_the_same_move_twice_adds_nothing():
     assert second["performance"]["movement"] == first["performance"]["movement"]
 
 
+def test_a_lighting_first_location_is_not_read_as_an_object_clause():
+    # "Soft natural daylight from the side" must never be read as the
+    # carried object "the side": deleting that clause is what left the
+    # stored Location as the bare trailing fragment "with grass ...".
+    original = "Soft natural daylight from the side, with grass and trees behind"
+    place, removed = scene_consistency.strip_location_objects(original)
+    assert removed == []
+    assert place == original
+    assert scene_consistency._is_object("side") == ""
+
+
+def test_the_fragment_is_anchored_by_the_moment_place_on_reconcile():
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_concept": "A person at a park railing lifts their eyes off a weekly chart and names the worry that keeps returning.",
+        "hook_action": "Sits on the step",
+        "scene": {
+            "location": "Soft natural daylight from the side, with grass and trees behind",
+            "props": "",
+            "camera_angle": "Eye-level handheld selfie shot",
+            "framing": "Upper chest up with headroom and room at the sides for hand gestures.",
+        },
+        "performance": {
+            "movement": "Other hand gripping the railing, brows lift, jaw settles, and the short line "
+                         "is delivered, small exhale, then a slow breath as the eyes drop to the weekly "
+                         "chart, thumb taps once to scroll, pausing on the days the worry showed up, "
+                         "looks up with a settled breath, rests the gaze on the lens, final beat left open"
+        },
+        "segments": [
+            {"role": "hook", "action": "Sits on the step"},
+            {"role": "middle", "action": "Slowly scrolls the weekly chart with one thumb, pausing on the "
+                            "days the worry showed up, looks up with a settled breath."},
+        ],
+    }
+    plan = {"visual_direction": "", "beat_timeline": [],
+            "hook_promise": "The character scrolls a weekly chart on a phone while leaning on a park railing.",
+            "hook_concept": strategy["hook_concept"]}
+    out = scene_consistency.reconcile_scene(strategy, plan)
+    assert out["strategy"]["scene"]["location"] == "A park railing, with grass and trees behind"
+    assert "Soft natural daylight" in out["strategy"]["scene"]["lighting"]
+    blob = (
+        out["strategy"]["hook_concept"] + out["strategy"]["performance"]["movement"]
+        + out["strategy"]["segments"][1]["action"]
+    ).lower()
+    assert "chart" not in blob
+    assert "thumb taps" not in blob
+    assert "gripping the railing" in out["strategy"]["performance"]["movement"].lower()
+
+
+def test_a_deliberate_place_is_not_anchored_back():
+    assert scene_consistency.repair_location_fragment(
+        "A kitchen at 7am",
+        "The character scrolls a weekly chart on a phone while leaning on a park railing.",
+    ) == "A kitchen at 7am"
+
+
+def test_plan_drafts_are_rewritten_before_they_promising_a_screen_result():
+    # A spoken line that narrates working an app surface, or promises a
+    # knowledge result the angle forbids, is an editorial defect on the
+    # draft, not a warning after approval.
+    bad_script = (
+        "Leaning on this railing, I scrolled my week and saw the worry come back "
+        "on Monday and Friday. Now I know how long it has been there. "
+        "I speak my day out loud, no blank page."
+    )
+    issues = ai_service._generated_spoken_issues(
+        "The same worry keeps coming back after a stressful call.",
+        bad_script, 200, 400,
+        claims_to_respect=["Trends are shown in the app, not diagnosed"],
+    )
+    assert any("scrolling or reading a chart" in issue for issue in issues)
+    assert any("promises a result the angle forbids" in issue for issue in issues)
+
+    clean = ai_service._generated_spoken_issues(
+        "The same worry keeps coming back after a stressful call.",
+        "Leaning on this railing, I speak my day out loud. I say there is no blank page.",
+        200, 400,
+        claims_to_respect=["Trends are shown in the app, not diagnosed"],
+    )
+    assert clean == []
+
+    # A light week mention keeps the demo handoff without claiming a result.
+    light = ai_service._generated_spoken_issues(
+        "The same worry keeps coming back after a stressful call.",
+        "Leaning on this railing, I looked back over the week. I speak my day out loud.",
+        200, 400,
+        claims_to_respect=["Trends are shown in the app, not diagnosed"],
+    )
+    assert light == []
+
+    # Adding a week word does not launder a knowledge claim.
+    still_bad = ai_service._generated_spoken_issues(
+        "The same worry keeps coming back after a stressful call.",
+        "Leaning on this railing, I speak my day out loud. "
+        "Now I know how long the week has been, and I speak my day.",
+        200, 400,
+        claims_to_respect=["Trends are shown in the app, not diagnosed"],
+    )
+    assert any("promises a result the angle forbids" in issue for issue in still_bad)
+
+
+def test_the_railing_is_scenery_not_a_prop():
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Grips the railing",
+        "scene": {"location": "A park railing", "props": ""},
+        "performance": {"movement": "Grips the railing."},
+        "segments": [{"role": "middle", "action": "Grips the railing"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert "railing" not in (out["strategy"]["scene"]["props"] or "").lower()
+
+
 def test_normalize_strategy_applies_the_handheld_repairs_for_the_panel():
     normalized = ai_service.normalize_strategy({
         "camera_setup": "handheld",

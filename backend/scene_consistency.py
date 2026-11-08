@@ -113,6 +113,10 @@ _FIXED_SCENERY_WORDS = frozenset((
     "pavement", "fence", "gate", "bridge", "station", "platform", "park",
     "tree", "plant", "roof", "porch", "balcony", "driveway", "garage",
     "corridor", "lobby",
+    # A park railing is the outdoor fixture the scene hangs off: without it
+    # here the object pass reads the anchor of the opening moment as a
+    # carried object and Location loses the place it names.
+    "railing", "signpost",
     # Fixtures, decor and screens
     "lamp", "rug", "carpet", "curtain", "mirror", "painting", "frame", "sink",
     "stove", "oven", "fridge", "refrigerator", "microwave", "toilet",
@@ -139,7 +143,10 @@ _PROP_PLACE_TAIL_RE = re.compile(
 )
 
 # Abstract nouns the determiner pattern would otherwise catch ("the moment",
-# "the problem"). None of these is an object on camera.
+# "the problem"). None of these is an object on camera. Direction words are
+# here for the same reason: "from the side" names where, not an object —
+# without "side" the capture reads that lighting clause's tail as an object
+# and Location collapses to whatever clause survives it.
 _ABSTRACT_WORDS = frozenset((
     "moment", "moments", "day", "days", "time", "times", "thing", "things",
     "way", "ways", "feeling", "feelings", "story", "video", "app", "screen",
@@ -151,6 +158,7 @@ _ABSTRACT_WORDS = frozenset((
     "evening", "afternoon", "night", "question", "answer", "list",
     "pattern", "cycle", "chore", "task", "feeling", "dread", "guilt",
     "relief", "calm", "focus", "flow", "start", "finish", "push", "pull",
+    "side", "front", "back",
 ))
 
 # Placeholder wording that is an instruction to the model, never a scene value.
@@ -376,6 +384,13 @@ def _location_clause_names_object(clause) -> bool:
     text = " ".join(str(clause or "").split()).strip(" ,;.")
     if not text:
         return False
+    # A clause that is mostly light or time of day ("Soft natural daylight
+    # from the side") is never an object clause: the split below moves its
+    # light/time into Lighting. Reading its tail ("the side") as an object
+    # would delete the whole clause and leave the next clause standing
+    # alone as the place.
+    if _LIGHT_RE.search(text) or time_spans(text):
+        return False
     if _FILMING_DEVICE_RE.search(text):
         return True
     for match in _OBJECT_RE.finditer(text):
@@ -422,6 +437,108 @@ def strip_location_objects(text):
     if not re.search(r"[A-Za-z]", place):
         return raw, []
     return place, removed
+
+
+_LOCATION_FRAGMENT_STARTERS = frozenset(("with", "and", "from", "in", "on", "at", "by", "under", "near"))
+
+
+def is_location_fragment(text) -> bool:
+    """True when a Location reads as a trailing clause with no place head.
+
+    "With grass and trees behind" is the tail of a sentence, not a place:
+    it begins with a connector and never names the fixture the scene
+    hangs off. A deliberate founder location that merely starts with a
+    preposition still needs the anchor check below, so the fragment test
+    alone never repairs — both must agree.
+    """
+    raw = " ".join(str(text or "").split()).strip(" ,;.")
+    if not raw:
+        return False
+    first = raw.split()[0].casefold().strip(" .,;:'\u2019")
+    return first in _LOCATION_FRAGMENT_STARTERS
+
+
+def place_anchor_from_text(text) -> str:
+    """A place anchor ("A park railing") from an opening moment, or "".
+
+    Scans for a scenery head noun rather than a determiner phrase: the
+    capture overshoots ("The person on the wooden porch step") and eats
+    the next determiner, so the head is found by token position, grown
+    left over adjectives/determiner and right over a joined fixed noun
+    ("park" + "railing"), and never anchors on a phone or chart.
+    """
+    blob = " ".join(str(text or "").split())
+    if not blob:
+        return ""
+    tokens = [t.casefold().strip(" .,;:'\u2019") for t in re.findall(r"[A-Za-z][A-Za-z'\-]*", blob)]
+    fixed = _FIXED_SCENERY_WORDS | _SIGNAGE_WORDS
+    stop_left = {"on", "at", "by", "against", "outside", "while", "with", "and", "in", "into", "onto"}
+    for idx, token in enumerate(tokens):
+        if token not in fixed:
+            continue
+        phrase = [token]
+        # Grow right over a joined fixed noun: "park" + "railing".
+        nxt = idx + 1
+        while nxt < len(tokens) and tokens[nxt] in fixed and nxt - idx <= 2:
+            phrase.append(tokens[nxt])
+            nxt += 1
+        # Grow left over adjectives and the determiner.
+        left = idx - 1
+        while left >= 0 and idx - left <= 3:
+            prev = tokens[left]
+            if prev in stop_left:
+                break
+            phrase.insert(0, prev)
+            if prev in ("a", "an", "the"):
+                break
+            left -= 1
+        if phrase and phrase[0] in ("a", "an", "the"):
+            joined = " ".join(phrase[1:])
+        else:
+            joined = " ".join(phrase)
+        joined = joined.strip(" ,;.")
+        if not joined or _FILMING_DEVICE_RE.search(joined):
+            continue
+        article = "An" if joined.split()[0].lower()[:1] in "aeiou" else "A"
+        return f"{article} {joined}"
+    return ""
+
+
+def repair_location_fragment(text, anchor_text) -> str:
+    """Prepend the place anchor when `text` is a fragment missing it.
+
+    Conserves a deliberate founder location: only a continuation
+    fragment ("with ...", "and ...") that does not already contain the
+    anchor's head noun is repaired, so a founder move to another place
+    is never undone back to the angle's.
+    """
+    raw = " ".join(str(text or "").split()).strip()
+    if not raw or not is_location_fragment(raw):
+        return raw
+    anchor = place_anchor_from_text(anchor_text)
+    if not anchor:
+        return raw
+    anchor_tokens = {t.casefold().strip(" .,;:'\u2019")
+                     for t in anchor.split() if t.casefold() not in ("a", "an", "the")}
+    if anchor_tokens & {t.casefold().strip(" .,;:'\u2019")
+                        for t in raw.casefold().split() if t.strip()}:
+        return raw
+    tail = raw
+    if tail.casefold().startswith("and "):
+        tail = tail[4:].strip()
+    if not tail:
+        return anchor
+    # A split leftover ("from the side, with grass and trees behind") still
+    # carries the moved lighting's tail as its first segment. When that
+    # segment is linker-led and the rest of the place names something,
+    # drop it instead of stacking it after the anchor.
+    if "," in tail:
+        head, sep, rest = tail.partition(",")
+        if sep and head.casefold().strip().split()[0].casefold() in _LOCATION_FRAGMENT_STARTERS:
+            tail = rest.strip()
+    if not tail:
+        return anchor
+    return f"{anchor}, {tail}"
 
 
 def _match_case(original: str, replacement: str) -> str:
@@ -1004,6 +1121,18 @@ def reconcile_scene(strategy, plan=None) -> dict:
         if planned_setup in ("handheld", "fixed"):
             result["camera_setup"] = planned_setup
 
+    # The opening moment's place anchor is read before any phone/screen
+    # strip below — stripping the chart clause would also strip the
+    # railing the clause was leaning on, leaving Location with nothing
+    # to anchor to.
+    _anchor_source = " ".join(
+        str(result.get(k) or "") for k in ("hook_promise", "hook_concept", "strategy_summary")
+    )
+    if isinstance(plan, dict):
+        _anchor_source += " " + " ".join(
+            str(plan.get(k) or "") for k in ("hook_promise", "user_problem", "hook_concept", "location", "hook_line")
+        )
+
     # A handheld selfie names no phone anywhere (ADR 0093): Phone clauses are
     # removed from the strategy's own action/concept/movement fields before
     # any completion pass below can copy them back into Props or Movement.
@@ -1054,6 +1183,16 @@ def reconcile_scene(strategy, plan=None) -> dict:
             scene["lighting"] = append_clause(scene.get("lighting"), moved)
             changed.append("Location")
             changed.append("Lighting")
+        # A split that exposes a fragment ("from the side, with grass and
+        # trees behind") still names no anchor. Anchor it with the promise's
+        # own place, or the prompt's WHERE line names only the tail.
+        repaired = repair_location_fragment(scene.get("location"), _anchor_source)
+        if repaired and repaired != str(scene.get("location") or ""):
+            scene["location"] = repaired
+            for key in ("environment", "background", "setting"):
+                if key in scene and scene[key] != repaired:
+                    scene[key] = repaired
+            changed.append("Location")
 
         # One setup, one set of camera words: a handheld strategy cannot say
         # "fixed camera"/"locked shot"/"steady framing", and a fixed strategy

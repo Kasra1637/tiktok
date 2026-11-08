@@ -284,3 +284,64 @@ def test_the_final_line_is_refused_when_it_breaks_the_bounded_by():
         assert "Nothing has been charged" in detail
     else:
         raise AssertionError("expected the bounded-by refusal")
+
+
+def test_chart_scroll_and_thumb_tap_are_struck_for_selfie_but_not_in_framing():
+    movement = (
+        "Other hand gripping the railing, brows lift, jaw settles, and the short line "
+        "is delivered, small exhale, then a slow breath as the eyes drop to the weekly "
+        "chart, thumb taps once to scroll, pausing on the days the worry showed up, "
+        "looks up with a settled breath, rests the gaze on the lens, final beat left open"
+    )
+    kept, removed = final_beat.split_phone_clauses(movement)
+    assert removed
+    assert "chart" not in kept.lower()
+    assert "thumb taps" not in kept.lower()
+    assert "scroll" not in kept.lower()
+    assert "gripping the railing" in kept.lower()
+    assert "looks up with a settled breath" in kept.lower()
+
+    middle = (
+        "Slowly scrolls the weekly chart with one thumb, pausing on the days the "
+        "worry showed up, looks up with a settled breath, rests the gaze on the lens, "
+        "leaving the final beat open"
+    )
+    kept, _removed = final_beat.split_phone_clauses(middle)
+    assert "chart" not in kept.lower()
+    assert "pausing on the days the worry showed up" in kept.lower()
+    assert "looks up with a settled breath" in kept.lower()
+
+    # A chart in Props names the screen itself, so it leaves Props for selfie.
+    props, changed = final_beat.strip_props("Rain jacket, weekly chart, grey t-shirt")
+    assert changed
+    assert "chart" not in props.lower()
+    assert "rain jacket" in props.lower()
+
+    # The viewer-stop idiom and a negated rule are not action surfaces.
+    assert final_beat.split_phone_clauses("Stop the scroll by naming the worry out loud")[1] == ""
+    assert final_beat.split_phone_clauses("No chart on camera, eyes on the lens")[1] == ""
+
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Sits on the step",
+        "scene": {"location": "A park railing", "props": "rain jacket"},
+        "performance": {"movement": movement},
+        "segments": [
+            {"role": "hook", "action": "Sits on the step"},
+            {"role": "middle", "action": middle,
+             "script": "Leaning on this railing, I speak my day out loud."},
+        ],
+    }
+    project = {"id": "p1", "location": "A park railing", "beat_timeline": [],
+               "script": "Leaning on this railing, I speak my day out loud."}
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    blob = json.dumps(patched).lower()
+    assert "chart" not in blob
+    assert "weekly" not in blob
+    assert "thumb taps" not in blob
+    # Spoken lines are never rewritten for this — the founder's own words
+    # keep their chart mention if they wrote one.
+    strategy["segments"][1]["script"] = "I scrolled my week and speak my day out loud."
+    project["script"] = strategy["segments"][1]["script"]
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    assert patched["segments"][1]["script"] == "I scrolled my week and speak my day out loud."

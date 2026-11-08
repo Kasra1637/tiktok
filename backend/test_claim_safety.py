@@ -460,3 +460,53 @@ class TestBoundedByFinalLine:
             [self.DIAGNOSTIC_BOUND],
         ) == []
         assert cs.bounded_by_conflict("It diagnosed my anxiety.", [self.DIAGNOSTIC_BOUND])
+
+    def test_a_knowledge_line_breaks_a_trends_not_diagnosed_bound(self):
+        trends_bound = "Trends are shown in the app, not diagnosed"
+        assert cs.bounded_by_conflict(
+            "Now I know how long it has been there.", [trends_bound]
+        )
+        # The same knowledge shape without a forbidding bound, or a plain
+        # speaking line under the same bound, keeps the bound.
+        assert cs.bounded_by_conflict("Now I know how long it has been there.", []) == []
+        assert cs.bounded_by_conflict(
+            "I speak my day out loud, no blank page.", [trends_bound]
+        ) == []
+
+    def test_a_light_week_mention_is_not_a_result_claim(self):
+        trends_bound = "Trends are shown in the app, not diagnosed"
+        assert cs._is_light_week_mention("I looked back over the week before speaking.")
+        assert cs._is_light_week_mention("The worry came back on Monday and Friday.")
+        assert not cs._is_light_week_mention("Now I know how long it has been there.")
+        assert not cs._is_light_week_mention(
+            "Now I know how long the week has been, and I speak my day."
+        )
+        assert cs.bounded_by_conflict(
+            "I looked back over the week before speaking.", [trends_bound]
+        ) == []
+        assert cs.bounded_by_conflict(
+            "Now I know how long the week has been, and I speak my day.", [trends_bound]
+        )
+
+    def test_paraphrases_of_screen_work_are_struck_for_selfie(self):
+        import final_beat
+
+        for sentence in (
+            "She looks at the screen and smiles",
+            "A thumb on the display while she listens",
+            "Eyes drop down to the chart for a beat",
+            "Glances at the phone in her hand",
+            "Stares at the display",
+            "Reads the timeline aloud",
+            "Finger sliding on the trackpad",
+            "They check the dashboard mid-sentence",
+        ):
+            kept, removed = final_beat.split_phone_clauses(sentence)
+            assert removed, sentence
+            assert "railing" not in kept.lower() or "chart" not in kept.lower()
+
+        # Idioms and negated rules stay untouched, and so does a plain
+        # physical looking (no surface noun).
+        assert final_beat.split_phone_clauses("Stop the scroll by naming the worry out loud")[1] == ""
+        assert final_beat.split_phone_clauses("No chart on camera, eyes on the lens")[1] == ""
+        assert final_beat.split_phone_clauses("Eyes steady on the lens")[1] == ""

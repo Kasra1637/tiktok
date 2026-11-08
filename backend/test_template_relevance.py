@@ -11,6 +11,7 @@ template, and `angle_scene.opening_shape` builds the one opening from the First
 3 Seconds Promise.
 """
 import angle_scene
+from angle_policy import normalize_content_angles
 from template_recommendations import (
     check_template_relevance,
     filter_relevant_templates,
@@ -190,6 +191,28 @@ class TestOpeningShape:
         )
         assert result["angle_scene"]["shape"] == hook
         assert result["angle_scene"]["development"] == "I talked and the day went unsaid"
+
+    def test_a_chart_promise_is_repaired_to_its_place(self):
+        angle = {"hook_promise": "The character scrolls a weekly chart on a phone while leaning on a park railing."}
+        shape = angle_scene.opening_shape(angle, {"opening_structure": "Ignored."})
+        assert shape == "Leaning on a park railing."
+        assert "chart" not in shape.lower()
+        assert "phone" not in shape.lower()
+
+    def test_a_stored_chart_angle_is_repaired_on_normalize(self):
+        angles = normalize_content_angles(
+            [{
+                "kind": "problem_solution",
+                "target_audience": "a",
+                "user_problem": "p",
+                "hook_promise": "The character scrolls a weekly chart on a phone while leaning on a park railing.",
+                "app_feature": "f",
+            }],
+            6,
+            {"core_features": ["f"]},
+        )
+        assert angles[0]["hook_promise"] == "Leaning on a park railing"
+        assert "chart" not in angles[0]["hook_promise"].lower()
 
 
 class TestOpeningStaging:

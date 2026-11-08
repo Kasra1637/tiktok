@@ -547,9 +547,45 @@ _SELF_UNDERSTANDING_DOMAINS = (
      (r"\bverdict\s+on\s+(?:your|my|their|the)\s+inner\s+life\b",),
      (r"\bverdict\b.*\binner\s+life\b", r"\binner\s+life\b")),
     ("diagnosis",
-     (r"\b(?:diagnos(?:e|es|ed|is|ing)|diagnostic)\b",),
-     (r"\bdiagnostic\b", r"\bdiagnos(?:e|es|ed|is|ing)\b")),
+     (r"\b(?:diagnos(?:e|es|ed|is|ing)|diagnostic)\b",
+      r"\bnow\s+i\s+know\b[^.]{0,60}?\b(?:how\s+long|how\s+often|"
+      r"how\s+many\s+times?|when\s+i\s+started|why\s+i\s+keep)\b",
+      r"\bknow\s+how\s+long\b"),
+     (r"\bdiagnostic\b", r"\bdiagnos(?:e|es|ed|is|ing)\b",
+      r"\bnot\s+diagnosed\b", r"\bnot\s+diagnose\b")),
 )
+
+# A light time mention ("I looked back over the week") connects the clip to
+# the weekly view the founder's demo shows without claiming the app produced
+# a result. It is allowed inside a sentence that would otherwise report
+# knowledge only when the knowledge verb is gone too — what keeps it honest
+# is the absence of the result claim, not the presence of a week word.
+_KNOWLEDGE_RESULT_RE = re.compile(
+    r"\b(?:now\s+i\s+know|i\s+(?:now\s+)?know|know\s+how\s+long|"
+    r"diagnos(?:e|es|ed|is|ing)|diagnostic)\b",
+    re.I,
+)
+_WEEK_MENTION_RE = re.compile(
+    r"\b(?:this\s+week|the\s+week|my\s+week|last\s+week|weekly|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.I,
+)
+
+
+def _is_light_week_mention(sentence: str) -> bool:
+    """True when a sentence mentions the week without claiming a result.
+
+    A light mention keeps the handoff to the demo's weekly view ("I looked
+    back over the week") — allowed. A result claim ("Now I know how long
+    it's been there") is never a light mention, even if it carries a week
+    word. Claim checks stay unchanged; this only distinguishes the two.
+    """
+    blob = normalize(sentence)
+    if not blob:
+        return False
+    if _KNOWLEDGE_RESULT_RE.search(blob):
+        return False
+    return bool(_WEEK_MENTION_RE.search(blob))
 
 
 def last_sentence(text: str) -> str:
@@ -592,7 +628,7 @@ def bounded_by_conflict(sentence: str, claims_to_respect: Iterable[str]) -> list
         if benefit_domains & bound_domains:
             hits.append({
                 "claim": bound,
-                "reason": "the final line promises self-understanding this angle forbids",
+                "reason": "the final line promises a result this angle forbids",
             })
     return hits
 

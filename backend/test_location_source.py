@@ -451,7 +451,7 @@ class TestRenderGuard:
         project = {"id": "p1", "location": LOCATION}
         patched = api._guard_render_scene(desk_strategy(), project)
         assert patched["scene"]["location"] == LOCATION
-        assert patched["hook_concept"] == "scrolling, frustrated"
+        assert patched["hook_concept"] == "Frustrated"
 
     def test_the_legacy_mirror_can_supply_the_location(self, api):
         project = {"id": "p1", "location": "", "visual_direction": LOCATION}

@@ -3738,6 +3738,15 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
     ones the profile gives nothing to stand on (no named alternative, no
     recorded objection) instead of letting them lead the row.
     """
+    # Stored angles written before screen-interaction stripping still
+    # promise unfilmable scroll/chart openings. The serialized row is the
+    # picker’s view, so strip the screen clause here rather than asking
+    # the founder to discard an angle a rebuild already fixed elsewhere.
+    _promise = str(row.get("hook_promise") or "")
+    if _promise:
+        _kept, _removed = final_beat.split_screen_clauses(_promise)
+        if _removed and _kept:
+            _promise = _kept
     return {
         "id": row.get("id"),
         "brand_profile_id": row.get("brand_profile_id"),
@@ -3745,7 +3754,7 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
         "label": row.get("label") or "",
         "target_audience": row.get("target_audience") or "",
         "user_problem": row.get("user_problem") or "",
-        "hook_promise": row.get("hook_promise") or "",
+        "hook_promise": _promise,
         "app_feature": row.get("app_feature") or "",
         "desired_emotion": row.get("desired_emotion") or "",
         "viewer_outcome": row.get("viewer_outcome") or "",
@@ -4886,11 +4895,18 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
         out["location"] = ((out["strategy"].get("scene") or {}).get("location") or "").strip()
     # The Location editor shows the place only: object clauses ("a phone
     # beside the person") are dropped from the display even though the
-    # lighting split still only runs on save and render.
+    # lighting split still only runs on save and render. A continuation
+    # fragment ("with ...") is prepended with the strategy prose's own
+    # anchor so the editor never shows a tail without its place.
     if (out.get("location") or "").strip():
         displayed_location, _objects = scene_consistency.strip_location_objects(out["location"])
         if _objects:
             out["location"] = displayed_location
+        _anchor_text = " ".join(str(out["strategy"].get(k) or "")
+                                for k in ("hook_promise", "hook_concept", "strategy_summary"))
+        out["location"] = scene_consistency.repair_location_fragment(
+            out.get("location"), _anchor_text
+        )
     out["strategy_is_current"] = out["strategy_is_current"] and (
         (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
     )
@@ -5331,6 +5347,30 @@ async def update_studio_project(
             # camera setup: object clauses ("a phone beside the person") are
             # dropped on save, not only in the strategy copy.
             place, _objects = scene_consistency.strip_location_objects(place)
+            # A continuation fragment ("with ...") names no place head.
+            # Prepend the angle's own anchor so the saved place is the
+            # fixture the scene hangs off. Angle prose is preferred so a
+            # deliberate founder place (non-fragment) is never rewritten;
+            # a stored strategy usually carries it already.
+            _existing_for_anchor = row.get("strategy")
+            if isinstance(_existing_for_anchor, str):
+                try:
+                    _existing_for_anchor = json.loads(_existing_for_anchor)
+                except (json.JSONDecodeError, TypeError):
+                    _existing_for_anchor = {}
+            if not isinstance(_existing_for_anchor, dict):
+                _existing_for_anchor = {}
+            _anchor_source = " ".join(str(_existing_for_anchor.get(k) or "")
+                                      for k in ("hook_promise", "hook_concept"))
+            if not _anchor_source.strip() and row.get("content_angle_id"):
+                _angle_row = await _fetch_one(
+                    "SELECT hook_promise, user_problem FROM content_angles WHERE id = ?",
+                    (row.get("content_angle_id"),),
+                )
+                if _angle_row:
+                    _anchor_source = " ".join(str(_angle_row.get(k) or "")
+                                              for k in ("hook_promise", "user_problem"))
+            place = scene_consistency.repair_location_fragment(place, _anchor_source)
             mirror_key = "visual_direction" if location_key == "location" else "location"
             existing_strategy = row.get("strategy")
             if isinstance(existing_strategy, str):
@@ -6352,6 +6392,13 @@ async def _submit_generation(
         )
         place_only, _objects = scene_consistency.strip_location_objects(place_only)
         if place_only:
+            place_only = scene_consistency.repair_location_fragment(
+                place_only,
+                " ".join(str((content_angle or {}).get(k) or "")
+                         for k in ("hook_promise",))
+                + " " + " ".join(str(strategy.get(k) or "")
+                                 for k in ("hook_promise", "hook_concept")),
+            )
             render_plan["location"] = place_only
     # Each provider has its own prompt ceiling. Hailuo's was measured live at
     # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
@@ -7276,7 +7323,7 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       rewritten or refused for this.
     - The final script line stays inside the angle's "bounded by" limits
       (ADR 0108): spoken words are never rewritten or auto-fixed, so a last
-      line promising self-understanding the angle forbids refuses the render
+      line promising a result the angle forbids refuses the render
       with the line named. Checked even when the project carries no Location,
       because the spoken words are the risk here, not the place.
     """
@@ -7309,7 +7356,7 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
                         status_code=409,
                         detail=(
                             f"This render was stopped before it cost anything: the final line "
-                            f"\u201c{final_line}\u201d promises self-understanding the audience "
+                            f"\u201c{final_line}\u201d promises a result the audience "
                             f"angle forbids (\u201c{bound}\u201d). Spoken words are never rewritten "
                             "automatically \u2014 edit the script on Review & submit so the last line "
                             "stays inside that bound, then generate again. Nothing has been charged."
@@ -7318,6 +7365,14 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
     location = str(project.get("location") or project.get("visual_direction") or "").strip()
+    if location and content_angle is not None:
+        location = scene_consistency.repair_location_fragment(
+            location,
+            " ".join(str((content_angle or {}).get(k) or "")
+                     for k in ("hook_promise", "user_problem"))
+            + " " + " ".join(str((strategy or {}).get(k) or "")
+                             for k in ("hook_promise", "hook_concept")),
+        )
     if not location or not isinstance(strategy, dict) or not strategy:
         return strategy
     audit = angle_scene.reconcile_location(strategy, location, thorough=True)
