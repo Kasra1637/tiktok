@@ -94,6 +94,24 @@ def test_fixed_camera_guard_keeps_the_phone_handoff():
     assert "raises the phone into view" in patched["performance"]["movement"]
 
 
+def test_props_forbidden_reach_is_stripped_not_refused():
+    # Props carried a selfie-forbidden reach clause with no phone noun.
+    # strip_props only removed phone/camera/screen nouns, so the reach
+    # survived into the guard and refused the render with the field named.
+    # The widened strip removes the clause, so the field survives.
+    strategy = {
+        "camera_setup": "handheld",
+        "hook_action": "Turns to the lens",
+        "scene": {"location": "A park", "props": "Reaches toward the camera, mug"},
+        "performance": {"movement": "Grips the railing"},
+        "segments": [{"role": "middle", "action": "Smiles at the lens"}],
+    }
+    project = {"id": "p1", "location": "A park", "beat_timeline": []}
+    patched = server._guard_render_scene(strategy, project, render_index=0)
+    assert "mug" in (patched["scene"]["props"] or "")
+    assert "reaches toward the camera" not in (patched["scene"]["props"] or "").lower()
+
+
 def test_the_final_prompt_has_no_phone_for_selfie_and_keeps_it_for_fixed():
     selfie = gp.build_segment_prompt(
         strategy={"camera_setup": "handheld", "final_beat": final_beat.ENDINGS[0]["text"]},

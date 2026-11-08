@@ -355,14 +355,28 @@ def split_screen_clauses(text):
 
 
 def strip_props(props):
-    """Props without the phone, camera or a screen surface; (text, changed)."""
+    """Props without the phone, camera, a screen surface, or a selfie-forbidden
+    reach/hand action; (text, changed).
+
+    The noun filter alone caught "phone, tripod" but missed "reaches toward
+    the camera" — a prop entry that needs the forbidden action, not the
+    device. The action clause now goes through split_phone_clauses, so any
+    entry the guard would refuse is removed here first and the field survives
+    instead of becoming a wall.
+    """
     parts = [p.strip() for p in re.split(r"\s*[,;]\s*", str(props or "")) if p.strip()]
     if not parts:
         return str(props or ""), False
-    kept = [p for p in parts
-            if not re.search(
-                r"\b(?:phones?|cameras?|charts?|graphs?|dashboards?|reports?|screens?)\b",
-                p, re.I)]
+    kept = []
+    for part in parts:
+        kept_text, removed = split_phone_clauses(part)
+        if removed:
+            continue
+        if re.search(
+            r"\b(?:phones?|cameras?|charts?|graphs?|dashboards?|reports?|screens?)\b",
+            part, re.I):
+            continue
+        kept.append(kept_text or part)
     if len(kept) == len(parts):
         return ", ".join(parts), False
     return ", ".join(kept), True
@@ -465,6 +479,10 @@ def forbidden_hits(strategy):
             if split_phone_mentions(scene.get(key))[1]:
                 hits.append(label)
         if strip_props(scene.get("props"))[1]:
+            # strip_props reports changed=True whenever it removed a phone
+            # noun, but a hit here means the stripped remainder still carries
+            # a forbidden clause the strip could not remove without losing
+            # the rest of the field — a wall, not a guard.
             hits.append("Props")
     return hits
 
