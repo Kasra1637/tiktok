@@ -437,6 +437,7 @@ export default function CreateVideo() {
   // A pick alone is deliberately not enough: a stale ?angle= param or a draft
   // pointing at a deleted angle must not open a list of strangers on first
   // view, which is the exact screenshot this rule fixes.
+  const showAngles = anglesRevealed || Boolean(angle);
   const showGoals = goalsRevealed || Boolean(objective);
   // The reveal lasts for the visit, not the mount. Entering the angle step
   // without a resolved pick re-arms both CTAs, so a list revealed earlier
