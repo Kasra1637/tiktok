@@ -435,9 +435,11 @@ _LOCATION_LEGACY_FIELDS = (
 # The strategy prose that reaches the prompt but is not a place line: rewritten
 # only by the render audit (thorough=True), never by the Location save, so a
 # location edit touches the enumerated place lines and the scene, and nothing
-# else the founder wrote.
+# else the founder wrote. hook_dialogue is delivery direction, so it is
+# rewritten here rather than reported as spoken words.
 _LOCATION_THOROUGH_FIELDS = (
     ("hook_promise", "Hook promise"),
+    ("hook_dialogue", "Hook dialogue"),
     ("strategy_summary", "Strategy summary"),
     ("audience_problem", "Audience problem"),
     ("desired_outcome", "Desired outcome"),
@@ -448,9 +450,10 @@ _LOCATION_THOROUGH_FIELDS = (
 
 # Spoken words: never rewritten, and reported when they still contradict the
 # Location. The render turns these into a refusal.
+# hook_dialogue is delivery direction ("Low and quick"), not spoken words, so
+# it is audited as direction, never as something the founder approved hearing.
 _LOCATION_SPOKEN_FIELDS = (
     ("hook_line", "Hook line"),
-    ("hook_dialogue", "Hook dialogue"),
 )
 
 
@@ -564,6 +567,9 @@ def reconcile_location(strategy: Optional[dict], location: str, thorough: bool =
                 _patch(section, "goal", f"{role.capitalize()} — what it must achieve")
 
     # Spoken words are audited in both modes and never rewritten.
+    # hook_dialogue is delivery direction — it was moved to the thorough
+    # direction fields above, so its conflicting clauses are rewritten rather
+    # than reported as something the founder approved hearing.
     for key, label in _LOCATION_SPOKEN_FIELDS:
         reason = conflict_reason(result.get(key), scene)
         if reason:

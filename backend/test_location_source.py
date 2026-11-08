@@ -156,6 +156,18 @@ class TestReconcileLocation:
         assert out["strategy"]["hook_line"] == "I hate being stuck in my living room"
         assert out["strategy"]["segments"][1]["script"] == "So I stayed in bed all morning"
 
+    def test_a_delivery_direction_is_patched_not_blocked(self):
+        # hook_dialogue is delivery direction ("Delivered while seated"), not
+        # words the founder approved hearing: an indoor delivery note under an
+        # outdoor Location has its conflicting clause rewritten, and the line
+        # is never listed as a spoken-word block that would refuse the render.
+        strategy = desk_strategy()
+        strategy["hook_dialogue"] = "Delivered while seated at home"
+        out = angle_scene.reconcile_location(strategy, LOCATION, thorough=True)
+        blocked_fields = {b["field"] for b in out["blocked"]}
+        assert "Hook dialogue" not in blocked_fields
+        assert out["strategy"]["hook_dialogue"] != "Delivered while seated at home"
+
     def test_a_matching_spoken_line_is_never_blocked(self):
         out = angle_scene.reconcile_location(desk_strategy(), LOCATION)
         assert out["blocked"] == []
