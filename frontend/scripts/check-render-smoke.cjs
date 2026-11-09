@@ -1627,8 +1627,7 @@ async function main() {
 
   await check("paid render reuses the mock progress UI and the mock section is gone", async (ctx) => {
     // The hypothetical preview was removed: the paid in-flight render must
-    // carry its progress bar + stage checklist instead, with billed (never
-    // hypothetical) copy.
+    // carry its progress bar + stage checklist without the removed mock copy.
     const generating = { ...SEGMENT, id: "gen-flight", status: "generating" };
     await withApi({
       getGenerations: async () => ({ generations: [generating] }),
@@ -1640,7 +1639,6 @@ async function main() {
     if (bar.getAttribute("aria-valuenow") !== "85") {
       throw new Error(`paid progress should sit at 85 during generating, got ${JSON.stringify(bar.getAttribute("aria-valuenow"))}`);
     }
-    expectText(ctx, "This run is billed", "the paid progress does not say it is billed");
     expectAbsent(ctx, "Hypothetical", "the removed mock preview still renders beside the paid render");
     expectAbsent(ctx, "Show hypothetical processing", "the mock preview trigger still renders");
   });

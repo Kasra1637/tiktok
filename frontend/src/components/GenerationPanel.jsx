@@ -43,9 +43,6 @@ function PaidRenderProgress({ status, modelName }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={Film}>Render in progress — paid render</GroupLabel>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Real render{modelName ? ` · ${modelName}` : ""}. This run is billed.
-      </p>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">{RENDER_STAGES[stageIndex].label}…</p>
         <span className="text-xs text-muted-foreground">{progress}%</span>
@@ -784,59 +781,6 @@ const handleGenerate = async () => {
           )}
         </div>
       )}
-
-      {/* Pre-render summary: the exact decision the button below takes, stated
-          before the paid click. Model, duration, and resolution are the values
-          the request carries; cost is shown only when the capability record
-          carries reliable per-second pricing — the server deliberately keeps no
-          cost column, so without that the honest answer is "unavailable",
-          never an invented price. The includes/excludes line states that the
-          render produces Hook + Story only, not the founder's separately
-          filmed demo, closing CTA, or on-screen text. Read-only: it changes
-          nothing about confirmation, idempotency, or the safety gates. The
-          "nothing is published for you" note is NOT here: that is the page-level
-          line's job (CreateVideo's create-no-autopost-note), and three copies of
-          it on one screen made none of them the answer. */}
-      <div
-        className="space-y-1 border-t border-[color:var(--hairline)] pt-3"
-        data-testid="render-summary"
-      >
-        <GroupLabel icon={Info}>Before you render</GroupLabel>
-        <p className="text-sm text-muted-foreground" data-testid="render-summary-model">
-          Model: {models ? (capability?.name || selectedModel || models.default || "unknown") : "loading…"}
-        </p>
-        <p className="text-sm text-muted-foreground" data-testid="render-summary-duration">
-          Duration: {pieceSeconds}s in one render
-          {models && capability && tooLong
-            ? ` — exceeds ${capability.name}'s single-pass ceiling (${ceiling}s); the endpoint will refuse this render`
-            : ""}
-        </p>
-        <p className="text-sm text-muted-foreground" data-testid="render-summary-resolution">
-          Resolution: {models
-            ? (selectedResolution
-                ? `${selectedResolution}`
-                : `${capability?.resolution || "default"} (default)`)
-            : "loading…"}
-        </p>
-        <p className="text-sm text-muted-foreground" data-testid="render-summary-cost">
-          {(() => {
-            const perSecond = Number(
-              capability?.price_per_second ??
-              capability?.price_usd_per_second ??
-              capability?.cost_per_second
-            );
-            if (Number.isFinite(perSecond) && perSecond > 0 && Number(pieceSeconds) > 0) {
-              return `Estimated cost: $${(perSecond * Number(pieceSeconds)).toFixed(2)}`;
-            }
-            return "Cost estimate unavailable";
-          })()}
-        </p>
-        <p className="text-sm text-muted-foreground" data-testid="render-summary-scope">
-          Produces Hook + Story only: the hook and the middle, ending where viewers
-          reach for their phones. Does not include your filmed product demo, closing
-          CTA, or on-screen text.
-        </p>
-      </div>
 
       <Button
         variant="accent"
