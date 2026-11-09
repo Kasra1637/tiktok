@@ -29,6 +29,48 @@ def test_server_reexports_recommendation_policy_for_existing_callers():
     assert server._split_shared_notes is split_shared_notes
 
 
+def test_db_layer_is_owned_by_db_module():
+    """The SQLite/Turso primitives live in db.py; server re-exports them."""
+    import db
+    import server
+
+    assert server.get_db is db.get_db
+    assert server._fetch_one is db._fetch_one
+    assert server._fetch_all is db._fetch_all
+    assert server._execute is db._execute
+    assert server.init_db is db.init_db
+    assert server._log_model_call is db._log_model_call
+    assert server._LibsqlAsyncWrapper is db._LibsqlAsyncWrapper
+    assert server._CursorWrapper is db._CursorWrapper
+
+
+def test_db_module_never_imports_the_composition_root():
+    """db.py must not import server; config flows via the _server back-ref."""
+    tree = ast.parse((BACKEND / "db.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
+def test_schema_module_owns_schema_bootstrap():
+    """Schema creation/migrations live in schema.py, not inline in server."""
+    import schema
+
+    assert callable(schema.apply_schema)
+    tree = ast.parse((BACKEND / "schema.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
 def test_ai_adapter_reuses_the_same_angle_policy_for_all_briefs():
     import ai_service
     from angle_policy import angle_grounding, duplicate_angle_pairs, normalize_content_angles
