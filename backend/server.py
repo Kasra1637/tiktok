@@ -4910,6 +4910,24 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     out["strategy_is_current"] = out["strategy_is_current"] and (
         (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
     )
+    # A strategy stamped with a different objective/template than the project
+    # now carries is stale, but a strategy predating the stamp (an empty value
+    # — a live fake, an older build) is missing history, not a mismatch, the
+    # same missing-history rule as the script_version stamp above.
+    _strategy_objective = out["strategy"].get("objective")
+    out["strategy_is_current"] = out["strategy_is_current"] and (
+        _strategy_objective is None or _strategy_objective == (out.get("objective") or "")
+    )
+    _strategy_template = out["strategy"].get("template_id")
+    out["strategy_is_current"] = out["strategy_is_current"] and (
+        _strategy_template is None or _strategy_template == (out.get("template_id") or "")
+    )
+    # A strategy predating the template_version stamp (live-generated fakes and
+    # pre-stamp projects) is missing history, not a mismatch — do not block it.
+    _strategy_tv = out["strategy"].get("template_version")
+    out["strategy_is_current"] = out["strategy_is_current"] and (
+        _strategy_tv is None or int(_strategy_tv) == int(out.get("template_version") or 1)
+    )
     # How much of the approved script cannot be spoken in the middle's seconds.
     # Recomputed, never stored: it is a pure function of (plan, seconds), so a
     # hand-edited strategy cannot drop it and the founder edits that change the
@@ -7283,6 +7301,53 @@ def _require_current_strategy(project: dict) -> dict:
                 "strategy describes a different video than the one now picked. "
                 "Rebuild it on the Hook + Story step for the current angle, then "
                 "generate."
+            ),
+        )
+    # The goal, the template identity and the template's version are stamped on
+    # the strategy at build (ai_service 6195-6198) and are NOT in _CONTENT_KEYS,
+    # so the script_version stamp alone never sees them drift: changing the goal
+    # after a plan/strategy lets the render speak words built for the old goal,
+    # and switching the template mixes the new template's structure with the old
+    # strategy's words. The spend boundary compares them the same way the angle
+    # check above does, rather than trusting the caller to have asked.
+    # Missing-history rule: a strategy whose stamp never landed (empty value,
+    # pre-stamp build) is unstamped, not mismatched — a truly unstamped
+    # strategy this project still has to rebuild once, and refusing it here
+    # would block every pre-stamp project forever.
+    _strategy_objective = strategy.get("objective")
+    if _strategy_objective is not None and _strategy_objective != (project.get("objective") or ""):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The video goal changed after this strategy was built, so the "
+                "strategy describes a different intent than the one now picked. "
+                "Rebuild it on the Hook + Story step for the current goal, then "
+                "generate."
+            ),
+        )
+    _strategy_template = strategy.get("template_id")
+    if _strategy_template is not None and _strategy_template != (project.get("template_id") or ""):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The template changed after this strategy was built, so the "
+                "strategy describes a different structure than the template now "
+                "picked. Rebuild it on the Hook + Story step for the current "
+                "template, then generate."
+            ),
+        )
+    # A strategy predating the template_version stamp (live-generated fakes and
+    # pre-stamp projects) is missing history, not a mismatch — the same
+    # missing-history rule as the script_version stamp above.
+    _strategy_tv = strategy.get("template_version")
+    if _strategy_tv is not None and int(_strategy_tv) != int(project.get("template_version") or 1):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The template changed after this strategy was built, so the "
+                "strategy describes a different structure than the template now "
+                "picked. Rebuild it on the Hook + Story step for the current "
+                "template, then generate."
             ),
         )
     return strategy

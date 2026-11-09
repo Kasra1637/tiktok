@@ -3738,6 +3738,10 @@ async def generate_creative_plan(
         "camera_pacing": template.get("camera_pacing") or "(unstated)",
         "content_slots": template.get("content_slots") or {},
         "required_assets": template.get("required_assets") or [],
+        # The template's own aim for the viewer ("What this is aiming to leave
+        # them with"). It shapes the words: without it the pipeline never uses
+        # the aim the UI presents, and the plan's script has nothing to serve.
+        "template_outcome": template.get("outcome") or "(unstated)",
     }
 
     brief = {
@@ -5651,6 +5655,11 @@ async def generate_video_strategy(
         "objective": objective or "(unstated)",
         "opening_structure": template.get("opening_structure") or "(unstated)",
         "hook_seconds": hook_seconds,
+        # The template's own aim for the viewer. It shapes the middle's
+        # mechanism line the same way it shapes the plan's script on the
+        # other path — without it the strategy never serves the aim the UI
+        # presents.
+        "template_outcome": template.get("outcome") or "(unstated)",
         # `middle_structure` replaced `continuation_structure` + `cta_pattern`
         # when a video became one render with a hook and a middle. Reading the
         # retired names here meant this block printed
