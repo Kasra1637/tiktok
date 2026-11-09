@@ -722,6 +722,18 @@ export function AngleGoalPicker({
   }
   const shownOutcomes = { ...(outcomes || {}), ...liveOutcomes };
   const shownFitReasons = { ...(fitReasons || {}), ...liveFitReasons };
+  // Fit badge: when a live fit_score exists for this goal/angle, use it —
+  // that's the model's per-angle, per-goal measurement of alignment. When no
+  // score exists, render NO badge rather than summing thumbs across all goals
+  // of that kind (satisfaction arithmetic is not alignment).
+  const _fitFor = (goal, index) => {
+    const liveScore = liveScores?.[goal];
+    if (Number.isFinite(Number(liveScore))) {
+      const score = Math.min(10, Math.max(0, Math.floor(Number(liveScore))));
+      return { score, basis: `fit ${score} of 10 for this angle` };
+    }
+    return null;
+  };
 
   // Live count-up while the six reshuffle ("Shuffling goal 3 of 6…"). Same
   // contract as the angle count-up: narrates fresh work, unmounts on settle
@@ -815,19 +827,9 @@ export function AngleGoalPicker({
           // 0–10 fit for this goal under the selected angle: annotates the
           // card, never reorders the six. Rank is this angle's persisted
           // suggestion order, tally is the goal's own win share. A live-goal
-          // fit_score, when present, replaces the computed score.
-          const liveScore = liveScores?.[goal];
-          const fit = Number.isFinite(Number(liveScore))
-            ? {
-                score: Math.min(10, Math.max(0, Math.floor(Number(liveScore)))),
-                basis: `fit ${Math.min(10, Math.max(0, Math.floor(Number(liveScore))))} of 10 for this angle`,
-              }
-            : goalFitScore({
-                index,
-                total: featured.length,
-                evidence: objectiveEvidence?.[goal],
-                hasFitReason: Boolean(shownFitReasons?.[goal]),
-              });
+          // fit_score replaces the computed score; when no score exists, no
+          // badge renders rather than summing thumbs.
+          const fit = _fitFor(goal, index);
           return (
             // Staggered arrival, same language as the angle rows: a fresh
             // order is watched arriving instead of blinking in at once. Keyed
@@ -848,7 +850,7 @@ export function AngleGoalPicker({
               <span className="flex items-center justify-between gap-2 text-sm font-semibold">
                 {humanize(goal)}
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <FitBadge score={fit.score} basis={fit.basis} testId={`goal-fit-score-${goal}`} />
+                  {fit && <FitBadge score={fit.score} basis={fit.basis} testId={`goal-fit-score-${goal}`} />}
                   {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" />}
                 </span>
               </span>

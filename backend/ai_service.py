@@ -3585,7 +3585,7 @@ def _angle_scene_moment(angle: Optional[dict]) -> str:
     return scene["moment"] + (f" ({', '.join(where)})" if where else "")
 
 
-def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "") -> str:
+def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "", goal_rationale: str = "") -> str:
     """
     The audience, problem and goal rule shared by the plan and the strategy.
 
@@ -3599,6 +3599,12 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
     different viewers, where the WHO line sends the hook at the angle's audience
     and the brief sends it at theirs. With no override the angle's audience wins,
     which is the behaviour the angle's own selection implies.
+
+    `goal_rationale` carries the goal's own generated "why_it_fits" for THIS
+    angle: the same goal on a different angle is a different job, and the static
+    OBJECTIVE_OUTCOMES line alone collapses them into one definition. The
+    rationale makes the goal angle-specific in the plan and the strategy, so
+    the render's campaign hint matches what the founder read on the goal card.
     """
     a = angle or {}
 
@@ -3641,6 +3647,10 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "")
     job = OBJECTIVE_OUTCOMES.get(goal, "")
     if goal and job:
         lines.append(f"- GOAL: '{goal}' means: {job}. The hook and script do that job for this viewer. The founder's later demo/CTA is not spoken here: NEVER include a product demonstration or a call to action.")
+    # goal_rationale: the goal's own "why_it_fits" for THIS angle, or the angle-kind fit reason from the library. The static OBJECTIVE_OUTCOMES line above is the same for every angle; this line makes the goal angle-specific in the plan and the strategy, so the render's campaign hint matches what the founder read on the goal card.
+    rationale = " ".join(str(goal_rationale or "").split()).strip()
+    if rationale:
+        lines.append(f"- WHY THIS GOAL FITS THIS ANGLE (the same goal on a different angle is a different job): {rationale}")
     lines.append("- TEMPLATE: the template sets the hook's SHAPE only; fill it with this angle's problem and facts, never its example wording.")
     lines.append("- CONFLICT: if the goal and angle clash, keep this viewer and problem; the goal shapes how the script moves them forward.")
     return "\n".join(lines) + "\n"
@@ -3661,6 +3671,7 @@ async def generate_creative_plan(
     profile_feedback: Optional[dict] = None,
     component_feedback: Optional[dict] = None,
     recent_hooks=None,
+    goal_rationale: str = "",
 ) -> dict:
     """
     Generate an editable creative plan from an approved App Profile + template.
@@ -3811,7 +3822,7 @@ async def generate_creative_plan(
     # The founder's audience, when they wrote one, is the WHO line's audience
     # too -- not just the brief's. One prompt naming two viewers is a model
     # free to pick either.
-    angle_goal_block = _angle_goal_block(angle, objective, audience)
+    angle_goal_block = _angle_goal_block(angle, objective, audience, goal_rationale=goal_rationale)
     _recent_hook_lines = [str(h).strip() for h in (recent_hooks or []) if str(h).strip()][-3:]
     _hook_form = _hook_form_block(angle, [hook_form_of(h) for h in _recent_hook_lines], _recent_hook_lines)
     system_message = (
@@ -5574,6 +5585,7 @@ async def generate_video_strategy(
     plan: Optional[dict] = None,
     camera_setup: str = "handheld",
     recent_hooks=None,
+    goal_rationale: str = "",
 ) -> dict:
     """
     Turn an App Profile into a video strategy specific to THIS app.
@@ -5803,7 +5815,7 @@ async def generate_video_strategy(
             f"{evidence_sentence}\n"
         )
 
-    angle_goal_block = _angle_goal_block(angle, objective)
+    angle_goal_block = _angle_goal_block(angle, objective, "", goal_rationale=goal_rationale)
     _recent_hook_lines = [str(h).strip() for h in (recent_hooks or []) if str(h).strip()][-3:]
     _hook_form = _hook_form_block(angle, [hook_form_of(h) for h in _recent_hook_lines], _recent_hook_lines)
     system_message = (

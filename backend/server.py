@@ -5682,6 +5682,12 @@ async def generate_plan(
         recent_hooks = [str(r.get("hook_line") or "").strip() for r in recent_rows]
     except Exception:
         recent_hooks = []
+    # The goal's angle-specific fit reason: the angle kind's curated reason
+    # from the library. The render uses it as the goal's angle-specific job
+    # line in the plan and strategy prompts.
+    goal_rationale = ""
+    if angle and objective:
+        goal_rationale = template_library.angle_goal_fit_reason(angle.get("kind"), objective) or ""
     # The angle owns where and when the video happens (ADR 0084): a saved look
     # naming another place or time is adjusted before the plan sees it, and the
     # founder is told what changed.
@@ -5713,6 +5719,7 @@ async def generate_plan(
                 profile_feedback=profile_feedback,
                 component_feedback=plan_feedback,
                 recent_hooks=recent_hooks,
+                goal_rationale=goal_rationale,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
@@ -8874,6 +8881,11 @@ async def generate_project_strategy(
     except Exception:
         recent_hooks = []
 
+    # The goal's angle-specific fit reason, for the strategy's ANGLE + GOAL rule.
+    goal_rationale = ""
+    if angle and objective:
+        goal_rationale = template_library.angle_goal_fit_reason(angle.get("kind"), objective) or ""
+
     try:
         strategy = await _log_model_call(
             "video_strategy", "text", TEXT_MODEL,
@@ -8891,6 +8903,7 @@ async def generate_project_strategy(
                 plan=approved_plan,
                 camera_setup=row.get("camera_setup") or "handheld",
                 recent_hooks=recent_hooks,
+                goal_rationale=goal_rationale,
             ),
             user_id,
             brand_profile_id=row.get("brand_profile_id"),
