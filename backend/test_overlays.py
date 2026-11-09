@@ -30,7 +30,7 @@ class TestCanvasRescale:
         argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
         graph = argv[argv.index("-filter_complex") + 1]
         assert "scale=1080:1920" in graph
-        assert "pad=1080:1920" in graph
+        assert "crop=1080:1920" in graph
 
     def test_upscale_command_uses_lanczos(self):
         """
@@ -44,15 +44,15 @@ class TestCanvasRescale:
         graph = argv[argv.index("-filter_complex") + 1]
         assert "flags=lanczos" in graph
 
-    def test_upscale_command_chains_scale_into_pad(self):
+    def test_upscale_command_chains_scale_into_crop(self):
         """
-        Pad must read scale's output, not the raw input, or the chain silently
+        Crop must read scale's output, not the raw input, or the chain silently
         produces nothing.
         """
         argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
         graph = argv[argv.index("-filter_complex") + 1]
         assert graph.count("[0:v]") == 1
-        assert "[scaled_outv]pad=1080:1920" in graph
+        assert "[scaled_outv]crop=1080:1920" in graph
 
     def test_upscale_command_copies_audio_optionally(self):
         """

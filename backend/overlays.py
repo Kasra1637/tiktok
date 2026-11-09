@@ -49,17 +49,17 @@ def camera_beat_seconds(hook_seconds, strategy: dict = None) -> float:
 
 def canvas_fit_chain(source_label: str, out_label: str) -> list:
     """
-    Filter fragments that fit a clip onto the 1080x1920 canvas, letterboxed.
+    Filter fragments that fit a clip onto the 1080x1920 canvas, cropped to fill.
 
     Shared by the finalize rescale and the plain-download rescale so both
     produce the same frame size. The studio's cheaper providers render below
     this canvas (Grok at 720p), and a founder posting to TikTok wants the
     platform's own 1080x1920 rather than whatever the model emitted.
 
-    The scale and pad MUST be chained through explicit labels. Chaining two
+    The scale and crop MUST be chained through explicit labels. Chaining two
     filters off the same source label leaves the first one's output dangling
-    and unconnected, so pad re-reads the raw input and everything downstream is
-    silently orphaned — ffmpeg still exits 0 and writes a file.
+    and unconnected, so crop re-reads the raw input and everything downstream
+    is silently orphaned — ffmpeg still exits 0 and writes a file.
 
     Lanczos, not bilinear. Most studio renders arrive BELOW this canvas (Grok
     at 720p, H3 Max and HeyGen at 768p) and are therefore scaled up, and
@@ -73,9 +73,9 @@ def canvas_fit_chain(source_label: str, out_label: str) -> list:
     """
     return [
         f"[{source_label}]scale={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
-        f"force_original_aspect_ratio=decrease:flags=lanczos[scaled_{out_label}]",
-        f"[scaled_{out_label}]pad={CANVAS_WIDTH}:{CANVAS_HEIGHT}:"
-        f"(ow-iw)/2:(oh-ih)/2:color=black[{out_label}]",
+        f"force_original_aspect_ratio=increase:flags=lanczos[scaled_{out_label}]",
+        f"[scaled_{out_label}]crop={CANVAS_WIDTH}:{CANVAS_HEIGHT}:(in_w-{CANVAS_WIDTH})/2:"
+        f"(in_h-{CANVAS_HEIGHT})/2[{out_label}]",
     ]
 
 
