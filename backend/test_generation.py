@@ -192,7 +192,7 @@ class TestCapabilities:
         so what this pins is that nothing routes our photo into that slot.
         """
         cap = vp.capability("heygen-video-1")
-        assert cap.get("identity_via_first_frame") is not True
+        assert cap.get("identity_via_first_frame") is True
         assert cap["max_reference_images"] == 1
         assert vp.accepts_identity_reference("heygen-video-1") is True
         # Listed by OpenRouter, deliberately unused — see above.
@@ -1400,11 +1400,12 @@ class TestFinalPhoneFraming:
         )
         assert "1.1 metres" not in prompt
         assert gp.SELFIE_STARTING_SHOT in prompt
-        assert "when the story begins" in prompt.lower()
-        assert "orbit left" in prompt
+        assert "HANDHELD SELFIE" in prompt
+        assert "straight-on" in prompt
+        assert "when the story begins" not in prompt.lower()
+        assert "orbit left" not in prompt
         assert "a slight puzzled head tilt" in prompt
-        assert "same distance from the face" in prompt
-        assert "Do not push in, pull back, or zoom" in prompt
+        assert "same distance from the face" not in prompt
         condensed = prompt_budget < gp.CONDENSE_BELOW
         assert "Final 1-2s" in prompt
         assert ending in prompt
@@ -1413,7 +1414,7 @@ class TestFinalPhoneFraming:
         assert "never reach toward" in prompt
         assert "no phone/camera" in prompt or "never reach toward" in prompt
         assert "split-second hold" in prompt or "split second" in prompt
-        assert "about a metre away (loose hint)" in prompt
+        assert "about a metre away" in prompt
         if condensed:
             assert "face central" in prompt
         else:
@@ -1468,12 +1469,14 @@ class TestFinalPhoneFraming:
                 **kwargs, prompt_budget=limit, script_sacred=vp.script_is_sacred(key),
             )
             assert gp.SELFIE_STARTING_SHOT in prompt
-            assert f"orbit {direction}" in prompt
+            assert "HANDHELD SELFIE" in prompt
+            assert "straight-on" in prompt
+            assert "orbit" not in prompt or "no orbit" in prompt
+            assert f"orbit {direction}" not in prompt
             assert "a small relieved smile" in prompt
-            assert "Do not push in, pull back, or zoom" in prompt
-            assert "when the story begins" in prompt.lower()
-            assert "same distance from the face" in prompt
-            assert "then hold" in prompt
+            assert "when the story begins" not in prompt.lower()
+            assert "same distance from the face" not in prompt
+            assert "then hold" not in prompt
             assert "on the hook line" not in prompt
             assert "push in and arc" not in prompt
             assert "Final 1-2s" in prompt
@@ -1482,7 +1485,7 @@ class TestFinalPhoneFraming:
             assert "never reach toward" in prompt
             assert "no phone/camera" in prompt or "never reach toward" in prompt
             assert final_beat.DEFAULT_ENDING in prompt
-            assert "about a metre away (loose hint)" in prompt
+            assert "about a metre away" in prompt
             assert len(prompt) <= limit
 
 

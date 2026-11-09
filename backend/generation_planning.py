@@ -185,8 +185,8 @@ CONDENSE_BELOW = 5000
 # and a selfie render gets the physical ending instead. The reach/phone/camera
 # and second-free-hand prohibitions (ADR 0093, as superseded) are part of the
 # fixed text, which is why both floors rose.
-FULL_PROMPT_FLOOR = 4268
-CONDENSED_PROMPT_FLOOR = 2395
+FULL_PROMPT_FLOOR = 4232
+CONDENSED_PROMPT_FLOOR = 2365
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -376,13 +376,18 @@ _CONDENSED_IDENTITY_CLOSE = (
 
 # The model owns perspective and performance; processing alone owns zoom.
 # This starting shot is verbatim in the strategy and every provider prompt.
-SELFIE_STARTING_SHOT = (
-    "Handheld selfie-style shot, eye-level and roughly straight-on, like a creator "
-    "filming themselves with a phone about a metre away (loose hint). Frame upper chest up, "
-    "full head with headroom, room at the sides for hand gestures. Natural "
+# ONE framing ask for a handheld selfie: straight-on at arm's length, no 3/4
+# angle and no off-centre bias. The strategy and every provider prompt read
+# this same wording so the render is told one framing, not two.
+HANDHELD_SELFIE_FRAMING = (
+    "HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away. "
+    "Frame upper chest up, full head with headroom, room at the sides for hand gestures. "
+    "Hold straight-on, no 3/4 angle, no off-centre framing. Natural "
     "facial proportions, no exaggerated wide-angle distortion. Very subtle natural "
     "handheld sway."
 )
+
+SELFIE_STARTING_SHOT = HANDHELD_SELFIE_FRAMING
 
 FIXED_STARTING_SHOT = (
     "Fixed camera: a stationary phone on a shelf or tripod, eye-level and straight-on. "
@@ -459,6 +464,20 @@ def require_camera_setup_directions(strategy: dict) -> None:
                     negative_list = False
 
 
+_SELFIE_CAMERA_MOVE = (
+    "HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away; "
+    "hold that straight-on framing for the whole take — keep the phone steady, no push "
+    "in, pull back, or zoom. In the same "
+    "moment the actor makes one small story-specific action{gesture}. Keep it subtle "
+    "and natural, eyes on the lens. No cut. Keep the full head and chin visible."
+)
+
+_CONDENSED_SELFIE_CAMERA_MOVE = (
+    "HANDHELD SELFIE: straight-on at arm's length, about a metre away; hold straight-on "
+    "— keep the phone steady, no zoom. Simultaneous actor gesture{gesture}; "
+    "subtle, natural, eyes on lens."
+)
+
 _CAMERA_MOVE = (
     "When the story begins, make one smooth, small camera orbit {direction} to a "
     "three-quarter angle, keeping the same distance from the face, then hold that angle "
@@ -526,6 +545,8 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     Timing is qualitative because generation cannot guarantee frame-exact action.
     Processing independently starts its single zoom at 70% of hook_seconds and
     completes its eased ramp about 0.6s later. It never supplies the orbit.
+    A handheld selfie has no orbit at all — the held phone cannot be the
+    framing and also move to a 3/4 angle, so its wording holds straight-on.
     """
     beat = (strategy or {}).get("camera_beat")
     beat = beat if isinstance(beat, dict) else {}
@@ -540,6 +561,9 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     if gesture[:3].lower() == "as ":
         gesture = gesture[3:].lstrip(" ,—-")
     clause = f": {gesture}" if gesture else " (a slight head tilt or expression shift)"
+    if (strategy or {}).get("camera_setup") != "fixed":
+        template = _CONDENSED_SELFIE_CAMERA_MOVE if condensed else _SELFIE_CAMERA_MOVE
+        return template.format(gesture=clause)
     if (strategy or {}).get("camera_setup") == "fixed":
         return (
             "Camera stays locked for the whole take: no sway, orbit, pan, tracking or zoom. "

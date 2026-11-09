@@ -6049,10 +6049,11 @@ async def generate_video_strategy(
             "All scene, action and performance fields must agree with this setup; "
             "it overrides conflicting camera directions in the plan or template.\n"
             if camera_setup == "fixed" else
-            "- When the story begins, one smooth small orbit left or right to three-quarter; "
-            "same distance from the face, then hold. Do not push in, pull back, or zoom. "
-            "Simultaneously perform that gesture; subtle, natural. "
-            "All fields agree; no timestamp or word sync.\n"
+            "- HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away; "
+            "hold that straight-on framing for the whole take — no orbit to three-quarter, no "
+            "diagonal angle, no off-centre framing, no push in, pull back, or zoom. "
+            "In the same moment the actor makes one small story-specific action; "
+            "no timestamp or word sync.\n"
         )
         + f"{final_beat_rule}"
         # proof_moment is deliberately NOT a generation input any more. It is the one moment

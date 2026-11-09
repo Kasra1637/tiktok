@@ -99,14 +99,15 @@ _CAPABILITY_NOTES = {
         "max_reference_images": 1,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
-        # The model does accept a first frame (listed), and we deliberately never
-        # send one, so nothing can pin the opening back to the photograph. It
-        # stays True because it is a fact about the model that the drift check
-        # verifies against OpenRouter's listing — identity_via_first_frame is
-        # the field that records where OUR photo actually goes, and for this
-        # model it stays unset.
+        # The model does accept a first frame (listed). We DELIBERATELY pin the
+        # opening frame to the founder's photo instead of generating from the
+        # plan, so the photo is a hard anchor — the same first-frame route
+        # H3 Max uses — rather than a soft input_references suggestion.
+        # accepts_identity_reference() stays True: the photo is accepted; the
+        # flag records that it rides as the opening frame.
         "supports_first_frame": True,
         "supports_last_frame": False,
+        "identity_via_first_frame": True,
         # Founder-specified ceiling of 4,090 characters: over it, only the
         # app's own direction and template wording is trimmed, never the
         # spoken script (see script_sacred in generation_planning).

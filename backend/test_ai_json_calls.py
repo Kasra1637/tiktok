@@ -1166,9 +1166,9 @@ class TestStrategyBudget:
         assert SELFIE_STARTING_SHOT in prompt
         assert "1.1 metres" not in prompt
         assert '"direction": "left or right"' in prompt
-        assert "when the story begins" in prompt.lower()
-        assert "same distance from the face" in prompt
-        assert "Do not push in, pull back, or zoom" in prompt
+        assert "when the story begins" not in prompt.lower()
+        assert "same distance from the face" not in prompt
+        assert "Do not push in, pull back, or zoom" not in prompt
         assert '"at":' not in prompt
         assert "Final 1-2s" in prompt
         # A selfie render ends on a physical beat: the camera is the phone in
@@ -1182,7 +1182,7 @@ class TestStrategyBudget:
         assert "whole phone" not in prompt
         assert "screen to her" not in prompt
         assert "eyes on it" not in prompt
-        assert "about a metre away (loose hint)" in prompt
+        assert "about a metre away" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt
 
