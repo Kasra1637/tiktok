@@ -13503,14 +13503,14 @@ async function runDemoCtaChecks() {
   );
 
   await check("Demo + CTA shows what the plan told the founder to record", async (ctx) => {
-    // Review asks "What you record for the demo" and stores the plan's answer
+    // Review asks "What the demo should show" and stores the plan's answer
     // as `demo_brief`. The editor is where that footage is actually added, so
     // the note has to be on this screen: a founder styling a clip was leaving
     // for the Review step to remember what to shoot. Read-only, and outside
     // the collapsible groups — only one is open at a time, so a note nested in
     // one disappears the moment the founder opens another.
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
-    const brief = "Record yourself tapping the timer once, hands only.";
+    const brief = "A spoken recap of one call, then the weekly mood reports screen.";
     await withApi(
       { getGenerations: async () => ({ generations: [COMPLETED] }) },
       async () => {
@@ -13519,7 +13519,7 @@ async function runDemoCtaChecks() {
         if (!note) {
           throw new Error("the editor does not show what the plan says to record for the demo");
         }
-        if (!note.textContent.includes("What you record for the demo")) {
+        if (!note.textContent.includes("What the demo should show")) {
           throw new Error(
             `the note is not labelled the way Review labels it: ${JSON.stringify(note.textContent)}`
           );

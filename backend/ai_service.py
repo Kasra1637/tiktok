@@ -3886,7 +3886,7 @@ async def generate_creative_plan(
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
-        '  "demo_brief": "ONE sentence telling the FOUNDER what to record for their own demo. This never reaches the generated video.",\n'
+        '  "demo_brief": "ONE sentence trading in PLAIN PERSONAL-CONTENT language, written in third person about the footage itself — the thing to record on the phone, not what you ask the founder to do. Name the specific angle-relevant state or action the phone should capture (phone already in use, specific screen or feature shown, the moment captured). This never reaches the generated video.",\n'
         '  "voice_direction": "delivery for the voiceover or on-camera talent, set from this video\'s objective, audience and angle emotion \u2014 never a generic default",\n'
         '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
         '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
@@ -4000,9 +4000,10 @@ async def generate_creative_plan(
         "afterwards.\n"
         "- NEVER write a call to action. There is no closing beat and no request to download, "
         "install, sign up or try anything — the founder adds that in their own editor.\n"
-        "- demo_brief is the ONLY place the app's feature may be named, and even there it is "
-        "an instruction to the founder about what to record themselves. Keep it to one "
-        "sentence, and never write it as dialogue or as something the presenter says.\n"
+        "- demo_brief is the ONLY place the app's feature may be named. Keep it to one "
+        "sentence, say what the phone footage should show about turning the angle "
+        "into a concrete moment (phone in use, which screen, the moment captured), "
+        "and never write it as dialogue or as something the presenter says.\n"
         "- Fill every content_slot in the template with a concrete value for THIS app.\n"
         "- The angle's opening moment (angle_hook_promise) fixes where and when the video "
         "happens. Put that complete place description in Location only. If the brief states a "

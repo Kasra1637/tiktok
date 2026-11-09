@@ -192,7 +192,7 @@ function FieldLabel({ children }) {
 function RecordBriefNote({ brief }) {
   return (
     <div className="inset-panel" data-testid="demo-cta-record-brief">
-      <GroupLabel icon={Clapperboard}>What you record for the demo</GroupLabel>
+      <GroupLabel icon={Clapperboard}>What the demo should show</GroupLabel>
       <p className="mt-3 text-base leading-relaxed">{brief}</p>
       <p className="mt-2 text-sm text-muted-foreground">
         A note from your plan — never part of the generated clip.

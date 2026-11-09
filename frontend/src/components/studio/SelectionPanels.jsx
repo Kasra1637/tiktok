@@ -945,27 +945,8 @@ export function AngleGoalPicker({
           <GroupLabel as="h3" icon={Target} id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {onGenerate && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={onGenerate}
-                disabled={generating}
-                busy={generating}
-                title="Generate six goals fitted to this angle's audience, problem, promise, outcome, emotion and feature. Runs only when you click it."
-                data-testid="generate-goals-button"
-              >
-                {generating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                {generating ? "Generating goals" : "Generate goals"}
-              </Button>
-            )}
-            {onRegenerate && revealed && featured.length > 0 && (
+          {onRegenerate && revealed && featured.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1.5">
               <Button
                 variant="ghost"
                 size="sm"
@@ -984,8 +965,8 @@ export function AngleGoalPicker({
                 )}
                 {regenerating ? "Shuffling goals" : "Shuffle"}
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           {revealed && featured.length > 0

@@ -2485,17 +2485,17 @@ export default function CreateVideo() {
                 instruction back into the video. */}
             <div className="inset-panel space-y-4">
               <label htmlFor="review-demo-brief" className="text-sm font-semibold">
-                What you record for the demo
+                What the demo should show
               </label>
               <Textarea
                 id="review-demo-brief"
                 value={editValue("demo_brief", "")}
                 onChange={(e) => dispatchDraft({ type: "edit-field", field: "demo_brief", value: e.target.value })}
                 className="min-h-[70px]"
-                placeholder="For example: Record yourself tapping the timer once, hands only"
+                placeholder="For example: A spoken recap of one call, then the weekly mood reports screen"
               />
               <p className="text-sm text-muted-foreground" data-subtitle="">
-                A note to you, not the model — never reaches the render.
+                A note about your own recording — never reaches the render.
               </p>
             </div>
             <div className="space-y-2" data-testid="review-location-field">
