@@ -260,9 +260,9 @@ class TestTemperatureIsDataDriven:
         monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
         # A family the fallback omits, declared as accepting it.
         monkeypatch.setitem(
-            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
+            ai_service._TEMPERATURE_SUPPORT, "meta/muse-ember", True)
         assert ai_service._temperature_param(
-            "anthropic/claude-haiku-5.5", 0.4) == {"temperature": 0.4}
+            "meta/muse-ember", 0.4) == {"temperature": 0.4}
         # A family the fallback sends to, declared as refusing it.
         monkeypatch.setitem(ai_service._TEMPERATURE_SUPPORT, "z-ai/glm-5.3-flash", False)
         assert ai_service._temperature_param("z-ai/glm-5.3-flash", 0.4) == {}
@@ -270,8 +270,8 @@ class TestTemperatureIsDataDriven:
     def test_an_unknown_model_falls_back_to_the_prefix_list(self, monkeypatch):
         import ai_service
         monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
-        assert ai_service.temperature_support("anthropic/claude-haiku-5.5") is None
-        assert ai_service._temperature_param("anthropic/claude-haiku-5.5", 0.4) == {}
+        assert ai_service.temperature_support("openai/gpt-5-mini") is None
+        assert ai_service._temperature_param("openai/gpt-5-mini", 0.4) == {}
         assert ai_service._temperature_param("z-ai/glm-5.3-flash", 0.4) == {"temperature": 0.4}
 
     def test_the_lookup_reads_the_declared_parameters(self, monkeypatch):
@@ -327,38 +327,55 @@ class TestTemperatureIsDataDriven:
 
 class TestChatModelRequestShape:
     """
-    Claude Haiku 5.5 replaces GPT-5 Mini on every chat flow. The consequences
-    that travel with the family are pinned here rather than re-discovered as
-    production 400s:
+    Muse Ember (Max) replaces Claude Haiku 5.5 on every chat flow. The
+    consequences that travel with the model are pinned here rather than
+    re-discovered as production 400s:
 
-    - temperature is sent ONLY where the endpoint declares it. Haiku 5.5
-      declares none on any of its endpoints, so the field is omitted for it and
-      nothing is spent finding that out; _post_chat's retry stays as the net
-      under both the declared data and the offline fallback;
-    - max_tokens stays (OpenRouter maps it), and thinking tokens are billed
+    - temperature is sent ONLY where the endpoint declares it. Muse Ember
+      declares temperature on its endpoints, so the field is sent for it; the
+      offline fallback sends it too. _post_chat's retry stays as the net under
+      both the declared data and the offline fallback;
+    - reasoning_effort=max is sent for the shipped slug, because Max is
+      how the model is specified to run, and for no other slug;
+    - max_tokens stays (OpenRouter maps it), and reasoning tokens are billed
       against the same budget, which the truncation retry already covers.
     """
 
-    def test_chat_models_point_at_haiku_5_5(self):
+    def test_chat_models_point_at_muse_ember(self):
         import ai_service
-        assert ai_service.TEXT_MODEL == "anthropic/claude-haiku-5.5"
-        assert ai_service.VISION_MODEL == "anthropic/claude-haiku-5.5"
+        assert ai_service.TEXT_MODEL == "meta/muse-ember"
+        assert ai_service.VISION_MODEL == "meta/muse-ember"
+        assert ai_service.REASONING_EFFORT == "max"
 
-    def test_the_shipped_default_gets_no_temperature(self, monkeypatch):
+    def test_the_shipped_default_gets_temperature_and_max(self, monkeypatch):
         """
-        Claude Haiku 5.5 declares no temperature on any of its endpoints, so the
-        field is omitted and nothing is spent discovering that by 400.
+        Muse Ember declares temperature on its endpoints, so the field is sent
+        rather than spent discovering by 400 — and reasoning_effort=max
+        travels with every call to the shipped slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
-        assert rec.payloads[0]["model"] == "anthropic/claude-haiku-5.5"
-        assert "temperature" not in rec.payloads[0]
+        assert rec.payloads[0]["model"] == "meta/muse-ember"
+        assert rec.payloads[0]["temperature"] == 0.4
+        assert rec.payloads[0]["reasoning_effort"] == "max"
+
+    def test_no_reasoning_effort_for_an_override_model(self, monkeypatch):
+        """
+        An effort level meant for Muse Ember is not a parameter another model
+        declared, so an env override changes the request shape with the slug.
+        """
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        assert _run(ai_service._chat_json(
+            "sys", "prompt", "Ctx", model="z-ai/glm-5.3-flash")) == {"a": 1}
+        assert rec.payloads[0]["model"] == "z-ai/glm-5.3-flash"
+        assert "reasoning_effort" not in rec.payloads[0]
 
     def test_an_explicit_temperature_reaches_a_model_that_takes_it(self, monkeypatch):
         import ai_service
         monkeypatch.setitem(
-            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
+            ai_service._TEMPERATURE_SUPPORT, "meta/muse-ember", True)
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.5)) == {"a": 1}
         assert rec.payloads[0]["temperature"] == 0.5
@@ -370,11 +387,12 @@ class TestChatModelRequestShape:
     def test_the_offline_fallback_omits_for_the_known_families(self, monkeypatch):
         import ai_service
         monkeypatch.setattr(ai_service, "_TEMPERATURE_SUPPORT", {})
-        for slug in ("openai/gpt-5-mini", "openai/gpt-6-sol", "o3-mini",
-                     "anthropic/claude-haiku-5.5", "anthropic/claude-opus-5.5"):
+        for slug in ("openai/gpt-5-mini", "openai/gpt-6-sol", "o3-mini"):
             assert ai_service._temperature_param(slug, 0.4) == {}, slug
         assert ai_service._temperature_param(
             "z-ai/glm-5.3-flash", 0.4) == {"temperature": 0.4}
+        assert ai_service._temperature_param(
+            "meta/muse-ember", 0.4) == {"temperature": 0.4}
 
     def test_a_refused_temperature_is_retried_without_it(self, monkeypatch):
         """
@@ -384,7 +402,7 @@ class TestChatModelRequestShape:
         """
         import ai_service
         monkeypatch.setitem(
-            ai_service._TEMPERATURE_SUPPORT, "anthropic/claude-haiku-5.5", True)
+            ai_service._TEMPERATURE_SUPPORT, "meta/muse-ember", True)
         refusal = _Response(
             {"error": {"message": "Unsupported value: temperature"}}, status=400)
         rec = _patch_client(monkeypatch, [refusal, _completion('{"a": 1}')])
@@ -494,7 +512,7 @@ class TestChatModelRequestShape:
         assert len(rec.payloads) == 3
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
-            assert "temperature" not in payload
+            assert payload["reasoning_effort"] == "max"
 
 
 class TestLiveAngleGoals:

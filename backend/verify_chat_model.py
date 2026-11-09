@@ -2,22 +2,20 @@
 Live chat-model verification: real calls, nothing mocked.
 
 The suite proves the request SHAPE the studio sends; only a real provider
-response proves that shape is ACCEPTED. Two facts about the Claude Haiku 5.5
+response proves that shape is ACCEPTED. Two facts about the Muse Ember (Max)
 swap cannot be settled by a mocked test, and this script settles both:
 
   1. Structured output. Every research / angles / plan / script call depends on
-     OpenRouter strict json_schema (response_format). Anthropic documents
-     structured outputs for Haiku 4.5 and 5.5, but OpenRouter routes support per
-     endpoint, so this proves the endpoint the studio actually reaches accepts
-     the envelope and returns JSON that satisfies a strict schema.
+     OpenRouter strict json_schema (response_format). Muse Ember declares
+     structured outputs, but OpenRouter routes support per endpoint, so this
+     proves the endpoint the studio actually reaches accepts the envelope and
+     returns JSON that satisfies a strict schema.
 
-  2. The temperature question. Whether an endpoint accepts a temperature is now
-     read from OpenRouter's own per-endpoint declaration (see
-     ai_service.refresh_temperature_support), so the app no longer guesses from
-     the model family. This probe is the independent cross-check on that
-     declaration: it sends a temperature and reports whether the provider
-     actually takes it, so a listing that under- or over-reports the field is
-     visible rather than silently trusted.
+  2. The reasoning effort question. Every call now pins reasoning_effort to
+     Max for the shipped slug (see ai_service._reasoning_effort_param).
+     This probe is the proof that the endpoint accepts that value alongside
+     the strict schema above: a refusal costs the first probe and names the
+     field rather than silently running at another level.
 
 Two cheap text calls by default. The key is
 read from the environment only, never printed, never stored.
@@ -82,17 +80,17 @@ async def _structured_output(ai_service) -> dict:
             "model": ai_service.TEXT_MODEL, "passed": passed, "detail": out}
 
 
-async def _temperature_probe(ai_service, model: str, temperature: float) -> dict:
+async def _reasoning_effort_probe(ai_service, model: str, effort: str) -> dict:
     """
-    Sent raw, because _temperature_param omits the field by design — the whole
-    point is to find out what happens when it IS sent.
+    Sent raw, because _reasoning_effort_param pins the field for the shipped
+    slug — the whole point is to find out the provider accepts the value.
     """
     import httpx
 
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": "Reply with the single word: ready"}],
-        "temperature": temperature,
+        "reasoning_effort": effort,
         "max_tokens": 512,
     }
     async with httpx.AsyncClient(timeout=120) as client:
@@ -109,14 +107,14 @@ async def _temperature_probe(ai_service, model: str, temperature: float) -> dict
             detail = body.get("error", {}).get("message") or json.dumps(body)
         except Exception:
             detail = (resp.text or "")[:400]
-    return {"check": f"temperature accepted (={temperature})", "model": model,
+    return {"check": f"reasoning_effort accepted (={effort})", "model": model,
             "passed": accepted, "status": resp.status_code, "detail": detail[:400]}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live chat-model verification.")
-    ap.add_argument("--temperature", type=float, default=0.4,
-                    help="temperature to probe for acceptance")
+    ap.add_argument("--effort", default="max",
+                    help="reasoning effort to probe for acceptance")
     ap.add_argument("--model", default="",
                     help="model slug to probe (default: the configured TEXT_MODEL)")
     args = ap.parse_args()
@@ -129,47 +127,21 @@ def main() -> int:
     import ai_service
 
     model = args.model or ai_service.TEXT_MODEL
-    # What the app currently believes, read from the same listing it reads at
-    # boot — the probe below is only interesting next to this.
-    _guard(_run, ai_service.refresh_temperature_support([model]))
-    declared = ai_service.temperature_support(model)
-
     results = [
         _guard(_run, _structured_output(ai_service)),
-        _guard(_run, _temperature_probe(ai_service, model, args.temperature)),
+        _guard(_run, _reasoning_effort_probe(ai_service, model, args.effort)),
     ]
 
     print("\n================ RESULTS ================", flush=True)
     for r in results:
         mark = "PASS" if r["passed"] else "FAIL"
         print(f"[{mark}] {r['check']}  ({r['model']})", flush=True)
-        if not r["passed"] or r["check"].startswith("temperature"):
+        if not r["passed"] or r["check"].startswith("reasoning_effort"):
             print(f"        {json.dumps(r.get('detail'))[:400]}", flush=True)
 
-    temp = next((r for r in results if r["check"].startswith("temperature")), None)
-    print("\n---------------- next step ----------------", flush=True)
-    if declared is None:
-        verdict = "UNKNOWN (lookup failed; the offline fallback applies)"
-    elif declared:
-        verdict = "SUPPORTED"
-    else:
-        verdict = "NOT supported"
-    print(f"declared by the listing: temperature {verdict}", flush=True)
-
-    if temp and declared is not None and temp["passed"] != declared:
-        print("\nMISMATCH: the listing and the provider disagree. The app follows", flush=True)
-        print("the listing, so this is the case worth reporting upstream — it is", flush=True)
-        print("how a field ends up sent to a provider that refuses it, or withheld", flush=True)
-        print("from one that would have taken it.", flush=True)
-    elif temp and temp["passed"]:
-        print("\nAgreed: temperature is accepted, and the app sends it.", flush=True)
-    elif temp:
-        print("\nAgreed: temperature is refused, and the app omits it. The retry in", flush=True)
-        print("_post_chat remains the net for any model the listing gets wrong.", flush=True)
-
-    # The temperature verdict is informational either way; only the checks the
-    # studio depends on decide the exit code.
-    required = [r for r in results if not r["check"].startswith("temperature")]
+    # The reasoning-effort verdict is informational either way; only the checks
+    # the studio depends on decide the exit code.
+    required = [r for r in results if not r["check"].startswith("reasoning_effort")]
     return 1 if any(not r["passed"] for r in required) else 0
 
 

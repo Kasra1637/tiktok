@@ -60,33 +60,33 @@ logger = logging.getLogger(__name__)
 
 # Models
 #
-# Both chat models default to Claude Haiku 5.5: Anthropic's small, fast,
-# cost-sensitive tier, multimodal (text+image in) with structured-output
-# support. It replaces GPT-5 Mini, which it beats on every axis this service
-# cares about — cheaper ($0.10/$0.50 vs $0.25/$2.00 per 1M), a larger context
-# (1M vs 400K) and a much higher intelligence index (~43 vs ~17).
+# Both chat models default to Muse Ember (Max): Meta's smallest and most
+# efficient Muse tier, multimodal (text+image in) with structured-output
+# support, a 1M-token context window and reasoning effort pinned to Max.
+# It replaces Claude Haiku 5.5 at the same listed price ($0.10/$0.50 per 1M).
 #
 # Both slugs are overridable from the environment so a model swap is a config
 # change rather than a code change, the same way the video provider already
 # works (see video_providers.default_model_key). An override is taken as given:
 # the request shape is guarded by _temperature_param below, not by validating
-# the slug here.
+# the slug here. The Max reasoning level is part of the shipped request
+# shape — _reasoning_effort_param sends it for the shipped slug only.
 #
 # Consequences that travel with the shipped default everywhere below:
-# - temperature is NOT sent to it. Claude accepts temperature on Anthropic's
-#   own API, but this model runs adaptive thinking by default and whether a
-#   non-default temperature is accepted alongside that is UNVERIFIED, so it
-#   stays behind the guard in _temperature_param until a live call proves it.
+# - temperature IS declared by the Muse Ember endpoints, so it is sent. The
+#   guard in _temperature_param reads that declaration; it stays the net for
+#   any override whose endpoints declare something else.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
-#   thinking tokens are billed against the same budget, so small budgets can
+#   reasoning tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
-# - structured outputs (strict json_schema) are supported on Anthropic (Haiku
-#   4.5 and 5.5) and are compatible with thinking; the local parse-and-retry in
-#   _chat_json stays as defense-in-depth for endpoints that treat the schema as
-#   a hint rather than a guarantee.
-DEFAULT_TEXT_MODEL = "anthropic/claude-haiku-5.5"
-DEFAULT_VISION_MODEL = "anthropic/claude-haiku-5.5"
+# - structured outputs (strict json_schema) are supported on Muse Ember and
+#   are compatible with reasoning; the local parse-and-retry in _chat_json stays
+#   as defense-in-depth for endpoints that treat the schema as a hint rather
+#   than a guarantee.
+DEFAULT_TEXT_MODEL = "meta/muse-ember"
+DEFAULT_VISION_MODEL = "meta/muse-ember"
+REASONING_EFFORT = "max"
 
 
 def _model_from_env(var: str, default: str) -> str:
@@ -288,9 +288,9 @@ def _headers():
 CHAT_TEMPERATURE = 0.4
 
 # Whether an endpoint accepts a `temperature` field is a MEASURED fact, not a
-# property of the model family, and it moves: every Claude 5.x and GPT-5/6
-# endpoint declares no temperature, while Gemini, Qwen, GLM and DeepSeek all
-# declare it — and older models inside those same families differ again. A
+# property of the model family, and it moves: every GPT-5/6 endpoint declares
+# no temperature, while Muse Ember, Gemini, Qwen, GLM and DeepSeek all declare
+# it — and older models inside those same families differ again. A
 # hand-maintained prefix list cannot be right for all of them, so the decision
 # is read from OpenRouter's per-endpoint declaration (supported_parameters) and
 # cached. See refresh_temperature_support().
@@ -299,7 +299,7 @@ CHAT_TEMPERATURE = 0.4
 # not been fetched: a cold process, a network failure, the test suite. The retry
 # in _post_chat covers whatever it gets wrong, so a bad fallback costs one round
 # trip and never a call.
-_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "gpt-6", "claude", "o1", "o3", "o4")
+_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
 
 # {normalized slug: True when EVERY declared endpoint accepts a temperature}.
 # Empty until refresh_temperature_support() runs.
@@ -386,6 +386,22 @@ def _temperature_param(model: str, temperature: float) -> dict:
     if _is_family(model, _TEMPERATURE_OMITTED_PREFIXES):
         return {}
     return {"temperature": temperature}
+
+
+def _reasoning_effort_param(model: str) -> dict:
+    """
+    The Max reasoning level, for the shipped model only.
+
+    "Max" is how this model is specified to run at all. The field is sent as
+    `reasoning_effort`, which the Muse Ember endpoints declare, and only for
+    that slug: an override pointed at another model is taken as given for its
+    request shape (see _temperature_param — declared data, offline fallback,
+    refuse-and-retry), and an effort level meant for one model is not a
+    parameter another model declared.
+    """
+    if _normalize_slug(model) == DEFAULT_TEXT_MODEL:
+        return {"reasoning_effort": REASONING_EFFORT}
+    return {}
 
 
 def _temperature_refused(resp) -> bool:
@@ -889,8 +905,8 @@ async def _chat_json(
 
     Only after the retries are exhausted does it raise.
 
-    `temperature` is sent to models that take it (GPT-5 Mini does not; Claude
-    Haiku 5.5 does), and a provider that refuses the field costs the field
+    `temperature` is sent to models that take it (Muse Ember does), and a
+    provider that refuses the field costs the field
     rather than the call — see _post_chat; `json_schema`, when given, is sent as
     OpenRouter structured output (strict JSON Schema) while the parse-and-retry
     below stays as defense-in-depth for provider errors, refusals and truncation.
@@ -923,6 +939,7 @@ async def _chat_json(
                 {"role": "user", "content": attempt_prompt},
             ],
             **_temperature_param(model, temperature),
+            **_reasoning_effort_param(model),
             "max_tokens": budget,
         }
         if json_schema is not None:
@@ -1101,6 +1118,7 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
             {"role": "user", "content": content},
         ],
         **_temperature_param(VISION_MODEL, 0.3),
+        **_reasoning_effort_param(VISION_MODEL),
         "max_tokens": 3000,
     }
 
@@ -5907,7 +5925,7 @@ async def generate_video_strategy(
     # on paper can be exhausted before the closing brace is written. 8192
     # stays the floor: it fits this schema and sits inside the provider
     # output ceiling of the models this service can be pointed at
-    # (Claude Haiku 5.5's output ceiling is far above the 8192 used here).
+    # (Muse Ember's output ceiling is far above the 8192 used here).
     # No wording gate: the strategy is accepted as written. Missing fields
     # still fail loudly; wording never fails a draft.
     raw = await _chat_json(
