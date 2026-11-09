@@ -2715,14 +2715,18 @@ async function main() {
   // (no Back/Continue words), centred, and sticky to the bottom of the scroll
   // so they are always within reach on a long step.
   await check("wizard arrows walk the steps in order", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
-    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+    // ?step=profile pins the wizard on step 1: without it the profile load
+    // auto-advances to the angle step (CreateVideo selectProfile path).
+    global.__SMOKE_PARAMS = "?step=profile";
+    await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const back = () => ctx.container.querySelector('[data-testid="wizard-back-button"]');
     const next = () => ctx.container.querySelector('[data-testid="wizard-continue-button"]');
     if (!back() || back().disabled !== true) throw new Error("Back is not disabled on the first step");
     if (!next()) throw new Error("Continue is missing on the first step");
+    // Profile auto-loads on mount, so Continue starts unlocked on step 1.
+    if (next().disabled) throw new Error("Continue is locked after profile load");
     if (next().getAttribute("aria-label") !== "Continue to Audience & template") {
       throw new Error(`Continue does not name its destination: ${next().getAttribute("aria-label")}`);
     }
@@ -2838,10 +2842,12 @@ async function main() {
   });
 
   // Step headers carry no glyph disc: the digit + label is the identity,
-  // and the chip at the end of the row carries done/blocked state.
+  // and the chip at the end of the row carries done/blocked state. A locked
+  // step wears a padlock instead of its digit, so the seal is announced
+  // by both chip and icon.
   await check("the three step headers carry no glyph disc", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
-    await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
+    global.__SMOKE_PARAMS = "?step=profile";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     for (const key of ["profile", "angle", "review"]) {
@@ -2849,8 +2855,14 @@ async function main() {
       if (el) throw new Error(`the ${key} step header still renders a glyph disc`);
       const toggle = ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
       if (!toggle) throw new Error(`the ${key} step header is missing`);
-      if (!toggle.textContent.includes(["profile", "angle", "review"].indexOf(key) + 1)) {
-        throw new Error(`the ${key} step header lost its digit`);
+      const idx = ["profile", "angle", "review"].indexOf(key);
+      // Profile is always open (digit or its pick); angle/review start locked.
+      if (key === "profile") {
+        if (!toggle.textContent.includes("1")) {
+          throw new Error(`the ${key} step header lost its digit`);
+        }
+      } else if (!toggle.textContent.toLowerCase().includes("locked")) {
+        throw new Error(`the ${key} step header does not name its locked seal`);
       }
     }
   });
@@ -2901,16 +2913,13 @@ async function main() {
   // ready" promise the task line replaced.
   await check("the action bar names the next action beside its arrows", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+    await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const bar = ctx.container.querySelector('[data-testid="wizard-arrows"]');
     const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
     if (!bar || !hint || !bar.contains(hint)) {
       throw new Error("the action bar carries no next-action line");
-    }
-    if (!/app/i.test(hint.textContent || "")) {
-      throw new Error("the first step's bar does not name what it needs");
     }
     if (/continue when ready/i.test(ctx.text())) {
       throw new Error("the bar brings back the old Continue promise");
@@ -2920,7 +2929,7 @@ async function main() {
     if (back.textContent.trim() || next.textContent.trim()) {
       throw new Error("the action bar arrows carry words");
     }
-    await clickEl(ctx, next, "Continue to the angle step");
+    // Profile load auto-advances to the angle step, so the bar names the angle gate.
     const angleHint = (
       ctx.container.querySelector('[data-testid="wizard-footer-hint"]').textContent || ""
     ).trim();
@@ -3019,18 +3028,21 @@ async function main() {
     }
   });
 
-  // Moving without finishing stays allowed — the arrows never lock — but the
-  // unfinished step's Continue wears the same dashed "not done" language the
-  // pills use, instead of reading like a finished step's primary.
-  await check("the action bar cues an unfinished step without locking the arrows", async (ctx) => {
+  // Unfinished steps lock Continue: disabled with a padlock and dashed
+  // border, instead of reading like a finished step's primary that can walk
+  // ahead to an empty next step.
+  await check("the action bar locks Continue on an unfinished step", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
-    if (!next || next.disabled) throw new Error("Continue is locked on an unfinished step");
+    if (!next || !next.disabled) throw new Error("Continue is not locked on an unfinished step");
     if (!/border-dashed/.test(next.className)) {
       throw new Error("the unfinished step's Continue carries no unfinished cue");
+    }
+    if (!/locked/i.test(next.getAttribute("aria-label") || "")) {
+      throw new Error("the locked Continue does not name its seal");
     }
   });
 
@@ -3043,14 +3055,10 @@ async function main() {
   // unrelated controls.
   await check("the wizard states the step once under the title and centres its arrows", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+    await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    await clickEl(
-      ctx,
-      ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
-      "Continue to the angle step"
-    );
+    // Profile load auto-advances to the angle step; the task line is already there.
     const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
     if (!task || !task.textContent.includes("each one ranks the next")) {
       throw new Error("the angle step no longer says its picks rank the next");

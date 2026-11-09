@@ -45,7 +45,7 @@ import { sentenceCase } from "../lib/copyCase";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X } from "lucide-react";
+import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X, Lock } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -171,6 +171,7 @@ const STEP_STATE_COPY = {
   done: "done",
   todo: "not started",
   blocked: "needs something from you",
+  locked: "locked",
 };
 
 /**
@@ -1549,6 +1550,16 @@ export default function CreateVideo() {
     hasEdits,
   });
 
+  // Sequential unlock: a step is sealed until every previous step is done.
+  // The rail and canvas headers wear the padlock (dimming + "locked" chip)
+  // and the body opens on a lock banner naming the predecessor, so the
+  // founder sees they must finish it first. Continue is the hard gate:
+  // disabled with a padlock until this step is done. Back stays free.
+  const unlocked = STEPS.map((_, i) => {
+    if (i === 0) return true;
+    return stepStates.slice(0, i).every((s) => s.state === "done");
+  });
+
   /* What a satisfied pill names beside its tick. Derived like the states, so
      a changed pick renames its pill on the next render instead of going
      stale. Only done pills carry one: anything earlier has nothing picked
@@ -1581,8 +1592,10 @@ export default function CreateVideo() {
      photo — each one ranks the next". That ranking sentence lives in the task
      line now, so nothing here repeats it. Plain body copy, deliberately NOT a
      data-subtitle: the subtitle budget (text-sm, 55-60 chars) covers
-     label-attached helpers only. Navigation stays free — a hint names what is
-     missing, it never locks the arrows. */
+     label-attached helpers only. A step stays locked until every previous
+     step is done: the arrows, the rail segments and the canvas headers all
+     refuse to advance past an unfinished step, and the locked visual (padlock
+     + dimming + "locked" chip) names what must finish first. */
   const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
   /* The action bar's one line: what the step in view is waiting on, derived
      from the same states the pills and the rail read. It never restates the
@@ -2923,6 +2936,9 @@ export default function CreateVideo() {
           // Resolved once per segment: the tick, the label, and the pick below
           // must all agree on the same selection.
           const value = s.state === "done" ? pillValue(s.step.key) : null;
+          const isLocked = !unlocked[i];
+          const lockedBy = i > 0 ? STEPS[i - 1].label : null;
+          const lockTitle = isLocked ? `Locked — finish ${lockedBy} to unlock` : STEP_STATE_COPY[s.state];
           return (
             <button
               key={s.step.key}
@@ -2932,19 +2948,24 @@ export default function CreateVideo() {
               // Announced rather than shown only: the tick is a shape-only cue, and
               // this is the one place the founder looks to answer "what is left".
               aria-label={
-                value
-                  ? `${s.step.label}: ${value}, done, ${cumulative}% complete`
-                  : `${s.step.label}: ${STEP_STATE_COPY[s.state]}, ${cumulative}% complete`
+                isLocked
+                  ? `${s.step.label}: locked — finish ${lockedBy} to unlock, ${cumulative}% complete`
+                  : value
+                    ? `${s.step.label}: ${value}, done, ${cumulative}% complete`
+                    : `${s.step.label}: ${STEP_STATE_COPY[s.state]}, ${cumulative}% complete`
               }
-              title={STEP_STATE_COPY[s.state]}
-              data-state={s.state}
+              title={lockTitle}
+              data-state={isLocked ? "locked" : s.state}
+              data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
-                active
-                  ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                  : s.state === "done"
-                    ? "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
-                    : "border-dashed border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+              className={`tap-chip flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
+                isLocked
+                  ? "border-dashed border-[color:var(--hairline)] opacity-70 hover:border-[color:var(--indigo-35)]"
+                  : active
+                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                    : s.state === "done"
+                      ? "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+                      : "border-dashed border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
               }`}
             >
               <span
@@ -2955,7 +2976,7 @@ export default function CreateVideo() {
                     : "border border-current text-muted-foreground"
                 }`}
               >
-                {s.state === "done" ? <Check className="h-3 w-3" /> : i + 1}
+                {isLocked ? <Lock className="h-3 w-3" /> : s.state === "done" ? <Check className="h-3 w-3" /> : i + 1}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span
@@ -2974,7 +2995,7 @@ export default function CreateVideo() {
                     because an angle label can be a sentence; the full text
                     lives in the aria-label above. */}
                 <span className="truncate text-xs text-muted-foreground" aria-hidden="true">
-                  {value || STEP_STATE_COPY[s.state]}
+                  {isLocked ? `locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[s.state]}
                 </span>
               </span>
               <span
@@ -3028,29 +3049,39 @@ export default function CreateVideo() {
 
       {/* The canvas: every step stands on the page as a section, the one in
           view expanded and the rest collapsed to a header and a state chip.
-          Opening a header walks there exactly like its pill — one state
-          machine, one gate set, no second navigation model. The sections
-          render from state the page already holds: disclosure queues no
+          A locked header cannot open until its predecessor is done; the
+          padlock, dimming and "locked — finish <prev> first" banner name
+          the seal. Opening an unlocked header walks there exactly like its
+          segment — one state machine, one gate set. Disclosure queues no
           request of any kind (ADR 0098). */}
       <div className="page-content-enter space-y-3">
         {STEPS.map((s, i) => {
           const active = i === step;
           const state = stepStates.find((x) => x.step.key === s.key)?.state || "todo";
           const value = state === "done" ? pillValue(s.key) : null;
+          const isLocked = !unlocked[i];
+          const lockedBy = i > 0 ? STEPS[i - 1].label : null;
+          const chipText = isLocked ? `locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[state];
           return (
             <section
               key={s.key}
               data-testid={`wizard-section-${s.key}`}
               data-active={active ? "true" : "false"}
+              data-locked={isLocked ? "true" : "false"}
               className={`surface surface-step scroll-mt-24 rounded-2xl ${
                 active ? "ring-1 ring-[color:var(--indigo-35)]" : ""
-              }`}
+              } ${isLocked ? "opacity-60" : ""}`}
             >
               <button
                 type="button"
                 onClick={() => setStep(i)}
                 aria-expanded={active}
                 aria-controls={`wizard-section-body-${s.key}`}
+                aria-label={
+                  isLocked
+                    ? `${s.label}: locked — finish ${lockedBy} to unlock`
+                    : `${s.label}: ${chipText}`
+                }
                 data-testid={`wizard-section-toggle-${s.key}`}
                 className="flex w-full items-center gap-2.5 pb-3 text-left"
               >
@@ -3058,26 +3089,33 @@ export default function CreateVideo() {
                   aria-hidden="true"
                   className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--hairline)] text-xs font-semibold text-muted-foreground"
                 >
-                  {i + 1}
+                  {isLocked ? <Lock className="h-3 w-3" /> : i + 1}
                 </span>
                 <span className="font-display text-sm font-semibold">{s.label}</span>
                 <span
                   data-testid={`wizard-section-chip-${s.key}`}
-                  title={value || STEP_STATE_COPY[state]}
+                  title={isLocked ? `Locked — finish ${lockedBy} first` : value || STEP_STATE_COPY[state]}
                   className={`ml-auto max-w-44 truncate rounded-full border px-2 py-0.5 text-xs ${
-                    state === "done"
+                    state === "done" && !isLocked
                       ? "border-[color:var(--indigo-35)] text-foreground"
                       : "border-dashed border-[color:var(--hairline)] text-muted-foreground"
                   }`}
                 >
-                  {value || STEP_STATE_COPY[state]}
+                  {chipText}
                 </span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${
-                    active ? "rotate-180" : ""
-                  }`}
-                />
+                {isLocked ? (
+                  <Lock
+                    aria-hidden="true"
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                  />
+                ) : (
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${
+                      active ? "rotate-180" : ""
+                    }`}
+                  />
+                )}
               </button>
               {active && (
                 <div
@@ -3085,6 +3123,18 @@ export default function CreateVideo() {
                   data-testid={`wizard-section-body-${s.key}`}
                   className="wizard-section-enter border-t border-[color:var(--hairline)] pt-4"
                 >
+                  {isLocked && (
+                    <div
+                      data-testid={`wizard-section-locked-${s.key}`}
+                      className="inset-panel mb-4 flex items-center gap-2 text-sm text-muted-foreground"
+                    >
+                      <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        Locked — finish <strong className="font-semibold">{lockedBy}</strong> to unlock{" "}
+                        <strong className="font-semibold">{s.label}</strong>.
+                      </span>
+                    </div>
+                  )}
                   {stepContent}
                 </div>
               )}
@@ -3096,11 +3146,11 @@ export default function CreateVideo() {
       {/* Sticky action bar: the arrow-only pair and the one line naming what
           the step in view is waiting on, in one glass cluster that stays
           within reach however long the canvas runs. Arrow-only — the
-          destination lives in the aria-label, never words on the button. No
-          guards, like the pills: these only move. The Back arrow stays on
-          every step, the last one included — the wizard has no separate exit
-          control, so leaving the studio is the sidebar's job. The pills in the
-          rail above still walk anywhere. */}
+          destination lives in the aria-label, never words on the button.
+          Continue is locked until the step in view is done: a locked arrow
+          shows a padlock and cannot move. The Back arrow stays on every
+          step, the last one included — the wizard has no separate exit
+          control, so leaving the studio is the sidebar's job. */}
       <div className="sticky bottom-4 z-30 flex justify-center px-2" data-testid="wizard-arrows">
         <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
           <Button
@@ -3140,24 +3190,39 @@ export default function CreateVideo() {
             </Button>
           )}
           {/* Earns prominence: a finished step turns Continue primary, so the
-              way forward lights up the moment there is somewhere to go. Never
-              disabled — a returning founder can always walk forward to look —
-              an unfinished step wears the dashed "not done" cue instead of
-              locking, and the line beside it names what is still missing. */}
+              way forward lights up the moment there is somewhere to go. An
+              unfinished step locks Continue: the button is disabled and
+              wears a padlock, so the founder sees they must finish this
+              step before the next unlocks. The line beside it names what
+              is still missing. */}
           {step < STEPS.length - 1 && (
             <Button
               variant={activeStepState?.state === "done" ? "accent" : "secondary"}
               size="icon"
+              disabled={activeStepState?.state !== "done"}
               onClick={() => setStep(step + 1)}
-              aria-label={`Continue to ${STEPS[step + 1].label}`}
+              aria-label={
+                activeStepState?.state === "done"
+                  ? `Continue to ${STEPS[step + 1].label}`
+                  : `Locked — finish ${STEPS[step].label} to continue to ${STEPS[step + 1].label}`
+              }
+              title={
+                activeStepState?.state === "done"
+                  ? undefined
+                  : `Locked — finish ${STEPS[step].label} first`
+              }
               data-testid="wizard-continue-button"
               className={`h-11 w-11 rounded-full shadow-sm ${
                 activeStepState?.state === "done"
                   ? ""
-                  : "border border-dashed border-[color:var(--hairline)]"
+                  : "cursor-not-allowed border border-dashed border-[color:var(--hairline)] opacity-60"
               }`}
             >
-              <ChevronRight className="h-5 w-5" />
+              {activeStepState?.state === "done" ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <Lock className="h-5 w-5" />
+              )}
             </Button>
           )}
         </div>
