@@ -2902,6 +2902,22 @@ def normalize_brand_template(raw: dict) -> Optional[dict]:
         ("name", "opening_structure", "middle_structure", "visual_style",
          "camera_pacing", "outcome"),
     )
+    # A screen-narration clause ("They pull a phone from a pocket, looking
+    # down at the screen") in the stored middle_structure is the failure the
+    # defensive strip in angle_scene._development_beat / final_beat.forbidden_hits
+    # exists to catch at read/render time. Stripping it at write time means the
+    # stored row never narrates the filmable surface at all — the card and the
+    # body agree by construction instead of by a downstream strip. Only the
+    # un-ingestible clause is removed; the rest of the sentence survives.
+    for _field in ("opening_structure", "middle_structure"):
+        _value = str(draft.get(_field) or "")
+        if not _value:
+            continue
+        _kept, _removed = final_beat.split_screen_clauses(_value)
+        if _removed:
+            draft[_field] = " ".join(
+                _kept.split()
+            ) if _kept else _value.split(".")[0].strip()
     draft["content_slots"] = {
         key: character_policy.neutralize(value)
         for key, value in (draft.get("content_slots") or {}).items()
