@@ -34,7 +34,10 @@ DB or the operator's credentials.
 | Recommendation fit / shared notes | `python -m pytest backend/test_architecture.py backend/test_template_library.py backend/test_template_library_api.py -q` |
 | Angle grounding / normalization / AI envelopes | `python -m pytest backend/test_architecture.py backend/test_ai_json_calls.py -q` |
 | Studio save/readiness/version flow | `python -m pytest backend/test_studio_api.py -q` plus the relevant frontend generation checks below |
-| Render planning/provider routing | Relevant cases in `backend/test_generation.py`, `backend/test_generation_api.py` and `backend/test_influencer_workflow.py`; read ADRs 0001–0006 and 0053/0061/0063–0064/0083 first |
+| Render planning/provider routing | Relevant cases in `backend/test_generation.py`, `backend/test_generation_api.py` and `backend/test_influencer_workflow.py`; read `docs/adr/README.md` first, then the canon 0001–0006 and 0053/0061/0063–0064/0083/0090/0092/0097/0099/0100/0103/0104/0108/0109 |
+| Render guards (opening move / scene agreement / selfie beat) | `python -m pytest backend/tests/test_opening_move.py backend/tests/test_scene_consistency.py backend/tests/test_final_beat.py backend/tests/test_selfie_framing.py -q` |
+| Location unified field | `python -m pytest backend/test_location_source.py backend/tests/test_location_regression.py -q` |
+| Post kit hashtag strategy | `python -m pytest backend/test_post_kit_strategy.py backend/test_post_kit_api.py -q` |
 | Claim rules | `python -m pytest backend/test_claim_safety.py -q` plus the route/plan cases that consume the changed rule |
 | Any frontend import/module move | `node frontend/scripts/check-imports.cjs` |
 | Frontend generation flow | Imports, `node frontend/scripts/check-frontend-logic.cjs`, and `node frontend/scripts/check-render-smoke.cjs` |

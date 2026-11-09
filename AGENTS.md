@@ -28,8 +28,17 @@ One render path, single-pass video generation via OpenRouter.
   diversity. `backend/template_recommendations.py` — pure fit/shared notes and
   Problem/Promise relevance. `backend/character_policy.py` — pure identity rule:
   the on-screen person is never given a gender, role or pronoun (ADR 0089).
-  None may import HTTP, AI, auth or persistence adapters; guarded by
-  `backend/test_architecture.py`. Old adapter names are compatibility aliases.
+  Same pure contract — no HTTP, AI, auth or persistence imports; `test_architecture.py`
+  parametrizes the 5 it imports — for `backend/scene_consistency.py` (ADR 0092 /
+  0103 / 0104: `reconcile_scene`; Movement ≥600 is advisory, Props stays a hard
+  block), `backend/final_beat.py` (ADR 0093 / 0097: selfie strip; spoken words
+  never rewritten), `backend/opening_move.py` (ADR 0090: validate / repair the
+  opening move), `backend/angle_scene.py` (ADR 0084), `backend/face_crop.py`
+  (YuNet crop + defocus, fallback to the original image), and
+  `backend/hook_prompting.py` (extracted prompt builders, re-exported by
+  `server.py`). `backend/observability.py` + `backend/routers/health.py` own
+  `/api/metrics` — process-local counters, observability only, never a gate.
+  Old adapter names are compatibility aliases.
 - `backend/video_providers.py` — capability source of truth (limits, identity
   routing, prompt ceilings). Swapping providers is env config, not redesign.
 - `backend/generation_planning.py` — prompt assembly + `is_recoverable_error`
@@ -46,6 +55,11 @@ One render path, single-pass video generation via OpenRouter.
   in the page. `pages/wizardDraft.js` owns coupled draft transitions;
   `hooks/useWizardTemplates.js` owns recommendation/tailoring state. Other
   steps navigate to the angle control, not a second selector.
+  Review/editor siblings: `components/studio/HookLineEditor.jsx` (spoken-line editor),
+  `pages/useWizardDirections.js` (stale-request guard), `components/SafetyPanel.jsx`
+  (advisory per ADR 0081, never a gate), `pages/PendingSaveCard.jsx` (storage retry),
+  `lib/vitals.js` (LCP/INP/CLS, window-exposed, no sink), `lib/recentDraft.js`
+  (sidebar draft link), `pages/DemoCtaStudio.jsx` (starts blank ADR 0082).
 - `frontend/src/pages/GenerationHistory.jsx` (+ `historyPolling.js`,
   `historyRepair.js`) — confirmed row snapshots, bounded per-row polling and
   durable-save recovery; a stopped browser check is not a provider failure.
@@ -61,6 +75,13 @@ One render path, single-pass video generation via OpenRouter.
 - Other surfaces: `backend/auth.py` (Clerk; authz stays at HTTP/DB entry
   points), `frontend/src/upscale/` + `pages/VideoUpscaler.jsx`, and onboarding
   tours in `components/onboarding/` + `lib/onboarding/tours.js`.
+  Schemas: `backend/models.py` owns `STUDIO_EDITABLE_FIELDS` and row
+  serialization; `backend/template_library.py` + `backend/recommendation_tags.py`
+  own curated vocab / tag matching. Operator tooling — NOT a render path:
+  `backend/repair_failed_saves.py`, `backend/recovery_report.py`,
+  `backend/live_sample.py`, `backend/mp4_samples.py`, and the Media
+  offload (`backend/pipeline.py`, `backend/posters.py`,
+  `backend/modal_worker.py`). `_submit_generation` stays the sole submit.
 - Voice: `frontend/src/lib/listen.js` + `ListenDock` (mounted by `AppShell`) —
   browser `speechSynthesis` only (no text leaves the device), text built from
   the data model, never the DOM. See ADR 0088.
@@ -91,13 +112,14 @@ One render path, single-pass video generation via OpenRouter.
   enforced by the smoke suite. Loading indicators narrate fresh work and
   unmount on settle *and* error; lists arrive staggered, collapsing to
   instant under reduced motion.
-- `memory/` is an empty stub, not a system. `test_reports/` holds committed
+- `memory/` is an empty stub, not a system. `memory/PRD.md` is the historical
+  Unified Location spec (ADR 0090), implemented. `test_reports/` holds committed
   review evidence; scratch logs stay untracked.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and two decisions (0001–0102) now
-exist;
+Read `docs/adr/README.md` first. One hundred and nine decisions (0001–0109) now
+exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
 orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused

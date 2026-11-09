@@ -1,5 +1,9 @@
 # HookForge — Unified Location Field
 
+> Status: implemented historical spec for Unified Location (ADR 0090).
+> Canonical architecture is `docs/architecture.md`; this file is not a current
+> inventory and must not be treated as one.
+
 ## Original problem statement
 
 In the Hook + Story strategy render and prompt scene section, replace the separate Environment, Background, and Setting fields with one field named **Location** everywhere: strategy output, scene display, editable Review fields, strategy JSON, visual/audio direction, render prompts, and results. A selected Location direction must update the same Location value used by rendering. Existing saved work must remain compatible by merging the three legacy values.

@@ -34,6 +34,7 @@ React routes (App.js)
         -> ai_service: OpenRouter requests and correction/retry orchestration
            -> angle_policy: normalization, recorded grounding, lexical diversity
         -> generation_planning / claim_safety / angle_scene / video_providers
+        -> character_policy / final_beat / opening_move / scene_consistency
         -> storage_service / pipeline / media_signing
 
 DemoCtaEditor -> usePreviewLoop / overlays / scene drawing
@@ -71,6 +72,10 @@ Paths below are relative to [backend](../backend/).
 | [angle_scene.py](../backend/angle_scene.py) | Where and when the video happens, owned by the selected angle; later steps conform, not re-decide (ADR 0084). `opening_shape`/`opening_staging` build the card's two opening lines from the First 3 Seconds Promise (ADR 0089). |
 | [character_policy.py](../backend/character_policy.py) | The on-screen person is never given a gender, role or pronoun: `neutralize` rewrites, `identity_terms` proves a payload clean. Pure; applied to every video-facing field and again at prompt assembly (ADR 0089). |
 | [hook_prompting.py](../backend/hook_prompting.py) | Hook-video prompt construction (motion styles, directives, templates); extracted from server.py, which re-exports it. |
+| [final_beat.py](../backend/final_beat.py) | Selfie ending (ADR 0093/0097): one physical beat, no phone / reach / second free hand; fixed camera keeps the phone handoff. Spoken words never rewritten. |
+| [opening_move.py](../backend/opening_move.py) | Opening-move check (ADR 0090): `validate_opening` / `repair` — guard refuses a static or speech-only hook before render. |
+| [scene_consistency.py](../backend/scene_consistency.py) | Scene-field agreement (ADR 0092/0103/0104): `reconcile_scene` patches what is patchable; Movement ≥600 is advisory, Props stays a hard block. |
+| [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
 | [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |
 | [routers/post_kit.py](../backend/routers/post_kit.py), [routers/health.py](../backend/routers/health.py) | Endpoint-specific ownership with DB functions injected by the composition root. They must not import `server` back. |
@@ -89,7 +94,10 @@ Paths below are relative to [backend](../backend/).
    prevent rendering an old strategy after edits. Readiness is a gate, not an
    alternate way around checks.
 4. Submit once through `_submit_generation`, with provider-specific identity
-   routing, duration and prompt ceiling. No model fallback, render chain or
+   routing, duration and prompt ceiling. Pre-submit guards run first: `opening_move`
+   validate/repair (ADR 0090), `scene_consistency.reconcile_scene` (ADR 0092/0103/0104),
+   `final_beat` selfie strip (ADR 0097) — a guard that cannot repair hard-blocks
+   with 409 naming the field. No model fallback, render chain or
    silent dialogue rewrite is introduced by this extraction.
 5. Poll and finalize. Provider completion and durable save are different facts:
    a finished job can still carry `storage_error`.
@@ -109,6 +117,10 @@ accepts data; it must not be mistaken for an authorization check.
 | [useWizardTemplates.js](../frontend/src/hooks/useWizardTemplates.js) | Keyed recommendation/tailoring requests, shared fit/error state, visible list and progress timer. Tailoring fires only when the page calls `runTailoring` — the goals-section Generate CTA or the header Regenerate — never on the goal pick. No project writes. |
 | [SelectionPanels.jsx](../frontend/src/components/studio/SelectionPanels.jsx) | Angle selector, goal picker, template shape and recommendation cards. Receives callbacks/data; does not take over project writes. |
 | [ReviewPanels.jsx](../frontend/src/components/studio/ReviewPanels.jsx) | Profile-matched direction dropdowns (per-dropdown refresh) and plan-phase narration. It does not own plan writes or render submission. |
+| [HookLineEditor.jsx](../frontend/src/components/studio/HookLineEditor.jsx) | Review spoken-line editor under Review & submit. |
+| [useWizardDirections.js](../frontend/src/pages/useWizardDirections.js) | Direction fetch with stale-request guard; picks reset on app switch. |
+| [SafetyPanel.jsx](../frontend/src/components/SafetyPanel.jsx) | Advisory claim report surface (ADR 0081 — never a gate). |
+| [PendingSaveCard.jsx](../frontend/src/pages/PendingSaveCard.jsx) | Surfaces a durable-save retry card without claiming that a browser check is a render failure. |
 | [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. |
 | [GenerationHistory.jsx](../frontend/src/pages/GenerationHistory.jsx), [historyPolling.js](../frontend/src/pages/historyPolling.js), [historyRepair.js](../frontend/src/pages/historyRepair.js) | Confirmed row snapshots, bounded per-row polling and durable-save recovery. Stopped browser polling does not mean provider failure. |
 | [OnboardingProvider.jsx](../frontend/src/components/onboarding/OnboardingProvider.jsx), [tours.js](../frontend/src/lib/onboarding/tours.js) | First-run readiness and manual help; deferred tours are not marked completed. |
