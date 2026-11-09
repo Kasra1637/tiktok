@@ -19,13 +19,12 @@ swap cannot be settled by a mocked test, and this script settles both:
      actually takes it, so a listing that under- or over-reports the field is
      visible rather than silently trusted.
 
-Two cheap text calls by default, plus one vision call with --photo. The key is
+Two cheap text calls by default. The key is
 read from the environment only, never printed, never stored.
 
 Usage (bash):
     export OPENROUTER_API_KEY="<key never committed anywhere>"
     python backend/verify_chat_model.py
-    python backend/verify_chat_model.py --photo ./face.png
 """
 import argparse
 import asyncio
@@ -114,17 +113,8 @@ async def _temperature_probe(ai_service, model: str, temperature: float) -> dict
             "passed": accepted, "status": resp.status_code, "detail": detail[:400]}
 
 
-async def _vision_probe(ai_service, photo: Path) -> dict:
-    out = await ai_service.analyze_image_for_hook(photo, "live-verify")
-    passed = isinstance(out, dict) and bool(out.get("hook_summary"))
-    return {"check": "vision (image in, JSON out)", "model": ai_service.VISION_MODEL,
-            "passed": passed, "detail": out}
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live chat-model verification.")
-    ap.add_argument("--photo", type=Path,
-                    help="optional presenter photo to verify the vision path")
     ap.add_argument("--temperature", type=float, default=0.4,
                     help="temperature to probe for acceptance")
     ap.add_argument("--model", default="",
@@ -148,8 +138,6 @@ def main() -> int:
         _guard(_run, _structured_output(ai_service)),
         _guard(_run, _temperature_probe(ai_service, model, args.temperature)),
     ]
-    if args.photo:
-        results.append(_guard(_run, _vision_probe(ai_service, args.photo)))
 
     print("\n================ RESULTS ================", flush=True)
     for r in results:

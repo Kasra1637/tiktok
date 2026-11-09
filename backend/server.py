@@ -2594,32 +2594,14 @@ def validate_and_normalize_photo(raw_bytes: bytes) -> bytes:
 #   frame as a bridge for visual continuity.
 # ---------------------------------------------------------------------------
 
-# Hook-video prompt construction lives in hook_prompting.py (motion styles,
-# style directives, template constants and their builders). Every name is
-# re-exported here so existing `server.X` references keep working.
+# Hook-video prompt vocab lives in hook_prompting.py (motion styles,
+# style directives, template categories). Only the vocab constants are
+# re-exported here so `server.X` keeps working for existing records; the
+# prompt builders were removed (no live caller).
 from hook_prompting import (
-    HOOK_VIDEO_PROMPT_TEMPLATE,
-    AUDIO_ON_INSTRUCTION,
-    AUDIO_OFF_INSTRUCTION,
-    NO_TEXT_OVERLAY_INSTRUCTION,
-    apply_audio_directive,
     HOOK_MOTION_STYLES,
-    HOOK_MOTION_TYPES,
-    MOTION_STYLE_INDEX,
-    _coerce_mechanics,
-    build_hook_prompt_from_analysis,
-    build_hook_prompt_from_image_analysis,
-    build_hook_prompt_from_motion_style,
-    apply_motion_style_directive,
     HOOK_TEMPLATE_CATEGORIES,
-    HOOK_TEMPLATE_NAME_MAX,
-    HOOK_TEMPLATE_NOTES_MAX,
     HOOK_STYLE_DIRECTIVES,
-    HOOK_STYLE_CUSTOM_PROMPT_MAX,
-    _sanitize_custom_hook_prompt,
-    apply_hook_style_directive,
-    _normalize_template_category,
-    _template_thumbnail_source,
 )
 
 
