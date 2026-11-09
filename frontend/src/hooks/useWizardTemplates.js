@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { api, getErrorMessage } from "../lib/api";
 
 const emptyFit = () => ({ reasons: [], limitations: [] });
@@ -9,7 +9,6 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
   const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [tailoring, setTailoring] = useState(false);
   const [tailorError, setTailorError] = useState(null);
-  const [tailorCount, setTailorCount] = useState(0);
   const recRequestRef = useRef(0);
   const tailorRequestRef = useRef(0);
   // Latest wizard identity: a tailor flight that resolves after the founder
@@ -144,24 +143,11 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
     return [...matched, ...backfill].slice(0, 3);
   }, [recommendationsVisible, tailoredReady, tailored.templates, ranked.rows]);
 
-  const tailorTotal = Math.max(visibleRecommendations.length, 1);
-  useEffect(() => {
-    if (!tailoring) {
-      setTailorCount(0);
-      return undefined;
-    }
-    setTailorCount(1);
-    const timer = setInterval(() => {
-      setTailorCount((count) => Math.min(count + 1, tailorTotal));
-    }, 450);
-    return () => clearInterval(timer);
-  }, [tailoring, tailorTotal]);
-
   return {
     recommendations: ranked.rows, sharedFit: ranked.shared, recError: ranked.error,
     recKey: ranked.key, recRequestKey,
     clearRecommendations, loadRecommendations, runTailoring,
-    tailoring, tailorError, tailorCount, tailorTotal, tailorKey, tailoredReady,
+    tailoring, tailorError, tailorKey, tailoredReady,
     recommendationsVisible, visibleRecommendations,
   };
 }

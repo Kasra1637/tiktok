@@ -415,7 +415,7 @@ export default function CreateVideo() {
   const profileId = project?.brand_profile_id || selectedProfileId;
   const {
     recommendations, sharedFit, recError, recKey, recRequestKey, clearRecommendations,
-    runTailoring, tailoring, tailorError, tailorCount, tailorTotal,
+    runTailoring, tailoring, tailorError,
     tailoredReady, recommendationsVisible, visibleRecommendations,
   } = useWizardTemplates({
     profileId, angleId, objective,
@@ -1907,21 +1907,26 @@ export default function CreateVideo() {
               {/* Nothing starts on the goal pick — no powered generation and
                   no ranked read: every template request waits for this click
                   (ADR 0098). One reflexive tap on a neighbouring goal must
-                  cost exactly nothing. The action leads; the line under it
-                  carries the when, not the cost. */}
-              {angle && objective && profileId && !tailoring && !(recommendationsVisible && visibleRecommendations.length > 0) && (
+                  cost exactly nothing. The button carries the work: idle it
+                  says Generate, processing it says Tailoring templates with
+                  a looping sweep — no helper line below while it runs. */}
+              {angle && objective && profileId && !(recommendationsVisible && visibleRecommendations.length > 0) && (
                 <div className="space-y-2">
                   <Button
                     variant="accent"
                     className="w-full gap-1.5"
                     onClick={() => runTailoring(false)}
+                    disabled={tailoring}
+                    busy={tailoring}
                     data-testid="templates-generate"
                   >
-                    <Sparkles className="h-3.5 w-3.5" /> Generate tailored templates
+                    <Sparkles className="h-3.5 w-3.5" /> {tailoring ? "Tailoring templates" : "Generate tailored templates"}
                   </Button>
-                  <p className="text-sm text-muted-foreground">
-                    Tailoring runs only when you click it — switching goals never starts it.
-                  </p>
+                  {!tailoring && (
+                    <p className="text-sm text-muted-foreground">
+                      Tailoring runs only when you click it — switching goals never starts it.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1934,22 +1939,10 @@ export default function CreateVideo() {
                 Pick a goal above — tailored templates are one click away.
               </p>
             )}
-            {/* Tailoring narrates fresh work while it reads, then the cards
-                arrive. It sits above the list rather than beside a section
-                label: the list is hidden while tailoring runs (a half-set is
-                not a ranked set), so a status inside it would be invisible
-                exactly when the founder is waiting. */}
-            {objective && tailoring && (
-              <div className="inset-panel space-y-2" role="status" data-testid="templates-tailoring">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Tailoring templates for this goal…
-                </p>
-                <p className="text-sm text-muted-foreground" data-testid="templates-progress">
-                  Reading template {tailorCount} of {tailorTotal}…
-                </p>
-              </div>
-            )}
+            {/* The flight owns the screen: the button above is the only
+                narrator while tailoring runs (its looping sweep carries the
+                wait), and the cards wait for it to settle — a half-set is not
+                a ranked set. No count line, no second spinner. */}
             {tailorError && !tailoring && (
               <p className="text-sm text-muted-foreground">{tailorError}</p>
             )}
@@ -2132,12 +2125,14 @@ export default function CreateVideo() {
               </p>
               {!project ? (
                 <>
-                  <p className="text-base text-muted-foreground">
-                    Preparing the video draft for your photo…
-                  </p>
-                  <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={() => ensureProject()}>
+                  {!busy && (
+                    <p className="text-base text-muted-foreground">
+                      Preparing the video draft for your photo…
+                    </p>
+                  )}
+                  <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={() => ensureProject()} data-testid="prepare-draft-button">
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                    Try preparing the draft again
+                    {busy ? "Preparing draft" : "Try preparing the draft again"}
                   </Button>
                 </>
               ) : (
@@ -2247,35 +2242,40 @@ export default function CreateVideo() {
               variant="accent"
               onClick={handleGeneratePlan}
               disabled={busy || !canGenerate || !objective || !angle}
+              busy={busy}
+              data-testid="plan-retry-button"
             >
               <Sparkles className="h-4 w-4" />
-              Try again
+              {busy ? "Generating your plan" : "Try again"}
             </Button>
-            <p className="text-base text-muted-foreground">
-              The plan didn't generate. Fix what's missing below, then try again — still free.
-            </p>
-            <p className="text-sm text-muted-foreground" data-subtitle="">
-              Writes hook, script, shots, and demo note. Editable below.
-            </p>
+            {!busy && (
+              <>
+                <p className="text-base text-muted-foreground">
+                  The plan didn't generate. Fix what's missing below, then try again — still free.
+                </p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">
+                  Writes hook, script, shots, and demo note. Editable below.
+                </p>
+              </>
+            )}
           </div>
         ) : !project?.script_version && (busy || loading || (canGenerate && effectiveObjective && angle)) ? (
           /* No plan and nothing wrong: an attempt is in flight, the draft is
              still loading, or every input is present and the auto effect fires
              next — reading the stored goal too, so a draft that already holds
-             one spins instead of flashing the picker. Only these three cases
-             may show a spinner. */
+             one spins instead of flashing the picker. This panel is the only
+             narrator while the plan writes: one concise button label with a
+             looping sweep, no count line below it. */
           <div className="inset-panel space-y-4">
-            <div className="flex items-center gap-2">
+            <Button
+              variant="accent"
+              disabled={busy}
+              busy={busy || loading}
+              data-testid="plan-progress-button"
+            >
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm font-semibold">
-                {loading && !busy ? "Loading your draft…" : "Generating your plan…"}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {loading && !busy
-                ? "Picking up where you left off."
-                : <PlanPhaseLine />}
-            </p>
+              {loading && !busy ? "Loading your draft" : "Generating your plan"}
+            </Button>
           </div>
         ) : !project?.script_version ? (
           /* No plan and the auto effect cannot fire: a profile, a template or
@@ -2343,16 +2343,19 @@ export default function CreateVideo() {
                   disabled={busy}
                   busy={busy}
                   onClick={confirmRegeneratePlan}
+                  data-testid="plan-regenerate-button"
                 >
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Regenerate plan
+                  {busy ? "Regenerating plan" : "Regenerate plan"}
                 </Button>
-                <p className="text-sm text-muted-foreground" data-testid="plan-version-status">
-                  Plan v{project.script_version}
-                  {(project.hook_line || project.script)
-                    ? " · generated ✓"
-                    : " · empty — regenerate to write it"}
-                </p>
+                {!busy && (
+                  <p className="text-sm text-muted-foreground" data-testid="plan-version-status">
+                    Plan v{project.script_version}
+                    {(project.hook_line || project.script)
+                      ? " · generated ✓"
+                      : " · empty — regenerate to write it"}
+                  </p>
+                )}
               </div>
             )}
             <div className="inset-panel space-y-4" data-testid="review-thumb-loop">
@@ -2671,9 +2674,9 @@ export default function CreateVideo() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="accent" onClick={() => handleSaveEdits()} disabled={busy || !hasEdits} busy={busy}>
+              <Button variant="accent" onClick={() => handleSaveEdits()} disabled={busy || !hasEdits} busy={busy} data-testid="plan-save-button">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save edits
+                {busy ? "Saving edits" : "Save edits"}
               </Button>
               {/* No "Mark ready" button. Approval is not a decision the founder
                   makes by hand here: the plan handler marks the project ready
@@ -2785,9 +2788,11 @@ export default function CreateVideo() {
               />
             ) : !project ? (
               <div className="inset-panel">
-                <p className="text-base text-muted-foreground">
-                  Preparing the video draft for your photo…
-                </p>
+                {!busy && (
+                  <p className="text-base text-muted-foreground">
+                    Preparing the video draft for your photo…
+                  </p>
+                )}
                 <Button
                   variant="accent"
                   className="mt-4"
@@ -2797,7 +2802,7 @@ export default function CreateVideo() {
                   data-testid="create-draft-button"
                 >
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Create the draft
+                  {busy ? "Creating draft" : "Create the draft"}
                 </Button>
               </div>
             ) : (
@@ -2826,7 +2831,14 @@ export default function CreateVideo() {
                     <div id="review-submit" className="scroll-mt-4">
                       <GenerationPanel
                         project={project}
-                        onGenerationChange={() => {}}
+                        onGenerationChange={(fresh) => {
+                          // Adopt the row into project-level state so the
+                          // result area never holds a stale pre-poll snapshot
+                          // after the backend terminalized it in History.
+                          if (fresh && (fresh.status === "completed" || fresh.status === "failed")) {
+                            receiveProject({ ...project, last_generation: fresh });
+                          }
+                        }}
                         onProjectChange={receiveProject}
                         hasUnsavedEdits={hasEdits}
                         onNavigate={(action) => {

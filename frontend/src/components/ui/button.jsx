@@ -54,16 +54,14 @@ const buttonVariants = cva(
   }
 )
 
-/* Unified busy state (idea 1): `busy` paints the slow sweep-fill layer from
-   `.btn-studio[data-busy]` and exposes `aria-busy`, while the label names the
-   work without trailing dots ("Generating angles", never dotted) — the step
-   caption below the button, where one exists, carries the live detail. Text
+/* Unified busy state: a looping sheen sweep on the button itself (`.btn-studio[data-busy]`).
+   The label names the work concisely ("Tailoring templates", never dotted, never
+   a "Reading X of Y…" line beside it) and the sweep carries the wait. Text
    and icons never animate; only the fill layer moves. Callers keep owning
    `disabled`: busy describes the work, not whether the control accepts input.
-   Determinate waits pass `progress` (0–1): the fill then holds at that width
-   instead of looping, and falls back to the loop when it is absent — so a
-   counted job (6 angles, 6 goals) shows real position while an unknowable
-   one (plan body, render queue) keeps the breathing sweep. */
+   Counted jobs pass `progress` (0–1) for a determinate hold; absent progress
+   keeps the looping sweep — so a counted job shows real position while an
+   unknowable one keeps the breathing sweep. */
 const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, style, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   // `?? NaN`: Number(null) is 0, so a missing progress must not coerce — an

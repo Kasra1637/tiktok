@@ -362,12 +362,10 @@ export function AngleSelector({
   // with, never the angle's paraphrase promising unspoken words (ADR 0108).
   hookLine = "",
 }) {
-  // Live count-up while a generation is in flight ("Reading angle 3 of 6…").
-  // It answers the only question a spinner cannot — is this fresh work or a
-  // cached list — and it unmounts the moment `generating` clears, so a
-  // failure can never leave a frozen count beside the error alert. Capped at
-  // the six-row contract; the interval is wall-clock display only, and the
-  // rows below still arrive on the endpoint's real response.
+  // Processing lives on the button itself: busy paints the looping sweep and
+  // the label names the work concisely ("Generating angles"). No live count
+  // line below the button — the progress value rides the fill, not a second
+  // narrator row that unmounts mid-flight and can freeze beside an error.
   const [genCount, setGenCount] = useState(0);
   const genTimer = useRef(null);
   useEffect(() => {
@@ -384,11 +382,6 @@ export function AngleSelector({
       genTimer.current = null;
     };
   }, [generating]);
-  const progressLine = generating ? (
-    <p className="text-sm text-muted-foreground" role="status" data-testid="angles-progress">
-      Reading angle {genCount} of 6…
-    </p>
-  ) : null;
   // The gate names what the click will do: generating fresh is a model call
   // with a wait, while revealing a set generated moments ago in-session is
   // instant and free. A cached set from an earlier approval is never offered
@@ -438,10 +431,11 @@ export function AngleSelector({
         )}
             {gateButtonLabel}
           </Button>
-          {progressLine}
-      <p className="text-sm text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
-        {ANGLES_CTA_COPY}
-      </p>
+          {!generating && (
+            <p className="text-sm text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
+              {ANGLES_CTA_COPY}
+            </p>
+          )}
         </div>
       ) : (
     <div className="space-y-4" data-testid="audience-angle-list">
@@ -466,18 +460,17 @@ export function AngleSelector({
           )}
           {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
-            {angleSetFreshness && (
+            {angleSetFreshness && !generating && (
               <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
                 Refreshed {angleSetFreshness}
               </p>
             )}
-            {!objective && (
+            {!objective && !generating && (
               <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
                 Pick a goal first — regenerating aims fresh angles at it.
               </p>
             )}
           </div>
-          {progressLine}
       {notice && (
         <Alert variant="warning" data-testid="angle-regen-notice">
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -735,9 +728,9 @@ export function AngleGoalPicker({
     return null;
   };
 
-  // Live count-up while the six reshuffle ("Shuffling goal 3 of 6…"). Same
-  // contract as the angle count-up: narrates fresh work, unmounts on settle
-  // or error, capped at the visible total so it never over-counts.
+  // Live count-up while the six reshuffle. The count drives the button's
+  // determinate fill; no count line renders below the Shuffle button — the
+  // button's busy label and sweep carry the wait while it reshuffles.
   const [shuffleCount, setShuffleCount] = useState(0);
   const shuffleTimer = useRef(null);
   const shuffleTotal = Math.max(featured.length, 1);
@@ -795,30 +788,17 @@ export function AngleGoalPicker({
         )}
         {gateButtonLabel}
       </Button>
-      {generating && (
-        <p className="text-sm text-muted-foreground" role="status" data-testid="goals-generating">
-          Generating goals for this angle…
+      {!generating && (
+        <p className="text-sm text-muted-foreground" data-testid="goals-cta-copy" data-subtitle="">
+          {GOALS_CTA_COPY}
         </p>
       )}
-      <p className="text-sm text-muted-foreground" data-testid="goals-cta-copy" data-subtitle="">
-        {GOALS_CTA_COPY}
-      </p>
     </div>
   ) : (
   <div className="space-y-4">
-    {generating && (
-      <p className="text-sm text-muted-foreground" role="status" data-testid="goals-generating">
-        Generating goals for this angle…
-      </p>
-    )}
     {generationError && (
       <p className="text-sm text-destructive" role="alert" data-testid="goals-generation-error">
         {generationError} The suggested goals below are unchanged.
-      </p>
-    )}
-    {regenerating && (
-      <p className="text-sm text-muted-foreground" role="status" data-testid="goals-progress">
-        Shuffling goal {shuffleCount} of {shuffleTotal}…
       </p>
     )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" role="group" aria-label={`Recommended video goals for ${angle.label}`} data-testid="goals-grid">

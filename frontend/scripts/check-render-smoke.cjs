@@ -1453,10 +1453,14 @@ async function main() {
         if (!showingPlan && !midFlight) {
           throw new Error("Review neither shows the fresh plan nor generates it");
         }
-        // Mid-flight, the generating state narrates which section is being
-        // written — never a bare spinner while the plan is en route.
-        if (midFlight && !ctx.container.querySelector('[data-testid="plan-progress"]')) {
+        // Mid-flight, the generating state carries the wait on the progress
+        // button itself — its concise label with a looping sweep. No second
+        // narrator line below it.
+        if (midFlight && !ctx.container.querySelector('[data-testid="plan-progress-button"]')) {
           throw new Error("the generating state narrates nothing live");
+        }
+        if (midFlight && ctx.container.querySelector('[data-testid="plan-progress"]')) {
+          throw new Error("a phase line renders beside the busy button");
         }
         if (text.includes("No plan yet")) {
           throw new Error("Review still bounces to a separate plan step for its own plan");
@@ -1628,7 +1632,7 @@ async function main() {
   await check("paid render reuses the mock progress UI and the mock section is gone", async (ctx) => {
     // The hypothetical preview was removed: the paid in-flight render must
     // carry its progress bar + stage checklist without the removed mock copy.
-    const generating = { ...SEGMENT, id: "gen-flight", status: "generating" };
+    const generating = { ...SEGMENT, id: "gen-flight", status: "generating", playback_url: null, r2_url: null, video_url: null };
     await withApi({
       getGenerations: async () => ({ generations: [generating] }),
       pollGeneration: async () => generating,
@@ -3348,9 +3352,10 @@ async function main() {
     }
   });
 
-  // The build narrates liveness while running — dots cycling on a line that
-  // claims motion only, never stages the backend cannot show. It unmounts
-  // with the busy state, so a failure can never strand it beside its error.
+  // The build narrates on the button itself while running — its concise
+  // label ("Building strategy") with the looping busy sweep, never a second
+  // line under it. The busy state unmounts with the build, so a failure can
+  // never strand it beside its error.
   await check("a strategy build narrates liveness, then clears it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     let releaseBuild;
@@ -3371,23 +3376,32 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
+          const build = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+          if (!build) throw new Error("no strategy build button");
           await act(async () => {
             build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
-          const live = ctx.container.querySelector('[data-testid="strategy-progress"]');
-          if (!live) throw new Error("no liveness line while the strategy builds");
-          if (!/Building your strategy/.test(live.textContent || "")) {
-            throw new Error(`the liveness line claims stages it cannot see: ${JSON.stringify(live.textContent)}`);
+          const live = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+          if (!live) throw new Error("no strategy button while the strategy builds");
+          if (live.getAttribute("data-busy") !== "true") throw new Error("the strategy button wears no busy sweep while the strategy builds");
+          if (!/Building strategy/.test(live.textContent || "")) {
+            throw new Error(`the button label does not name the work: ${JSON.stringify(live.textContent)}`);
+          }
+          if (ctx.container.querySelector('[data-testid="strategy-progress"]')) {
+            throw new Error("a second narrator line renders beside the busy button");
           }
           await act(async () => {
             releaseBuild({ ...PROJECT_WITH_STRATEGY });
           });
           await act(async () => {});
           await act(async () => {});
+          const settled = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+          if (settled && settled.getAttribute("data-busy") === "true") {
+            throw new Error("the busy sweep survived its own build");
+          }
           if (ctx.container.querySelector('[data-testid="strategy-progress"]')) {
-            throw new Error("the liveness line survived its own build");
+            throw new Error("the narrator line survived its own build");
           }
         }
       );
@@ -4527,9 +4541,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Generation narrates fresh work while in flight, then the rows arrive as
-  // a staggered cascade — never a spinner-to-list blink, and never a frozen
-  // count beside an error.
+  // Generation narrates on the button itself while in flight, then the rows
+  // arrive as a staggered cascade — never a spinner-to-list blink, and never
+  // a leftover sweep after the set lands.
   await check("angle generation counts up in flight, then cascades rows in", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     let release;
@@ -4544,10 +4558,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
       await clickEl(ctx, step.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA on empty angles");
-      const progress = step.querySelector('[data-testid="angles-progress"]');
-      if (!progress) throw new Error("no live count while the generation is in flight");
-      if (!/Reading angle \d+ of 6/.test(progress.textContent || "")) {
-        throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+      const busy = step.querySelector('[data-testid="generate-angles-button"]');
+      if (!busy) throw new Error("no busy button while the generation is in flight");
+      if (busy.getAttribute("data-busy") !== "true") throw new Error("the generate button wears no busy sweep while the generation is in flight");
+      if (!/Generating angles/.test(busy.textContent || "")) {
+        throw new Error(`the button label does not name the work: ${JSON.stringify(busy.textContent)}`);
+      }
+      if (step.querySelector('[data-testid="angles-progress"]')) {
+        throw new Error("a second narrator line renders beside the busy button");
+      }
+      if (step.querySelector('[data-testid="angles-cta-copy"]')) {
+        throw new Error("the CTA helper line stays visible while the button is busy");
       }
       await act(async () => {
         release({ angles: [ANGLE, ANGLE_B] });
@@ -6329,8 +6350,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Shuffle narrates fresh work while cycling, then the six arrive staggered —
-  // never a spinner-to-grid blink, and never a frozen count beside an error.
+  // Shuffle narrates on the button itself while cycling, then the six arrive
+  // staggered — never a spinner-to-grid blink, and never a leftover sweep
+  // beside an error.
   await check("goal shuffle counts up in flight, then cascades cards in", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     let releaseShuffle;
@@ -6356,10 +6378,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await passGoalGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
-          const progress = ctx.container.querySelector('[data-testid="goals-progress"]');
-          if (!progress) throw new Error("no live count while goals reshuffle");
-          if (!/Shuffling goal \d+ of 6/.test(progress.textContent || "")) {
-            throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+          const busyBtn = ctx.container.querySelector('[data-testid="regenerate-goals-button"]');
+          if (!busyBtn) throw new Error("no shuffle button while goals reshuffle");
+          if (busyBtn.getAttribute("data-busy") !== "true") throw new Error("the shuffle button wears no busy sweep while goals reshuffle");
+          if (!/Shuffling goals/.test(busyBtn.textContent || "")) {
+            throw new Error(`the button label does not name the work: ${JSON.stringify(busyBtn.textContent)}`);
+          }
+          if (ctx.container.querySelector('[data-testid="goals-progress"]')) {
+            throw new Error("a second narrator line renders beside the busy button");
           }
           await act(async () => {
             releaseShuffle({ goal_variant: 1, suggestions: [...SIX].reverse() });
@@ -7336,9 +7362,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // Tailoring narrates fresh work while reading, then the cards arrive
-  // staggered. The count caps at the outgoing list — the only honest total
-  // mid-flight — and unmounts on settle so it never outlives the call.
+  // Tailoring narrates on the button itself while reading, then the cards
+  // arrive staggered. The button carries the wait with its looping sweep —
+  // no count line beside it, and the sweep clears on settle so it never
+  // outlives the call.
   //
   // The picker shows exactly three rows, always (ADR 0096): the scored top
   // three, never more when the library offers more and never a "show more"
@@ -7418,10 +7445,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (!waiting.includes("Tailoring templates")) {
           throw new Error("the step does not say it is tailoring before showing templates");
         }
-        const progress = ctx.container.querySelector('[data-testid="templates-progress"]');
-        if (!progress) throw new Error("no live count while templates tailor");
-        if (!/Reading template \d+ of \d+/.test(progress.textContent || "")) {
-          throw new Error(`the count does not read as fresh work: ${JSON.stringify(progress.textContent)}`);
+        const btn = ctx.container.querySelector('[data-testid="templates-generate"]');
+        if (!btn) throw new Error("no templates button while templates tailor");
+        if (btn.getAttribute("data-busy") !== "true") throw new Error("the templates button wears no busy sweep while templates tailor");
+        if (!/Tailoring templates/.test(btn.textContent || "")) {
+          throw new Error(`the button label does not name the work: ${JSON.stringify(btn.textContent)}`);
+        }
+        if (ctx.container.querySelector('[data-testid="templates-progress"]')) {
+          throw new Error("a second narrator line renders beside the busy button");
+        }
+        if (ctx.container.querySelector('[data-testid="templates-tailoring"]')) {
+          throw new Error("the tailoring panel survived beside the busy button");
         }
         await act(async () => {
           releaseTailoring({

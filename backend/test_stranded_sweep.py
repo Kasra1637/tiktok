@@ -94,6 +94,26 @@ def clean_generations(api):
 
 
 class TestWhatCountsAsStranded:
+    def test_a_row_terminal_at_provider_but_still_generating_is_reconciled(self, api, monkeypatch):
+        gen_id = _run(_insert(api, status="generating", job_id="gen-vid-terminal", age_seconds=7200))
+        seen = []
+
+        async def fake_poll(generation_id, user_id=None):
+            seen.append(generation_id)
+            return {"status": "completed"}
+
+        monkeypatch.setattr(api, "poll_generation", fake_poll)
+        assert _run(api._sweep_stranded_generations()) == 1
+        assert seen == [gen_id]
+
+    def test_completed_rows_are_terminal(self, api, monkeypatch):
+        _run(_insert(api, status="completed", job_id="gen-vid-done", age_seconds=7200))
+        monkeypatch.setattr(
+            api, "poll_generation",
+            lambda *a, **k: pytest.fail("a completed row must not be polled"),
+        )
+        assert _run(api._sweep_stranded_generations()) == 0
+
     def test_a_long_lived_in_flight_row_is_reconciled(self, api, monkeypatch):
         """The actual bug: provider finished, container died, row never updated."""
         gen_id = _run(_insert(api, status="generating", job_id="gen-vid-1", age_seconds=7200))

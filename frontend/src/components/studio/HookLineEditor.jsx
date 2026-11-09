@@ -48,9 +48,10 @@ export default function HookLineEditor({ projectId, value, onChange, report, dis
           {!live && (
             <Button type="button" variant="outline" size="sm" onClick={suggest}
               disabled={busy || disabled || !projectId || !String(value || "").trim()}
+              busy={busy}
               data-testid="hook-rewrite-button">
               {busy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-2 h-3.5 w-3.5" />}
-              {busy ? "Writing one" : "Suggest a clearer hook"}
+              {busy ? "Writing hook" : "Suggest a clearer hook"}
             </Button>
           )}
           {error && <p className="text-sm text-destructive" role="alert" data-testid="hook-rewrite-error">{error}</p>}

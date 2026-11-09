@@ -29,22 +29,33 @@ import { GroupLabel } from "./SectionCard";
  * No mock frame, no replay, no hypothetical copy — this only renders while
  * a paid render is in flight.
  */
-const RENDER_STAGES = [
-  { key: "lock", label: "Locking your approved script" },
-  { key: "render", label: "Rendering hook + story in one pass" },
-  { key: "stitch", label: "Stitching one clip" },
+const STAGES = [
+  "Locking your approved script",
+  "Rendering hook + story in one pass",
+  "Stitching one clip",
 ];
 
-function PaidRenderProgress({ status, modelName }) {
-  const stageIndex = status === "generating" ? 2 : 0;
-  const progress = status === "generating" ? 85 : 25;
+function stageLabel(status, hasUrl) {
+  if (hasUrl) return "Done";
+  if (status === "generating") return "Stitching one clip";
+  if (status === "submitted") return "Locking your approved script";
+  if (status === "completed") return "Done";
+  if (status === "failed") return "Failed";
+  return "Rendering hook + story in one pass";
+}
+
+function PaidRenderProgress({ status, modelName, videoUrl }) {
+  const hasUrl = Boolean(videoUrl);
+  const isDone = status === "completed" || hasUrl;
+  const stageIndex = isDone ? 3 : status === "generating" ? 2 : 0;
+  const progress = isDone ? 100 : status === "generating" ? 85 : 25;
   return (
     <div className="space-y-3" aria-live="polite" data-testid="paid-render-progress">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={Film}>Render in progress — paid render</GroupLabel>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{RENDER_STAGES[stageIndex].label}…</p>
+        <p className="text-sm font-semibold">{stageLabel(status, hasUrl)}…</p>
         <span className="text-xs text-muted-foreground">{progress}%</span>
       </div>
       <div
@@ -61,9 +72,9 @@ function PaidRenderProgress({ status, modelName }) {
         />
       </div>
       <ul className="space-y-1.5">
-        {RENDER_STAGES.map((s, i) => (
+        {STAGES.map((label, i) => (
           <li
-            key={s.key}
+            key={label}
             className={`flex items-center gap-2 text-sm ${
               i < stageIndex
                 ? "text-muted-foreground"
@@ -84,8 +95,8 @@ function PaidRenderProgress({ status, modelName }) {
                 }`}
               />
             )}
-            {s.label}
-            {i === stageIndex ? "…" : ""}
+            {label}
+            {i === stageIndex && !isDone ? "…" : ""}
           </li>
         ))}
       </ul>
@@ -162,6 +173,10 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const [savingLocation, setSavingLocation] = useState(false);
   const [locationNote, setLocationNote] = useState(null);
   const timer = useRef(null);
+  const generationRef = useRef(null);
+  // Keep generationRef current so visibility resumes can read the live row
+  // without re-subscribing.
+  useEffect(() => { generationRef.current = generation; }, [generation]);
 
   const projectId = project?.id;
   const ready = project?.status === "ready_for_generation";
@@ -290,6 +305,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // every mount — which the app-wide ErrorBoundary turned into a blank screen
   // on every route. scripts/check-render-smoke.cjs mounts this component, so
   // that class of ordering mistake fails the gate instead of shipping.
+  //
   // Consecutive poll failures and the generation they belong to. One failed
   // Polling budget. A rate-limited poll is NEVER counted as an outage
   // failure and NEVER escalates the banner — 429 means the render is healthy
@@ -300,12 +316,79 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // ONLY on a terminal row status; a transient network/5xx failure walks
   // the outage budget and, once spent, names History as the next step —
   // never a frozen progress bar.
+  //
+  // The poll chain is the only thing that flips the panel off 85%. If the
+  // chain dies — tab backgrounded past browser timer floors, unmount, a
+  // missed timeout — the founder is left staring at a frozen bar while the
+  // backend keeps rendering and History later shows the clip completed.
+  // So every generation advance re-arms the chain, and a visibility return
+  // forces an immediate poll: the first poll after the tab returns the
+  // terminal row, not another silent wait.
   const pollFailures = useRef(0);
   const poll429s = useRef(0);
   const pollingId = useRef(null);
   const pollTimedOut = useRef(false);
   const MAX_POLL_FAILURES = 5;
   const MAX_POLL_429s = 20;
+
+  const onPollSettled = useCallback((updated) => {
+    setGeneration(updated);
+    onGenerationChange?.(updated);
+    return updated.status === "submitted" || updated.status === "generating";
+  }, [onGenerationChange]);
+
+  const pollOnce = useCallback(async (id) => {
+    try {
+      const updated = await api.pollGeneration(id);
+      pollFailures.current = 0;
+      poll429s.current = 0;
+      if (onPollSettled(updated)) {
+        schedulePollRef.current?.(id);
+      }
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        poll429s.current += 1;
+        try {
+          const data = await api.getGenerations({ studio_project_id: projectId, limit: 1 });
+          const newest = data.generations?.[0] || null;
+          if (newest && newest.id !== id) {
+            onPollSettled(newest);
+            if (newest.status === "submitted" || newest.status === "generating") {
+              schedulePollRef.current?.(newest.id);
+            }
+            return;
+          }
+          if (newest && newest.id === id && newest.status !== "submitted" && newest.status !== "generating") {
+            onPollSettled(newest);
+            return;
+          }
+        } catch {
+          /* best-effort */
+        }
+        if (poll429s.current >= MAX_POLL_429s) {
+          pollTimedOut.current = true;
+          setError(
+            "The render is still in progress at the video provider but the studio is being rate-limited. The clip is not lost; it will appear in History once the provider finishes. Check History for this project; the panel will not loop forever."
+          );
+          return;
+        }
+        schedulePollRef.current?.(id);
+        return;
+      }
+      pollFailures.current += 1;
+      if (pollFailures.current >= MAX_POLL_FAILURES) {
+        pollTimedOut.current = true;
+        setError(
+          `We couldn't check the render status after ${MAX_POLL_FAILURES} tries: `
+          + `${getErrorMessage(err)}. The render may still be running — check `
+          + "History for this project. The panel will not loop forever."
+        );
+      } else {
+        schedulePollRef.current?.(id);
+      }
+    }
+  }, [onPollSettled, projectId]);
+
   const schedulePoll = useCallback((id) => {
     if (pollingId.current !== id) {
       pollingId.current = id;
@@ -316,62 +399,29 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     if (pollTimedOut.current) return;
     if (timer.current) clearTimeout(timer.current);
     const delay = poll429s.current > 0 ? Math.min(POLL_INTERVAL_MS * (1 + poll429s.current), 60_000) : POLL_INTERVAL_MS;
-    timer.current = setTimeout(async () => {
-      try {
-        const updated = await api.pollGeneration(id);
-        pollFailures.current = 0;
-        poll429s.current = 0;
-        setGeneration(updated);
-        onGenerationChange?.(updated);
-        if (updated.status === "submitted" || updated.status === "generating") {
-          schedulePoll(id);
-        }
-      } catch (err) {
-        if (err?.response?.status === 429) {
-          poll429s.current += 1;
-          try {
-            const data = await api.getGenerations({ studio_project_id: projectId, limit: 1 });
-            const newest = data.generations?.[0] || null;
-            if (newest && newest.id !== id) {
-              setGeneration(newest);
-              onGenerationChange?.(newest);
-              if (newest.status === "submitted" || newest.status === "generating") {
-                schedulePoll(newest.id);
-              }
-              return;
-            }
-            if (newest && newest.id === id && newest.status !== "submitted" && newest.status !== "generating") {
-              setGeneration(newest);
-              onGenerationChange?.(newest);
-              return;
-            }
-          } catch {
-            /* best-effort */
-          }
-          if (poll429s.current >= MAX_POLL_429s) {
-            pollTimedOut.current = true;
-          setError(
-            "The render is still in progress at the video provider but the studio is being rate-limited. The clip is not lost; it will appear in History once the provider finishes. Check History for this project; the panel will not loop forever."
-          );
-            return;
-          }
-          schedulePoll(id);
-          return;
-        }
-        pollFailures.current += 1;
-        if (pollFailures.current >= MAX_POLL_FAILURES) {
-          pollTimedOut.current = true;
-          setError(
-            `We couldn't check the render status after ${MAX_POLL_FAILURES} tries: `
-            + `${getErrorMessage(err)}. The render may still be running — check `
-            + "History for this project. The panel will not loop forever."
-          );
-        } else {
-          schedulePoll(id);
-        }
-      }
+    timer.current = setTimeout(() => {
+      pollOnce(id);
     }, delay);
-  }, [onGenerationChange, projectId]);
+  }, [pollOnce]);
+
+  // Keep the ref current so pollOnce (which runs outside render) always calls
+  // the latest scheduler.
+  const schedulePollRef = useRef(schedulePoll);
+  schedulePollRef.current = schedulePoll;
+
+  // A backgrounded tab throttles every setTimeout to minutes; when the
+  // founder returns the chain may already be dead. Force one poll on
+  // visibility return, and re-arm the chain if the row is still in flight.
+  useEffect(() => {
+    const resumePolling = () => {
+      if (document.visibilityState !== "visible") return;
+      const current = generationRef.current;
+      if (!current || (current.status !== "submitted" && current.status !== "generating")) return;
+      pollOnce(current.id);
+    };
+    document.addEventListener("visibilitychange", resumePolling);
+    return () => document.removeEventListener("visibilitychange", resumePolling);
+  }, [pollOnce]);
 
   // Adopt the newest generation for this project, and stop polling a
   // finished one so a completed video is not re-checked forever.
@@ -397,6 +447,21 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
       if (timer.current) clearTimeout(timer.current);
     };
   }, [projectId, schedulePoll]);
+
+  // A HeyGen render that the polling chain died on leaves the panel frozen
+  // at 85% while History shows completed. Re-arm the chain whenever the
+  // panel mounts or the project changes and the newest row is still in
+  // flight: this catches the "reload kept showing the message" case, where
+  // getGenerations returned the in-flight row but the fetch died before
+  // schedulePoll ran.
+  useEffect(() => {
+    const current = generation;
+    if (!current) return;
+    if (current.status !== "submitted" && current.status !== "generating") return;
+    if (!timer.current) {
+      schedulePoll(current.id);
+    }
+  }, [generation, schedulePoll]);
 
 
   // A new render starts unvoted: the override belongs to the previous clip.
@@ -789,6 +854,7 @@ const handleGenerate = async () => {
           busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
         }
         busy={busy || inFlight}
+        data-testid="render-generate-button"
       >
         {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
         {inFlight || busy
@@ -798,7 +864,7 @@ const handleGenerate = async () => {
             : "Generate the video"}
       </Button>
 
-      {remedies.length > 0 && (
+      {remedies.length > 0 && !(busy || inFlight) && (
         <div className="flex flex-wrap gap-2" data-testid="render-remedies">
           {remedies.map((remedy) => (
             <Button
@@ -855,10 +921,17 @@ const handleGenerate = async () => {
         </p>
       )}
 
-      {(busy || inFlight) && (
+      {/* Paid render progress is the stage checklist with a real bar — the
+          button's looping sweep alone cannot carry a minutes-long paid wait
+          with a stage state, so this stays as the result/queue narrator and
+          is not a helper line under an idle CTA. It flips to a checkmark the
+          second the row has a playable URL, so a completed render can never
+          leave the panel frozen at 85% with History already showing it. */}
+      {(busy || inFlight || (generation && (generation.playback_url || generation.r2_url || generation.video_url))) && (
         <PaidRenderProgress
           status={generation?.status || "submitted"}
           modelName={capability?.name || selectedModel || ""}
+          videoUrl={generation?.playback_url || generation?.r2_url || generation?.video_url}
         />
       )}
 

@@ -1092,11 +1092,12 @@ h1,
     animation: shimmer-sweep 850ms ease-out;
 }
 
-/* Unified busy state: a slow light fill that breathes across the button while
-   it works. It lives on `::before` so the hover sweep keeps `::after`, and it
+/* Unified busy state: a looping sheen sweep on the button itself while it
+   works. It lives on `::before` so the hover sweep keeps `::after`, and it
    keys off `data-busy` (set by the Button `busy` prop) rather than a second
    spinner style per screen — one behavior for every CTA after the click.
-   The label names the work without dots; the fill is the wait indicator.
+   The label names the work concisely without dots; the sweep is the wait
+   indicator, and no helper line below the button carries a live count.
    Text and icons never animate: only this fill layer moves. */
 @keyframes busy-sweep {
     0% { transform: translateX(-140%) skewX(-18deg); opacity: 0; }

@@ -1,7 +1,4 @@
-import { useEffect, useState } from "react";
 import { CONTROL_CLASS } from "../formControls";
-
-const PLAN_PHASES = ["Writing the hook…", "Writing the script…", "Placing the shots…", "Adding the demo note…"];
 
 /**
  * One profile-aware dropdown for a Review-step direction field.
@@ -60,23 +57,13 @@ export function DirectionSelect({
 }
 
 /**
- * Live narration while the plan writes. The artifact arrives whole, so there
- * is nothing honest to count — but its sections are known up front (hook,
- * script, shots, demo note), and naming the current one beats a static line
- * that never moves. Unmounts with its branch, so a failure can never strand
- * it beside the error; the interval dies with the component.
+ * The plan writes in one call with no observable intermediate stages, and
+ * the Review step now carries the wait on the progress button itself
+ * ("Generating your plan" with a looping sweep) instead of a phase line
+ * cycling invented stage names. The export keeps the name the page imports
+ * so the panel wiring does not churn; it renders nothing — the button is
+ * the only narrator while the plan writes.
  */
 export function PlanPhaseLine() {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % PLAN_PHASES.length);
-    }, 1800);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <span role="status" data-testid="plan-progress">
-      {PLAN_PHASES[index]}
-    </span>
-  );
+  return null;
 }
