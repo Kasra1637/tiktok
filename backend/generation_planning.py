@@ -185,8 +185,8 @@ CONDENSE_BELOW = 5000
 # and a selfie render gets the physical ending instead. The reach/phone/camera
 # and second-free-hand prohibitions (ADR 0093, as superseded) are part of the
 # fixed text, which is why both floors rose.
-FULL_PROMPT_FLOOR = 4232
-CONDENSED_PROMPT_FLOOR = 2365
+FULL_PROMPT_FLOOR = 4027
+CONDENSED_PROMPT_FLOOR = 2238
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -200,7 +200,7 @@ CONDENSED_PROMPT_FLOOR = 2365
 # before it builds a prompt, so this path is not the one that failed — but it is
 # the same ceiling one path had no answer for, and it now scales like its
 # sibling rather than relying on the guard.
-SINGLE_PASS_PROMPT_FLOOR = 2308
+SINGLE_PASS_PROMPT_FLOOR = 2302
 
 # The app's own name, in the prompt, clipped.
 #
@@ -332,7 +332,10 @@ def _clip(text, limit: int, protect: bool = False, sacred: bool = False,
     if len(s) <= effective:
         return s
     head = s[:effective].rstrip()
-    if _PROMPT_CONDENSED.get():
+    # Clean boundary on any squeeze, not only the condensed path: a 6,800-char
+    # Hailuo prompt over budget squeezes to scale < 1.0 with condensed False,
+    # and a hard mid-word cut there is noise the model reads as an instruction.
+    if _PROMPT_CONDENSED.get() or scale < 1.0:
         return _clean_boundary(head)
     return head
 
@@ -812,7 +815,7 @@ def _assemble_single_pass_prompt(
     sections.append(
         f"Create ONE continuous {duration}-second vertical (9:16) promotional video "
         f"for the mobile app {app_name}. It must be a single coherent take containing "
-        f"both the opening hook and its continuation, with no visible cut to a separate clip, "
+        f"both the opening hook and its middle, with no visible cut to a separate clip, "
         f"no black frames, and no title card."
     )
 
@@ -871,11 +874,12 @@ def _assemble_single_pass_prompt(
         sections.append(f"Visual direction: {visual}")
     if tpl.get("visual_style"):
         sections.append(f"Visual style: {_clip(tpl['visual_style'], 100)}")
-    if tpl.get("camera_pacing") or tpl.get("middle_structure"):
-        pacing = " ".join(
-            p for p in (_clip(tpl.get("camera_pacing"), 100), _clip(tpl.get("middle_structure"), 100)) if p
-        )
-        sections.append(f"Camera and pacing: {pacing}")
+    # Template camera_pacing is deliberately not emitted: the fixed camera-move
+    # section owns camera words (ADR 0108) and curated pacing values ("hard cut",
+    # "slow push") contradict the one-take orbit rule there. The template's
+    # middle_structure is the shape carrier, not its pacing.
+    if tpl.get("middle_structure"):
+        sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 100)}")
     if voice:
         sections.append(f"Voice direction: {voice}")
     else:
@@ -1160,7 +1164,7 @@ def person_anchor_notes(assets: list) -> str:
             "or recolour their hair, and do not add or remove anything absent from the "
             "image (hats, glasses, jewellery, makeup). Move and speak naturally, but do "
         "not change who they are. The image is the only authority on the person — "
-        "face, hair and build, not the place. Where this prompt states otherwise "
+        "face, hair and skin, not the place. Where this prompt states otherwise "
         "about who they are, ignore the text and follow the image. Do not invent "
         "a different person and do not blend "
         "them with anyone else. Their clothing is the one exception: the scene above "
@@ -1281,8 +1285,7 @@ def character_scene_lock(strategy: dict, location: str = "") -> str:
         "THE SCENE AND THE DELIVERY ARE LOCKED. Reproduce these exactly — same place, "
         "same light, same wardrobe and props, same way of moving and speaking:\n"
         + "\n".join(lines)
-        + "\n\nThese are not suggestions. Do not restyle, re-light, re-wardrobe or relocate "
-        "this scene, and do not swap in a different location, prop or outfit, even if the "
+        + "\n\nDo not swap in a different location, prop or outfit, even if the "
         "later part of the story would seem to call for it."
     )
     # The block as a whole is capped, not just its values: scene fields come
@@ -1390,38 +1393,16 @@ def strategy_brief(strategy: dict) -> str:
     benefit-framed how-it-helps first, the outcome stated directly last.
     """
     strategy = strategy or {}
+    # Order is load-bearing: the brief is capped at 700 chars below, so the
+    # pitch (problem/mechanism/payoff/differentiation) comes first and the
+    # generic context (summary/triggers/pillars) last. Previously the summary
+    # headed the brief and a realistic full brief was cut mid-payoff and never
+    # reached differentiation.
     parts = []
-    summary = _clip(strategy.get("strategy_summary"), 250)
-    if summary:
-        parts.append(f"Strategy for this video: {summary}")
 
     problem = _clip(strategy.get("audience_problem"), 200)
     if problem:
         parts.append(f"The problem this viewer actually has: {problem}")
-
-    triggers = [_clip(t, 80) for t in (strategy.get("emotional_triggers") or []) if str(t).strip()]
-    if triggers:
-        parts.append(f"Emotions to land: {'; '.join(triggers[:4])}")
-
-    pillars = [_clip(p, 100) for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
-    if pillars:
-        # Outcome-framed by construction: the strategy prompt asks for
-        # benefits here, never the feature spec, so the label says outcomes.
-        parts.append("Outcomes that must be delivered: " + "; ".join(pillars[:4]))
-
-    feature = _clip(strategy.get("primary_feature"), 200)
-    if feature:
-        # Subject matter, not an instruction. The old wording ("The one feature
-        # shown: {feature}. Show it in use, not described.") was a direct
-        # product-demo order reaching the render prompt on every generation.
-        parts.append(
-            f"What this app is about (the situation the middle is set in, never filmed "
-            f"working): {feature}"
-        )
-
-    outcome = _clip(strategy.get("desired_outcome"), 200)
-    if outcome:
-        parts.append(f"Outcome the viewer should expect: {outcome}")
 
     mechanism = _clip(strategy.get("mechanism_beat"), 200)
     if mechanism:
@@ -1437,15 +1418,44 @@ def strategy_brief(strategy: dict) -> str:
     if diff:
         parts.append(f"How this app is different: {diff}")
 
+    feature = _clip(strategy.get("primary_feature"), 200)
+    if feature:
+        # Subject matter, not an instruction. The old wording ("The one feature
+        # shown: {feature}. Show it in use, not described.") was a direct
+        # product-demo order reaching the render prompt on every generation.
+        parts.append(
+            f"What this app is about (the situation the middle is set in, never filmed "
+            f"working): {feature}"
+        )
+
+    outcome = _clip(strategy.get("desired_outcome"), 200)
+    if outcome:
+        parts.append(f"Outcome the viewer should expect: {outcome}")
+
+    triggers = [_clip(t, 80) for t in (strategy.get("emotional_triggers") or []) if str(t).strip()]
+    if triggers:
+        parts.append(f"Emotions to land: {'; '.join(triggers[:4])}")
+
+    pillars = [_clip(p, 100) for p in (strategy.get("messaging_pillars") or []) if str(p).strip()]
+    if pillars:
+        # Outcome-framed by construction: the strategy prompt asks for
+        # benefits here, never the feature spec, so the label says outcomes.
+        parts.append("Outcomes that must be delivered: " + "; ".join(pillars[:4]))
+
+    summary = _clip(strategy.get("strategy_summary"), 250)
+    if summary:
+        parts.append(f"Strategy for this video: {summary}")
+
     if not parts:
         return ""
     brief = "THIS APP-SPECIFIC STRATEGY — it governs this whole video:\n" + "\n".join(
         f"  {p}" for p in parts
     )
-    # The brief as a whole is capped: its head (summary, problem, triggers)
-    # carries the context the render needs, so a pathological strategy loses
-    # the tail, never the head. Sized to clear a realistic full brief — lower
-    # cuts feature and outcome lines out of ordinary strategies.
+    # The brief as a whole is capped: its head (problem, mechanism, payoff,
+    # differentiation) carries the pitch the render needs, so a pathological
+    # strategy loses the generic tail (summary/triggers/pillars), never the
+    # payoff. Sized to clear a realistic full brief — lower cuts context lines
+    # out of ordinary strategies while keeping the pitch whole.
     return _clip(brief, 700, protect=True)
 
 
@@ -1798,13 +1808,34 @@ def _assemble_prompt(
     hook_action = _clip(strategy.get("hook_action"), 280, protect=True)
     hook_dialogue = _clip(strategy.get("hook_dialogue"), 75)
     promise = _clip(strategy.get("hook_promise"), 40)
+    # bind_spoken_words copies the approved hook line into segments[0].script,
+    # so the same words would otherwise be spoken three times (top-level hook
+    # line, hook_dialogue, and the HOOK section below). The top-level line is
+    # the canonical carrier and always emits; the section copy is dropped when
+    # verbatim identical. hook_dialogue emits only when it adds delivery
+    # direction beyond the hook line.
+    _hook_section = next(
+        (s for s in (strategy.get("segments") or [])
+         if isinstance(s, dict) and str(s.get("role") or "").strip().lower() == "hook"),
+        {},
+    )
+    _hook_script_raw = " ".join(str(_hook_section.get("script") or "").split()).strip()
+    _hook_action_raw = " ".join(str(_hook_section.get("action") or "").split()).strip()
+    _hook_line_raw = " ".join(str(strategy.get("hook_line") or "").split()).strip()
+    _hook_dialogue_raw = " ".join(str(strategy.get("hook_dialogue") or "").split()).strip()
+    _hook_action_top_raw = " ".join(str(strategy.get("hook_action") or "").split()).strip()
     if hook_concept:
         sections.append(f"What the opening must DO: {hook_concept}")
     if hook_line:
         sections.append(f"The spoken hook line, delivered on camera: \"{hook_line}\"")
+    # The top-level hook action is the full score (280-char budget); the hook
+    # section's copy is dropped when verbatim identical so the score is stated
+    # once, whole. With no hook section the top-level line is the only carrier.
     if hook_action:
         sections.append(f"What the person physically does in the opening: {hook_action}")
-    if hook_dialogue:
+    if hook_dialogue and _hook_dialogue_raw not in (
+        _hook_line_raw, _hook_script_raw,
+    ):
         sections.append(f"Dialogue and delivery: {hook_dialogue}")
     if promise:
         sections.append(f"What the hook promises: {promise}")
@@ -1874,6 +1905,14 @@ def _assemble_prompt(
         goal = _clip(section.get("goal"), goal_budget, protect=True)
         script = _clip(section.get("script"), 160, protect=True, sacred=True)
         action = _clip(section.get("action"), action_budget, protect=True)
+        # The top-level hook lines already carry these verbatim (larger
+        # budgets); the section copies are dropped when identical so each
+        # spoken line and the physical score are stated once. With no hook
+        # section the top-level lines are the only carriers.
+        if role == "hook" and action and _hook_action_top_raw and _hook_action_top_raw == _hook_action_raw:
+            action = ""
+        if role == "hook" and script and _hook_line_raw and _hook_line_raw == _hook_script_raw:
+            script = ""
         block = [f"{label} — {budget}s, and its job is to {purpose}:"]
         if goal:
             block.append(f"  what it must achieve: {goal}")
@@ -1910,10 +1949,11 @@ def _assemble_prompt(
         sections.append(f"Hook mechanism to honour: {_clip(tpl['opening_structure'], 80)}")
     if tpl.get("middle_structure") and _fits_scene(tpl["middle_structure"]):
         sections.append(f"Middle structure to honour: {_clip(tpl['middle_structure'], 80)}")
-    if tpl.get("visual_style") and strategy.get("camera_setup") != "fixed" and _fits_scene(tpl["visual_style"]):
-        sections.append(f"Visual style: {_clip(tpl['visual_style'], 80)}")
-    if tpl.get("camera_pacing") and strategy.get("camera_setup") != "fixed":
-        sections.append(f"Camera and pacing: {_clip(tpl['camera_pacing'], 80)}")
+    # Template visual_style and camera_pacing are deliberately not emitted:
+    # visual_style duplicates the locked scene's style line, and curated pacing
+    # values ("hard cut", "slow push") directly contradict the fixed one-take
+    # orbit rule in camera_move_section. Setup owns camera words (ADR 0108);
+    # the template's contribution that reaches render is its two structures.
 
     # After the sections it governs and before the general look, which is where
     # the opening-interrupt directive sits for the same reason: the model reads a
@@ -1931,10 +1971,10 @@ def _assemble_prompt(
         template = _CONDENSED_SELFIE_FINAL_BEAT if condensed else _SELFIE_FINAL_BEAT
         sections.append(template.format(ending=ending))
 
-    sections.append(
-        "No text appears on screen at all — no captions, no titles, no labels. "
-        "Render a clean frame and do not draw any text yourself."
-    )
+    # No standalone no-text line here: _UI_RENDERING_WARNING below already
+    # states "no text appears on screen at all" as part of the UI prohibition,
+    # and the condensed handoff merges both. Emitting both said the same rule
+    # twice on a tight budget.
     # Voice-only audio, stated outright: the model synthesizes dialogue and
     # music in one pass with no way to separate them afterwards, so without
     # this every render arrives with a music bed under the speech.
@@ -1975,9 +2015,11 @@ def _assemble_prompt(
         # identity lock, which appears nowhere else.
         sections.append(_CONDENSED_IDENTITY_CLOSE)
     else:
+        # Vertical + identity lock only: the one-take / no-cut / no-black-frame
+        # / no-title-card rule is already stated in the opening sentence, so
+        # restating it here spent ~90 chars saying the same thing twice.
         sections.append(
-            f"Vertical 9:16 throughout. One continuous {seconds}-second take with no cut, no "
-            f"black frame, and no title card. The person on camera is the same individual in "
+            f"Vertical 9:16 throughout. The person on camera is the same individual in "
             f"every frame, with their face and hair exactly as in the reference photograph, in "
             f"the one outfit this scene specifies, in the same place, under the same light."
         )
