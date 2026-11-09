@@ -1,29 +1,42 @@
 """Benchmark harness for non-video text models on OpenRouter.
 
 One-off, run manually with OPENROUTER_API_KEY. It:
-1. Runs the golden fixtures through each candidate model's
+1. Discovers the current general-purpose text models from OpenRouter's live
+   catalog (GET /api/v1/models — no preset list), filtering out video, image,
+   embedding and moderation models, one per family.
+2. Runs the golden fixtures through each candidate model's
    generate_creative_plan and generate_video_strategy (via _chat_json's
    `model` override, so production prompts are untouched).
-2. Rates each output two ways:
+3. Rates each output two ways:
    - gated: the app's deterministic gates (spoken budget, one pronoun,
      no screen narration, no bounded-by result) as a hard pass/fail.
    - blind: an LLM judge scores the output 0-10 for hook strength,
      lived detail, voice and approval readiness, without knowing which
-     model wrote it.
-3. Prints a per-model table and writes a markdown report to
+     model wrote it. The judge is NOT in the candidate set.
+4. Prints a per-model table and writes a markdown report to
    `test_reports/benchmark_YYYY-MM-DD.md`.
 
 Cost is not considered: this is a quality-only comparison for a documented
 record. The current model is the baseline; every other row is the delta.
+
+Corrects two flaws in the earlier harness:
+- The preset CANDIDATES list was sample-only and violated the "no preset
+  list" rule. It is now discovered live from the catalog.
+- JUDGE_MODEL = BASELINE let the baseline judge its own outputs, inflating
+  its blind scores. The judge is now a fixed model outside the candidate
+  set (or a candidate explicitly excluded from the set before the run).
 """
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import datetime
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -33,26 +46,73 @@ import final_beat  # noqa: E402
 from claim_safety import bounded_by_conflict  # noqa: E402
 from golden_fixtures import FIXTURES  # noqa: E402
 
-# Candidate list. The baseline is the shipped default; the others are the
-# top general-purpose models running on OpenRouter today. Confirm slugs
-# against OpenRouter's live catalog before a run — a retired slug 404s and
-# wastes the whole batch.
 BASELINE = "anthropic/claude-haiku-5.5"
-CANDIDATES = [
-    BASELINE,
-    "anthropic/claude-sonnet-4.5",
-    "openai/gpt-5",
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "x-ai/grok-4.1-fast",
-    "deepseek/deepseek-v3.2-speciale",
-    "meta-llama/llama-4-maverick",
-    "qwen/qwen3-max",
-    "mistralai/large-3",
-    "mistralai/mistral-large-2.1",
-]
 
-JUDGE_MODEL = BASELINE  # the baseline judges blind; it cannot see names
+EXCLUDED_KINDS = ("video", "image", "embedding", "moderation")
+FAMILY_PREFIXES = (
+    "anthropic", "openai", "google", "x-ai", "deepseek", "qwen",
+    "mistralai", "meta-llama", "microsoft", "z-ai",
+)
+FAMILY_ORDER = {f: i for i, f in enumerate(FAMILY_PREFIXES)}
+
+
+def _family_of(model_id: str) -> str:
+    return (model_id or "").split("/", 1)[0].lower() if "/" in (model_id or "") else ""
+
+
+def discover_candidates(baseline: str = BASELINE, limit: int = 12) -> list:
+    """Live discovery from OpenRouter's catalog — no preset list.
+
+    GET /api/v1/models, filter out video/image/embedding/moderation, keep
+    currently servable general-purpose text models, one per family.
+    """
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY is required for live discovery")
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/models",
+        headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.load(resp)
+    models = data.get("data") or []
+
+    seen = {}
+    for entry in models:
+        model_id = (entry.get("id") or "").strip()
+        if not model_id:
+            continue
+        architecture = entry.get("architecture") or {}
+        modality = (architecture.get("modality") or "").lower()
+        if any(kind in modality for kind in EXCLUDED_KINDS):
+            continue
+        family = _family_of(model_id)
+        if family not in FAMILY_ORDER:
+            continue
+        current = seen.get(family)
+        if current is None or len(model_id) > len(current):
+            seen[family] = model_id
+
+    candidates = list(seen.values())
+    candidates = [baseline] + [m for m in candidates if m != baseline]
+    candidates.sort(
+        key=lambda m: (0 if m == baseline else 1, FAMILY_ORDER.get(_family_of(m), 99), m)
+    )
+    return candidates[:limit]
+
+
+def pick_judge(candidates: list, preferred: str = "openai/gpt-5") -> str:
+    """A fixed judge that is NOT in the candidate set."""
+    base = set(candidates) | {BASELINE}
+    if preferred not in base:
+        return preferred
+    for fallback in (
+        "openai/gpt-4.1", "google/gemini-2.0-flash-001", "mistralai/large-3",
+        "meta-llama/llama-3.3-70b-instruct",
+    ):
+        if fallback not in base:
+            return fallback
+    raise RuntimeError("No judge outside the candidate set — pass --judge explicitly")
 
 
 def _gate_plan_output(plan: dict, fixture: dict) -> list:
@@ -63,7 +123,6 @@ def _gate_plan_output(plan: dict, fixture: dict) -> list:
     script = str(plan.get("script") or "")
     hook_budget = ai_service.spoken_hook_budget(fixture.get("duration") or 20)
     script_budget = ai_service.spoken_middle_budget(fixture.get("duration") or 20)
-    hooks = [hook] if hook else []
     issues += ai_service._generated_spoken_issues(
         hook, script, hook_budget, script_budget,
         allows_question=ai_service._plan_requests_question_format(
@@ -74,13 +133,12 @@ def _gate_plan_output(plan: dict, fixture: dict) -> list:
         issues.append("hook_line is empty")
     if ai_service.hook_form_of(hook) == "question" and not ai_service._angle_invites_question(angle):
         issues.append("question hook without a self-ask problem")
-    # Screen-surface narration in the spoken line.
     if final_beat._clause_has_screen_action(ai_service._normalize_spoken(script)):
         issues.append("script narrates scrolling/reading a surface")
     return issues
 
 
-async def _run_one(model: str, fixture: dict) -> dict:
+async def _run_one(model: str, fixture: dict, judge_model: str) -> dict:
     """One fixture through one model's plan + strategy, with both ratings."""
     original = ai_service.TEXT_MODEL
     ai_service.TEXT_MODEL = model
@@ -100,8 +158,7 @@ async def _run_one(model: str, fixture: dict) -> dict:
         ai_service.TEXT_MODEL = original
     gate_issues = _gate_plan_output(plan, fixture)
 
-    # Blind rating: the judge sees the words, never the model name.
-    blind = await _judge(plan, strategy, fixture)
+    blind = await _judge(plan, strategy, fixture, judge_model)
     return {
         "fixture": fixture["name"],
         "model": model,
@@ -113,7 +170,7 @@ async def _run_one(model: str, fixture: dict) -> dict:
     }
 
 
-async def _judge(plan: dict, strategy: dict, fixture: dict) -> float:
+async def _judge(plan: dict, strategy: dict, fixture: dict, judge_model: str) -> float:
     """LLM-as-judge 0-10 for hook strength, lived detail, voice, approval readiness."""
     prompt = (
         "You are a founder reviewing a TikTok hook script for their app. "
@@ -131,7 +188,7 @@ async def _judge(plan: dict, strategy: dict, fixture: dict) -> float:
     try:
         result = await ai_service._chat_json(
             "Rate founder scripts on a strict 0-10 scale.",
-            prompt, "blind judge", model=JUDGE_MODEL, max_tokens=200,
+            prompt, "blind judge", model=judge_model, max_tokens=200,
         )
         return float(result.get("score", 0))
     except Exception:
@@ -140,21 +197,30 @@ async def _judge(plan: dict, strategy: dict, fixture: dict) -> float:
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--models", nargs="*", help="override the candidate list")
     parser.add_argument("--limit", type=int, default=0, help="stop after N fixtures per model")
+    parser.add_argument("--judge", help="explicit judge model (must be outside the candidate set)")
+    parser.add_argument("--baseline", default=BASELINE)
     args = parser.parse_args()
 
-    models = args.models or CANDIDATES
     fixtures = FIXTURES[: args.limit] if args.limit else FIXTURES
-    print(f"benchmark: {len(models)} models x {len(fixtures)} fixtures", flush=True)
+    candidates = discover_candidates(baseline=args.baseline)
+    judge = args.judge or pick_judge(candidates)
+    if judge in set(candidates) | {BASELINE}:
+        print(f"judge {judge} must be outside the candidate set", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"baseline: {BASELINE}", flush=True)
+    print(f"candidates ({len(candidates)}): {candidates}", flush=True)
+    print(f"judge (not a candidate): {judge}", flush=True)
+    print(f"fixtures: {len(fixtures)}", flush=True)
     if not os.environ.get("OPENROUTER_API_KEY"):
         print("OPENROUTER_API_KEY is required", file=sys.stderr)
         sys.exit(1)
 
     rows = []
-    for model in models:
+    for model in candidates:
         for fixture in fixtures:
-            row = await _run_one(model, fixture)
+            row = await _run_one(model, fixture, judge)
             rows.append(row)
             print(
                 f"{model:40s} {fixture['name']:28s} "
@@ -163,9 +229,8 @@ async def main():
                 flush=True,
             )
 
-    # Aggregate: gated pass rate, mean blind score, per-form variance.
     summary = {}
-    for model in models:
+    for model in candidates:
         mine = [r for r in rows if r["model"] == model]
         summary[model] = {
             "n": len(mine),
@@ -177,6 +242,8 @@ async def main():
 
     today = datetime.date.today().isoformat()
     out = [f"# Text model benchmark — {today}", ""]
+    out.append(f"Baseline: {BASELINE}  ·  Judge (not a candidate): {judge}  ·  Candidates: discovered live from OpenRouter (no preset list)")
+    out.append("")
     out.append("| model | gated pass | mean blind (0-10) | baseline |")
     out.append("|---|---|---|---|")
     for model, s in ranked:
