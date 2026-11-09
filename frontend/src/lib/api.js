@@ -198,9 +198,6 @@ function newDemoCtaUploadId() {
 export const api = {
   // Brand profile / Content Remixer
   getActiveBrand: () => client.get("/brand/active").then((r) => r.data),
-  // All saved brands for the current user, active first — powers the brand
-  // picker so generation flows don't require re-entering a URL.
-  getBrands: () => client.get("/brands").then((r) => r.data),
   getBrand: (id) => client.get(`/brand/${id}`).then((r) => r.data),
   createBrand: (payload) => client.post("/brand", payload).then((r) => r.data),
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
