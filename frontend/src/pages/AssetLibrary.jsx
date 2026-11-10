@@ -50,13 +50,33 @@ function formatSeconds(value) {
  * `onError` swaps in a neutral placeholder that keeps the box's exact shape, so
  * a broken source looks broken on purpose and the name stays where it belongs,
  * in the row's text.
+ *
+ * `media_url` is signed at serialization with a 12h TTL, and the server
+ * re-signs fresh on every list — but an asset card the founder leaves open
+ * long enough (page kept open past expiry, backend restarted with a fresh
+ * per-process signing key) carries a dead signature, so every thumbnail in
+ * the list breaks at once while the rows themselves are fine. The first
+ * failure therefore asks the parent for a fresh list, which mints new
+ * signatures; only a second consecutive failure is shown as missing. The
+ * `src` guard stops the refetch from looping on a genuinely missing file —
+ * a fresh URL that still does not load is a missing asset, not an expiry.
  */
-function AssetThumb({ asset, isVideo, isAudio }) {
+function AssetThumb({ asset, isVideo, isAudio, onRefresh }) {
   const [failed, setFailed] = useState(false);
+  const [retriedSrc, setRetriedSrc] = useState(null);
   const src = asset.media_url;
   useEffect(() => {
     setFailed(false);
+    setRetriedSrc(null);
   }, [src]);
+  const handleError = () => {
+    if (retriedSrc !== src && onRefresh) {
+      setRetriedSrc(src);
+      onRefresh();
+      return;
+    }
+    setFailed(true);
+  };
   return (
     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-secondary/40">
       {!src ? null : failed || isAudio ? (
@@ -75,7 +95,7 @@ function AssetThumb({ asset, isVideo, isAudio }) {
           className="h-full w-full object-cover"
           loading="lazy"
           decoding="async"
-          onError={() => setFailed(true)}
+          onError={handleError}
         />
       )}
     </div>
@@ -121,6 +141,7 @@ function AssetRow({
   onArchive,
   onAttach,
   onDetach,
+  onRefresh,
   embedded = false,
   projectId,
   attached,
@@ -155,7 +176,7 @@ function AssetRow({
       data-new-upload={highlight ? "true" : undefined}
     >
       <div className="flex items-center gap-3">
-        <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} />
+        <AssetThumb asset={asset} isVideo={isVideo} isAudio={isAudio} onRefresh={onRefresh} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-base font-semibold">
@@ -894,6 +915,7 @@ export default function AssetLibrary({
               onArchive={handleArchive}
               onAttach={handleAttach}
               onDetach={handleDetach}
+              onRefresh={load}
               embedded
               projectId={projectId}
               attached
@@ -927,6 +949,7 @@ export default function AssetLibrary({
                     onArchive={handleArchive}
                     onAttach={handleAttach}
                     onDetach={handleDetach}
+                    onRefresh={load}
                     embedded
                     projectId={projectId}
                     attached={attachedIds.has(a.id)}
@@ -997,6 +1020,7 @@ export default function AssetLibrary({
               onArchive={handleArchive}
               onAttach={handleAttach}
               onDetach={handleDetach}
+              onRefresh={load}
               projectId={projectId}
               attached={attachedIds.has(a.id)}
               attachDisabled={busy || (characterSlotTaken && a.kind === "character_reference")}

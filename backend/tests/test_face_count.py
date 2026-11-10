@@ -78,3 +78,48 @@ def test_hair_blob_detection_is_not_a_face():
     dominant = max(float(f[2]) * float(f[3]) for f in faces)
     assert face_crop._is_plausible_face(main, dominant) is True
     assert face_crop._is_plausible_face(blob, dominant) is False
+
+
+def _count(faces) -> int:
+    faces = np.asarray(faces)
+    dominant = face_crop._dominant_index(faces)
+    dominant_area = float(faces[dominant][2]) * float(faces[dominant][3])
+    others = sum(
+        1 for i, f in enumerate(faces)
+        if i != dominant and face_crop._is_plausible_face(f, dominant_area)
+    )
+    return 1 + others
+
+
+def test_marginal_single_face_still_counts_one():
+    # A realistic portrait YuNet scores marginal — side profile, sunglasses,
+    # phone noise — has one detection, but at 0.55 confidence with collapsed
+    # landmarks it fails every plausible-face check. Gating the first face
+    # turned that into "No face detected", which is the more expensive
+    # error: the founder is told the provider will refuse a photo that
+    # already shows one face. The dominant detection always counts.
+    assert _count([_face(0.55, 10, 10, 100, 130, 0.10)]) == 1
+
+
+def test_hair_blob_pair_counts_one():
+    assert _count([
+        _face(0.894, 260, 365, 270, 350, 0.48),
+        _face(0.596, 475, 146, 65, 91, 0.11),
+    ]) == 1
+
+
+def test_second_real_face_counts_two():
+    assert _count([
+        _face(0.894, 0, 0, 270, 350, 0.48),
+        _face(0.894, 300, 0, 270, 350, 0.48),
+    ]) == 2
+
+
+def test_largest_box_is_dominant_even_at_lower_confidence():
+    # Area wins over confidence when picking the anchor: a big marginal face
+    # is still the face, not the small confident blob next to it.
+    faces = np.array([
+        _face(0.9, 0, 0, 50, 65, 0.48),
+        _face(0.6, 100, 100, 200, 260, 0.48),
+    ])
+    assert face_crop._dominant_index(faces) == 1

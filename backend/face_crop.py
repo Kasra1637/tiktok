@@ -32,7 +32,7 @@ _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar_i
 # Detection confidence threshold
 _MIN_CONFIDENCE = 0.5
 
-# A name-photo warning only fires when a second detection is visible to a
+# A second-face warning only fires when a second detection is visible to a
 # person. YuNet fires on head-shaped non-faces — a messy hair bun is its
 # favourite — at marginal confidence, and count_faces used to take that raw
 # length, so a solo portrait of one woman with a topknot read "2 faces" and
@@ -44,6 +44,14 @@ _MIN_CONFIDENCE = 0.5
 # person carries a comparable face, at a comparable confidence, with a
 # comparable eye span — the checks were validated against a tiled two-person
 # composite of the same portrait, which clears all three.
+#
+# The checks gate only the SECOND and later detections. The dominant
+# detection (largest box, highest confidence among those) always counts as
+# a face: gating it too turned every realistic portrait that YuNet scores
+# marginal — a side profile, sunglasses, phone noise — from one detected
+# face into zero, which is the more expensive error ("provider will
+# refuse" on a photo that already shows one face, and a crop step that has
+# nothing to crop to).
 _COUNT_MIN_CONFIDENCE = 0.65
 _COUNT_MIN_AREA_REL = 0.15
 _COUNT_MIN_EYE_SPAN_RATIO = 0.30
@@ -361,15 +369,32 @@ def _pad_to_vertical(img: Image.Image, bbox: tuple) -> tuple:
 
 
 def _is_plausible_face(face, dominant_area: float) -> bool:
-    """One detection survives as a face for counting purposes. See the
+    """A non-dominant detection survives as a second person. See the
     _COUNT_* note above: a hair blob is marginal, tiny next to the main
-    face, and has degenerate landmarks; a real person is none of those."""
+    face, and has degenerate landmarks; a real person is none of those.
+    The dominant detection is never gated through this — it counts on its
+    own, so a marginal-but-real single face reads 1, not 0."""
     if float(face[14]) < _COUNT_MIN_CONFIDENCE:
         return False
     if dominant_area > 0 and (float(face[2]) * float(face[3])) / dominant_area < _COUNT_MIN_AREA_REL:
         return False
     eye_span = abs(float(face[6]) - float(face[4])) / max(float(face[2]), 1.0)
     return eye_span >= _COUNT_MIN_EYE_SPAN_RATIO
+
+
+def _dominant_index(faces) -> int:
+    """Index of the detection that anchors the count — the largest box,
+    ties broken by confidence. Always counted; the plausible-face checks
+    gate the second person, never the first."""
+    best = 0
+    best_area = float(faces[0][2]) * float(faces[0][3])
+    best_conf = float(faces[0][14])
+    for i in range(1, len(faces)):
+        area = float(faces[i][2]) * float(faces[i][3])
+        conf = float(faces[i][14])
+        if area > best_area or (area == best_area and conf > best_conf):
+            best, best_area, best_conf = i, area, conf
+    return best
 
 
 def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
@@ -395,8 +420,13 @@ def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
 
     if faces is None or len(faces) == 0:
         return 0
-    dominant_area = max(float(f[2]) * float(f[3]) for f in faces)
-    return int(sum(1 for f in faces if _is_plausible_face(f, dominant_area)))
+    dominant = _dominant_index(faces)
+    dominant_area = float(faces[dominant][2]) * float(faces[dominant][3])
+    others = sum(
+        1 for i, f in enumerate(faces)
+        if i != dominant and _is_plausible_face(f, dominant_area)
+    )
+    return 1 + others
 
 
 def count_faces_from_path(image_path: Path) -> Optional[int]:
