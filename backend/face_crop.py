@@ -32,6 +32,22 @@ _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar_i
 # Detection confidence threshold
 _MIN_CONFIDENCE = 0.5
 
+# A name-photo warning only fires when a second detection is visible to a
+# person. YuNet fires on head-shaped non-faces — a messy hair bun is its
+# favourite — at marginal confidence, and count_faces used to take that raw
+# length, so a solo portrait of one woman with a topknot read "2 faces" and
+# told the founder to upload a solo shot of a photo that already was one.
+# The hair blobs this detector produces fail all three checks at once:
+# confidence far below the dominant face, a fraction of its area, and
+# landmarks that cannot be a face (both "eyes" collapse onto one point,
+# where a real face's eyes span roughly half the box width). A real second
+# person carries a comparable face, at a comparable confidence, with a
+# comparable eye span — the checks were validated against a tiled two-person
+# composite of the same portrait, which clears all three.
+_COUNT_MIN_CONFIDENCE = 0.65
+_COUNT_MIN_AREA_REL = 0.15
+_COUNT_MIN_EYE_SPAN_RATIO = 0.30
+
 # Padding ratios relative to the detected face bounding box dimensions.
 # These capture the full head (face + hair + ears + chin/neck) with margin to
 # spare, because this crop can BECOME the opening frame: first-frame models
@@ -344,6 +360,18 @@ def _pad_to_vertical(img: Image.Image, bbox: tuple) -> tuple:
         return (img, bbox)
 
 
+def _is_plausible_face(face, dominant_area: float) -> bool:
+    """One detection survives as a face for counting purposes. See the
+    _COUNT_* note above: a hair blob is marginal, tiny next to the main
+    face, and has degenerate landmarks; a real person is none of those."""
+    if float(face[14]) < _COUNT_MIN_CONFIDENCE:
+        return False
+    if dominant_area > 0 and (float(face[2]) * float(face[3])) / dominant_area < _COUNT_MIN_AREA_REL:
+        return False
+    eye_span = abs(float(face[6]) - float(face[4])) / max(float(face[2]), 1.0)
+    return eye_span >= _COUNT_MIN_EYE_SPAN_RATIO
+
+
 def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
     """
     Count confidently-detected faces in an RGB numpy array.
@@ -365,9 +393,10 @@ def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
     )
     _, faces = detector.detect(img_rgb)
 
-    if faces is None:
+    if faces is None or len(faces) == 0:
         return 0
-    return int(len(faces))
+    dominant_area = max(float(f[2]) * float(f[3]) for f in faces)
+    return int(sum(1 for f in faces if _is_plausible_face(f, dominant_area)))
 
 
 def count_faces_from_path(image_path: Path) -> Optional[int]:
