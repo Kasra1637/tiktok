@@ -20,8 +20,15 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Architecture (ownership map)
 
-- `backend/server.py` — HTTP layer; `_submit_generation` is the ONLY render
-  path; `_studio_identity_references` resolves the photo.
+- `backend/server.py` — composition root (ADR 0111): includes the domain
+  routers, re-exports their helpers, and owns the render lifecycle.
+  `_submit_generation` is the ONLY render path; `_studio_identity_references`
+  resolves the photo. Keeps the mutable DB config the tests rebind.
+- `backend/db.py` + `backend/schema.py` — SQLite/Turso primitives and schema
+  bootstrap; `db.py` reads config through a `_server` back-reference. Domain
+  routers (`routers/brands.py`, `routers/studio.py`, `routers/assets.py`) own
+  their endpoints and resolve test-patched `server` names at call time via
+  `_cfg`; none may import `server` back (ADR 0111).
 - `backend/ai_service.py` — all OpenRouter calls; `VIDEO_MODELS` is the model
   catalog; `generate_video` submits, `describe_provider_refusal` classifies.
 - `backend/angle_policy.py` — pure normalization, source grounding and lexical
@@ -118,7 +125,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and nine decisions (0001–0109) now
+Read `docs/adr/README.md` first. One hundred and eleven decisions (0001–0111) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

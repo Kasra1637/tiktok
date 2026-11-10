@@ -95,6 +95,91 @@ def test_media_router_never_imports_the_composition_root():
     assert "server" not in imports
 
 
+def test_brands_router_is_owned_by_routers_brands():
+    """Profile/angle/template routes live in routers.brands; server re-exports them."""
+    import routers.brands as brands
+    import server
+
+    for name in ("create_brand", "list_brands", "get_brand", "update_brand",
+                 "research_app_profile", "list_app_profiles", "get_app_profile",
+                 "update_app_profile", "approve_app_profile", "list_templates",
+                 "template_facets", "ensure_objective_templates",
+                 "_normalize_url", "_brand_update_parts", "_cap_page_text",
+                 "_approval_gaps", "_serialize_angle_row",
+                 "_public_library_template", "_public_template",
+                 "_ensure_objective_templates", "_require_profile_for_studio",
+                 "_angle_feedback_for_profile", "_with_verdicts"):
+        assert getattr(server, name) is getattr(brands, name), name
+    for name in ("APP_RESEARCH_CAPS", "CONTENT_ANGLE_TEXT_FIELDS"):
+        assert getattr(server, name) is getattr(brands, name), name
+
+
+def test_studio_router_is_owned_by_routers_studio():
+    """Studio project/plan/strategy routes live in routers.studio; server re-exports them."""
+    import routers.studio as studio
+    import server
+
+    for name in ("list_studio_projects", "create_studio_project", "get_studio_project",
+                 "update_studio_project", "suggest_hook_rewrite", "generate_plan",
+                 "mark_project_ready", "submit_project_generation",
+                 "generate_project_strategy", "list_studio_video_models",
+                 "_two_section_repairs", "_public_project", "_project_strategy",
+                 "_safety_report_for", "_require_claims_clear",
+                 "_require_spoken_words_fit", "_require_current_strategy",
+                 "_guard_render_scene", "_assert_model_usable",
+                 "_assert_resolution_offered", "_assert_within_single_pass_cap",
+                 "_require_renderable_project", "_backfill_two_section_projects"):
+        assert getattr(server, name) is getattr(studio, name), name
+
+
+def test_studio_router_never_imports_the_composition_root():
+    tree = ast.parse((BACKEND / "routers/studio.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
+def test_brands_router_never_imports_the_composition_root():
+    tree = ast.parse((BACKEND / "routers/brands.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
+def test_assets_router_is_owned_by_routers_assets():
+    """App-Profile library routes live in routers.assets; server re-exports them."""
+    import routers.assets as assets
+    import server
+
+    for name in ("list_assets", "get_asset_usage", "upload_asset", "update_asset",
+                 "delete_asset", "attach_asset_to_project", "detach_asset_from_project",
+                 "_public_asset", "_asset_usage_index", "_attach_usage",
+                 "_asset_dir", "_ensure_asset_file"):
+        assert getattr(server, name) is getattr(assets, name), name
+    for name in ("ASSET_MAX_BYTES", "ASSET_IMAGE_TYPES", "ASSET_ALLOWED_EXT",
+                 "ASSET_AUDIO_ROLES"):
+        assert getattr(server, name) is getattr(assets, name), name
+
+
+def test_assets_router_never_imports_the_composition_root():
+    tree = ast.parse((BACKEND / "routers/assets.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
 def test_ai_adapter_reuses_the_same_angle_policy_for_all_briefs():
     import ai_service
     from angle_policy import angle_grounding, duplicate_angle_pairs, normalize_content_angles

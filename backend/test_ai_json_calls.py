@@ -1082,8 +1082,10 @@ class TestScriptVoiceAndTarget:
         assert "def partition_spoken_words" in src
         assert "def repair_spoken_story" in src
         assert "condense_script_to_target" not in src
+        studio_src = (BACKEND_DIR / "routers/studio.py").read_text(encoding="utf-8")
+        assert "partition_spoken_words(" in studio_src
+        # Called in server._submit_generation, which stays the sole submit path.
         server_src = (BACKEND_DIR / "server.py").read_text(encoding="utf-8")
-        assert "partition_spoken_words(" in server_src
         assert "repair_spoken_story(" in server_src
 
 

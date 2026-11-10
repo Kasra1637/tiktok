@@ -59,7 +59,8 @@ Paths below are relative to [backend](../backend/).
 
 | Owner | Responsibility / change here when… |
 |---|---|
-| [server.py](../backend/server.py) | Routes, ownership-scoped queries, schema bootstrap, project versions/readiness, render lifecycle. `_submit_generation` is the sole submit path; `_studio_identity_references` resolves the photograph. |
+| [server.py](../backend/server.py) | Composition root: includes the domain routers, re-exports their helpers, and owns the render lifecycle. `_submit_generation` is the sole submit path; `_studio_identity_references` resolves the photograph. Also keeps the mutable DB config the tests rebind (`DB_PATH`, `TURSO_*`, `_ACTIVE_BACKEND`, `_TURSO_BOOT_SYNC_DONE`). |
+| [db.py](../backend/db.py), [schema.py](../backend/schema.py) | SQLite/Turso primitives and schema bootstrap/migrations, owned here (ADR 0111). `db.py` reads config through a `_server` back-reference; it and `schema.py` never import `server`. |
 | [models.py](../backend/models.py) | Request schemas, editable-field lists and row serialization. |
 | [auth.py](../backend/auth.py) | Clerk verification, local anonymous mode and hosted boot guard. |
 | [template_recommendations.py](../backend/template_recommendations.py) | `score_template_for_angle(template, profile, angle, objective, feedback_events)` returns score/reasons/limitations/matches; `split_shared_notes(recs)` mutates the visible comparison list and returns its common notes. It neither fetches rows nor sorts HTTP results. |
@@ -78,7 +79,7 @@ Paths below are relative to [backend](../backend/).
 | [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
 | [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |
-| [routers/post_kit.py](../backend/routers/post_kit.py), [routers/health.py](../backend/routers/health.py) | Endpoint-specific ownership with DB functions injected by the composition root. They must not import `server` back. |
+| [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
 | [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
 | [pipeline.py](../backend/pipeline.py), [storage_service.py](../backend/storage_service.py), [media_signing.py](../backend/media_signing.py) | Local media operations, R2 durability and signed app URLs. Provider URLs are not durable browser playback links. |
 | [overlays.py](../backend/overlays.py) | Server ffmpeg composition helpers; not the current Demo + CTA browser editor. |
