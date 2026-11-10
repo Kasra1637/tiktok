@@ -31,6 +31,11 @@ One render path, single-pass video generation via OpenRouter.
   names at call time via `_cfg`; none may import `server` back (ADR 0111).
 - `backend/ai_service.py` — all OpenRouter calls; `VIDEO_MODELS` is the model
   catalog; `generate_video` submits, `describe_provider_refusal` classifies.
+  Pure clusters live in `ai_spoken.py` (spoken budgets/trimming/story
+  checks), `ai_strategy.py` (strategy normalization), `ai_text.py`
+  (HTML→text) and `ai_media.py` (image data URIs) and are re-exported here
+  (ADR 0112); the transport + chat flows stay, so the patched
+  `_chat_json`/temperature/config names keep resolving on this namespace.
 - `backend/angle_policy.py` — pure normalization, source grounding and lexical
   diversity. `backend/template_recommendations.py` — pure fit/shared notes and
   Problem/Promise relevance. `backend/character_policy.py` — pure identity rule:
@@ -60,8 +65,9 @@ One render path, single-pass video generation via OpenRouter.
   `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); direction
   dropdowns and plan-phase narration in `ReviewPanels.jsx`. Project writes stay
   in the page. `pages/wizardDraft.js` owns coupled draft transitions;
-  `hooks/useWizardTemplates.js` owns recommendation/tailoring state. Other
-  steps navigate to the angle control, not a second selector.
+  `hooks/useWizardTemplates.js` owns recommendation/tailoring state,
+  `hooks/useWizardAngleStep.js` owns the angle-step lifecycle (ADR 0112).
+  Other steps navigate to the angle control, not a second selector.
   Review/editor siblings: `components/studio/HookLineEditor.jsx` (spoken-line editor),
   `pages/useWizardDirections.js` (stale-request guard), `components/SafetyPanel.jsx`
   (advisory per ADR 0081, never a gate), `pages/PendingSaveCard.jsx` (storage retry),

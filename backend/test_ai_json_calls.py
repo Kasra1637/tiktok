@@ -1078,10 +1078,14 @@ class TestScriptVoiceAndTarget:
         helper existed for a moment and cut the script's TAIL, which is where
         the payoff sentence lives; it is gone.
         """
-        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        src = (BACKEND_DIR / "ai_spoken.py").read_text(encoding="utf-8")
         assert "def partition_spoken_words" in src
         assert "def repair_spoken_story" in src
         assert "condense_script_to_target" not in src
+        # Re-exported from the adapter so the call seams keep working (ADR 0112).
+        import ai_service
+        assert ai_service.partition_spoken_words.__module__ == "ai_spoken"
+        assert ai_service.repair_spoken_story.__module__ == "ai_spoken"
         studio_src = (BACKEND_DIR / "routers/studio.py").read_text(encoding="utf-8")
         assert "partition_spoken_words(" in studio_src
         # Called in server._submit_generation, which stays the sole submit path.

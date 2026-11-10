@@ -53,6 +53,39 @@ from claim_safety import (
     _is_light_week_mention,
 )
 
+# Pure clusters live in their own modules (split by flow); re-exported
+# here so existing callers, monkeypatching of ai_service.<name>, and tests
+# keep resolving exactly as before. Do not add new logic back here.
+from ai_media import _IMAGE_MIME_BY_SUFFIX, image_data_uri, image_mime_type, image_to_base64
+from ai_spoken import (
+    _AI_FLUFF_MARKERS, _CONTINUITY_STOPWORDS,
+    _FIRST_PERSON_I, _PAYOFF_VERBS, _PERSON_WORDS, _PROBLEM_MARKERS,
+    _PROMOTION_MARKERS, _RESOLUTION_MARKERS, _SCENE_MOMENTS,
+    _SCENE_PLACES, _BARE_LOCATION_NOUNS, HOOK_CHARS_PER_SECOND,
+    HOOK_TARGET_CHARS, SCRIPT_TARGET_CHARS, SPOKEN_CHARS_PER_SECOND,
+    TARGET_BAND, _closes_the_problem, _continuity_stem,
+    _continuity_words, _dangling_references, _ends_on_handoff,
+    _first_sentence, _generated_spoken_issues, _keep_tail,
+    _normalize_spoken, _opens_a_problem, _script_echoes_hook,
+    _sets_scene, _spoken_marker_hit, _split_sentences, _summarize_line,
+    _words_match, bind_spoken_words, check_spoken_story, hook_ceiling,
+    partition_spoken_words, repair_spoken_story, spoken_budget,
+    spoken_targets, strategy_text, strip_leading_hook,
+    trend_evidence_sentence, trim_spoken_body, trim_to_sentence,
+)
+from ai_strategy import (
+    GENERATED_SECTIONS, SECTION_ROLES, _STRATEGY_TEXT_LIMITS,
+    STRATEGY_PERFORMANCE_FIELDS, STRATEGY_SCENE_FIELDS,
+    _clean_strategy_list, _clean_strategy_text, _enforce_two_sections,
+    _normalize_camera_beat, _normalize_sections,
+    _normalize_strategy_section, _trim_hook_line, _two_section_schema,
+    merge_legacy_location, normalize_strategy,
+)
+from ai_text import (
+    _html_json_ld_strings, _html_meta_descriptions, _html_title,
+    page_text_with_metadata, strip_html_to_text,
+)
+
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
@@ -269,8 +302,6 @@ APP_PROFILE_LIST_KEYS = (
     "usage_moments", "claims_approved",
     "claims_review", "claims_banned",
 )
-
-
 
 
 def _headers():
@@ -725,41 +756,9 @@ def provider_download_headers(url: str) -> dict:
     return {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
 
 
-def image_to_base64(path: Path) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-
-
 # The formats the upload path accepts (server.ASSET_ALLOWED_EXT["image"]).
 # face_crop saves with the source file's own suffix, so a cropped face derived
 # from a .jpg upload is still a JPEG.
-_IMAGE_MIME_BY_SUFFIX = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-}
-
-
-def image_mime_type(path: Path) -> str:
-    """The MIME type that actually matches the file's bytes.
-
-    Every reference used to be labelled `image/png` regardless of what it was,
-    so a .jpg phone photo went out as `data:image/png;base64,<JPEG bytes>`. A
-    mislabelled data URI is invalid, which image_testing.md calls out by name.
-    The tests never caught it because every fixture is a .png.
-    """
-    suffix = Path(path).suffix.lower()
-    if suffix in _IMAGE_MIME_BY_SUFFIX:
-        return _IMAGE_MIME_BY_SUFFIX[suffix]
-    guessed, _encoding = mimetypes.guess_type(str(path))
-    return guessed or "image/png"
-
-
-def image_data_uri(path: Path) -> str:
-    """A base64 data URI whose declared MIME matches the encoded bytes."""
-    return f"data:{image_mime_type(path)};base64,{image_to_base64(path)}"
 
 
 def _clean_json_text(text: str) -> str:
@@ -1030,10 +1029,6 @@ async def _chat_json(
     raise RuntimeError(f"{context}: model returned no usable response")
 
 
-
-
-
-
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
     """
     Analyze hook frames using OpenRouter vision model.
@@ -1150,14 +1145,6 @@ async def analyze_hook(frame_paths: list, session_id: str, music_context: dict =
         raise RuntimeError(f"Hook analysis missing required fields: {missing}")
 
     return analysis
-
-
-
-
-
-
-
-
 
 
 # Provider error signatures that mean "this input will never be accepted".
@@ -1638,7 +1625,6 @@ async def poll_video_job(job_id: str) -> dict:
     data = resp.json()
     logger.info(f"Poll video {job_id}: status={data.get('status')}, has_urls={bool(data.get('unsigned_urls'))}")
     return data
-
 
 
 # How long the App Profile's description may be, in characters.
@@ -2995,37 +2981,6 @@ PLAN_SECTION_LABELS = ("hook", "middle")
 # sentences" and the founder gets no plan at all. So only phrases that are
 # unarguably promotion, unarguably exaggerated, or unarguably machine-written
 # belong here; judgement calls stay in the prompt's own rules.
-_PROMOTION_MARKERS = (
-    "you won t believe", "you wont believe", "mind blown", "mind blowing",
-    "this changed everything", "changed my life", "life changing",
-    "shocking", "shockingly", "game changer",
-    "no one talks about", "nobody talks about", "little did i know",
-    "guaranteed", "miracle", "cured", "cure for",
-    "download", "install it", "install the app", "sign up", "try it free",
-    "try the app", "get the app", "our app", "our product", "we built",
-    "as the founder", "as the developer", "link in bio", "follow for more",
-    "hit the follow", "smash that", "comment below", "tag a friend",
-)
-_AI_FLUFF_MARKERS = (
-    "in today s fast paced world", "fast paced world", "digital age",
-    "ever evolving", "ever changing", "let s dive in", "lets dive in",
-    "dive into", "diving into", "unlock the power", "unleash the",
-    "supercharge", "to the next level", "imagine a world where",
-    "the best part", "look no further", "here s the thing",
-)
-
-
-def _spoken_marker_hit(text: str, markers: tuple) -> str:
-    """The first phrase from `markers` that appears in `text`, else "".
-
-    Normalized the same way the other spoken checks normalize: lowercased with
-    punctuation gone, so "It's a GAME-CHANGER!" and "game changer" match.
-    """
-    normalized = _normalize_spoken(text)
-    for marker in markers:
-        if marker in normalized:
-            return marker
-    return ""
 
 
 def _spoken_line_rules_block() -> str:
@@ -3108,7 +3063,6 @@ _SELF_ASK_PATTERNS = (
 
 # A first-person 'I' in a hook line, contractions included ("I'm", "I've").
 # One can anchor a genuine line; two turn the opening into diary narration.
-_FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
 
 
 def hook_form_of(text: str) -> str:
@@ -3909,65 +3863,6 @@ async def generate_creative_plan(
     return result
 
 
-def _enforce_two_sections(beats: list, hook_seconds: int) -> list:
-    """
-    Force a plan's beat timeline down to exactly two beats: hook, then middle.
-
-    The prompt asks for two beats and the schema names only those two labels,
-    but a model that returns four — the old hook/problem/demo/cta shape is
-    strongly represented in its training — produces a plan whose timeline says
-    to film a demonstration and end on a call to action. Nothing downstream
-    would stop that: both are read straight into the render prompt. So it is
-    corrected here, where the shape is known, rather than trusted.
-
-    Anything after the middle is dropped, and the middle absorbs the remaining
-    time, because the founder attaches their own demo and CTA to whatever this
-    returns — a plan that reserved seconds for them would render footage that
-    runs out mid-thought.
-    """
-    cleaned = [b for b in (beats or []) if isinstance(b, dict)]
-    hook = next((b for b in cleaned if str(b.get("label", "")).lower() == "hook"), None)
-    middle = next((b for b in cleaned if str(b.get("label", "")).lower() == "middle"), None)
-
-    # A beat whose label is a demo or a call to action is dropped on the FLOOR,
-    # not folded in below. Dropping the label while keeping its prose is the
-    # difference between a plan with the right shape and a plan that still says
-    # "show the timer" and "try it free" as middle copy — and that text goes
-    # verbatim into the render prompt, which is how a demonstration gets
-    # generated by a workflow that must not generate one.
-    def _is_droppable(beat: dict) -> bool:
-        label = str(beat.get("label", "")).strip().lower()
-        return any(
-            word in label
-            for word in ("demo", "cta", "call to action", "payoff", "conversion", "close")
-        )
-
-    # A hook is never droppable, so it is looked up again in the kept set rather
-    # than being subject to the same filter.
-    hook = next((b for b in cleaned if str(b.get("label", "")).lower() == "hook"), None)
-    kept = [b for b in cleaned if b is hook or not _is_droppable(b)]
-    if hook is None and kept:
-        hook = kept[0]
-
-    if middle is None:
-        extras = [b for b in kept if b is not hook and b.get("text")]
-        if extras:
-            # The model wrote a multi-beat arc without labelling a middle, so
-            # what it actually described is the story. Fold the SURVIVING beats
-            # into one middle rather than borrowing the hook's words.
-            middle = {
-                "label": "middle",
-                "text": " ".join(str(b.get("text") or "").strip() for b in extras).strip(),
-            }
-    if hook is None:
-        return []
-    hook = {**hook, "label": "hook", "start": 0, "end": min(hook_seconds, max(1, int(hook_seconds)))}
-    if middle is None:
-        return [hook]
-    middle = {**middle, "label": "middle", "start": hook["end"]}
-    return [hook, middle]
-
-
 REQUIRED_STRATEGY_KEYS = {
     "strategy_summary", "audience_problem", "emotional_triggers", "hook_concept",
     "hook_line", "hook_promise", "hook_action", "messaging_pillars",
@@ -4019,37 +3914,7 @@ REQUIRED_STRATEGY_KEYS = {
 # the founder's own footage attached afterwards. So the count is structural
 # rather than a budget — a third section would be a product demo, which this
 # workflow does not generate.
-GENERATED_SECTIONS = 2
-SECTION_ROLES = ("hook", "middle")
 
-
-def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> str:
-    """
-    Emit the two generated sections as JSON schema text.
-
-    Exactly two segments, roles "hook" and "middle". The middle is the last
-    thing this product generates, so it carries the whole remainder of the piece
-    and its only obligation is to bring the viewer to the edge of wanting the
-    app — not to satisfy them. Its closing action is setup-dependent: the
-    fixed-camera handoff for fixed, and the physical ending (never a reach
-    for the app/phone/camera) for selfie.
-    """
-    if camera_setup == "fixed":
-        middle_goal = "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app"
-        middle_action = "what they do through the middle, ending at the handoff moment"
-    else:
-        middle_goal = "what the middle must achieve: develop the hook and end before the last second"
-        middle_action = "what they do through the middle, ending before the final physical beat - never a reach toward a phone or camera, never a second free hand, never scrolling, swiping, or tapping a chart, graph, app, screen, report, or dashboard or looking at one"
-    return (
-        ',\n    {"index": 0, "role": "hook", "seconds": 3, '
-        '"goal": "what the opening beat must achieve to stop the scroll", '
-        '"script": "the exact words spoken in the opening - the plan\'s hook line", '
-        '"action": "the opening physical performance: the FIRST beat is a clearly visible movement, gesture or position change inside the first 1-2 seconds (step, turn, stand, sit, reach, lift, place or grab), then ordered, timed beats across face, hands, posture and props"}'
-        f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
-        f'"goal": "{middle_goal}", '
-        '"script": "the words spoken in the middle - different from the hook", '
-        f'"action": "{middle_action}"}}'
-    )
 
 # The scene is where the single render's consistency lives: it is locked for
 # the whole piece, so the hook and the middle cannot disagree about the room,
@@ -4074,245 +3939,6 @@ def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> 
 # from Location, and locked like the room. It was dropped with `character`
 # and readmitting only this field is what restores that — the fabrication
 # problem above was never about clothes, it was about the face.
-STRATEGY_SCENE_FIELDS = (
-    "camera_angle", "framing", "lighting", "location",
-    "visual_style", "character_positioning", "wardrobe", "props",
-    "color_palette",
-)
-STRATEGY_PERFORMANCE_FIELDS = ("movement", "voice_delivery")
-
-_STRATEGY_TEXT_LIMITS = {
-    "strategy_summary": 900,
-    "audience_problem": 700,
-    "hook_concept": 700,
-    "hook_line": 200,
-    "hook_promise": 300,
-    "hook_action": 700,
-    "hook_dialogue": 400,
-    "primary_feature": 400,
-    "desired_outcome": 400,
-    "mechanism_beat": 400,
-    "payoff_beat": 400,
-    "differentiation_beat": 400,
-}
-
-
-def _clean_strategy_text(value, limit: int) -> str:
-    # Every strategy field is read by a viewer or handed to the render prompt,
-    # so none of it may name the person's gender, role or a pronoun: the
-    # founder's uploaded photo is the only authority on who is on screen
-    # (ADR 0089).
-    return character_policy.neutralize(str(value or "").strip())[:limit]
-
-
-def _clean_strategy_list(value, limit: int, cap: int = 6) -> list:
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, list):
-        return []
-    return [str(v).strip()[:limit] for v in value if str(v).strip()][:cap]
-
-
-def _normalize_strategy_section(raw, fields, limits=None) -> dict:
-    """Coerce a nested strategy section to known keys, all non-empty strings.
-
-    A missing key becomes "" rather than vanishing, so the continuity prompt
-    can state the whole lock and the founder can see exactly which attributes
-    were pinned and which were left open.
-    """
-    raw = raw if isinstance(raw, dict) else {}
-    limits = limits if isinstance(limits, dict) else {}
-    return {
-        field: _clean_strategy_text(raw.get(field), limits.get(field, 300))
-        for field in fields
-    }
-
-
-def merge_legacy_location(scene) -> str:
-    """Return one render-ready Location from new or legacy scene fields.
-
-    Older strategies split the place across environment, background and setting.
-    Preserve them in that order, remove exact/subsumed repeats, and expose only
-    the unified value to every current consumer.
-    """
-    scene = scene if isinstance(scene, dict) else {}
-    candidates = [scene.get("location")]
-    candidates.extend(scene.get(key) for key in ("environment", "background", "setting"))
-    kept = []
-    normalized = []
-    for value in candidates:
-        text = " ".join(str(value or "").split()).strip(" ,.;")
-        if not text:
-            continue
-        key = " ".join(
-            "".join(char.casefold() if char.isalnum() else " " for char in text).split()
-        )
-        if key and any(key == old or key in old for old in normalized if old):
-            continue
-        pairs = [
-            (part, old) for part, old in zip(kept, normalized)
-            if not (key and old and old in key)
-        ]
-        kept = [part for part, _ in pairs]
-        normalized = [old for _, old in pairs]
-        kept.append(text)
-        normalized.append(key)
-    return ". ".join(part.rstrip(".!?") for part in kept) + ("." if kept else "")
-
-
-def _normalize_camera_beat(raw) -> dict:
-    """Keep only orbit direction and a short gesture; discard legacy timing/arc.
-
-    Old strategies with no direction retain a rightward orbit. Invalid explicit
-    directions fail with a next step instead of quietly changing the performance.
-    """
-    raw = raw if isinstance(raw, dict) else {}
-    direction = str(raw.get("direction") or "right").strip().lower()
-    if direction not in ("left", "right"):
-        raise ValueError("Camera orbit direction must be left or right; regenerate the strategy.")
-    gesture = " ".join(str(raw.get("gesture") or "").split())
-    if len(gesture) > 90:
-        gesture = gesture[:91].rsplit(" ", 1)[0]
-    return {"direction": direction, "gesture": gesture}
-
-
-def normalize_strategy(raw: dict) -> dict:
-    """
-    Validate and normalize a strategy payload.
-
-    Split out from the model call so the shape can be tested directly and so
-    the endpoint can re-validate a founder-edited strategy.
-    """
-    result = {
-        key: _clean_strategy_text(raw.get(key), _STRATEGY_TEXT_LIMITS.get(key, 600))
-        for key in (
-            "strategy_summary", "audience_problem", "hook_concept", "hook_line",
-            "hook_promise", "hook_action", "hook_dialogue", "primary_feature",
-            "desired_outcome", "mechanism_beat", "payoff_beat",
-            "differentiation_beat",
-        )
-    }
-    result["emotional_triggers"] = _clean_strategy_list(raw.get("emotional_triggers"), 200)
-    result["messaging_pillars"] = _clean_strategy_list(raw.get("messaging_pillars"), 300)
-
-    # No "character" section: see STRATEGY_SCENE_FIELDS for why. An existing
-    # project may still carry one from before this change, so it is dropped here
-    # rather than trusted — an old fabrication must not reach a new prompt.
-    raw_scene = raw.get("scene") if isinstance(raw.get("scene"), dict) else {}
-    result["scene"] = _normalize_strategy_section(
-        {**raw_scene, "location": merge_legacy_location(raw_scene)}, STRATEGY_SCENE_FIELDS
-    )
-    # Internal wording ("Use STARTING SHOT") is an instruction to the render,
-    # never a scene value the founder should read. The same rule guards the
-    # render path (scene_consistency.reconcile_scene), so the panel and the
-    # prompt can never show it again.
-    scene_consistency.clean_placeholders(result["scene"])
-    # Render & result reads these rows before money is spent, so the scene is
-    # cleaned on the way to the panel, not only at the save/render guard:
-    # Camera angle and Visual style call the filming device "the camera", and
-    # Props lists objects the person carries, wears or uses — never furniture,
-    # buildings or signs the Location already names. Spoken lines are untouched.
-    for field in ("camera_angle", "visual_style"):
-        result["scene"][field] = scene_consistency.camera_wording(
-            result["scene"].get(field)
-        )[:300]
-    # Location names the place only, in every camera setup: a phone may stay
-    # in the action and Props for a fixed camera, never in the place.
-    _repairs = []
-    place_only, objects_removed = scene_consistency.strip_location_objects(
-        result["scene"].get("location")
-    )
-    if objects_removed:
-        result["scene"]["location"] = place_only
-        _repairs.append("Location")
-    # A continuation fragment ("with grass and trees behind") names no
-    # place head. Prepend the angle promise's own anchor ("A park
-    # railing") — never for a deliberate founder place, which is not a
-    # fragment and is therefore never repaired here.
-    _anchor_text = " ".join(str(result.get(k) or "") for k in ("hook_promise", "hook_concept", "strategy_summary"))
-    repaired = scene_consistency.repair_location_fragment(
-        result["scene"].get("location"), _anchor_text
-    )
-    if repaired != str(result["scene"].get("location") or ""):
-        result["scene"]["location"] = repaired
-        if "Location" not in _repairs:
-            _repairs.append("Location")
-    result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
-        result["scene"].get("props"), result["scene"].get("location")
-    )
-    result["performance"] = _normalize_strategy_section(
-        raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS,
-        {"movement": scene_consistency.MOVEMENT_LIMIT},
-    )
-
-    # An old strategy may still carry a contract; it is dropped rather than
-    # trusted, because a seam contract describes a chain that no longer exists.
-    # The hook line is spoken, so its cap snaps to a sentence like the plan's.
-    # It must trim the RAW line: _clean_strategy_text above already hard-sliced
-    # it to 200 characters, and snapping the slice would keep a mid-word cut.
-    result["hook_line"], _ = _trim_hook_line(
-        str((raw or {}).get("hook_line") or "").strip(),
-        _STRATEGY_TEXT_LIMITS["hook_line"])
-    result["segments"] = _normalize_sections(raw.get("segments"))
-    result["camera_beat"] = _normalize_camera_beat(raw.get("camera_beat"))
-    result["camera_setup"] = raw.get("camera_setup") or "handheld"
-    if result["camera_setup"] not in ("handheld", "fixed"):
-        raise ValueError("Camera setup must be handheld or fixed; rebuild the strategy.")
-    # One setup, one set of camera words, cleaned on the way to the panel
-    # (ADR 0108): a handheld selfie names no phone in its action/concept/
-    # movement lines, and its camera wording describes a handheld selfie
-    # rather than a fixed camera. The plan's camera-move carry needs the
-    # plan timeline this normalizer does not have, so it runs on the read
-    # and render paths that do.
-    if final_beat.is_selfie(result):
-        strip_audit = final_beat.strip_fields(result)
-        result = strip_audit["strategy"]
-        _repairs.extend(strip_audit["changed"])
-    _repairs.extend(scene_consistency.camera_setup_wording(result))
-    # Audit trail at debug (ADR 0108): pure modules return `changed`, the
-    # caller logs it. Debug, not info — this normalizer runs on every panel
-    # read, and the spend-time audit lives in the render guard's info log.
-    if _repairs:
-        logger.debug(
-            "normalize_strategy scene repaired: %s",
-            ", ".join(dict.fromkeys(_repairs)),
-        )
-    return result
-
-
-def _normalize_sections(raw) -> list:
-    """
-    Coerce the model's segments down to exactly two: the hook and the middle.
-
-    Truncation alone is not enough. A model returning the old eight-beat shape
-    would keep beats 2-8, and beat 8's role is "cta" — so the middle would
-    inherit a call to action, and that role is read by the render prompt. Roles
-    are therefore reassigned by position rather than trusted, and a third
-    section is dropped entirely: the product demo that a third beat would hold
-    is the founder's own recording.
-    """
-    cleaned = []
-    for item in raw if isinstance(raw, list) else []:
-        if not isinstance(item, dict):
-            continue
-        try:
-            seconds = int(item.get("seconds") or 0)
-        except (TypeError, ValueError):
-            seconds = 0
-        cleaned.append({
-            "seconds": max(1, min(seconds or 0, 30)),
-            "goal": _clean_strategy_text(item.get("goal"), 400),
-            "script": _clean_strategy_text(item.get("script"), 900),
-            "action": _clean_strategy_text(item.get("action"), 400),
-        })
-        if len(cleaned) >= GENERATED_SECTIONS:
-            break
-
-    sections = []
-    for index, role in enumerate(SECTION_ROLES):
-        item = cleaned[index] if index < len(cleaned) else {"seconds": 3, "goal": "", "script": "", "action": ""}
-        sections.append({"index": index, "role": role, **item})
-    return sections
 
 
 # ---------------------------------------------------------------------------
@@ -4340,25 +3966,6 @@ def _normalize_sections(raw) -> list:
 # packed roughly 200 characters into 10 seconds, the fastest end of natural
 # speech, which reads as hurried in an extension that has to flow into the
 # surrounding footage; 15 chars/sec is the measured middle of the range.
-SPOKEN_CHARS_PER_SECOND = 15
-
-
-def spoken_budget(seconds) -> int:
-    """
-    What a section of `seconds` holds at the middle's conversational pace.
-
-    This is the length for a natural read, not a hard technical ceiling the
-    video model imposes: 10 seconds is about 150 characters at 15 characters a
-    second. It is the same number the prompt asks the model to aim for and the
-    render measures against, so the words the founder approves are the words
-    that fit — and it is what `spoken_targets` caps a line's natural target
-    with when the piece is shorter than the target.
-    """
-    try:
-        secs = float(seconds or 0)
-    except (TypeError, ValueError):
-        secs = 0.0
-    return max(60, int(round(secs * SPOKEN_CHARS_PER_SECOND)))
 
 
 # The pace an OPENING line is sized at, which is not the middle's.
@@ -4368,16 +3975,6 @@ def spoken_budget(seconds) -> int:
 # this file carried before the middle's pace was retuned to the conversational
 # 15. Sizing the opening at the middle's pace would hold a 3s hook to 45
 # characters and a 4s one to 60, which is a fragment rather than a hook line.
-HOOK_CHARS_PER_SECOND = 20
-
-
-def hook_ceiling(seconds) -> int:
-    """The character ceiling for an opening line of `seconds`, at the brisk pace."""
-    try:
-        secs = float(seconds or 0)
-    except (TypeError, ValueError):
-        secs = 0.0
-    return max(60, int(round(secs * HOOK_CHARS_PER_SECOND)))
 
 
 # ---------------------------------------------------------------------------
@@ -4400,12 +3997,9 @@ def hook_ceiling(seconds) -> int:
 # thought after it, which is what a middle is — the problem the hook named,
 # answered. A line under its target is a choice rather than a fault, so nothing
 # here refuses one; the ceiling is still what the render enforces.
-HOOK_TARGET_CHARS = 70
-SCRIPT_TARGET_CHARS = 150
 
 # How far off a target still counts as on target. Reported, never enforced:
 # these are speaking targets, not quotas.
-TARGET_BAND = 0.25
 
 # Words that mark an opening as naming a problem — or asking one — rather than
 # stating a benefit. Matched against normalized text (lowercased, punctuation
@@ -4413,916 +4007,29 @@ TARGET_BAND = 0.25
 # generous: the templates include openings that are not problems at all (a
 # curiosity gap, an ordinary morning), so this reads the line rather than
 # gating it.
-_PROBLEM_MARKERS = (
-    "why", "how come", "can t", "cannot", "won t", "don t", "doesn t", "didn t",
-    "no one", "nothing", "nobody", "stop", "stuck", "struggle", "struggling",
-    "tired", "hate", "waste", "wasting", "wish", "keeps", "always", "never",
-    "problem", "hard", "harder", "hardest", "wrong", "failing", "forgetting",
-    "losing", "lost", "dread", "mess", "chaos", "guessing", "overwhelmed",
-    "endless", "too much", "again", "every time",
-)
 
 # Words that mark a body as resolving rather than piling on: the change has
 # happened, or the fix is named. Same generosity and the same honesty rule —
 # this is a read of the words, not a proof about them.
-_RESOLUTION_MARKERS = (
-    "now", "so i", "instead", "finally", "turns out", "the fix", "fixes",
-    "fixed", "solves", "solved", "helps", "helping", "lets you", "let me",
-    "ends with", "one tap", "no more", "never again", "since then", "started",
-    "made it", "makes it", "gives you", "which is why", "that s why",
-    "the answer", "written down", "stops", "worked",
-)
-
-
-def spoken_targets(hook_seconds=3, total_seconds=12) -> dict:
-    """
-    What each spoken line aims at, and the most its seconds can hold.
-
-    The target is the natural speaking length above, never above the ceiling: a
-    2s hook cannot hold 70 characters at any pace this product renders at, so
-    aiming there would only guarantee an over-length line. `ceiling` is what
-    the render, the arrival clamp and the Review step already measure against —
-    `spoken_budget` for the middle, and the brisk `hook_budget` for the
-    opening, which is read fast — so this adds the aim, it does not move the
-    limit.
-    """
-    hook_limit = hook_ceiling(hook_seconds)
-    middle_seconds = max(1, int(total_seconds or 0) - int(hook_seconds or 0))
-    script_ceiling = spoken_budget(middle_seconds)
-    return {
-        "hook_seconds": int(hook_seconds or 0),
-        "middle_seconds": middle_seconds,
-        "hook": {"target": min(HOOK_TARGET_CHARS, hook_limit), "ceiling": hook_limit},
-        "script": {
-            "target": min(SCRIPT_TARGET_CHARS, script_ceiling),
-            "ceiling": script_ceiling,
-        },
-    }
-
-
-def _split_sentences(text: str) -> list:
-    """
-    Split a line into sentences, each keeping its own terminator.
-
-    A terminator only ends a sentence when what follows is a space or the end
-    of the line, so "Dr. Smith" and "12.5" stay whole. The same rule
-    `_first_sentence` applies to the opening, applied to every sentence.
-    """
-    stripped = str(text or "").strip()
-    if not stripped:
-        return []
-    sentences = []
-    start = 0
-    for index, ch in enumerate(stripped):
-        if ch not in ".!?":
-            continue
-        following = stripped[index + 1: index + 2]
-        if following == "" or following in " \n\t":
-            sentence = stripped[start: index + 1].strip()
-            if sentence:
-                sentences.append(sentence)
-            start = index + 1
-    tail = stripped[start:].strip()
-    if tail:
-        sentences.append(tail)
-    return sentences
-
-
-def _keep_tail(text: str, limit: int) -> str:
-    """
-    The end of a sentence, cut back to a word boundary and stripped of its mark.
-
-    Used only for a resolving sentence that is itself longer than the body can
-    speak. The end of that sentence is its conclusion — the payoff beat is the
-    last thing said — so the tail is the part worth keeping, where the head of
-    it is the setup that led there.
-    """
-    window = str(text or "").strip()[-max(1, int(limit)):]
-    space = window.find(" ")
-    if space > 0:
-        window = window[space + 1:]
-    # Only the front is cleaned: the cut leaves the previous sentence's mark on
-    # the way in, and the closing mark is part of the sentence that survives.
-    return window.lstrip(" ,.!?;:-").rstrip()
-
-
-def trim_spoken_body(text: str, limit: int):
-    """
-    Cut a spoken body to fit `limit`, keeping the sentence that resolves it.
-
-    `trim_to_sentence` keeps the opening and cuts the tail, which for a spoken
-    body means cutting the resolution — the payoff the hook set up in the first
-    place, and the one sentence the middle exists to say. So a body is cut from
-    the MIDDLE outwards instead: whole sentences go from between the opening
-    (the line that links back to the hook) and the closing sentence (the one
-    that answers it), and only when those two are still too long does the
-    opening give way, at its own sentence-then-word boundary. The payoff is the
-    last thing cut, never the first.
-
-    Returns (kept, dropped), `dropped` counted in characters, so a caller
-    reports exactly how much of the approved words is not spoken.
-    """
-    text = str(text or "").strip()
-    if not text or limit <= 0 or len(text) <= limit:
-        return text, 0
-    sentences = _split_sentences(text)
-    if len(sentences) < 2:
-        return trim_to_sentence(text, limit)
-    kept = list(sentences)
-    while len(kept) > 2 and len(" ".join(kept)) > limit:
-        del kept[1]
-    joined = " ".join(kept)
-    if len(joined) > limit:
-        # Only the opening and the payoff are left, and both are the story. The
-        # opening gives way first: it is the half a viewer can reconstruct from
-        # the hook, and the payoff is the half they cannot.
-        payoff = kept[-1]
-        if len(payoff) >= limit:
-            payoff = _keep_tail(payoff, limit)
-        room = limit - len(payoff) - 1
-        head = trim_to_sentence(kept[0], room)[0] if room > 0 else ""
-        joined = (head + " " + payoff).strip() if head else payoff
-    return joined, len(text) - len(joined)
-
-
-def _trim_hook_line(text: str, limit: int):
-    """
-    Cut a hook line back to fit `limit`, keeping it readable as an opening.
-
-    Sentence boundary first. When the opening sentence is itself longer than
-    the limit there is no sentence to cut at, so the cut lands on a word
-    boundary — and a line cut that way loses its terminator along with its
-    tail. The terminator is restored from the sentence the cut came out of,
-    because punctuation is not spoken: "Do you know what triggers your emotions
-    and keeps them" is a fragment, while "...and keeps them?" is the question
-    it was.
-    """
-    text = str(text or "").strip()
-    if not text or limit <= 0 or len(text) <= limit:
-        return text, 0
-    kept, _dropped = trim_to_sentence(text, limit)
-    if kept and kept[-1] not in ".!?":
-        for index, ch in enumerate(text):
-            if ch in ".!?" and index >= len(kept) - 1:
-                kept = kept + ch
-                break
-    return kept, len(text) - len(kept)
-
-
-def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
-                              *, allows_question: bool = False, claims_to_respect=None) -> list:
-    """Reject observable draft defects before any sentence-splitting clamp.
-
-    This is not a general grammar parser or a semantic coherence score. It
-    catches empty/oversized lines, missing terminators, dangling function
-    words and obvious cross-field continuations. The prompt's editorial
-    self-review handles meaning; these checks prevent our own length fitting
-    from manufacturing the reported fragments.
-
-    Two more families are rejected because they are observable rather than
-    matters of taste, and because the prompt's rules state each as an absolute:
-    promotion/marketing wording (a download request, the founder's own voice,
-    the app named) and machine-sounding filler openers. Both are matched as
-    whole phrases on normalized text, so a genuine customer line never trips
-    them — see _PROMOTION_MARKERS for why that constraint is the whole design.
-    The hook's first-person count is the same kind of arithmetic, not taste:
-    the prompt allows at most one 'I' in the whole hook line. So is the
-    statement default: a hook-line question is detectable (it ends in '?'),
-    so a non-question plan that drafts one is rewritten through the editorial
-    loop instead of shipped.
-    """
-    issues = []
-    # Prepositions/pronouns CAN end grammatical English ("look forward to",
-    # "I felt like that"). Only unambiguous dangling words are rejected on
-    # their own; the reported "typing feels like" needs its local context.
-    dangling = {"a", "an", "the", "and", "or", "but", "because"}
-    unfinished_endings = ("feels like", "felt like", "seems like", "looks like")
-    for name, text, budget in (("hook_line", hook, hook_budget), ("script", script, script_budget)):
-        if not text:
-            issues.append(f"{name} is empty")
-            continue
-        if len(text) > budget:
-            issues.append(f"{name} has {len(text)} characters, exceeding {budget}; rewrite the thought")
-        hit = _spoken_marker_hit(text, _PROMOTION_MARKERS)
-        if hit:
-            issues.append(f"{name} reads as promotion or hype, not a customer: '{hit}'")
-        hit = _spoken_marker_hit(text, _AI_FLUFF_MARKERS)
-        if hit:
-            issues.append(f"{name} uses a generic AI-sounding phrase: '{hit}'")
-        # The generator obeying its own safety layer: claim_safety warns when a
-        # spoken line claims a personal history with the app ("I use", "my
-        # patients"), so a draft that does it is rewritten here instead of
-        # accepted and then warned about. The patterns are shared, not copied,
-        # so the two cannot disagree about what counts — including the "I used
-        # to <verb>" exclusion, which is a past habit rather than a usage claim
-        # and must keep passing untouched.
-        for pattern in FIRST_PERSON_PATTERNS:
-            match = re.search(pattern, _normalize_spoken(text))
-            if match:
-                issues.append(
-                    f"{name} claims a personal history with the app "
-                    f"('{match.group(0).strip()}'), which no record can substantiate"
-                )
-                break
-        # The generated clip never shows app content, so the spoken lines
-        # never narrate working a chart/graph/screen ("I scrolled my week",
-        # "saw the worry come back on Monday" from the app). The demo the
-        # founder records shows the app; the clip's voice stays on leaning,
-        # speaking and breathing instead.
-        if final_beat._clause_has_screen_action(_normalize_spoken(text)):
-            issues.append(
-                f"{name} narrates scrolling or reading a chart/screen the "
-                f"generated clip never shows — speak on leaning, breathing and naming "
-                f"the worry instead; the founder's demo shows the app"
-            )
-        # The angle's bounded-by limits fence knowledge claims too: when a
-        # bound forbids diagnosis (trends shown, not diagnosed), a sentence
-        # like "Now I know how long it's been there" promises the very
-        # result the angle forbids. Rejected here per sentence, so the
-        # editorial rewrite lands on speaking — a light mention of the week
-        # ("I looked back over the week") keeps the handoff to the demo's
-        # weekly view without claiming that result. A sentence that carries
-        # the knowledge claim stays rejected even when it mentions the week.
-        if claims_to_respect:
-            for sentence in _split_sentences(text):
-                hits = [] if _is_light_week_mention(sentence) else bounded_by_conflict(sentence, list(claims_to_respect))
-                if hits:
-                    issues.append(
-                        f"{name} promises a result the angle forbids "
-                        f"('{sentence.strip()}': '{hits[0]['claim']}')"
-                    )
-        for sentence in _split_sentences(text):
-            plain = sentence.rstrip('\"\u201d\u2019')
-            if not plain.endswith((".", "!", "?")):
-                issues.append(f"{name} has an unfinished sentence")
-            words = _normalize_spoken(plain).split()
-            if words and words[-1] in dangling:
-                issues.append(f"{name} ends a sentence on '{words[-1]}'")
-            if any(" ".join(words).endswith(ending) for ending in unfinished_endings):
-                issues.append(f"{name} has an unfinished comparison")
-        if text[0].islower():
-            issues.append(f"{name} begins as a continuation rather than a standalone sentence")
-    # The hook leads with the viewer's problem, not the speaker's diary: one
-    # 'I' can anchor a real line, two make it narration ("Friday evening, and
-    # I feel off, and I cannot say why") and the draft is rewritten through
-    # the editorial loop instead.
-    if len(_FIRST_PERSON_I.findall(hook)) > 1:
-        issues.append(
-            "hook_line narrates in first person more than once; open on the "
-            "viewer's problem instead, with 'I' used at most once"
-        )
-    if ";" in hook:
-        issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
-    # A question hook is a defect unless the angle/problem itself is a
-    # silent self-question (or the plan explicitly requested that shape),
-    # which the caller proves with allows_question.
-    if not allows_question and str(hook or "").strip().endswith("?"):
-        issues.append(
-            "hook_line is a question; use a question only when the problem is "
-            "something viewers silently ask themselves — otherwise name it "
-            "with a statement, confession, or blunt observation"
-        )
-    return issues
-
-
-def _summarize_line(text: str, spec: dict) -> dict:
-    """One line's count, the target it aims at, and the ceiling it must hold."""
-    chars = len(str(text or "").strip())
-    if chars > spec["ceiling"]:
-        verdict = "over_ceiling"
-    elif chars < spec["target"] * (1 - TARGET_BAND):
-        verdict = "under_target"
-    else:
-        verdict = "on_target"
-    return {
-        "chars": chars,
-        "target": spec["target"],
-        "ceiling": spec["ceiling"],
-        "verdict": verdict,
-    }
-
-
-def _opens_a_problem(text: str) -> bool:
-    """Whether an opening line names a problem rather than stating a benefit."""
-    stripped = str(text or "").strip()
-    if not stripped:
-        return False
-    if stripped.endswith("?"):
-        return True
-    normalized = _normalize_spoken(stripped)
-    padded = f" {normalized} "
-    return any(f" {marker} " in padded for marker in _PROBLEM_MARKERS)
-
-
-def _closes_the_problem(text: str) -> bool:
-    """Whether a body reads as resolving, rather than adding more of the same."""
-    normalized = _normalize_spoken(text)
-    if not normalized:
-        return False
-    padded = f" {normalized} "
-    return any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS)
 
 
 # Words that carry no image, so the hook-echo check ignores them: the hook's
 # load-bearing word is never "the", "just" or "still".
-_CONTINUITY_STOPWORDS = frozenset((
-    "the", "a", "an", "and", "or", "but", "if", "then", "than",
-    "that", "this", "these", "those", "with", "from", "have", "has",
-    "had", "were", "been", "are", "was", "will", "would", "could",
-    "should", "just", "very", "really", "still", "even", "also",
-    "when", "what", "which", "there", "their", "they", "them",
-    "into", "over", "under", "about", "after", "before", "again",
-    "every", "each", "more", "most", "much", "many", "some", "such",
-))
 
 # People whose earlier mention lets a later he/she/they refer back to someone.
 # Generic crowds (people, team, family) count: "they" after "most people"
 # is a genuine antecedent, not a dangling pronoun.
-_PERSON_WORDS = frozenset((
-    "mom", "mother", "dad", "father", "mama", "papa", "parent",
-    "parents", "boss", "friend", "friends", "kid", "kids", "child",
-    "children", "wife", "husband", "partner", "daughter", "son",
-    "sister", "brother", "doctor", "therapist", "counselor", "coach",
-    "coworker", "coworkers", "colleague", "colleagues", "neighbor",
-    "neighbors", "teacher", "nurse", "nurses", "guy", "guys", "man",
-    "men", "woman", "women", "person", "people", "team", "family",
-    "roommate", "classmate", "client", "clients", "customer",
-    "customers", "stranger", "strangers",
-))
 
 # Nouns where a leading "the" with no earlier mention genuinely confuses:
 # "the place" could be anywhere. Everyday objects ("the words", "the
 # suggestions") are left alone — flagging those would cry wolf on ordinary
 # customer speech.
-_BARE_LOCATION_NOUNS = frozenset((
-    "place", "meeting", "office", "house", "room", "building",
-    "event", "party", "store", "shop", "school", "interview",
-    "appointment",
-))
 
 # Where the speaker can be when the opening sentence sets the scene.
-_SCENE_PLACES = frozenset((
-    "car", "home", "house", "apartment", "flat", "dorm", "kitchen",
-    "desk", "office", "couch", "sofa", "bed", "bedroom", "bathroom",
-    "shower", "street", "train", "bus", "park", "gym", "store",
-    "shop", "cafe", "restaurant", "diner", "bar", "work", "school",
-    "library", "classroom", "porch", "driveway", "garage", "yard",
-    "backyard", "garden", "sidewalk", "elevator", "lobby", "hall",
-    "hallway", "stairs", "parking", "table", "counter", "window",
-    "door", "doorway", "closet", "basement", "attic", "balcony",
-    "patio", "deck", "playground", "field", "beach", "pool", "lake",
-    "river", "trail", "woods", "forest", "city", "town", "farm",
-))
 
 # Words that pin the moment the opening sentence happens in.
-_SCENE_MOMENTS = frozenset((
-    "morning", "afternoon", "evening", "night", "tonight", "today",
-    "yesterday", "tomorrow", "weekend", "monday", "tuesday",
-    "wednesday", "thursday", "friday", "saturday", "sunday", "dawn",
-    "dusk", "midnight", "noon", "lunch", "dinner", "breakfast",
-    "commute", "drive", "driving", "shift", "break", "bedtime",
-    "overtime", "deadline", "moment", "time", "after", "before",
-    "when", "while", "during", "since", "until",
-))
 
 # Concrete payoff verbs: the last sentence acts rather than trails off.
-_PAYOFF_VERBS = frozenset((
-    "open", "opens", "pull", "pulls", "reach", "reaches", "start",
-    "starts", "begin", "begins", "write", "writes", "wrote",
-    "written", "tap", "taps", "check", "checks", "look", "looks",
-    "read", "reads", "put", "puts", "set", "sets", "close",
-    "closes", "shut", "end", "ends", "finish", "finishes", "done",
-    "save", "saves", "keep", "keeps", "hold", "holds", "breathe",
-    "breathes", "say", "says", "said", "tell", "tells", "name",
-    "names", "named", "find", "finds", "found", "leave", "leaves",
-    "walk", "walks", "step", "steps", "sit", "sits",
-))
-
-
-def _continuity_stem(word: str) -> str:
-    """A light stem so "feeling" meets "feel" and "houses" meets "house".
-
-    Customer speech is short, so the rule is deliberately crude: strip one
-    common ending only when four letters remain. A missed inflection is a
-    missed echo, which is why the echo check also tries plain containment.
-    """
-    for suffix in ("ing", "ed", "es", "s"):
-        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
-            stemmed = word[: -len(suffix)]
-            # "houses" strips to "hous" through "es" but to "house"
-            # through "s" — the longer stem wins when both survive.
-            if suffix == "es" and word.endswith("s") and len(word) - 1 >= 4:
-                longer = word[:-1]
-                return longer if len(longer) > len(stemmed) else stemmed
-            return stemmed
-    return word
-
-
-def _continuity_words(text: str) -> list:
-    """The image-carrying words of a line: long enough to mean something."""
-    return [
-        word for word in _normalize_spoken(text).split()
-        if len(word) >= 4 and word not in _CONTINUITY_STOPWORDS
-    ]
-
-
-def _words_match(first: str, second: str) -> bool:
-    """Same word, same stem, or one plainly containing the other."""
-    if first == second:
-        return True
-    if _continuity_stem(first) == _continuity_stem(second):
-        return True
-    short, long = (first, second) if len(first) <= len(second) else (second, first)
-    return len(short) >= 5 and long.startswith(short)
-
-
-def _script_echoes_hook(hook: str, script: str) -> bool:
-    """Whether the script echoes at least one of the hook's image words.
-
-    A hook with no image words ("Hi.") asks nothing, so there is nothing
-    to miss — vacuously true, never a flag.
-    """
-    hook_words = _continuity_words(hook)
-    if not hook_words:
-        return True
-    script_words = _continuity_words(script)
-    return any(
-        _words_match(hook_word, script_word)
-        for hook_word in hook_words
-        for script_word in script_words
-    )
-
-
-def _dangling_references(hook: str, script: str) -> list:
-    """Spans in the script that point at nothing the pair established.
-
-    Three shapes, each matched on the words rather than the meaning: motion
-    into nowhere ("walk in," with no destination), a distal demonstrative
-    whose noun never appeared ("that meeting"), and a third-person pronoun
-    with no person mentioned anywhere before it ("he"). "It" is excluded:
-    in customer speech it almost always points at the feeling just named.
-    """
-    refs = []
-    seen = set()
-
-    def _add(span: str):
-        key = span.lower()
-        if key not in seen:
-            seen.add(key)
-            refs.append(span)
-
-    text = str(script or "")
-    lowered = text.lower()
-    for match in re.finditer(
-        r"\b(walk|go|come|head|step)s? in\b"
-        r"(?!\s+(?:to|through|past|around|between|among)\b)",
-        lowered,
-    ):
-        _add(text[match.start(): match.end()])
-    tokens = [(m.group(0), m.start()) for m in re.finditer(r"[a-z0-9]+", lowered)]
-    hook_stems = {_continuity_stem(word) for word in _normalize_spoken(hook).split()}
-
-    def _established_before(position: int, extra: set = frozenset()) -> set:
-        known = set(hook_stems) | set(extra)
-        for word, start in tokens:
-            if start >= position:
-                break
-            known.add(_continuity_stem(word))
-        return known
-
-    person_stems = {_continuity_stem(word) for word in _PERSON_WORDS}
-    for match in re.finditer(r"\b(that|those)\s+([a-z]+)\b", lowered):
-        noun = match.group(2)
-        known = _established_before(match.start())
-        if not any(_words_match(noun, word) for word in known):
-            _add(text[match.start(): match.end()])
-    for match in re.finditer(r"\b(he|him|his|she|her|they|them)\b", lowered):
-        known = _established_before(match.start())
-        if not (known & person_stems):
-            _add(text[match.start(): match.end()])
-    for match in re.finditer(r"\bthe\s+([a-z]+)\b", lowered):
-        noun = match.group(1)
-        if noun not in _BARE_LOCATION_NOUNS:
-            continue
-        known = _established_before(match.start())
-        if _continuity_stem(noun) not in known:
-            _add(text[match.start(): match.end()])
-    return refs
-
-
-def _sets_scene(script: str) -> bool:
-    """Whether the opening script sentence names a place or a moment."""
-    tokens = _normalize_spoken(_first_sentence(script)).split()
-    words = set(tokens) | {_continuity_stem(token) for token in tokens}
-    return bool(words & _SCENE_PLACES or words & _SCENE_MOMENTS)
-
-
-def _ends_on_handoff(script: str) -> bool:
-    """Whether the last script sentence lands a first-person payoff.
-
-    The founder's demo and CTA follow immediately, so the script must end on
-    the resolved feeling in the customer's own words — a first-person sentence
-    carrying a resolution marker or a concrete payoff verb — rather than
-    trailing off mid-thought.
-    """
-    sentences = _split_sentences(script)
-    if not sentences:
-        return False
-    last = sentences[-1]
-    padded = f" {_normalize_spoken(last)} "
-    if not any(f" {pronoun} " in padded for pronoun in ("i", "me", "my", "mine", "myself")):
-        return False
-    if _spoken_marker_hit(last, _RESOLUTION_MARKERS):
-        return True
-    return any(f" {verb} " in padded for verb in _PAYOFF_VERBS)
-
-
-def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_name="") -> dict:
-    """
-    Both spoken lines measured, and read as ONE story.
-
-    Counts each line against the target it aims at and the ceiling it must
-    hold, and reads the two together: the hook should open a problem — a
-    question, a cost, something the viewer is doing that keeps failing — and
-    the script should close the one the hook opened, rather than restating it
-    or answering a different question.
-
-    Nothing here refuses anything. The ceiling is what the render enforces and
-    an under-target line is a choice, so the story verdict is reported to the
-    founder rather than acted on. The continuity flags below are the same kind
-    of report: a dangling reference or an unanswered hook image is craft, not
-    an observable defect, so it is flagged for the founder instead of
-    rewritten — the third failed editorial attempt must never destroy a plan
-    over it. Pure, so the Review step and the render path measure the same
-    words the same way.
-
-    `app_name` adds the one check that cannot live in the prompt: whether the
-    customer's own line names the product they are talking about, which is
-    promotion however the sentence is worded. Reported, never acted on — a veto
-    would take a whole plan down the moment an app was named after a common
-    noun ("Journal", "Notes"), and the founder can see the flag and fix the
-    line themselves.
-    """
-    targets = spoken_targets(hook_seconds, total_seconds)
-    hook = str(hook_line or "").strip()
-    body = str(script or "").strip()
-    story = {
-        "problem_in_hook": _opens_a_problem(hook),
-        "resolution_in_script": _closes_the_problem(body),
-        # The plan's script is written as the whole piece, so a copy of the
-        # hook at its head is the hook being said twice rather than a middle.
-        "restates_hook": bool(hook and body) and strip_leading_hook(hook, body) != body,
-        # One continuous thought, read across the boundary: every reference
-        # established, the hook's image echoed, the scene set, the handoff
-        # landed. Reported, never acted on — see the docstring.
-        "dangling_refs": _dangling_references(hook, body),
-        "echoes_hook": _script_echoes_hook(hook, body),
-        "sets_scene": _sets_scene(body),
-        "ends_on_handoff": _ends_on_handoff(body),
-    }
-    # Only a name long enough to be a real product name, and never the short
-    # generic one that would match ordinary speech.
-    named = str(app_name or "").strip()
-    if len(named) >= 5:
-        needle = _normalize_spoken(named)
-        spoken = f" {_normalize_spoken(hook)} {_normalize_spoken(body)} "
-        story["names_the_app"] = bool(needle) and f" {needle} " in spoken
-        story["generic_phrasing"] = bool(
-            _spoken_marker_hit(hook, _AI_FLUFF_MARKERS)
-            or _spoken_marker_hit(body, _AI_FLUFF_MARKERS)
-        )
-    story["coherent"] = bool(
-        story["problem_in_hook"] and story["resolution_in_script"] and not story["restates_hook"]
-    )
-    return {
-        "hook": _summarize_line(hook, targets["hook"]),
-        "script": _summarize_line(body, targets["script"]),
-        "story": story,
-        "hook_seconds": targets["hook_seconds"],
-        "middle_seconds": targets["middle_seconds"],
-        "over_ceiling": bool(
-            len(hook) > targets["hook"]["ceiling"] or len(body) > targets["script"]["ceiling"]
-        ),
-    }
-
-
-def repair_spoken_story(plan, hook_seconds=3, total_seconds=12) -> tuple:
-    """
-    Validate the two spoken lines before a render, and rewrite what cannot be spoken.
-
-    Returns (words, report). `words` holds `hook_line` and `script` exactly as
-    the video model must receive them; nothing else from the plan is touched.
-    The rewrite is the partition rule and nothing more:
-
-    - a hook line longer than its seconds is cut back to its opening sentence,
-      and what comes off is spoken at the head of the middle instead of being
-      deleted. The words stay in the video; they simply stop being the opening
-      line, which is what "the hook names the problem and the script answers
-      it" means in practice — a resolution that had drifted into the hook is
-      handed to the middle that has to carry it;
-    - a middle longer than its seconds keeps its opening and its resolving
-      sentence and gives up the sentences in between, so the payoff survives
-      the cut.
-
-    No model call and no provider request: this is arithmetic on the founder's
-    own words, run inside the render path so the words measured here are the
-    words sent. The report carries the count either side of the rewrite and
-    every change made, so a shortened line is reported rather than silent.
-    """
-    source = plan if isinstance(plan, dict) else {}
-    hook_line = str(source.get("hook_line") or "").strip()
-    script = str(source.get("script") or "").strip()
-    hook_seconds = hook_seconds or 3
-    total_seconds = total_seconds or 0
-
-    part = partition_spoken_words(source, hook_seconds, total_seconds)
-    spoken_hook = part["hook_line"]
-
-    changes = []
-    if spoken_hook != hook_line:
-        changes.append({
-            "field": "hook_line",
-            "reason": "over_ceiling",
-            "removed_chars": part["hook_dropped_chars"],
-            "moved_to_script": len(part["hook_spill"]),
-        })
-    if hook_line and strip_leading_hook(hook_line, script) != script:
-        # The script opened with the hook, so the two lines said the same thing
-        # twice and the hook's characters were charged to the middle's seconds.
-        changes.append({"field": "script", "reason": "restated_hook"})
-    if part["dropped_chars"]:
-        changes.append({
-            "field": "script",
-            "reason": "over_ceiling",
-            "removed_chars": part["dropped_chars"],
-            "kept_chars": len(part["kept"]),
-        })
-
-    report = {
-        "before": check_spoken_story(hook_line, script, hook_seconds, total_seconds),
-        "after": check_spoken_story(spoken_hook, part["kept"], hook_seconds, total_seconds),
-        "changes": changes,
-        "rewritten": bool(changes),
-        "middle_seconds": part["middle_seconds"],
-    }
-    return {"hook_line": spoken_hook, "script": part["kept"]}, report
-
-
-def trim_to_sentence(text: str, limit: int):
-    """
-    The longest prefix of `text` that fits `limit` and stops at a sentence.
-
-    Returns (kept, dropped). A mid-sentence cut would lop the payoff — usually
-    the last sentence — and a hard cut mid-word is a visible fault in a line
-    someone has to debug, so the order is: sentence boundary, then word
-    boundary, then a hard cut only when neither exists.
-    """
-    text = str(text or "").strip()
-    if not text or limit <= 0 or len(text) <= limit:
-        return text, 0
-    window = text[:limit]
-    cut = max(window.rfind("."), window.rfind("!"), window.rfind("?"))
-    if cut >= 0:
-        kept = window[: cut + 1].strip()
-    else:
-        space = window.rfind(" ")
-        kept = (window[:space] if space > 0 else window).strip()
-    return kept, len(text) - len(kept)
-
-
-def _normalize_spoken(text: str) -> str:
-    """
-    Lowercase, drop punctuation, collapse whitespace. For comparing words only.
-
-    Two strings that would be spoken identically normalize to the same string,
-    which is what lets the hook line be found in a script that introduces it
-    rather than starting with it verbatim.
-    """
-    chars = []
-    for ch in str(text or "").lower():
-        chars.append(ch if ch.isalnum() else " ")
-    return " ".join("".join(chars).split())
-
-
-def _first_sentence(text: str) -> str:
-    """
-    The opening sentence of `text`, or all of it when it has no terminator.
-
-    A terminator only ends the sentence when what follows is a space, an
-    earlier abbreviation's period ("Dr. Smith") is left alone, and the closing
-    mark is included so a lead-in is cut with the rest.
-    """
-    stripped = str(text or "").strip()
-    for index, ch in enumerate(stripped):
-        if ch not in ".!?":
-            continue
-        following = stripped[index + 1: index + 2]
-        if following == "" or following in " \n\t":
-            return stripped[: index + 1]
-    return stripped
-
-
-def strip_leading_hook(hook_line: str, script: str) -> str:
-    """
-    Remove the hook line from the front of the script, returning what is left.
-
-    The plan's `script` is written as the whole piece, so it normally opens with
-    the hook line. Leaving that copy in means the middle speaks the hook a
-    second time, and the hook's characters are then charged to the middle's
-    budget -- which the render reports as an overflow and refuses.
-
-    This used to be an exact `startswith` test, so any introduction defeated it
-    ("So, <hook line>? ..." is the same words, differently opened). The hook is
-    therefore matched at the sentence, on normalized text, and the first
-    sentence is treated as the hook when it carries the hook's words and is
-    little more than a lead-in to them. A script that does not open with the
-    hook at all is left completely alone: its two sections are separate texts,
-    and nothing needs removing.
-    """
-    hook = _normalize_spoken(hook_line)
-    body = str(script or "").strip()
-    if not hook or not body:
-        return body
-
-    normalized = _normalize_spoken(body)
-    if normalized.startswith(hook):
-        return body[len(str(hook_line).strip()):].lstrip(" ,.!?;:-")
-
-    opening = _first_sentence(body)
-    opening_normalized = _normalize_spoken(opening)
-    # The lead-in tolerance is deliberately small. A first sentence that merely
-    # contains the hook somewhere is far more likely to be the middle than the
-    # hook, and cutting it would delete the founder's actual words.
-    lead_in = len(hook) + 30
-    if hook in opening_normalized and len(opening_normalized) <= lead_in:
-        return body[len(opening):].lstrip(" ,.!?;:-")
-    return body
-
-
-def partition_spoken_words(plan, hook_seconds=3, total_seconds=12) -> dict:
-    """
-    The single rule for how the approved words divide between hook and middle.
-
-    Returns hook_line, the middle as written, the part of the middle that fits
-    its seconds, and how many characters did not. Every consumer reads this:
-    the plan clamp that sizes a freshly generated script, the binding that
-    rewrites a strategy's spoken lines, and the render gate that refuses an
-    over-length script. A second implementation of the arithmetic here would
-    mean a plan the clamp called short and the gate calls long, which is the one
-    disagreement a founder cannot act on.
-
-    `total_seconds` and `hook_seconds` must be passed exactly as the render gate
-    passes them, or the two will not agree on what fits.
-    """
-    hook_line = ""
-    script = ""
-    if isinstance(plan, dict):
-        hook_line = str(plan.get("hook_line") or "").strip()
-        script = str(plan.get("script") or "").strip()
-
-    targets = spoken_targets(hook_seconds, total_seconds)
-
-    # The hook is counted FIRST, and against its own seconds. It used to pass
-    # through untouched, which is how a hook line several times the length of
-    # the opening beat was stored, bound into section 0, and cut mid-sentence by
-    # the prompt builder with nothing telling the founder. The cut keeps the
-    # opening sentence and hands the rest to the middle below, so the words are
-    # still spoken — just after the hook, which is where a resolution belongs.
-    spoken_hook, hook_dropped = _trim_hook_line(hook_line, targets["hook"]["ceiling"])
-    # Only the front is cleaned: the cut can leave a leading mark behind it,
-    # and the closing mark belongs to the sentence the spill ends with.
-    hook_spill = hook_line[len(spoken_hook):].lstrip(" ,.!?;:-") if spoken_hook else ""
-
-    middle_text = strip_leading_hook(hook_line, script)
-    if hook_spill:
-        middle_text = f"{hook_spill} {middle_text}".strip() if middle_text else hook_spill
-
-    budget = targets["script"]["ceiling"]
-    kept, dropped = trim_spoken_body(middle_text, budget)
-    return {
-        "hook_line": spoken_hook,
-        "hook_spill": hook_spill,
-        "hook_dropped_chars": hook_dropped,
-        "middle_text": middle_text,
-        "kept": kept,
-        "dropped_chars": dropped,
-        "budget": budget,
-        "target": targets["script"]["target"],
-        "hook_target": targets["hook"]["target"],
-        "middle_seconds": targets["middle_seconds"],
-    }
-
-
-def bind_spoken_words(strategy: dict, plan, hook_seconds=3, total_seconds=12):
-    """
-    Rewrite the strategy's spoken words from the plan's approved words.
-
-    Returns (strategy, overflow). `overflow` is {} when everything fits and
-    {"dropped_chars", "budget", "middle_seconds"} when the approved script is
-    longer than the middle can speak. That record is recomputed, not stored: it
-    is a pure function of (plan, seconds), so the render gate and the public
-    project serializer can derive it fresh and a strategy PATCH cannot drop it.
-
-    When there is no approved plan, nothing is rebound — a strategy built
-    without one keeps the model's words, which is the legacy path, and no
-    overflow is reported because there is nothing to overflow.
-
-    The returned strategy is a copy: binding mutates the sections, and the
-    caller's dict must not gain words it did not ask for.
-    """
-    import copy
-
-    if not isinstance(strategy, dict):
-        return strategy, {}
-    part = partition_spoken_words(plan, hook_seconds, total_seconds)
-    hook_line = part["hook_line"]
-    middle_text = part["middle_text"]
-    if not hook_line and not middle_text:
-        return strategy, {}
-
-    strategy = copy.deepcopy(strategy)
-    kept = part["kept"]
-
-    sections = strategy.get("segments")
-    if isinstance(sections, list):
-        if hook_line:
-            if len(sections) > 0 and isinstance(sections[0], dict):
-                sections[0]["script"] = hook_line
-            if len(sections) > 1 and isinstance(sections[1], dict):
-                sections[1]["script"] = kept
-        elif len(sections) > 1 and isinstance(sections[1], dict):
-            sections[1]["script"] = kept
-    if hook_line:
-        strategy["hook_line"] = hook_line
-
-    overflow = (
-        {
-            "dropped_chars": part["dropped_chars"],
-            "budget": part["budget"],
-            "middle_seconds": part["middle_seconds"],
-        }
-        if part["dropped_chars"]
-        else {}
-    )
-    return strategy, overflow
-
-
-def strategy_text(strategy: dict) -> str:
-    """
-    Flatten every human-readable string in a strategy.
-    Used by claim safety so the strategy's own wording — the hook line, the
-    spoken script, the promises — is checked exactly like the plan's is. A
-    banned claim that appears only in the strategy is still a banned claim.
-    """
-    if not isinstance(strategy, dict):
-        return ""
-    parts: list = []
-    for key, value in strategy.items():
-        if isinstance(value, str):
-            parts.append(value)
-        elif isinstance(value, dict):
-            parts.extend(v for v in value.values() if isinstance(v, str))
-            for nested in value.values():
-                if isinstance(nested, list):
-                    parts.extend(str(v) for v in nested)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    parts.extend(str(v) for v in item.values() if isinstance(v, str))
-    return " \n ".join(p for p in parts if p.strip())
-
-
-def trend_evidence_sentence(evidence) -> str:
-    """
-    Render a template's anonymous trend aggregate as one prompt sentence.
-
-    Kept here rather than imported from a research helper so the strategy
-    path does not pull in extra modules; the format is a small
-    contract between the scan and the prompt, and the two sides assert the same
-    fields in the same way.
-
-    Returns "" when there is no signal, and the caller omits the whole section
-    rather than printing a heading with nothing under it.
-    """
-    if isinstance(evidence, str):
-        try:
-            evidence = json.loads(evidence)
-        except (json.JSONDecodeError, TypeError):
-            return ""
-    if not isinstance(evidence, dict) or not evidence.get("has_signal"):
-        return ""
-    sample = evidence.get("sample_size") or 0
-    if not sample:
-        return ""
-    return (
-        f"Across {sample} public openings of this shape in the last scan, the median one had "
-        f"{evidence.get('median_view_band', 'unknown')} views and "
-        f"{evidence.get('median_engagement_band', 'unknown')} engagement "
-        f"({evidence.get('recency_band', 'unknown')}). This is what similar shapes have "
-        f"carried, not a promise about any single video."
-    )
 
 
 async def generate_video_strategy(
@@ -6035,122 +4742,3 @@ def _normalize_beats(beats, duration: int) -> list:
     return out
 
 
-
-
-
-
-def strip_html_to_text(html: str) -> str:
-    """Basic regex-based HTML-to-text stripper (no external HTML parsing dependency)."""
-    import re
-
-    # Remove script/style/head blocks entirely (including their content)
-    text = re.sub(r"(?is)<(script|style|head|noscript)[^>]*>.*?</\1>", " ", html)
-    # Replace common block-level tags with newlines to preserve some structure
-    text = re.sub(r"(?i)<(br|/p|/div|/li|/h[1-6]|/tr)\s*/?>", "\n", text)
-    # Strip all remaining tags
-    text = re.sub(r"(?s)<[^>]+>", " ", text)
-    # Unescape common HTML entities
-    entities = {
-        "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
-        "&quot;": '"', "&#39;": "'", "&rsquo;": "'", "&ldquo;": '"', "&rdquo;": '"',
-    }
-    for ent, repl in entities.items():
-        text = text.replace(ent, repl)
-    # Collapse whitespace
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n", text)
-    return text.strip()
-
-
-def _html_meta_descriptions(html: str) -> list:
-    """
-    content= of description/og:description/twitter:description meta tags.
-
-    Parsed per-tag so attribute order does not matter (content-first tags
-    are common on store listings). Returns [] on any markup surprise rather
-    than half a tag.
-    """
-    found = []
-    for tag in re.findall(r"(?is)<meta\b[^>]*>", html or ""):
-        attrs = dict(
-            (k.lower(), v)
-            for k, v in re.findall(r"""(\w+)\s*=\s*["'](.*?)["']""", tag)
-        )
-        name = (attrs.get("name") or attrs.get("property") or "").strip().lower()
-        if name in ("description", "og:description", "twitter:description"):
-            content = (attrs.get("content") or "").strip()
-            if content:
-                found.append(content)
-    return found
-
-
-def _html_json_ld_strings(html: str, limit: int = 20) -> list:
-    """
-    Every string value inside JSON-LD blocks, in document order.
-
-    Store listings and business sites carry their real description here even
-    when the visible body is a client-rendered shell. Malformed blocks are
-    skipped: one bad script tag must not poison the rest.
-    """
-    found = []
-    for block in re.findall(
-        r'''(?is)<script\b[^>]*type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>''',
-        html or "",
-    ):
-        try:
-            data = json.loads(block)
-        except (ValueError, TypeError):
-            continue
-        stack = [data]
-        while stack and len(found) < limit:
-            node = stack.pop()
-            if isinstance(node, dict):
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
-            elif isinstance(node, str) and node.strip():
-                found.append(node.strip())
-    return found[:limit]
-
-
-def _html_title(html: str) -> str:
-    """The page <title>: stripped with <head> today, yet often the only words
-    a script-rendered page serves to a plain fetch."""
-    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
-    if not match:
-        return ""
-    return re.sub(r"\s+", " ", re.sub(r"(?s)<[^>]+>", " ", match.group(1))).strip()
-
-
-def page_text_with_metadata(html: str) -> str:
-    """
-    Body text plus high-signal head metadata, highest-signal first.
-
-    The plain stripper drops <head> entirely, so a store listing whose body
-    is a client-rendered shell used to research as one heading plus nav —
-    while its title, meta description and JSON-LD carried the actual product
-    facts. This keeps the body primary (it stays the bulk) and prepends only
-    what the body lacks: title, meta descriptions, JSON-LD strings, each
-    once. A pure JS shell still yields almost nothing — honestly thin, and
-    reported as such by the caller — rather than invented text.
-    """
-    import re
-
-    body = strip_html_to_text(html)
-    blocks = []
-    title = _html_title(html)
-    if title:
-        blocks.append(title)
-    blocks.extend(_html_meta_descriptions(html))
-    blocks.extend(_html_json_ld_strings(html))
-    if body.strip():
-        blocks.append(body.strip())
-    # Meta and JSON-LD routinely repeat the body's first paragraph; exact
-    # duplicates would burn prompt budget twice for the same words.
-    seen = set()
-    unique = []
-    for block in blocks:
-        if block not in seen:
-            seen.add(block)
-            unique.append(block)
-    return "\n\n".join(unique).strip()
