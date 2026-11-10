@@ -4540,7 +4540,8 @@ async def generate_video_strategy(
             if camera_setup == "fixed" else
             "- HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away; "
             "hold that straight-on framing for the whole take — no orbit to three-quarter, no "
-            "diagonal angle, no off-centre framing, no push in, pull back, or zoom. "
+            "diagonal angle, no off-centre framing, no push in, pull back, or zoom, "
+            "never crop the forehead or chin. "
             "In the same moment the actor makes one small story-specific action; "
             "no timestamp or word sync.\n"
         )

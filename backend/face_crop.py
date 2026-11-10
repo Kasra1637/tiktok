@@ -33,14 +33,22 @@ _MODEL_PATH = Path(__file__).parent / "models" / "face_detection_yunet_2023mar_i
 _MIN_CONFIDENCE = 0.5
 
 # Padding ratios relative to the detected face bounding box dimensions.
-# These capture the full head (face + hair + ears + chin/neck) so the identity
-# survives, and they deliberately keep most of the garment OUT: 40% of the face
-# height below the chin is neck and the top of the shoulders, so anything past
-# it is clothing, which the scene chooses and locks. The room is still inside
-# this box — that is what defocus_outside_person is for.
-_PAD_HORIZONTAL = 0.6    # 60% of face width on each side (captures ears + hair width)
-_PAD_TOP = 1.0           # 100% above face (captures full hair/top of head)
-_PAD_BOTTOM = 0.4        # 40% below face (chin + neck for skin tone reference)
+# These capture the full head (face + hair + ears + chin/neck) with margin to
+# spare, because this crop can BECOME the opening frame: first-frame models
+# open the video on this image, so a headshot-tight reference opens the video
+# too close and the render stays there. The extra room costs nothing in
+# likeness — the head is still returned untouched — and it leaks nothing: the
+# room and the garment inside this box are what defocus_outside_person is for.
+_PAD_HORIZONTAL = 0.9    # 90% of face width on each side (ears + hair + side margin)
+_PAD_TOP = 1.4           # 140% above face (full hair plus headroom)
+_PAD_BOTTOM = 0.9        # 90% below face (neck plus shoulder margin)
+
+# The render is vertical 9:16, so the reference is too. A crop wider than that
+# is center-cropped by the provider to fit — cutting the sides of the head off
+# an already tight headshot — so the box is expanded (never shrunk) to 9:16
+# before the pixels are cut, and a headshot that skips the crop is padded to
+# 9:16 instead of being returned in the upload's own aspect.
+_TARGET_ASPECT = 9 / 16
 
 # How hard the reference is defocused outside the person, and over how much of
 # the frame that is applied.
@@ -112,6 +120,71 @@ def _detect_face(img_rgb: np.ndarray) -> tuple:
     return (fx, fy, fw, fh, confidence)
 
 
+def _crop_box(bbox: tuple, img_w: int, img_h: int) -> tuple:
+    """
+    The padded face box, expanded to vertical 9:16, clamped to the image.
+
+    One function so `_crop_face_region` and `_bbox_in` cannot disagree about
+    where the crop starts: both call this, one to cut pixels and one to move
+    the face box into the cropped frame.
+    """
+    x, y, w_face, h_face, _ = bbox
+
+    # Padded boundaries from the face box.
+    pad_x = int(w_face * _PAD_HORIZONTAL)
+    pad_top = int(h_face * _PAD_TOP)
+    pad_bottom = int(h_face * _PAD_BOTTOM)
+
+    x1 = max(0, x - pad_x)
+    y1 = max(0, y - pad_top)
+    x2 = min(img_w, x + w_face + pad_x)
+    y2 = min(img_h, y + h_face + pad_bottom)
+
+    return _expand_to_vertical(x1, y1, x2, y2, img_w, img_h)
+
+
+def _expand_to_vertical(x1: int, y1: int, x2: int, y2: int,
+                        img_w: int, img_h: int) -> tuple:
+    """
+    Grow a crop box to vertical 9:16 without leaving the image.
+
+    Only the short side grows, split across both ends; whatever one side loses
+    to the image edge is given to the other, so a face near the top still gets
+    a full-height box. Never shrinks: a box already at 9:16 keeps its pixels,
+    and a box the image cannot contain at 9:16 takes the closest it can.
+    """
+    w, h = x2 - x1, y2 - y1
+    if w <= 0 or h <= 0:
+        return (x1, y1, x2, y2)
+    if w / h <= _TARGET_ASPECT:
+        want_w = min(img_w, int(round(h * _TARGET_ASPECT)))
+        extra = want_w - w
+        if extra <= 0:
+            return (x1, y1, x2, y2)
+        nx1 = x1 - extra // 2
+        nx2 = x2 + (extra - extra // 2)
+        if nx1 < 0:
+            nx2 = min(img_w, nx2 - nx1)
+            nx1 = 0
+        if nx2 > img_w:
+            nx1 = max(0, nx1 - (nx2 - img_w))
+            nx2 = img_w
+        return (nx1, y1, nx2, y2)
+    want_h = min(img_h, int(round(w / _TARGET_ASPECT)))
+    extra = want_h - h
+    if extra <= 0:
+        return (x1, y1, x2, y2)
+    ny1 = y1 - extra // 2
+    ny2 = y2 + (extra - extra // 2)
+    if ny1 < 0:
+        ny2 = min(img_h, ny2 - ny1)
+        ny1 = 0
+    if ny2 > img_h:
+        ny1 = max(0, ny1 - (ny2 - img_h))
+        ny2 = img_h
+    return (x1, ny1, x2, ny2)
+
+
 def _crop_face_region(img: Image.Image, bbox: tuple) -> Image.Image:
     """
     Crop the image around the detected face with padding for context.
@@ -121,39 +194,25 @@ def _crop_face_region(img: Image.Image, bbox: tuple) -> Image.Image:
         bbox: (x, y, w, h, confidence) from _detect_face
 
     Returns:
-        Cropped PIL Image containing the face region with padding.
+        Cropped PIL Image containing the face region with padding, expanded
+        to vertical 9:16 so no provider-side center-crop bites into the head.
     """
-    x, y, w_face, h_face, _ = bbox
     img_w, img_h = img.size
-
-    # Calculate padded crop boundaries
-    pad_x = int(w_face * _PAD_HORIZONTAL)
-    pad_top = int(h_face * _PAD_TOP)
-    pad_bottom = int(h_face * _PAD_BOTTOM)
-
-    crop_x1 = max(0, x - pad_x)
-    crop_y1 = max(0, y - pad_top)
-    crop_x2 = min(img_w, x + w_face + pad_x)
-    crop_y2 = min(img_h, y + h_face + pad_bottom)
-
-    return img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+    return img.crop(_crop_box(bbox, img_w, img_h))
 
 
-def _bbox_in(bbox: tuple) -> tuple:
+def _bbox_in(bbox: tuple, img_w: int, img_h: int) -> tuple:
     """
     The same face box, expressed in a cropped frame's coordinates.
 
     `_crop_face_region` is called with the box on the original, and the result
     is a different image, so the box has to move with it. Recomputing it by
     re-detecting would be a second model call for a number the caller already
-    has, and the padding rules here are the same ones the crop used, so the
-    origin is recovered from the same arithmetic instead.
+    has, and the crop box here is the same one the crop used, so the origin
+    is recovered from the same arithmetic instead.
     """
     x, y, w_face, h_face, confidence = bbox
-    pad_x = int(w_face * _PAD_HORIZONTAL)
-    pad_top = int(h_face * _PAD_TOP)
-    crop_x1 = max(0, x - pad_x)
-    crop_y1 = max(0, y - pad_top)
+    crop_x1, crop_y1, _, _ = _crop_box(bbox, img_w, img_h)
     return (
         x - crop_x1,
         y - crop_y1,
@@ -243,6 +302,46 @@ def defocus_outside_person(img: Image.Image, bbox: tuple) -> Image.Image:
     except Exception as e:  # never fail a render over preprocessing
         logger.warning(f"Background defocus failed ({e}) — using the image as-is.")
         return img
+
+
+def _pad_to_vertical(img: Image.Image, bbox: tuple) -> tuple:
+    """
+    Pad an image out to vertical 9:16, returning (image, bbox).
+
+    For the headshot branch, which skips the crop: a tight square or landscape
+    upload returned as-is becomes a close-up first frame with no headroom, and
+    the provider center-crops its width to fit 9:16 on top of that. The upload
+    is centered on a blurred cover-fill of itself instead, so the head keeps
+    its pixels and gains margin in an aspect no provider has to crop.
+
+    The fill is blurred past recognition and partly desaturated — the same
+    treatment as defocus_outside_person — so it reads as backdrop, not as a
+    room to copy. An image already at (or taller than) 9:16 is returned
+    untouched. Never raises: any failure returns the inputs unchanged.
+    """
+    try:
+        width, height = img.size
+        if width <= 0 or height <= 0:
+            return (img, bbox)
+        if width / height <= _TARGET_ASPECT + 1e-6:
+            return (img, bbox)
+        new_h = int(round(width / _TARGET_ASPECT))
+        if new_h <= height:
+            return (img, bbox)
+        fill = img.convert("RGB").resize((width, new_h), Image.BILINEAR)
+        radius = max(2.0, min(width, new_h) * _DEFOUS_RADIUS_RATIO)
+        fill = fill.filter(ImageFilter.GaussianBlur(radius=radius))
+        fill = fill.filter(ImageFilter.GaussianBlur(radius=radius))
+        fill = Image.blend(
+            fill, fill.convert("L").convert("RGB"), _DEFOUS_DESATURATE,
+        )
+        top = (new_h - height) // 2
+        fill.paste(img.convert("RGB"), (0, top))
+        x, y, w_face, h_face, confidence = bbox
+        return (fill, (x, y + top, w_face, h_face, confidence))
+    except Exception as e:  # never fail a render over preprocessing
+        logger.warning(f"Vertical padding failed ({e}) — using the image as-is.")
+        return (img, bbox)
 
 
 def count_faces_in_image(img_rgb: np.ndarray) -> Optional[int]:
@@ -386,10 +485,15 @@ def crop_face_from_path(image_path: Path) -> Path:
                 f"Face already dominates image ({face_area_pct:.1f}% > 40%) — "
                 f"skipping crop, using original."
             )
-            # Still defocused. Skipping the crop is about framing, not about
-            # what the reference is allowed to contain: a tight selfie against a
-            # busy wall is the same leak as a full-body shot in a kitchen, and
-            # returning it untouched was how a close-up kept its own background.
+            # Still defocused, and padded to vertical. Skipping the crop is
+            # about framing, not about what the reference is allowed to
+            # contain: a tight selfie against a busy wall is the same leak as
+            # a full-body shot in a kitchen, and returning it untouched was how
+            # a close-up kept its own background. Padding first, so the head
+            # gains headroom in an aspect no provider has to center-crop — a
+            # square close-up returned as-is opens a first-frame video too
+            # close, with its sides cut off to fit 9:16.
+            img, bbox = _pad_to_vertical(img, bbox)
             cleaned = defocus_outside_person(img, bbox)
             stem = image_path.stem
             suffix = image_path.suffix or ".png"
@@ -408,7 +512,7 @@ def crop_face_from_path(image_path: Path) -> Path:
         # decides how much of the frame the person occupies, so the mask and the
         # blur radius are computed against the cropped frame rather than the
         # upload.
-        cropped = defocus_outside_person(cropped, _bbox_in(bbox))
+        cropped = defocus_outside_person(cropped, _bbox_in(bbox, img_w, img_h))
 
         # Save cropped version alongside original
         stem = image_path.stem

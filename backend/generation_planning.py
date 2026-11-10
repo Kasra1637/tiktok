@@ -185,8 +185,19 @@ CONDENSE_BELOW = 5000
 # and a selfie render gets the physical ending instead. The reach/phone/camera
 # and second-free-hand prohibitions (ADR 0093, as superseded) are part of the
 # fixed text, which is why both floors rose.
-FULL_PROMPT_FLOOR = 4027
-CONDENSED_PROMPT_FLOOR = 2238
+#
+# Both moved again for the no-crop framing: the starting shot widened from
+# upper-chest to mid-chest with an explicit never-crop-the-forehead-or-chin
+# rule, and the selfie hold forbids tightening in both budget modes. Renders
+# were coming back with the forehead or chin cut off — a close-up opening
+# plus the 1.10x processing zoom — so the margin is stated in fixed text
+# rather than left to the model's reading of "headroom". The hold's restated
+# distance paid for all of it and more: it now names the framing directly
+# above instead of repeating the metre-away setup, per the fixed-text trade
+# in ADR 0053 — which is why the full floor fell while the condensed floor
+# (whose hold was already terse) rose by the framing alone.
+FULL_PROMPT_FLOOR = 4019
+CONDENSED_PROMPT_FLOOR = 2244
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -384,7 +395,8 @@ _CONDENSED_IDENTITY_CLOSE = (
 # this same wording so the render is told one framing, not two.
 HANDHELD_SELFIE_FRAMING = (
     "HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away. "
-    "Frame upper chest up, full head with headroom, room at the sides for hand gestures. "
+    "Frame mid-chest up, full head with headroom, room at the sides for hand "
+    "gestures; never crop the forehead or chin. "
     "Hold straight-on, no 3/4 angle, no off-centre framing. Natural "
     "facial proportions, no exaggerated wide-angle distortion. Very subtle natural "
     "handheld sway."
@@ -467,18 +479,23 @@ def require_camera_setup_directions(strategy: dict) -> None:
                     negative_list = False
 
 
+# The hold follows the starting shot immediately in every prompt, so it names
+# that framing ("that straight-on selfie framing") instead of restating the
+# distance: the metre-away setup is stated once, directly above. The saved
+# characters pay for the never-tighten rule at the end, which the fixed-text
+# budget had no room left to absorb (ADR 0053).
 _SELFIE_CAMERA_MOVE = (
-    "HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away; "
-    "hold that straight-on framing for the whole take — keep the phone steady, no push "
-    "in, pull back, or zoom. In the same "
+    "Hold that straight-on selfie framing for the whole take — keep the phone "
+    "steady, no push in, pull back, or zoom. In the same "
     "moment the actor makes one small story-specific action{gesture}. Keep it subtle "
-    "and natural, eyes on the lens. No cut. Keep the full head and chin visible."
+    "and natural, eyes on the lens. No cut. Keep the full head and chin inside "
+    "frame; never tighten or crop the head."
 )
 
 _CONDENSED_SELFIE_CAMERA_MOVE = (
-    "HANDHELD SELFIE: straight-on at arm's length, about a metre away; hold straight-on "
-    "— keep the phone steady, no zoom. Simultaneous actor gesture{gesture}; "
-    "subtle, natural, eyes on lens."
+    "Hold that straight-on selfie framing — keep the phone steady, no zoom. "
+    "Simultaneous actor gesture{gesture}; "
+    "subtle, natural, eyes on lens. Never crop the head."
 )
 
 _CAMERA_MOVE = (
