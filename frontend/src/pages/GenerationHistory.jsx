@@ -46,7 +46,6 @@ import { useTourEligibility } from "../components/onboarding/OnboardingProvider"
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
-  Loader as Loader2,
   TriangleAlert as AlertTriangle,
   Download,
   Trash as Trash2,
@@ -408,21 +407,21 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
 
   const retryRenderButton = row.status === "failed" && row.retryable && (
     <Button variant="accent" disabled={busy} busy={busy} onClick={() => act(() => api.retryGeneration(row.id))} className="min-w-[150px] flex-1">
-      <RotateCcw className="h-4 w-4" /> Retry render
+      <RotateCcw className="h-4 w-4" /> {busy ? "Retrying render" : "Retry render"}
     </Button>
   );
   const recheckButton = awaitingProvider && (
     <Button variant="secondary" size="sm" className="w-full" disabled={busy} busy={busy} onClick={handleRecheckStranded}
       data-testid={`recheck-stranded-${row.id}`} title="Ask the provider whether this render finished, and fetch it if it did">
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-      Check again
+      <RotateCcw className="h-3.5 w-3.5" />
+      {busy ? "Checking" : "Check again"}
     </Button>
   );
   const retryStorageButton = canRepair && !awaitingProvider && (
     <Button variant="secondary" size="sm" className="w-full" disabled={busy} busy={busy} onClick={handleRetryStorage}
       data-testid={`retry-storage-${row.id}`} title="Re-fetch the finished render and save a durable copy, so it plays here">
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-      Retry durable save
+      <RotateCcw className="h-3.5 w-3.5" />
+      {busy ? "Retrying save" : "Retry durable save"}
     </Button>
   );
   const compactNotice = compact && (!downloadUrl || previewBroken);
@@ -829,7 +828,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               busy={deleting}
               data-testid={`delete-render-confirm-${row.id}`}
             >
-              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Delete permanently
             </Button>
           </DialogFooter>

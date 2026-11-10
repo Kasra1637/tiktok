@@ -18,7 +18,7 @@ import {
   clampHookSeconds,
   DEFAULT_HOOK_SECONDS,
 } from "../../lib/videoLength";
-import { Loader as Loader2, TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown } from "lucide-react";
+import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown } from "lucide-react";
 
 /* The single instruction for the angle picker, shared by the empty state
    (click generates the six) and the reveal state (click shows the six).
@@ -424,11 +424,7 @@ export function AngleSelector({
         progress={generating ? genCount / 6 : null}
         data-testid="generate-angles-button"
       >
-        {generating ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5" />
-        )}
+        <Sparkles className="h-3.5 w-3.5" />
             {gateButtonLabel}
           </Button>
           {!generating && (
@@ -453,11 +449,7 @@ export function AngleSelector({
           progress={generating ? genCount / 6 : null}
           data-testid="regenerate-angles-button"
         >
-          {generating ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
+          <RefreshCw className="h-3.5 w-3.5" />
           {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
             {angleSetFreshness && !generating && (
@@ -781,11 +773,7 @@ export function AngleGoalPicker({
         busy={generating}
         data-testid="generate-goals-button"
       >
-        {generating ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5" />
-        )}
+        <Sparkles className="h-3.5 w-3.5" />
         {gateButtonLabel}
       </Button>
       {!generating && (
@@ -938,11 +926,7 @@ export function AngleGoalPicker({
                 title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
                 data-testid="regenerate-goals-button"
               >
-                {regenerating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
+                <RefreshCw className="h-3.5 w-3.5" />
                 {regenerating ? "Shuffling goals" : "Shuffle"}
               </Button>
             </div>

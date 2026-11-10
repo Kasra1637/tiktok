@@ -6,7 +6,7 @@ import { api, getErrorMessage } from "../lib/api";
 import { plannedSections } from "../lib/videoLength";
 import { sentenceCase } from "../lib/copyCase";
 import {
-  Loader2, AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
+  AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
 import { Disclosure } from "./Disclosure";
 import { GroupLabel } from "./SectionCard";
@@ -443,7 +443,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           busy={busy}
           data-testid="strategy-build-button"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          <Sparkles className="h-4 w-4" />
           {busy ? "Building strategy" : hasStrategy ? "Rebuild strategy" : "Build the app-specific strategy"}
         </Button>
         {!busy && needsAngle && (

@@ -15,7 +15,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import {
-  Images, Loader2, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
+  Images, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
   ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
 } from "lucide-react";
 
@@ -235,6 +235,7 @@ function AssetRow({
               variant="secondary"
               size="sm"
               disabled={!usable || attachDisabled || attachBusy || busy}
+              busy={attachBusy}
               title={
                 asset.status !== "active"
                     ? "Restore this asset before using it."
@@ -264,6 +265,7 @@ function AssetRow({
                 variant="ghost"
                 size="sm"
                 disabled={busy}
+                busy={busy}
                 onClick={() => onDetach(asset)}
                 title="Stops using this photo for the video you are building"
               >
@@ -283,6 +285,7 @@ function AssetRow({
               variant="ghost"
               size="sm"
               disabled={busy}
+              busy={busy}
               onClick={() => onArchive(asset)}
               aria-label={asset.status === "archived" ? "Restore asset" : "Archive asset"}
             >
@@ -296,6 +299,7 @@ function AssetRow({
               variant="ghost"
               size="sm"
               disabled={busy}
+              busy={busy}
               onClick={() => onDelete(asset)}
               aria-label="Delete asset"
             >
@@ -875,7 +879,7 @@ export default function AssetLibrary({
             aria-label="Optional photo label"
           />
           <Button variant="accent" onClick={() => fileRef.current?.click()} disabled={busy} busy={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            <Upload className="h-4 w-4" />
             {attachedAsset ? "Upload a different photo" : "Upload"}
           </Button>
         </div>

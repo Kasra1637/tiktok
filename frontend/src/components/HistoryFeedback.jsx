@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Clapperboard, ExternalLink, Eye, Link2, Loader2, X } from "lucide-react";
+import { Check, Clapperboard, ExternalLink, Eye, Link2, X } from "lucide-react";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -187,7 +187,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 onClick={saveLink}
                 data-testid={`history-tiktok-save-${row.id}`}
               >
-                {savingLink ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save link"}
+                {savingLink ? "Saving link" : "Save link"}
               </Button>
             </>
           )}
@@ -230,7 +230,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 onClick={saveViews}
                 data-testid={`history-tiktok-views-save-${row.id}`}
               >
-                {savingViews ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save views"}
+                {savingViews ? "Saving views" : "Save views"}
               </Button>
             </div>
             {viewsError && <p role="alert" className="text-sm text-destructive">{viewsError}</p>}

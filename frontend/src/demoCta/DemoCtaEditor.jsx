@@ -10,7 +10,6 @@ import {
   Clapperboard,
   Download,
   Film,
-  Loader2,
   Megaphone,
   Pause,
   Play,
@@ -1682,7 +1681,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </div>
               {loadingSource && (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading the finished render…
+                  Loading the finished render…
                 </p>
               )}
             </>
@@ -2502,7 +2501,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               {historyError && <p className="text-sm text-destructive">{historyError}</p>}
               {historyRows === null && !historyError && (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading finished renders…
+                  Loading finished renders…
                 </p>
               )}
               {historyRows !== null && historyRows.length === 0 && !historyError && (
@@ -2730,14 +2729,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                       type="button"
                       variant="accent"
                       size="sm"
-                      disabled={!videoUrl || !videoMeta || recording || saving || appendNotReady}
                       onClick={exportVideo}
                       data-testid="demo-cta-export"
                       className="shrink-0"
+                      busy={recording}
+                      progress={recording ? progress : null}
+                      disabled={!videoUrl || !videoMeta || recording || saving || appendNotReady}
                       title="Export TikTok MP4 · 1080×1920 · 30 fps"
                     >
                       {recording ? (
-                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {Math.round(progress * 100)}%</>
+                        <>{Math.round(progress * 100)}%</>
                       ) : (
                         <><Smartphone className="h-3.5 w-3.5" /> Export</>
                       )}
@@ -2816,7 +2817,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           {recording && <Progress value={Math.round(progress * 100)} />}
           {saving && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving to History…
+              Saving to History…
             </p>
           )}
           {error && (
@@ -2877,7 +2878,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 {saved ? (
                   <Badge variant="secondary"><Check className="mr-1 h-2.5 w-2.5" /> In History</Badge>
                 ) : saving ? (
-                  <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Saving…</span>
+                  <span className="flex items-center gap-1">Saving…</span>
                 ) : null}
               </div>
               {/* One honest readback, not a verdict: the hook window is the

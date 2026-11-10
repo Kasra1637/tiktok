@@ -24,7 +24,7 @@ import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
-import { Sparkles, Briefcase, Loader as Loader2, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
+import { Sparkles, Briefcase, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -865,7 +865,7 @@ export default function BrandSetup() {
                   className="w-full sm:w-auto"
                   data-testid="research-app-button"
                 >
-                  {researching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  <Sparkles className="h-4 w-4" />
                   {researching ? "Researching" : "Research app for video"}
                 </Button>
               )}
@@ -879,7 +879,7 @@ export default function BrandSetup() {
                   className="w-full sm:w-auto"
                   data-testid="save-brand-button"
                 >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Save className="h-4 w-4" />
                   {saving ? "Saving" : "Save profile"}
                 </Button>
               )}
@@ -893,7 +893,7 @@ export default function BrandSetup() {
                   className="w-full sm:w-auto"
                   data-testid="approve-profile-button"
                 >
-                  {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                  <BadgeCheck className="h-4 w-4" />
                   {approving ? "Approving" : "Approve for video"}
                 </Button>
               )}
@@ -912,11 +912,7 @@ export default function BrandSetup() {
                       title="Re-run research from these listings: read them into a proposal, or fork a separate draft"
                       data-testid="research-menu-button"
                     >
-                      {researching || refreshing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4" />
-                      )}
+                      <Sparkles className="h-4 w-4" />
                       Research
                     </Button>
                   </DropdownMenuTrigger>
@@ -988,7 +984,7 @@ export default function BrandSetup() {
               busy={approving}
               data-testid="approve-pending-button"
             >
-              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
+              <BadgeCheck className="h-3.5 w-3.5" />
               Review &amp; approve
             </Button>
           </AlertDescription>
@@ -1345,7 +1341,7 @@ export default function BrandSetup() {
                   className="w-full sm:w-auto"
                   data-testid="save-manual-profile-button"
                 >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Save className="h-4 w-4" />
                   {saving ? "Saving" : brand?.id ? "Save App Profile" : "Create App Profile"}
                 </Button>
                 {/* Autosave status for the hand-typed path — see the research

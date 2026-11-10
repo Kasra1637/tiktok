@@ -30,7 +30,7 @@ import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, State
 import { api, getErrorMessage } from "../lib/api";
 import { rememberCurrentAppId } from "../lib/currentApp";
 import {
-  Briefcase, Loader2, AlertTriangle, ArrowLeft,
+  Briefcase, AlertTriangle, ArrowLeft,
   Lightbulb, Trash2, RefreshCw, ClipboardCheck,
   Layers, Target, Megaphone, MessagesSquare, Users,
   Info, Sparkles, Compass, Ban, CircleAlert, Trophy,
@@ -643,11 +643,7 @@ return (
                     className="gap-1.5"
                     data-testid="research-menu-button"
                   >
-                    {regeneratingEverything || refreshing || researchingNew ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
+                    <Sparkles className="h-3.5 w-3.5" />
                     Research
                   </Button>
                 </DropdownMenuTrigger>
@@ -660,7 +656,7 @@ return (
                     className="text-sm"
                   >
                     {regeneratingEverything ? (
-                      <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Refreshing </>
+                      <> Refreshing </>
                     ) : (
                       <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh research & angles </>
                     )}
@@ -675,7 +671,7 @@ return (
                         className="text-sm"
                         data-testid="refresh-sources-button"
                       >                        {refreshing ? (
-                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Re-researching </>
+                          <> Re-researching </>
                         ) : (
                           <> <RefreshCw className="h-3.5 w-3.5 mr-2" /> Refresh from sources </>
                         )}
@@ -692,7 +688,7 @@ return (
                         className="text-sm"
                         data-testid="research-new-draft-button"
                       >                        {researchingNew ? (
-                          <> <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Researching </>
+                          <> Researching </>
                         ) : (
                           <> <Sparkles className="h-3.5 w-3.5 mr-2" /> Research into new draft </>
                         )}
@@ -756,7 +752,7 @@ return (
               busy={approving}
               data-testid="approve-pending-button"
             >
-              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BadgeCheck className="h-3.5 w-3.5" />}
+              <BadgeCheck className="h-3.5 w-3.5" />
               {approving ? "Approving" : "Review & approve"}
             </Button>
           </AlertDescription>
@@ -990,7 +986,6 @@ return (
               busy={deletingProfile}
               data-testid="delete-profile-confirm"
             >
-              {deletingProfile && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Delete permanently
             </Button>
           </DialogFooter>

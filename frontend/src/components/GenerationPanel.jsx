@@ -14,7 +14,7 @@ import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
 import {
-  Loader2, Clapperboard, AlertTriangle, Download, RotateCcw,
+  Clapperboard, AlertTriangle, Download, RotateCcw,
   Play, Info, Clock, Smartphone, Check, Film, MapPin, Save,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
@@ -761,7 +761,7 @@ const handleGenerate = async () => {
             }
             busy={savingLocation}
           >
-            <Save className="h-3.5 w-3.5" /> Save location
+            <Save className="h-3.5 w-3.5" /> {savingLocation ? "Saving" : "Save location"}
           </Button>
         </div>
         {!locationNote && (
@@ -856,7 +856,7 @@ const handleGenerate = async () => {
         busy={busy || inFlight}
         data-testid="render-generate-button"
       >
-        {busy || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+        <Play className="h-4 w-4" />
         {inFlight || busy
           ? "Generating video"
           : generation
@@ -972,7 +972,6 @@ const handleGenerate = async () => {
                       disabled={retryingStorage}
                       busy={retryingStorage}
                   >
-                    {retryingStorage && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                     Retry durable save
                   </Button>
                 </div>
@@ -1076,7 +1075,7 @@ const handleGenerate = async () => {
             <div className="space-y-2">
               <p className="text-sm text-destructive break-words whitespace-pre-wrap">{generation.error}</p>
               {generation.retryable ? (
-                <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy}>
+                <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy} busy={busy}>
                   <RotateCcw className="h-3.5 w-3.5" /> Render it again
                 </Button>
               ) : (

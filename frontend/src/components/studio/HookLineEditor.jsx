@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader as Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { api, getErrorMessage } from "../../lib/api";
@@ -50,7 +50,7 @@ export default function HookLineEditor({ projectId, value, onChange, report, dis
               disabled={busy || disabled || !projectId || !String(value || "").trim()}
               busy={busy}
               data-testid="hook-rewrite-button">
-              {busy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-2 h-3.5 w-3.5" />}
+              <Sparkles className="mr-2 h-3.5 w-3.5" />
               {busy ? "Writing hook" : "Suggest a clearer hook"}
             </Button>
           )}

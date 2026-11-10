@@ -46,7 +46,7 @@ import { sentenceCase } from "../lib/copyCase";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, Loader as Loader2, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X, Lock } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X, Lock } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -1910,7 +1910,7 @@ export default function CreateVideo() {
                     </p>
                   )}
                   <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={() => ensureProject()} data-testid="prepare-draft-button">
-                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                    <ImageIcon className="h-3.5 w-3.5" />
                     {busy ? "Preparing draft" : "Try preparing the draft again"}
                   </Button>
                 </>
@@ -2052,7 +2052,6 @@ export default function CreateVideo() {
               busy={busy || loading}
               data-testid="plan-progress-button"
             >
-              <Loader2 className="h-4 w-4 animate-spin" />
               {loading && !busy ? "Loading your draft" : "Generating your plan"}
             </Button>
           </div>
@@ -2124,7 +2123,7 @@ export default function CreateVideo() {
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
                 >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  <RefreshCw className="h-3.5 w-3.5" />
                   {busy ? "Regenerating plan" : "Regenerate plan"}
                 </Button>
                 {!busy && (
@@ -2454,7 +2453,7 @@ export default function CreateVideo() {
 
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="accent" onClick={() => handleSaveEdits()} disabled={busy || !hasEdits} busy={busy} data-testid="plan-save-button">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Save className="h-4 w-4" />
                 {busy ? "Saving edits" : "Save edits"}
               </Button>
               {/* No "Mark ready" button. Approval is not a decision the founder
@@ -2481,7 +2480,6 @@ export default function CreateVideo() {
                   the feedback then. */}
               {saveStatus && (
                 <p role="status" data-testid="review-autosave-status" className="text-sm text-muted-foreground">
-                  {autosaving && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
                   {saveStatus}
                 </p>
               )}
@@ -2580,7 +2578,7 @@ export default function CreateVideo() {
                   onClick={ensureProject}
                   data-testid="create-draft-button"
                 >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  <Sparkles className="h-3.5 w-3.5" />
                   {busy ? "Creating draft" : "Create the draft"}
                 </Button>
               </div>
