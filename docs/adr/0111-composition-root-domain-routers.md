@@ -34,6 +34,13 @@ tests still call from `server`.
   endpoints. Each is configured once with the composition root
   (`configure_x(server_module)`) and resolves server-owned, test-patched names
   at call time through a module-local `_cfg(name)` lookup.
+- `routers/history.py` owns the post-submit render endpoints (both history
+  listings, detail, poll, durable-save retry, failed-render retry, the TikTok
+  link/view fields, archive, and delete) under the same configure/`_cfg`
+  contract. The render lifecycle they drive — `_submit_generation` and
+  `_persist_generation_clip` — stays in the composition root and is resolved
+  through `_cfg`, so the stranded-render sweep and the tests keep their
+  binding.
 - No domain module imports `server`, in either direction. An unconfigured call
   raises `RuntimeError` instead of half-working.
 - The move is move-only: no route path, response shape, status code or
@@ -53,7 +60,7 @@ tests still call from `server`.
 
 ## Consequences and evidence anchors
 
-- `server.py` drops from ~10,640 to ~3,815 lines; each domain is independently
+- `server.py` drops from ~10,640 to ~3,260 lines; each domain is independently
   importable and testable on ordinary data.
 - Ownership identity (each re-export is the router's object) and the no-back-import
   rule are enforced in `backend/test_architecture.py`.
@@ -65,4 +72,6 @@ tests still call from `server`.
 
 Anchors: `backend/db.py:_server`, `backend/routers/studio.py:_cfg`,
 `backend/routers/assets.py:configure_assets`, `backend/server.py:configure_studio`,
-`backend/test_architecture.py:test_studio_router_is_owned_by_routers_studio`.
+`backend/routers/history.py:configure_history`,
+`backend/test_architecture.py:test_studio_router_is_owned_by_routers_studio`,
+`backend/test_architecture.py:test_history_router_is_owned_by_routers_history`.

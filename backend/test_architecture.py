@@ -180,6 +180,70 @@ def test_assets_router_never_imports_the_composition_root():
     assert "server" not in imports
 
 
+def test_history_router_is_owned_by_routers_history():
+    """Generation history routes live in routers.history; server re-exports them."""
+    import routers.history as history
+    import server
+
+    for name in ("list_generations", "get_generation", "poll_generation",
+                 "retry_generation_storage", "_run_storage_repair",
+                 "retry_generation", "set_generation_tiktok_link",
+                 "set_generation_tiktok_views", "archive_generation",
+                 "generation_history", "delete_generation"):
+        assert getattr(server, name) is getattr(history, name), name
+
+
+def test_history_router_never_imports_the_composition_root():
+    tree = ast.parse((BACKEND / "routers/history.py").read_text(encoding="utf-8"))
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add((node.module or "").split(".")[0])
+    assert "server" not in imports
+
+
+def test_history_router_fails_loudly_before_configuration(monkeypatch):
+    """An unconfigured router raises instead of silently returning None."""
+    import routers.history as history
+
+    monkeypatch.setattr(history, "_server", None)
+    with pytest.raises(RuntimeError):
+        history._cfg("_fetch_one")
+
+
+
+def test_ai_service_reexports_pure_clusters_for_existing_callers():
+    """Pure clusters live in ai_* modules; ai_service re-exports them."""
+    import ai_media
+    import ai_service
+    import ai_spoken
+    import ai_strategy
+    import ai_text
+
+    for name in ("image_to_base64", "image_mime_type", "image_data_uri",
+                 "_IMAGE_MIME_BY_SUFFIX"):
+        assert getattr(ai_service, name) is getattr(ai_media, name), name
+    for name in ("strip_html_to_text", "_html_meta_descriptions",
+                 "_html_json_ld_strings", "_html_title", "page_text_with_metadata"):
+        assert getattr(ai_service, name) is getattr(ai_text, name), name
+    for name in ("spoken_budget", "hook_ceiling", "spoken_targets",
+                 "trim_spoken_body", "trim_to_sentence", "strip_leading_hook",
+                 "partition_spoken_words", "bind_spoken_words", "strategy_text",
+                 "check_spoken_story", "repair_spoken_story",
+                 "SPOKEN_CHARS_PER_SECOND", "HOOK_CHARS_PER_SECOND",
+                 "HOOK_TARGET_CHARS", "SCRIPT_TARGET_CHARS", "_PROBLEM_MARKERS",
+                 "_CONTINUITY_STOPWORDS", "_SCENE_MOMENTS", "_RESOLUTION_MARKERS",
+                 "_BARE_LOCATION_NOUNS", "_PAYOFF_VERBS"):
+        assert getattr(ai_service, name) is getattr(ai_spoken, name), name
+    for name in ("normalize_strategy", "merge_legacy_location",
+                 "_enforce_two_sections", "_clean_strategy_text",
+                 "GENERATED_SECTIONS", "SECTION_ROLES", "STRATEGY_SCENE_FIELDS",
+                 "STRATEGY_PERFORMANCE_FIELDS"):
+        assert getattr(ai_service, name) is getattr(ai_strategy, name), name
+
+
 def test_ai_adapter_reuses_the_same_angle_policy_for_all_briefs():
     import ai_service
     from angle_policy import angle_grounding, duplicate_angle_pairs, normalize_content_angles

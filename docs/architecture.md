@@ -79,7 +79,7 @@ Paths below are relative to [backend](../backend/).
 | [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
 | [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |
-| [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
+| [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py`, `history.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets`/`history` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
 | [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
 | [pipeline.py](../backend/pipeline.py), [storage_service.py](../backend/storage_service.py), [media_signing.py](../backend/media_signing.py) | Local media operations, R2 durability and signed app URLs. Provider URLs are not durable browser playback links. |
 | [overlays.py](../backend/overlays.py) | Server ffmpeg composition helpers; not the current Demo + CTA browser editor. |

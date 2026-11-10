@@ -26,9 +26,9 @@ One render path, single-pass video generation via OpenRouter.
   resolves the photo. Keeps the mutable DB config the tests rebind.
 - `backend/db.py` + `backend/schema.py` — SQLite/Turso primitives and schema
   bootstrap; `db.py` reads config through a `_server` back-reference. Domain
-  routers (`routers/brands.py`, `routers/studio.py`, `routers/assets.py`) own
-  their endpoints and resolve test-patched `server` names at call time via
-  `_cfg`; none may import `server` back (ADR 0111).
+  routers (`routers/brands.py`, `routers/studio.py`, `routers/assets.py`,
+  `routers/history.py`) own their endpoints and resolve test-patched `server`
+  names at call time via `_cfg`; none may import `server` back (ADR 0111).
 - `backend/ai_service.py` — all OpenRouter calls; `VIDEO_MODELS` is the model
   catalog; `generate_video` submits, `describe_provider_refusal` classifies.
 - `backend/angle_policy.py` — pure normalization, source grounding and lexical
