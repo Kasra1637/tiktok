@@ -523,11 +523,19 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
     # promise unfilmable scroll/chart openings. The serialized row is the
     # picker’s view, so strip the screen clause here rather than asking
     # the founder to discard an angle a rebuild already fixed elsewhere.
+    # The same holds for a phone in hand (ADR 0097): rows stored before
+    # the promise strip still name the device, so the picker would show a
+    # promise the render refuses. Strip the phrase; a promise that was
+    # nothing but the phone keeps its stored text here (the shape falls
+    # back to the template opening) rather than blanking the angle row.
     _promise = str(row.get("hook_promise") or "")
     if _promise:
         _kept, _removed = final_beat.split_screen_clauses(_promise)
         if _removed and _kept:
             _promise = _kept
+        _stripped = final_beat.strip_phone_phrases(_promise)
+        if _stripped:
+            _promise = _stripped
     return {
         "id": row.get("id"),
         "brand_profile_id": row.get("brand_profile_id"),

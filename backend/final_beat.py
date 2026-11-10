@@ -335,6 +335,56 @@ def split_phone_mentions(text):
     return _join_clauses(kept), ", ".join(removed)
 
 
+# Phone phrases used in setup-blind copy (an angle promise, a template middle).
+# The clause splitter above works on commas and connectors, so "The person
+# leans against porch railing with a phone in one hand" is ONE clause and the
+# phone rule would delete the whole moment. These phrase patterns cut the
+# device phrase and keep the rest ("The person leans against porch railing"),
+# which is the filmable promise both camera setups share.
+_PHONE_PHRASE_RES = (
+    re.compile(
+        r",?\s*(?:and\s+(?:then\s+)?)?(?:with|holding|hold|holds|clutching|gripping|"
+        r"carrying|raised|raising|lifted|lifting|shown|showing)\s+"
+        r"(?:a|an|the|her|his|their|my|your|one)\s+(?:phone|camera|smartphone|cellphone)"
+        r"(?:\s+in\s+(?:one|her|his|their|my|your|the)\s+hands?)?\b", re.I),
+    re.compile(
+        r",?\s*(?:and\s+|then\s+)*ends?\s+as\s+(?:the\s+)?"
+        r"(?:phone|camera)(?:\s+is\s+(?:held|raised|shown|lifting|lifted))?\b", re.I),
+    re.compile(
+        r",?\s*(?:and\s+(?:then\s+)?)?(?:phone|camera)\s+in\s+"
+        r"(?:one|her|his|their|my|your|the)\s+hands?\b", re.I),
+    re.compile(
+        r",?\s*(?:and\s+then\s+)?(?:phone|camera)\s+is\s+(?:held|raised|shown)\b", re.I),
+    re.compile(
+        r",?\s*(?:and\s+)?reaches?\s+for\s+(?:the|a|her|his|their|my|your)\s+"
+        r"(?:phone|camera)\b", re.I),
+)
+
+
+def strip_phone_phrases(text):
+    """`text` with phone/camera-holding phrases removed, the rest kept.
+
+    For setup-blind copy: an angle promise or a template middle names the
+    opening without knowing the camera setup, yet a phone in hand is the
+    recording device in a selfie (ADR 0097). Removing the phrase keeps the
+    filmable moment both setups share. Spoken words are never passed here.
+    A text that was nothing but the phone comes back "" so the caller falls
+    back (template opening, opening alone) rather than promising a device.
+    """
+    out = str(text or "")
+    if not out or not _clause_mentions_phone(out):
+        return out
+    for pattern in _PHONE_PHRASE_RES:
+        out = pattern.sub("", out)
+    if _clause_mentions_phone(out):
+        kept, _removed = split_phone_clauses(out)
+        return kept
+    out = re.sub(r",\s*,", ", ", out)
+    out = re.sub(r"\s+([,.;])", r"\1", out)
+    return " ".join(out.split()).strip(" ,;:")
+
+
+
 def split_screen_clauses(text):
     """`text` as (kept, removed): only clauses working a chart/screen surface.
 

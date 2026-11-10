@@ -89,10 +89,15 @@ def normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:
             # screen-interaction clause ("scrolls a weekly chart") is not
             # a filmable opening moment. Strip it here so it is never
             # stored; emptying the promise is left for the fallback path.
+            # The same holds for a phone in hand ("with a phone in one
+            # hand"): in a selfie the phone IS the camera (ADR 0097), and
+            # the promise is stored before the setup is picked, so the
+            # stored moment must be the filmable one both setups share.
             if field == "hook_promise" and value:
                 kept, removed = final_beat.split_screen_clauses(value)
                 if removed and kept:
                     value = kept
+                value = final_beat.strip_phone_phrases(value)
             normalized[field] = value[:limit]
         raw_claims = item.get("claims_to_respect")
         if isinstance(raw_claims, str):

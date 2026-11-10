@@ -2124,7 +2124,9 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "founder uploads a photo of, so write 'the person' or 'the character' and describe "
         "no face. Never an abstract benefit. Never describe scrolling, swiping, tapping, "
         "or looking at a chart, graph, screen, report, or dashboard — no generated clip "
-        "shows app content in any setup. The lean, the grip, the exhale and the glance "
+        "shows app content in any setup. Never a phone or camera in hand — the opening "
+        "is filmed before the setup is picked, and in a selfie the phone IS the camera, "
+        "so no second phone can be held. The lean, the grip, the exhale and the glance "
         "are EXAMPLES of what a clip can show, not a fixed shot: pick a fresh physical "
         "moment for this angle instead of copying one. Never stage it in a bedroom or car interior "
         "unless the app is used there — the model's lazy indoor defaults are what make "
@@ -2735,7 +2737,7 @@ _BRAND_TEMPLATE_BODY = (
     '  "objective": "address_user_problem | create_curiosity | demonstrate_feature | build_awareness | educate_viewers | achieve_desired_outcome | overcome_viewer_doubt | ease_daily_moment | avoid_common_mistake | feel_seen_and_understood",\n'
     '  "opening_structure": "what the first 4 seconds do: the same person doing the same thing in the FIRST 3 SECONDS PROMISE moment, plus the move that makes it this structure -- never a second opening",\n'
     '  "hook_seconds": 3,\n'
-    '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app.",\n'
+    '  "middle_structure": "how the rest of the GENERATED piece develops that hook, concretely for THIS app. It must stop at the moment the viewer would reach for the app — state the stop, never film a phone, a reach for one, or a handoff: the setup is picked later, and a selfie cannot show any of them.",\n'
     '  "visual_style": "the look of the FIRST 3 SECONDS PROMISE moment",\n'
     '  "camera_pacing": "camera behaviour",\n'
     '  "content_slots": {"the_concrete_beat": "the concrete beat this structure turns on", "the_moment": "where the viewer would reach for the app"},\n'

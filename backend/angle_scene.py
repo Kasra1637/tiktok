@@ -117,7 +117,10 @@ def angle_moment(angle: Optional[dict]) -> str:
     ("scrolls a weekly chart", "looks at the screen") names no filmable first
     three seconds in any setup — the generated clip never shows app content —
     so it is stripped and the place/task clause in the same moment carries
-    the shape instead.
+    the shape instead. The same holds for a phone in hand ("with a phone in
+    one hand"): in a selfie the phone IS the camera, so no second phone can
+    be held (ADR 0097) — and the promise is written before the setup is
+    picked, so it must show the filmable moment both setups share.
     """
     text = re.sub(r"\s+", " ", str((angle or {}).get("hook_promise") or "")).strip().rstrip(".")
     text = character_policy.neutralize(text).strip()
@@ -126,7 +129,7 @@ def angle_moment(angle: Optional[dict]) -> str:
         text = kept
     elif removed and not kept:
         return ""
-    text = text.rstrip(".")
+    text = final_beat.strip_phone_phrases(text).rstrip(".")
     return _capitalise(text)
 
 
@@ -219,7 +222,10 @@ def _development_beat(template: dict, scene: dict) -> str:
     Dropped when it moves the video somewhere the angle does not go: a middle
     that relocates the story is a second opening wearing a middle's clothes.
     A screen-interaction clause is stripped as unfilmable (no generated
-    clip shows app content) before the echo clause is removed.
+    clip shows app content) before the echo clause is removed, and so is a
+    phone in hand — the card is written before the setup is picked, so it
+    must show the filmable beat both setups share (ADR 0097), never the old
+    phone handoff a selfie cannot film.
     """
     template = template or {}
     middle = _first_sentence(
@@ -230,14 +236,23 @@ def _development_beat(template: dict, scene: dict) -> str:
     middle, _screen_removed = final_beat.split_screen_clauses(middle)
     if not middle or conflict_reason(middle, scene):
         return ""
-    beat = character_policy.neutralize(middle).rstrip(".")
     # The prompt asks the middle to stop at the moment the viewer would reach
-    # for the app, and models echo that instruction back as the last clause.
-    # It is an instruction to the writer, not a second beat, so it goes.
-    beat = re.split(
-        r"[,;]?\s*(?:and |then )?(?:stops|stopping|ends|ending) at the moment\b",
-        beat,
+    # for the app, and models echo that instruction back as the last clause —
+    # as "at the moment", as "at the reach for the phone", or as the old
+    # phone-ending handoff ("then ends as the phone is held"). It is an
+    # instruction to the writer, not a second beat, so it goes whole, before
+    # the phrase strip: cutting "reach for the phone" out of the tail first
+    # would leave "stops at the" behind instead of removing the echo.
+    middle = re.split(
+        r"[,;]?\s*(?:and |then )?(?:stops|stopping|ends|ending) at the moment\b"
+        r"|[,;]?\s*(?:and |then )?(?:stops|stopping|ends|ending) at the reach for the (?:phone|camera|app)\b"
+        r"|[,;]?\s*(?:and |then )?ends? as the (?:phone|camera)(?: is (?:held|raised|shown|lifted))?\b",
+        middle,
     )[0].rstrip(" ,;:-\u2014")
+    middle = final_beat.strip_phone_phrases(middle)
+    if not middle or conflict_reason(middle, scene):
+        return ""
+    beat = character_policy.neutralize(middle).rstrip(".")
     if not beat:
         return ""
     if beat[:1].isupper() and not beat.startswith(("I ", "I'")):
@@ -249,6 +264,14 @@ def _development_beat(template: dict, scene: dict) -> str:
     beat = re.sub(r"^then\s+", "", beat, flags=re.IGNORECASE)
     beat = re.sub(r"^(?:the |this )?(?:middle|video|piece|rest)\s+", "", beat, flags=re.IGNORECASE)
     if not beat:
+        return ""
+    # A middle that was nothing but the handoff echo ("Then it stops at the
+    # reach for the phone") leaves a pronoun stub behind. That is not a beat,
+    # so the card keeps the opening alone rather than printing "it".
+    if re.fullmatch(
+        r"(?:it|they|this|that|these|those|he|she|the person|the character)",
+        beat, flags=re.IGNORECASE,
+    ):
         return ""
     return _clip(beat, _BEAT_LIMIT)
 
@@ -284,9 +307,14 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_l
         ).strip()
         kept, removed = final_beat.split_screen_clauses(opening)
         if removed and kept:
-            return kept.rstrip(".") + "."
-        if removed:
+            opening = kept.rstrip(".") + "."
+        elif removed and not kept:
             return ""
+        stripped = final_beat.strip_phone_phrases(opening)
+        if not stripped:
+            return ""
+        if stripped != opening:
+            return stripped.rstrip(".") + "."
         return opening
     return _clip(promise.rstrip(".") + ".", _SHAPE_LIMIT)
 

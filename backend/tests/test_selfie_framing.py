@@ -101,6 +101,87 @@ def test_face_reference_expands_to_vertical_9_16():
     )
 
 
+def test_angle_promise_strips_a_phone_in_one_hand():
+    # The selected angle's FIRST 3 SECONDS PROMISE said "with a phone in one
+    # hand", and the template Shape printed it verbatim. In a handheld selfie
+    # the phone IS the camera, so no second phone can be held — the strategy
+    # stripped it downstream, but the card the founder clicked promised it.
+    # The promise is setup-blind, so it must never name a phone in hand, the
+    # same way screen clauses are owned at storage time.
+    import angle_scene
+    from angle_policy import normalize_content_angles
+    angle = {"hook_promise": "The person leans against porch railing with a phone in one hand"}
+    shape = angle_scene.opening_shape(angle, {"opening_structure": "Ignored."})
+    assert "phone" not in shape.lower(), shape
+    assert "leans against porch railing" in shape.lower(), shape
+    angles = normalize_content_angles(
+        [{
+            "kind": "problem_solution", "target_audience": "a", "user_problem": "p",
+            "hook_promise": "The person leans against porch railing with a phone in one hand",
+            "app_feature": "f",
+        }],
+        6, {"core_features": ["f"]},
+    )
+    assert "phone" not in angles[0]["hook_promise"].lower(), angles[0]["hook_promise"]
+    assert "leans against porch railing" in angles[0]["hook_promise"].lower()
+
+
+def test_serialized_angle_row_strips_a_phone_in_one_hand():
+    # Rows stored before the promise strip still name the device; the
+    # serialized row is the picker's view, so the phone phrase is stripped
+    # here too — the same read-time repair the screen clause already gets.
+    from routers.brands import _serialize_angle_row
+    out = _serialize_angle_row({
+        "id": "a1", "kind": "problem_solution",
+        "hook_promise": "The person leans against porch railing with a phone in one hand",
+    })
+    assert "phone" not in out["hook_promise"].lower(), out["hook_promise"]
+    assert "leans against porch railing" in out["hook_promise"].lower()
+
+
+def test_template_development_strips_the_phone_held_ending():
+    # Template cards said "... then ends as the phone is held", promising the
+    # old fixed-camera handoff. Handheld ends on a physical beat with no
+    # phone, so the displayed development must not end on a held phone.
+    import angle_scene
+    angle = {"hook_promise": "The person leans against porch railing"}
+    template = {
+        "middle_structure": (
+            "Then the person describes waking with racing thoughts and the overwhelm "
+            "of complex journal apps that add typing friction, then ends as the phone "
+            "is held"
+        ),
+    }
+    development = angle_scene.opening_development(angle, template)
+    assert "phone" not in development.lower(), development
+    assert "describes waking" in development.lower(), development
+
+
+def test_bare_steady_becomes_subtle_sway_for_handheld():
+    # "Straight-on and steady" and "steady selfie shot" survived the handheld
+    # rewrites (only "steady camera/shot" was caught), contradicting the
+    # required subtle sway. A handheld strategy must not say "steady".
+    import scene_consistency
+    strategy = {
+        "camera_setup": "handheld",
+        "scene": {
+            "camera_angle": "Eye-level handheld selfie at arm's length, straight-on and steady",
+            "framing": "Mid-chest up with full head and headroom, room for hand gestures",
+            "visual_style": "Natural amateur handheld camera footage with a calm look",
+        },
+    }
+    scene_consistency.camera_setup_wording(strategy)
+    blob = " ".join(strategy["scene"].values()).lower()
+    assert "steady" not in blob, strategy["scene"]
+    assert "sway" in blob, strategy["scene"]
+    strategy2 = {
+        "camera_setup": "handheld",
+        "scene": {"camera_angle": "steady selfie shot, eye level"},
+    }
+    scene_consistency.camera_setup_wording(strategy2)
+    assert "steady" not in strategy2["scene"]["camera_angle"].lower(), strategy2["scene"]
+
+
 def test_headshot_reference_pads_to_vertical_instead_of_staying_tight():
     # The face-dominates branch returns a tight upload (possibly square) as
     # the reference; as a first frame that is a close-up with no headroom.

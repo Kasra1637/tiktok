@@ -566,6 +566,11 @@ def _handheld_shot(match) -> str:
     return _match_case(match.group(0), replacement)
 
 
+def _handheld_selfie_shot(match) -> str:
+    replacement = f"handheld {match.group(1)} with subtle sway"
+    return _match_case(match.group(0), replacement)
+
+
 _HANDHELD_CAMERA_REWRITES = (
     (re.compile(r"\bfixed(?:[- ]positioned)?\s+camera\b", re.I), "handheld selfie camera"),
     (re.compile(r"\blocked(?:[- ]off)?\s+camera\b", re.I), "handheld selfie camera"),
@@ -578,6 +583,14 @@ _HANDHELD_CAMERA_REWRITES = (
     ), _handheld_shot),
     (re.compile(r"\bsteady\s+framing\b", re.I), "handheld framing"),
     (re.compile(r"\bsteady\s+(?:camera|shots?)\b", re.I), "handheld camera"),
+    # A bare "steady" contradicts the required subtle sway ("straight-on and
+    # steady", "steady selfie shot"), so it becomes the sway. Deliberately
+    # narrow: movement goes through these same rewrites, and "eyes steady
+    # on the lens" is a gaze direction the curated endings use — a generic
+    # steady rule would corrupt it.
+    (re.compile(r"\bsteady\s+(selfie\s+shots?)\b", re.I), _handheld_selfie_shot),
+    (re.compile(r"\bsteady\s+selfie\b", re.I), "handheld selfie with subtle sway"),
+    (re.compile(r"\band\s+steady\b", re.I), "with subtle handheld sway"),
     (re.compile(r"\btripod\b", re.I), "handheld selfie"),
 )
 

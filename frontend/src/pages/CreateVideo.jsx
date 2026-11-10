@@ -2337,7 +2337,7 @@ export default function CreateVideo() {
                 <p className="text-sm text-muted-foreground">
                   {editValue("camera_setup", "handheld") === "fixed"
                     ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
-                    : "Close handheld framing, subtle camera movement, and the current centered zoom."}
+                    : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
                 </p>
                 <p className="text-sm text-muted-foreground">Camera setup controls framing; save, then rebuild the strategy before rendering.</p>
               </div>
