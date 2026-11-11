@@ -18,6 +18,17 @@ import ai_service
 
 SCRIPT = "One prompt helped me start writing and I finished the entry."
 
+WEAK_HOOK = "Every week I look back and my mood shifts surprise me again."
+WEAK_SCRIPT = (
+    "In the garden stretching, I speak my days out loud and notice shifts tend "
+    "to come after busy mornings. That surprise feels steadier, a rhythm I can spot."
+)
+STRONG_HOOK = "Bad moods weren't random. They followed busy mornings."
+STRONG_SCRIPT = (
+    "In the garden, I talked through my day. There it was again: flat afternoon, "
+    "busy morning. Now I can name it, but not what sets it off."
+)
+
 
 def issues_for(hook, script=SCRIPT):
     return ai_service._generated_spoken_issues(hook, script, 60, 300)
@@ -260,3 +271,75 @@ def test_the_plan_loop_allows_question_for_question_template(monkeypatch):
         )
     )
     assert result["hook_line"] == good["hook_line"]
+
+
+def test_the_plan_loop_retries_a_hard_valid_but_craft_weak_draft(monkeypatch):
+    weak = _plan(WEAK_HOOK, WEAK_SCRIPT)
+    strong = _plan(STRONG_HOOK, STRONG_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return weak if len(calls) == 1 else strong
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == STRONG_HOOK
+    assert len(calls) == 2
+    # The retry is targeted at the craft finding, not a generic "try again".
+    assert "CRAFT CORRECTION" in calls[1]["prompt"]
+    assert "diary" in calls[1]["prompt"].lower()
+
+
+def test_a_craft_retry_never_refuses_the_plan(monkeypatch):
+    weak = _plan(WEAK_HOOK, WEAK_SCRIPT)
+    invalid = _plan(
+        "I feel off and I cannot say why.",
+        "I use the app every day and it changed my life.",
+    )
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return weak if len(calls) == 1 else invalid
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    # The craft retry is advisory: a worse or invalid rewrite keeps the
+    # hard-valid draft instead of failing a plan the founder can already use.
+    assert result["hook_line"] == WEAK_HOOK
+    assert result["script"] == WEAK_SCRIPT
+    assert len(calls) == 2
+
+
+def test_a_good_draft_gets_no_craft_retry(monkeypatch):
+    good = _plan(STRONG_HOOK, STRONG_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return good
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == STRONG_HOOK
+    assert len(calls) == 1
+

@@ -2106,6 +2106,20 @@ class TestSpokenWordsGate:
             "ends_on_handoff": False,
         }
 
+    def test_the_craft_score_reaches_the_review_step(self):
+        import server
+        out = server._public_project(self._project(
+            "Most evenings blur together. Yours ends with one sentence written down."
+        ))
+        report = out["quality_report"]
+        assert report["advisory"] is True
+        assert report["max"] == 100
+        assert report["total"] == sum(
+            dimension["score"] for dimension in report["dimensions"].values()
+        )
+        assert report["next_steps"]
+        assert report["dimensions"]["trust_compliance"]["score"] >= 8
+
     def test_a_feature_inventory_refuses_the_render(self):
         """Blocking removed: the recomputed verdict always passes and the
         gate never raises, even on a feature-list shape."""
@@ -2327,8 +2341,9 @@ class TestComponentFeedbackRouting:
 
 class TestPlanRewriteAvoidsBannedClaims:
     """
-    Blocking removed: wording never fails a draft. The plan is accepted
-    as written in a single attempt — no claim retry, no loud failure.
+    Blocking removed: wording never fails a draft. A claim is accepted as
+    written; a craft retry may still run for a clearly weak pair, but it is
+    never a claim retry and it never rewrites the accepted words.
     """
 
     def _draft(self, hook, script):
@@ -2338,7 +2353,7 @@ class TestPlanRewriteAvoidsBannedClaims:
             "voice_direction": "vd", "sound_direction": "sd",
         }
 
-    def test_banned_claim_in_first_draft_is_rewritten(self, monkeypatch):
+    def test_banned_claim_is_accepted_without_a_claim_retry(self, monkeypatch):
         import ai_service
         calls = []
         bad = self._draft(
@@ -2351,7 +2366,11 @@ class TestPlanRewriteAvoidsBannedClaims:
         result = _run(ai_service.generate_creative_plan(
             profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
             template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
-        assert len(calls) == 1, "wording never triggers a retry"
+        # One craft retry may run for this weak pair, but it is not a wording
+        # correction: the accepted claim is returned exactly as written.
+        assert len(calls) == 2
+        assert "CRAFT CORRECTION" in calls[1]
+        assert "EDITORIAL CORRECTION" not in calls[1]
         assert "cures anxiety" in result["script"].lower()
 
     def test_persistent_banned_claim_fails_loudly(self, monkeypatch):
