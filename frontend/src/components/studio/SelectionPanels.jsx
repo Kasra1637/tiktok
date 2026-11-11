@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from "react";
-
 import { Button } from "../ui/button";
 
 import { Badge } from "../ui/badge";
@@ -363,25 +361,9 @@ export function AngleSelector({
   hookLine = "",
 }) {
   // Processing lives on the button itself: busy paints the looping sweep and
-  // the label names the work concisely ("Generating angles"). No live count
-  // line below the button — the progress value rides the fill, not a second
-  // narrator row that unmounts mid-flight and can freeze beside an error.
-  const [genCount, setGenCount] = useState(0);
-  const genTimer = useRef(null);
-  useEffect(() => {
-    if (!generating) {
-      setGenCount(0);
-      return undefined;
-    }
-    setGenCount(1);
-    genTimer.current = setInterval(() => {
-      setGenCount((c) => (c >= 6 ? 6 : c + 1));
-    }, 450);
-    return () => {
-      clearInterval(genTimer.current);
-      genTimer.current = null;
-    };
-  }, [generating]);
+  // the label names the work concisely ("Generating angles"). The sweep loops
+  // because the wait length is unknowable — a counted fill would freeze at
+  // full long before the call settles, unlike every other CTA on the step.
   // The gate names what the click will do: generating fresh is a model call
   // with a wait, while revealing a set generated moments ago in-session is
   // instant and free. A cached set from an earlier approval is never offered
@@ -421,7 +403,6 @@ export function AngleSelector({
         onClick={onGenerate}
         disabled={generating}
         busy={generating}
-        progress={generating ? genCount / 6 : null}
         data-testid="generate-angles-button"
       >
         <Sparkles className="h-3.5 w-3.5" />
@@ -446,7 +427,6 @@ export function AngleSelector({
           onClick={onRegenerate}
           disabled={generating}
           busy={generating}
-          progress={generating ? genCount / 6 : null}
           data-testid="regenerate-angles-button"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -720,26 +700,9 @@ export function AngleGoalPicker({
     return null;
   };
 
-  // Live count-up while the six reshuffle. The count drives the button's
-  // determinate fill; no count line renders below the Shuffle button — the
-  // button's busy label and sweep carry the wait while it reshuffles.
-  const [shuffleCount, setShuffleCount] = useState(0);
-  const shuffleTimer = useRef(null);
-  const shuffleTotal = Math.max(featured.length, 1);
-  useEffect(() => {
-    if (!regenerating) {
-      setShuffleCount(0);
-      return undefined;
-    }
-    setShuffleCount(1);
-    shuffleTimer.current = setInterval(() => {
-      setShuffleCount((c) => (c >= shuffleTotal ? shuffleTotal : c + 1));
-    }, 450);
-    return () => {
-      clearInterval(shuffleTimer.current);
-      shuffleTimer.current = null;
-    };
-  }, [regenerating, shuffleTotal]);
+  // Shuffling is a free reshuffle of the same six — the button's busy label
+  // and looping sweep carry the wait, like every other CTA on this step. A
+  // counted fill would freeze at full long before the reshuffle settles.
 
   if (!angle) {
     /* The waits marker, and nothing to read in it: no goal button may render
@@ -922,7 +885,6 @@ export function AngleGoalPicker({
                 onClick={onRegenerate}
                 disabled={regenerating}
                 busy={regenerating}
-                progress={regenerating ? shuffleCount / shuffleTotal : null}
                 title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
                 data-testid="regenerate-goals-button"
               >
