@@ -90,6 +90,86 @@ _RESOLUTION_MARKERS = (
     "made it", "makes it", "gives you", "which is why", "that s why",
     "the answer", "written down", "stops", "worked",
 )
+
+# Live-POV surface defects (future generation only). A quoted span is a
+# quotation, not direct speech — contractions ("can't", "don't") are not
+# quotes; a quote opens at the start of the line or after space/comma and
+# closes before space/punctuation.
+_QUOTED_SPAN_RE = re.compile(
+    r"(?:\"|\u201c|\u201d)|\u2018[^']+\u2019|(?:^|(?<=[\s,;:\u2014]))'[^'\n]{1,80}'(?=[\s,.;:!?]|$)"
+)
+# Self-narration / stage directions: the speaker reports having said or done
+# something instead of saying it, live, in the moment. Matched on the words
+# the speaker would not say out loud while filming.
+_SELF_NARRATION_RE = re.compile(
+    # Reporting speech with a manner adverb ("I said quietly") reports past
+    # words instead of speaking them. A bare "I spoke instead" is a story
+    # beat, not a report, so the verb alone is not flagged.
+    r"\bi\s+(said|whispered|shouted|murmured|yelled|spoke)\s+"
+    r"(quietly|loudly|softly)\b"
+    r"|\bi\s+said\b[^\n]{0,40}?['\"\u201c\u201d]"
+    r"|\bi\s+told\s+myself\b"
+    r"|\bi\s+(lean|leans|leaned|grip|grips|gripped|stare|stares|stared|look|looks|looked)\s+"
+    r"(?:into|at|toward|towards)?\s*(?:the\s+)?(camera|lens|railing|frame)\b"
+    r"|\bi\s+(turn|turns|turned)\s+(?:to|toward|towards|into)\s+(?:the\s+)?(camera|lens|frame)\b"
+    r"|\bi\s+(point|points|pointed|raise|raises|raised|show|shows|showed)\s+"
+    r"(?:my\s+hand|the\s+camera|the\s+lens|the\s+frame)\b"
+    r"|\b(?:lean|leans|leaned|grip|grips|gripped|stare|stares|stared|look|looks|looked)\s+"
+    r"(?:[a-z]+\s+){0,3}?(?:camera|lens|railing|frame)\b",
+    re.I,
+)
+# Vague payoff stands in for the specific thing the line should name:
+# "a word", "that vague sense", "that feeling" — never a payoff.
+_VAGUE_PAYOFF_RES = (
+    re.compile(r"\b(?:a|the|that|this)\s+(?:word|words)\b", re.I),
+    re.compile(r"\b(?:a|the|that|this)\s+vague\s+\w+\b", re.I),
+    re.compile(r"\bvague\s+(?:sense|feeling|thing|idea)\b", re.I),
+    re.compile(r"\b(?:that|this)\s+(?:sense|feeling|idea)\b", re.I),
+    re.compile(r"\b(?:a|some)\s+(?:thing|stuff|idea)\b", re.I),
+    re.compile(r"\ba\s+(?:feeling|thought)\b", re.I),
+)
+
+
+def _has_quoted_span(text: str) -> bool:
+    return bool(text) and bool(_QUOTED_SPAN_RE.search(str(text)))
+
+
+def strip_quote_marks(text: str) -> str:
+    """`text` with quotation marks removed, the words kept intact.
+
+    Double and curly quotes go entirely. Single-quote delimiters go only
+    where they open or close a span (start/space/punctuation), so
+    contractions ("can't", "don't") survive untouched. Mechanical, not
+    editorial: it is the terminal salvage when a model keeps quoting after
+    the bounded repair attempts, so the plan ships instead of failing.
+    """
+    out = str(text or "")
+    out = out.replace('"', "").replace("\u201c", "").replace("\u201d", "")
+    out = out.replace("\u2018", "")
+    # Curly closing quote: drop it unless it is an apostrophe between letters.
+    out = re.sub(r"(?<![A-Za-z])\u2019|(?![A-Za-z])\u2019", "", out)
+    # Straight single-quote delimiters: start-of-line or after space/punct to
+    # open, and before space/punct/end to close. Contractions (letter ' letter)
+    # match neither side and survive.
+    out = re.sub(r"(?:^|(?<=[\s,;:\u2014(\u2014]))'(?=[^\s])", "", out)
+    out = re.sub(r"'(?=[\s,.;:!?]|$)", "", out)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    return out
+
+
+def _self_narration_hit(text: str) -> str:
+    if not text:
+        return ""
+    match = _SELF_NARRATION_RE.search(_normalize_spoken(text))
+    return match.group(0) if match else ""
+
+
+def _vague_payoff(text: str) -> bool:
+    """A vague stand-in in the payoff: the last sentence's 'a word' / 'that
+    vague sense' names no specific lived thing."""
+    sentences = _split_sentences(text)
+    last = sentences[-1] if sentences else str(text or "")
+    return any(pattern.search(last) for pattern in _VAGUE_PAYOFF_RES)
 def spoken_targets(hook_seconds=3, total_seconds=12) -> dict:
     """
     What each spoken line aims at, and the most its seconds can hold.
@@ -259,6 +339,25 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 f"generated clip never shows — speak on leaning, breathing and naming "
                 f"the worry instead; the founder's demo shows the app"
             )
+        # Live POV: a script line is spoken straight to camera in the moment.
+        # Quotation marks or a self-narration verb ("I said quietly",
+        # "I lean ... into the camera") turn direct speech into a report of
+        # words said or a description of what the camera already shows, so
+        # the draft is rewritten rather than shipped. Applies to the script
+        # only: the hook is frozen as written for this rule.
+        if name == "script":
+            if _has_quoted_span(text):
+                issues.append(
+                    "script uses quotation marks — speak the line directly, "
+                    "never as a quote of what the speaker said"
+                )
+            hit = _self_narration_hit(text)
+            if hit:
+                issues.append(
+                    f"script narrates itself ('{hit.strip()}') — speak live "
+                    "in the moment instead of reporting what was said or showing "
+                    "what the camera already sees"
+                )
         # The angle's bounded-by limits fence knowledge claims too: when a
         # bound forbids diagnosis (trends shown, not diagnosed), a sentence
         # like "Now I know how long it's been there" promises the very
@@ -427,6 +526,41 @@ def _words_match(first: str, second: str) -> bool:
         return True
     short, long = (first, second) if len(first) <= len(second) else (second, first)
     return len(short) >= 5 and long.startswith(short)
+def _repeats_hook_words(hook: str, script: str) -> bool:
+    """Whether the script repeats the hook's words wholesale.
+
+    One image word carried over is continuity; most of the hook's words
+    repeated is restatement. Repeat is counted in distinct content stems
+    (continuity words), so the punctuation and function words around them
+    do not fake a restatement.
+    """
+    hook_words = _continuity_words(hook)
+    if len(hook_words) < 3:
+        return False
+    script_words = _continuity_words(script)
+    repeated = [
+        hook_word for hook_word in hook_words
+        if any(_words_match(hook_word, script_word) for script_word in script_words)
+    ]
+    return len(repeated) >= 2 and len(repeated) / len(hook_words) >= 0.4
+
+
+def _answers_hook_first_clause(script: str) -> bool:
+    """Whether the script answers the hook in its first clause.
+
+    Read as one spoken thought: the script continues the hook and answers
+    its question immediately, not after a scene-setting preamble. A first
+    sentence that only sets the place carries no resolution or payoff verb.
+    """
+    first = _first_sentence(script)
+    if not first:
+        return False
+    padded = f" {_normalize_spoken(first)} "
+    if any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS):
+        return True
+    return any(f" {verb} " in padded for verb in _PAYOFF_VERBS)
+
+
 def _script_echoes_hook(hook: str, script: str) -> bool:
     """Whether the script echoes at least one of the hook's image words.
 
@@ -562,6 +696,14 @@ def check_spoken_story(hook_line, script, hook_seconds=3, total_seconds=12, app_
         "echoes_hook": _script_echoes_hook(hook, body),
         "sets_scene": _sets_scene(body),
         "ends_on_handoff": _ends_on_handoff(body),
+        # Live-POV checks (future generation only): the script speaks
+        # directly, answers the hook's question at once, and never repeats
+        # the hook's words wholesale. Reported like the flags above.
+        "repeats_hook_words": _repeats_hook_words(hook, body),
+        "answers_hook_first_clause": bool(hook) and _answers_hook_first_clause(body),
+        "has_quoted_span": _has_quoted_span(body),
+        "self_narrates": bool(_self_narration_hit(body)),
+        "vague_payoff": _vague_payoff(body),
     }
     # Only a name long enough to be a real product name, and never the short
     # generic one that would match ordinary speech.

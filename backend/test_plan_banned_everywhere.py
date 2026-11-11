@@ -29,7 +29,11 @@ def test_banned_word_in_direction_is_accepted(monkeypatch):
     result = _run(ai_service.generate_creative_plan(
         profile={"brand_name": "V", "claims_banned": ["focus"]},
         template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
-    assert len(calls) == 1, "wording never triggers a retry"
+    # The banned WORDING never triggers the hard editorial retry; this draft
+    # scores 67 on craft, below the 80 bar, so exactly one script-only craft
+    # correction runs (and keeps first draft, same words back).
+    assert len(calls) == 2, calls[1][:200] if len(calls) > 1 else calls
+    assert "CRAFT CORRECTION" in calls[1]
     assert "focus" in result["visual_direction"].lower()
 
 

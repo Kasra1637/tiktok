@@ -1534,7 +1534,8 @@ class TestGeneratedPlanEditorialFlow:
         assert bound["segments"][0]["script"] == good["hook_line"]
         assert bound["segments"][1]["script"] == good["script"]
         assert overflow == {}
-        assert len(rec.payloads) == 2
+        # 2 editorial payloads + 1 script-only craft correction at the 80 bar.
+        assert len(rec.payloads) == 3
 
     def test_generation_uses_project_hook_length_not_template_length(self, api, monkeypatch):
         from models import GeneratePlanRequest, UpdateStudioProjectRequest
@@ -2104,6 +2105,11 @@ class TestSpokenWordsGate:
             "echoes_hook": True,
             "sets_scene": True,
             "ends_on_handoff": False,
+            "repeats_hook_words": False,
+            "answers_hook_first_clause": False,
+            "has_quoted_span": False,
+            "self_narrates": False,
+            "vague_payoff": False,
         }
 
     def test_the_craft_score_reaches_the_review_step(self):

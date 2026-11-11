@@ -353,9 +353,12 @@ def _score_concreteness(hook, script):
     if abstract:
         score -= min(3, len(abstract))
         evidence.append(f"Abstract nouns carry part of the meaning ({', '.join(abstract[:3])}).")
+    if ai_spoken._vague_payoff(script):
+        score -= 2
+        evidence.append("The payoff is a vague stand-in, not a specific lived thing.")
     return _clamp(score, 0, 10), evidence, (
         "Add one place, one routine and one time trigger so the line can be "
-        "seen, not just understood."
+        "seen, not just understood; end on a specific payoff, never a vague stand-in."
     )
 
 
@@ -398,9 +401,25 @@ def _score_story(hook, script, check):
     if not story.get("dangling_refs"):
         score += 1
         evidence.append("Every reference is established.")
+    if story.get("repeats_hook_words"):
+        score -= 2
+        evidence.append("The script repeats the hook's words instead of continuing it.")
+    if story.get("has_quoted_span"):
+        score -= 2
+        evidence.append("A quotation reports the speaker's words instead of speaking them live.")
+    if story.get("self_narrates"):
+        score -= 2
+        evidence.append("The script narrates itself or describes what the camera shows.")
+    if not story.get("answers_hook_first_clause"):
+        score -= 1
+        evidence.append("The script does not answer the hook in its first clause.")
+    if story.get("vague_payoff"):
+        score -= 2
+        evidence.append("The payoff names a vague stand-in ('a word', 'that vague sense').")
     return _clamp(score, 0, 15), evidence, (
-        "Make the script answer the hook's problem with a specific insight, "
-        "not a restatement."
+        "Make the script answer the hook's problem in its first clause, live in "
+        "first person, with a specific payoff — never a quote, a narration, "
+        "a repeat of the hook, or a vague stand-in."
     )
 
 
@@ -422,6 +441,12 @@ def _score_naturalness(hook, script):
     if written:
         score -= min(2, len(written))
         evidence.append(f"Written-copy phrasing ({', '.join(written[:2])}) is hard to say out loud.")
+    if ai_spoken._has_quoted_span(script):
+        score -= 3
+        evidence.append("Quotation marks turn live speech into a quote of past words.")
+    if ai_spoken._self_narration_hit(script):
+        score -= 3
+        evidence.append("Self-narration reports the speaker instead of speaking live.")
     if _CONTRACTION.search(combined):
         score += 1
         evidence.append("Contractions make it sound spoken.")

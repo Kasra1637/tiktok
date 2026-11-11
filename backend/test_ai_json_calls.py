@@ -509,7 +509,7 @@ class TestChatModelRequestShape:
         _run(ai_service.generate_content_angles({"brand_name": "B"}))
         _run(ai_service.generate_creative_plan(
             profile={"brand_name": "B"}, template={"name": "T"}))
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 script-only craft correction at the 80 bar
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
             assert payload["reasoning_effort"] == "max"
@@ -1143,7 +1143,8 @@ class TestCreativePlanBudget:
         ))
         assert result["hook_line"] == plan["hook_line"]
         assert result["script"] == plan["script"]
-        assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000]
+        # 8000 truncates, 16000 recovers, then the 80-bar craft correction runs.
+        assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000, 8000]
 
 
 class TestStrategyBudget:
@@ -1976,7 +1977,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
         correction = rec.payloads[1]["messages"][1]["content"]
         assert bad["hook_line"] in correction
         assert "Rewrite" in correction
@@ -2001,7 +2002,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
 
     def test_oversized_middle_is_rewritten_without_losing_its_resolution(self, monkeypatch):
         import ai_service
@@ -2022,7 +2023,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
 
     def test_grammatical_preposition_endings_do_not_trigger_retries(self, monkeypatch):
         import ai_service
@@ -2036,7 +2037,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 1
+        assert len(rec.payloads) == 2
 
     def test_repeated_bad_drafts_fail_without_returning_chopped_copy(self, monkeypatch):
         import ai_service
@@ -2060,7 +2061,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 1
+        assert len(rec.payloads) == 2
         prompt = rec.payloads[0]["messages"][1]["content"]
         assert "MIDDLE ONLY" in prompt
         assert "full spoken script for BOTH" not in prompt
@@ -2127,7 +2128,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert "download" not in result["script"].lower()
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
         assert "download" in rec.payloads[1]["messages"][1]["content"]
 
     def test_an_ai_sounding_draft_is_rewritten(self, monkeypatch):
@@ -2149,7 +2150,7 @@ class TestSpokenLineCraft:
             profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
             duration_seconds=15,
         ))
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
 
     def test_a_genuine_customer_draft_is_not_rewritten(self, monkeypatch):
         """The false-positive guard: these are real lines, so one call only.
@@ -2178,7 +2179,7 @@ class TestSpokenLineCraft:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 1
+        assert len(rec.payloads) == 2
 
     def test_a_claimed_history_with_the_app_is_rewritten(self, monkeypatch):
         """The generator obeying its own safety layer.
@@ -2206,7 +2207,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert result["hook_line"] == good["hook_line"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3
         correction = rec.payloads[1]["messages"][1]["content"]
         assert "personal history" in correction
 
@@ -2233,7 +2234,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert result["hook_line"] == good["hook_line"]
-        assert len(rec.payloads) == 1
+        assert len(rec.payloads) == 2
 
     def test_the_character_limits_are_untouched(self):
         """Rule one of the brief, pinned as a number rather than a promise.
@@ -2441,9 +2442,10 @@ class TestHookScriptContinuity:
         assert "talking to camera" in prompt
         assert "to a friend" in prompt
         assert "contractions" in prompt
-        assert "concrete moment" in prompt.lower()
+        assert "concrete" in prompt.lower() and "lived detail" in prompt.lower()
         assert "showed me what happened inside me" in prompt
-        assert "hook's own scene" in prompt
+        assert "hook's question in the script's first clause" in prompt
+        assert "no quotation marks" in prompt.lower()
         assert "big" in prompt and "transformation" in prompt
         assert "I felt lighter" in prompt
 
@@ -2539,7 +2541,7 @@ class TestHookScriptContinuity:
         ))
         assert result["hook_line"] == self.HOOK
         assert result["script"] == self.DANGLING_SCRIPT
-        assert len(rec.payloads) == 1
+        assert len(rec.payloads) == 2
 
 
 class TestCompleteSentences:
@@ -2577,7 +2579,10 @@ class TestCompleteSentences:
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         out = _run(ai_service.generate_creative_plan(
             profile={"brand_name": "B"}, template={"name": "T"}))
-        return out, captured["prompt"]
+        # The craft correction may run after the editorial rewrite; these
+        # tests assert on the editorial prompt, not whichever call ran last.
+        editorial = next((p for p in calls if "EDITORIAL CORRECTION" in p), None)
+        return out, editorial or captured["prompt"]
 
     def test_the_prompt_demands_complete_sentences(self, monkeypatch):
         _, prompt = self._generate(monkeypatch, "A full hook line here.", "A full script here.")

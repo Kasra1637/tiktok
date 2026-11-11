@@ -198,7 +198,7 @@ def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
     )
     good = _plan(
         "Friday evenings feel off, and the reason never has a name.",
-        "The reflection helped me name the feeling, and I left the entry calmer.",
+        "The reflection at the desk helped me name the feeling, and I left the entry calmer.",
     )
     calls = []
 
@@ -227,7 +227,7 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
     )
     good = _plan(
         "Friday evenings feel off, and the reason never has a name.",
-        "The reflection helped me name the feeling, and I left the entry calmer.",
+        "The reflection at the desk helped me name the feeling, and I left the entry calmer.",
     )
     calls = []
 
@@ -290,11 +290,16 @@ def test_the_plan_loop_retries_a_hard_valid_but_craft_weak_draft(monkeypatch):
             duration_seconds=15,
         )
     )
-    assert result["hook_line"] == STRONG_HOOK
+    # The quality pass rewrites the script only: the hook is frozen byte-for-
+    # byte, so the strong script lands under the weak hook rather than the
+    # retry's own hook. The retry is targeted at the craft finding, not a
+    # generic "try again".
+    assert result["hook_line"] == WEAK_HOOK
+    assert result["script"] == STRONG_SCRIPT
     assert len(calls) == 2
-    # The retry is targeted at the craft finding, not a generic "try again".
     assert "CRAFT CORRECTION" in calls[1]["prompt"]
-    assert "diary" in calls[1]["prompt"].lower()
+    assert "Rewrite ONLY the script" in calls[1]["prompt"]
+    assert "EXACTLY as written" in calls[1]["prompt"]
 
 
 def test_a_craft_retry_never_refuses_the_plan(monkeypatch):
