@@ -1,14 +1,15 @@
 // Busy-button wait estimates (>=10s only).
 //
 // A busy button already paints the looping sweep on the button itself; the
-// ETA below rides inside that same button (e.g. "Generating angles · ~30s")
-// so no second narrator line appears beside it. Estimates are typical
-// completions for the underlying model call, not the client timeout and not
-// a countdown: the wait is indeterminate until the endpoint answers, so a
-// ticking "Xs left" would promise a precision the call cannot keep. The "~"
-// marks the number as an estimate. Operations expected under 10s (saves,
-// approvals, deletes, uploads, the free Shuffle) take no etaSeconds and keep
-// the sweep alone.
+// countdown below rides inside that same button (e.g. "Generating angles
+// · 30s", ticking down to "· 0s") so no second narrator line appears beside
+// it. The starting number is the typical completion for the underlying model
+// call, not the client timeout: the endpoint answers on its own schedule, so
+// a job that runs past its estimate holds at "· 0s" instead of going
+// negative or restarting. Operations expected under 10s (saves, approvals,
+// deletes, uploads, the free Shuffle) take no etaSeconds and keep the sweep
+// alone. A button with no etaSeconds — the video render, whose wait is the
+// polling progress bar with real position — takes no countdown at all.
 //
 // Values per operation, from backend/ai_service.py token/timeout budgets:
 // - angles: 8000 tokens, timeout 90 → ~30s for six fielded angles.
@@ -35,9 +36,12 @@ export const BUSY_ETA_SECONDS = {
   postKit: 12,
 };
 
-/** Returns the ETA suffix (e.g. "· ~30s") or null below the 10s threshold. */
-export function formatBusyEta(seconds) {
+/** Returns the countdown suffix for the seconds still to show (e.g. "· 30s"),
+ * or null for a non-number. The Button owns the 10s threshold and the 0s
+ * floor: this only formats what it is handed, so a job that runs past its
+ * estimate still reads "· 0s" instead of disappearing mid-wait. */
+export function formatBusyCountdown(seconds) {
   const n = Number(seconds);
-  if (!Number.isFinite(n) || n < BUSY_ETA_THRESHOLD_SECONDS) return null;
-  return `· ~${Math.round(n)}s`;
+  if (!Number.isFinite(n)) return null;
+  return `· ${Math.max(0, Math.round(n))}s`;
 }

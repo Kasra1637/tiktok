@@ -9741,13 +9741,22 @@ async function runIconChecks() {
     await mount(Button, { busy: true, children: "Generating angles" })(ctx);
     const looping = ctx.container.querySelector("button");
     if (looping && looping.hasAttribute("data-progress")) throw new Error("busy Button without progress claims a position it cannot know");
-    // Long waits (>=10s) carry a static in-button estimate, never a countdown
-    // and never a second narrator line; short or idle work carries none.
-    await mount(Button, { busy: true, etaSeconds: 30, children: "Generating angles" })(ctx);
+    // Long waits (>=10s) carry a live in-button countdown and wear the
+    // "Use this photo" dark surface while they run, never a second narrator
+    // line; short or idle work carries none. The countdown starts at the
+    // mandatory wait and ticks down once a second.
+    await mount(Button, { busy: true, variant: "accent", etaSeconds: 30, children: "Generating angles" })(ctx);
     const etaBtn = ctx.container.querySelector("button");
     if (!etaBtn || etaBtn.getAttribute("data-eta") !== "30") throw new Error("busy Button with a 10s+ estimate exposes no data-eta");
-    if (!/~30s/.test(etaBtn.textContent || "") || /(\.\.\.|…)/.test(etaBtn.textContent || "")) throw new Error("busy Button estimate is not a dotless ~30s suffix");
-    if (!etaBtn.querySelector('[data-testid="busy-eta"]')) throw new Error("busy Button estimate does not render inside the button");
+    if (!/· 30s/.test(etaBtn.textContent || "") || /(\.\.\.|…)/.test(etaBtn.textContent || "")) throw new Error("busy Button countdown does not start at a dotless 30s");
+    if (!etaBtn.querySelector('[data-testid="busy-eta"]')) throw new Error("busy Button countdown does not render inside the button");
+    if (etaBtn.getAttribute("data-generating") !== "true") throw new Error("busy Button with a generation wait does not mark its generating state");
+    if (!etaBtn.className.includes("bg-secondary/70") || !etaBtn.className.includes("btn-bevel-neutral") || etaBtn.className.includes("btn-bevel-accent")) throw new Error("busy Button with a generation wait does not wear the Use this photo dark surface");
+    await act(async () => { await new Promise((r) => setTimeout(r, 1500)); });
+    if (!/· 2[89]s/.test(etaBtn.textContent || "")) throw new Error("busy Button countdown did not tick down after a second");
+    await mount(Button, { variant: "accent", etaSeconds: 30, children: "Generate angles" })(ctx);
+    const idleAccent = ctx.container.querySelector("button");
+    if (!idleAccent || !idleAccent.className.includes("btn-bevel-accent")) throw new Error("idle Button lost its own accent surface");
     await mount(Button, { busy: true, etaSeconds: 5, children: "Saving" })(ctx);
     const shortBtn = ctx.container.querySelector("button");
     if (shortBtn && (shortBtn.hasAttribute("data-eta") || shortBtn.querySelector('[data-testid="busy-eta"]'))) throw new Error("busy Button under 10s wears an estimate it should not");
