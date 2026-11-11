@@ -2998,13 +2998,19 @@ def _spoken_line_rules_block() -> str:
     strategy's own words are held to the plan's rules when it writes without an
     approved plan to bind to.
 
-    Kept to five lines on purpose: the strategy prompt already carries its own
+    Kept short on purpose: the strategy prompt already carries its own
     demo/CTA bans and its own one-story rule, so this complements them rather
     than repeating them, and a strategy prompt over its token ceiling truncates
     into a 502 the founder cannot fix.
     """
     return (
         "SPOKEN LINE CRAFT (both spoken lines, every draft):\n"
+        "- PLAIN LOOSE WORDS: every spoken line sounds like a real person talking "
+        "to a friend, not app copy. Use plain, loose words, never analytical or "
+        "formal ones. Bad: 'noticing it repeat makes the dip feel less random' "
+        "-- say 'it's weirdly the same every day' instead. Bad: 'weekly' -- say "
+        "'every week' instead. Same for any frequency: 'daily' is 'every day', "
+        "'monthly' is 'every month'.\\n"
         "- HOOK FORM: choose the form from the angle and the problem it "
         "names. A question only when the problem is something viewers "
         "silently ask themselves, like a loop they can't explain. "

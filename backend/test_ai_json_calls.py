@@ -2449,6 +2449,46 @@ class TestHookScriptContinuity:
         assert "big" in prompt and "transformation" in prompt
         assert "I felt lighter" in prompt
 
+    def test_the_prompt_demands_plain_loose_words_not_app_copy(self, monkeypatch):
+        """Every spoken line must sound like a real person talking to a friend.
+
+        Plain, loose words, never analytical or formal ones: the prompt must
+        carry the bad/better pairs verbatim — 'noticing it repeat makes the
+        dip feel less random' becomes 'it's weirdly the same every day', and
+        'weekly' becomes 'every week' — so the model stops writing app copy
+        into the hook and the script.
+        """
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "PLAIN LOOSE WORDS" in block
+        assert "noticing it repeat makes the dip feel less random" in block
+        assert "it's weirdly the same every day" in block
+        assert "'weekly'" in block
+        assert "'every week'" in block
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "Naming what I felt never worked.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "PLAIN LOOSE WORDS" in prompt
+        assert "noticing it repeat makes the dip feel less random" in prompt
+        assert "it's weirdly the same every day" in prompt
+        assert "'weekly'" in prompt
+        assert "'every week'" in prompt
+
     def test_the_prompt_grounds_object_nouns_in_product_facts(self, monkeypatch):
         """The ownership rule must work for any product, not just journaling.
 
