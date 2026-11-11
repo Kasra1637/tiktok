@@ -166,6 +166,21 @@ function spokenCountNote(text, spec) {
   return `${chars} characters.`;
 }
 
+/** The craft score's band in the founder's terms. It is a mirror, not a gate:
+ *  no band refuses a render, and the copy says so. */
+const QUALITY_BAND_NOTES = {
+  distinctive: "Distinctive. The words are doing the work.",
+  strong: "Strong. One craft note would sharpen it.",
+  competent_but_generic:
+    "Competent but generic. The hook or the spoken line is leaving performance on the table.",
+  performance_risk: "Weak. Likely to lose the scroll or sound written.",
+  off_brief: "Off-brief. Rewrite before rendering.",
+};
+
+function qualityBandNote(report) {
+  return QUALITY_BAND_NOTES[report?.band] || "Advisory craft score for the saved words.";
+}
+
 /** What each progress state means, in words. Used for the pill tooltip and
  *  the aria-label, because both a tick and a dashed border are shape-only. */
 const STEP_STATE_COPY = {
@@ -2235,6 +2250,32 @@ export default function CreateVideo() {
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             <SafetyPanel report={project.safety_report} summary={project.safety_summary}
               busy={busy || autosaving} hasEdits={hasEdits} />
+            {/* The craft score is advisory: it names the weakest part of the
+                saved pair and the next rewrite, but no band refuses a render.
+                The hard gates live in SafetyPanel and the spoken counts above. */}
+            {project?.quality_report && (
+              <div className="inset-panel space-y-3" data-testid="quality-report">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold">Craft check</p>
+                  <p className="text-sm text-muted-foreground">
+                    {project.quality_report.grade} · {project.quality_report.total}/100
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {qualityBandNote(project.quality_report)}
+                </p>
+                {project.quality_report.next_steps?.length > 0 && (
+                  <ul className="space-y-1 text-sm">
+                    {project.quality_report.next_steps.slice(0, 2).map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Advisory only — it never blocks a render.
+                </p>
+              </div>
+            )}
             {/* What the middle can actually speak, and what it cannot. The middle's
                 seconds hold a fixed number of characters; anything past that is
                 dropped from the words reaching the video model, usually the

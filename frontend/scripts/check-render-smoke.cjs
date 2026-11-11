@@ -2205,6 +2205,38 @@ async function main() {
     expectAbsent(ctx, "generation blocked", "a warning is presented as a block");
   });
 
+  await check("the craft check is advisory and names the weakest rewrite", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const report = {
+      version: 1,
+      advisory: true,
+      total: 56,
+      max: 100,
+      grade: "C",
+      band: "competent_but_generic",
+      dimensions: {},
+      next_steps: [
+        "Open on the viewer's problem with one concrete detail; cut the diary frame.",
+        "Read it aloud; fix the fronted modifier and written phrase.",
+      ],
+    };
+    const project = { ...PROJECT_WITH_STRATEGY, quality_report: report };
+    try {
+      await withApi({ getStudioProject: async () => project }, async () => {
+        await mount(CreateVideo)(ctx);
+        if (!ctx.container.querySelector('[data-testid="quality-report"]')) {
+          throw new Error("the craft card is missing");
+        }
+        expectText(ctx, "Craft check", "the craft card is missing its name");
+        expectText(ctx, "56/100", "the craft score is missing");
+        expectText(ctx, "Advisory only", "the craft card does not say it is advisory");
+        expectAbsent(ctx, "Blocks rendering", "the craft card reads as a gate");
+      });
+    } finally {
+      delete global.__SMOKE_PARAMS;
+    }
+  });
+
   await check("GenerationPanel never blocks generation on wording", async (ctx) => {
     await mount(GenerationPanel, {
       project: {

@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import ai_service
 import angle_scene
+import creative_quality
 import scene_consistency
 import template_library
 import video_providers
@@ -316,6 +317,26 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
         # passed in by the callers that already fetched the profile, and is
         # absent everywhere it is not knowable.
         app_name=brand_name,
+    )
+    # The craft score is advisory and recomputed on read, like spoken_check:
+    # it describes the words currently saved, not the words a previous version
+    # scored. It never gates a render; `QualityReport` is the founder's mirror,
+    # not a submit condition.
+    out["quality_report"] = (
+        creative_quality.assess_spoken_quality(
+            out.get("hook_line"),
+            out.get("script"),
+            hook_seconds=out.get("hook_seconds") or 3,
+            total_seconds=out.get("duration_seconds") or 0,
+            app_name=brand_name,
+            spoken_check=out["spoken_check"],
+            # A question hook is a craft choice the plan's template can request;
+            # the deterministic spoken check already knows the plan's policy.
+            # The quality score should not call the form itself a trust defect.
+            allows_question=True,
+        )
+        if (out.get("hook_line") or out.get("script"))
+        else None
     )
     # What the arrival clamp cut from this plan, and the budget it cut against.
     # Reported from the stored count rather than recomputed from the script,
