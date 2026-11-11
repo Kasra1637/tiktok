@@ -43,6 +43,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
+import { useReducedMotionPreference } from "../lib/reducedMotion";
 
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
@@ -572,9 +573,50 @@ export default function CreateVideo() {
   // choice could be silently replaced by whatever ranked first that time, which
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
+  const reduceMotion = useReducedMotionPreference();
   const scrollToSubstep = (id) => {
-    document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    document
+      .getElementById(id)
+      ?.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   };
+  // Auto-scroll to the section a pick just unlocked, in the order the
+  // Audience & template screen finishes: angle unlocks the video goals,
+  // a finished tailoring run unlocks the templates, and a hand-picked
+  // template unlocks the presenter photo. Each effect only fires on a
+  // change, never on mount or a reload with a pick already in the draft,
+  // and only while this step is in view — the step-change scroll above
+  // already brings the founder to the top of this screen.
+  const prevAngleIdRef = useRef(angleId);
+  useEffect(() => {
+    const prevAngleId = prevAngleIdRef.current;
+    prevAngleIdRef.current = angleId;
+    if (!angleId || angleId === prevAngleId) return;
+    if (step !== 1) return;
+    requestAnimationFrame(() => scrollToSubstep("substep-goal"));
+  }, [angleId, step]);
+  const prevRecommendationsVisibleRef = useRef(false);
+  useEffect(() => {
+    const wasVisible = prevRecommendationsVisibleRef.current;
+    const visible = recommendationsVisible && visibleRecommendations.length > 0;
+    prevRecommendationsVisibleRef.current = visible;
+    if (!visible || wasVisible) return;
+    if (step !== 1) return;
+    requestAnimationFrame(() => scrollToSubstep("substep-template"));
+  }, [recommendationsVisible, visibleRecommendations, step]);
+  // Set only by a hand pick below, and consumed by the effect that follows,
+  // so the automatic preselect of the top template never jumps past the
+  // template cards to the photo section the founder has not chosen yet.
+  const handPickedTemplateRef = useRef(false);
+  const prevTemplateIdRef = useRef(templateId);
+  useEffect(() => {
+    const prevTemplateId = prevTemplateIdRef.current;
+    prevTemplateIdRef.current = templateId;
+    if (!templateId || templateId === prevTemplateId) return;
+    if (!handPickedTemplateRef.current) return;
+    handPickedTemplateRef.current = false;
+    if (step !== 1) return;
+    requestAnimationFrame(() => scrollToSubstep("template-photo"));
+  }, [templateId, step]);
 
 
 
@@ -650,6 +692,7 @@ export default function CreateVideo() {
     }
     // Latched, so a later reload cannot move this pick.
     templateChosenByHand.current = true;
+    handPickedTemplateRef.current = true;
     dispatchDraft({ type: "template-selected", id });
   };
 
