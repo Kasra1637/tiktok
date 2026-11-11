@@ -5,6 +5,7 @@ import { GroupLabel } from "./SectionCard";
 import { FactChip, FactList } from "./FactChip";
 import { useCopyButton } from "../lib/copyClipboard";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 
 /**
  * The frozen post copy for one render: 1 caption, a hashtag set, cover text.
@@ -82,6 +83,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
               onClick={handleRegenerate}
               disabled={regenBusy}
               busy={regenBusy}
+              etaSeconds={BUSY_ETA_SECONDS.postKit}
               data-testid="postkit-regenerate"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />

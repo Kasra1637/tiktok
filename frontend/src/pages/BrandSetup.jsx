@@ -24,6 +24,7 @@ import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { Sparkles, Briefcase, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
@@ -861,6 +862,7 @@ export default function BrandSetup() {
                   type="submit"
                   disabled={researching}
                   busy={researching}
+                  etaSeconds={BUSY_ETA_SECONDS.research}
                   variant="secondary"
                   className="w-full sm:w-auto"
                   data-testid="research-app-button"
@@ -909,6 +911,7 @@ export default function BrandSetup() {
                       className="w-full sm:w-auto"
                       disabled={researching || refreshing}
                       busy={researching || refreshing}
+                      etaSeconds={BUSY_ETA_SECONDS.research}
                       title="Re-run research from these listings: read them into a proposal, or fork a separate draft"
                       data-testid="research-menu-button"
                     >

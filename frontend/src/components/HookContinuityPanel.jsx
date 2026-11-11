@@ -3,6 +3,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { plannedSections } from "../lib/videoLength";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -441,6 +442,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           onClick={handleGenerateStrategy}
           disabled={busy || !projectId || needsAngle}
           busy={busy}
+          etaSeconds={BUSY_ETA_SECONDS.strategy}
           data-testid="strategy-build-button"
         >
           <Sparkles className="h-4 w-4" />

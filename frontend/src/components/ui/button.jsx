@@ -3,6 +3,7 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils"
+import { formatBusyEta } from "../../lib/busyEta"
 
 const buttonVariants = cva(
   "btn-studio inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0",
@@ -61,23 +62,51 @@ const buttonVariants = cva(
    `disabled`: busy describes the work, not whether the control accepts input.
    Counted jobs pass `progress` (0–1) for a determinate hold; absent progress
    keeps the looping sweep — so a counted job shows real position while an
-   unknowable one keeps the breathing sweep. */
-const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, style, ...props }, ref) => {
+   unknowable one keeps the breathing sweep.
+   Long waits (etaSeconds >= 10) append a static estimate inside the button
+   ("· ~30s") while busy; it never counts down, because the endpoint answers
+   on its own schedule. Determinate jobs and asChild links never take an ETA. */
+const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, etaSeconds = null, style, children, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   // `?? NaN`: Number(null) is 0, so a missing progress must not coerce — an
   // absent progress stays indeterminate and keeps the looping sweep.
   const fraction = Number(progress ?? NaN);
   const determinate = Boolean(busy) && Number.isFinite(fraction);
   const clamped = determinate ? Math.min(1, Math.max(0, fraction)) : 0;
+  const etaSuffix = formatBusyEta(etaSeconds);
+  const showEta = Boolean(busy) && !asChild && !determinate && etaSuffix;
+  if (asChild) {
+    // Slot clones the single child element; a second node would break
+    // Children.only. asChild links never take an ETA (they are not busy CTAs).
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        data-busy={busy || undefined}
+        data-progress={determinate ? "true" : undefined}
+        aria-busy={busy || undefined}
+        style={determinate ? { ...style, "--busy-progress": `${Math.round(clamped * 100)}%` } : style}
+        {...props}
+      >
+        {children}
+      </Comp>
+    );
+  }
   return (
     <Comp
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       data-busy={busy || undefined}
       data-progress={determinate ? "true" : undefined}
+      data-eta={showEta ? Math.round(Number(etaSeconds)) : undefined}
       aria-busy={busy || undefined}
       style={determinate ? { ...style, "--busy-progress": `${Math.round(clamped * 100)}%` } : style}
-      {...props} />
+      {...props}>
+      {children}
+      {showEta && (
+        <span data-testid="busy-eta" className="font-normal opacity-80">{etaSuffix}</span>
+      )}
+    </Comp>
   );
 })
 Button.displayName = "Button"

@@ -10,6 +10,7 @@ import { FitBadge } from "../FitBadge";
 import { sentenceCase } from "../../lib/copyCase";
 import { angleDetails, angleFitScore, formatVerdicts, goalFitScore } from "../../lib/angleSubtitle";
 import { angleSetAge } from "../../lib/angleFreshness";
+import { BUSY_ETA_SECONDS } from "../../lib/busyEta";
 import {
   readPieceSeconds,
   sectionSplit,
@@ -403,6 +404,7 @@ export function AngleSelector({
         onClick={onGenerate}
         disabled={generating}
         busy={generating}
+        etaSeconds={BUSY_ETA_SECONDS.angles}
         data-testid="generate-angles-button"
       >
         <Sparkles className="h-3.5 w-3.5" />
@@ -427,6 +429,7 @@ export function AngleSelector({
           onClick={onRegenerate}
           disabled={generating}
           busy={generating}
+          etaSeconds={BUSY_ETA_SECONDS.angles}
           data-testid="regenerate-angles-button"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -734,6 +737,7 @@ export function AngleGoalPicker({
         onClick={onGenerate}
         disabled={generating}
         busy={generating}
+        etaSeconds={BUSY_ETA_SECONDS.goals}
         data-testid="generate-goals-button"
       >
         <Sparkles className="h-3.5 w-3.5" />

@@ -28,6 +28,7 @@ import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { rememberCurrentAppId } from "../lib/currentApp";
 import {
   Briefcase, AlertTriangle, ArrowLeft,
@@ -640,6 +641,7 @@ return (
                     size="sm"
                     disabled={regeneratingEverything || refreshing || researchingNew}
                     busy={regeneratingEverything || refreshing || researchingNew}
+                    etaSeconds={BUSY_ETA_SECONDS.refresh}
                     className="gap-1.5"
                     data-testid="research-menu-button"
                   >

@@ -27,6 +27,7 @@ import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordThumb, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { rememberDraft } from "../lib/recentDraft";
 import {
@@ -1712,6 +1713,7 @@ export default function CreateVideo() {
                     onClick={() => runTailoring(false)}
                     disabled={tailoring}
                     busy={tailoring}
+                    etaSeconds={BUSY_ETA_SECONDS.templates}
                     data-testid="templates-generate"
                   >
                     <Sparkles className="h-3.5 w-3.5" /> {tailoring ? "Tailoring templates" : "Generate tailored templates"}
@@ -2037,6 +2039,7 @@ export default function CreateVideo() {
               onClick={handleGeneratePlan}
               disabled={busy || !canGenerate || !objective || !angle}
               busy={busy}
+              etaSeconds={BUSY_ETA_SECONDS.plan}
               data-testid="plan-retry-button"
             >
               <Sparkles className="h-4 w-4" />
@@ -2065,6 +2068,7 @@ export default function CreateVideo() {
               variant="accent"
               disabled={busy}
               busy={busy || loading}
+              etaSeconds={busy ? BUSY_ETA_SECONDS.plan : null}
               data-testid="plan-progress-button"
             >
               {loading && !busy ? "Loading your draft" : "Generating your plan"}
@@ -2135,6 +2139,7 @@ export default function CreateVideo() {
                   size="sm"
                   disabled={busy}
                   busy={busy}
+                  etaSeconds={BUSY_ETA_SECONDS.plan}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
                 >

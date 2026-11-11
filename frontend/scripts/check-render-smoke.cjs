@@ -9741,6 +9741,28 @@ async function runIconChecks() {
     await mount(Button, { busy: true, children: "Generating angles" })(ctx);
     const looping = ctx.container.querySelector("button");
     if (looping && looping.hasAttribute("data-progress")) throw new Error("busy Button without progress claims a position it cannot know");
+    // Long waits (>=10s) carry a static in-button estimate, never a countdown
+    // and never a second narrator line; short or idle work carries none.
+    await mount(Button, { busy: true, etaSeconds: 30, children: "Generating angles" })(ctx);
+    const etaBtn = ctx.container.querySelector("button");
+    if (!etaBtn || etaBtn.getAttribute("data-eta") !== "30") throw new Error("busy Button with a 10s+ estimate exposes no data-eta");
+    if (!/~30s/.test(etaBtn.textContent || "") || /(\.\.\.|…)/.test(etaBtn.textContent || "")) throw new Error("busy Button estimate is not a dotless ~30s suffix");
+    if (!etaBtn.querySelector('[data-testid="busy-eta"]')) throw new Error("busy Button estimate does not render inside the button");
+    await mount(Button, { busy: true, etaSeconds: 5, children: "Saving" })(ctx);
+    const shortBtn = ctx.container.querySelector("button");
+    if (shortBtn && (shortBtn.hasAttribute("data-eta") || shortBtn.querySelector('[data-testid="busy-eta"]'))) throw new Error("busy Button under 10s wears an estimate it should not");
+    await mount(Button, { etaSeconds: 30, children: "Generate angles" })(ctx);
+    const idleEta = ctx.container.querySelector("button");
+    if (idleEta && (idleEta.hasAttribute("data-eta") || idleEta.querySelector('[data-testid="busy-eta"]'))) throw new Error("idle Button wears an estimate before the click");
+    await mount(Button, { busy: true, progress: 0.5, etaSeconds: 30, children: "Generating angles" })(ctx);
+    const detEta = ctx.container.querySelector("button");
+    if (detEta && (detEta.hasAttribute("data-eta") || detEta.querySelector('[data-testid="busy-eta"]'))) throw new Error("determinate Button wears an estimate beside its real position");
+    const etaSrc = fs.readFileSync(path.join(SRC, "lib/busyEta.js"), "utf8");
+    if (!/BUSY_ETA_THRESHOLD_SECONDS\s*=\s*10/.test(etaSrc)) throw new Error("busyEta threshold is not 10 seconds");
+    const etaValuesBlock = etaSrc.match(/BUSY_ETA_SECONDS\s*=\s*\{([^}]+)\}/);
+    if (!etaValuesBlock) throw new Error("busyEta map is missing");
+    const etaValues = [...etaValuesBlock[1].matchAll(/:\s*(\d+)/g)].map((m) => Number(m[1]));
+    if (!etaValues.length || etaValues.some((v) => v < 10)) throw new Error("busyEta estimate falls below the 10s threshold");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of ['.btn-studio[data-busy="true"]::before', '.btn-studio[data-busy="true"][data-progress="true"]::before', "@keyframes busy-sweep", "--busy-progress"]) {
       if (!css.includes(token)) throw new Error(`index.css is missing the busy fill rule: ${token}`);
