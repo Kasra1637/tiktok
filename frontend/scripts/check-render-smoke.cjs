@@ -7802,6 +7802,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (questions.length !== 5 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
   });
 
+  // Kasra's rule for the What you get grid: every card matches the anchor
+  // card ("Claims checked before they cost you") — titles 35 chars,
+  // descriptions 160 — so no card ends with ragged empty space. The lengths
+  // are pinned here so a future copy edit cannot silently drift them apart.
+  await check("Landing feature cards share one title and description length", async (ctx) => {
+    await mount(Landing)(ctx);
+    const headings = [...ctx.container.querySelectorAll('[data-testid="landing-features"] h3')];
+    if (headings.length !== 8) throw new Error("expected eight feature cards");
+    for (const h of headings) {
+      const title = h.textContent;
+      const description = h.parentElement.querySelector("p")?.textContent ?? "";
+      if (title.length !== 35) throw new Error(`feature title is ${title.length} chars, not 35: ${title}`);
+      if (description.length !== 160) throw new Error(`feature description under "${title}" is ${description.length} chars, not 160`);
+    }
+  });
+
   for (const authState of ["signed-out", "signed-in", "no-auth"]) {
     await check(`Landing actions work in ${authState} mode`, async (ctx) => {
       // Marketing.jsx is cleared too: it re-exports the header/CTA that read

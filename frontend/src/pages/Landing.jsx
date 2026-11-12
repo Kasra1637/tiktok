@@ -17,33 +17,33 @@ import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../comp
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "Facts first, every time",
+    title: "Your facts first, every single time",
     description:
-      "Your website and store listing become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product.",
+      "Your website and store listing become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product itself.",
   },
   {
     icon: Target,
-    title: "Every video has a job",
+    title: "Every video has one clear job to do",
     description:
-      "A required audience angle and video goal steer the templates and the script, so each post aims at one viewer and one outcome — not everyone and nothing.",
+      "A required audience angle and video goal you set steer the templates and the script, so each post aims at one viewer and one outcome — not everyone and nothing.",
   },
   {
     icon: LayoutTemplate,
-    title: "Openings that earn the watch",
+    title: "The opening built to earn the watch",
     description:
-      "Templates ranked by fit to your angle and goal, with reasons and caveats up front. Pick the opening built to hold your first three seconds.",
+      "Templates are ranked by fit to your angle and your goal, with reasons and caveats up front. Pick the opening built to hold your first three seconds, every time.",
   },
   {
     icon: FileText,
-    title: "A script that sounds like you",
+    title: "A script that sounds just like you.",
     description:
-      "Review the free script plan: a hook and story in plain spoken words — a real person talking to their phone, never ad copy. Edit and save every line before the paid render.",
+      "Review the free script plan: a hook and story in plain words — a real person talking to a phone, never ad copy. Edit and save every line before the paid render.",
   },
   {
     icon: Clapperboard,
-    title: "One photo. Zero shoot days.",
+    title: "One photo, and zero shoot days ever",
     description:
-      "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — just edit and render again.",
+      "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — edit and render again.",
   },
   {
     icon: ShieldCheck,
@@ -53,43 +53,67 @@ const FEATURES = [
   },
   {
     icon: Film,
-    title: "Your demo, finished like a post",
+    title: "Your demo, finished like your posts",
     description:
-      "Bring your real footage to Demo + CTA: phone mockups, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one polished TikTok MP4.",
+      "Bring your real footage to Demo + CTA: phone mockups, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one TikTok MP4.",
   },
   {
     icon: Video,
-    title: "Results that teach the next video",
+    title: "Results that teach your next video.",
     description:
-      "Post it, then paste the link and the numbers — views, 3-second retention, average watch, saves, shares. After three posted clips, Analytics shows which craft choices track with people staying, and those lessons steer your next generations.",
+      "Post it, paste the link and the numbers — views, 3-second retention, average watch, saves, shares. After three posted clips, the lessons steer your next videos.",
   },
 ];
 
+/**
+ * The five steps as a visual strip. Each still is a frame from the app's own
+ * tour footage (public/hero-demo.mp4), in workflow order: App Profile (2s),
+ * the Review & submit gate that names the missing angle (6s), the Audience &
+ * template panel where templates rank for the goal (4.1s), the finished
+ * render in History (16s), and Demo + CTA (11s). The template list and the
+ * presenter-photo upload never appear in that footage, so step 3 shows the
+ * panel they live under rather than a fabricated screen.
+ */
 const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    detail: "Add your website, App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts — every video after starts from them, not a blank page.",
+    line: "Add your store or website URL, review the draft, and approve the facts — every video starts from them.",
+    outcome: "Built from your facts",
+    img: "how/step-1.svg",
+    alt: "Create Video wizard, App Profile step: the approved app Threadly is chosen",
   },
   {
     step: "2",
     label: "Choose a goal and audience",
-    detail: "Pick an audience angle and set a goal for the video; both are required. Every choice downstream — templates, script, hook — answers to both.",
+    line: "Pick an audience angle and set a goal — both are required before anything downstream is written.",
+    outcome: "One viewer, one outcome",
+    img: "how/step-2.svg",
+    alt: "Review and submit gate naming what is missing: pick an audience angle first",
   },
   {
     step: "3",
     label: "Pick a template",
-    detail: "Compare goal-matched recommendations and their caveats. Choose a template, then add a clear presenter photo.",
+    line: "Compare the ranked templates and their caveats, then add a clear presenter photo.",
+    outcome: "Openings that earn the watch",
+    img: "how/step-3.svg",
+    alt: "Audience and template panel: generate audience angles, and templates rank for the goal you pick",
   },
   {
     step: "4",
     label: "Review, then render",
-    detail: "The script plan is free: review it, edit and save it, then check flagged claims. You approve every word — only the render is paid, and it takes minutes, not a shoot day.",
+    line: "The plan is free: review it, edit and save it, check flagged claims — only the render is paid.",
+    outcome: "A clip worth posting",
+    img: "how/step-4.svg",
+    alt: "History tile for a finished render, marked Completed, with the clip ready to play",
   },
   {
     step: "5",
     label: "Add your real product demo",
-    detail: "Record your demo separately. In Demo + CTA, style a base clip, optionally add a Second clip after it or a phone overlay in Real Video, then export and publish them yourself.",
+    line: "Style a base clip, add a Second clip or a phone overlay, export one MP4, and publish them yourself.",
+    outcome: "Your demo stays yours",
+    img: "how/step-5.svg",
+    alt: "Demo plus CTA studio: source and look, a History render as the source, and the first clip style",
   },
 ];
 
@@ -360,25 +384,35 @@ export default function Landing() {
           lede="Five steps, one flow — your facts in, a finished Hook + Story out, and a demo that stays unmistakably yours."
         />
 
-        <div className="relative">
-          {/* Connecting line behind the cards on wide screens */}
-          <div
-            aria-hidden="true"
-            className="absolute left-0 right-0 top-[42px] hidden h-px bg-gradient-to-r from-transparent via-[color:var(--indigo-25)] to-transparent lg:block"
-          />
-          <div className="relative grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Visual strip: one real app still per step, a badge, one short
+            line, and an outcome label. On phones the strip scrolls sideways
+            with a faded edge; on wide screens it is a five-column grid.
+            Layout, band, badge, and dots live in index.css (.how-*). */}
+        <div className="how-band">
+          <ol className="how-steps">
             {FLOW_STEPS.map((s) => (
-              <div
+              <li
                 key={s.step}
-                className="surface surface-interactive shimmer-on-hover group rounded-2xl text-center"
+                className="how-step surface-interactive animate-fade-up"
+                style={{ animationDelay: `${Number(s.step) * 60}ms` }}
               >
-                <div className="relative mx-auto mb-5 flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] font-semibold text-white shadow-[var(--glow-indigo)]">
-                  <span className="font-display text-base">{s.step}</span>
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/25 to-transparent" />
+                <div className="how-shot">
+                  <img
+                    src={`${process.env.PUBLIC_URL}/${s.img}`}
+                    alt={s.alt}
+                    loading="lazy"
+                  />
+                  <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
                 </div>
                 <h3 className="font-display text-base font-semibold">{s.label}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.detail}</p>
-              </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.line}</p>
+                <span className="how-outcome">{s.outcome}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="how-dots" aria-hidden="true">
+            {FLOW_STEPS.map((s) => (
+              <span key={s.step} />
             ))}
           </div>
         </div>

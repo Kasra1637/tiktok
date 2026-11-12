@@ -1063,6 +1063,124 @@ h1,
     animation: shimmer-sweep 900ms ease-out;
 }
 
+/* ---------- Landing: How it works visual step strip ----------
+   Five real app stills (frames from the hero tour footage) carry the steps,
+   so the copy shrinks to one line plus an outcome label per step. All spacing
+   lives here, per the card rule — no p-* on the step cards. The band reuses
+   the surface fill and the hero's indigo pools; the badge is the same indigo
+   gradient + glow as the feature-card icons; the hover lift is
+   `.surface-interactive`, untouched. On phones the strip scrolls sideways
+   with snapped cards and a faded edge; from lg it is a five-column grid. */
+.how-band {
+    border: 1px solid var(--hairline);
+    border-radius: 1rem;
+    background:
+        radial-gradient(600px circle at 15% 0%, var(--indigo-6), transparent 55%),
+        radial-gradient(600px circle at 85% 100%, var(--indigo-6), transparent 55%),
+        hsl(228 14% 10% / 0.72);
+    box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 20px;
+}
+@media (min-width: 768px) {
+    .how-band { padding: 28px; }
+}
+.how-steps {
+    display: flex;
+    gap: 1.25rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+    mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+@media (min-width: 1024px) {
+    .how-steps {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        overflow: visible;
+        scroll-snap-type: none;
+        padding-bottom: 0;
+        mask-image: none;
+        -webkit-mask-image: none;
+    }
+}
+.how-step {
+    flex: 0 0 228px;
+    scroll-snap-align: start;
+    border: 1px solid var(--hairline);
+    border-radius: 1rem;
+    background-color: hsl(228 14% 12% / 0.72);
+    box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 14px;
+    text-align: center;
+    list-style: none;
+}
+@media (min-width: 1024px) {
+    .how-step { flex: none; }
+}
+.how-shot {
+    position: relative;
+    border: 1px solid var(--hairline);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+.how-shot img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 624 / 752;
+    object-fit: cover;
+}
+.how-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 0.75rem;
+    background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
+    box-shadow: var(--glow-indigo);
+    color: #fff;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+.how-badge::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.25), transparent);
+    pointer-events: none;
+}
+.how-outcome {
+    display: inline-block;
+    margin-top: 12px;
+    border: 1px solid var(--indigo-25);
+    border-radius: 999px;
+    background: var(--indigo-8);
+    color: var(--brand-indigo);
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.how-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+}
+.how-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
+    opacity: 0.55;
+}
+
 /* ---------- Studio Button System (Specular Bevel + Soft Light Sweep) ----------
    Signal Coral primary system:
    1. Specular 1px top-edge rim highlight (`inset 0 1px 0`) gives buttons physical studio-key depth.
