@@ -17,7 +17,9 @@ import {
   clampHookSeconds,
   DEFAULT_HOOK_SECONDS,
 } from "../../lib/videoLength";
-import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown } from "lucide-react";
+import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown, Image as ImageIcon } from "lucide-react";
+
+import AssetLibrary from "../../pages/AssetLibrary";
 
 /* The single instruction for the angle picker, shared by the empty state
    (click generates the six) and the reveal state (click shows the six).
@@ -316,11 +318,17 @@ export function TemplateShape({ template, middle: actualMiddle = "" }) {
  * for it. The review copy picks the angle through the single red jump back to step 1,
  * never a second copy of this list: the goal picker there waits silently.
  *
- * Landing is always gated: one "Generate angles" action, never a finished list.
- * The first click always generates fresh — a cached set from an earlier
- * approval is never revealed as-is, so a new video never lands on a stale
- * "Refreshed 9h ago" set. A set generated moments ago in-session is then
- * revealed free on step re-entry, so returning never spends a second call.
+ * On Audience & template the list renders on open: a founder whose app
+ * already has angles lands on the six themselves, not on a click-to-reveal
+ * gate (Part 3 removed that click — it cost a press on every fresh project
+ * and bought nothing the list does not say itself). The set's age still
+ * rides beside Regenerate, so a stale set reads as stale in plain view
+ * rather than being hidden behind a button. Only an empty set shows the
+ * "Generate angles" action, where the click is the generation itself.
+ *
+ * The Review recovery copy passes `landingGate`: that screen never hosts
+ * the list (selection lives on step 1), so its gate form stays — one red
+ * action whose click is the jump back, with the honesty rule naming it.
  * "Regenerate angles" appears only beside a visible list, where it always
  * has a current generation to act on.
  */
@@ -356,6 +364,11 @@ export function AngleSelector({
   // it costs, and a stale cache is not revealed at all: the click
   // regenerates it instead.
   sessionFresh = false,
+  // The gated landing form, kept only for the Review recovery copy (see
+  // the docstring above): the list stays behind the red action there,
+  // shown only when `showAngles` says the founder has viewed it. The
+  // Audience & template step never passes this — its list renders on open.
+  landingGate = false,
   // The approved hook line, when a plan already exists. The picked angle's
   // "First 3 seconds promise" row then quotes what the video actually opens
   // with, never the angle's paraphrase promising unspoken words (ADR 0108).
@@ -386,7 +399,7 @@ export function AngleSelector({
   // label-attached helpers, and a dynamic age cannot hold a fixed length.
   const angleSetFreshness = angleSetAge(angles);
 
-  const body = !showAngles || angles.length === 0 ? (
+  const body = angles.length === 0 || (landingGate && !showAngles) ? (
     // 12px, matching the Review step's "what's missing" panel: the red action
     // and the helper line under it are one gate section, and a tighter stack
     // here made the same ask read as a different control two steps later.
@@ -600,13 +613,16 @@ export function AngleSelector({
  * six angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
  *
- * Landing is always gated: one "Generate goals" action, never a finished
- * list. The first click always generates fresh — the facet-ordered
- * `suggestions` fallback from the server is never rendered as the initial
- * list, so a new video never lands on auto-populated goals. A set generated
- * moments ago in-session is then revealed free on step re-entry, so returning
- * never spends a second call. "Shuffle" appears only beside a visible list,
- * where it always has a current generation to act on.
+ * On Audience & template the six render on angle pick (Part 3 removed the
+ * click-to-reveal gate here too): the persisted, facet-ordered suggestions
+ * are the initial list, and the billed live generation moves to a
+ * "Generate goals" action beside the list, where its six replace the
+ * persisted order with per-goal fit scores. The Review recovery copies
+ * pass `landingGate` and keep the gated landing: one "Generate goals"
+ * action, never a finished list — the facet-ordered `suggestions` fallback
+ * is never rendered there as the initial list, so a founder fixing a plan
+ * never lands on auto-populated goals. "Shuffle" appears only beside a
+ * visible list, where it always has a current generation to act on.
  *
  * Each card shows the goal's general outcome plus an optional angle-specific
  * fit line explaining why that goal suits the selected angle. The fit line is
@@ -629,13 +645,16 @@ export function AngleGoalPicker({
   pairEvidence = {},
   // The six suggestions in the angle's profile-tailored PERSISTED variant
   // order, from the server (angle.goal_suggestions). Falls back to the
-  // static facet list when the angle row carries none. Kept for the Review
-  // recovery call sites and for the pre-generate fallback copy inspection,
-  // but never rendered as the initial list — the gate owns first view.
+  // static facet list when the angle row carries none. On Audience &
+  // template this IS the initial list; behind the gate (the Review
+  // recovery call sites) it is kept for the pre-generate fallback copy
+  // inspection and never rendered as the initial list — the gate owns
+  // first view there.
   suggestions,
   // Live goals generated on the founder's click, each
-  // {name, description, why_it_fits, fit_score}. Null until generated: the
-  // panel shows the gate in the meantime (and on failure keeps it).
+  // {name, description, why_it_fits, fit_score}. Null until generated:
+  // behind the gate the panel shows the gate in the meantime; ungated it
+  // shows the persisted list — and on failure keeps whichever it showed.
   liveGoals = null,
   showGoals = false,
   onGenerate,
@@ -643,6 +662,11 @@ export function AngleGoalPicker({
   generationError = null,
   onRegenerate,
   regenerating = false,
+  // The gated landing form, kept only for the Review recovery copies (see
+  // the docstring above): the six stay behind the Generate action there.
+  // The Audience & template step never passes this — its six render on
+  // angle pick, with Generate riding beside the list instead.
+  landingGate = false,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
   const liveByName = {};
@@ -664,15 +688,18 @@ export function AngleGoalPicker({
   const rankedGoals = orderedGoals.length > 0
     ? orderedGoals
     : (recommendations || []).filter((goal) => knownGoals.includes(goal));
-  // The reveal gate (the goals analogue of the angles gate above): the list
-  // is visible only when the founder clicked Generate (showGoals / liveGoals)
-  // or when a goal is already picked (a draft or deep link that already names
-  // one has been viewed by definition). The facet-ordered `suggestions` /
-  // `recommendations` lists are never shown on first view — they are the
-  // auto-populated output the gate exists to withhold. A draft whose only
-  // goals come from the facet list still renders them once a goal is picked,
-  // so resuming never strands the founder on an empty required control.
-  const revealed = showGoals || Boolean(value) || (Array.isArray(liveGoals) && liveGoals.length > 0);
+  // Visibility of the six. On Audience & template they render on angle
+  // pick — `landingGate` is false and the list is simply there. Behind the
+  // gate (the Review recovery copies) the list is visible only when the
+  // founder clicked Generate (showGoals / liveGoals) or when a goal is
+  // already picked (a draft or deep link that already names one has been
+  // viewed by definition): the facet-ordered `suggestions` /
+  // `recommendations` lists are never shown there on first view — they are
+  // the auto-populated output that gate exists to withhold. A draft whose
+  // only goals come from the facet list still renders them once a goal is
+  // picked, so resuming never strands the founder on an empty required
+  // control.
+  const revealed = !landingGate || showGoals || Boolean(value) || (Array.isArray(liveGoals) && liveGoals.length > 0);
   const featured = revealed
     ? [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6)
     : [];
@@ -879,21 +906,41 @@ export function AngleGoalPicker({
           <GroupLabel as="h3" icon={Target} id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
-          {onRegenerate && revealed && featured.length > 0 && (
+          {((!landingGate && onGenerate) || (onRegenerate && revealed && featured.length > 0)) && (
             <div className="flex shrink-0 items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 shrink-0"
-                onClick={onRegenerate}
-                disabled={regenerating}
-                busy={regenerating}
-                title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
-                data-testid="regenerate-goals-button"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                {regenerating ? "Shuffling goals" : "Shuffle"}
-              </Button>
+              {/* Ungated form only: the billed live generation the gate's
+                  click used to be, riding beside the list it refreshes.
+                  Behind the gate (Review) the same action is the gate
+                  button itself, so it never renders twice. */}
+              {!landingGate && onGenerate && (
+                <Button
+                  variant="accent"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={onGenerate}
+                  disabled={generating}
+                  busy={generating}
+                  data-testid="generate-goals-button"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {generating ? "Generating goals" : "Generate goals"}
+                </Button>
+              )}
+              {onRegenerate && revealed && featured.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={onRegenerate}
+                  disabled={regenerating}
+                  busy={regenerating}
+                  title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
+                  data-testid="regenerate-goals-button"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {regenerating ? "Shuffling goals" : "Shuffle"}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -906,5 +953,100 @@ export function AngleGoalPicker({
       </div>
       {body}
     </section>
+  );
+}
+
+/* The presenter photo's anchor, owned here with the control itself: the
+   page's scroll helpers, the substep caption and the onboarding tour all
+   aim at this id, so the string lives exactly once, beside the element
+   that carries it. */
+export const TEMPLATE_PHOTO_ID = "template-photo";
+
+/**
+ * The presenter photo control — the fourth creation control, owned by the
+ * selection structure like the angle, goal and template pickers above
+ * (Part 3 moved it here from CreateVideo.jsx, where it was the one control
+ * the page rendered inline). Presentational in the same way the panel
+ * always was: it renders only once a template is picked (the page keeps
+ * that condition), because with no template there is nothing to attach a
+ * photo to — the section is hidden entirely rather than showing a blank
+ * label. The project writes stay with the page: the control receives the
+ * draft-preparation action and the project-adoption callbacks, and the
+ * library's own attach/upload endpoints are unchanged.
+ */
+export function PresenterPhotoControl({
+  project,
+  profileId,
+  busy = false,
+  onEnsureProject,
+  onProjectChanged,
+  onRefreshProject,
+}) {
+  return (
+    <div id={TEMPLATE_PHOTO_ID} data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
+      <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
+      <p className="text-sm text-muted-foreground" data-subtitle="">
+        Upload one clear photo of the person you want on camera.
+      </p>
+      {!project ? (
+        <>
+          {!busy && (
+            <p className="text-base text-muted-foreground">
+              Preparing the video draft for your photo…
+            </p>
+          )}
+          <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={onEnsureProject} data-testid="prepare-draft-button">
+            <ImageIcon className="h-3.5 w-3.5" />
+            {busy ? "Preparing draft" : "Try preparing the draft again"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <AssetLibrary
+            embedded
+            profileId={profileId}
+            projectId={project.id}
+            projectAssets={project.assets}
+            onProjectChanged={onProjectChanged}
+            onChanged={onRefreshProject}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What the selected template is still waiting on.
+ *
+ * Face-only product: the character reference is the single permitted asset
+ * and every template requires exactly it. Without a photograph of the
+ * person the model would invent one, and the founder would pay for a video
+ * of somebody who looks nothing like them. The server refuses that case
+ * before rendering, so this is the early warning rather than the guarantee.
+ * It lives with the photo control it points at; the jump itself
+ * (onGoToTemplatePhoto) stays with the page, which owns step navigation.
+ */
+export function MissingRequirements({ identity, onGoToTemplatePhoto }) {
+  if (!identity || identity.length === 0) return null;
+
+  return (
+    <div className="inset-panel space-y-4">
+      {/* The button leads and the explanation follows it: the button says where
+          the upload is, and the upload is on the template step now. It used
+          to point at a step called "Assets" whose only content was this same
+          upload. */}
+      {onGoToTemplatePhoto && (
+        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
+          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
+        </Button>
+      )}
+      <p className="text-base font-semibold">
+        This template needs a character reference before it can generate
+      </p>
+      <p className="text-sm text-muted-foreground" data-subtitle="">
+        Your photograph is what the generated video is built from.
+      </p>
+    </div>
   );
 }

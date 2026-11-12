@@ -1208,61 +1208,60 @@ async function main() {
     }
   });
 
-  await check("a fresh gate generation parks the strongest angle and keeps it", async (ctx) => {
-    // The reveal lasts for the visit, not the mount: navigating away and
-    // back with a parked pick shows the picked list rather than re-arming
-    // the CTA. Only an unpicked visit (a stale ?angle=, pinned below)
-    // still lands gated. A resolved pick still bypasses —
-    // that path is pinned by the photo-gate check above.
+  await check("the revealed angle list keeps its pick across steps", async (ctx) => {
+    // No gate to pass any more (Part 3): the cached set renders on open,
+    // and a pick made on it survives leaving and returning — the list is
+    // simply there, with the pick still pressed. The generation-side
+    // parking (a fresh set lands on its strongest angle) is pinned by the
+    // regenerate checks below, which drive the same handler.
     global.__SMOKE_PARAMS = "";
     try {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
       const gate = () => ctx.container.querySelector('[data-testid="generate-angles-button"]');
       const list = () => ctx.container.querySelector('[data-testid="audience-angle-list"]');
-      if (!gate()) throw new Error("the angle step does not start behind its Generate CTA");
-      if (list()) throw new Error("the angle list is visible before anything was asked for");
-      await clickEl(ctx, gate());
-      if (!list()) throw new Error("the Generate CTA generated no angles");
-      const parked = ctx.container.querySelector('[data-testid="angle-option-a1"]');
-      if (!parked || parked.getAttribute("aria-pressed") !== "true") {
-        throw new Error("the fresh set parked on no angle");
+      if (gate()) throw new Error("a reveal CTA still gates the cached set");
+      if (!list()) throw new Error("the angle list is not rendered on open");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+      const picked = ctx.container.querySelector('[data-testid="angle-option-a1"]');
+      if (!picked || picked.getAttribute("aria-pressed") !== "true") {
+        throw new Error("the picked angle does not read as picked");
       }
       await openStep(ctx, "Review & submit");
-      await openStep(ctx, "Audience & template");          if (gate()) throw new Error("returning to the step re-armed the CTA over a picked set");
-          if (!list()) throw new Error("a picked list was lost on return to the step");
-        } finally {
-          global.__SMOKE_PARAMS = "";
-        }
-      });
+      await openStep(ctx, "Audience & template");
+      if (gate()) throw new Error("returning to the step raised a CTA over a picked set");
+      if (!list()) throw new Error("the list was lost on return to the step");
+      const still = ctx.container.querySelector('[data-testid="angle-option-a1"]');
+      if (!still || still.getAttribute("aria-pressed") !== "true") {
+        throw new Error("the pick was lost on return to the step");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
 
-      await check("the angle gate offers Generate for a cached set", async (ctx) => {
-        // A cached set from an earlier approval is never revealed as-is: the
-        // first click regenerates fresh (a model call with a wait), so the
-        // button must say Generate, never Show. "Show" is reserved for the
-        // set made moments ago in-session. Dateless rows render no freshness
-        // claim before anything is generated.
+      await check("a cached set renders revealed and spends nothing on view", async (ctx) => {
+        // Part 3: a cached set from an earlier approval renders as-is —
+        // no Generate/Show click, and no generation call for the viewing.
+        // Freshness is spent only when the founder asks for it (Regenerate,
+        // pinned with the regenerate checks). Dateless rows render no
+        // freshness claim.
         global.__SMOKE_PARAMS = "";
+        apiCalls.length = 0;
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & template");
-          const label = (ctx.container.querySelector('[data-testid="generate-angles-button"]') || {}).textContent || "";
-          if (!label.includes("Generate angles") || label.includes("Show your")) {
-            throw new Error(`a cached set does not offer a fresh generate: ${JSON.stringify(label)}`);
+          if (ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+            throw new Error("a reveal CTA still gates the cached set");
+          }
+          if (!ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
+            throw new Error("the cached set does not render its rows");
           }
           if (ctx.container.querySelector('[data-testid="angle-set-freshness"]')) {
             throw new Error("a dateless set renders a freshness claim");
           }
-          apiCalls.length = 0;
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA for the cached set");
-          if (!apiCalls.includes("regenerateContentAngles")) {
-            throw new Error("the cached set was revealed without regenerating it fresh");
-          }
-          if (apiCalls.includes("generateContentAngles")) {
-            throw new Error("the gate used the bare endpoint over a populated set");
-          }
-          if (!ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
-            throw new Error("the fresh generate showed no angles");
+          if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
+            throw new Error("viewing the cached set spent a generation call");
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -1289,9 +1288,9 @@ async function main() {
       });
 
       await check("the angle list dates its set", async (ctx) => {
-        // The gate never reveals a stale set (it regenerates instead), so the
-        // dated line is pinned through a resolved pick, which bypasses the
-        // gate: a draft's own set still dates itself beside Regenerate.
+        // The revealed list dates itself beside Regenerate, so a stale set
+        // reads as stale in plain view; pinned through a resolved pick,
+        // which is how a reopened draft meets its own set.
         const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
         const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
         try {
@@ -1342,6 +1341,42 @@ async function main() {
         }
       });
 
+
+  await check("the angle and goal controls render revealed by default", async (ctx) => {
+    // The click-to-reveal gate is gone from the Audience & template step
+    // (Part 3): a founder whose app already has angles lands on the list
+    // itself — no Generate/Show click, and no generation spend for the
+    // viewing — and picking an angle shows the six goal cards the same
+    // way. The billed live-goal generation stays one click away beside
+    // the revealed list.
+    global.__SMOKE_PARAMS = "";
+    apiCalls.length = 0;
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
+      if (!step.querySelector('[data-testid="audience-angle-list"]')) {
+        throw new Error("the angle list is not rendered on open");
+      }
+      if (step.querySelector('[data-testid="generate-angles-button"]')) {
+        throw new Error("a reveal CTA still gates the angle list");
+      }
+      if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
+        throw new Error("viewing the cached set spent a generation call");
+      }
+      await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+      const goals = [...step.querySelectorAll('[data-testid^="recommended-goal-"]')];
+      if (goals.length !== 6) throw new Error(`expected six goal cards on angle pick, saw ${goals.length}`);
+      if (apiCalls.includes("generateAngleGoals")) {
+        throw new Error("picking an angle fired the billed live-goal generation");
+      }
+      if (!step.querySelector('[data-testid="generate-goals-button"]')) {
+        throw new Error("the live-goal generation is not offered beside the revealed list");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
 
   await check("no step offers time-range or audio controls for an asset", async (ctx) => {
     // The video is one render with no compositing, so an asset has
@@ -1550,6 +1585,11 @@ async function main() {
           if (!goalPicker) throw new Error("Review does not offer its missing goal picker");
           const gen = goalPicker.querySelector('[data-testid="generate-goals-button"]');
           if (!gen) throw new Error("Review goal gate offers no Generate button");
+          // The gate's instruction line lives here now: Review's recovery
+          // copy is the gated form's only remaining home (Part 3 moved the
+          // angle step's copy assertion here with the gate itself).
+          const gateCopy = goalPicker.querySelector('[data-testid="goals-cta-copy"]');
+          if (!gateCopy) throw new Error("the Review goal gate shows no instruction line");
           await clickEl(ctx, gen);
           await act(async () => {});
           const goalButton = goalPicker.querySelector('[data-testid="recommended-goal-address_user_problem"]');
@@ -3078,8 +3118,8 @@ async function main() {
 
   // The angle hint follows the substep the founder is on, not a standing
   // sentence: the angle first, then the goal the moment a pick exists, then
-  // the template. Generating parks the pick on the strongest new angle
-  // (handleRegenerateAngles), so "parked" already counts as picked.
+  // the template. The pick here is the founder's own click on the revealed
+  // list's strongest row.
   await check("the angle hint follows the substep the founder is on", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
@@ -3090,8 +3130,11 @@ async function main() {
       throw new Error(`the bar does not name the angle first: ${JSON.stringify(hint())}`);
     }
     await passAngleGate(ctx);
+    // The list renders on open now (Part 3): the founder picks the
+    // strongest row directly — nothing parks a pick on view any more.
+    await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "the strongest angle");
     if (/pick an angle/i.test(hint())) {
-      throw new Error("the bar still asks for an angle after one is parked");
+      throw new Error("the bar still asks for an angle after one is picked");
     }
     if (!/goal/i.test(hint())) {
       throw new Error(`the bar does not move to the goal phase: ${JSON.stringify(hint())}`);
@@ -4306,9 +4349,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & template");
           const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-          await clickEl(ctx, step.querySelector('[data-testid="generate-angles-button"]'), "no Generate CTA");
-          // The fresh generate parks on a1, so moving to a2 files a1 as the
-          // shown-but-not-picked row.
+          // The list renders on open (Part 3): a1 is already shown, so
+          // picking a2 files a1 as the shown-but-not-picked row.
           await clickEl(ctx, step.querySelector('[data-testid="angle-option-a2"]'), "no angle a2 to pick");
           await act(async () => {});
           const rows = global.__SMOKE_BEHAVIOR || [];
@@ -4551,58 +4593,55 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // The server generates the six on approval, so without a gate the founder
-  // lands on a finished list plus Regenerate they never asked for. Landing
-  // shows one Generate CTA instead; the click regenerates fresh (a model
-  // call that keeps hand-written angles) rather than revealing the stale
-  // cached set. Regenerate appears only beside the visible list. A fresh
-  // profile id keeps this free of whatever other checks persisted, so the
-  // gate is asserted, not the order they ran in.
-  await check("landing on angles generates fresh over the cached set", async (ctx) => {
+  // The server generates the six on approval. Landing used to hide them
+  // behind a Generate CTA whose click regenerated fresh rather than
+  // revealing the cached set; Part 3 removed that click, so landing shows
+  // the cached six themselves — no spend for the viewing — and freshness
+  // is spent only on the explicit Regenerate beside the list (the
+  // regenerate endpoint, which keeps hand-written angles, never the bare
+  // one over a populated set). A fresh profile id keeps this free of
+  // whatever other checks persisted.
+  await check("landing on angles shows the cached set, Regenerate refreshes it", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
       getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
     }, async () => {
       global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (step.querySelector('[data-testid^="angle-option-"]')) {
-        throw new Error("the pre-generated six show before the founder clicks anything");
-      }
-      if (step.querySelector('[data-testid="regenerate-angles-button"]')) {
-        throw new Error("Regenerate shows before there is a visible generation");
-      }
-      const cta = step.querySelector('[data-testid="generate-angles-button"]');
-      if (!cta) throw new Error("first view offers no CTA for the six");
-      // A cached set is never revealed as-is: the button must say Generate
-      // (a fresh model call), never Show a set timestamped hours ago.
-      if (!/Generate angles/.test(cta.textContent || "") || /Show your/.test(cta.textContent || "")) {
-        throw new Error(`the CTA does not offer a fresh generate: ${JSON.stringify(cta.textContent)}`);
-      }
-      apiCalls.length = 0;
-      await clickEl(ctx, cta);
-      if (!apiCalls.includes("regenerateContentAngles")) {
-        throw new Error("the cached set was revealed without regenerating it fresh");
-      }
-      if (apiCalls.includes("generateContentAngles")) {
-        throw new Error("the gate used the bare endpoint over a populated set");
-      }
       if (!step.querySelector('[data-testid="angle-option-a1"]')) {
-        throw new Error("the Generate click did not show the six angles");
+        throw new Error("the pre-generated six do not show on landing");
       }
       if (!step.querySelector('[data-testid="regenerate-angles-button"]')) {
         throw new Error("Regenerate is missing beside the visible generation");
       }
+      if (step.querySelector('[data-testid="generate-angles-button"]')) {
+        throw new Error("a reveal CTA still gates the cached set");
+      }
+      if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
+        throw new Error("landing on the cached set spent a generation call");
+      }
+      await clickEl(ctx, step.querySelector('[data-testid="regenerate-angles-button"]'), "no Regenerate beside the list");
+      if (!apiCalls.includes("regenerateContentAngles")) {
+        throw new Error("Regenerate did not refresh the set");
+      }
+      if (apiCalls.includes("generateContentAngles")) {
+        throw new Error("Regenerate used the bare endpoint over a populated set");
+      }
+      if (!step.querySelector('[data-testid="angle-option-a1"]')) {
+        throw new Error("the refreshed set shows no angles");
+      }
     });
   });
 
-  // A pick that names nothing must not open the gate either. A stale ?angle=
-  // param or a draft pointing at a deleted angle used to read as "viewed"
-  // through the raw id, so first view landed on a list of strangers with no
-  // row picked — the exact failure this rule fixes.
-  await check("a stale angle pick still lands gated", async (ctx) => {
+  // A pick that names nothing resolves to no pick. A stale ?angle= param or
+  // a draft pointing at a deleted angle must not read as a selection: the
+  // list renders (it always does now), but no row is pressed and the goal
+  // picker keeps waiting — and clicking a real row recovers the flow.
+  await check("a stale angle pick shows the list unpicked and still recovers", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
@@ -4612,11 +4651,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (step.querySelector('[data-testid^="angle-option-"]')) {
-        throw new Error("a dangling pick opened the list on first view");
+      if (!step.querySelector('[data-testid="angle-option-a1"]')) {
+        throw new Error("the list does not render under a dangling pick");
       }
-      if (!step.querySelector('[data-testid="generate-angles-button"]')) {
-        throw new Error("a dangling pick left no Generate CTA to recover through");
+      const pressed = [...step.querySelectorAll('[data-testid^="angle-option-"]')]
+        .filter((row) => row.getAttribute("aria-pressed") === "true");
+      if (pressed.length > 0) {
+        throw new Error("a dangling pick reads as a selection");
+      }
+      if (!step.querySelector('[data-testid="goal-waits-for-angle"]')) {
+        throw new Error("the goal picker does not wait under a dangling pick");
+      }
+      await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no angle row to recover with");
+      const picked = step.querySelector('[data-testid="angle-option-a1"]');
+      if (!picked || picked.getAttribute("aria-pressed") !== "true") {
+        throw new Error("clicking a real row does not resolve the dangling pick");
       }
     });
   });
@@ -4688,6 +4737,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!/Pick an audience angle/.test(btn.textContent || "")) {
         throw new Error(`the CTA does not name its destination: ${JSON.stringify(btn.textContent)}`);
       }
+      if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
+        throw new Error("an angle list rendered on Review instead of only its redirect");
+      }
       apiCalls.length = 0;
       await clickEl(ctx, btn);
       if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
@@ -4697,8 +4749,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!pill || pill.getAttribute("aria-current") !== "step") {
         throw new Error("the red button did not land on the Audience & template step");
       }
-      if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
-        throw new Error("an angle list rendered outside its home step");
+      // Landed home: the list itself is there to pick from (Part 3) —
+      // the recovery is the pick, not another gate.
+      if (!ctx.container.querySelector('[data-testid^="angle-option-"]')) {
+        throw new Error("the redirect landed on no list to pick from");
       }
       expectAbsent(ctx, "Generate and pick an audience angle first", "the removed angle-first hint is back");
       expectAbsent(ctx, "Pick a goal above", "goal guidance points at a hidden control");
@@ -5540,16 +5594,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (text.includes("Fit 9")) {
       throw new Error("a fit score is shown for a template ranked with no objective");
     }
-    // ...and it must not restate the angle ask here: the angle gate above
-    // already requires an angle, and the goal-wait marker stays empty for
-    // the same reason — a third copy of one instruction. The step stays quiet
-    // until the gate above is satisfied.
+    // ...and it must not restate the angle ask here: the angle list above
+    // already offers the pick, and the goal-wait marker stays empty for
+    // the same reason — a third copy of one instruction. The templates
+    // stay quiet until a pick is made above.
     if (text.includes("Generate and pick an audience angle first")) {
       throw new Error("the removed angle-first hint is back below the templates");
     }
-    // The fix lives on this same screen: the angle gate above is what ranks
-    // the goal that ranks the templates, so no jump elsewhere is needed.
-    if (!ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+    // The fix lives on this same screen: the angle list above is what
+    // ranks the goal that ranks the templates, so no jump elsewhere is
+    // needed — the founder picks right there.
+    if (!ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
       throw new Error("there is no way on this step to fix the missing choice");
     }
   });
@@ -5851,18 +5906,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       desired_emotion: "Relief",
       claims_to_respect: ["works offline", "no iOS support"],
     };
-    await withApi({ getContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }), regenerateContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }) }, async () => {
+    await withApi({ getContentAngles: async () => ({ angles: [FULL_ANGLE, ANGLE] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & template");
-        await passAngleGate(ctx);
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      // The fresh generate parks on its strongest row, so the first row
-      // opens with its fields immediately: the pick is the viewing the gate
-      // asked for, and a closed row is still just its title and fit pill.
+      // The founder's click is the viewing (Part 3): the picked row opens
+      // with its fields immediately, and a closed row is still just its
+      // title and fit pill.
+      await clickEl(ctx, step.querySelector('[data-testid="angle-option-a3"]'), "no first angle row to pick");
       const parked0 = step.querySelector('[data-testid="angle-option-a3"]');
       if (!parked0 || parked0.getAttribute("aria-pressed") !== "true") {
-        throw new Error("the fresh set parked on no angle");
+        throw new Error("the pick did not land on the first angle");
       }
       // A closed row shows no subtitle. The subtitle came off the bar (the
       // row keeps its title and its fit pill), so the field that used to
@@ -5991,14 +6046,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error(`the check mark is off the 16px token: ${cls}`);
           }
         }
-        // The fresh generate parks on a1, so its check starts indigo and
-        // a2's starts muted; moving the pick flips them.
-        const parkedCheck = ctx.container.querySelector('[data-testid="angle-option-a1"] [data-testid="angle-row-check"]');
-        const parkedOther = ctx.container.querySelector('[data-testid="angle-option-a2"] [data-testid="angle-row-check"]');
-        if (!parkedCheck || !/brand-indigo/.test(parkedCheck.getAttribute("class") || "")) {
-          throw new Error("the parked row's check is not indigo");
+        // Nothing is picked on open (Part 3), so both checks start muted.
+        // Picking a1 turns its check indigo while a2's stays muted; moving
+        // the pick flips them.
+        const checkOf = (id) => ctx.container.querySelector(`[data-testid="angle-option-${id}"] [data-testid="angle-row-check"]`);
+        if (!checkOf("a1") || /brand-indigo/.test(checkOf("a1").getAttribute("class") || "")) {
+          throw new Error("an unpicked row shows the picked check");
         }
-        if (!parkedOther || /brand-indigo/.test(parkedOther.getAttribute("class") || "")) {
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+        if (!/brand-indigo/.test(checkOf("a1").getAttribute("class") || "")) {
+          throw new Error("the picked row's check is not indigo");
+        }
+        if (!checkOf("a2") || /brand-indigo/.test(checkOf("a2").getAttribute("class") || "")) {
           throw new Error("an unpicked row shows the picked check");
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a2"]'), "no angle row to pick");
@@ -6526,14 +6585,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (apiCalls.includes("generateAngleGoals")) {
             throw new Error("live goals fired on angle pick instead of waiting for the founder click");
           }
-          // Gated: no cards before the click, one CTA with copy.
-          if (orderOf().length !== 0) {
-            throw new Error(`goal cards shown before the click: ${orderOf().join(", ")}`);
+          // Revealed: the persisted six are the initial list (Part 3) —
+          // the click replaces them with the live order, it does not
+          // reveal them. The gate form's instruction line is pinned at
+          // the Review recovery copy, its only remaining home.
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the persisted six are not the initial list: ${orderOf().join(", ")}`);
           }
-          const gateCta = ctx.container.querySelector('[data-testid="generate-goals-button"]');
-          if (!gateCta) throw new Error("the goal gate offers no Generate button");
-          const gateCopy = ctx.container.querySelector('[data-testid="goals-cta-copy"]');
-          if (!gateCopy) throw new Error("the goal gate shows no instruction line");
+          const generateCta = ctx.container.querySelector('[data-testid="generate-goals-button"]');
+          if (!generateCta) throw new Error("the picker offers no Generate goals button beside the list");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
           await new Promise((r) => setTimeout(r, 150));
           const order = orderOf();
@@ -6557,8 +6617,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // A failed live-goal call keeps the gate and names the retry:
-  // the goal step is never blank and never resurrects the facet list.
+  // A failed live-goal call keeps the list it was called over and names
+  // the retry: the goal step is never blank — the persisted six that were
+  // showing stay put (ADR 0107's fallback rule).
   await check("live goal failure keeps the facet list and names the retry", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
@@ -6578,13 +6639,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the persisted six are not showing before the call: ${orderOf().join(", ")}`);
+          }
           await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
           await new Promise((r) => setTimeout(r, 150));
-          if (orderOf().length !== 0) {
-            throw new Error(`goal cards shown after a failed live-goal call: ${orderOf().join(", ")}`);
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the failed live-goal call changed the list: ${orderOf().join(", ")}`);
           }
           const gate = ctx.container.querySelector('[data-testid="generate-goals-button"]');
-          if (!gate || gate.disabled) throw new Error("the gate is not retryable after a failed live-goal call");
+          if (!gate || gate.disabled) throw new Error("the Generate button is not retryable after a failed live-goal call");
           const error = ctx.container.querySelector('[data-testid="goals-generation-error"]');
           if (!error) throw new Error("a failed live-goal call shows no error");
           if (!error.textContent.includes("goal generation unavailable")) {
@@ -6623,11 +6687,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & template");
-          await passAngleGate(ctx);
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
-          await passGoalGate(ctx);
+          // The list renders on open (Part 3): Regenerate is right there,
+          // and the fresh set parks on its strongest row (n0).
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
           await new Promise((r) => setTimeout(r, 150));
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
           const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
           if (rows.length !== 6) throw new Error(`expected six fresh angles, saw ${rows.length}`);
           if (ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
@@ -6711,10 +6775,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Audience & template");
-          await passAngleGate(ctx);
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
+          // The list renders on open (Part 3): Regenerate is right there,
+          // and the fresh set parks on its strongest row (n0).
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
           await new Promise((r) => setTimeout(r, 150));
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
           const notice = ctx.container.querySelector('[data-testid="angle-regen-notice"]');
           if (!notice) throw new Error("regen with an affected draft shows no notice");
           if (!/Review/.test(notice.textContent) || !/rebuild/i.test(notice.textContent)) {
@@ -6944,14 +7009,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       gates.push({ label, token });
     };
 
-    // The choosing screen from a blank draft (no angle, no goal, no template)
-    // and the still-missing panel: the goal hint below the angle gate names the
-    // next pick but carries no red button of its own — the angle CTA above is
-    // the fix — so only the angle gate records a spacing here.
+    // The choosing screen from a blank draft (no angles yet, no goal, no
+    // template) and the still-missing panel: the goal hint below the angle
+    // gate names the next pick but carries no red button of its own — the
+    // angle CTA above is the fix — so only the angle gate records a
+    // spacing here. The empty set is the gate's surviving form on this
+    // step (Part 3), so the mount stubs an empty set to record it.
     global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & template");
-    record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'));
+    await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'));
+    });
     await openStep(ctx, "Review & submit");
     record("Review & submit", ctx.container.querySelector('[data-testid="goto-first-gap-button"]'));
 
@@ -7034,17 +7103,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const buttonWithText = (container, text) =>
       [...container.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === text);
 
-    // The angle gate and the still-missing panel from a bare mount: one mount,
-    // walked the way a founder walks it, so no remount is involved.
+    // The angle gate and the still-missing panel from one mount, walked
+    // the way a founder walks it, so no remount is involved. The gate is
+    // recorded in its surviving form on this step — the empty set's CTA
+    // (Part 3) — so the mount stubs an empty set.
     global.__SMOKE_PARAMS = "";
-    await mount(CreateVideo, {})(ctx);
-    await openStep(ctx, "Audience & template");
-    before(
-      ctx.container,
-      ctx.container.querySelector('[data-testid="generate-angles-button"]'),
-      ctx.container.querySelector('[data-testid="angles-cta-copy"]'),
-      "the angle gate"
-    );
+    await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      before(
+        ctx.container,
+        ctx.container.querySelector('[data-testid="generate-angles-button"]'),
+        ctx.container.querySelector('[data-testid="angles-cta-copy"]'),
+        "the angle gate"
+      );
+    });
     await openStep(ctx, "Review & submit");
     before(
       ctx.container,
@@ -17160,10 +17233,11 @@ async function openStep(ctx, label) {
 /**
  * Pass the angle gate the way a founder does.
  *
- * Landing on Audience & template shows one Generate CTA, never the list. Clicking
- * it generates fresh (over a cached set via regenerate, from empty via
- * generate) or reveals free the set made moments ago in-session. Tests that
- * assert on rows call this first; tests that assert on the gate itself do not.
+ * Since Part 3 the list renders on open, so the only Generate CTA left on
+ * this step is the empty set's — where the click IS the generation (from
+ * empty via generate). Tests that assert on rows call this first; with a
+ * populated set it is a no-op, and tests that assert on the surviving
+ * gate forms (empty set, Review) drive them directly.
  */
 async function passAngleGate(ctx) {
   const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
@@ -17174,16 +17248,15 @@ async function passAngleGate(ctx) {
 /**
  * Pass the goal gate the way a founder does.
  *
- * Landing on an angle shows one Generate CTA, never the six. Clicking it
- * generates fresh live goals (or reveals the in-session set) and reveals the
- * list. Tests that assert on goal cards call this after picking an angle;
- * tests that assert on the gate itself do not. No-op when the gate is
- * already bypassed (a picked goal, e.g. via ?objective=).
+ * There is no gate left to pass on this step (Part 3): picking an angle
+ * renders the six persisted goals directly. The generate-goals-button
+ * testid now belongs to the header's billed live generation, so clicking
+ * it here would spend a model call in every test that only wants the
+ * cards. Kept as a no-op so the many call sites read unchanged; tests
+ * that assert on live goals click the header button explicitly.
  */
 async function passGoalGate(ctx) {
-  const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-  const cta = step && step.querySelector('[data-testid="generate-goals-button"]');
-  if (cta) await clickEl(ctx, cta);
+  void ctx;
 }
 
 /**
@@ -17202,8 +17275,8 @@ async function passGoalGate(ctx) {
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & template");
-  // The six wait behind the Generate CTA: pass it the way a founder does
-  // (fresh generation on first click) before picking.
+  // The six render on open; passAngleGate only still acts over an empty
+  // set, where its click is the generation itself.
   await passAngleGate(ctx);
   const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]
     .find((button) => button.textContent.includes(ANGLE.label));

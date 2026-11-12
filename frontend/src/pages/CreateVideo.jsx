@@ -1,4 +1,4 @@
-import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker } from "../components/studio/SelectionPanels";
+import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker, PresenterPhotoControl, MissingRequirements, TEMPLATE_PHOTO_ID } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import ScriptLineRewrites from "../components/studio/ScriptLineRewrites";
@@ -25,7 +25,6 @@ import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
-import AssetLibrary from "./AssetLibrary";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordThumb, recordBehavior, classifyScriptEdit } from "../lib/feedback";
@@ -106,39 +105,6 @@ const STEPS = [
   { key: "angle", label: "Audience & template", icon: Target },
   { key: "review", label: "Review & submit", icon: CheckCircle2 },
 ];
-
-/**
- * What the selected template is still waiting on.
- *
- * Face-only product: the character reference is the single permitted asset
- * and every template requires exactly it. Without a photograph of the
- * person the model would invent one, and the founder would pay for a video
- * of somebody who looks nothing like them. The server refuses that case
- * before rendering, so this is the early warning rather than the guarantee.
- */
-function MissingRequirements({ identity, onGoToTemplatePhoto }) {
-  if (!identity || identity.length === 0) return null;
-
-  return (
-    <div className="inset-panel space-y-4">
-      {/* The button leads and the explanation follows it: the button says where
-          the upload is, and the upload is on the template step now. It used
-          to point at a step called "Assets" whose only content was this same
-          upload. */}
-      {onGoToTemplatePhoto && (
-        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
-          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
-        </Button>
-      )}
-      <p className="text-base font-semibold">
-        This template needs a character reference before it can generate
-      </p>
-      <p className="text-sm text-muted-foreground" data-subtitle="">
-        Your photograph is what the generated video is built from.
-      </p>
-    </div>
-  );
-}
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -388,23 +354,27 @@ export default function CreateVideo() {
     hookLine: project?.hook_line || "",
     middle: project?.script || project?.spoken_middle || "",
   });
-  // Every app lands gated: switching apps re-arms the CTA so a revealed set
-  // for one app never leaks into another app's first view.
+  // The reveal state survives for the Review recovery copies only: the
+  // angle step itself renders its lists on open now (Part 3), but Review's
+  // pickers stay gated, so what counts as "viewed" there is still tracked —
+  // and switching apps re-arms it, so a set viewed for one app never counts
+  // as viewed for another app's recovery panel.
   const angle = angles.find((a) => a.id === angleId) || null;
-  // The list reads revealed when the gate was clicked, or when the pick names
-  // a real row — selecting an angle is itself the viewing the gate asks for.
-  // A pick alone is deliberately not enough: a stale ?angle= param or a draft
-  // pointing at a deleted angle must not open a list of strangers on first
-  // view, which is the exact screenshot this rule fixes.
+  // "Viewed" for the gated Review copies: the gate was clicked, or the pick
+  // names a real row — selecting an angle is itself the viewing the gate
+  // asks for. A stale ?angle= param or a draft pointing at a deleted angle
+  // does NOT count: it must not open a list of strangers in the recovery
+  // panel on first view, which is the exact screenshot this rule fixes.
   const showAngles = anglesRevealed || Boolean(angle);
   const showGoals = goalsRevealed || Boolean(objective);
   // The reveal lasts for the visit, not the mount. Entering the angle step
-  // without a resolved pick re-arms both CTAs, so a list revealed earlier
-  // never greets a founder who navigated away and back unpicked. A resolved
-  // angle still bypasses the angle gate — a reopened draft shows its own
-  // angle, never an empty gate — while a dangling pick re-gates like any
-  // other visit with nothing to show. The goal gate follows the same rule:
-  // a resolved objective bypasses it, otherwise the step re-arms it.
+  // without a resolved pick re-arms both gates, so a list viewed earlier
+  // never counts as viewed for a founder who navigated away and back
+  // unpicked when Review later asks. A resolved angle still bypasses the
+  // angle gate — a reopened draft shows its own angle, never an empty
+  // gate — while a dangling pick re-gates like any other visit with
+  // nothing to show. The goal gate follows the same rule: a resolved
+  // objective bypasses it, otherwise the step re-arms it.
   useEffect(() => {
     if (STEPS[step]?.key === "angle" && !angle) setAnglesRevealed(false);
     if (STEPS[step]?.key === "angle" && !objective) setGoalsRevealed(false);
@@ -425,9 +395,9 @@ export default function CreateVideo() {
   const objectiveFitReasons = angle
     ? facets?.angle_goal_fit_reasons?.[angle.kind] || {}
     : {};
-  // Live goals replace the facet lookup only after the founder's click.
-  // A new angle starts gated again — the facet list is never the initial
-  // view any more.
+  // Live goals replace the persisted facet order only after the founder's
+  // Generate click: the angle step opens on the facet list itself, and the
+  // click swaps in the live six with their fit scores.
 
   // The deep-link inputs as plain strings, so the load below depends on what
   // it reads rather than on the params object: the ?step= mirror rewriting
@@ -615,7 +585,7 @@ export default function CreateVideo() {
     if (!handPickedTemplateRef.current) return;
     handPickedTemplateRef.current = false;
     if (step !== 1) return;
-    requestAnimationFrame(() => scrollToSubstep("template-photo"));
+    requestAnimationFrame(() => scrollToSubstep(TEMPLATE_PHOTO_ID));
   }, [templateId, step]);
 
 
@@ -1016,7 +986,7 @@ export default function CreateVideo() {
     // After the step renders, not before: the element does not exist yet.
     requestAnimationFrame(() => {
       document
-        .getElementById("template-photo")
+        .getElementById(TEMPLATE_PHOTO_ID)
         ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     });
   };
@@ -1610,7 +1580,7 @@ export default function CreateVideo() {
         { key: "angle", label: "Angle", done: Boolean(angleId), target: "substep-angle" },
         { key: "goal", label: "Goal", done: Boolean(objective), target: "substep-goal" },
         { key: "template", label: "Template", done: Boolean(template?.id), target: "substep-template" },
-        { key: "photo", label: "Photo", done: Boolean(template?.id) && missingIdentity.length === 0, target: "template-photo" },
+        { key: "photo", label: "Photo", done: Boolean(template?.id) && missingIdentity.length === 0, target: TEMPLATE_PHOTO_ID },
       ];
       const substepsDone = substeps.filter((s) => s.done).length;
 
@@ -1670,7 +1640,6 @@ export default function CreateVideo() {
               angles={angles}
               angleId={angleId}
               onSelect={handleAnglePick}
-              showAngles={showAngles}
               generating={generatingAngles}
               error={angleError}
               onGenerate={handleGenerateAngles}
@@ -1719,7 +1688,6 @@ export default function CreateVideo() {
               objectiveEvidence={objectiveEvidence}
               pairEvidence={pairEvidence}
               suggestions={angle?.goal_suggestions}
-              showGoals={showGoals}
               liveGoals={liveGoals}
               onGenerate={handleGenerateGoals}
               generating={liveGoalsLoading}
@@ -1922,7 +1890,7 @@ export default function CreateVideo() {
                     immediately underneath is where the photo actually lives, so
                     the card's job is to say whether anything is still owed and
                     point at it. */}
-                {showAngles && template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
+                {template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1955,42 +1923,23 @@ export default function CreateVideo() {
                 for a template that was never selected. The empty-text state
                 ("Pick a template above first") was removed — with no template
                 there is nothing to attach a photo to, so the section is hidden
-                entirely rather than showing a blank label. */}
-            {showAngles && templateId && (
-            <div id="template-photo" data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
-              <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Upload one clear photo of the person you want on camera.
-              </p>
-              {!project ? (
-                <>
-                  {!busy && (
-                    <p className="text-base text-muted-foreground">
-                      Preparing the video draft for your photo…
-                    </p>
-                  )}
-                  <Button variant="secondary" size="sm" disabled={busy} busy={busy} onClick={() => ensureProject()} data-testid="prepare-draft-button">
-                    <ImageIcon className="h-3.5 w-3.5" />
-                    {busy ? "Preparing draft" : "Try preparing the draft again"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <AssetLibrary
-                    embedded
-                    profileId={profileId}
-                    projectId={project.id}
-                    projectAssets={project.assets}
-                    onProjectChanged={(fresh) => dispatchDraft({ type: "project-received", project: fresh || project })}
-                    onChanged={() => {
-                      // Re-read the project's attached assets so the picker updates.
-                      // Silent on failure: the pre-change project is still valid.
-                      api.getStudioProject(project.id).then(receiveProject).catch(() => {});
-                    }}
-                  />
-                </>
-              )}
-            </div>
+                entirely rather than showing a blank label. The control itself
+                is PresenterPhotoControl in SelectionPanels (Part 3): the page
+                keeps the template-picked condition and the project writes,
+                the panel owns the markup and the anchor id. */}
+            {templateId && (
+              <PresenterPhotoControl
+                project={project}
+                profileId={profileId}
+                busy={busy}
+                onEnsureProject={ensureProject}
+                onProjectChanged={(fresh) => dispatchDraft({ type: "project-received", project: fresh || project })}
+                onRefreshProject={() => {
+                  // Re-read the project's attached assets so the picker updates.
+                  // Silent on failure: the pre-change project is still valid.
+                  api.getStudioProject(project.id).then(receiveProject).catch(() => {});
+                }}
+              />
             )}
           </div>
         </div>
@@ -2069,6 +2018,7 @@ export default function CreateVideo() {
                   fitReasons={objectiveFitReasons}
                   suggestions={angle?.goal_suggestions}
                   showGoals={showGoals}
+                  landingGate
                   liveGoals={liveGoals}
                   onGenerate={handleGenerateGoals}
                   generating={liveGoalsLoading}
@@ -2158,6 +2108,7 @@ export default function CreateVideo() {
                 fitReasons={objectiveFitReasons}
                 suggestions={angle?.goal_suggestions}
                 showGoals={showGoals}
+                landingGate
                 liveGoals={liveGoals}
                 onGenerate={handleGenerateGoals}
                 generating={liveGoalsLoading}
@@ -2634,6 +2585,7 @@ export default function CreateVideo() {
                 angleId={angleId}
                 onSelect={handleAnglePick}
                 showAngles={showAngles}
+                landingGate
                 generating={generatingAngles}
                 error={angleError}
                 onGenerate={() => setStep(1)}
