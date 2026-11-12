@@ -246,6 +246,10 @@ const SEGMENT = {
   approved: 0,
   video_url: "/media/gen-1.mp4",
     r2_url: null,
+  // The serializer mints a signed playback path for every completed row
+  // whose bytes the app can serve; a completed fixture without one models
+  // a payload the server never sends.
+  playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
   retryable: true,
   performance: null,
 };
@@ -10992,6 +10996,68 @@ async function runDemoCtaChecks() {
       if (!src.includes("/api/media/videos/") || src.includes("r2.dev")) {
         throw new Error(`the preview still points at raw storage: ${src}`);
       }
+    }
+  );
+
+  await check(
+    "finished preview never hands the provider link to the player or the download",
+    async (ctx) => {
+      // A completed HeyGen row whose durable copy is not playable yet carries
+      // only the provider's temporary link in video_url. The browser can never
+      // fetch that link (it needs a bearer token, then it expires), so the
+      // panel must not hand it to the <video> or the download anchor — a
+      // player pointed at it never loads, which reads as a broken app.
+      const providerOnly = {
+        ...COMPLETED,
+        r2_url: null,
+        playback_url: null,
+        video_url: "https://provider.example/clip.mp4?token=secret",
+      };
+      await mountStudio(ctx, [providerOnly]);
+      const video = ctx.container.querySelector("video");
+      if (video && (video.getAttribute("src") || "").includes("provider.example")) {
+        throw new Error("the finished player points at the provider link");
+      }
+      const download = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Download MP4")
+      );
+      if (download && (download.getAttribute("href") || "").includes("provider.example")) {
+        throw new Error("the finished download points at the provider link");
+      }
+    }
+  );
+
+  await check(
+    "finished preview can be retried in place after a load error",
+    async (ctx) => {
+      // One transient error (an expired signed URL is enough) used to swap
+      // the player for a dead-end note for the whole panel session, even
+      // though the finished clip was fine. The broken state must offer a
+      // retry that refetches fresh signed URLs and brings the player back.
+      // The API stub wraps the whole interaction, not just the mount: the
+      // retry refetches through the same stubbed getGenerations.
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [COMPLETED] }),
+        },
+        async () => {
+          await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+          const video = ctx.container.querySelector("video");
+          if (!video) throw new Error("the finished preview did not render");
+          await act(async () => {
+            video.dispatchEvent(new dom.window.Event("error"));
+          });
+          expectText(ctx, "Preview unavailable", "the broken preview note did not render");
+          const retry = buttonByText(ctx, /Try the preview again/);
+          if (!retry) throw new Error("the broken preview offers no retry");
+          await clickEl(ctx, retry);
+          const restored = ctx.container.querySelector("video");
+          if (!restored) throw new Error("the retry did not restore the player");
+          if (!(restored.getAttribute("src") || "").includes("/api/media/videos/")) {
+            throw new Error("the restored player lost its playable source");
+          }
+        }
+      );
     }
   );
 

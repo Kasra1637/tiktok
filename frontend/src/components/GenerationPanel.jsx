@@ -5,7 +5,7 @@ import { Badge } from "./ui/badge";
 import { Textarea } from "./ui/textarea";
 import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
-import { api, getErrorMessage, mediaUrl, downloadMediaUrl } from "../lib/api";
+import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../lib/api";
 import { recordSignal, verdictFor } from "../lib/feedback";
 import { ComponentThumbs } from "./ComponentThumbs";
 import { PostKitSection } from "./PostKitSection";
@@ -156,6 +156,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // Set when the finished clip cannot be played inline, so the panel replaces a
   // dead-looking player with the truth instead of leaving a dead control.
   const [previewBroken, setPreviewBroken] = useState(false);
+  const [retryingPreview, setRetryingPreview] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
@@ -465,9 +466,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
 
 
   // A new render starts unvoted: the override belongs to the previous clip.
+  // Its preview also starts unbroken: a load error on the previous clip must
+  // not hide this one's player before it has even been tried.
   const trackedGenerationId = generation?.id || "";
   useEffect(() => {
     setVideoOverride(null);
+    setPreviewBroken(false);
   }, [trackedGenerationId]);
 
   // The Location draft follows the saved plan's value whenever the project
@@ -638,10 +642,36 @@ const handleGenerate = async () => {
     }
   };
 
+  // A preview error is often just an expired signed URL — the signature is
+  // minted when the row is read and the panel stops polling once the render
+  // completes, so a clip that finished a while ago can hold a dead link
+  // while the clip itself is fine. Retry means refetching the row (fresh
+  // signatures) and mounting the player again, not declaring it gone.
+  const handleRetryPreview = async () => {
+    if (!projectId) return;
+    setRetryingPreview(true);
+    try {
+      const data = await api.getGenerations({ studio_project_id: projectId, limit: 1 });
+      const newest = data.generations?.[0] || null;
+      if (newest) setGeneration(newest);
+    } catch {
+      /* best-effort: clearing the flag below still remounts the player */
+    } finally {
+      setPreviewBroken(false);
+      setRetryingPreview(false);
+    }
+  };
+
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const cameraIncompatible = project?.camera_setup === "fixed" && capability?.identity_via_first_frame;
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
-  const downloadUrl = generation ? mediaUrl(generation.r2_url || generation.video_url) : null;
+  // The playable URL follows the same rule History uses (durableMediaUrl):
+  // the signed playback route first, then the durable copy. Never the
+  // provider's temporary link in video_url — the browser cannot fetch it
+  // (it needs a bearer token, then it expires), so a player or download
+  // pointed at it never loads, and a completed render looked broken in
+  // this panel while the same clip played fine in History.
+  const downloadUrl = generation ? durableMediaUrl(generation) : null;
   // The save must originate same-origin: the playback href above is a raw
   // cross-origin R2 locator whenever the durable copy sits in R2, and browsers
   // ignore `download` there — the button opened an R2 error page instead of
@@ -651,7 +681,9 @@ const handleGenerate = async () => {
   const saveUrl = generation ? downloadMediaUrl(generation) || downloadUrl : null;
   // Preview through the fresh signed same-origin route for the same reason:
   // a raw R2 href fails on play (masked until then by preload="none").
-  const previewUrl = generation?.playback_url ? mediaUrl(generation.playback_url) : downloadUrl;
+  // durableMediaUrl already prefers that route, so the preview and the
+  // download read the same source and cannot disagree about playability.
+  const previewUrl = downloadUrl;
   const posterUrl = generation?.poster_url ? mediaUrl(generation.poster_url) : null;
   // The length this project will render at, and whether the selected model can
   // do it in one pass. Shown before the click because the endpoint refuses
@@ -992,11 +1024,23 @@ const handleGenerate = async () => {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                 <div className="w-full max-w-[280px] shrink-0 space-y-2">
                   {previewBroken ? (
-                    <p className="w-full rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3 text-sm text-muted-foreground">
-                      Preview unavailable — download it to view.
-                    </p>
+                    <div className="w-full space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
+                      <p className="text-sm text-muted-foreground">
+                        Preview unavailable — download it to view.
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleRetryPreview}
+                        disabled={retryingPreview}
+                        busy={retryingPreview}
+                      >
+                        Try the preview again
+                      </Button>
+                    </div>
                   ) : (
                     <video
+                      key={`${generation.id}-${previewUrl}`}
                       src={previewUrl}
                       controls
                       playsInline
