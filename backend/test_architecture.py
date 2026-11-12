@@ -84,6 +84,30 @@ def test_media_router_is_owned_by_routers_media():
     assert server._POSTER_FILENAME_RE is media._POSTER_FILENAME_RE
 
 
+def test_media_routes_are_mounted_under_the_api_prefix():
+    """Every signed media route answers under /api, where the minted URLs point.
+
+    The routers.media extraction mounted the router on the app with no
+    prefix, so /api/media/* fell through to the StaticFiles mount: posters
+    404'd unless an eager hook had already written the file (History
+    previews rendered black), videos were served as plain static files
+    with no byte ranges and no signature check, and the lazy poster and
+    cloud-restore paths never ran. The route functions were all correct —
+    the direct-call media tests cannot see a mounting bug. This pin reads
+    the mounted route table instead.
+    """
+    import routers.media as media
+    import server
+
+    mounted = {getattr(route, "path", "") for route in server.app.routes}
+    for route in media.router.routes:
+        path = getattr(route, "path", "")
+        if not path:
+            continue
+        assert f"/api{path}" in mounted, path
+        assert path not in mounted, path
+
+
 def test_media_router_never_imports_the_composition_root():
     tree = ast.parse((BACKEND / "routers/media.py").read_text(encoding="utf-8"))
     imports = set()

@@ -3277,7 +3277,14 @@ api_router.routes[:] = [
 app.include_router(api_router)
 
 # Signed media routes live in routers.media (single owner) but must register
-# here, before the StaticFiles mount at the bottom, so they shadow it.
+# here, before the StaticFiles mount at the bottom, so they shadow it — and
+# under the /api prefix, because every URL the backend mints for them
+# (playback, poster, asset, frame, template) is /api/media/*. Mounted
+# without the prefix they sat at /media/* and never matched: /api/media/*
+# fell through to StaticFiles, so posters 404'd unless an eager hook had
+# written the file (History previews rendered black), videos were served
+# as unsigned static files with no byte ranges, and the lazy poster and
+# cloud-restore paths never ran. test_architecture.py pins the mount.
 from routers.media import (
     router as media_router,
     configure_media,
@@ -3291,7 +3298,7 @@ configure_media(
     _recover_missing_frame, _ensure_asset_file, _http_video_source,
     ffmpeg_slot=_FFMPEG_SLOT, generated_id_re=GENERATED_ID_RE,
 )
-app.include_router(media_router)
+app.include_router(media_router, prefix="/api")
 
 app.mount("/api/media", StaticFiles(directory=str(pipeline.STORAGE_DIR)), name="media")
 
