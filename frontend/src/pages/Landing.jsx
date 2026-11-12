@@ -535,7 +535,7 @@ export default function Landing() {
                 className="how-step surface-interactive animate-fade-up"
                 style={{ animationDelay: `${Number(s.step) * 60}ms` }}
               >
-                <div className="how-art" style={{ animationDelay: `${(Number(s.step) - 1) * 0.4}s` }}>
+                <div className="how-art">
                   {STEP_ART[s.step]}
                 </div>
                 <div className="how-head">

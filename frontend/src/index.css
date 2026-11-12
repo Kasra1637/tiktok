@@ -1096,6 +1096,8 @@ h1,
 .how-step {
     flex: 0 0 228px;
     scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--hairline);
     border-radius: 1rem;
     background-color: hsl(228 14% 12% / 0.72);
@@ -1129,9 +1131,10 @@ h1,
 }
 .how-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-start;
     gap: 8px;
+    min-height: 3rem;
 }
 .how-badge {
     position: relative;
@@ -1156,9 +1159,13 @@ h1,
     background: linear-gradient(to bottom, rgba(255, 255, 255, 0.25), transparent);
     pointer-events: none;
 }
+.how-step > p {
+    margin-bottom: 12px;
+}
 .how-outcome {
     display: inline-block;
-    margin-top: 12px;
+    align-self: flex-start;
+    margin-top: auto;
     border: 1px solid var(--indigo-25);
     border-radius: 999px;
     background: var(--indigo-8);
@@ -1173,10 +1180,7 @@ h1,
    strip below. Slides share one stacked cell and crossfade slowly; the nav
    row pins the dots and the pause control to the frame's bottom. */
 .hero-screen {
-    background:
-        radial-gradient(420px circle at 18% 0%, var(--indigo-8), transparent 55%),
-        radial-gradient(420px circle at 85% 100%, var(--indigo-8), transparent 55%),
-        hsl(228 14% 10%);
+    background: hsl(228 14% 10%);
 }
 .hero-flow {
     position: absolute;
