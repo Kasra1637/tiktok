@@ -16,15 +16,17 @@ module actually connects with. No import of `server` here; `_server` is
 assigned, never imported, keeping the dependency one-way.
 """
 
+import json
 import logging
-import os
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import aiosqlite
 
+from auth import hosted_environment
 from models import now_iso, row_to_dict
 
 # Log under the composition root's logger so caplog filters on logger="server"
@@ -105,13 +107,18 @@ def _log_database_backend() -> None:
             f"Database backend: local SQLite at {_cfg('DB_PATH')}. User data (profiles, "
             "projects, generations) will NOT survive a redeploy or restart."
         )
-    if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"):
-        # Render sets these itself, so their presence means this process is on
-        # Render's ephemeral filesystem rather than a dev laptop. Local SQLite
-        # here is a data-loss configuration, not a dev default.
+    if hosted_environment():
+        # The hosted signal is auth.hosted_environment — Render markers or
+        # ENVIRONMENT/APP_ENV=production — the same one the auth boot guard
+        # uses to tell a dev laptop from hosted infra. Local SQLite here is
+        # a data-loss configuration, not a dev default, and a production
+        # process without Turso is reported as unavailable in health too
+        # (ADR 0120), so the startup line names it that way.
         logger.critical(
-            message + " Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (see render.yaml) "
-            "or every deploy wipes the database."
+            message + " This is a production environment with no durable "
+            "database configured, so the database is effectively unavailable: "
+            "every deploy wipes it. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN "
+            "(see render.yaml)."
         )
     elif actual == "local-ephemeral-fallback":
         logger.error(message)
@@ -236,6 +243,13 @@ class _CursorWrapper:
     @property
     def description(self):
         return self._cursor.description
+
+    @property
+    def rowcount(self):
+        # The job queue's claim is a conditional UPDATE whose rowcount is
+        # the proof the claim landed; sqlite3 cursors report it, and the
+        # wrapper must not hide it.
+        return getattr(self._cursor, "rowcount", -1)
 
     async def fetchone(self):
         return self._cursor.fetchone()
@@ -370,3 +384,154 @@ async def init_db():
             normalize_template_thumbnail=srv._normalize_template_thumbnail,
             generated_id_re=srv.GENERATED_ID_RE,
         )
+
+
+# ---------------------------------------------------------------------------
+# Durable job queue (ADR 0120)
+# ---------------------------------------------------------------------------
+#
+# Work that must survive a container restart is recorded here BEFORE it is
+# attempted, and claimed under a lease by whichever process runs it. The
+# first tenant is the persistence of a completed render (server enqueues a
+# `persist_generation_clip` job the moment a provider job finishes), but the
+# primitives are deliberately generic: a kind, a JSON payload, and a lease.
+#
+# Semantics:
+# - Enqueue is idempotent per dedupe_key while a job under that key is
+#   active (pending or claimed): a second enqueue returns the existing job.
+# - A claim is a conditional UPDATE; its rowcount is the proof of
+#   exclusivity. Attempts are counted at claim time.
+# - A claimed job whose lease expires becomes claimable again — that is
+#   the restart case: the holder died, a later process picks the work up.
+# - Failing a job requeues it until attempts reach max_attempts, then parks
+#   it as `failed` with the last error kept. Nothing retries forever, and
+#   nothing is silently dropped.
+
+JOB_LEASE_SECONDS = 300
+
+
+async def _enqueue_job(kind: str, payload: Optional[dict] = None, *,
+                       dedupe_key: Optional[str] = None,
+                       max_attempts: int = 3) -> str:
+    """Record a job and return its id (the active duplicate's, if deduped)."""
+    if dedupe_key:
+        existing = await _fetch_one(
+            "SELECT id FROM jobs WHERE dedupe_key = ? "
+            "AND status IN ('pending', 'claimed') ORDER BY created_at ASC LIMIT 1",
+            (dedupe_key,),
+        )
+        if existing:
+            return existing["id"]
+    job_id = str(uuid.uuid4())
+    now = now_iso()
+    await _execute(
+        "INSERT INTO jobs (id, kind, payload, dedupe_key, status, attempts, "
+        "max_attempts, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?)",
+        (job_id, kind, json.dumps(payload or {}), dedupe_key,
+         max(1, int(max_attempts)), now, now),
+    )
+    return job_id
+
+
+async def _fetch_job(job_id: str) -> Optional[dict]:
+    return await _fetch_one("SELECT * FROM jobs WHERE id = ?", (job_id,))
+
+
+def _lease_until(lease_seconds: int) -> str:
+    return (datetime.now(timezone.utc)
+            + timedelta(seconds=max(0, int(lease_seconds)))).isoformat()
+
+
+async def _try_claim_job(job_id: str, worker: str, lease_seconds: int) -> Optional[dict]:
+    """Claim one job by id; the claimed row, or None when the claim lost."""
+    now = now_iso()
+    async with get_db() as conn:
+        cursor = await conn.execute(
+            "UPDATE jobs SET status = 'claimed', worker = ?, "
+            "lease_expires_at = ?, attempts = attempts + 1, updated_at = ? "
+            "WHERE id = ? AND (status = 'pending' "
+            "OR (status = 'claimed' AND lease_expires_at <= ?))",
+            (worker, _lease_until(lease_seconds), now, job_id, now),
+        )
+        await conn.commit()
+        if getattr(cursor, "rowcount", 0) != 1:
+            return None
+        cursor = await conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+        cols = [d[0] for d in cursor.description]
+        row = await cursor.fetchone()
+        return row_to_dict(row, cols) if row is not None else None
+
+
+async def _claim_job(worker: str, *, kind: Optional[str] = None,
+                     lease_seconds: int = JOB_LEASE_SECONDS) -> Optional[dict]:
+    """Claim the oldest claimable job (optionally of one kind), or None."""
+    clauses = ["(status = 'pending' OR (status = 'claimed' AND lease_expires_at <= ?))"]
+    params: list = [now_iso()]
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    rows = await _fetch_all(
+        f"SELECT id FROM jobs WHERE {' AND '.join(clauses)} "
+        "ORDER BY created_at ASC, rowid ASC LIMIT 5",
+        tuple(params),
+    )
+    for row in rows:
+        job = await _try_claim_job(row["id"], worker, lease_seconds)
+        if job is not None:
+            return job
+    return None
+
+
+async def _claim_job_by_id(job_id: str, worker: str, *,
+                           lease_seconds: int = JOB_LEASE_SECONDS) -> Optional[dict]:
+    """Claim a specific job; None when it is held under a live lease."""
+    return await _try_claim_job(job_id, worker, lease_seconds)
+
+
+async def _heartbeat_job(job_id: str, worker: str, *,
+                         lease_seconds: int = JOB_LEASE_SECONDS) -> bool:
+    """Extend the lease of a job the caller still holds. False otherwise."""
+    async with get_db() as conn:
+        cursor = await conn.execute(
+            "UPDATE jobs SET lease_expires_at = ?, updated_at = ? "
+            "WHERE id = ? AND status = 'claimed' AND worker = ?",
+            (_lease_until(lease_seconds), now_iso(), job_id, worker),
+        )
+        await conn.commit()
+        return getattr(cursor, "rowcount", 0) == 1
+
+
+async def _complete_job(job_id: str, worker: str, result: Optional[dict] = None) -> bool:
+    """Mark a held job completed, with an optional JSON result."""
+    async with get_db() as conn:
+        cursor = await conn.execute(
+            "UPDATE jobs SET status = 'completed', result = ?, "
+            "lease_expires_at = NULL, updated_at = ? "
+            "WHERE id = ? AND status = 'claimed' AND worker = ?",
+            (json.dumps(result) if result is not None else None,
+             now_iso(), job_id, worker),
+        )
+        await conn.commit()
+        return getattr(cursor, "rowcount", 0) == 1
+
+
+async def _fail_job(job_id: str, worker: str, error: str = "") -> Optional[str]:
+    """
+    Release a held job after a failure; returns its new status.
+
+    Requeued as `pending` while attempts remain, parked as `failed` once
+    attempts reach max_attempts. None when the caller does not hold the job.
+    """
+    job = await _fetch_job(job_id)
+    if not job or job.get("status") != "claimed" or job.get("worker") != worker:
+        return None
+    new_status = (
+        "failed" if int(job.get("attempts") or 0) >= int(job.get("max_attempts") or 3)
+        else "pending"
+    )
+    await _execute(
+        "UPDATE jobs SET status = ?, worker = NULL, lease_expires_at = NULL, "
+        "last_error = ?, updated_at = ? WHERE id = ?",
+        (new_status, (error or "")[:2000], now_iso(), job_id),
+    )
+    return new_status

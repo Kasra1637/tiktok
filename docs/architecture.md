@@ -145,9 +145,17 @@ errors the production compiler may not report.
 
 ## Persistence and deployment constraints
 
-- DB bootstrap/migrations still live in `server.init_db`, not an independent
-  migration system. Back up before applying a new schema; an image rollback
-  is not a database rollback.
+- Schema is versioned in `schema.apply_schema` (ADR 0120): the historical
+  bootstrap is the recorded baseline in `schema_migrations`, and later
+  changes append numbered steps the runner applies once. Back up before
+  applying a new schema (operations runbook); an image rollback is not a
+  database rollback.
+- Post-render persistence runs through the `jobs` table with claim/lease/
+  attempt semantics in `db.py`: poll enqueues and drains inline, and the
+  startup sweep drains whatever a dead process left behind. Health reports
+  a production process with no Turso configured as `unavailable` rather
+  than a quiet local label, and unconfigured R2 as media that will not
+  persist.
 - Turso uses an embedded replica with boot synchronization. Local in-flight
   sets guard one process only. Do not raise instance/worker counts without
   redesigning coordination and read freshness.

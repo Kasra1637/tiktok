@@ -44,7 +44,7 @@ DB or the operator's credentials.
 | Tours and target names | `node frontend/scripts/audit_tour_targets.cjs` plus the affected onboarding checks |
 | React test behavior | `CI=true yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/historyPolling.test.js` (replace the test path with the affected existing test) |
 | Production compilation / effect warnings | `CI=true yarn --cwd frontend build` |
-| Database backend / health | `python -m pytest backend/test_database_backend.py backend/test_health_endpoint.py -q` |
+| Database backend / health | `python -m pytest backend/test_database_backend.py backend/test_health_endpoint.py backend/test_schema_migrations.py backend/test_job_queue.py backend/test_db_backup.py backend/test_durability_fail_loud.py backend/test_persist_job_wiring.py -q` |
 | Backend-wide integration change | `python -m pytest backend/ -q` (requires ffmpeg/ffprobe) |
 | Docs only | Verify commands against scripts/configuration and resolve changed relative links; do not describe an unrun command as tested |
 

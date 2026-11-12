@@ -56,21 +56,34 @@ if not CLERK_JWKS_URL:
     )
 
 
-def _hosted_without_auth() -> bool:
-    """True when this process looks hosted but has no Clerk key.
+def hosted_environment() -> bool:
+    """True when this process looks hosted (production), not a dev laptop.
 
-    Reads the environment fresh (not the import-time CLERK_JWKS_URL) so the
-    boot guard answers for the process as launched, and so tests can drive
-    it with monkeypatched env. Render sets RENDER/RENDER_SERVICE_NAME
-    itself — the same signal the database backend uses to tell a dev
-    laptop from hosted infra. ENVIRONMENT/APP_ENV covers other hosts.
+    The one production signal for the whole backend: Render sets
+    RENDER/RENDER_SERVICE_NAME itself; ENVIRONMENT/APP_ENV covers other
+    hosts. Reads the environment fresh so tests can drive it with
+    monkeypatched env. The auth boot guard below, the database backend
+    disclosure (db._log_database_backend) and the health report all read
+    this rather than keeping their own variant — a durability warning that
+    fires on one host and not another is how the unconfigured-production
+    case stayed quiet (ADR 0120).
     """
-    if os.environ.get("CLERK_JWKS_URL", "").strip():
-        return False
     if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"):
         return True
     return os.environ.get(
         "ENVIRONMENT", os.environ.get("APP_ENV", "")).strip().lower() in ("production", "prod")
+
+
+def _hosted_without_auth() -> bool:
+    """True when this process looks hosted but has no Clerk key.
+
+    Reads the Clerk key fresh (not the import-time CLERK_JWKS_URL) so the
+    boot guard answers for the process as launched, and so tests can drive
+    it with monkeypatched env.
+    """
+    if os.environ.get("CLERK_JWKS_URL", "").strip():
+        return False
+    return hosted_environment()
 
 
 def ensure_auth_configured() -> None:

@@ -18,19 +18,22 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 
 import observability
-from auth import get_current_user_id
+import storage_service
+from auth import get_current_user_id, hosted_environment
 
 router = APIRouter()
 
 _fetch_one = None
 _get_active_backend = None
+_get_turso_configured = None
 
 
-def configure_health(fetch_one, get_active_backend):
+def configure_health(fetch_one, get_active_backend, get_turso_configured=None):
     """Inject the composition root's DB read and backend label. Once at include."""
-    global _fetch_one, _get_active_backend
+    global _fetch_one, _get_active_backend, _get_turso_configured
     _fetch_one = fetch_one
     _get_active_backend = get_active_backend
+    _get_turso_configured = get_turso_configured
 
 
 def _require_configured():
@@ -38,7 +41,16 @@ def _require_configured():
         raise RuntimeError("health router used before configure_health ran")
 
 
-def health_database_report(active_backend: Optional[str]) -> dict:
+def _turso_configured() -> bool:
+    # An unconfigured composition (a direct call in a test) keeps the older
+    # judgement: the label is decided by the active backend alone.
+    if _get_turso_configured is None:
+        return True
+    return bool(_get_turso_configured())
+
+
+def health_database_report(active_backend: Optional[str], *, production: bool = False,
+                           turso_configured: bool = True) -> dict:
     """
     The database half of /api/health, as a pure function of the active backend.
 
@@ -50,11 +62,28 @@ def health_database_report(active_backend: Optional[str]) -> dict:
     both local labels mean they do not, and on Render neither does. Reporting
     anything else here is the one genuinely dangerous thing this endpoint could
     say, because it is consulted precisely when someone has already lost data.
+
+    The production case (ADR 0120, extending ADR 0083): a hosted process with
+    no Turso configured is serving from ephemeral local SQLite — a store that
+    is indistinguishable from unavailable the moment the host restarts. It is
+    reported as `unavailable`, with the fix named in `database_detail`, rather
+    than as a plain local label that reads like a choice someone made.
     """
     # An unset backend means the connection has not been opened yet. This
     # endpoint always reads rows before calling this, so in practice it is set;
     # the fallback only keeps a direct call honest.
     backend = active_backend or "local-sqlite"
+    if production and not turso_configured and backend != "turso":
+        return {
+            "database": "unavailable",
+            "durable": False,
+            "database_detail": (
+                "Production environment without TURSO_DATABASE_URL configured: "
+                "this process is serving from ephemeral local SQLite, whose "
+                "writes do not survive a restart. Set TURSO_DATABASE_URL and "
+                "TURSO_AUTH_TOKEN for a durable database."
+            ),
+        }
     return {"database": backend, "durable": backend == "turso"}
 
 
@@ -89,11 +118,29 @@ async def health(user_id: str = Depends(get_current_user_id)):
             counts[table] = int((row or {}).get("n") or 0)
         except Exception as exc:  # a missing table is itself the answer
             counts[table] = f"unavailable: {type(exc).__name__}"
-    return {
+    production = hosted_environment()
+    report = health_database_report(
+        _get_active_backend(),
+        production=production,
+        turso_configured=_turso_configured(),
+    )
+    media_durable = storage_service.is_configured()
+    out = {
         "status": "ok",
-        **health_database_report(_get_active_backend()),
+        **report,
+        "media_durable": media_durable,
         "your_rows": counts,
     }
+    if production and not media_durable:
+        # The media half of the same warning the startup log shouts (ADR
+        # 0120): in production an unconfigured R2 means every finished
+        # render is one deploy away from gone.
+        out["media_warning"] = (
+            "R2 is not configured: finished renders will not persist across "
+            "deploys. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, "
+            "R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME."
+        )
+    return out
 
 
 @router.get("/metrics")

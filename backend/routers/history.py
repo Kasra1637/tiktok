@@ -94,6 +94,14 @@ def _persist_generation_clip(*a, **k):
     return _cfg("_persist_generation_clip")(*a, **k)
 
 
+def _persist_via_queue(*a, **k):
+    return _cfg("_persist_via_queue")(*a, **k)
+
+
+def _apply_persist_outcome(*a, **k):
+    return _cfg("_apply_persist_outcome")(*a, **k)
+
+
 def _recovery_sources(*a, **k):
     return _cfg("_recovery_sources")(*a, **k)
 
@@ -272,47 +280,42 @@ async def poll_generation(
     now = now_iso()
 
     if status in ("completed", "succeeded", "success") and video_url:
-        stored_url = None
-        storage_error = None
         delivered_seconds = int(row.get("duration") or 0)
-        # Persist locally first so the clip survives even if R2 is unconfigured.
-        # _persist_generation_clip owns the whole sequence -- download, trim,
-        # rescale, upload, local fallback -- because retry_generation_storage
-        # runs the identical pipeline to repair a row that already failed, and
-        # two copies of this is how the studio downloader ended up without the
-        # bearer token the legacy one always sent.
+        # The durable save is owed work, so it goes through the job queue
+        # (ADR 0120): _persist_via_queue records the persist as a job before
+        # attempting it, claims it, runs _persist_generation_clip — the one
+        # pipeline retry_generation_storage also runs (download, trim,
+        # rescale, upload, local fallback, so the two can never drift) —
+        # and applies the outcome. If the container dies anywhere in there,
+        # the job is still in the table for the next process's sweep to
+        # drain, instead of the save being owed by nobody.
         #
-        # It also resolves the precedence for us: a real problem outranks a
-        # trim note, so "the upload fell back to local storage" is never
-        # overwritten by "Cut down to 5s", and a clean run reports neither.
+        # The pipeline resolves error precedence for us: a real problem
+        # outranks a trim note, so "the upload fell back to local storage"
+        # is never overwritten by "Cut down to 5s", and a clean run reports
+        # neither.
         try:
-            stored_url, storage_error, delivered_seconds = await _persist_generation_clip(
-                row, user_id, video_url
+            outcome = await _persist_via_queue(
+                generation_id, user_id, video_url, background_tasks
             )
         except Exception as e:
+            # The job was already failed back to the queue for a later
+            # drain; the row still completes with the error named, exactly
+            # as it did when the persist ran inline here.
             storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
-
-        await _execute(
-            "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
-            "duration = ?, error = NULL, storage_error = ?, completed_at = ?, updated_at = ? "
-            "WHERE id = ?",
-            (video_url, stored_url or "", delivered_seconds,
-             storage_error or None, now, now, generation_id),
-        )
-        if stored_url:
-            await _execute(
-                "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
+            await _apply_persist_outcome(
+                generation_id, user_id, video_url,
+                None, storage_error, delivered_seconds, background_tasks,
             )
-        # Frozen post copy, written once at completion and deferred past the
-        # response like the poster: a kit failure leaves NULL, never invented
-        # copy. A NULL kit renders as no kit.
-        await _schedule_post_kit(background_tasks, generation_id, user_id)
-        if stored_url:
-            # Poster is best-effort and off the critical path: History works
-            # without it, it just costs video bytes per thumbnail. Scheduled
-            # after the response so the save never stacks two ffmpegs.
-            await _schedule_poster(background_tasks, generation_id, user_id)
+        else:
+            if outcome is None:
+                # Another worker holds the persist job — the startup sweep
+                # draining in this same process. It applies the outcome
+                # when it finishes; answer with the row's current state
+                # (still generating) and let the panel keep polling, the
+                # same contract as a throttled status check.
+                return await _with_verdicts(_public_generation_detail(row), user_id)
     elif status in ("failed", "error", "cancelled", "canceled", "expired"):
         # "expired" is terminal but arrived here as infinite "generating":
         # OpenRouter lists it in the status enum, yet it matched none of the

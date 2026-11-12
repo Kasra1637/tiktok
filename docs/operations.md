@@ -26,7 +26,8 @@ credits. Begin with [setup](../README.md#quick-start) and
 | `GET /api/` responds | Basic API reachability only; says nothing about DB/media durability. |
 | `GET /api/health` | Authenticated inventory. Read `database`, `durable`, `your_rows`; table-read failures may be reported inside an HTTP 200 response. |
 | `database: turso` | This process established a cloud-backed connection. Also inspect logs for sync failures: recent unsynced writes can remain only on the local replica. |
-| `database: unavailable` | Configured Turso could not connect or sync. Database requests fail rather than opening local SQLite; restore Turso before accepting work. |
+| `database: unavailable` | Configured Turso could not connect or sync — or a production environment with no Turso configured at all. Database requests fail rather than opening local SQLite; `database_detail` names which case and the fix. Restore/configure Turso before accepting work. |
+| `media_durable: false` / `media_warning` | R2 is not configured in this process. In production the warning is explicit: finished renders live on ephemeral local disk and will not survive the next deploy. Configure R2's four variables. |
 | `database: local-ephemeral-fallback` | Legacy state from an older revision that accepted local writes after Turso failed. Preserve and reconcile that file deliberately. |
 | `database: local-sqlite`, `durable: false` | Local development default, unsafe for durable production state on an ephemeral host. A laptop's local file is not deleted merely by restarting Python. |
 | `GET /api/metrics` | Authenticated process-local counters/uptime. Not a persistent monitoring history or provider billing meter. |
@@ -121,8 +122,11 @@ exact browser origin in `CORS_ORIGINS`; an empty value means `*`, not deny-all.
 
 History bounds polling per row, names stops/errors and offers Check again.
 Reload/check the generation rather than declaring it failed from a browser
-state. A startup sweep can reconcile stranded jobs, but it is not an external,
-durable queue and it cannot guarantee survival of every interruption.
+state. The post-render durable save is recorded in the `jobs` table before
+it runs and drained by the startup sweep (ADR 0120), so a restart between
+provider completion and the save resumes instead of stranding the clip;
+re-checking the provider for a row that never finished remains a boot-time
+sweep, not a continuously running worker.
 
 ### Demo + CTA draft or export failure
 
@@ -164,7 +168,8 @@ variable **names**, not values, when diagnosing configuration loss.
 ### Preflight and current caveats
 
 - Review local affected checks and production config before an authorized
-  publish. Back up schema/data and preserve local-only media/replica writes.
+  publish. Take the pre-deploy database snapshot below, and preserve
+  local-only media/replica writes.
 - The Docker runtime currently uses Python 3.11 while backend CI uses 3.12.
 - The current Dockerfile tries to hash
   `/app/frontend/build/asset-manifest.json` in the runtime stage **before** that
@@ -177,7 +182,9 @@ variable **names**, not values, when diagnosing configuration loss.
   process/instance view. Raising workers/instances requires coordination and
   freshness work, not just more CPU.
 - Request-spawned media/background tasks require CPU after the response and
-  can still be interrupted by an instance stop. Do not promise a durable queue.
+  can still be interrupted by an instance stop. The post-render persist is
+  the exception — it is queued in the `jobs` table before it runs and drains
+  on the next boot — but post-kit/poster scheduling stays best-effort.
 
 These are documented constraints, not changes made by this refactor. Do not
 claim production is verified from a local frontend build or unit suite.
@@ -188,6 +195,40 @@ After a publish, verify the active revision/image matches the intended commit,
 then check the actual hosted origin: HTML/JS/CSS, signed-in data isolation,
 health durability, signed playback/download, and the affected workflow. A paid
 render requires separate authorization. Record what was not tested.
+
+### Database backup and restore
+
+An image rollback does not reverse startup migrations or restore lost rows,
+so the database carries its own snapshot-and-restore contract (ADR 0120).
+
+**Pre-deploy snapshot** — run against the deployment's active store before
+publishing:
+
+```bash
+python backend/backup_db.py --snapshot
+```
+
+The script resolves the active file the way the app does: the libsql
+embedded replica (`backend/hookforge.db`) when `TURSO_DATABASE_URL` is
+configured — snapshot it on the host, where the live replica is — otherwise
+the local default `backend/storage/hookforge.db` (`--db PATH` overrides).
+Snapshots land timestamped in `backend/storage/backups/`. They are taken
+through SQLite's backup API, so they are consistent even while the app
+holds the file open, and each one passes an integrity check before it is
+kept. With Turso configured, also take a cloud-side Turso dump: the replica
+can hold writes that have not synced yet.
+
+**Restore** — only with explicit authorization, and with the app stopped:
+
+```bash
+python backend/backup_db.py --list
+python backend/backup_db.py --restore backend/storage/backups/hookforge-backup-<stamp>.db --yes
+```
+
+The snapshot is integrity-checked before anything is overwritten and the
+restored database is checked again after. Without `--yes` the command
+refuses and changes nothing. Rehearse a restore against a disposable copy
+(`--db /tmp/rehearsal.db`) before an incident, not during one.
 
 ### Rollback
 

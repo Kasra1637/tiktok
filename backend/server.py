@@ -74,7 +74,7 @@ from models import (
     STUDIO_EDITABLE_FIELDS, STUDIO_TEXT_FIELDS,
     now_iso, row_to_dict,
 )
-from auth import ensure_auth_configured, get_current_user_id, get_optional_user_id
+from auth import ensure_auth_configured, get_current_user_id, get_optional_user_id, hosted_environment
 
 # Anonymous mode is local-dev-only: refuse to boot hosted without a Clerk
 # key, so production can never serve every request as user 'anonymous'.
@@ -292,6 +292,13 @@ from db import (
     _record_model_request,
     _record_asset_event,
     _log_model_call,
+    _enqueue_job,
+    _claim_job,
+    _claim_job_by_id,
+    _heartbeat_job,
+    _complete_job,
+    _fail_job,
+    _fetch_job,
     init_db,
 )
 
@@ -301,7 +308,7 @@ configure_post_kit(_fetch_one, _execute, _log_model_call)
 
 # Health router borrows the row-count read defined above and the live backend
 # label; injected here, once, so the router module never imports server.
-configure_health(_fetch_one, lambda: _ACTIVE_BACKEND)
+configure_health(_fetch_one, lambda: _ACTIVE_BACKEND, lambda: bool(TURSO_DATABASE_URL))
 
 # Brands router: configure with the DB helpers just imported plus the server
 # module itself so call sites can resolve patched helpers at call time.
@@ -2757,6 +2764,177 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
 
 
 # ---------------------------------------------------------------------------
+# Persist jobs: the durable queue in front of _persist_generation_clip
+# ---------------------------------------------------------------------------
+#
+# A finished provider render becomes a durable clip in exactly one place —
+# _persist_generation_clip above — but it used to be invoked inline by the
+# poll that noticed the finish. If the container died between the provider
+# finishing and the save landing, nothing recorded that the persist was
+# owed: the row sat at `generating` until the stranded sweep happened to
+# re-poll it and ask the provider again.
+#
+# Now the persist is queued before it is attempted (ADR 0120). Poll records
+# a `persist_generation_clip` job, claims it, and runs it; the outcome is
+# applied through the one function below, so the queued path and the sweep
+# path cannot drift. A restart leaves the job in the table — claimed under
+# a lease that lapses, or still pending — and the startup sweep drains it
+# without re-asking the provider anything: the provider URL rides in the
+# job payload.
+
+_PERSIST_JOB_KIND = "persist_generation_clip"
+
+# The lease holder name for jobs this process claims. Single-process today
+# (the same assumption as _storage_repairs_in_flight); the pid keeps two
+# processes' claims distinguishable in the jobs table if that ever changes.
+_JOB_WORKER = f"proc-{os.getpid()}"
+
+
+async def _enqueue_persist_job(generation_id: str, user_id: str, video_url: str = "") -> str:
+    """Record that a finished render's persist is owed. Deduped per render."""
+    return await _enqueue_job(
+        _PERSIST_JOB_KIND,
+        {"generation_id": generation_id, "user_id": user_id, "video_url": video_url},
+        dedupe_key=f"persist:{generation_id}",
+    )
+
+
+async def _execute_persist_job(job: dict) -> tuple:
+    """Run one persist job's work: _persist_generation_clip for its row."""
+    payload = json.loads(job.get("payload") or "{}")
+    generation_id = payload.get("generation_id") or ""
+    row = await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    if not row:
+        raise RuntimeError(f"persist job names unknown generation {generation_id}")
+    return await _persist_generation_clip(
+        row, payload.get("user_id") or "anonymous", payload.get("video_url") or ""
+    )
+
+
+async def _execute_claimed_persist_job(job: dict) -> tuple:
+    """
+    Execute a claimed persist job and settle its bookkeeping.
+
+    Returns the persist outcome. A raised persist fails the job (requeue or
+    park, per attempts) and re-raises, so the caller keeps the error for
+    its own reporting — poll turns it into the row's storage_error exactly
+    as it did when the persist ran inline.
+    """
+    try:
+        outcome = await _execute_persist_job(job)
+    except Exception as e:
+        await _fail_job(job["id"], _JOB_WORKER, f"{type(e).__name__}: {e}")
+        raise
+    payload = json.loads(job.get("payload") or "{}")
+    await _complete_job(job["id"], _JOB_WORKER, result={
+        "generation_id": payload.get("generation_id"),
+        "stored_url": outcome[0],
+        "storage_error": outcome[1],
+        "delivered_seconds": outcome[2],
+    })
+    return outcome
+
+
+async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: str,
+                                 stored_url, storage_error, delivered_seconds,
+                                 background_tasks: BackgroundTasks = None) -> None:
+    """
+    Write a persist outcome onto the generation row — the one copy of this.
+
+    Poll and the sweep's queue drain both land here, so a completion looks
+    identical no matter which process ran the save: status flip, durable
+    URL, delivered length, the frozen post kit and the poster scheduled
+    the same way.
+    """
+    now = now_iso()
+    await _execute(
+        "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
+        "duration = ?, error = NULL, storage_error = ?, completed_at = ?, updated_at = ? "
+        "WHERE id = ?",
+        (video_url, stored_url or "", delivered_seconds,
+         storage_error or None, now, now, generation_id),
+    )
+    if stored_url:
+        await _execute(
+            "UPDATE video_assets SET r2_url = ? WHERE job_id = ?", (stored_url, generation_id)
+        )
+    # Frozen post copy, written once at completion and deferred past the
+    # response like the poster: a kit failure leaves NULL, never invented
+    # copy. A NULL kit renders as no kit.
+    await _schedule_post_kit(background_tasks, generation_id, user_id)
+    if stored_url:
+        # Poster is best-effort and off the critical path: History works
+        # without it. Scheduled after the response so the save never stacks
+        # two ffmpegs; with no BackgroundTasks (the sweep) it runs inline.
+        await _schedule_poster(background_tasks, generation_id, user_id)
+
+
+async def _persist_via_queue(generation_id: str, user_id: str, video_url: str,
+                             background_tasks: BackgroundTasks = None):
+    """
+    Poll's path: record the persist job, claim it, run it, apply the outcome.
+
+    Returns the persist outcome, or None when another worker already holds
+    the job (the startup sweep draining in this same process) — that worker
+    applies the outcome when it finishes, and the caller answers with the
+    row's current state, exactly as for a throttled status check.
+    """
+    job_id = await _enqueue_persist_job(generation_id, user_id, video_url)
+    job = await _claim_job_by_id(job_id, _JOB_WORKER)
+    if job is None:
+        return None
+    outcome = await _execute_claimed_persist_job(job)
+    await _apply_persist_outcome(
+        generation_id, user_id, video_url,
+        outcome[0], outcome[1], outcome[2], background_tasks,
+    )
+    return outcome
+
+
+async def _drain_pending_persist_jobs(limit: int = 10) -> int:
+    """
+    Run queued persist jobs to completion. Returns jobs completed.
+
+    The startup sweep calls this before re-polling stranded rows: a render
+    whose persist was recorded before a restart is finished here from the
+    job payload alone. Self-guarding by design — a queue that cannot be
+    read (a test double's database, a missing table) drains nothing rather
+    than failing the sweep it rides in.
+    """
+    done = 0
+    try:
+        for _ in range(max(1, int(limit))):
+            job = await _claim_job(_JOB_WORKER, kind=_PERSIST_JOB_KIND)
+            if job is None:
+                break
+            payload = json.loads(job.get("payload") or "{}")
+            generation_id = payload.get("generation_id") or ""
+            try:
+                outcome = await _execute_claimed_persist_job(job)
+            except Exception as e:
+                logger.warning(
+                    "Persist queue: job for %s did not run (%s: %s)",
+                    generation_id, type(e).__name__, str(e)[:200],
+                )
+                continue
+            await _apply_persist_outcome(
+                generation_id, payload.get("user_id") or "anonymous",
+                payload.get("video_url") or "",
+                outcome[0], outcome[1], outcome[2], None,
+            )
+            done += 1
+            logger.info(
+                "Persist queue: completed the durable save for %s", generation_id
+            )
+    except Exception as e:
+        logger.warning(
+            "Persist queue drain did not complete (%s: %s)",
+            type(e).__name__, str(e)[:200],
+        )
+    return done
+
+
+# ---------------------------------------------------------------------------
 # Stranded-render sweep
 # ---------------------------------------------------------------------------
 #
@@ -2808,6 +2986,11 @@ async def _sweep_stranded_generations(
     `openrouter_job_id` was never submitted, so there is nothing to reconcile --
     polling it would fail forever and burn a slot.
     """
+    # Queued persist jobs first (ADR 0120): a render whose provider job
+    # finished and whose persist was recorded before the container died is
+    # completed from the job payload, without re-asking the provider.
+    fixed = await _drain_pending_persist_jobs(limit=limit)
+
     cutoff = (
         datetime.now(timezone.utc) - timedelta(seconds=max(0, int(min_age_seconds)))
     ).isoformat()
@@ -2819,7 +3002,7 @@ async def _sweep_stranded_generations(
         (cutoff, max(1, int(limit))),
     )
     if not rows:
-        return 0
+        return fixed
 
     logger.info(
         "Stranded-render sweep: %d row(s) in flight for over %ds",
@@ -2827,7 +3010,6 @@ async def _sweep_stranded_generations(
         int(min_age_seconds),
     )
 
-    fixed = 0
     for row in rows:
         generation_id = row.get("id")
         # A `submitted` row with no job id was never submitted to the
@@ -3115,6 +3297,36 @@ async def root():
 # ---------------------------------------------------------------------------
 # App wiring
 # ---------------------------------------------------------------------------
+def _log_storage_durability() -> None:
+    """
+    Say, once per boot, whether finished renders will persist.
+
+    The media counterpart of _log_database_backend, with the same rule:
+    report the configuration as it is, at an alarm level that matches what
+    it costs. R2 unconfigured is a fine local default and a data-loss
+    configuration in production — renders are the product, and on an
+    ephemeral host an unconfigured R2 means every finished clip vanishes
+    with the next deploy (ADR 0120).
+    """
+    if storage_service.is_configured():
+        logger.info(
+            "Cloud storage: R2 configured — finished renders persist across deploys."
+        )
+        return
+    if hosted_environment():
+        logger.critical(
+            "Cloud storage (R2) is NOT configured in a production environment: "
+            "finished renders will not persist across deploys. Set R2_ACCOUNT_ID, "
+            "R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME."
+        )
+    else:
+        logger.info(
+            "Cloud storage (R2) is not configured; finished renders are served "
+            "from local disk and will not persist across deploys. "
+            "(fine for local dev)"
+        )
+
+
 @app.on_event("startup")
 async def on_startup():
     # Retry init_db up to 3 times — Turso or network hiccups during a cold
@@ -3141,6 +3353,7 @@ async def on_startup():
     # it before would repeat the old lie — "Turso cloud" from config while the
     # connection had fallen back to ephemeral.
     _log_database_backend()
+    _log_storage_durability()
     if not os.environ.get("OPENROUTER_API_KEY"):
         logger.warning(
             "OPENROUTER_API_KEY is not set. The app will run, but AI features "

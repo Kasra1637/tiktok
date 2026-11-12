@@ -24,8 +24,10 @@ One render path, single-pass video generation via OpenRouter.
   routers, re-exports their helpers, and owns the render lifecycle.
   `_submit_generation` is the ONLY render path; `_studio_identity_references`
   resolves the photo. Keeps the mutable DB config the tests rebind.
-- `backend/db.py` + `backend/schema.py` — SQLite/Turso primitives and schema
-  bootstrap; `db.py` reads config through a `_server` back-reference. Domain
+- `backend/db.py` + `backend/schema.py` — SQLite/Turso primitives, the
+  versioned schema (recorded baseline plus numbered steps, ADR 0120) and the
+  jobs-queue claim/lease helpers; `db.py` reads config through a `_server`
+  back-reference. Domain
   routers (`routers/brands.py`, `routers/studio.py`, `routers/assets.py`,
   `routers/history.py`) own their endpoints and resolve test-patched `server`
   names at call time via `_cfg`; none may import `server` back (ADR 0111).

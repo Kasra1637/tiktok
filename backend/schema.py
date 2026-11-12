@@ -1,7 +1,14 @@
-"""Schema bootstrap and idempotent migrations.
+"""Schema bootstrap and versioned migrations.
 
-`apply_schema(conn, ...)` is called by `db.init_db`. It owns every CREATE TABLE,
-ADD COLUMN migration, and curated-template seeding/backfill the app ships with.
+`apply_schema(conn, ...)` is called by `db.init_db`. It runs the historical
+bootstrap (recorded as migration version 1, the baseline) and then any
+numbered migration steps in `MIGRATION_STEPS`, in order, recording each in
+`schema_migrations` so a database carries proof of what has been applied to
+it (ADR 0120). The baseline body stays idempotent and runs on every boot —
+it also carries the per-boot curated-template sync, which is data
+maintenance, not schema change. Numbered steps after the baseline run
+exactly once per database.
+
 The few media helpers the backfills need (`_analysis_frame_path`,
 `_normalize_analysis_frame`, `_normalize_template_thumbnail`, `GENERATED_ID_RE`)
 stay owned by `server` and are passed in by `db.init_db`, so this module never
@@ -19,8 +26,11 @@ from models import now_iso
 logger = logging.getLogger(__name__)
 
 
-async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
-                       normalize_template_thumbnail, generated_id_re):
+async def _apply_baseline_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
+                                 normalize_template_thumbnail, generated_id_re):
+    """The pre-versioning bootstrap, verbatim: every CREATE TABLE, guarded
+    ALTER, and backfill the app shipped before migration records existed.
+    Recorded as version 1 by `apply_schema` after it runs."""
     await conn.executescript("""
         CREATE TABLE IF NOT EXISTS videos (
             id TEXT PRIMARY KEY,
@@ -976,3 +986,112 @@ async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
                 f"Migration: backfilled provenance for {backfilled} generated image(s)"
             )
         await conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Versioned migrations (ADR 0120)
+# ---------------------------------------------------------------------------
+#
+# Version 1 is the baseline above: the entire bootstrap the app shipped
+# before migration records existed. It is fully idempotent, and parts of it
+# (the curated-template sync) are per-boot data maintenance rather than
+# schema change, so its body still runs on every boot exactly as before;
+# the record exists so a database can prove the baseline has been applied
+# and so later steps have an ordering to build on.
+#
+# Every change AFTER the baseline is a numbered step below: it runs exactly
+# once per database, in version order, and is recorded in schema_migrations
+# in the same pass. Steps must stay idempotent anyway (CREATE TABLE IF NOT
+# EXISTS, guarded ALTERs) — a crash between the step and its record must
+# not make the retry fail.
+
+MIGRATION_BASELINE_VERSION = 1
+_MIGRATION_BASELINE_NAME = "bootstrap baseline (pre-versioning schema)"
+
+
+async def _migration_0002_jobs(conn):
+    """The durable job queue (ADR 0120): work that must survive a restart —
+    starting with persisting a completed render — is recorded here before
+    it is attempted, and claimed under a lease by whichever process runs it."""
+    await conn.executescript("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            payload TEXT,
+            dedupe_key TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 3,
+            worker TEXT,
+            lease_expires_at TEXT,
+            last_error TEXT,
+            result TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_jobs_claim
+            ON jobs (status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_jobs_dedupe
+            ON jobs (dedupe_key, status);
+    """)
+    await conn.commit()
+
+
+MIGRATION_STEPS = (
+    (2, "jobs queue for post-render persistence", _migration_0002_jobs),
+)
+
+
+async def _recorded_migration_versions(conn) -> set:
+    cursor = await conn.execute("SELECT version FROM schema_migrations")
+    return {row[0] for row in await cursor.fetchall()}
+
+
+async def _record_migration(conn, version: int, name: str) -> None:
+    await conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at) "
+        "VALUES (?, ?, ?)",
+        (version, name, now_iso()),
+    )
+    await conn.commit()
+
+
+async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
+                       normalize_template_thumbnail, generated_id_re):
+    """Create and migrate the schema: baseline first, then numbered steps.
+
+    Called by `db.init_db` on every boot. A fresh database and a database
+    created by the pre-versioning bootstrap converge here to the same
+    schema and the same recorded versions (pinned by
+    test_schema_migrations).
+    """
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    """)
+    await conn.commit()
+    applied = await _recorded_migration_versions(conn)
+
+    await _apply_baseline_schema(
+        conn,
+        analysis_frame_path=analysis_frame_path,
+        normalize_analysis_frame=normalize_analysis_frame,
+        normalize_template_thumbnail=normalize_template_thumbnail,
+        generated_id_re=generated_id_re,
+    )
+    if MIGRATION_BASELINE_VERSION not in applied:
+        await _record_migration(
+            conn, MIGRATION_BASELINE_VERSION, _MIGRATION_BASELINE_NAME
+        )
+        applied.add(MIGRATION_BASELINE_VERSION)
+
+    for version, name, step in MIGRATION_STEPS:
+        if version in applied:
+            continue
+        logger.info("Migration: applying %d (%s)", version, name)
+        await step(conn)
+        await _record_migration(conn, version, name)
+        applied.add(version)

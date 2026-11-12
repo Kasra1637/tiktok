@@ -142,3 +142,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0117](0117-performance-feedback-loop.md) | Performance feedback loop: manual dated snapshots, frozen craft score, prompt steering | accepted |
 | [0118](0118-onboarding-core-tour-expansion.md) | Onboarding core tours expand to the journey's fork pages (Demo + CTA, Analytics, Assets); App Profile detail stays replay-only | accepted |
 | [0119](0119-remove-claim-safety-entirely.md) | Remove the claim-safety system entirely: no claim lists, no safety report, no SafetyPanel, no bounded-by or wording refusals; angle bounds stay as prompt guidance only | accepted |
+| [0120](0120-versioned-migrations-backup-fail-loud-jobs-queue.md) | Data durability: versioned migrations, operator backup/restore, production fail-loud, and a jobs queue for post-render persistence | accepted |
