@@ -501,14 +501,13 @@ export default function Landing() {
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
-            <div className="border-gradient relative rounded-2xl p-[1px] shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)]">
+            <div className="border-gradient relative rounded-2xl p-[1px]">
               <div className="hero-screen overflow-hidden rounded-2xl">
                 <div className="relative aspect-[471/710] w-full">
                   <HeroFlow />
                 </div>
               </div>
             </div>
-            <div aria-hidden="true" className="mx-auto -mt-3 h-12 w-3/4 rounded-[100%] bg-[color:var(--brand-indigo)] opacity-25 blur-2xl" />
           </figure>
         </div>
       </section>
