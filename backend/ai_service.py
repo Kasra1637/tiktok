@@ -3054,6 +3054,13 @@ def _spoken_line_rules_block() -> str:
         "'I have been using', 'my patients'), and never ask for anything — no "
         "download, install, sign-up, follow or 'try it'. A customer telling "
         "what happened is the whole piece.\n"
+        "- REAL PERSON, HOLDING THE VIEWER: one real person talking to their "
+        "phone, each line holding a TikTok viewer to the next. No repeated "
+        "words. No filler words, forced slang, written or ad-style phrasing, "
+        "or run-on sentences. The hook carries the question; the script "
+        "never asks one, and it ends on the strongest concrete line. Before "
+        "returning, read both lines out loud as if to a friend and rewrite "
+        "anything robotic.\n"
     )
 
 

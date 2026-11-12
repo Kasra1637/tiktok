@@ -1685,7 +1685,16 @@ class TestStrategyBudget:
         # choosing the hook's spoken form from the angle/problem and naming
         # the last few generations' forms so the next one varies. 33,500
         # keeps ~1,200 of headroom for the next measured change.
-        CEILING = 33_500
+        #
+        # REAL PERSON, HOLDING THE VIEWER raises it once more, measured:
+        # 33,771 against the 33,500 ceiling. Kasra's read-aloud rule joins
+        # the shared spoken-line block as a 416-char bullet — one person
+        # talking to their phone, no repeated or filler words, no forced
+        # slang, nothing written or ad-style, no run-ons, the question in
+        # the hook only, the script ending on its strongest concrete line,
+        # and a read-it-out-loud rewrite pass before returning. The ceiling
+        # moves by a measured 750 to 34,250, keeping ~480 of headroom.
+        CEILING = 34_250
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
@@ -2488,6 +2497,51 @@ class TestHookScriptContinuity:
         assert "it's weirdly the same every day" in prompt
         assert "'weekly'" in prompt
         assert "'every week'" in prompt
+
+    def test_the_prompt_demands_a_real_person_holding_the_viewer(self, monkeypatch):
+        """The script must sound like a real person talking to their phone.
+
+        Kasra's rule: hold a TikTok viewer with speech, not writing. The
+        prompt bans repeated words, filler words, forced slang, written or
+        ad-style phrasing and run-on sentences; the question lives in the
+        hook while the script never asks one and ends on its strongest
+        concrete line; and before returning, the model reads both lines
+        out loud as if to a friend and rewrites anything robotic.
+        """
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "REAL PERSON, HOLDING THE VIEWER" in block
+        assert "talking to their phone" in block
+        assert "No repeated words" in block
+        assert "No filler words" in block
+        assert "forced slang" in block
+        assert "ad-style" in block
+        assert "run-on" in block
+        assert "script never asks one" in block
+        assert "strongest concrete line" in block
+        assert "out loud as if to a friend" in block
+        assert "robotic" in block
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "Naming what I felt never worked.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "REAL PERSON, HOLDING THE VIEWER" in prompt
+        assert "script never asks one" in prompt
+        assert "strongest concrete line" in prompt
 
     def test_the_prompt_grounds_object_nouns_in_product_facts(self, monkeypatch):
         """The ownership rule must work for any product, not just journaling.
