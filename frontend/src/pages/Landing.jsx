@@ -66,13 +66,82 @@ const FEATURES = [
 ];
 
 /**
- * The five steps as a visual strip. Each still is a frame from the app's own
- * tour footage (public/hero-demo.mp4), in workflow order: App Profile (2s),
- * the Review & submit gate that names the missing angle (6s), the Audience &
- * template panel where templates rank for the goal (4.1s), the finished
- * render in History (16s), and Demo + CTA (11s). The template list and the
- * presenter-photo upload never appear in that footage, so step 3 shows the
- * panel they live under rather than a fabricated screen.
+ * Custom step illustrations: one small line scene per step, all sharing
+ * the same 200x150 canvas, stroke weight, and indigo tokens, so the five
+ * read as one family. Scenes: 1) your app in a browser, facts approved;
+ * 2) a target and the one viewer it aims at; 3) ranked template cards
+ * with a fit bar; 4) the script you review, and the render it becomes;
+ * 5) your real demo on a phone with its call to action.
+ */
+const STEP_ART = {
+  "1": (
+    <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="30" y="28" width="140" height="94" rx="12" />
+      <line x1="30" y1="50" x2="170" y2="50" />
+      <circle cx="47" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" />
+      <circle cx="62" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" opacity="0.6" />
+      <circle cx="77" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" opacity="0.35" />
+      <rect x="48" y="66" width="36" height="36" rx="9" fill="var(--indigo-25)" fillOpacity="0.35" />
+      <line x1="100" y1="76" x2="152" y2="76" opacity="0.55" />
+      <line x1="100" y1="92" x2="136" y2="92" opacity="0.55" />
+      <circle cx="156" cy="110" r="13" fill="var(--brand-indigo)" stroke="none" />
+      <path d="M149 110 l5 5 l9 -10" stroke="#fff" strokeWidth="4" />
+    </svg>
+  ),
+  "2": (
+    <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="80" cy="75" r="36" />
+      <circle cx="80" cy="75" r="21" />
+      <circle cx="80" cy="75" r="7" fill="var(--brand-indigo)" stroke="none" />
+      <line x1="160" y1="26" x2="126" y2="50" />
+      <path d="M124 52 L139 49 L129 64 Z" fill="var(--brand-indigo)" stroke="none" />
+      <circle cx="152" cy="100" r="10" />
+      <path d="M133 128 a19 13 0 0 1 38 0" />
+    </svg>
+  ),
+  "3": (
+    <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="34" y="30" width="108" height="68" rx="10" opacity="0.35" />
+      <rect x="50" y="42" width="108" height="68" rx="10" opacity="0.6" />
+      <rect x="66" y="54" width="108" height="68" rx="10" fill="var(--indigo-10)" />
+      <path d="M86 76 l16 9 l-16 9 Z" fill="var(--brand-indigo)" stroke="none" />
+      <line x1="114" y1="80" x2="162" y2="80" opacity="0.3" strokeWidth="6" />
+      <line x1="114" y1="80" x2="148" y2="80" strokeWidth="6" />
+      <line x1="114" y1="100" x2="150" y2="100" opacity="0.5" />
+      <circle cx="162" cy="64" r="5" fill="var(--brand-indigo)" stroke="none" />
+    </svg>
+  ),
+  "4": (
+    <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="46" y="22" width="76" height="106" rx="10" />
+      <line x1="62" y1="48" x2="108" y2="48" opacity="0.55" />
+      <line x1="62" y1="66" x2="108" y2="66" opacity="0.55" />
+      <line x1="62" y1="84" x2="94" y2="84" opacity="0.55" />
+      <path d="M62 106 l6 6 l11 -12" strokeWidth="4" />
+      <path d="M152 20 v16 M144 28 h16" strokeWidth="4" opacity="0.8" />
+      <circle cx="152" cy="92" r="24" fill="var(--brand-indigo)" stroke="none" />
+      <path d="M144 78 l20 14 l-20 14 Z" fill="#fff" stroke="none" />
+    </svg>
+  ),
+  "5": (
+    <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="68" y="16" width="64" height="118" rx="14" />
+      <line x1="92" y1="29" x2="108" y2="29" strokeWidth="4" opacity="0.5" />
+      <path d="M92 56 l24 15 l-24 15 Z" fill="var(--brand-indigo)" stroke="none" />
+      <rect x="82" y="100" width="36" height="12" rx="6" fill="var(--brand-indigo)" fillOpacity="0.85" stroke="none" />
+      <path d="M148 50 a30 30 0 0 1 0 50" opacity="0.5" />
+      <circle cx="50" cy="75" r="4" fill="var(--brand-indigo)" stroke="none" opacity="0.6" />
+    </svg>
+  ),
+};
+
+/**
+ * The five steps as a visual strip. Kasra rejected screenshot stills for
+ * this section, so each step carries a custom branded illustration from
+ * STEP_ART below — one line family, the app's indigo tokens, each scene
+ * drawn to show what the step does. Titles, lines, and outcomes are the
+ * copy Kasra approved; the strip sits on the plain section background
+ * (he also rejected the band that used to sit behind the five cards).
  */
 const FLOW_STEPS = [
   {
@@ -80,40 +149,30 @@ const FLOW_STEPS = [
     label: "Introduce your app",
     line: "Add your store or website URL, review the draft, and approve the facts — every video starts from them.",
     outcome: "Built from your facts",
-    img: "how/step-1.svg",
-    alt: "Create Video wizard, App Profile step: the approved app Threadly is chosen",
   },
   {
     step: "2",
     label: "Choose a goal and audience",
     line: "Pick an audience angle and set a goal — both are required before anything downstream is written.",
     outcome: "One viewer, one outcome",
-    img: "how/step-2.svg",
-    alt: "Review and submit gate naming what is missing: pick an audience angle first",
   },
   {
     step: "3",
     label: "Pick a template",
     line: "Compare the ranked templates and their caveats, then add a clear presenter photo.",
     outcome: "Openings that earn the watch",
-    img: "how/step-3.svg",
-    alt: "Audience and template panel: generate audience angles, and templates rank for the goal you pick",
   },
   {
     step: "4",
     label: "Review, then render",
     line: "The plan is free: review it, edit and save it, check flagged claims — only the render is paid.",
     outcome: "A clip worth posting",
-    img: "how/step-4.svg",
-    alt: "History tile for a finished render, marked Completed, with the clip ready to play",
   },
   {
     step: "5",
     label: "Add your real product demo",
     line: "Style a base clip, add a Second clip or a phone overlay, export one MP4, and publish them yourself.",
     outcome: "Your demo stays yours",
-    img: "how/step-5.svg",
-    alt: "Demo plus CTA studio: source and look, a History render as the source, and the first clip style",
   },
 ];
 
@@ -384,11 +443,12 @@ export default function Landing() {
           lede="Five steps, one flow — your facts in, a finished Hook + Story out, and a demo that stays unmistakably yours."
         />
 
-        {/* Visual strip: one real app still per step, a badge, one short
-            line, and an outcome label. On phones the strip scrolls sideways
-            with a faded edge; on wide screens it is a five-column grid.
-            Layout, band, badge, and dots live in index.css (.how-*). */}
-        <div className="how-band">
+        {/* Visual strip: one branded illustration per step, a badge, one
+            short line, and an outcome label, on the plain section
+            background — no band behind the five. On phones the strip
+            scrolls sideways with a faded edge; on wide screens it is a
+            five-column grid. Layout lives in index.css (.how-*). */}
+        <div>
           <ol className="how-steps">
             {FLOW_STEPS.map((s) => (
               <li
@@ -396,12 +456,8 @@ export default function Landing() {
                 className="how-step surface-interactive animate-fade-up"
                 style={{ animationDelay: `${Number(s.step) * 60}ms` }}
               >
-                <div className="how-shot">
-                  <img
-                    src={`${process.env.PUBLIC_URL}/${s.img}`}
-                    alt={s.alt}
-                    loading="lazy"
-                  />
+                <div className="how-art" style={{ animationDelay: `${(Number(s.step) - 1) * 0.4}s` }}>
+                  {STEP_ART[s.step]}
                   <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
                 </div>
                 <h3 className="font-display text-base font-semibold">{s.label}</h3>
