@@ -154,6 +154,7 @@ from routers.studio import (
     list_studio_projects, create_studio_project, get_studio_project,
     update_studio_project, suggest_hook_rewrite, suggest_line_rewrite, generate_plan,
     mark_project_ready, submit_project_generation, generate_project_strategy,
+    generate_plan_and_strategy,
     list_studio_video_models,
 )
 api_router.include_router(studio_router)

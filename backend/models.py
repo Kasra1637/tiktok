@@ -374,6 +374,22 @@ class GeneratePlanRequest(BaseModel):
     audience: Optional[str] = None
 
 
+class GeneratePlanAndStrategyRequest(BaseModel):
+    """
+    Optional overrides for the one-pass plan + strategy generation.
+
+    The union of the plan and strategy overrides: the pass runs the plan
+    stage, then the strategy stage reads the plan that stage wrote, so one
+    request carries both stages' inputs. Empty means "reuse what the
+    project already has" for both stages.
+    """
+    objective: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    tone: Optional[str] = None
+    audience: Optional[str] = None
+    hook_seconds: Optional[int] = None
+
+
 class RefreshDirectionOptionsRequest(BaseModel):
     """Fresh dropdown options for one Review-step direction field."""
     field: str = ""

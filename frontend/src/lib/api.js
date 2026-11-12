@@ -293,6 +293,12 @@ export const api = {
   createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
+  // The one-pass form of the two above: the server writes the plan, then
+  // builds the strategy from it, and answers once with both. This is the
+  // call the Review step's generate action makes; generatePlan and
+  // generateStrategy stay for the strategy panel's own rebuild, which is a
+  // repair of one half, not the pass that writes both.
+  generatePlanAndStrategy: (id, payload = {}) => client.post(`/studio/projects/${id}/plan-and-strategy`, payload).then((r) => r.data),
   rewriteHook: (id, hookLine) => client.post(`/studio/projects/${id}/rewrite-hook`, { hook_line: hookLine }).then((r) => r.data),
   rewriteLine: (id, payload) => client.post(`/studio/projects/${id}/rewrite-line`, payload).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),

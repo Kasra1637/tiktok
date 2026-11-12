@@ -1095,17 +1095,27 @@ const handleGenerate = async () => {
               />
               {/* The native next step. The download above is the finish line for
                   anyone who does not want it: this panel adds nothing to what
-                  they already have, changes no gate, and takes nothing away. It
-                  opens the native editor for this exact render, in this app,
-                  rather than leaving the founder to find it elsewhere. */}
+                  they already have, changes no gate, and takes nothing away.
+                  Inside the wizard it walks to the flow's own finishing step,
+                  where this exact render is already loaded in the editor —
+                  the wizard's last step IS Demo + CTA now, so leaving the
+                  flow to reach it would strand the step the flow ends on.
+                  Mounted without the wizard's navigation (a direct mount),
+                  it keeps the route link to the standalone editor. */}
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="accent" size="sm" asChild>
-                    <Link to={`/demo-cta/${generation.id}`}>
+                  {onNavigate ? (
+                    <Button variant="accent" size="sm" onClick={() => onNavigate("goto-finish")}>
                       <Smartphone className="h-3.5 w-3.5" /> Open in Demo + CTA
-                    </Link>
-                  </Button>
+                    </Button>
+                  ) : (
+                    <Button variant="accent" size="sm" asChild>
+                      <Link to={`/demo-cta/${generation.id}`}>
+                        <Smartphone className="h-3.5 w-3.5" /> Open in Demo + CTA
+                      </Link>
+                    </Button>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   This is the hook and the middle. Use it as is, or open it in Demo + CTA

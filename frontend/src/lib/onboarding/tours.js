@@ -37,11 +37,13 @@ export const TOURS = {
   // testids stay on the page — they cost nothing and are what a future test on
   // the home page would hook to.
 
-  // Targets CreateVideo — the three-step studio at /create. The tour walks
-  // the whole journey the page now carries: profile, angle/goal/template,
-  // the required presenter photo, the free plan vs the strategy that films
-  // it, the advisory Craft check, and the paid render whose result lands
-  // back in the same panel. State-dependent steps are optional so a
+  // Targets CreateVideo — the four-step studio at /create. The tour walks
+  // the whole journey the page now carries: profile (approved right on the
+  // step when it starts as a draft), angle/goal/template, the required
+  // presenter photo, the one pass that writes the plan and builds the
+  // strategy that films it, the advisory Craft check, the paid render whose
+  // result lands back in the same panel, and the Demo + CTA finishing step
+  // that opens on that render. State-dependent steps are optional so a
   // first-run founder (profile step, nothing picked yet) simply skips them.
   create: {
     id: "create",
@@ -51,7 +53,7 @@ export const TOURS = {
         target: '[data-testid="studio-progress-segment-profile"]',
         title: "Start with an approved App Profile",
         body:
-          "Everything here is written from one approved App Profile — its facts and audience. If you have none, open App Profile to research and approve your app first; nothing renders before that.",
+          "Everything here is written from one approved App Profile — its facts and audience. A draft can be reviewed and approved right on this step; nothing renders before an approval, wherever it happens.",
       },
       {
         target: '[data-testid="studio-progress-segment-angle"]',
@@ -70,7 +72,7 @@ export const TOURS = {
         target: '[data-testid="studio-progress-segment-review"]',
         title: "The plan is words; the strategy is filming",
         body:
-          "The plan is the words — the hook line and the spoken script — and writing it is free. The strategy is how those words get filmed: the scene, the camera, the opening move. Read both before paying for a render.",
+          "One pass writes both, free: the plan is the words — the hook line and the spoken script — and the strategy is how those words get filmed: the scene, the camera, the opening move. Read them before paying for a render.",
       },
       {
         target: '[data-testid="quality-report"]',
@@ -86,6 +88,13 @@ export const TOURS = {
         placement: "top",
         body:
           "Rendering takes minutes and the progress shows here. When it finishes, the video appears here to preview and download, post copy frozen beside it. Posting stays manual; the demo and close are yours, in Demo + CTA.",
+      },
+      {
+        target: '[data-testid="studio-progress-segment-finish"]',
+        title: "Finish in Demo + CTA",
+        optional: true,
+        body:
+          "The flow ends in Demo + CTA, with your finished render already loaded — no hunting for the clip you just made. Add the demo you record and your closing message there; the export saves beside the original in History.",
       },
     ],
   },

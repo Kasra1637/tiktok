@@ -126,6 +126,37 @@ function describeResults(row) {
 }
 
 /**
+ * Where one finished video stands: finished, posted, or measured.
+ *
+ * The four facts of a video's life after the render — the export, the post
+ * copy, the posted link, the recorded results — used to live in four
+ * different corners of this card: the download in the media row, the copy
+ * in one collapsible, the link and results behind a second toggle. A
+ * founder asking "what does this video still need" had to open the card
+ * and hunt. The journey line in the summary now carries the four together
+ * as one state, derived from the same row fields the scattered controls
+ * write, so the line can never disagree with them: it is a reading of the
+ * record, not a second record. The stage is the furthest point reached —
+ * a link makes it posted, a results snapshot makes it measured.
+ */
+function journeyStage(row) {
+  if (row.performance_snapshot) return "measured";
+  if (row.tiktok_url) return "posted";
+  return "finished";
+}
+
+/** The latest results snapshot as one line, in HistoryFeedback's words. */
+function describeSnapshot(snapshot) {
+  if (!snapshot) return "";
+  return [
+    snapshot.retention_3s_pct != null ? `${Number(snapshot.retention_3s_pct)}% watched past 3 seconds` : null,
+    snapshot.avg_watch_pct != null ? `${Number(snapshot.avg_watch_pct)}% average watch` : null,
+    snapshot.saves != null ? `${Number(snapshot.saves).toLocaleString("en-US")} saves` : null,
+    snapshot.shares != null ? `${Number(snapshot.shares).toLocaleString("en-US")} shares` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+/**
  * One render, as one attached card: the clip, then — as a separate full-width grid item
  * — its detail band.
  *
@@ -426,6 +457,27 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
     </Button>
   );
   const compactNotice = compact && (!downloadUrl || previewBroken);
+  // The joined finished → posted state shows only on a card that holds a
+  // finished, fetchable clip: before that the stage notice above is the
+  // honest surface, and a journey line would promise an export that does
+  // not exist yet.
+  const showJourney = (row.status === "completed" || row.status === "archived") && Boolean(downloadUrl);
+  const resultsLine = describeSnapshot(row.performance_snapshot);
+  // The journey line's post-copy item walks to the control that owns it:
+  // the kit itself when one is written (opening its panel), the generate
+  // prompt when none is. One click from the state to the thing it names,
+  // the same contract openResults keeps for the link and results.
+  const openPostCopy = () => {
+    if (row.post_kit) setOpenPanel("post");
+    requestAnimationFrame(() => {
+      const target = document.querySelector(
+        row.post_kit
+          ? `[data-testid="history-post-copy-${row.id}"]`
+          : `[data-testid="history-generate-post-copy-${row.id}"]`
+      );
+      target?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
+    });
+  };
   const notice = (
     <div className="history-stage-empty">
       <Film aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -570,6 +622,40 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               <span data-testid="history-result-line">{describeResults(row)}</span>
               {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
+            {/* The video's one home from finished to posted to measured:
+                export, post copy, posted link and recorded results as a
+                single line in the always-visible summary, each item naming
+                its state and walking to the control that owns it. The
+                controls themselves stay where they were — this line is
+                their join, not a second set. */}
+            {showJourney && (
+              <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[color:var(--hairline)] pt-2 text-xs"
+                data-testid={`history-journey-${row.id}`}
+                data-stage={journeyStage(row)}
+              >
+                <span className="font-semibold text-muted-foreground">Finished → posted:</span>
+                <span>Export ready</span>
+                <span aria-hidden="true" className="text-muted-foreground">·</span>
+                {row.post_kit ? (
+                  <button type="button" className="underline" onClick={openPostCopy}>Post copy written</button>
+                ) : (
+                  <button type="button" className="underline" onClick={openPostCopy}>Post copy not written yet</button>
+                )}
+                <span aria-hidden="true" className="text-muted-foreground">·</span>
+                {row.tiktok_url ? (
+                  <span>Posted</span>
+                ) : (
+                  <button type="button" className="underline" onClick={openResults}>Not posted yet</button>
+                )}
+                <span aria-hidden="true" className="text-muted-foreground">·</span>
+                {resultsLine ? (
+                  <span>Results: {resultsLine}</span>
+                ) : (
+                  <button type="button" className="underline" onClick={openResults}>No results yet</button>
+                )}
+              </div>
+            )}
             {/* Provenance is a line, not a chip run. Four bordered pills of
                 model, attempt and two versions competed with the headline for
                 the same corner of the card; they answer a follow-up question

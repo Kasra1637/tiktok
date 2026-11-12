@@ -399,6 +399,7 @@ const apiStub = {
     duration_segments: { 8: 1, 10: 1, 12: 1, 15: 1 },
   }),
   getAppProfiles: async () => ({ profiles: [PROFILE] }),
+  approveAppProfile: async (id) => ({ id, status: "approved" }),
   // Empty by default: History and Analytics verify draft links against the
   // live list, and an unverified list fails open to the draft link — the
   // behavior every pre-verification check asserts. Checks that exercise the
@@ -472,6 +473,9 @@ const apiStub = {
   getAssets: async () => ({ assets: [] }),
   uploadAsset: async () => ({ asset: null }),
   generatePlan: async () => PROJECT_WITH_STRATEGY,
+  // The Review step's generate action makes the one combined call now; the
+  // separate calls remain on the stub for the strategy panel's own rebuild.
+  generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
   generateStrategy: async () => PROJECT_WITH_STRATEGY,
   generateVideo: async () => SEGMENT,
   // The drawer revalidates votes on every expand, so the detail endpoint
@@ -1022,6 +1026,7 @@ const STEP_LABELS = [
   "App Profile",
   "Audience & template",
   "Review & submit",
+  "Demo + CTA",
 ];
 
 
@@ -1409,6 +1414,285 @@ async function main() {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // Part 5: the journey is one flow. The profile is approved where the flow
+  // starts, the plan and the strategy arrive in one pass, the wizard ends in
+  // Demo + CTA with the render loaded, and a History card carries its video
+  // from finished to posted to measured in one place.
+  // -------------------------------------------------------------------------
+
+  await check("plan and strategy arrive in one pass on Review", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    // One request from the founder's point of view: entering Review with a
+    // ready draft fires the combined pass, and neither old stage endpoint is
+    // called — two waits and two failure surfaces is the thing being removed.
+    const passes = [];
+    await withApi(
+      {
+        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        generatePlanAndStrategy: async (id, payload) => {
+          passes.push(payload);
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+        await act(async () => {});
+        await act(async () => {});
+        const before = apiCalls.length;
+        await openStep(ctx, "Review & submit");
+        await act(async () => {});
+        await act(async () => {});
+        const reviewCalls = apiCalls.slice(before);
+        if (passes.length !== 1) {
+          throw new Error(`Review fired ${passes.length} combined passes, not one`);
+        }
+        if (reviewCalls.includes("generatePlan") || reviewCalls.includes("generateStrategy")) {
+          throw new Error("Review still calls the separate plan/strategy endpoints");
+        }
+        // The combined result populated both halves: the plan reads on the
+        // step, and the strategy panel is already built (its auto-build has
+        // nothing to fire).
+        if (!ctx.text().includes("Hook line")) {
+          throw new Error("the one pass did not land a readable plan");
+        }
+        if (apiCalls.includes("generateStrategy")) {
+          throw new Error("the strategy was built by a second call after the pass");
+        }
+      }
+    );
+  });
+
+  await check("the wizard's last step is Demo + CTA, opening on the finished render", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    const finished = {
+      ...SEGMENT,
+      id: "gen-finished",
+      status: "completed",
+      demo_brief: "Record yourself tapping the timer once, hands only.",
+    };
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [finished] }),
+        getGeneration: async () => finished,
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-finish"]');
+        if (!segment) throw new Error("the progress rail has no Demo + CTA finishing segment");
+        if (!ctx.container.querySelector('[data-testid="wizard-section-finish"]')) {
+          throw new Error("the canvas has no Demo + CTA finishing section");
+        }
+        await openStep(ctx, "Demo + CTA");
+        await act(async () => {});
+        await act(async () => {});
+        const task = (ctx.container.querySelector('[data-testid="wizard-step-task"]')?.textContent || "").trim();
+        if (!task.startsWith("Step 4 of 4")) {
+          throw new Error(`the finishing step does not read as the last of four: ${JSON.stringify(task)}`);
+        }
+        // The editor opened with THIS render loaded: its record brief is the
+        // plan's own note for this generation, which only renders when the
+        // editor holds the generation.
+        const brief = ctx.container.querySelector('[data-testid="wizard-section-finish"] [data-testid="demo-cta-record-brief"]');
+        if (!brief || !(brief.textContent || "").includes("tapping the timer")) {
+          throw new Error("the finishing step did not open the editor on the finished render");
+        }
+        if (segment.getAttribute("data-state") !== "done") {
+          throw new Error("a project with a finished render does not read the finishing step as done");
+        }
+      }
+    );
+  });
+
+  await check("the finishing step names the missing render before one exists", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    await withApi(
+      { getGenerations: async () => ({ generations: [] }) },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Demo + CTA");
+        await act(async () => {});
+        await act(async () => {});
+        const section = ctx.container.querySelector('[data-testid="wizard-section-finish"]');
+        if (!section || !section.querySelector('[data-testid="finish-needs-render"]')) {
+          throw new Error("the finishing step shows nothing honest before a render exists");
+        }
+        if (!section.querySelector('[data-testid="finish-goto-render"]')) {
+          throw new Error("the finishing step offers no way back to the render it is waiting on");
+        }
+        const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-finish"]');
+        if (segment && segment.getAttribute("data-state") === "done") {
+          throw new Error("the finishing step reads done with no finished render");
+        }
+      }
+    );
+  });
+
+  await check("a draft profile is reviewed and approved on the profile step itself", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const draft = {
+      id: "b2",
+      brand_name: "Draftly",
+      app_category: "productivity",
+      status: "draft",
+      brand_description: "A focus timer for people who stall on starting.",
+      core_features: ["Task timer", "Reminders"],
+      usage_moments: ["Starting a task they have been avoiding"],
+      outcome_statements: [
+        { outcome: "Starting without stalling on setup", from_feature: "Task timer", who_feels_it: "people who stall", how_it_helps: "One tap starts it" },
+      ],
+    };
+    const approvals = [];
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [draft] }),
+        approveAppProfile: async (id) => {
+          approvals.push(id);
+          return { ...draft, status: "approved" };
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        // Not pickable yet: the picker only ever offers approved profiles.
+        if (ctx.container.querySelector('[data-testid="app-profile-picker"]')) {
+          throw new Error("a draft profile is pickable before approval");
+        }
+        // The review is real: the facts approval covers are on the step, not
+        // behind a detour to another page.
+        const panel = ctx.container.querySelector('[data-testid="unapproved-profiles-panel"]');
+        if (!panel) throw new Error("the profile step carries no inline approval panel");
+        if (!(panel.textContent || "").includes("A focus timer for people who stall")) {
+          throw new Error("the inline review does not show the profile's description");
+        }
+        if (!(panel.textContent || "").includes("Task timer")) {
+          throw new Error("the inline review does not show the profile's features");
+        }
+        const approve = panel.querySelector('[data-testid="inline-approve-profile-b2"]');
+        if (!approve) throw new Error("the draft cannot be approved where the flow starts");
+        await clickEl(ctx, approve, "the inline approve button");
+        await act(async () => {});
+        if (approvals.length !== 1 || approvals[0] !== "b2") {
+          throw new Error("the inline approval did not call the approve endpoint once for this profile");
+        }
+        // Approved here means the flow moves on from here: the profile step
+        // reads done and the founder lands on the choosing step, with the
+        // just-approved app as the pick — no detour, no second hunt for it.
+        const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
+        if (!segment || segment.getAttribute("data-state") !== "done") {
+          throw new Error("the profile step does not read done after the inline approval");
+        }
+        if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
+          throw new Error("the flow did not continue to the choosing step after the inline approval");
+        }
+      }
+    );
+  });
+
+  await check("an inline approval refusal names the gaps and approves nothing", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const draft = {
+      id: "b3",
+      brand_name: "Gappy",
+      app_category: "productivity",
+      status: "draft",
+      brand_description: "",
+      core_features: [],
+      usage_moments: [],
+      outcome_statements: [],
+    };
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [draft] }),
+        approveAppProfile: async () => {
+          const err = new Error("Request failed with status code 409");
+          err.response = {
+            status: 409,
+            data: {
+              detail:
+                "Fill in a few things before approving this App Profile: " +
+                "a one-line description of what the app does; at least one core feature.",
+            },
+          };
+          throw err;
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        const approve = ctx.container.querySelector('[data-testid="inline-approve-profile-b3"]');
+        if (!approve) throw new Error("the draft cannot be approved where the flow starts");
+        await clickEl(ctx, approve, "the inline approve button");
+        await act(async () => {});
+        const alert = ctx.container.querySelector('[data-testid="inline-approve-error-b3"]');
+        if (!alert || !(alert.textContent || "").includes("one-line description")) {
+          throw new Error("the refusal does not name the gaps where the approval was attempted");
+        }
+        if (ctx.container.querySelector('[data-testid="app-profile-picker"]')) {
+          throw new Error("a refused profile became pickable");
+        }
+      }
+    );
+  });
+
+  await check("a finished History card carries finished, posted and measured in one place", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    // COMPLETED (the panel section's fixture) is out of scope here; this is
+    // the same finished row built from SEGMENT, with the server-minted
+    // playback path a real completed row always carries.
+    const FINISHED = {
+      ...SEGMENT,
+      status: "completed",
+      video_url: "/api/media/videos/gen-1.mp4",
+      playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
+    };
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      // One mount, both rows: a second mount reconciles into the same
+      // History instance and its load effect does not refire, so the two
+      // journey states must arrive in a single response.
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...FINISHED, id: "journey-1", hook_line: "Find your next thought." },
+          {
+            ...FINISHED,
+            id: "journey-2",
+            hook_line: "A measured winner.",
+            tiktok_url: "https://www.tiktok.com/@founder/video/123",
+            tiktok_views: 9000,
+            performance_snapshot: {
+              retention_3s_pct: 71, avg_watch_pct: 38, saves: 12, shares: 3,
+              recorded_at: "2026-11-10T12:00:00Z",
+            },
+          },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const journey = ctx.container.querySelector('[data-testid="history-journey-journey-1"]');
+        if (!journey) throw new Error("the finished card carries no joined journey state");
+        if (journey.getAttribute("data-stage") !== "finished") {
+          throw new Error(`an unposted, unmeasured render reads stage ${journey.getAttribute("data-stage")}, not finished`);
+        }
+        const text = journey.textContent || "";
+        if (!text.includes("Not posted yet")) throw new Error("the journey state does not name the missing link");
+        if (!text.includes("No results yet")) throw new Error("the journey state does not name the missing results");
+        const measured = ctx.container.querySelector('[data-testid="history-journey-journey-2"]');
+        if (!measured) throw new Error("the posted card carries no joined journey state");
+        if (measured.getAttribute("data-stage") !== "measured") {
+          throw new Error(`a posted render with results reads stage ${measured.getAttribute("data-stage")}, not measured`);
+        }
+        const measuredText = measured.textContent || "";
+        if (!measuredText.includes("Posted")) throw new Error("the journey state does not name the posted link");
+        if (!measuredText.includes("71%")) throw new Error("the journey state does not carry the recorded results");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
   await check("the plan is written before a character photo is attached", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     // The plan needs a profile, a template and a goal. The photo is required to
@@ -1418,7 +1702,7 @@ async function main() {
       {
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
-        generatePlan: async (id, payload) => {
+        generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
         },
@@ -1445,7 +1729,7 @@ async function main() {
     global.__SMOKE_PARAMS = "";
     // Entering Review with a ready draft and no plan generates it without a
     // click; the button below is the retry path, not the happy path. The
-    // default generatePlan stub answers with a planned project, so by the
+    // default generatePlanAndStrategy stub answers with a planned project, so by the
     // time the acts flush the step reads the fresh plan.
     const plans = [];
     // A create returns a fresh draft (no plan yet) -- matching the server. The
@@ -1458,7 +1742,7 @@ async function main() {
         // disagree with the wizard's empty angle on every pass.
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
-        generatePlan: async (id, payload) => {
+        generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
         },
@@ -1565,7 +1849,7 @@ async function main() {
           getStudioProject: async () => ({ ...BASE_PROJECT, objective: "", assets: [] }),
           createStudioProject: async () => ({ ...BASE_PROJECT, objective: "", assets: [] }),
           updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", assets: [], ...patch }),
-          generatePlan: async (id, payload) => {
+          generatePlanAndStrategy: async (id, payload) => {
             plans.push(payload);
             return PROJECT_WITH_STRATEGY;
           },
@@ -1618,7 +1902,7 @@ async function main() {
           getStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
           createStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
           updateStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
-          generatePlan: async () => {
+          generatePlanAndStrategy: async () => {
             throw new Error("provider unavailable in this check");
           },
         },
@@ -2871,24 +3155,26 @@ async function main() {
     if (ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
       throw new Error("Back did not return to the profile step");
     }
-    // Last step: there is nowhere to continue to.
-    await openStep(ctx, "Review & submit");
+    // Last step: there is nowhere to continue to. Review used to be that
+    // step; the finishing step is now, so Review offers the Continue that
+    // walks into it and Demo + CTA offers none.
+    await openStep(ctx, "Demo + CTA");
     if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
       throw new Error("Continue is offered on the last step");
     }
   });
 
-  // The wizard reads as one canvas now: all three step sections stand on the
+  // The wizard reads as one canvas now: all four step sections stand on the
   // page at once, and exactly the active one is expanded. A section header is
   // a control, not a label — opening a collapsed one walks there the same way
   // its pill does, so progressive disclosure adds no second navigation model
   // and queues nothing.
-  await check("the canvas stacks all three sections and expands the active one", async (ctx) => {
+  await check("the canvas stacks all four sections and expands the active one", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    const keys = ["profile", "angle", "review"];
+    const keys = ["profile", "angle", "review", "finish"];
     const sections = keys.map((key) =>
       ctx.container.querySelector(`[data-testid="wizard-section-${key}"]`)
     );
@@ -2923,10 +3209,10 @@ async function main() {
   });
 
   // The bar is the nav: each segment above states its step's cumulative
-  // third, moving to a step walks there, and the bar's fill tracks the same
+  // quarter, moving to a step walks there, and the bar's fill tracks the same
   // states so the readouts can never disagree. The pills are gone — the
   // section headers already carry the picks.
-  await check("the progress bar is the nav, stated in thirds", async (ctx) => {
+  await check("the progress bar is the nav, stated in quarters", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     // Not done even as chrome: the pills were a second nav with the same
@@ -2940,12 +3226,12 @@ async function main() {
     if (segments.length !== STEP_LABELS.length) {
       throw new Error(`expected ${STEP_LABELS.length} progress segments, saw ${segments.length}`);
     }
-    const expected = ["33%", "67%", "100%"];
+    const expected = ["25%", "50%", "75%", "100%"];
     segments.forEach((seg, i) => {
       const label = (seg.textContent || "").trim();
       if (!label.endsWith(expected[i])) {
         throw new Error(
-          `segment ${i + 1} does not state its third ${expected[i]}: ${JSON.stringify(label)}`
+          `segment ${i + 1} does not state its quarter ${expected[i]}: ${JSON.stringify(label)}`
         );
       }
       if (seg.tagName !== "BUTTON") throw new Error(`progress segment ${i + 1} is not navigable`);
@@ -2959,6 +3245,11 @@ async function main() {
     await clickEl(ctx, segments[2], "the Review segment");
     const review = ctx.container.querySelector('[data-testid="wizard-section-review"]');
     if (!review || review.getAttribute("data-active") !== "true") {
+      throw new Error("clicking the Review segment did not open its section");
+    }
+    await clickEl(ctx, segments[3], "the Demo + CTA segment");
+    const finish = ctx.container.querySelector('[data-testid="wizard-section-finish"]');
+    if (!finish || finish.getAttribute("data-active") !== "true") {
       throw new Error("clicking the last segment did not open its section");
     }
   });
@@ -2967,17 +3258,17 @@ async function main() {
   // and the chip at the end of the row carries done/blocked state. A locked
   // step wears a padlock instead of its digit, so the seal is announced
   // by both chip and icon.
-  await check("the three step headers carry no glyph disc", async (ctx) => {
+  await check("the four step headers carry no glyph disc", async (ctx) => {
     global.__SMOKE_PARAMS = "?step=profile";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    for (const key of ["profile", "angle", "review"]) {
+    for (const key of ["profile", "angle", "review", "finish"]) {
       const el = ctx.container.querySelector(`[data-testid="wizard-section-icon-${key}"]`);
       if (el) throw new Error(`the ${key} step header still renders a glyph disc`);
       const toggle = ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
       if (!toggle) throw new Error(`the ${key} step header is missing`);
-      const idx = ["profile", "angle", "review"].indexOf(key);
+      const idx = ["profile", "angle", "review", "finish"].indexOf(key);
       // Profile is always open (digit or its pick); angle/review start locked.
       if (key === "profile") {
         if (!toggle.textContent.includes("1")) {
@@ -3012,21 +3303,21 @@ async function main() {
     const pct = () =>
       (ctx.container.querySelector('[data-testid="studio-progress-pct"]')?.textContent || "").trim();
     if (!/^\d+%$/.test(pct())) throw new Error("the rail carries no percentage readout");
-    // Profile done plus the step in view = 1.5 of 3 = 50%.
-    if (pct() !== "50%") throw new Error(`the mounted rail does not state 50%: ${JSON.stringify(pct())}`);
-    // Walking back to a done step holds its third whole: 1 of 3 = 33%.
+    // Profile done plus the step in view = 1.5 of 4 = 38%.
+    if (pct() !== "38%") throw new Error(`the mounted rail does not state 38%: ${JSON.stringify(pct())}`);
+    // Walking back to a done step holds its quarter whole: 1 of 4 = 25%.
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="wizard-back-button"]'),
       "Back to the profile step"
     );
-    if (pct() !== "33%") throw new Error(`the rail ignores the completed step: ${JSON.stringify(pct())}`);
+    if (pct() !== "25%") throw new Error(`the rail ignores the completed step: ${JSON.stringify(pct())}`);
     await clickEl(
       ctx,
       ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
       "Continue to the angle step"
     );
-    if (pct() !== "50%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
+    if (pct() !== "38%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
   });
 
   // The action bar names the one next action beside the arrow-only pair, so a
@@ -3758,7 +4049,7 @@ async function main() {
           getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
           createStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
           updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, script_version: 0, script: "", ...payload, script_version: 0, script: "" }),
-          generatePlan: async () => {
+          generatePlanAndStrategy: async () => {
             throw new Error("plan unavailable in this check");
           },
         },
@@ -4212,7 +4503,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     let planCalls = 0;
     await withApi(
       {
-        generatePlan: async () => {
+        generatePlanAndStrategy: async () => {
           planCalls += 1;
           await new Promise((resolve) => { releasePlan = resolve; });
           return PROJECT_WITH_STRATEGY;
@@ -4262,7 +4553,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     let planCalls = 0;
     await withApi(
       {
-        generatePlan: async () => {
+        generatePlanAndStrategy: async () => {
           planCalls += 1;
           return PROJECT_WITH_STRATEGY;
         },
@@ -4299,7 +4590,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // teach the AI step that produces it.
   await check("plan and template thumbs are recorded under their own component", async (ctx) => {
     await withApi(
-      { generatePlan: async () => PROJECT_WITH_STRATEGY },
+      { generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
         global.__SMOKE_THUMBS = [];
@@ -5742,7 +6033,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           // echo: the default stub answers a planned project, which would
           // hide the gap this check is about behind a plan nobody wrote.
           getStudioProject: async () => ({ ...BASE_PROJECT, template_id: "t1", script_version: 0 }),
-          generatePlan: async () => gone(),
+          generatePlanAndStrategy: async () => gone(),
         },
         async () => {
           await mount(CreateVideo, {})(ctx);
@@ -6861,7 +7152,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await withApi({
         getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, ...payload }),
-        generatePlan: async () => { plans += 1; return PROJECT_WITH_STRATEGY; },
+        generatePlanAndStrategy: async () => { plans += 1; return PROJECT_WITH_STRATEGY; },
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
@@ -7152,7 +7443,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
         createStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
         updateStudioProject: async (id, payload) => ({ ...BASE_PROJECT, script_version: 0, script: "", ...payload, script_version: 0, script: "" }),
-        generatePlan: async () => { throw new Error("plan unavailable in this check"); },
+        generatePlanAndStrategy: async () => { throw new Error("plan unavailable in this check"); },
       }, async () => {
         const c = freshCtx();
         try {
@@ -7669,7 +7960,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           updates.push(payload);
           return PROJECT_WITH_STRATEGY;
         },
-        generatePlan: async (id, payload) => {
+        generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
         },
@@ -14501,10 +14792,11 @@ async function runDemoCtaChecks() {
         // Order is the priority, and it used to be inverted: provenance chips
         // led, so the dimmest, least glance-relevant line came first and the
         // loudest one (the hook) sat third from last. Identity, headline,
-        // results, provenance — in that order, as four blocks.
+        // results, the joined finished → posted journey line, provenance —
+        // in that order, as five blocks.
         const blocks = [...summary.children];
-        if (blocks.length !== 4) {
-          throw new Error(`the summary should read as four blocks, saw ${blocks.length}`);
+        if (blocks.length !== 5) {
+          throw new Error(`the summary should read as five blocks, saw ${blocks.length}`);
         }
         if (!blocks[0].textContent.includes("Journal") || !blocks[0].textContent.includes("Completed")) {
           throw new Error("the summary does not open with app identity and its status");
@@ -14515,7 +14807,10 @@ async function runDemoCtaChecks() {
         if (!blocks[2].textContent.includes("Not posted yet")) {
           throw new Error("the results line does not follow the headline");
         }
-        if (blocks[3].tagName !== "P" || !blocks[3].textContent.includes("script v")) {
+        if (blocks[3].getAttribute("data-testid") !== "history-journey-dense-1") {
+          throw new Error("the joined journey line does not follow the results line");
+        }
+        if (blocks[4].tagName !== "P" || !blocks[4].textContent.includes("script v")) {
           throw new Error("provenance must trail the summary as a line, not a chip run");
         }
         // Identity lives once under the clip: the record beside it must not repeat the headline.

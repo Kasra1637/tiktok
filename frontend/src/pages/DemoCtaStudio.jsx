@@ -112,6 +112,18 @@ function EditorRoute({ generationId }) {
   );
 }
 
+/**
+ * The editor with one finished render loaded into it: fetch the row, prove
+ * it is a finished clip with a copy the browser can open, then hand it to
+ * the editor. Exported under this name because the Create Video wizard's
+ * finishing step renders exactly this — the same loader and the same error
+ * surface, so the last step of the flow and the standalone route can never
+ * disagree about what "opening a render in Demo + CTA" means.
+ */
+export function DemoCtaGenerationEditor({ generationId }) {
+  return <EditorRoute generationId={generationId} />;
+}
+
 export function DemoCtaStudio() {
   const { generationId } = useParams();
   return (

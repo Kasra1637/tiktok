@@ -23,6 +23,7 @@ import { useTourEligibility } from "../components/onboarding/OnboardingProvider"
 
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
+import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { ThumbPair } from "../components/ThumbPair";
 import { ComponentThumbs } from "../components/ComponentThumbs";
 import { api, getErrorMessage } from "../lib/api";
@@ -47,7 +48,7 @@ import { useReducedMotionPreference } from "../lib/reducedMotion";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, X, Lock } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -55,6 +56,7 @@ import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image 
 // The order is the product, and it is deliberate.
 //
 //   profile -> angle+goal+template+photo -> review+submit (plan above, render below)
+//     -> finish (Demo + CTA, opening on the render the step above made)
 //
 // The script is written and read by the founder
 // BEFORE any video is rendered. The last step then renders the piece that
@@ -66,7 +68,7 @@ import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image 
 // different video — with the craft check running against
 // text nobody had looked at before the render.
 /**
- * The three steps, in order.
+ * The steps, in order.
  *
  * Was seven, then five. "Assets" and "Creative plan" were steps that existed
  * only to hold a button, and both are now part of the step they belonged to;
@@ -99,15 +101,50 @@ import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image 
    precedes seeing what the choice ranks, and reading still precedes the
    model call — there are just no steps whose only job was walking to the
    next one. */
+/* The fourth step is not a walking step either, which is why it earns its
+   place under the rule above: it holds the Demo + CTA editor itself, with
+   the finished render already loaded. The flow used to end at the render —
+   download it, then go and find the editor as a separate surface that
+   started blank and made the founder pick the clip they had just made.
+   Now the render's own step is the finish: continue, and the clip is open
+   in the editor, ready for the founder's demo and closing message. The
+   standalone /demo-cta route stays for re-edits and the founder's own
+   footage; inside a flow, the finish is a step, not a detour. */
 const LEGACY_STEP_KEYS = { template: "angle", hook: "review" };
 const STEPS = [
   { key: "profile", label: "App Profile", icon: Briefcase },
   { key: "angle", label: "Audience & template", icon: Target },
   { key: "review", label: "Review & submit", icon: CheckCircle2 },
+  { key: "finish", label: "Demo + CTA", icon: Smartphone },
 ];
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * The facts an approval actually judges, as review rows for the profile
+ * step's inline approval. The four rows mirror the server's approval gaps
+ * (_approval_gaps in the brands router) one for one — description, core
+ * features, a use, a linked outcome — so what the founder reads here is
+ * exactly what the approve endpoint will refuse or accept on, and a blank
+ * row names itself instead of hiding the way a rendered-only-if-present
+ * field list would.
+ */
+function profileApprovalFacts(p) {
+  const list = (v) => (Array.isArray(v) ? v.map((x) => String(x || "").trim()).filter(Boolean) : []);
+  const uses = [p?.usage_moments, p?.primary_use_cases, p?.problems_solved]
+    .map(list)
+    .find((items) => items.length > 0) || [];
+  const outcomes = (Array.isArray(p?.outcome_statements) ? p.outcome_statements : [])
+    .map((o) => (typeof o === "string" ? o : String(o?.outcome || "")).trim())
+    .filter(Boolean);
+  return [
+    { label: "What it does", value: String(p?.brand_description || "").trim() },
+    { label: "Core features", value: list(p?.core_features).join(", ") },
+    { label: "People use it for", value: uses.join(", ") },
+    { label: "Outcomes it promises", value: outcomes.join(", ") },
+  ];
 }
 
 /**
@@ -193,7 +230,7 @@ const TEMPLATE_GONE_MESSAGE = "That template is no longer available — pick ano
  * themselves after reading, and ticking the step for it would claim the
  * workflow is finished when the last read is still ahead of them.
  */
-function stepCompletion({ profileId, objective, angleId, templateId, project, missingIdentity, hasEdits }) {
+function stepCompletion({ profileId, objective, angleId, templateId, project, missingIdentity, hasEdits, hasFinishedRender }) {
   const hasPhoto = missingIdentity.length === 0;
   return STEPS.map((step) => {
     let state = "done";
@@ -211,6 +248,15 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
       // so a plan without one leaves this step reporting what is owed.
       if (!project?.script_version) state = "todo";
       else if (hasEdits || (templateId && !hasPhoto)) state = "blocked";
+    } else if (step.key === "finish") {
+      // The finishing step is satisfied by the render itself. The demo and
+      // closing message are the founder's optional craft on top of a
+      // finished clip — the render panel already says "use it as is, or
+      // open it in Demo + CTA" — so the step ticks when there is a finished
+      // render for it to open on, and waits as a plain todo until then.
+      // Requiring an export here would gate the journey on an edit the
+      // product itself calls optional.
+      state = hasFinishedRender ? "done" : "todo";
     }
     return { step, state };
   });
@@ -254,6 +300,11 @@ export default function CreateVideo() {
     );
   }, [step, setSearchParams, params]);
   const [profiles, setProfiles] = useState([]);
+  // Inline approval on the profile step: which draft is mid-approval, and
+  // the refusal each draft last earned, keyed by profile id so one app's
+  // gaps are never read under another app's name.
+  const [approvingProfileId, setApprovingProfileId] = useState(null);
+  const [approveErrors, setApproveErrors] = useState({});
   const [facets, setFacets] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [draft, dispatchDraft] = useReducer(wizardDraftReducer, {
@@ -265,6 +316,34 @@ export default function CreateVideo() {
   const receiveProject = useCallback((fresh) => {
     dispatchDraft({ type: "project-received", project: fresh });
   }, []);
+  // The newest finished render for this project, and whether the lookup has
+  // answered at all. The finishing step opens on this row and its pill ticks
+  // from it, so it is resolved at the page level rather than inside the
+  // step: a founder who jumps straight to ?step=finish gets the same answer
+  // as one who watched the render complete. `undefined` is "not looked up
+  // yet", `null` is "looked, and there is none" — the step shows a loading
+  // line for the first and the honest missing-render panel for the second,
+  // and never confuses the two. The render panel reports completions into
+  // the same state as they land, so a render that finishes while the
+  // founder sits on Review ticks the finishing step without a reload.
+  const [finishedGeneration, setFinishedGeneration] = useState(undefined);
+  useEffect(() => {
+    setFinishedGeneration(undefined);
+    if (!project?.id) return undefined;
+    let cancelled = false;
+    api
+      .getGenerations({ studio_project_id: project.id, status: "completed", limit: 1 })
+      .then((data) => {
+        if (cancelled) return;
+        setFinishedGeneration((data.generations || [])[0] || null);
+      })
+      .catch(() => {
+        if (!cancelled) setFinishedGeneration(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.id]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -683,6 +762,33 @@ export default function CreateVideo() {
     setStep(1);
   };
 
+  /* Approve a draft profile where the flow starts, instead of sending the
+     founder to the App Profile page and back. The approval itself is
+     untouched — the same endpoint App Profile's own button calls, with the
+     same gaps refusal and the same angles generated on the server — only
+     its location moved: the facts are reviewed on this step (the panel
+     below renders exactly what approval judges), and approving picks the
+     profile and walks on, so a first-run founder goes from draft to
+     choosing an angle without leaving the flow. A refusal stays on the
+     step and names the gaps beside the profile that earned them; filling
+     them is still an edit, and editing still lives on App Profile. */
+  const handleInlineApprove = async (profile) => {
+    if (approvingProfileId) return;
+    setApprovingProfileId(profile.id);
+    setApproveErrors((prev) => ({ ...prev, [profile.id]: null }));
+    try {
+      const approved = await api.approveAppProfile(profile.id);
+      setProfiles((list) =>
+        list.map((p) => (p.id === approved.id ? { ...p, ...approved } : p))
+      );
+      await selectProfile(approved.id);
+    } catch (err) {
+      setApproveErrors((prev) => ({ ...prev, [profile.id]: getErrorMessage(err) }));
+    } finally {
+      setApprovingProfileId(null);
+    }
+  };
+
   const createProject = async (overrides = {}) => {
     setBusy(true);
     setError(null);
@@ -898,7 +1004,16 @@ export default function CreateVideo() {
           template_id: ready.template_id,
         });
       }
-      const updated = await api.generatePlan(ready.id, {
+      // One pass, one wait: the server writes the plan and builds the
+      // strategy from it before answering, so the project that lands here
+      // already carries both. The two-stage shape this replaces made the
+      // founder wait for the plan, then wait again while the strategy panel
+      // auto-built — two waits and two failure surfaces for a pair where
+      // the second is a function of the first. The strategy panel's own
+      // build stays as the recovery path for a project that reaches ready
+      // without a strategy (a strategy-stage failure retried from the
+      // panel, or a draft from before the pass existed).
+      const updated = await api.generatePlanAndStrategy(ready.id, {
         objective,
         tone,
       });
@@ -1356,6 +1471,7 @@ export default function CreateVideo() {
     project,
     missingIdentity,
     hasEdits,
+    hasFinishedRender: Boolean(finishedGeneration),
   });
 
   // Sequential unlock: a step is sealed until every previous step is done.
@@ -1429,6 +1545,13 @@ export default function CreateVideo() {
     } else {
       footerHint = "Ready \u2014 continue to Review & submit.";
     }
+  } else if (STEPS[step].key === "finish") {
+    // The last step's line names its one input: the finished render. With
+    // it, the editor is the work; without it, the render is the work, and
+    // the line sends the founder back to the step that makes it.
+    footerHint = finishedGeneration
+      ? "Add your demo and closing message — exports save beside the original."
+      : "Render the piece first — the finished clip opens here.";
   } else if (activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
   } else if (activeStepState?.state === "blocked") {
@@ -1452,8 +1575,8 @@ export default function CreateVideo() {
     // and the button beside it opens the render half.
     footerHint = "Ready \u2014 review the render below.";
   }
-  // The rail score, derived per segment so the bar, the thirds and the
-  // number can never disagree: a done step claims its full third, the step
+  // The rail score, derived per segment so the bar, the quarters and the
+  // number can never disagree: a done step claims its full quarter, the step
   // in view claims half until it is done, the rest claim nothing.
   const railPct = Math.round(
     (stepStates.reduce(
@@ -1482,7 +1605,7 @@ export default function CreateVideo() {
               description={describeEmptySelection(profiles)}
               action={
                 <Button variant="accent" asChild>
-                  <Link to="/brand">Create or approve an App Profile</Link>
+                  <Link to="/brand">Create an App Profile</Link>
                 </Button>
               }
             />
@@ -1525,33 +1648,68 @@ export default function CreateVideo() {
           )}
 
           {unapproved.length > 0 && (
-            <div className="inset-panel">
+            <div className="inset-panel" data-testid="unapproved-profiles-panel">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="text-base font-semibold">
                     {describeUnapprovedCount(unapproved.length)}
                   </p>
-                  {unapproved.length > 3 ? (
-                    <details className="mt-0.5">
-                      <summary className="cursor-pointer text-sm text-muted-foreground">
-                        Show all {unapproved.length} apps
-                      </summary>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {unapproved.map(profileLabel).join(", ")}
-                      </p>
-                    </details>
-                  ) : (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {unapproved.map(profileLabel).join(", ")}
-                    </p>
-                  )}
-                  <p className="mt-4 text-sm text-muted-foreground" data-subtitle="">
+                  <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
                     Draft profiles need review before a video can use them.
                   </p>
-                  <Button variant="secondary" size="sm" asChild className="mt-4">
-                    <Link to="/brand">Review in App Profile</Link>
-                  </Button>
+                  {/* The review happens here now: each draft shows the facts
+                      its approval will be judged on, and the approve button
+                      sits under them. Nothing about the approval weakened —
+                      the same endpoint refuses a half-filled profile and
+                      names the gaps, which land under that profile below. */}
+                  <div className="mt-4 space-y-3">
+                    {unapproved.map((p) => (
+                      <div
+                        key={p.id}
+                        className="row-pad space-y-3 rounded-xl border border-[color:var(--hairline)]"
+                        data-testid={`unapproved-profile-${p.id}`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="font-display text-sm font-semibold">{profileLabel(p)}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {p.app_category || p.niche || "Category not set"}
+                          </span>
+                        </div>
+                        <dl className="space-y-1.5">
+                          {profileApprovalFacts(p).map((fact) => (
+                            <div key={fact.label} className="flex flex-wrap gap-x-2 text-sm">
+                              <dt className="font-semibold text-muted-foreground">{fact.label}:</dt>
+                              <dd className={fact.value ? "" : "text-muted-foreground"}>
+                                {fact.value || "Not filled in yet"}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {approveErrors[p.id] && (
+                          <div className="space-y-2">
+                            <p role="alert" className="text-sm text-destructive" data-testid={`inline-approve-error-${p.id}`}>
+                              {approveErrors[p.id]}
+                            </p>
+                            <Button variant="secondary" size="sm" asChild>
+                              <Link to="/brand">Fill the gaps in App Profile</Link>
+                            </Button>
+                          </div>
+                        )}
+                        <Button
+                          variant="accent"
+                          size="sm"
+                          disabled={Boolean(approvingProfileId)}
+                          busy={approvingProfileId === p.id}
+                          onClick={() => handleInlineApprove(p)}
+                          data-testid={`inline-approve-profile-${p.id}`}
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          {approvingProfileId === p.id ? "Approving" : "Approve for video"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2032,7 +2190,7 @@ export default function CreateVideo() {
               onClick={handleGeneratePlan}
               disabled={busy || !canGenerate || !objective || !angle}
               busy={busy}
-              etaSeconds={BUSY_ETA_SECONDS.plan}
+              etaSeconds={BUSY_ETA_SECONDS.planStrategy}
               data-testid="plan-retry-button"
             >
               <Sparkles className="h-4 w-4" />
@@ -2061,7 +2219,7 @@ export default function CreateVideo() {
               variant="accent"
               disabled={busy}
               busy={busy || loading}
-              etaSeconds={busy ? BUSY_ETA_SECONDS.plan : null}
+              etaSeconds={busy ? BUSY_ETA_SECONDS.planStrategy : null}
               data-testid="plan-progress-button"
             >
               {loading && !busy ? "Loading your draft" : "Generating your plan"}
@@ -2133,7 +2291,7 @@ export default function CreateVideo() {
                   size="sm"
                   disabled={busy}
                   busy={busy}
-                  etaSeconds={BUSY_ETA_SECONDS.plan}
+                  etaSeconds={BUSY_ETA_SECONDS.planStrategy}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
                 >
@@ -2682,12 +2840,20 @@ export default function CreateVideo() {
                           if (fresh && (fresh.status === "completed" || fresh.status === "failed")) {
                             receiveProject({ ...project, last_generation: fresh });
                           }
+                          // A completion also arms the finishing step: its
+                          // pill ticks and its editor opens on this row,
+                          // without waiting for the page-level lookup.
+                          if (fresh && fresh.status === "completed") {
+                            setFinishedGeneration(fresh);
+                          }
                         }}
                         onProjectChange={receiveProject}
                         hasUnsavedEdits={hasEdits}
                         onNavigate={(action) => {
                           if (action === "goto-angle" || action === "goto-photo") {
                             scrollToTemplatePhoto();
+                          } else if (action === "goto-finish") {
+                            setStep(STEPS.findIndex((s) => s.key === "finish"));
                           } else if (action === "save-edits") {
                             document
                               .getElementById("review-submit")
@@ -2708,6 +2874,53 @@ export default function CreateVideo() {
               </>
             ))}
             </div>
+        </div>
+      );
+    }
+
+    if (step === 3) {
+      /* The finishing step. With a finished render it IS the Demo + CTA
+         editor, opened on that render — the very loader the standalone
+         route renders, so the flow's last step and /demo-cta/:id can never
+         disagree about what opening a render means. Without one it says so
+         and walks back to the render it is waiting on: a step that cannot
+         act yet must navigate to what is missing, not sit blank. */
+      if (finishedGeneration) {
+        return (
+          <DemoCtaGenerationEditor
+            key={finishedGeneration.id}
+            generationId={finishedGeneration.id}
+          />
+        );
+      }
+      return (
+        <div className="inset-panel space-y-4" data-testid="finish-needs-render">
+          <GroupLabel icon={Smartphone}>Demo + CTA</GroupLabel>
+          {finishedGeneration === undefined ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Looking for this project&rsquo;s finished render&hellip;
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Nothing to finish yet. This step opens with your finished render
+                loaded in the editor — render the piece first, then continue
+                here to add your demo and closing message.
+              </p>
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => {
+                  setStep(STEPS.findIndex((s) => s.key === "review"));
+                  setReviewTab("render");
+                  scrollToSubmit();
+                }}
+                data-testid="finish-goto-render"
+              >
+                <Clapperboard className="h-3.5 w-3.5" /> Go to the render
+              </Button>
+            </>
+          )}
         </div>
       );
     }
@@ -2757,10 +2970,12 @@ export default function CreateVideo() {
           stays for label-attached helpers. */}
       <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
         {step === 0
-          ? "Step 1 of 3: choose the approved app this video is for."
+          ? "Step 1 of 4: choose the approved app this video is for."
           : step === 1
-            ? "Step 2 of 3: Angle, goal, template and photo \u2014 each one ranks the next."
-            : "Step 3 of 3: read the plan, then render the Hook + Story."}
+            ? "Step 2 of 4: Angle, goal, template and photo \u2014 each one ranks the next."
+            : step === 2
+              ? "Step 3 of 4: read the plan, then render the Hook + Story."
+              : "Step 4 of 4: add your demo and closing message in Demo + CTA."}
       </p>
       {/* Progress that tracks state rather than position.
           The tick used to mean "this step is to the left of the one you are on",
@@ -2777,7 +2992,7 @@ export default function CreateVideo() {
           pills already announce it. */}
       {/* Progress rail: one navigable bar — the pills were a second nav with
           the same labels, so the bar owns step navigation now. Each segment
-          states its step's cumulative third (33 / 67 / 100%) and the live
+          states its step's cumulative quarter (25 / 50 / 75 / 100%) and the live
           score sits at the end; all of it derives from the same step states,
           so the readouts can never disagree. It scrolls with the page — a
           pinned bar over the plan form read as a second, floating layer. */}
@@ -2786,7 +3001,7 @@ export default function CreateVideo() {
         <nav aria-label="Progress" className="flex flex-1 items-stretch gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
-          // Cumulative thirds: the segment states how much of the workflow
+          // Cumulative quarters: the segment states how much of the workflow
           // finishes when this step does.
           const cumulative = Math.round(((i + 1) / STEPS.length) * 100);
           // Resolved once per segment: the tick, the label, and the pick below

@@ -52,6 +52,7 @@ from models import (
     CreateStudioProjectRequest,
     UpdateStudioProjectRequest,
     GeneratePlanRequest,
+    GeneratePlanAndStrategyRequest,
     GenerateStrategyRequest,
     RewriteHookRequest,
     RewriteLineRequest,
@@ -2054,6 +2055,55 @@ async def generate_project_strategy(
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
+
+@router.post("/studio/projects/{project_id}/plan-and-strategy")
+async def generate_plan_and_strategy(
+    project_id: str, payload: GeneratePlanAndStrategyRequest, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Write the plan and build the strategy in ONE pass.
+
+    The founder used to wait twice here: generate the plan, read it, then
+    wait again while the strategy was built from it — two requests, two
+    failure surfaces, for a pair of stages where the second is defined as a
+    function of the first's output. This endpoint runs the two existing
+    stages back to back server-side and answers once, with the project
+    carrying both. Neither stage changed: the plan stage is generate_plan
+    (same gates, same prompt, same writes, script_version bump included)
+    and the strategy stage is generate_project_strategy, which re-reads the
+    row, so the strategy is built from the plan this pass just wrote and is
+    stamped current against it.
+
+    One error surface, honestly staged: whichever stage fails is the error
+    the founder sees, and the later stage is never attempted on a plan that
+    does not exist. If the strategy stage fails, the plan it was building
+    from stays written — retrying the pass (or the strategy panel's own
+    rebuild) starts from that plan rather than from nothing. Approving
+    nothing extra happens here: the App Profile approval gate and the
+    template gate are the stages' own, applied in the same order as when
+    the founder called them one at a time.
+    """
+    await generate_plan(
+        project_id,
+        GeneratePlanRequest(
+            objective=payload.objective,
+            duration_seconds=payload.duration_seconds,
+            tone=payload.tone,
+            audience=payload.audience,
+        ),
+        user_id,
+    )
+    return await generate_project_strategy(
+        project_id,
+        GenerateStrategyRequest(
+            objective=payload.objective,
+            duration_seconds=payload.duration_seconds,
+            tone=payload.tone,
+            hook_seconds=payload.hook_seconds,
+        ),
+        user_id,
+    )
+
 
 async def _require_renderable_project(project_id: str, user_id: str) -> tuple:
     """

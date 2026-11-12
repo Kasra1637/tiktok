@@ -62,8 +62,10 @@ One render path, single-pass video generation via OpenRouter.
 - `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
   pure function of video time (export matches preview), faces come from
   `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007.
-- `frontend/src/pages/CreateVideo.jsx` — three-step wizard orchestration:
-  App Profile → Audience & template → Review & submit. Selection UI lives in
+- `frontend/src/pages/CreateVideo.jsx` — four-step wizard orchestration:
+  App Profile → Audience & template → Review & submit → Demo + CTA (the
+  finishing step renders the Demo+CTA editor loader on the project's newest
+  finished render; ADR 0121). Selection UI lives in
   `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); direction
   dropdowns and plan-phase narration in `ReviewPanels.jsx`. Project writes stay
   in the page. `pages/wizardDraft.js` owns coupled draft transitions;

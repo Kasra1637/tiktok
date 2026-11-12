@@ -112,7 +112,7 @@ accepts data; it must not be mistaken for an authorization check.
 | Owner | State / responsibility |
 |---|---|
 | [App.js](../frontend/src/App.js) | Real route inventory, protected shell, lazy page loading. |
-| [CreateVideo.jsx](../frontend/src/pages/CreateVideo.jsx) | Three-step orchestration, URL navigation, request cancellation, autosave and plan/strategy handoffs. |
+| [CreateVideo.jsx](../frontend/src/pages/CreateVideo.jsx) | Four-step orchestration (App Profile → Audience & template → Review & submit → Demo + CTA finishing step), URL navigation, request cancellation, autosave and plan/strategy handoffs. |
 | [wizardDraft.js](../frontend/src/pages/wizardDraft.js) | Pure named transitions for selections, saved project and pending edits. Resume/reset/save adoption are atomic; background project updates retain edits. |
 | [useWizardTemplates.js](../frontend/src/hooks/useWizardTemplates.js) | Keyed recommendation/tailoring requests, shared fit/error state, visible list and progress timer. Tailoring fires only when the page calls `runTailoring` — the goals-section Generate CTA or the header Regenerate — never on the goal pick. No project writes. |
 | [useWizardAngleStep.js](../frontend/src/hooks/useWizardAngleStep.js) | Angle-step lifecycle: angles + verdict evidence, both click-to-view gates, live billed goals, regenerate handlers (ADR 0112). The page clears through its returned setters. |
@@ -130,7 +130,7 @@ accepts data; it must not be mistaken for an authorization check.
 | [api.js](../frontend/src/lib/api.js), [errorMessage.js](../frontend/src/lib/errorMessage.js) | Authenticated transport, durable media selection and actionable errors. |
 | [Analytics.jsx](../frontend/src/pages/Analytics.jsx) | Manual views and own ratings, visualised; reads recorded outcomes only. |
 | [VideoUpscaler.jsx](../frontend/src/pages/VideoUpscaler.jsx), [upscale/](../frontend/src/upscale) | Browser-side 1080p export; the clip's audio stays with the export (ADR 0086). |
-| [DemoCtaStudio.jsx](../frontend/src/pages/DemoCtaStudio.jsx) | Standalone entry to the Demo + CTA editor; pinned workspaces resume their draft, otherwise it starts blank (ADR 0082). |
+| [DemoCtaStudio.jsx](../frontend/src/pages/DemoCtaStudio.jsx) | Standalone entry to the Demo + CTA editor; pinned workspaces resume their draft, otherwise it starts blank (ADR 0082). Its generation loader is also the wizard's finishing step content (ADR 0121). |
 | [BrandSetup.jsx](../frontend/src/pages/BrandSetup.jsx), [AppProfileDetail.jsx](../frontend/src/pages/AppProfileDetail.jsx), [AssetLibrary.jsx](../frontend/src/pages/AssetLibrary.jsx) | App Profile research/approval and its asset library; feeds Create Video. |
 | [PostKitSection.jsx](../frontend/src/components/PostKitSection.jsx) | Frozen post kit on a finished render; copy buttons and completed-only regenerate. |
 | [components/auth/](../frontend/src/components/auth) | Clerk bridge/provider/controls; `ProtectedRoute` gates routes; anonymous local mode when auth is absent. |

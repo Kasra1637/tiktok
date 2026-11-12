@@ -19,6 +19,9 @@
 // - templates: founder-measured 20s for 3 structures (Nov 2026).
 // - plan: founder-measured 50s typical (Nov 2026; up to 3 editorial
 //   attempts against the 120s timeout can still run past it, holding at 0s).
+// - planStrategy: the one pass the Review step now makes — the plan's
+//   founder-measured 50s plus the strategy's ~30s behind the same button,
+//   so the countdown covers the whole wait the founder actually sits through.
 // - strategy: 8192 tokens → ~30s typical.
 // - research: page fetches (15s timeout each, sequential) + 8000-token draft
 //   (timeout 90) → ~40s; refresh variants that also regenerate angles → ~45s.
@@ -32,6 +35,7 @@ export const BUSY_ETA_SECONDS = {
   angles: 50,
   templates: 20,
   plan: 50,
+  planStrategy: 80,
   strategy: 30,
   research: 40,
   refresh: 45,
