@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AuthedOnly,
@@ -9,9 +10,9 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video,
+  Pause, Play,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { LazyHeroVideo } from "../components/LazyHeroVideo";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
 
 const FEATURES = [
@@ -175,6 +176,96 @@ const FLOW_STEPS = [
     outcome: "Your demo stays yours",
   },
 ];
+
+/**
+ * The hero loop: the five steps, cycling in the frame beside the headline.
+ * Kasra replaced the recorded tour footage with this — the same STEP_ART
+ * illustrations the How it works strip uses, one at a time, so the whole
+ * flow plays in one place with no video bytes at all. The pace is set to
+ * stay comfortable: four seconds a step with a slow crossfade, a pause
+ * while the pointer rests on the frame, and a pause control beside the
+ * dots (an autoplaying loop needs a way to stop it). Under reduced motion
+ * the loop never starts — the first step sits still and the dots step
+ * through by hand.
+ */
+const HERO_FLOW_MS = 4000;
+
+function HeroFlow() {
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  const [active, setActive] = useState(0);
+  const [playing, setPlaying] = useState(!reduceMotion);
+  const [hovering, setHovering] = useState(false);
+
+  useEffect(() => {
+    if (!playing || hovering) return undefined;
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      setActive((i) => (i + 1) % FLOW_STEPS.length);
+    }, HERO_FLOW_MS);
+    return () => window.clearInterval(id);
+  }, [playing, hovering]);
+
+  const toggleLabel = playing ? "Pause the step loop" : "Play the step loop";
+
+  return (
+    <div
+      className="hero-flow"
+      role="group"
+      aria-label="How HookForge works, in five steps"
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      <div className="hero-flow-slides">
+        {FLOW_STEPS.map((s, i) => (
+          <div
+            key={s.step}
+            className={`hero-flow-slide${i === active ? " is-active" : ""}`}
+            aria-hidden={i !== active}
+          >
+            <div className="hero-flow-art">{STEP_ART[s.step]}</div>
+            <div className="hero-flow-caption">
+              <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
+              <span className="hero-flow-title font-display">{s.label}</span>
+            </div>
+            <p className="hero-flow-line">{s.line}</p>
+          </div>
+        ))}
+      </div>
+      <div className="hero-flow-nav">
+        <div className="hero-flow-dots">
+          {FLOW_STEPS.map((s, i) => (
+            <button
+              key={s.step}
+              type="button"
+              className={`hero-flow-dot${i === active ? " is-active" : ""}`}
+              aria-label={`Show step ${s.step}: ${s.label}`}
+              aria-current={i === active ? "true" : undefined}
+              onClick={() => setActive(i)}
+            />
+          ))}
+        </div>
+        {!reduceMotion && (
+          <button
+            type="button"
+            className="hero-flow-toggle"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            data-testid="hero-flow-toggle"
+            onClick={() => setPlaying((p) => !p)}
+          >
+            {playing ? (
+              <Pause className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Problem / solution contrast. Left is the manual path, right is the product.
@@ -394,38 +485,24 @@ export default function Landing() {
             </span>
           </div>
           </div>
-          {/* The app itself, beside the pitch: the real three-step Create
-              Video journey (App Profile → Audience & template, with the
-              Review & submit gate naming what's missing) plus the editable
-              Demo + CTA canvas and an expanded History tile, recorded from
-              the running app. A minimal floating card frames it: gradient
-              hairline and a portrait viewport at the capture's exact aspect
-              (471:710) with the footage contained, so the whole interface
-              shows with no cropping and no letterbox gap. The card grows on
-              wide screens and sits on a soft indigo glow so it holds its
-              own next to the headline. Autoplay is silent and loops; the
-              footage loads lazily as the frame nears the viewport, and under
-              reduced motion it stays a poster frame until someone presses
-              Play. The corner play/pause control is the way to stop the loop
-              and the way back into it. */}
+          {/* The flow itself, beside the pitch: the five step illustrations
+              from the How it works strip, cycling in one frame — Kasra
+              replaced the recorded tour footage with this loop, so the hero
+              carries no video bytes at all. The frame keeps the portrait
+              card the footage used (gradient hairline, soft indigo glow);
+              inside, HeroFlow crossfades the steps at four seconds each,
+              with dots and a pause control along the bottom. Under reduced
+              motion the loop never starts and the dots step through by
+              hand. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
             <div className="border-gradient relative rounded-2xl p-[1px] shadow-[0_24px_80px_-24px_rgb(0_0_0/0.8)]">
-              <div className="overflow-hidden rounded-2xl bg-black">
+              <div className="hero-screen overflow-hidden rounded-2xl">
                 <div className="relative aspect-[471/710] w-full">
-                  <LazyHeroVideo
-                    className="absolute inset-0 block h-full w-full object-contain"
-                    poster={`${process.env.PUBLIC_URL}/hero-demo-poster.jpg`}
-                    sources={[
-                      { src: `${process.env.PUBLIC_URL}/hero-demo.webm`, type: "video/webm" },
-                      { src: `${process.env.PUBLIC_URL}/hero-demo.mp4`, type: "video/mp4" },
-                    ]}
-                    ariaLabel="Screen recording: the three-step Create Video wizard, the Demo plus CTA canvas, and an expanded History tile — full interface with no page header or footer"
-                    showPlayControl
-                  />
+                  <HeroFlow />
                 </div>
               </div>
             </div>

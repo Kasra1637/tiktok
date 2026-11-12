@@ -7930,10 +7930,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // The landing payload must stay lean: the Demo + CTA editor pulls in
-  // mediabunny (megabytes of encode/decode), and the hero footage competes
-  // with JS on slow networks. So the editor route is split out of the
-  // landing chunk, and the hero video carries no bytes until it nears the
-  // viewport — poster first, so fast connections swap frames with no flicker.
+  // mediabunny (megabytes of encode/decode). So the editor route is split
+  // out of the landing chunk, and the hero carries no footage at all — the
+  // five step illustrations loop in the frame instead of a recording.
   await check("the landing payload excludes the editor bundle", async () => {
     const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
     if (/import\s+DemoCtaStudio\s+from/.test(src)) {
@@ -7966,214 +7965,67 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("the hero video loads no bytes until it nears the viewport", async (ctx) => {
-    // A stubbed IntersectionObserver that never fires on its own: the hero
-    // must stay a poster-only frame until the observer says it is near. The
-    // component reads the bare global (not dom.window), so the stub replaces
-    // the harness NoopObserver there and restores it after.
-    const observers = [];
-    const prevObserver = global.IntersectionObserver;
-    const StubObserver = class {
-      constructor(cb) { this.cb = cb; observers.push(this); }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-      fire(intersecting) { this.cb([{ isIntersecting: intersecting }]); }
-    };
-    global.IntersectionObserver = StubObserver;
-    dom.window.IntersectionObserver = StubObserver;
-    try {
-      await mount(load("pages/Landing.jsx").default)(ctx);
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      // No flicker on fast connections: the poster is there from first paint,
-      // so the frame is already correct before any bytes arrive.
-      if (!video.getAttribute("poster")) throw new Error("the hero shows no poster before its footage loads");
-      if (video.getAttribute("preload") !== "none") throw new Error("the hero video still preloads against the landing JS");
-      if (video.querySelector("source") || video.getAttribute("src")) {
-        throw new Error("the hero video carries footage before nearing the viewport");
-      }
-      await act(async () => { observers.forEach((o) => o.fire(true)); });
-      await act(async () => {});
-      const sources = [...video.querySelectorAll("source")].map((s) => s.getAttribute("src") || "");
-      if (!sources.some((s) => s.includes("hero-demo"))) {
-        throw new Error("nearing the viewport did not load the hero footage");
-      }
-    } finally {
-      global.IntersectionObserver = prevObserver;
-      dom.window.IntersectionObserver = prevObserver;
-    }
+  // The hero is a loop of the five step illustrations, not a recording:
+  // Kasra replaced the tour footage so the whole flow plays in the frame
+  // with no video bytes. The pins below hold that shape — five slides, the
+  // first one up front, dots to step by hand, a control that stops the
+  // loop, and a still first step under reduced motion.
+  await check("the hero shows the five-step flow instead of a video", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+    if (!shot) throw new Error("no hero frame rendered");
+    if (shot.querySelector("video")) throw new Error("the hero still carries a video");
+    const slides = [...shot.querySelectorAll(".hero-flow-slide")];
+    if (slides.length !== 5) throw new Error(`expected five hero flow slides, got ${slides.length}`);
+    if (!slides[0].classList.contains("is-active")) throw new Error("the flow does not open on the first step");
+    const dots = [...shot.querySelectorAll(".hero-flow-dot")];
+    if (dots.length !== 5) throw new Error("the flow is missing its five step dots");
   });
 
-  await check("the hero video stays a poster frame under reduced motion", async (ctx) => {
-    // The reduced-motion contract is a paused poster: downloading footage
-    // that never plays wastes the very bytes the lazy load was saving.
+  await check("the hero flow stays on the first step under reduced motion", async (ctx) => {
+    // Reduced motion means the loop never starts: the first step sits
+    // still, no play control is offered for a loop that never plays, and
+    // the dots remain the way through.
     const prevMatchMedia = dom.window.matchMedia;
     dom.window.matchMedia = () => ({ matches: true });
     try {
       await mount(load("pages/Landing.jsx").default)(ctx);
       await act(async () => {});
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      if (video.querySelector("source") || video.getAttribute("src")) {
-        throw new Error("reduced motion still downloads hero footage that never plays");
+      const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+      const slides = [...shot.querySelectorAll(".hero-flow-slide")];
+      if (!slides[0].classList.contains("is-active")) throw new Error("reduced motion moved the flow off the first step");
+      if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
+        throw new Error("reduced motion still offers a play control for a loop that never plays");
       }
-      if (!video.getAttribute("poster")) throw new Error("the reduced-motion hero lost its poster frame");
     } finally {
       dom.window.matchMedia = prevMatchMedia;
     }
   });
 
-  // Hero playback: the footage autoplays and loops, so it has to carry the
-  // control that stops it (and the way back in). The label is the assertion,
-  // not the icon: a control that draws Pause over a frozen poster, or Pause
-  // that pauses nothing, reads as a broken app rather than a stopped clip.
-  // jsdom has no media pipeline, so `play`/`pause` are recorded and the
-  // element's own events are dispatched the way a browser fires them, which
-  // keeps the component's onPlay/onPause handlers on the tested path.
-  const stubHeroMedia = () => {
-    const media = dom.window.HTMLMediaElement.prototype;
-    const original = { play: media.play, pause: media.pause };
-    const calls = { play: 0, pause: 0 };
-    let refusePlay = false;
-    media.play = function () {
-      calls.play += 1;
-      if (refusePlay) return Promise.reject(new Error("NotAllowedError"));
-      this.dispatchEvent(new dom.window.Event("play"));
-      return Promise.resolve();
-    };
-    media.pause = function () {
-      calls.pause += 1;
-      this.dispatchEvent(new dom.window.Event("pause"));
-    };
-    return {
-      calls,
-      refusePlay: (value) => { refusePlay = value; },
-      restore: () => { media.play = original.play; media.pause = original.pause; },
-    };
-  };
-  const heroControlLabel = (ctx) => {
-    const control = ctx.container.querySelector('[data-testid="hero-play-toggle"]');
-    return control ? control.getAttribute("aria-label") : null;
-  };
-
-  await check("the hero's play control pauses the footage and plays it again", async (ctx) => {
-    const media = stubHeroMedia();
+  await check("the hero flow dots and pause control drive the loop", async (ctx) => {
+    const prevMatchMedia = dom.window.matchMedia;
+    dom.window.matchMedia = () => ({ matches: false });
     try {
       await mount(load("pages/Landing.jsx").default)(ctx);
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      // The browser's canplay step is the moment autoplay starts, and jsdom
-      // never decodes, so that event is dispatched by hand.
-      await act(async () => { video.dispatchEvent(new dom.window.Event("canplay")); });
       await act(async () => {});
-      if (heroControlLabel(ctx) === null) {
-        throw new Error("the autoplaying hero has no play/pause control");
+      const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+      const slides = () => [...shot.querySelectorAll(".hero-flow-slide")];
+      const dots = () => [...shot.querySelectorAll(".hero-flow-dot")];
+      const toggle = () => shot.querySelector('[data-testid="hero-flow-toggle"]');
+      if (!toggle()) throw new Error("the looping hero has no pause control");
+      if (toggle().getAttribute("aria-label") !== "Pause the step loop") {
+        throw new Error(`the control does not offer to stop the loop: ${toggle().getAttribute("aria-label")}`);
       }
-      if (heroControlLabel(ctx) !== "Pause the recording") {
-        throw new Error(`the control does not offer to stop the autoplaying footage: ${heroControlLabel(ctx)}`);
-      }
-      const control = () => ctx.container.querySelector('[data-testid="hero-play-toggle"]');
-      await act(async () => { control().click(); });
+      await act(async () => { dots()[2].click(); });
       await act(async () => {});
-      if (media.calls.pause !== 1) throw new Error("the control did not pause the footage");
-      if (heroControlLabel(ctx) !== "Play the recording") {
+      if (!slides()[2].classList.contains("is-active")) throw new Error("the third dot did not show the third step");
+      await act(async () => { toggle().click(); });
+      await act(async () => {});
+      if (toggle().getAttribute("aria-label") !== "Play the step loop") {
         throw new Error("after pausing, the control still offers Pause");
       }
-      await act(async () => { control().click(); });
-      await act(async () => {});
-      if (media.calls.play < 2) throw new Error("the control never resumed playback");
-      if (heroControlLabel(ctx) !== "Pause the recording") {
-        throw new Error("resumed footage did not return the control to Pause");
-      }
-    } finally {
-      media.restore();
-    }
-  });
-
-  await check("the reduced-motion hero waits for the play tap before loading footage", async (ctx) => {
-    // Reduced motion keeps the poster and downloads nothing on its own. The
-    // control is the opt-in: one deliberate tap attaches the sources and
-    // plays, so the contract costs no bytes it does not have to.
-    const prevMatchMedia = dom.window.matchMedia;
-    const media = stubHeroMedia();
-    dom.window.matchMedia = () => ({ matches: true });
-    try {
-      await mount(load("pages/Landing.jsx").default)(ctx);
-      await act(async () => {});
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      if (heroControlLabel(ctx) === null) {
-        throw new Error("the reduced-motion hero has no way to start the footage");
-      }
-      if (heroControlLabel(ctx) !== "Play the recording") {
-        throw new Error(`the reduced-motion control should offer Play: ${heroControlLabel(ctx)}`);
-      }
-      if (video.querySelector("source") || video.getAttribute("src")) {
-        throw new Error("the reduced-motion hero loaded footage before anyone asked for it");
-      }
-      const control = () => ctx.container.querySelector('[data-testid="hero-play-toggle"]');
-      await act(async () => { control().click(); });
-      await act(async () => {});
-      if (!video.querySelector("source")) {
-        throw new Error("the play control did not attach the footage");
-      }
-      if (media.calls.play !== 1) throw new Error("the play control never asked the footage to play");
-      if (heroControlLabel(ctx) !== "Pause the recording") {
-        throw new Error("tap-to-play left the control saying Play over playing footage");
-      }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
-      media.restore();
-    }
-  });
-
-  await check("a refused hero autoplay leaves Play, not a dead Pause", async (ctx) => {
-    // Muted autoplay can still be refused — data saver, an embedded webview,
-    // a strict default. The control must then offer Play, because it is the
-    // only way through, and it must actually retry when pressed.
-    const media = stubHeroMedia();
-    try {
-      media.refusePlay(true);
-      await mount(load("pages/Landing.jsx").default)(ctx);
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      await act(async () => { video.dispatchEvent(new dom.window.Event("canplay")); });
-      await act(async () => {});
-      if (heroControlLabel(ctx) !== "Play the recording") {
-        throw new Error(`a refused autoplay still reads as playing: ${heroControlLabel(ctx)}`);
-      }
-      const attemptsBefore = media.calls.play;
-      await act(async () => { ctx.container.querySelector('[data-testid="hero-play-toggle"]').click(); });
-      await act(async () => {});
-      if (media.calls.play <= attemptsBefore) {
-        throw new Error("the control never retried playback after the refusal");
-      }
-      if (heroControlLabel(ctx) !== "Play the recording") {
-        throw new Error("a still-refused play flipped the control to Pause");
-      }
-    } finally {
-      media.restore();
-    }
-  });
-
-  await check("a hero whose recording fails drops the dead play control", async (ctx) => {
-    // If the sources cannot play, the poster is the whole story. A Play
-    // button that cannot start anything would be the dead control this
-    // project bans, so it goes with the footage.
-    const media = stubHeroMedia();
-    try {
-      await mount(load("pages/Landing.jsx").default)(ctx);
-      const video = ctx.container.querySelector('[data-testid="landing-hero-shot"] video');
-      if (!video) throw new Error("no hero video rendered");
-      if (heroControlLabel(ctx) === null) throw new Error("the hero has no play control");
-      await act(async () => { video.dispatchEvent(new dom.window.Event("error")); });
-      await act(async () => {});
-      if (heroControlLabel(ctx) !== null) {
-        throw new Error("a recording that cannot play still offers a dead Play button");
-      }
-    } finally {
-      media.restore();
     }
   });
 
