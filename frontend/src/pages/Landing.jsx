@@ -488,25 +488,20 @@ export default function Landing() {
           </div>
           </div>
           {/* The flow itself, beside the pitch: the five step illustrations
-              from the How it works strip, cycling in one frame — Kasra
-              replaced the recorded tour footage with this loop, so the hero
-              carries no video bytes at all. The frame keeps the portrait
-              card the footage used (gradient hairline, soft indigo glow);
-              inside, HeroFlow crossfades the steps at four seconds each,
-              with dots and a pause control along the bottom. Under reduced
-              motion the loop never starts and the dots step through by
-              hand. */}
+              from the How it works strip, cycling bare — no card, frame, or
+              backdrop, only the illustration, title, line, dots, and pause
+              control. Kasra replaced the recorded tour footage with this loop,
+              so the hero carries no video bytes at all. HeroFlow crossfades
+              the steps at four seconds each, with dots and a pause control
+              along the bottom. Under reduced motion the loop never starts and
+              the dots step through by hand. */}
           <figure
             className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
-            <div className="border-gradient relative rounded-2xl p-[1px]">
-              <div className="hero-screen overflow-hidden rounded-2xl">
-                <div className="relative aspect-[471/710] w-full">
-                  <HeroFlow />
-                </div>
-              </div>
+            <div className="relative aspect-[471/710] w-full">
+              <HeroFlow />
             </div>
           </figure>
         </div>

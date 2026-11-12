@@ -1175,13 +1175,11 @@ h1,
     font-weight: 600;
 }
 /* ---------- Landing: hero flow loop ----------
-   The five step illustrations cycling inside the hero frame, replacing the
-   recorded tour footage — no video bytes, the same indigo family as the
-   strip below. Slides share one stacked cell and crossfade slowly; the nav
-   row pins the dots and the pause control to the frame's bottom. */
-.hero-screen {
-    background: hsl(228 14% 10%);
-}
+   The five step illustrations cycling bare in the hero (no frame or
+   backdrop), replacing the recorded tour footage — no video bytes, the
+   same indigo family as the strip below. Slides share one stacked cell
+   and crossfade slowly; the nav row pins the dots and the pause control
+   to the bottom. */
 .hero-flow {
     position: absolute;
     inset: 0;
