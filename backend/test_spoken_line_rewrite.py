@@ -1,0 +1,262 @@
+"""Per-line rewrite assist: a suggestion for any spoken line, never saved.
+
+The endpoint half mirrors test_hook_rewrite.py (the hook-only original);
+the service half mirrors test_hook_voice.py's `_chat_json` fakes and pins
+the two rules that are a middle line's own: the script never asks a
+question, and the rewrite must fit the room the rest of the script leaves
+in the middle's seconds.
+"""
+import asyncio
+import importlib
+import os
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi import HTTPException
+
+BACKEND_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BACKEND_DIR))
+
+import ai_service
+from ai_spoken import spoken_targets
+
+ANON = "anonymous"
+
+HOOK = "I don't want to type anything"
+SCRIPT = (
+    "Typing is the last thing I want to do at night. "
+    "My head is still loud from the whole day."
+)
+FIRST_LINE = "Typing is the last thing I want to do at night."
+CLEARER = "Writing in my journal is the last thing I want at night."
+
+
+@pytest.fixture(scope="module")
+def api():
+    tmpdir = tempfile.mkdtemp(prefix="tiktok-line-rewrite-")
+    os.environ["TURSO_DATABASE_URL"] = ""
+    os.environ["OPENROUTER_API_KEY"] = "test-key-not-real"
+    os.environ["CLERK_JWKS_URL"] = ""
+    sys.modules.pop("server", None)
+    server = importlib.import_module("server")
+    server.DB_PATH = Path(tmpdir) / "test.db"
+    asyncio.run(server.init_db())
+    yield server
+    sys.modules.pop("server", None)
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+def _project(api, hook_line=HOOK, script=SCRIPT):
+    from models import (
+        ApproveAppProfileRequest, BrandProfileCreateRequest,
+        CreateStudioProjectRequest, UpdateStudioProjectRequest,
+    )
+    profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+        brand_name="Voice Journal", app_category="Wellness",
+        brand_description="Speak your journal entry instead of writing it.",
+        core_features=["Voice entries"],
+        usage_moments=["Winding down after work"],
+        outcome_statements=[{
+            "outcome": "Clearing the day's thoughts out loud",
+            "who_feels_it": "people too tired to write",
+            "from_feature": "Voice entries",
+            "how_it_helps": "Talking replaces writing the entry",
+        }],
+    ), user_id=ANON))
+    _run(api.approve_app_profile(profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+    project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+        brand_profile_id=profile["id"]), user_id=ANON))
+    _run(api.update_studio_project(
+        project["id"],
+        UpdateStudioProjectRequest(hook_line=hook_line, script=script),
+        ANON,
+    ))
+    return _run(api.get_studio_project(project["id"], ANON))
+
+
+def _fake(calls, reply=CLEARER):
+    async def fake(profile, angle, line, role="middle", **kwargs):
+        calls.append({"line": line, "role": role, **kwargs})
+        return reply
+    return fake
+
+
+# ---------------------------------------------------------------- endpoint
+
+
+def test_middle_suggestion_returned_and_nothing_saved(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls))
+    out = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert out == {"line": CLEARER, "original": FIRST_LINE, "role": "middle"}
+    assert calls[0]["line"] == FIRST_LINE
+    assert calls[0]["role"] == "middle"
+    assert calls[0]["hook_line"] == HOOK
+    assert calls[0]["script"] == SCRIPT
+    # The budget handed to the rewrite is the room the rest of the script
+    # leaves in the middle's ceiling — no more, so an accepted suggestion
+    # cannot push the script over.
+    ceiling = spoken_targets(
+        project.get("hook_seconds") or 3, project.get("duration_seconds") or 15,
+    )["script"]["ceiling"]
+    assert calls[0]["max_chars"] == ceiling - (len(SCRIPT) - len(FIRST_LINE))
+    stored = _run(api.get_studio_project(project["id"], ANON))
+    assert stored["script"] == SCRIPT
+    assert stored["hook_line"] == HOOK
+
+
+def test_hook_role_falls_back_to_the_saved_hook(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls))
+    out = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(role="hook"), ANON))
+    assert out == {"line": CLEARER, "original": HOOK, "role": "hook"}
+    assert calls[0]["line"] == HOOK
+    assert calls[0]["max_chars"] == 0
+
+
+def test_unknown_project_bad_role_and_empty_line_are_refused(api):
+    from models import RewriteLineRequest
+    with pytest.raises(HTTPException) as missing:
+        _run(api.suggest_line_rewrite(
+            "no-such-project", RewriteLineRequest(line="x", role="middle"), ANON))
+    assert missing.value.status_code == 404
+    project = _project(api)
+    with pytest.raises(HTTPException) as bad_role:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line="x", role="chorus"), ANON))
+    assert bad_role.value.status_code == 400
+    with pytest.raises(HTTPException) as empty:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line="  ", role="middle"), ANON))
+    assert empty.value.status_code == 400
+
+
+def test_no_room_left_in_the_middle_names_the_fix(api, monkeypatch):
+    from models import RewriteLineRequest
+    # A script far past anything its seconds can hold leaves no room for
+    # any one line: the refusal names the fix and the model is never called.
+    project = _project(api, script="word " * 400)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line="word", role="middle"), ANON))
+    assert err.value.status_code == 400
+    assert "shorten it first" in err.value.detail
+    assert calls == []
+
+
+def test_failed_rewrite_names_the_next_step(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("The rewrite came back unchanged.")
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", boom)
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "Try again" in err.value.detail
+
+
+# ----------------------------------------------------------------- service
+
+
+def _chat_fake(replies, calls):
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return replies[len(calls) - 1]
+    return fake_chat
+
+
+def test_middle_rewrite_prompts_with_the_whole_story(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([{"line": CLEARER}], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    assert line == CLEARER
+    prompt = calls[0]["prompt"]
+    assert f"HOOK: {HOOK}" in prompt
+    assert f"FULL SCRIPT: {SCRIPT}" in prompt
+    assert FIRST_LINE in prompt
+    assert "never a question" in prompt
+
+
+def test_middle_rewrite_corrects_a_question_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "Why is typing the last thing I want at night?"},
+        {"line": CLEARER},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    assert line == CLEARER
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "never asks one" in calls[1]["prompt"]
+
+
+def test_middle_rewrite_refuses_a_persistent_question(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": "Why is typing the last thing I want?"}),
+    )
+    with pytest.raises(RuntimeError, match="question"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+
+
+def test_middle_rewrite_keeps_the_lines_budget(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "Writing in my journal is honestly the very last thing I want to do."},
+        {"line": "Journaling is the last thing I want."},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT, max_chars=40))
+    assert line == "Journaling is the last thing I want."
+    assert len(line) <= 40
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "40" in calls[1]["prompt"]
+
+
+def test_middle_rewrite_refuses_a_persistent_overrun(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": "Writing in my journal is the very last thing I want to do at night."}),
+    )
+    with pytest.raises(RuntimeError, match="running long"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT, max_chars=40))
+
+
+def test_middle_rewrite_unchanged_reply_raises(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": FIRST_LINE}),
+    )
+    with pytest.raises(RuntimeError, match="unchanged"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+
+
+def test_hook_role_delegates_to_the_hook_rewrite(monkeypatch):
+    async def fake_hook(profile, angle, hook_line, objective=""):
+        return "A sharper hook."
+    monkeypatch.setattr(ai_service, "rewrite_hook_line", fake_hook)
+    line = asyncio.run(ai_service.rewrite_spoken_line({}, None, "A dull hook.", "hook"))
+    assert line == "A sharper hook."

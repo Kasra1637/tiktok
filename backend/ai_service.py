@@ -3258,6 +3258,106 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     raise RuntimeError("The rewrite kept narrating in first person or asking a question; try again.")
 
 
+LINE_REWRITE_JSON_SCHEMA = _strict_object({"line": {"type": "string"}})
+
+
+async def rewrite_spoken_line(
+    profile: dict,
+    angle: Optional[dict],
+    line: str,
+    role: str = "middle",
+    *,
+    hook_line: str = "",
+    script: str = "",
+    objective: str = "",
+    max_chars: int = 0,
+) -> str:
+    """A clearer version of any one spoken line — the per-line rewrite assist.
+
+    The hook role delegates to `rewrite_hook_line`: its form rules (problem
+    first, "I" at most once, a question only when the founder's hook asks)
+    are hook-only (ADR 0084). A middle line is one sentence of the script,
+    rewritten inside its story: it keeps its meaning, its place and roughly
+    its length, because its seconds are already spoken for by the rest of
+    the script — `max_chars`, when given, is the exact room the middle's
+    ceiling leaves it. It stays a statement: the hook carries the question
+    and the script never asks one.
+
+    A suggestion only: nothing is saved here. An empty line or a reply that
+    comes back unchanged raises, so the founder never sees a fake
+    improvement.
+    """
+    if role == "hook":
+        return await rewrite_hook_line(profile, angle, line, objective)
+    original = str(line or "").strip()
+    if not original:
+        raise RuntimeError("There is no line to rewrite yet.")
+    p = profile or {}
+    facts = "\n".join(
+        f"- {k}: {str(p.get(k)).strip()}"
+        for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
+        if str(p.get(k) or "").strip()
+    )
+    if max_chars and max_chars < len(original):
+        budget = (
+            f" The middle's seconds hold {max_chars} characters for this line "
+            "— the rest of the script already uses the remainder — so the "
+            "rewrite must fit inside that."
+        )
+    else:
+        budget = (
+            " Keep roughly its length — its seconds are already spoken for "
+            "by the rest of the script."
+        )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
+        f"{_angle_goal_block(angle, objective)}\n\n"
+        f"{_spoken_line_rules_block()}\n"
+        f"HOOK: {str(hook_line or '').strip()}\n"
+        f"FULL SCRIPT: {str(script or '').strip()}\n"
+        f"LINE TO REWRITE (one sentence of the script): {original}\n\n"
+        "Rewrite the LINE TO REWRITE so it says the same thing clearer, in "
+        "the plain loose words a real person says out loud to a friend. Keep "
+        "its meaning, its place in the story and its feeling: it still has "
+        "to follow the hook and sit inside the full script without repeating "
+        "either. One spoken sentence, a statement — never a question."
+        f"{budget} Never name the app. No quotation marks. "
+        'Return JSON: {"line": "..."}'
+    )
+    for _ in range(2):
+        raw = await _chat_json(
+            system_message="You sharpen one spoken line from a TikTok script. Return one JSON object only.",
+            prompt=prompt,
+            context="Line rewrite",
+            temperature=0.6,
+            max_tokens=400,
+            attempts=2,
+            json_schema=LINE_REWRITE_JSON_SCHEMA,
+        )
+        candidate = re.sub(r"\s+", " ", str((raw or {}).get("line") or "")).strip().strip('"“”')
+        # The rewrite is spoken, so it passes the same identity rule as
+        # every other spoken line (ADR 0089).
+        candidate = character_policy.neutralize(candidate)
+        if not candidate or candidate.lower() == character_policy.neutralize(original).lower():
+            raise RuntimeError("The rewrite came back unchanged.")
+        if "?" in candidate:
+            prompt += (
+                "\n\nCORRECTION: that rewrite asked a question. The hook "
+                "carries the question and the script never asks one — rewrite "
+                "it as a statement that says the same thing directly."
+            )
+            continue
+        if max_chars and len(candidate) > max_chars:
+            prompt += (
+                f"\n\nCORRECTION: that rewrite is {len(candidate)} characters, "
+                f"but this line's seconds hold {max_chars}. Say the same "
+                "thing in fewer, plainer words."
+            )
+            continue
+        return candidate
+    raise RuntimeError("The rewrite kept asking a question or running long; try again.")
+
+
 def _angle_scene_moment(angle: Optional[dict]) -> str:
     """The angle's opening moment, with any place and time of day it names spelled out."""
     scene = _angle_scene_policy.angle_scene(angle)

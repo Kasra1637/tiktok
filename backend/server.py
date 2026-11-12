@@ -152,7 +152,7 @@ from routers.studio import (
     _assert_model_usable, _assert_resolution_offered, _assert_within_single_pass_cap,
     _require_renderable_project, _backfill_two_section_projects,
     list_studio_projects, create_studio_project, get_studio_project,
-    update_studio_project, suggest_hook_rewrite, generate_plan,
+    update_studio_project, suggest_hook_rewrite, suggest_line_rewrite, generate_plan,
     mark_project_ready, submit_project_generation, generate_project_strategy,
     list_studio_video_models,
 )

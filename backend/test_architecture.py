@@ -144,7 +144,7 @@ def test_studio_router_is_owned_by_routers_studio():
     import server
 
     for name in ("list_studio_projects", "create_studio_project", "get_studio_project",
-                 "update_studio_project", "suggest_hook_rewrite", "generate_plan",
+                 "update_studio_project", "suggest_hook_rewrite", "suggest_line_rewrite", "generate_plan",
                  "mark_project_ready", "submit_project_generation",
                  "generate_project_strategy", "list_studio_video_models",
                  "_two_section_repairs", "_public_project", "_project_strategy",

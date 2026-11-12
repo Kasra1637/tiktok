@@ -537,3 +537,18 @@ class DemoCtaUploadCompleteRequest(BaseModel):
 class RewriteHookRequest(BaseModel):
     """The hook to sharpen; empty means the project's saved hook line."""
     hook_line: Optional[str] = None
+
+
+class RewriteLineRequest(BaseModel):
+    """One spoken line to sharpen, and where it sits in the pair.
+
+    `line` is the line itself, in the founder's current draft wording;
+    `role` is "hook" or "middle". For a middle line, `script` carries the
+    full current script so the rewrite keeps its place in the story and is
+    budgeted by the room the rest of the script leaves in the middle's
+    seconds; both context fields fall back to the project's saved words.
+    """
+    line: Optional[str] = None
+    role: str = "middle"
+    hook_line: Optional[str] = None
+    script: Optional[str] = None

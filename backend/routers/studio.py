@@ -54,6 +54,7 @@ from models import (
     GeneratePlanRequest,
     GenerateStrategyRequest,
     RewriteHookRequest,
+    RewriteLineRequest,
     StudioGenerationRequest,
     STUDIO_EDITABLE_FIELDS,
     STUDIO_TEXT_FIELDS,
@@ -1299,6 +1300,78 @@ async def suggest_hook_rewrite(
             detail="Couldn't write a clearer hook just now. Try again, or edit the line yourself.",
         )
     return {"hook_line": line, "original": original}
+
+@router.post("/studio/projects/{project_id}/rewrite-line")
+async def suggest_line_rewrite(
+    project_id: str, payload: RewriteLineRequest, user_id: str = Depends(get_current_user_id)
+):
+    """A clearer version of any spoken line the founder may accept.
+
+    Advisory like the hook rewrite (ADR 0084): writes nothing. The hook
+    role runs the hook rewrite unchanged; a middle line is rewritten inside
+    the room the rest of the script leaves in the middle's seconds, so an
+    accepted suggestion cannot push the script over its ceiling — and when
+    no room is left, the refusal says to shorten the script first instead
+    of offering a rewrite that could never fit.
+    """
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    role = str(payload.role or "").strip().lower()
+    if role not in ("hook", "middle"):
+        raise HTTPException(
+            status_code=400,
+            detail="Say which line it is — the hook or a script line — then ask for a clearer one.",
+        )
+    original = (payload.line or "").strip()
+    if role == "hook" and not original:
+        original = (row.get("hook_line") or "").strip()
+    if not original:
+        raise HTTPException(status_code=400, detail="Write the line first, then ask for a clearer one.")
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+        (row.get("brand_profile_id"), user_id),
+    ) if row.get("brand_profile_id") else None
+    angle = await _fetch_one(
+        "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
+        (row["content_angle_id"], user_id),
+    ) if row.get("content_angle_id") else None
+    hook_line = (payload.hook_line or row.get("hook_line") or "").strip()
+    script = (payload.script or row.get("script") or "").strip()
+    max_chars = 0
+    if role == "middle":
+        # A missing duration falls back to fifteen seconds, the same reading
+        # the craft score gives an old project: it must not be measured
+        # against a one-second middle.
+        ceiling = check_spoken_story(
+            hook_line, script, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
+        )["script"]["ceiling"]
+        max_chars = ceiling - (len(script) - len(original))
+        if max_chars < 16:
+            raise HTTPException(
+                status_code=400,
+                detail="The rest of the script already fills its seconds — shorten it first, then rewrite this line.",
+            )
+    try:
+        line = await _log_model_call(
+            "line_rewrite", "text", TEXT_MODEL,
+            lambda: ai_service.rewrite_spoken_line(
+                profile or {}, angle, original, role,
+                hook_line=hook_line, script=script,
+                objective=row.get("objective") or "", max_chars=max_chars,
+            ),
+            user_id, studio_project_id=project_id,
+        )
+    except Exception as e:
+        logger.error(f"Line rewrite failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't write a clearer line just now. Try again, or edit the line yourself.",
+        )
+    return {"line": line, "original": original, "role": role}
 
 @router.post("/studio/projects/{project_id}/plan")
 async def generate_plan(

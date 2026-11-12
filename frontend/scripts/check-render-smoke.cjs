@@ -2268,6 +2268,52 @@ async function main() {
     }
   });
 
+  await check("the craft check lists all eight craft dimensions", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const dimension = (key, label, score, max, next_step) => ({
+      key, label, weight: max, score, max, evidence: [], next_step,
+    });
+    const report = {
+      version: 1,
+      advisory: true,
+      total: 79,
+      max: 100,
+      grade: "B",
+      band: "strong",
+      dimensions: {
+        hook_stopping_power: dimension("hook_stopping_power", "Hook stopping power", 16, 20, "Open on the problem, not the diary."),
+        audience_truth: dimension("audience_truth", "Audience truth / customer voice", 12, 15, "Say it the way the viewer would."),
+        clarity: dimension("clarity", "Clarity / one thought", 8, 10, "Cut the second thought from the hook."),
+        concreteness: dimension("concreteness", "Concreteness", 7, 10, "Name one place and one time."),
+        story_arc: dimension("story_arc", "Story arc / payoff", 11, 15, "Answer the hook in the first clause."),
+        spoken_naturalness: dimension("spoken_naturalness", "Spoken naturalness", 9, 10, "Read it aloud and fix the written phrase."),
+        demo_handoff: dimension("demo_handoff", "Demo handoff", 6, 10, "End on the question the demo answers."),
+        trust_compliance: dimension("trust_compliance", "Trust & compliance", 10, 10, "Keep it a customer story, not an ad."),
+      },
+      next_steps: ["Answer the hook in the first clause."],
+    };
+    const project = { ...PROJECT_WITH_STRATEGY, quality_report: report };
+    try {
+      await withApi({ getStudioProject: async () => project }, async () => {
+        await mount(CreateVideo)(ctx);
+        if (!ctx.container.querySelector('[data-testid="quality-report"]')) {
+          throw new Error("the craft card is missing");
+        }
+        const list = ctx.container.querySelector('[data-testid="quality-dimensions"]');
+        if (!list) throw new Error("the craft card does not list the dimensions");
+        if (list.querySelectorAll("li").length !== 8) {
+          throw new Error("not all eight craft dimensions rendered");
+        }
+        expectText(ctx, "Hook stopping power", "a dimension label is missing");
+        expectText(ctx, "Trust & compliance", "a dimension label is missing");
+        expectText(ctx, "16/20", "a dimension score is missing");
+        expectText(ctx, "Cut the second thought from the hook.", "a dimension next step is missing");
+      });
+    } finally {
+      delete global.__SMOKE_PARAMS;
+    }
+  });
+
   // -------------------------------------------------------------------------
   // The replacement for the extend-coverage warning.
   //

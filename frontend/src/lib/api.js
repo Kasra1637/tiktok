@@ -294,6 +294,7 @@ export const api = {
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
   rewriteHook: (id, hookLine) => client.post(`/studio/projects/${id}/rewrite-hook`, { hook_line: hookLine }).then((r) => r.data),
+  rewriteLine: (id, payload) => client.post(`/studio/projects/${id}/rewrite-line`, payload).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
   // `duration_seconds` is not sent from here. The length is computed — a template
   // declares a `default_duration` and the project seeds from it — and the plan

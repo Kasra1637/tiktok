@@ -1,6 +1,7 @@
 import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
+import ScriptLineRewrites from "../components/studio/ScriptLineRewrites";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
@@ -2263,6 +2264,7 @@ export default function CreateVideo() {
               </div>
             )}
             <HookLineEditor
+              projectId={project?.id}
               value={editValue("hook_line", "")}
               onChange={(next) => dispatchDraft({ type: "edit-field", field: "hook_line", value: next })}
               disabled={busy}
@@ -2291,6 +2293,17 @@ export default function CreateVideo() {
                   or shorten the script above.
                 </p>
               )}
+              {/* Every spoken line carries the clearer-line rewrite, not
+                  only a flagged hook: the assist the hook has, per script
+                  sentence, each accepted suggestion editing just that
+                  sentence through the same draft edit as the textarea. */}
+              <ScriptLineRewrites
+                projectId={project?.id}
+                hookLine={editValue("hook_line", "")}
+                script={editValue("script", "")}
+                onChange={(next) => dispatchDraft({ type: "edit-field", field: "script", value: next })}
+                disabled={busy}
+              />
             </div>
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             {/* The craft score is advisory: it names the weakest part of the
@@ -2311,6 +2324,24 @@ export default function CreateVideo() {
                   <ul className="space-y-1 text-sm">
                     {project.quality_report.next_steps.slice(0, 2).map((step) => (
                       <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
+                {/* The full breakdown the score is built from: every
+                    dimension the backend scores, with its own next step —
+                    the grade alone names no fix. */}
+                {Object.values(project.quality_report.dimensions || {}).length > 0 && (
+                  <ul className="space-y-3" data-testid="quality-dimensions">
+                    {Object.values(project.quality_report.dimensions).map((dimension) => (
+                      <li key={dimension.key} className="space-y-1">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <p className="text-sm font-semibold">{dimension.label}</p>
+                          <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
+                        </div>
+                        {dimension.next_step && (
+                          <p className="text-sm text-muted-foreground">{dimension.next_step}</p>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 )}

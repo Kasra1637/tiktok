@@ -4,7 +4,7 @@ import HookLineEditor from "./HookLineEditor";
 import { api } from "../../lib/api";
 
 jest.mock("../../lib/api", () => ({
-  api: { rewriteHook: jest.fn() },
+  api: { rewriteLine: jest.fn() },
   getErrorMessage: (err) => err?.message || "Something went wrong",
 }));
 jest.mock("../ui/button", () => ({
@@ -13,8 +13,6 @@ jest.mock("../ui/button", () => ({
 jest.mock("../ui/input", () => ({ Input: (props) => <input {...props} /> }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-const VAGUE = { risk_warnings: [{ claim: "type anything", reason: "is vague: name the real action" }] };
 
 async function mount(props) {
   const container = document.createElement("div");
@@ -34,18 +32,20 @@ async function mount(props) {
 afterEach(() => jest.clearAllMocks());
 
 describe("HookLineEditor", () => {
-  test("offers no rewrite when the hook is not vague", async () => {
-    const view = await mount({ report: { risk_warnings: [{ claim: "4.8 stars", reason: "needs a source" }] } });
+  test("offers the rewrite on every hook, with no warning gate", async () => {
+    const view = await mount({});
+    expect(view.q("hook-rewrite-button")).not.toBeNull();
     expect(view.q("vague-hook-note")).toBeNull();
     await view.unmount();
   });
 
   test("suggests a clearer hook and applies it only on Use this line", async () => {
-    api.rewriteHook.mockResolvedValue({ hook_line: "I don't want to write in my journal today" });
-    const view = await mount({ report: VAGUE });
-    expect(view.q("vague-hook-note").textContent).toContain("type anything");
+    api.rewriteLine.mockResolvedValue({ line: "I don't want to write in my journal today" });
+    const view = await mount({});
     await act(async () => { view.q("hook-rewrite-button").click(); });
-    expect(api.rewriteHook).toHaveBeenCalledWith("p1", "I don't want to type anything");
+    expect(api.rewriteLine).toHaveBeenCalledWith("p1", {
+      line: "I don't want to type anything", role: "hook", hook_line: "", script: "",
+    });
     expect(view.q("hook-rewrite-suggestion").textContent).toContain("write in my journal today");
     expect(view.onChange).not.toHaveBeenCalled();
     await act(async () => { view.q("hook-rewrite-accept").click(); });
@@ -54,8 +54,8 @@ describe("HookLineEditor", () => {
   });
 
   test("Keep mine dismisses without changing the hook", async () => {
-    api.rewriteHook.mockResolvedValue({ hook_line: "I don't want to write in my journal today" });
-    const view = await mount({ report: VAGUE });
+    api.rewriteLine.mockResolvedValue({ line: "I don't want to write in my journal today" });
+    const view = await mount({});
     await act(async () => { view.q("hook-rewrite-button").click(); });
     await act(async () => { view.q("hook-rewrite-dismiss").click(); });
     expect(view.q("hook-rewrite-suggestion")).toBeNull();
@@ -64,11 +64,17 @@ describe("HookLineEditor", () => {
   });
 
   test("a failed rewrite shows the next step instead of failing silently", async () => {
-    api.rewriteHook.mockRejectedValue(new Error("Couldn't write a clearer hook just now. Try again."));
-    const view = await mount({ report: VAGUE });
+    api.rewriteLine.mockRejectedValue(new Error("Couldn't write a clearer line just now. Try again."));
+    const view = await mount({});
     await act(async () => { view.q("hook-rewrite-button").click(); });
     expect(view.q("hook-rewrite-error").textContent).toContain("Try again");
     expect(view.q("hook-rewrite-suggestion")).toBeNull();
+    await view.unmount();
+  });
+
+  test("the rewrite stays disabled while the hook is empty", async () => {
+    const view = await mount({ value: "" });
+    expect(view.q("hook-rewrite-button").disabled).toBe(true);
     await view.unmount();
   });
 });
