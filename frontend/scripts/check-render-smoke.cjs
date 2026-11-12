@@ -7818,6 +7818,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // Kasra's rule for the How it works strip: every step title matches the
+  // anchor title ("Introduce your app") — exactly 18 chars — pinned here
+  // for the same reason as the feature cards above.
+  await check("Landing step titles share one length", async (ctx) => {
+    await mount(Landing)(ctx);
+    const headings = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
+    if (headings.length !== 5) throw new Error("expected five step titles");
+    for (const h of headings) {
+      if (h.textContent.length !== 18) throw new Error(`step title is ${h.textContent.length} chars, not 18: ${h.textContent}`);
+    }
+  });
+
   for (const authState of ["signed-out", "signed-in", "no-auth"]) {
     await check(`Landing actions work in ${authState} mode`, async (ctx) => {
       // Marketing.jsx is cleared too: it re-exports the header/CTA that read

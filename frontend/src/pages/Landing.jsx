@@ -152,25 +152,25 @@ const FLOW_STEPS = [
   },
   {
     step: "2",
-    label: "Choose a goal and audience",
+    label: "Pick goal + viewer",
     line: "Pick an audience angle and set a goal — both are required before anything downstream is written.",
     outcome: "One viewer, one outcome",
   },
   {
     step: "3",
-    label: "Pick a template",
+    label: "Pick your template",
     line: "Compare the ranked templates and their caveats, then add a clear presenter photo.",
     outcome: "Openings that earn the watch",
   },
   {
     step: "4",
-    label: "Review, then render",
+    label: "Review then render",
     line: "The plan is free: review it, edit and save it, check flagged claims — only the render is paid.",
     outcome: "A clip worth posting",
   },
   {
     step: "5",
-    label: "Add your real product demo",
+    label: "Add your real demo",
     line: "Style a base clip, add a Second clip or a phone overlay, export one MP4, and publish them yourself.",
     outcome: "Your demo stays yours",
   },
@@ -458,9 +458,11 @@ export default function Landing() {
               >
                 <div className="how-art" style={{ animationDelay: `${(Number(s.step) - 1) * 0.4}s` }}>
                   {STEP_ART[s.step]}
-                  <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
                 </div>
-                <h3 className="font-display text-base font-semibold">{s.label}</h3>
+                <div className="how-head">
+                  <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
+                  <h3 className="font-display text-base font-semibold">{s.label}</h3>
+                </div>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.line}</p>
                 <span className="how-outcome">{s.outcome}</span>
               </li>
