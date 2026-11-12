@@ -19,13 +19,16 @@ re-exports the handlers and `_run_storage_repair` for existing callers.
 """
 
 import asyncio
+import json
 import logging
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 import ai_service
+import feedback as feedback_mod
 import generation_planning
 import media_signing
 import pipeline
@@ -33,7 +36,7 @@ import posters
 import storage_service
 import video_providers
 from auth import get_current_user_id
-from models import TikTokLinkRequest, TikTokViewsRequest, now_iso
+from models import PerformanceSnapshotRequest, TikTokLinkRequest, TikTokViewsRequest, now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -180,15 +183,19 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
     # Hook + Story behind it, or a project deleted since) simply carries None,
     # and the editor renders no note rather than an empty one.
     row = await _fetch_one(
-        """SELECT g.*, p.demo_brief
+        """SELECT g.*, p.demo_brief, p.hook_line, p.script, p.hook_seconds,
+                  p.duration_seconds, b.brand_name
              FROM generations g
              LEFT JOIN studio_projects p ON p.id = g.studio_project_id
+             LEFT JOIN brand_profiles b ON b.id = g.brand_profile_id
             WHERE g.id = ? AND g.user_id = ?""",
         (generation_id, user_id),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Generation not found")
-    return await _with_verdicts(_public_generation_detail(row), user_id)
+    detail = _public_generation_detail(row)
+    detail["performance_snapshot"] = await _latest_performance_snapshot(generation_id)
+    return await _with_verdicts(detail, user_id)
 
 
 @router.post("/generations/{generation_id}/poll")
@@ -540,6 +547,124 @@ async def retry_generation(generation_id: str, user_id: str = Depends(get_curren
     )
 
 
+def _performance_snapshot_view(row):
+    """One snapshot row as the payload shape, or None.
+
+    Percentages ride as numbers (whole or decimal, as recorded); counts as
+    ints. Absent metrics stay None: a reading that did not carry a number
+    must not read as a zero.
+    """
+    if not row:
+        return None
+    def _count(key):
+        value = row.get(key)
+        return int(value) if value is not None else None
+
+    def _pct(key):
+        value = row.get(key)
+        return float(value) if value is not None else None
+
+    return {
+        "recorded_at": row.get("recorded_at"),
+        "views": _count("views"),
+        "retention_3s_pct": _pct("retention_3s_pct"),
+        "avg_watch_pct": _pct("avg_watch_pct"),
+        "saves": _count("saves"),
+        "shares": _count("shares"),
+    }
+
+
+def _stored_quality_report(value):
+    """The craft report frozen on a row, parsed, or None.
+
+    Stored only: the list never recomputes (the script stays on the
+    detail endpoint), so a pre-column row reads as unscored here rather
+    than wearing a score its render never carried (ADR 0117).
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+async def _latest_performance_snapshot(generation_id):
+    rows = await _fetch_all(
+        "SELECT * FROM performance_snapshots WHERE generation_id = ?"
+        " ORDER BY recorded_at DESC, rowid DESC LIMIT 1",
+        (generation_id,),
+    )
+    return _performance_snapshot_view(rows[0] if rows else None)
+
+
+async def _latest_performance_snapshots(generation_ids):
+    """The latest snapshot per generation, one query for a whole page.
+
+    Rows arrive newest first, so the first row seen per generation is its
+    latest reading; rowid breaks a same-timestamp tie toward the later save.
+    """
+    ids = [g for g in generation_ids if g]
+    if not ids:
+        return {}
+    placeholders = ", ".join("?" for _ in ids)
+    rows = await _fetch_all(
+        f"SELECT * FROM performance_snapshots WHERE generation_id IN ({placeholders})"
+        " ORDER BY recorded_at DESC, rowid DESC",
+        tuple(ids),
+    )
+    latest = {}
+    for row in rows:
+        if row["generation_id"] not in latest:
+            latest[row["generation_id"]] = _performance_snapshot_view(row)
+    return latest
+
+
+async def _posted_performance_rows(brand_profile_id, user_id):
+    """Posted clips for one profile, shaped for the performance join.
+
+    Each row carries the stored craft report (the JSON frozen on the row
+    at submit, parsed back to a dict) beside the clip's latest results
+    snapshot — the two halves feedback.summarize_posted_performance
+    joins. A clip missing either half stays in the list, so it still
+    counts as posted for the view tallies, and simply teaches the join
+    nothing.
+    """
+    rows = await _fetch_all(
+        "SELECT id, tiktok_url, tiktok_views, quality_report FROM generations "
+        "WHERE brand_profile_id = ? AND user_id = ? AND tiktok_url IS NOT NULL "
+        "AND TRIM(tiktok_url) != '' ORDER BY created_at DESC LIMIT 200",
+        (brand_profile_id, user_id),
+    )
+    snapshots = await _latest_performance_snapshots([row.get("id") for row in rows])
+    posted = []
+    for row in rows:
+        report = row.get("quality_report")
+        if isinstance(report, str) and report.strip():
+            try:
+                report = json.loads(report)
+            except (TypeError, ValueError):
+                report = None
+        posted.append({
+            "tiktok_url": row.get("tiktok_url"),
+            "tiktok_views": row.get("tiktok_views"),
+            "quality_report": report if isinstance(report, dict) else None,
+            "performance": snapshots.get(row.get("id")),
+        })
+    return posted
+
+
+async def _generation_detail(generation_id, user_id):
+    """The detail payload with its latest performance snapshot attached."""
+    row = await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
+    detail = _public_generation_detail(row)
+    detail["performance_snapshot"] = await _latest_performance_snapshot(generation_id)
+    return await _with_verdicts(detail, user_id)
+
+
 @router.post("/generations/{generation_id}/tiktok-link")
 async def set_generation_tiktok_link(
     generation_id: str, payload: TikTokLinkRequest, user_id: str = Depends(get_current_user_id)
@@ -566,9 +691,7 @@ async def set_generation_tiktok_link(
         "UPDATE generations SET tiktok_url = ?, updated_at = ? WHERE id = ?",
         (link or None, now_iso(), generation_id),
     )
-    return await _with_verdicts(_public_generation_detail(
-        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    ), user_id)
+    return await _generation_detail(generation_id, user_id)
 
 
 @router.post("/generations/{generation_id}/tiktok-views")
@@ -588,9 +711,73 @@ async def set_generation_tiktok_views(
         "UPDATE generations SET tiktok_views = ?, tiktok_views_at = ?, updated_at = ? WHERE id = ?",
         (stored, stamped if stored is not None else None, stamped, generation_id),
     )
-    return await _with_verdicts(_public_generation_detail(
-        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    ), user_id)
+    return await _generation_detail(generation_id, user_id)
+
+
+@router.post("/generations/{generation_id}/performance-snapshot")
+async def set_generation_performance_snapshot(
+    generation_id: str, payload: PerformanceSnapshotRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Record one dated reading of the posted clip's numbers (ADR 0117).
+
+    Snapshots accumulate — the founder pastes the numbers TikTok shows
+    today, and again next week — and reads show the latest. A reading that
+    carries views also refreshes the legacy single view count, so every
+    surface that already reads views (ranking, Analytics) keeps working
+    from the newest number instead of a stale hand-entered one.
+    """
+    row = await _fetch_one(
+        "SELECT id, tiktok_views FROM generations WHERE id = ? AND user_id = ?",
+        (generation_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    metrics = {
+        "views": payload.views,
+        "retention_3s_pct": payload.retention_3s_pct,
+        "avg_watch_pct": payload.avg_watch_pct,
+        "saves": payload.saves,
+        "shares": payload.shares,
+    }
+    if all(value is None for value in metrics.values()):
+        raise HTTPException(
+            status_code=400,
+            detail="Add at least one number from the posted video — views, "
+                   "3-second retention, average watch, saves, or shares.",
+        )
+    for key in ("retention_3s_pct", "avg_watch_pct"):
+        value = metrics[key]
+        if value is not None and not 0 <= value <= 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Percentages run from 0 to 100.")
+    for key in ("views", "saves", "shares"):
+        value = metrics[key]
+        if value is not None and not 0 <= value <= 10_000_000_000:
+            raise HTTPException(
+                status_code=400,
+                detail="Counts must be whole numbers from 0 to 10 billion.")
+    stamped = now_iso()
+    # A reading that omits views inherits the count already on the row, so
+    # every snapshot stays a complete record of its day; only a supplied
+    # count is a fresh observation, and only it re-stamps the legacy fields.
+    snapshot_views = metrics["views"] if metrics["views"] is not None else row.get("tiktok_views")
+    await _execute(
+        "INSERT INTO performance_snapshots"
+        " (id, generation_id, user_id, views, retention_3s_pct, avg_watch_pct,"
+        "  saves, shares, recorded_at, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (str(uuid.uuid4()), generation_id, user_id, snapshot_views,
+         metrics["retention_3s_pct"], metrics["avg_watch_pct"], metrics["saves"],
+         metrics["shares"], stamped, stamped),
+    )
+    if metrics["views"] is not None:
+        await _execute(
+            "UPDATE generations SET tiktok_views = ?, tiktok_views_at = ?, updated_at = ?"
+            " WHERE id = ?",
+            (metrics["views"], stamped, stamped, generation_id),
+        )
+    return await _generation_detail(generation_id, user_id)
 
 
 @router.post("/generations/{generation_id}/archive")
@@ -636,6 +823,7 @@ async def generation_history(
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
                    g.post_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at, g.location,
+                   g.quality_report,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
                    p.strategy_version, ca.kind AS angle_kind
             FROM generations g
@@ -668,10 +856,22 @@ async def generation_history(
         views = entry.get("tiktok_views")
         entry["tiktok_views"] = int(views) if views is not None else None
         entry["tiktok_views_at"] = entry.get("tiktok_views_at")
+        entry["quality_report"] = _stored_quality_report(entry.get("quality_report"))
         entry["composition"] = None
         out.append(entry)
+    snapshots = await _latest_performance_snapshots([entry["id"] for entry in out])
+    for entry in out:
+        entry["performance_snapshot"] = snapshots.get(entry["id"])
     await _with_verdicts(out, user_id)
-    return {"generations": out}
+    # The join Analytics renders: stored craft scores against latest
+    # snapshots over this page of clips. Below 3 joined clips the summary
+    # says so (ready is False) instead of implying a pattern (ADR 0117).
+    performance_summary = feedback_mod.summarize_posted_performance([
+        {"quality_report": entry.get("quality_report"),
+         "performance": entry.get("performance_snapshot")}
+        for entry in out
+    ])
+    return {"generations": out, "performance_summary": performance_summary}
 
 
 @router.delete("/generations/{generation_id}")

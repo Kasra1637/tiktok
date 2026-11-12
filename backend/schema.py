@@ -324,6 +324,7 @@ async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
             strategy_version INTEGER DEFAULT 0,
             continuity TEXT,
             post_kit TEXT,
+            quality_report TEXT,
             tiktok_url TEXT,
             tiktok_views INTEGER,
             tiktok_views_at TEXT,
@@ -353,6 +354,21 @@ async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
             ON generations (user_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_generations_project
             ON generations (studio_project_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS performance_snapshots (
+            id TEXT PRIMARY KEY,
+            generation_id TEXT NOT NULL,
+            user_id TEXT DEFAULT 'anonymous',
+            views INTEGER,
+            retention_3s_pct INTEGER,
+            avg_watch_pct INTEGER,
+            saves INTEGER,
+            shares INTEGER,
+            recorded_at TEXT,
+            created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_performance_snapshots_generation
+            ON performance_snapshots (generation_id, recorded_at);
 
         CREATE TABLE IF NOT EXISTS assets (
             id TEXT PRIMARY KEY,
@@ -625,6 +641,7 @@ async def apply_schema(conn, *, analysis_frame_path, normalize_analysis_frame,
         ("content_angles", "goal_variant", "INTEGER DEFAULT 0"),
         ("content_angles", "origin", "TEXT DEFAULT 'generated'"),
         ("generations", "post_kit", "TEXT"),
+        ("generations", "quality_report", "TEXT"),
         ("generations", "tiktok_url", "TEXT"),
         ("generations", "tiktok_views", "INTEGER"),
         ("generations", "tiktok_views_at", "TEXT"),

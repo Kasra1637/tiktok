@@ -334,6 +334,10 @@ export const api = {
     client.post(`/generations/${id}/tiktok-link`, { tiktok_url }).then((r) => r.data),
   setTikTokViews: (id, tiktok_views) =>
     client.post(`/generations/${id}/tiktok-views`, { tiktok_views }).then((r) => r.data),
+  // One dated reading of the posted clip's results (ADR 0117): snapshots
+  // accumulate server-side and reads show the latest.
+  setPerformanceSnapshot: (id, metrics) =>
+    client.post(`/generations/${id}/performance-snapshot`, metrics).then((r) => r.data),
 
   // App-specific creative direction for the one render.
   //

@@ -733,6 +733,12 @@ def summarize_profile_feedback(events, template_id: str = "", posted_rows=()) ->
         "impressions": 0,
         "posted_clips": posted_clips,
         "posted_views": posted_views,
+        # The score-to-outcome join over the same posted rows. Rows that
+        # carry neither a stored craft report nor a results snapshot (the
+        # older link/views-only shape) contribute no clips, so this stays
+        # empty — and the prompt section stays silent — until real
+        # snapshots exist (ADR 0117).
+        "performance": summarize_posted_performance(posted_rows),
         "top_reasons": [],
         "selected_template": {
             "template_id": template_id or "",
@@ -909,6 +915,139 @@ def template_outcome_adjustment(outcome_rows, template_id: str) -> dict:
     return facts
 
 
+# Posted-performance steering waits for a pattern, not a lucky clip: below
+# this many posted clips with both a stored craft score and a results
+# snapshot, the join contributes nothing to generation prompts (ADR 0117).
+MIN_POSTED_CLIPS_FOR_PERFORMANCE_STEERING = 3
+
+# A dimension counts as "scoring high" on a clip at 8+ of its 10 normalized
+# points — the same split the Analytics summary shows the founder, so the
+# prompt note and the page can never describe two different groups.
+_PERFORMANCE_HIGH_SCORE = 8.0
+
+
+def _dimension_metric_split(clips, key, metric):
+    """Average one metric for clips scoring high vs low on one dimension.
+
+    `clips` are (report, snapshot) pairs that already carry both halves.
+    Returns None unless both groups have at least one clip with the metric
+    recorded — a one-sided average would read as a comparison it is not.
+    """
+    high, low = [], []
+    for report, snapshot in clips:
+        value = snapshot.get(metric)
+        if value is None:
+            continue
+        dimension = (report.get("dimensions") or {}).get(key) or {}
+        maximum = dimension.get("max") or 0
+        if not maximum:
+            continue
+        normalized = (dimension.get("score") or 0) / maximum * 10
+        (high if normalized >= _PERFORMANCE_HIGH_SCORE else low).append(value)
+    if not high or not low:
+        return None
+    return {
+        "high_avg": round(sum(high) / len(high)),
+        "low_avg": round(sum(low) / len(low)),
+        "high_clips": len(high),
+        "low_clips": len(low),
+    }
+
+
+def summarize_posted_performance(rows) -> dict:
+    """
+    Join stored craft scores to latest posted results, per dimension.
+
+    `rows` are generation-shaped dicts carrying `quality_report` (the dict
+    frozen at completion, ADR 0117) and `performance` (the latest snapshot
+    dict or None). A row counts as a clip only with BOTH halves: a score
+    with no outcome, or an outcome with no score, teaches the loop nothing.
+
+    The summary is pure fact: counts and averages over the rows given. It
+    invents no metric and names no cause — a dimension whose high scorers
+    held viewers better is a correlation over a handful of clips, and the
+    rendered note says exactly that much.
+    """
+    clips = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        report = row.get("quality_report")
+        snapshot = row.get("performance")
+        if isinstance(report, dict) and isinstance(snapshot, dict):
+            clips.append((report, snapshot))
+    labels = {}
+    dimension_keys = []
+    for report, _snapshot in clips:
+        for key, dimension in (report.get("dimensions") or {}).items():
+            if key not in labels:
+                labels[key] = dimension.get("label") or key
+                dimension_keys.append(key)
+    dimensions = []
+    for key in dimension_keys:
+        dimensions.append({
+            "key": key,
+            "label": labels[key],
+            "retention": _dimension_metric_split(clips, key, "retention_3s_pct"),
+            "avg_watch": _dimension_metric_split(clips, key, "avg_watch_pct"),
+        })
+    retentions = [s["retention_3s_pct"] for _r, s in clips
+                  if s.get("retention_3s_pct") is not None]
+    watches = [s["avg_watch_pct"] for _r, s in clips
+               if s.get("avg_watch_pct") is not None]
+    return {
+        "clips": len(clips),
+        "ready": len(clips) >= MIN_POSTED_CLIPS_FOR_PERFORMANCE_STEERING,
+        "dimensions": dimensions,
+        "avg_retention_3s_pct": round(sum(retentions) / len(retentions)) if retentions else None,
+        "avg_watch_pct": round(sum(watches) / len(watches)) if watches else None,
+    }
+
+
+def build_performance_section(summary: dict) -> str:
+    """
+    The one performance note generation prompts may receive, or "".
+
+    Empty below MIN_POSTED_CLIPS_FOR_PERFORMANCE_STEERING clips: steering on
+    one or two posts would chase noise. When ready, the note names the
+    dimension whose high scorers held viewers best (3-second retention,
+    the earliest honest signal), with the real averages and clip count —
+    or, when no dimension splits both ways, the plain overall averages.
+    """
+    summary = summary or {}
+    if not summary.get("ready"):
+        return ""
+    clips = int(summary.get("clips") or 0)
+    best = None
+    for dimension in summary.get("dimensions") or []:
+        split = dimension.get("retention")
+        if not split:
+            continue
+        gap = split["high_avg"] - split["low_avg"]
+        if best is None or gap > best[0]:
+            best = (gap, dimension, split)
+    if best is not None:
+        _gap, dimension, split = best
+        return (
+            f"Posted results so far ({clips} posted clips with results): clips "
+            f"scoring high on {dimension.get('label')} averaged "
+            f"{split['high_avg']}% watched past 3 seconds, vs {split['low_avg']}% "
+            f"for the rest. Reproduce what held viewers; views alone are reach, "
+            f"not proof a line worked."
+        )
+    facts = []
+    if summary.get("avg_retention_3s_pct") is not None:
+        facts.append(f"{summary['avg_retention_3s_pct']}% watched past 3 seconds on average")
+    if summary.get("avg_watch_pct") is not None:
+        facts.append(f"{summary['avg_watch_pct']}% average watch")
+    if not facts:
+        return ""
+    return (
+        f"Posted results so far ({clips} posted clips with results): "
+        + ", ".join(facts) + "."
+    )
+
+
 def build_profile_feedback_section(summary: dict) -> str:
     """
     Render feedback as prompt context without leaking free text.
@@ -961,6 +1100,13 @@ def build_profile_feedback_section(summary: dict) -> str:
                 for item in selected_reasons
             )
             lines.append(f"Founder-stated issues for this template: {stated}.")
+    # Posted performance joins here, through the same section, so plan and
+    # strategy prompts receive it exactly where they receive the rest of
+    # the profile's feedback. Guarded inside build_performance_section:
+    # below 3 posted clips with results it contributes nothing (ADR 0117).
+    performance_note = build_performance_section(summary.get("performance") or {})
+    if performance_note:
+        lines.append(performance_note)
     lines.append(
         "Automatic triggers record that rework happened; only the stated "
         "reasons above explain why. Avoid repeating a stated issue, but do not "

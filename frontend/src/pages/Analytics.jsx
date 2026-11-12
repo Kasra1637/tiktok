@@ -68,6 +68,7 @@ export default function Analytics() {
   const [selectedId, setSelectedId] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [generations, setGenerations] = useState(null);
+  const [performanceSummary, setPerformanceSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -107,6 +108,7 @@ export default function Analytics() {
     setError(null);
     setFeedback(null);
     setGenerations(null);
+    setPerformanceSummary(null);
     const scope = selectedId ? { brand_profile_id: selectedId } : {};
     Promise.all([
       api.getFeedback({ ...scope, limit: 500 }),
@@ -115,6 +117,7 @@ export default function Analytics() {
       if (cancelled) return;
       setFeedback(fb);
       setGenerations(history.generations || []);
+      setPerformanceSummary(history.performance_summary || null);
     }).catch((err) => {
       if (!cancelled) setError(getErrorMessage(err));
     }).finally(() => {
@@ -211,7 +214,7 @@ export default function Analytics() {
           </p>
           {renders?.length > 0 && (
             <>
-              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} />
+              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} performanceSummary={performanceSummary} />
             </>
           )}
           {renders !== null && renders.length > 0 && (
@@ -250,6 +253,58 @@ function clipName(row) {
 // a spreadsheet rather than a comparison; the rest stay one click away.
 const LEADERBOARD_PAGE_SIZE = 3;
 
+/**
+ * The one line joining craft scores to posted results, or the honest
+ * not-yet state. Mirrors feedback.summarize_posted_performance on the
+ * server: a dimension tracks with an outcome only when its high scorers
+ * averaged better than the rest on that metric, over clips carrying both
+ * a stored score and a results snapshot. Below 3 joined clips there is
+ * no pattern to name, and the line says so (ADR 0117).
+ */
+function performanceSummaryLine(summary) {
+  const clips = summary?.clips || 0;
+  if (!summary?.ready) {
+    return `Not enough posted clips yet — the loop starts learning once 3 posted clips have both a craft score and pasted results. ${clips} so far.`;
+  }
+  const best = (metric, phrase) => {
+    let chosen = null;
+    for (const dimension of summary.dimensions || []) {
+      const split = dimension[metric];
+      if (!split) continue;
+      const gap = split.high_avg - split.low_avg;
+      if (gap > 0 && (!chosen || gap > chosen.gap)) {
+        chosen = { gap, label: dimension.label, split };
+      }
+    }
+    return chosen
+      ? `clips scoring high on ${chosen.label} averaged ${chosen.split.high_avg}% ${phrase}, vs ${chosen.split.low_avg}% for the rest`
+      : null;
+  };
+  const parts = [
+    best("retention", "watched past 3 seconds"),
+    best("avg_watch", "average watch"),
+  ].filter(Boolean);
+  if (parts.length) return `Across ${clips} posted clips with results: ${parts.join("; ")}.`;
+  const facts = [
+    summary.avg_retention_3s_pct != null ? `${summary.avg_retention_3s_pct}% watched past 3 seconds on average` : null,
+    summary.avg_watch_pct != null ? `${summary.avg_watch_pct}% average watch` : null,
+  ].filter(Boolean);
+  return facts.length
+    ? `Across ${clips} posted clips with results: ${facts.join(", ")}. No single craft score splits the clips that held viewers from the rest yet.`
+    : `Across ${clips} posted clips with results.`;
+}
+
+/** The real numbers from a clip's latest results snapshot, as one line. */
+function snapshotFacts(snapshot) {
+  if (!snapshot) return [];
+  return [
+    snapshot.retention_3s_pct != null ? `${Number(snapshot.retention_3s_pct)}% past 3s` : null,
+    snapshot.avg_watch_pct != null ? `${Number(snapshot.avg_watch_pct)}% avg watch` : null,
+    snapshot.saves != null ? `${Number(snapshot.saves).toLocaleString("en-US")} saves` : null,
+    snapshot.shares != null ? `${Number(snapshot.shares).toLocaleString("en-US")} shares` : null,
+  ].filter(Boolean);
+}
+
 /** A short, local date for the renders inside a status group. */
 function shortDate(value) {
   const t = Date.parse(value);
@@ -257,7 +312,7 @@ function shortDate(value) {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function ClipResults({ generations, profileId, pick, draftIds }) {
+function ClipResults({ generations, profileId, pick, draftIds, performanceSummary }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
     .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
@@ -294,6 +349,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                 label: "Clip results",
                 values: [
                   `${posted} posted. ${counted} with recorded views. ${rated} rated.`,
+                  performanceSummaryLine(performanceSummary),
                   "Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Your vote is your judgment. Winner still means thumbs up plus a posted link.",
                   pick && pickNext
                     ? `Suggested next take: ${clipName(pick)}. Posted, ${pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good.`
@@ -327,6 +383,9 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
         <FactChip>{counted} with recorded views</FactChip>
         <FactChip>{rated} rated</FactChip>
       </FactList>
+      <p className="text-sm text-muted-foreground" data-testid="analytics-performance-summary">
+        {performanceSummaryLine(performanceSummary)}
+      </p>
       {open && (
         <div id={panelId} className="space-y-5">
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)]">
@@ -365,7 +424,7 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                 <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
                 <thead>
                   <tr className="bg-secondary/20 text-xs text-muted-foreground">
-                    {["Rank", "Clip", "Posted", "Views", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
+                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -410,6 +469,18 @@ function ClipResults({ generations, profileId, pick, draftIds }) {
                               </span>
                               <span className="whitespace-nowrap font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
                             </span>
+                          )}
+                          {snapshotFacts(row.performance_snapshot).length > 0 && (
+                            <span className="mt-1 block whitespace-normal text-muted-foreground" data-testid={`result-results-${row.id}`}>
+                              {snapshotFacts(row.performance_snapshot).join(" · ")}
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-xs" data-testid={`result-craft-${row.id}`}>
+                          {row.quality_report ? (
+                            <span className="font-mono tabular-nums">{row.quality_report.grade} · {row.quality_report.total}</span>
+                          ) : (
+                            <span className="text-muted-foreground">Not scored</span>
                           )}
                         </td>
                         <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap px-3 py-3 text-xs">

@@ -124,6 +124,10 @@ def _component_feedback_for_profile(*a, **k):
     return _cfg("_component_feedback_for_profile")(*a, **k)
 
 
+def _posted_performance_rows(*a, **k):
+    return _cfg("_posted_performance_rows")(*a, **k)
+
+
 def _require_profile_for_studio(*a, **k):
     return _cfg("_require_profile_for_studio")(*a, **k)
 
@@ -1448,12 +1452,8 @@ async def generate_plan(
     # free-text detail never does. Posted clips travel too so plans reproduce
     # what earned posts instead of repeating what flopped.
     try:
-        plan_posted = await _fetch_all(
-            "SELECT tiktok_url, tiktok_views FROM generations "
-            "WHERE brand_profile_id = ? AND user_id = ? AND tiktok_url IS NOT NULL "
-            "ORDER BY created_at DESC LIMIT 200",
-            (row.get("brand_profile_id"), user_id),
-        )
+        plan_posted = await _posted_performance_rows(
+            row.get("brand_profile_id"), user_id)
     except Exception:
         plan_posted = []
     profile_feedback = feedback_mod.summarize_profile_feedback(
@@ -1884,6 +1884,15 @@ async def generate_project_strategy(
         min(template_library.MAX_HOOK_SECONDS, hook_seconds),
     )
 
+    # Posted clips travel into the strategy prompt the same way they travel
+    # into the plan prompt: with their stored craft scores and latest
+    # results snapshots attached, so the performance note (3+ clips only,
+    # ADR 0117) can steer the strategy too.
+    try:
+        strategy_posted = await _posted_performance_rows(
+            row.get("brand_profile_id"), user_id)
+    except Exception:
+        strategy_posted = []
     profile_feedback = feedback_mod.summarize_profile_feedback(
         await _fetch_all(
             "SELECT event, signal, reason, template_id FROM feedback_events "
@@ -1891,6 +1900,7 @@ async def generate_project_strategy(
             (row.get("brand_profile_id"), user_id),
         ),
         template.get("id") or "",
+        posted_rows=strategy_posted,
     )
 
     # The founder-approved creative plan, when one exists. The plan is written

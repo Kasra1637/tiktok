@@ -80,6 +80,77 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
       setSavingViews(false);
     }
   }, [row.id, views, onUpdated]);
+  // Posted results, pasted back like the views — one dated snapshot per
+  // save (ADR 0117). Retention and average watch say whether the clip held
+  // people; views alone only say it was shown. These are the numbers the
+  // learning loop joins against this render's stored craft score, and the
+  // latest reading is shown with its date: saving again next week adds a
+  // new reading instead of overwriting this one.
+  const [snapshot, setSnapshot] = useState(row.performance_snapshot ?? null);
+  const [retention, setRetention] = useState("");
+  const [avgWatch, setAvgWatch] = useState("");
+  const [saves, setSaves] = useState("");
+  const [shares, setShares] = useState("");
+  const [savingResults, setSavingResults] = useState(false);
+  const [resultsError, setResultsError] = useState(null);
+  const saveResults = useCallback(async () => {
+    const fields = [
+      { key: "retention_3s_pct", label: "3-second retention", raw: retention, pct: true },
+      { key: "avg_watch_pct", label: "Average watch", raw: avgWatch, pct: true },
+      { key: "saves", label: "Saves", raw: saves, pct: false },
+      { key: "shares", label: "Shares", raw: shares, pct: false },
+    ];
+    const metrics = {};
+    for (const field of fields) {
+      const text = String(field.raw).trim().replace(/,/g, "");
+      if (text === "") continue;
+      if (!/^\d+$/.test(text)) {
+        setResultsError(`${field.label} must be a whole number of 0 or more.`);
+        return;
+      }
+      const value = Number(text);
+      if (field.pct && value > 100) {
+        setResultsError(`${field.label} runs from 0 to 100.`);
+        return;
+      }
+      if (!field.pct && value > 10000000000) {
+        setResultsError(`${field.label} is too large to be a TikTok count.`);
+        return;
+      }
+      metrics[field.key] = value;
+    }
+    if (Object.keys(metrics).length === 0) {
+      setResultsError("Add at least one number from the posted video — retention, average watch, saves, or shares.");
+      return;
+    }
+    setSavingResults(true);
+    setResultsError(null);
+    try {
+      const updated = await api.setPerformanceSnapshot(row.id, metrics);
+      setSnapshot(updated.performance_snapshot ?? null);
+      setRetention("");
+      setAvgWatch("");
+      setSaves("");
+      setShares("");
+      onUpdated?.(row.id, { performance_snapshot: updated.performance_snapshot ?? null });
+    } catch (err) {
+      setResultsError(getErrorMessage(err));
+    } finally {
+      setSavingResults(false);
+    }
+  }, [row.id, retention, avgWatch, saves, shares, onUpdated]);
+  const snapshotFacts = snapshot
+    ? [
+        snapshot.retention_3s_pct != null ? `${Number(snapshot.retention_3s_pct)}% watched past 3 seconds` : null,
+        snapshot.avg_watch_pct != null ? `${Number(snapshot.avg_watch_pct)}% average watch` : null,
+        snapshot.saves != null ? `${Number(snapshot.saves).toLocaleString("en-US")} saves` : null,
+        snapshot.shares != null ? `${Number(snapshot.shares).toLocaleString("en-US")} shares` : null,
+      ].filter(Boolean)
+    : [];
+  const snapshotDate = (() => {
+    const t = Date.parse(snapshot?.recorded_at);
+    return Number.isNaN(t) ? "" : new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  })();
   const saveLink = useCallback(async () => {
     setSavingLink(true);
     setLinkError(null);
@@ -239,6 +310,93 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 Read the count off TikTok and paste it back — most-viewed renders sort first.
               </p>
             )}
+          </div>
+        )}
+        {savedLink && (
+          <div className="space-y-1.5 pt-1" data-testid={`history-perf-${row.id}`}>
+            {snapshot && snapshotFacts.length > 0 && (
+              <p className="text-sm" data-testid={`history-perf-latest-${row.id}`}>
+                <span className="font-semibold">Latest results{snapshotDate ? ` · ${snapshotDate}` : ""}:</span>{" "}
+                {snapshotFacts.join(" · ")}
+              </p>
+            )}
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-muted-foreground" htmlFor={`history-perf-retention-input-${row.id}`}>3-second retention %</label>
+                <Input
+                  id={`history-perf-retention-input-${row.id}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={retention}
+                  onChange={(e) => setRetention(e.target.value)}
+                  placeholder="e.g. 71"
+                  aria-label="3-second retention percent"
+                  data-testid={`history-perf-retention-${row.id}`}
+                  disabled={savingResults}
+                  className="h-9 w-24"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-muted-foreground" htmlFor={`history-perf-watch-input-${row.id}`}>Average watch %</label>
+                <Input
+                  id={`history-perf-watch-input-${row.id}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={avgWatch}
+                  onChange={(e) => setAvgWatch(e.target.value)}
+                  placeholder="e.g. 38"
+                  aria-label="Average watch percent"
+                  data-testid={`history-perf-watch-${row.id}`}
+                  disabled={savingResults}
+                  className="h-9 w-24"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-muted-foreground" htmlFor={`history-perf-saves-input-${row.id}`}>Saves</label>
+                <Input
+                  id={`history-perf-saves-input-${row.id}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={saves}
+                  onChange={(e) => setSaves(e.target.value)}
+                  placeholder="e.g. 12"
+                  aria-label="Saves on the posted TikTok"
+                  data-testid={`history-perf-saves-${row.id}`}
+                  disabled={savingResults}
+                  className="h-9 w-24"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-muted-foreground" htmlFor={`history-perf-shares-input-${row.id}`}>Shares</label>
+                <Input
+                  id={`history-perf-shares-input-${row.id}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={shares}
+                  onChange={(e) => setShares(e.target.value)}
+                  placeholder="e.g. 3"
+                  aria-label="Shares on the posted TikTok"
+                  data-testid={`history-perf-shares-${row.id}`}
+                  disabled={savingResults}
+                  className="h-9 w-24"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={savingResults || [retention, avgWatch, saves, shares].every((v) => String(v).trim() === "")}
+                busy={savingResults}
+                onClick={saveResults}
+                data-testid={`history-perf-save-${row.id}`}
+              >
+                {savingResults ? "Saving results" : "Save results"}
+              </Button>
+            </div>
+            {resultsError && <p role="alert" className="text-sm text-destructive">{resultsError}</p>}
+            <p className="text-sm text-muted-foreground">
+              Read them off TikTok's analytics for the posted video. Each save is a dated reading;
+              once 3 posted clips have both results and a craft score, the app starts learning which scores held viewers.
+            </p>
           </div>
         )}
       </div>

@@ -33,6 +33,7 @@ import final_beat
 import opening_move
 import scene_consistency
 import claim_safety
+import creative_quality
 import media_signing
 import video_providers
 import generation_planning
@@ -183,6 +184,7 @@ from routers.history import (
     list_generations, get_generation, poll_generation,
     retry_generation_storage, _run_storage_repair, retry_generation,
     set_generation_tiktok_link, set_generation_tiktok_views,
+    set_generation_performance_snapshot, _posted_performance_rows,
     archive_generation, generation_history, delete_generation,
 )
 api_router.include_router(history_router)
@@ -1071,6 +1073,52 @@ async def _schedule_poster(
     await _eager_poster(generation_id, user_id)
 
 
+def _parse_quality_report(value):
+    """The stored craft report as a dict, or None when absent or unreadable.
+
+    The column is written once, at submit, from our own JSON; a value that
+    does not parse is treated as no stored report rather than trusted, so the
+    read falls back to recomputing from the project's words.
+    """
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _quality_report_for_row(row):
+    """The craft report for a generation row: stored wins, else recompute.
+
+    The stored report is the score of the words this render actually spoke,
+    frozen at submit (ADR 0117). It wins over the project's current words,
+    which the founder may have rewritten since. A row from before the column
+    existed carries no stored report; when the row also carries its project's
+    words (the detail and history reads join them in), the report is
+    recomputed from those words so old renders still read with a score. The
+    score stays advisory either way: it never gates anything (ADR 0114).
+    """
+    stored = _parse_quality_report((row or {}).get("quality_report"))
+    if stored is not None:
+        return stored
+    hook = (row or {}).get("hook_line")
+    script = (row or {}).get("script")
+    if not (hook or script):
+        return None
+    return creative_quality.assess_spoken_quality(
+        hook,
+        script,
+        hook_seconds=(row.get("hook_seconds") or 3),
+        total_seconds=row.get("duration_seconds") or 0,
+        app_name=row.get("brand_name") or "",
+        allows_question=True,
+    )
+
+
 def _public_generation(row: dict) -> dict:
     """Serialize a generation row, hiding the stored prompt by default.
 
@@ -1091,6 +1139,12 @@ def _public_generation(row: dict) -> dict:
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out["post_kit"] = _parse_post_kit(row.get("post_kit"))
+    out["quality_report"] = _quality_report_for_row(row)
+    # The project's words ride along on the detail/history joins only so the
+    # quality fallback above can recompute for pre-column rows; they are not
+    # generation fields and do not belong in the payload.
+    for _joined_key in ("hook_line", "script", "hook_seconds", "duration_seconds", "brand_name"):
+        out.pop(_joined_key, None)
     out["tiktok_url"] = (row.get("tiktok_url") or "").strip() or None
     views = row.get("tiktok_views")
     out["tiktok_views"] = int(views) if views is not None else None
@@ -1641,6 +1695,23 @@ async def _submit_generation(
             existing["idempotent_replay"] = True
             return existing
 
+    # The craft score of the words this render will speak, frozen onto the
+    # row (ADR 0117). Scored here, over the repaired plan words, with the
+    # same inputs the Review read uses, so the stored report is the score the
+    # founder saw for these exact words — and a later performance snapshot
+    # can be joined against it. Advisory only: computing it can never refuse
+    # the render, and empty words store no report rather than a zero score.
+    frozen_quality_report = None
+    if plan_words.get("hook_line") or plan_words.get("script"):
+        frozen_quality_report = creative_quality.assess_spoken_quality(
+            plan_words.get("hook_line"),
+            plan_words.get("script"),
+            hook_seconds=project.get("hook_seconds") or 3,
+            total_seconds=project.get("duration_seconds") or 0,
+            app_name=(profile.get("brand_name") or "").strip(),
+            allows_question=True,
+        )
+
     try:
         await _execute(
             """INSERT INTO generations
@@ -1648,8 +1719,8 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location, final_beat)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location, final_beat, quality_report)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -1658,7 +1729,8 @@ async def _submit_generation(
          attempt, prompt, json.dumps([]), now, now, now, user_id,
          claim_key or None, camera_setup,
          ((strategy or {}).get("scene") or {}).get("location") or "",
-         ((strategy or {}).get("final_beat") or "") or None),
+         ((strategy or {}).get("final_beat") or "") or None,
+         json.dumps(frozen_quality_report) if frozen_quality_report else None),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request
@@ -1910,7 +1982,7 @@ async def _store_demo_cta_result(
         parent = await _fetch_one(
             "SELECT id, studio_project_id, brand_profile_id, template_id, template_version, "
             "script_version, duration, model, model_id, segment_role, segment_index, "
-            "strategy_version, post_kit, location FROM generations WHERE id = ? AND user_id = ?",
+            "strategy_version, post_kit, quality_report, location FROM generations WHERE id = ? AND user_id = ?",
             (generation_id, user_id),
         )
         if not parent:
@@ -1944,10 +2016,10 @@ async def _store_demo_cta_result(
            (id, studio_project_id, brand_profile_id, template_id, template_version,
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, attempt,
-            prompt_used, retryable, approved, post_kit,
+            prompt_used, retryable, approved, post_kit, quality_report,
             requested_at, completed_at, created_at, updated_at, user_id, video_url, r2_url, location)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed',
-                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result_id,
             parent.get("studio_project_id") if parent else None,
@@ -1976,6 +2048,7 @@ async def _store_demo_cta_result(
             1,
             parent["id"] if parent else None,
             (parent.get("post_kit") if parent else None),
+            (parent.get("quality_report") if parent else None),
             now_iso(),
             now_iso(),
             now_iso(),

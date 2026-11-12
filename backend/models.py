@@ -490,6 +490,23 @@ class TikTokViewsRequest(BaseModel):
     tiktok_views: Optional[StrictInt] = None
 
 
+class PerformanceSnapshotRequest(BaseModel):
+    """One dated set of posted results, pasted back from TikTok by hand.
+
+    Every field is optional — the founder records what TikTok shows them —
+    but a snapshot with no numbers at all is refused at the endpoint.
+    `views`, when supplied, also writes through to the generation's
+    tiktok_views; when omitted, the snapshot inherits the stored count so
+    each snapshot stays a complete record of that day. Ranges are refused
+    at the endpoint, not coerced (ADR 0117).
+    """
+    views: Optional[StrictInt] = None
+    retention_3s_pct: Optional[StrictInt] = None
+    avg_watch_pct: Optional[StrictInt] = None
+    saves: Optional[StrictInt] = None
+    shares: Optional[StrictInt] = None
+
+
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.
