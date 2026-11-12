@@ -1167,21 +1167,6 @@ h1,
     font-size: 11px;
     font-weight: 600;
 }
-.how-dots {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 20px;
-}
-.how-dots span {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
-    opacity: 0.55;
-}
-
 /* ---------- Landing: hero flow loop ----------
    The five step illustrations cycling inside the hero frame, replacing the
    recorded tour footage — no video bytes, the same indigo family as the

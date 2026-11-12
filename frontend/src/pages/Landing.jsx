@@ -68,36 +68,36 @@ const FEATURES = [
 
 /**
  * Custom step illustrations: one small line scene per step, all sharing
- * the same 200x150 canvas, stroke weight, and indigo tokens, so the five
- * read as one family. Scenes: 1) your app in a browser, facts approved;
- * 2) a target and the one viewer it aims at; 3) ranked template cards
- * with a fit bar; 4) the script you review, and the render it becomes;
- * 5) your real demo on a phone with its call to action.
+ * the same 200x150 canvas, stroke weight, and indigo tokens. Every scene
+ * is built on the step-3 chassis Kasra picked out — three stacked square
+ * cards (faint, mid, front) forming one piece — and only the glyph on the
+ * front card changes: 1) an app tile and its approved check; 2) a target
+ * and the one viewer; 3) a play mark and its fit bar; 4) script lines
+ * becoming a render; 5) a phone playing your real demo.
  */
 const STEP_ART = {
   "1": (
     <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="30" y="28" width="140" height="94" rx="12" />
-      <line x1="30" y1="50" x2="170" y2="50" />
-      <circle cx="47" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" />
-      <circle cx="62" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" opacity="0.6" />
-      <circle cx="77" cy="39" r="3.5" fill="var(--brand-indigo)" stroke="none" opacity="0.35" />
-      <rect x="48" y="66" width="36" height="36" rx="9" fill="var(--indigo-25)" fillOpacity="0.35" />
-      <line x1="100" y1="76" x2="152" y2="76" opacity="0.55" />
-      <line x1="100" y1="92" x2="136" y2="92" opacity="0.55" />
-      <circle cx="156" cy="110" r="13" fill="var(--brand-indigo)" stroke="none" />
-      <path d="M149 110 l5 5 l9 -10" stroke="#fff" strokeWidth="4" />
+      <rect x="34" y="30" width="108" height="68" rx="10" opacity="0.35" />
+      <rect x="50" y="42" width="108" height="68" rx="10" opacity="0.6" />
+      <rect x="66" y="54" width="108" height="68" rx="10" fill="var(--indigo-10)" />
+      <rect x="82" y="72" width="30" height="30" rx="8" fill="var(--indigo-25)" fillOpacity="0.35" />
+      <line x1="124" y1="82" x2="160" y2="82" opacity="0.55" />
+      <line x1="124" y1="98" x2="146" y2="98" opacity="0.55" />
+      <circle cx="158" cy="112" r="12" fill="var(--brand-indigo)" stroke="none" />
+      <path d="M151.5 112 l4.5 4.5 l8.5 -9.5" stroke="#fff" strokeWidth="4" />
     </svg>
   ),
   "2": (
     <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="80" cy="75" r="36" />
-      <circle cx="80" cy="75" r="21" />
-      <circle cx="80" cy="75" r="7" fill="var(--brand-indigo)" stroke="none" />
-      <line x1="160" y1="26" x2="126" y2="50" />
-      <path d="M124 52 L139 49 L129 64 Z" fill="var(--brand-indigo)" stroke="none" />
-      <circle cx="152" cy="100" r="10" />
-      <path d="M133 128 a19 13 0 0 1 38 0" />
+      <rect x="34" y="30" width="108" height="68" rx="10" opacity="0.35" />
+      <rect x="50" y="42" width="108" height="68" rx="10" opacity="0.6" />
+      <rect x="66" y="54" width="108" height="68" rx="10" fill="var(--indigo-10)" />
+      <circle cx="102" cy="88" r="16" />
+      <circle cx="102" cy="88" r="8" />
+      <circle cx="102" cy="88" r="2.5" fill="var(--brand-indigo)" stroke="none" />
+      <circle cx="146" cy="79" r="7.5" />
+      <path d="M133 105 a13 9.5 0 0 1 26 0" />
     </svg>
   ),
   "3": (
@@ -114,24 +114,26 @@ const STEP_ART = {
   ),
   "4": (
     <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="46" y="22" width="76" height="106" rx="10" />
-      <line x1="62" y1="48" x2="108" y2="48" opacity="0.55" />
-      <line x1="62" y1="66" x2="108" y2="66" opacity="0.55" />
-      <line x1="62" y1="84" x2="94" y2="84" opacity="0.55" />
-      <path d="M62 106 l6 6 l11 -12" strokeWidth="4" />
-      <path d="M152 20 v16 M144 28 h16" strokeWidth="4" opacity="0.8" />
-      <circle cx="152" cy="92" r="24" fill="var(--brand-indigo)" stroke="none" />
-      <path d="M144 78 l20 14 l-20 14 Z" fill="#fff" stroke="none" />
+      <rect x="34" y="30" width="108" height="68" rx="10" opacity="0.35" />
+      <rect x="50" y="42" width="108" height="68" rx="10" opacity="0.6" />
+      <rect x="66" y="54" width="108" height="68" rx="10" fill="var(--indigo-10)" />
+      <line x1="84" y1="74" x2="118" y2="74" opacity="0.55" />
+      <line x1="84" y1="90" x2="118" y2="90" opacity="0.55" />
+      <line x1="84" y1="106" x2="104" y2="106" opacity="0.55" />
+      <circle cx="145" cy="90" r="15" fill="var(--brand-indigo)" stroke="none" />
+      <path d="M140.5 81 l11 9 l-11 9 Z" fill="#fff" stroke="none" />
     </svg>
   ),
   "5": (
     <svg viewBox="0 0 200 150" fill="none" stroke="var(--brand-indigo)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="68" y="16" width="64" height="118" rx="14" />
-      <line x1="92" y1="29" x2="108" y2="29" strokeWidth="4" opacity="0.5" />
-      <path d="M92 56 l24 15 l-24 15 Z" fill="var(--brand-indigo)" stroke="none" />
-      <rect x="82" y="100" width="36" height="12" rx="6" fill="var(--brand-indigo)" fillOpacity="0.85" stroke="none" />
-      <path d="M148 50 a30 30 0 0 1 0 50" opacity="0.5" />
-      <circle cx="50" cy="75" r="4" fill="var(--brand-indigo)" stroke="none" opacity="0.6" />
+      <rect x="34" y="30" width="108" height="68" rx="10" opacity="0.35" />
+      <rect x="50" y="42" width="108" height="68" rx="10" opacity="0.6" />
+      <rect x="66" y="54" width="108" height="68" rx="10" fill="var(--indigo-10)" />
+      <rect x="86" y="66" width="34" height="44" rx="7" />
+      <path d="M98 80 l12 7 l-12 7 Z" fill="var(--brand-indigo)" stroke="none" />
+      <rect x="93" y="99" width="20" height="6" rx="3" fill="var(--brand-indigo)" fillOpacity="0.85" stroke="none" />
+      <line x1="134" y1="76" x2="160" y2="76" opacity="0.55" />
+      <line x1="134" y1="90" x2="152" y2="90" opacity="0.55" />
     </svg>
   ),
 };
@@ -545,11 +547,6 @@ export default function Landing() {
               </li>
             ))}
           </ol>
-          <div className="how-dots" aria-hidden="true">
-            {FLOW_STEPS.map((s) => (
-              <span key={s.step} />
-            ))}
-          </div>
         </div>
       </section>
 
