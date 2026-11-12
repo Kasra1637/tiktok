@@ -117,15 +117,15 @@ URL for same-origin API calls.
 
 The creation wizard has **three steps**, not five:
 
-1. **App Profile** — research or select a profile, review its facts and claims,
+1. **App Profile** — research or select a profile, review its facts,
    and approve it. Profile editing/research lives at `/brand`.
 2. **Audience & template** — choose an angle and goal, compare templates, and
    attach the presenter's photograph. There is one angle selector.
-3. **Review & submit** — generate and edit the text plan, inspect claim
-   findings, build/review the matching strategy, and explicitly submit a video.
+3. **Review & submit** — generate and edit the text plan, inspect the craft
+   grade, build/review the matching strategy, and explicitly submit a video.
 
 Rendering remains gated on approved profile, valid angle/template/photograph,
-claim checks, saved/current plan and strategy, and project readiness. Review
+saved/current plan and strategy, and project readiness. Review
 edits autosave through the server's normal validation path. A variation is a
 **draft**, not a paid render.
 

@@ -1,6 +1,6 @@
 # 0081 — Remove claim wording as a render block
 
-Status: accepted
+Status: superseded by 0119
 
 ## Context
 

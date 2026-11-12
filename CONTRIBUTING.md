@@ -38,7 +38,6 @@ DB or the operator's credentials.
 | Render guards (opening move / scene agreement / selfie beat) | `python -m pytest backend/tests/test_opening_move.py backend/tests/test_scene_consistency.py backend/tests/test_final_beat.py backend/tests/test_selfie_framing.py -q` |
 | Location unified field | `python -m pytest backend/test_location_source.py backend/tests/test_location_regression.py -q` |
 | Post kit hashtag strategy | `python -m pytest backend/test_post_kit_strategy.py backend/test_post_kit_api.py -q` |
-| Claim rules | `python -m pytest backend/test_claim_safety.py -q` plus the route/plan cases that consume the changed rule |
 | Any frontend import/module move | `node frontend/scripts/check-imports.cjs` |
 | Frontend generation flow | Imports, `node frontend/scripts/check-frontend-logic.cjs`, and `node frontend/scripts/check-render-smoke.cjs` |
 | Browser editing document | `node frontend/scripts/check-demo-cta-draft.cjs` plus the affected render-smoke checks |

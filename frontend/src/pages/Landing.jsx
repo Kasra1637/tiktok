@@ -9,7 +9,7 @@ import {
 } from "../components/auth/AuthControls";
 import {
   Sparkles, Clapperboard, Film, Target,
-  FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video,
+  FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video, Gauge,
   Pause, Play,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -47,10 +47,10 @@ const FEATURES = [
       "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — edit and render again.",
   },
   {
-    icon: ShieldCheck,
-    title: "Claims checked before they cost you",
+    icon: Gauge,
+    title: "A craft grade before you pay a cent",
     description:
-      "Claim warnings surface beside your script while you can still fix them. Matches to your banned claims block generation; you still make the final factual review.",
+      "Every plan is graded on craft before you pay: the score names the weakest line and the next rewrite to try. It advises only — no grade ever blocks your renders.",
   },
   {
     icon: Film,
@@ -168,7 +168,7 @@ const FLOW_STEPS = [
   {
     step: "4",
     label: "Review then render",
-    line: "The plan is free: review it, edit and save it, check flagged claims — only the render is paid.",
+    line: "The plan is free: review it, edit and save it, check the craft grade — only the render is paid.",
     outcome: "A clip worth posting",
   },
   {
@@ -355,7 +355,7 @@ const PIPELINE_BLOCKS = [
     tone: "indigo",
     kicker: "Your review",
     title: "Nothing ships without your yes",
-    body: "Approve your app profile and review the script before rendering. Claim checks flag language to revisit, not a guarantee that every claim is correct. Review the finished clip, download it, and choose where and when to publish.",
+    body: "Approve your app profile and review the script before rendering. A craft grade scores the words and names the weakest line, so you know what to fix first. Review the finished clip, download it, and choose where and when to publish.",
   },
 ];
 
@@ -366,7 +366,7 @@ const QUESTIONS = [
   },
   {
     question: "Can I change the script before generating?",
-    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the claim check — all before you pay for a render, never after.",
+    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the craft grade — all before you pay for a render, never after.",
   },
   {
     question: "Does the video use my real face and voice?",

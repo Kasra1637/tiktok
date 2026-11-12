@@ -286,7 +286,6 @@ const BASE_PROJECT = {
   duration_seconds: 10,
   hook_seconds: 3,
   assets: ASSETS,
-  safety_report: { passed: true, blocking: [], unverified: [] },
   strategy: {},
   script: "",
   hook_line: "",
@@ -988,7 +987,6 @@ function stripComments(src) {
 
 console.log("Mounting every wizard step and panel...");
 
-const { SafetyPanel } = load("components/SafetyPanel.jsx");
 const { GenerationPanel } = load("components/GenerationPanel.jsx");
 const { HookContinuityPanel } = load("components/HookContinuityPanel.jsx");
 const CreateVideo = load("pages/CreateVideo.jsx").default;
@@ -997,12 +995,12 @@ const { OnboardingProvider } = load("components/onboarding/OnboardingProvider.js
 const { HistoryFeedback } = load("components/HistoryFeedback.jsx");
 
 // The shipped order, in the order the founder walks it. Asserted as a whole
-// sequence rather than a set: the point of the reorder is that the free, claim-
-// checked plan comes before the step that calls the model, and a set comparison
+// sequence rather than a set: the point of the reorder is that the free,
+// reviewed plan comes before the step that calls the model, and a set comparison
 // would pass just as happily if the render went back to fourth.
 //
 // The last step is "Review & submit" rather than "Hook + Story" because that is
-// what it holds: the free, claim-checked plan above and the one render it
+// what it holds: the free, reviewed plan above and the one render it
 // approves below. The old label named only the output; a step called
 // "Hook + Story" whose first job is reading words understated the read that
 // must come before any model call. "Story" replaced "middle" on request: the
@@ -1019,7 +1017,7 @@ const { HistoryFeedback } = load("components/HistoryFeedback.jsx");
 // that shows the plan it renders.
 //
 // The order still matters and is still asserted as a whole sequence: the
-// free, claim-checked plan is read before the step that calls the model, and a// comparison would pass just as happily if the render went back to third.
+// free, reviewed plan is read before the step that calls the model, and a// comparison would pass just as happily if the render went back to third.
 const STEP_LABELS = [
   "App Profile",
   "Audience & template",
@@ -2111,38 +2109,6 @@ async function main() {
     );
   });
 
-  await check("review checks never block and keep supporting evidence collapsed", async (ctx) => {
-    // Blocking removed as a product decision: even a legacy failing-shape
-    // report renders the clean advisory state with no block actions.
-    await mount(SafetyPanel, {
-      report: { passed: false, blocking: [{ claim: "cures anxiety", reason: "listed as never-use" }],
-        risk_warnings: [{ claim: "anxiety", reason: "needs substantiation" }], claims_used: ["works offline"] },
-      onEditClaim: () => { throw new Error("wording must not offer a repair action"); },
-      onRegenerate: () => { throw new Error("wording must not offer a regeneration action"); },
-    })(ctx);
-    expectText(ctx, "No blocking claims found", "the panel does not render the clean state");
-    expectAbsent(ctx, "Fix the flagged wording", "the block message still renders");
-    expectAbsent(ctx, "Blocks rendering", "the block section still renders");
-    expectAbsent(ctx, "Regenerate plan for review", "the block regeneration still renders");
-    if (ctx.container.querySelector('[data-testid="safety-edit-0"]')) throw new Error("a blocker edit action still renders");
-    if (ctx.container.querySelector('[data-testid="safety-regenerate"]')) throw new Error("a block regeneration action still renders");
-    const evidence = ctx.container.querySelector('[data-testid="claim-check-details"]');
-    if (!evidence || evidence.open) throw new Error("supporting evidence is not collapsed");
-  });
-
-  await check("review checks offer no flagged-text repair action", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1&step=review";
-    const legacyBlocked = { ...PROJECT_WITH_STRATEGY, safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }] }, script: "This cures anxiety." };
-    try {
-      await withApi({ getStudioProject: async () => legacyBlocked }, async () => {
-        await mount(CreateVideo)(ctx);
-        if (ctx.container.querySelector('[data-testid="safety-edit-0"]')) throw new Error("a repair action still renders");
-        if (ctx.container.querySelector('[data-testid="safety-regenerate"]')) throw new Error("a block regeneration still renders");
-        expectAbsent(ctx, "Fix the flagged wording", "the block message still renders");
-      });
-    } finally { delete global.__SMOKE_PARAMS; }
-  });
-
   await check("intent onboarding waits for readiness, defers resumed work, and retains replay", async (ctx) => {
     const { useOnboarding, useTourEligibility } = load("components/onboarding/OnboardingProvider.jsx");
     const storage = dom.window.localStorage;
@@ -2270,12 +2236,6 @@ async function main() {
     }
   });
 
-  await check("review checks describe warnings as nonblocking", async (ctx) => {
-    await mount(SafetyPanel, { report: { passed: true, risk_warnings: [{ claim: "ADHD", reason: "needs substantiation" }] } })(ctx);
-    expectText(ctx, "do not block rendering", "warnings imply a prohibition");
-    expectAbsent(ctx, "generation blocked", "a warning is presented as a block");
-  });
-
   await check("the craft check is advisory and names the weakest rewrite", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const report = {
@@ -2305,24 +2265,6 @@ async function main() {
       });
     } finally {
       delete global.__SMOKE_PARAMS;
-    }
-  });
-
-  await check("GenerationPanel never blocks generation on wording", async (ctx) => {
-    await mount(GenerationPanel, {
-      project: {
-        ...PROJECT_WITH_STRATEGY,
-        safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }], unverified: [] },
-      },
-    })(ctx);
-    expectAbsent(ctx, "Prohibited claim present", "the wording block still renders");
-    // Wording never touches the button: only readiness, strategy, photo,
-    // angle, length or model state may disable it.
-    const generate = [...ctx.container.querySelectorAll("button")]
-      .find((b) => /Generate/.test(b.textContent || ""));
-    if (!generate) throw new Error("the generate control is missing");
-    if (generate.disabled) {
-      throw new Error("a wording flag leaves the generate button disabled");
     }
   });
 
@@ -2595,17 +2537,6 @@ async function main() {
     await mount(HookContinuityPanel, { project: BASE_PROJECT })(ctx);
     expectText(ctx, "Build the app-specific strategy", "the free strategy button did not render");
     expectAbsent(ctx, "The two sections", "sections rendered for a project with no strategy");
-  });
-
-  await check("the strategy review never names a blocking claim", async (ctx) => {
-    await mount(HookContinuityPanel, {
-      project: {
-        ...PROJECT_WITH_STRATEGY,
-        // Legacy failing-shape report: the panel must not surface it.
-        safety_report: { passed: false, blocking: [{ claim: "cures anxiety" }], unverified: [] },
-      },
-    })(ctx);
-    expectAbsent(ctx, "Prohibited claim present", "the wording block still renders");
   });
 
   await check("the strategy review warns when no character reference is attached", async (ctx) => {
@@ -4945,7 +4876,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   await check("review edits autosave after every change without the save button", async (ctx) => {
     // The Demo + CTA editor saves its draft shortly after every change; the
-    // Review step does the same through the server path (claim check and
+    // Review step does the same through the server path (validation and
     // ready re-mark included), so an unpressed Save button never reads as
     // lost work. The manual button stays for an immediate, explicit save.
     global.__SMOKE_PARAMS = "?project=p1";
@@ -7742,7 +7673,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (unsupported.test(copy)) throw new Error(`unsupported landing promise: ${unsupported}`);
     }
     expectText(ctx, "limitations", "template fit is not presented as proven performance");
-    expectText(ctx, "Matches to your banned claims block generation", "the claim gate is disclosed");
+    expectText(ctx, "no grade ever blocks your renders", "the craft grade is disclosed as advisory only");
+    expectAbsent(ctx, "Claims checked before they cost you", "the claim check is gone");
   });
 
   // Demo + CTA now supports user-authored end cards. A blanket ban on those
@@ -7763,7 +7695,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     for (const phrase of ["a base clip", "an end card you write", "Second clip", "Real Video", "one TikTok MP4"]) {
       if (!editor.includes(phrase)) throw new Error(`missing editor boundary: ${phrase}`);
     }
-    if (!review.includes("not a guarantee that every claim is correct")) throw new Error("claim checks presented as factual certification");
+    if (!review.includes("A craft grade scores the words")) throw new Error("the review block no longer discloses the craft grade");
     const answers = [...ctx.container.querySelectorAll('[data-testid="landing-questions"] details')].map((e) => e.textContent.replace(/\s+/g, " "));
     for (const pattern of [
       /own video.*don’t need to generate a Hook \+ Story first/,
@@ -8333,7 +8265,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             app_category: "Journaling",
             platforms: ["iOS"],
             core_features: ["Voice entries", "Mood trends"],
-            claims_approved: ["Track your mood over time"],
             must_not_show: ["A doctor promising a cure"],
             outcome_statements: [
               {
@@ -8376,9 +8307,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
       if (!ctx.container.querySelector('[data-testid="listen-profile"]')) {
         throw new Error("the header lost the read-the-profile control");
-      }
-      if (!ctx.container.querySelector('[data-testid="listen-claims"]')) {
-        throw new Error("the claim guardrails card has no listen toggle");
       }
       for (const id of ["listen-facts", "listen-never-show", "listen-statements", "listen-objections"]) {
         if (!ctx.container.querySelector(`[data-testid="${id}"]`)) {
@@ -8437,7 +8365,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (fieldSpeakers < 15) {
       throw new Error(`expected 15+ field speakers on BrandSetup, found ${fieldSpeakers}`);
     }
-    for (const group of ["brand-basics", "brand-does", "brand-direction", "brand-audience", "brand-claims"]) {
+    for (const group of ["brand-basics", "brand-does", "brand-direction", "brand-audience"]) {
       if (!src.includes(`id: "${group}"`)) {
         throw new Error(`BrandSetup lost the ${group} group speaker`);
       }
@@ -9444,7 +9372,7 @@ async function runIconChecks() {
 
   await check("every profile card and group bar opens with its own icon", async () => {
     // Profile Detail headings are read the way Demo + CTA's panel headers are:
-    // an uppercase title with a glyph on its left. The page has exactly five
+    // an uppercase title with a glyph on its left. The page has exactly four
     // groups, each one's icon names a different subject, and a heading left
     // bare is the row that breaks the skim.
     //
@@ -9462,8 +9390,8 @@ async function runIconChecks() {
       throw new Error(`profile headings without an icon:\n        ${bare.join("\n        ")}`);
     }
     const groups = seen.filter((name) => name === "SectionGroup").length;
-    if (groups !== 5) {
-      throw new Error(`expected the page's five section groups, saw ${groups}`);
+    if (groups !== 4) {
+      throw new Error(`expected the page's four section groups, saw ${groups}`);
     }
     if (seen.filter((name) => name === "ProfileCard").length < 10) {
       throw new Error("too few profile cards to be the whole page");
@@ -10109,7 +10037,7 @@ async function runDeleteDialogChecks() {
   }
 
   // Angles moved out of the profile page into the Create Video wizard: the
-  // profile is facts, results, audiences and guardrails, and the Audience &
+  // profile is facts, results and audiences, and the Audience &
   // goal step already offers to generate missing angles (pinned above). The
   // profile must therefore carry no angles or drafts section at all.
   await check("the profile page carries no angles or drafts section", async (ctx) => {

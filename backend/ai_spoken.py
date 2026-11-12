@@ -10,11 +10,23 @@ import json
 import re
 
 import final_beat
-from claim_safety import (
-    FIRST_PERSON_PATTERNS,
-    _is_light_week_mention,
-    bounded_by_conflict,
-)
+
+
+# A claimed history with the product ("I've used this every shift for two
+# years") is an invented testimonial when the presenter is generated from a
+# photo: no record can substantiate it, so the draft check below rejects it.
+# "I used to <verb>" is deliberately NOT matched: a past habit is not a usage
+# claim, and half of all natural first-person hooks are built on it. Same for
+# "be used to" ("I am used to waking early" is accustomed, not a claim).
+FIRST_PERSON_PATTERNS = [
+    r"\bi (?:have |ve |am )?(?:been )?us(?:e[sd]?|ing)\b(?! to\b)",
+    r"\bi (?:rely on(?: it)?|depend on)\b",
+    r"\bi (?:swear|promise|guarantee)\b",
+    r"\bas an? \w+,? i\b",
+    r"\bmy (?:patients|clients|customers|students|team) (?:say|told me|use)\b",
+    r"\bi built (?:this|it)\b",
+    r"\bwe (?:built|developed|shipped) (?:this|it)\b",
+]
 
 
 _PROMOTION_MARKERS = (
@@ -274,7 +286,7 @@ def trim_spoken_body(text: str, limit: int):
         joined = (head + " " + payoff).strip() if head else payoff
     return joined, len(text) - len(joined)
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
-                              *, allows_question: bool = False, claims_to_respect=None) -> list:
+                              *, allows_question: bool = False) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
 
     This is not a general grammar parser or a semantic coherence score. It
@@ -313,13 +325,11 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
         hit = _spoken_marker_hit(text, _AI_FLUFF_MARKERS)
         if hit:
             issues.append(f"{name} uses a generic AI-sounding phrase: '{hit}'")
-        # The generator obeying its own safety layer: claim_safety warns when a
-        # spoken line claims a personal history with the app ("I use", "my
-        # patients"), so a draft that does it is rewritten here instead of
-        # accepted and then warned about. The patterns are shared, not copied,
-        # so the two cannot disagree about what counts — including the "I used
-        # to <verb>" exclusion, which is a past habit rather than a usage claim
-        # and must keep passing untouched.
+        # A spoken line that claims a personal history with the app ("I use",
+        # "my patients") states a testimonial no record can substantiate, so
+        # a draft that does it is rewritten here instead of accepted. The
+        # "I used to <verb>" exclusion is a past habit rather than a usage
+        # claim and must keep passing untouched.
         for pattern in FIRST_PERSON_PATTERNS:
             match = re.search(pattern, _normalize_spoken(text))
             if match:
@@ -358,22 +368,6 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                     "in the moment instead of reporting what was said or showing "
                     "what the camera already sees"
                 )
-        # The angle's bounded-by limits fence knowledge claims too: when a
-        # bound forbids diagnosis (trends shown, not diagnosed), a sentence
-        # like "Now I know how long it's been there" promises the very
-        # result the angle forbids. Rejected here per sentence, so the
-        # editorial rewrite lands on speaking — a light mention of the week
-        # ("I looked back over the week") keeps the handoff to the demo's
-        # weekly view without claiming that result. A sentence that carries
-        # the knowledge claim stays rejected even when it mentions the week.
-        if claims_to_respect:
-            for sentence in _split_sentences(text):
-                hits = [] if _is_light_week_mention(sentence) else bounded_by_conflict(sentence, list(claims_to_respect))
-                if hits:
-                    issues.append(
-                        f"{name} promises a result the angle forbids "
-                        f"('{sentence.strip()}': '{hits[0]['claim']}')"
-                    )
         for sentence in _split_sentences(text):
             plain = sentence.rstrip('\"\u201d\u2019')
             if not plain.endswith((".", "!", "?")):

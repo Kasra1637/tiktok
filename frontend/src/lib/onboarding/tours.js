@@ -51,7 +51,7 @@ export const TOURS = {
         target: '[data-testid="studio-progress-segment-profile"]',
         title: "Start with an approved App Profile",
         body:
-          "Everything here is written from one approved App Profile — its facts, claims and audience. If you have none, open App Profile to research and approve your app first; nothing renders before that.",
+          "Everything here is written from one approved App Profile — its facts and audience. If you have none, open App Profile to research and approve your app first; nothing renders before that.",
       },
       {
         target: '[data-testid="studio-progress-segment-angle"]',
@@ -176,20 +176,13 @@ export const TOURS = {
         target: '[data-testid="app-profile-header"]',
         title: "One profile, every video",
         body:
-          "Draft or approved — the badge says which. Review this app's facts and claims here. Use App Profile to edit or approve it, Create Video to plan a clip, History for finished clips, and Analytics for saved results."
+          "Draft or approved — the badge says which. Review this app's facts here. Use App Profile to edit or approve it, Create Video to plan a clip, History for finished clips, and Analytics for saved results."
       },
       {
         target: '[data-testid="profile-facts"]',
         title: "The facts your scripts live on",
         body:
           "Features, use cases, outcomes, audience details, proof points — this is the raw material for every script. The 'Never show in the video' list goes straight to the video generator."
-      },
-      {
-        target: '[data-testid="claim-guardrails"]',
-        title: "Claims with guardrails",
-        optional: true,
-        body:
-          "Approved, needs review, banned. The script plan runs a claim check against these and flags anything it cannot tie to your profile — review notes, never a render block. Do not publish anything you cannot back."
       },
       {
         target: '[data-testid="pending-proposal-alert"]',

@@ -18,7 +18,6 @@ import EmptyState from "../components/EmptyState";
 import { GroupLabel } from "../components/SectionCard";
 import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
-import SafetyPanel from "../components/SafetyPanel";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 
 import HookContinuityPanel from "../components/HookContinuityPanel";
@@ -57,14 +56,14 @@ import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image 
 //
 //   profile -> angle+goal+template+photo -> review+submit (plan above, render below)
 //
-// The script is written, checked for banned claims and read by the founder
+// The script is written and read by the founder
 // BEFORE any video is rendered. The last step then renders the piece that
 // script describes: the strategy is built from the approved plan, so the words
 // the founder read are the words that get rendered.
 //
 // This was the other way round. The hook came first, so a founder approved a
 // strategy on trust, rendered, and only then read a script describing a
-// different video — with the claim check and the SafetyPanel running against
+// different video — with the craft check running against
 // text nobody had looked at before the render.
 /**
  * The three steps, in order.
@@ -325,7 +324,7 @@ export default function CreateVideo() {
   // Thumbs verdict on the saved Review plan: up advances to the render below,
   // down records the rejection and asks the AI for a fresh plan. Manual
   // editing stays untouched — this is an additive fast path, not a
-  // replacement, so the claim check and ready gate keep working as before.
+  // replacement, so the craft check and ready gate keep working as before.
   const [reviewThumb, setReviewThumb] = useState(0);
   /* Review's two halves as sub-screens: "Read the plan" then "Render &
      result". One screen in view at a time so the plan's dozen fields stop
@@ -937,13 +936,13 @@ export default function CreateVideo() {
       // it. There is no manual mark-ready control anywhere: a click that could
       // only confirm what the studio already knew was a button with no meaning,
       // and its absence was read as the render button being broken. The server
-      // recomputes claim safety on this call and refuses when a prohibited
-      // claim is present, so the gate is unchanged -- it just happens without
+      // re-checks readiness on this call and refuses when a requirement is
+      // missing, so the gate is unchanged -- it just happens without
       // the founder having to say "I saw it".
       //
       // A refusal is kept as the plan's own state rather than surfaced as a
       // thrown error, because the plan landed and is readable; the render
-      // button then states the real reason (a prohibited claim, a missing
+      // button then states the real reason (a missing
       // photograph) instead of the screen looking broken.
       let settled = updated;
       let readyError = null;
@@ -951,8 +950,8 @@ export default function CreateVideo() {
         settled = await api.markProjectReady(updated.id);
       } catch (err) {
         // The plan landed and is readable, so this is not a failure of the step.
-        // The render button below names the real reason (a prohibited claim, or
-        // a photograph still owed); swallowing this without comment is what made
+        // The render button below names the real reason (a photograph
+        // still owed); swallowing this without comment is what made
         // a refused project look broken rather than gated.
         settled = updated;
         readyError = err;
@@ -1023,7 +1022,7 @@ export default function CreateVideo() {
 
   // Autosave mirrors the Demo + CTA editor's draft rhythm (save shortly
   // after every change), but through the server path, not browser storage:
-  // Review edits are claim-checked plan text, so only a real save counts.
+  // Review edits are plan text the render speaks, so only a real save counts.
   // Silent saves never touch `busy` — disabling the step on every debounced
   // keystroke would interrupt the typing they follow — and the manual Save
   // button stays for an immediate, explicit save.
@@ -1075,8 +1074,8 @@ export default function CreateVideo() {
       // manual mark-ready control for them to reach for instead.
       //
       // The readiness rule this encodes: an edit the founder saved after reading
-      // it keeps the project approved, and a server refusal (a claim that is now
-      // prohibited, a photograph detached) is reported rather than hidden -- so
+      // it keeps the project approved, and a server refusal (a photograph
+      // detached) is reported rather than hidden -- so
       // the render button is disabled with a stated reason instead of the screen
       // looking broken.
       let settled = updated;
@@ -1128,7 +1127,7 @@ export default function CreateVideo() {
 
   // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
   // the approval and moves to the render below. Down reuses the existing plan
-  // generation (claim check + ready marking included), capped at three
+  // generation (ready marking included), capped at three
   // refinements per saved plan version so the loop always terminates.
   const handleReviewThumb = async (next) => {
     setReviewThumb(next);
@@ -2264,10 +2263,8 @@ export default function CreateVideo() {
               </div>
             )}
             <HookLineEditor
-              projectId={project?.id}
               value={editValue("hook_line", "")}
               onChange={(next) => dispatchDraft({ type: "edit-field", field: "hook_line", value: next })}
-              report={project.safety_report}
               disabled={busy}
             />
             {/* Real-time, not a saved-plan readout: the count follows the field
@@ -2296,11 +2293,9 @@ export default function CreateVideo() {
               )}
             </div>
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
-            <SafetyPanel report={project.safety_report} summary={project.safety_summary}
-              busy={busy || autosaving} hasEdits={hasEdits} />
             {/* The craft score is advisory: it names the weakest part of the
                 saved pair and the next rewrite, but no band refuses a render.
-                The hard gates live in SafetyPanel and the spoken counts above. */}
+                The hard gates are the readiness checks and the spoken counts above. */}
             {project?.quality_report && (
               <div className="inset-panel space-y-3" data-testid="quality-report">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -2554,7 +2549,7 @@ export default function CreateVideo() {
 
                   Saving an edit re-marks, for the same reason: the founder
                   reviewed the exact text they saved, so the approval still
-                  describes it. If the server refuses (a prohibited claim, a
+                  describes it. If the server refuses (a
                   missing photograph), the render button below states that real
                   reason instead of sitting disabled behind this control. */}
               {project?.status === "ready_for_generation" && (
@@ -2575,7 +2570,7 @@ export default function CreateVideo() {
             </div>
             {hasEdits && (
               <p className="text-sm text-muted-foreground" data-subtitle="">
-                Save your edits before rendering. Edits are claim-checked.
+                Save your edits before rendering — the render speaks them.
               </p>
             )}
             <MissingRequirements
@@ -2583,11 +2578,11 @@ export default function CreateVideo() {
               onGoToTemplatePhoto={scrollToTemplatePhoto}
             />
 
-            {/* The render panel closes this step below, so the claim check above
+            {/* The render panel closes this step below, so the plan above
                 has been read before any render runs. */}
           </div>
         )}
-            {/* Plan above, render below: the claim check in Review has been read
+            {/* Plan above, render below: the plan in Review has been read
                 before any render down here runs. This is the render half of the
                 review sub-tabs: hidden while the plan half is in view (and never
                 hidden before a plan exists, so the no-plan states above keep

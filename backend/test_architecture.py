@@ -148,7 +148,6 @@ def test_studio_router_is_owned_by_routers_studio():
                  "mark_project_ready", "submit_project_generation",
                  "generate_project_strategy", "list_studio_video_models",
                  "_two_section_repairs", "_public_project", "_project_strategy",
-                 "_safety_report_for", "_require_claims_clear",
                  "_require_spoken_words_fit", "_require_current_strategy",
                  "_guard_render_scene", "_assert_model_usable",
                  "_assert_resolution_offered", "_assert_within_single_pass_cap",

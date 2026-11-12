@@ -25,7 +25,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
-import { Sparkles, Briefcase, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users, ShieldAlert } from "lucide-react";
+import { Sparkles, Briefcase, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -48,9 +48,6 @@ const EMPTY_FORM = {
   icp_segments: "",
   differentiation: "",
   tone_voice: "",
-  claims_approved: "",
-  claims_review: "",
-  claims_banned: "",
 };
 
 function productsToText(products) {
@@ -170,9 +167,6 @@ function profileToForm(data) {
     icp_segments: linesToText(data.icp_segments),
     differentiation: data.differentiation || "",
     tone_voice: data.tone_voice || "",
-    claims_approved: productsToText(data.claims_approved),
-    claims_review: productsToText(data.claims_review),
-    claims_banned: productsToText(data.claims_banned),
   };
 }
 
@@ -204,7 +198,7 @@ function Field({ label, hint, listen, children }) {
 /* Every collapsible bar in the App Profile Details card. Same ids, order and
    single-open behaviour as the App Profile page's SectionGroups, so the two
    pages read as one surface. Summaries are derived from the live form below. */
-const GROUP_IDS = ["basics", "does", "direction", "audience", "claims"];
+const GROUP_IDS = ["basics", "does", "direction", "audience"];
 
 /**
  * Map a save/approve failure to the group holding the offending field, so
@@ -214,7 +208,6 @@ const GROUP_IDS = ["basics", "does", "direction", "audience", "claims"];
  */
 function groupForSaveError(message) {
   const text = (message || "").toLowerCase();
-  if (/claim/.test(text)) return "claims";
   if (/audience|segment|differentiation|ideal customer/.test(text)) return "audience";
   if (/featur|outcome|statement|problems solved|use case|\buse it for\b/.test(text)) return "does";
   if (/proof|objection|must not show|usage moment|direction|scene/.test(text)) return "direction";
@@ -283,11 +276,6 @@ export default function BrandSetup() {
     { label: "Ideal Customer", values: [form.ideal_customer_profile] },
     { label: "Audience segments", values: spokenList("icp_segments") },
     { label: "What Sets You Apart", values: [form.differentiation] },
-  ];
-  const listenClaims = () => [
-    { label: "Approved claims", values: spokenList("claims_approved") },
-    { label: "Claims needing review", values: spokenList("claims_review") },
-    { label: "Banned claims", values: spokenList("claims_banned") },
   ];
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -478,9 +466,6 @@ export default function BrandSetup() {
     icp_segments: textToLines(form.icp_segments),
     differentiation: form.differentiation,
     tone_voice: form.tone_voice,
-    claims_approved: textToProducts(form.claims_approved),
-    claims_review: textToProducts(form.claims_review),
-    claims_banned: textToProducts(form.claims_banned),
   });
 
   // The write itself, shared: update in place when a profile already exists,
@@ -713,12 +698,6 @@ export default function BrandSetup() {
     || (momentCount ? `${momentCount} usage moment${momentCount === 1 ? "" : "s"}` : "")
     || "Scenes, proof, objections";
   const audienceSummary = form.target_audience.trim() || "Who it's for";
-  const approvedCount = textToProducts(form.claims_approved).length;
-  const reviewCount = textToProducts(form.claims_review).length;
-  const bannedCount = textToProducts(form.claims_banned).length;
-  const claimsSummary = (approvedCount || reviewCount || bannedCount)
-    ? `${approvedCount} approved · ${reviewCount} to review · ${bannedCount} never`
-    : "No guardrails set";
 
   return (
     <PageFrame className="space-y-6">
@@ -1290,37 +1269,6 @@ export default function BrandSetup() {
               </div>
               </SectionGroup>
 
-              {/* ── Claim guardrails ── */}
-              <SectionGroup id="claims" label="Claim guardrails" icon={ShieldAlert} summary={claimsSummary} open={openGroup === "claims"} onToggle={toggleGroup} listen={{ id: "brand-claims", label: "Claim guardrails", getBlocks: listenClaims }}>
-              <div className="space-y-2">
-                <Field label="Approved claims" hint="Comma-separated — factual claims safe for promos." listen={listenField("claims_approved", "Approved claims")}>
-                  <Input
-                    value={form.claims_approved}
-                    onChange={handleFieldChange("claims_approved")}
-                    placeholder="Comma-separated"
-                    data-testid="app-claims-approved-field"
-                  />
-                </Field>
-
-                <Field label="Claims needing review" hint="Comma-separated — verify before use." listen={listenField("claims_review", "Claims needing review")}>
-                  <Input
-                    value={form.claims_review}
-                    onChange={handleFieldChange("claims_review")}
-                    placeholder="Comma-separated"
-                    data-testid="app-claims-review-field"
-                  />
-                </Field>
-
-                <Field label="Banned claims" hint="Comma-separated — promos must never make these." listen={listenField("claims_banned", "Banned claims")}>
-                  <Input
-                    value={form.claims_banned}
-                    onChange={handleFieldChange("claims_banned")}
-                    placeholder="Comma-separated, for example: Guaranteed results, Fake reviews"
-                    data-testid="app-claims-banned-field"
-                  />
-                </Field>
-              </div>
-              </SectionGroup>
             </div>
 
             {/* The manual path's own Save, then the Ready alert directly below

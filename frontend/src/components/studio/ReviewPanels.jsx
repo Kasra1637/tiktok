@@ -4,7 +4,7 @@ import { CONTROL_CLASS } from "../formControls";
  * One profile-aware dropdown for a Review-step direction field.
  *
  * The options come from the profile's category group (no free typing), and
- * picking only fills the draft — saving still runs the normal claim check
+ * picking only fills the draft — saving still validates like any edit
  * and the strategy still needs a rebuild, exactly as with typed notes.
  */
 export function DirectionSelect({

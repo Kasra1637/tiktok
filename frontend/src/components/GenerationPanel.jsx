@@ -116,9 +116,9 @@ function PaidRenderProgress({ status, modelName, videoUrl }) {
  * What is left for the founder is the demo they record and the close they add,
  * and saying so is part of this panel's job.
  *
- * The claim gate and the ready gate both stay. They are the two things standing
+ * The ready gate stays. It is the thing standing
  * between an unreviewed plan and the render, and nothing about making the
- * render a single job weakened either one.
+ * render a single job weakened it.
  *
  * A third thing stands there now, and it is built here rather than asked for:
  * the strategy. Without one the render falls back to a generic take with a name
@@ -492,8 +492,8 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
       const updated = await api.updateStudioProject(projectId, { location: value });
       // Same rule as every other saved edit on Review: a content save
       // re-marks the project ready, because the founder reviewed the exact
-      // text they saved. A server refusal (a prohibited claim in the new
-      // location) is reported rather than hidden, and the draft state stands.
+      // text they saved. A server refusal (a location the scene
+      // checks reject) is reported rather than hidden, and the draft state stands.
       let settled = updated;
       try {
         settled = await api.markProjectReady(updated.id);

@@ -26,16 +26,16 @@ import PageHeader from "../components/PageHeader";
 import { ListenButton } from "../components/ListenButton";
 import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
-import { ProfileCard, ProfileField, InfoChipList, InfoListBlock, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
+import { ProfileCard, ProfileField, InfoChipList, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { rememberCurrentAppId } from "../lib/currentApp";
 import {
   Briefcase, AlertTriangle, ArrowLeft,
   Lightbulb, Trash2, RefreshCw, ClipboardCheck,
-  Layers, Target, Megaphone, MessagesSquare, Users,
+  Layers, Target, Megaphone, MessagesSquare,
   Info, Sparkles, Compass, Ban, CircleAlert, Trophy,
-  BadgeCheck, Star, ListChecks, Clock, ShieldCheck, MessageCircleQuestion,
+  BadgeCheck, Star, ListChecks, Clock, MessageCircleQuestion,
 } from "lucide-react";
 
 /**
@@ -99,37 +99,6 @@ function list(value) {
    wrapping chips so lists use their horizontal room instead of stretching
    one phrase per row down a tall strip of empty space. */
 
-function ClaimPanel({ profile }) {
-  const approved = list(profile.claims_approved);
-  const review = list(profile.claims_review);
-  const banned = list(profile.claims_banned);
-  if (!approved.length && !review.length && !banned.length) return null;
-  // Spoken from the same lists the blocks render; the em-dash labels become
-  // commas because a dash reads as a stumble out loud.
-  const getBlocks = () => [
-    { label: "Approved, safe to use", values: approved },
-    { label: "Needs review, verify first", values: review },
-    { label: "Never use", values: banned },
-  ];
-  return (
-    <ProfileCard
-      testid="claim-guardrails"
-      eyebrow="Claim guardrails"
-      icon={ShieldCheck}
-      listen={{ id: "claims", label: "Claim guardrails", getBlocks }}
-    >
-      {/* The "Needs review · N" badge that sat here was the same tier the list
-          below already names, said again one line above it — and this group's
-          bar counts what is to review as well. It also read "Needs review · 0"
-          on a profile with nothing to check. The tiers are the headings. */}
-      <p className="text-sm leading-[20px] text-muted-foreground">The plan checks these phrases before rendering. Review each claim for accuracy before publishing; an automated check is not a guarantee.</p>
-      <InfoListBlock label="Approved — safe to use" items={approved} tone="approved" />
-      <InfoListBlock label="Needs review — verify first" items={review} tone="review" />
-      <InfoListBlock label="Never use" items={banned} tone="banned" />
-    </ProfileCard>
-  );
-}
-
 /**
  * Join a list the way a sentence does: "a", "a and b", "a, b and c".
  *
@@ -147,7 +116,7 @@ function formatList(items) {
 
 /* Every collapsible bar on this page. The accordion keeps at most one of
    these open; persisted state stores the open id (or null). */
-const GROUP_IDS = ["essentials", "problems", "messaging", "context", "audience"];
+const GROUP_IDS = ["essentials", "problems", "messaging", "context"];
 
 /**
  * Everything a delete of this profile takes with it, named from the data the
@@ -463,12 +432,6 @@ export default function AppProfileDetail() {
   const usageMoments = list(profile?.usage_moments);
   const outcomeCount = Array.isArray(profile?.outcome_statements) ? profile.outcome_statements.length : 0;
   const objectionCount = Array.isArray(profile?.viewer_objections) ? profile.viewer_objections.length : 0;
-  const claimApproved = list(profile?.claims_approved);
-  const claimReview = list(profile?.claims_review);
-  const claimBanned = list(profile?.claims_banned);
-  // The group holds Claim Guardrails only now, so it renders when there is
-  // at least one claim to show.
-  const hasAudience = claimApproved.length + claimReview.length + claimBanned.length > 0;
 
   // Group visibility mirrors the cards: an empty group leaves no header
   // behind. Summaries are computed from the data, never hand-written.
@@ -493,10 +456,6 @@ export default function AppProfileDetail() {
   const contextSummary = joinSummary([
     usageMoments.length > 0 && `${usageMoments.length} moment${usageMoments.length === 1 ? "" : "s"}`,
     objectionCount > 0 && `${objectionCount} objection${objectionCount === 1 ? "" : "s"}`,
-  ]);
-  const audienceSummary = joinSummary([
-    claimApproved.length > 0 && `${claimApproved.length} approved`,
-    claimReview.length > 0 && `${claimReview.length} to review`,
   ]);
 
   // Spoken content is built from the same data the cards render — never from
@@ -561,11 +520,6 @@ export default function AppProfileDetail() {
       ),
     },
   ];
-  const listenClaims = () => [
-    { label: "Approved, safe to use", values: claimApproved },
-    { label: "Needs review, verify first", values: claimReview },
-    { label: "Never use", values: claimBanned },
-  ];
   // Group bars speak these composed views of the same card blocks.
   const listenEssentials = () => [
     ...listenFacts(),
@@ -581,14 +535,12 @@ export default function AppProfileDetail() {
     ...listenStatements(),
   ];
   const listenContext = () => [...listenMoments(), ...listenObjections()];
-  const listenAudience = () => [...listenClaims()];
   const listenProfile = () => [
     `${profile?.brand_name?.trim() || "This app"}, profile overview.`,
     ...(hasEssentials ? listenEssentials() : []),
     ...(hasProblems ? listenProblems() : []),
     ...(hasMessaging ? listenMessaging() : []),
     ...(hasContext ? listenContext() : []),
-    ...(hasAudience ? listenAudience() : []),
   ];
 
 return (
@@ -917,11 +869,6 @@ return (
         {/* The delete dialog counts drafts, angles and photos from the data
             above; recorded-results history lived here once and is gone with
             the manual-results loop. */}
-        {hasAudience && (
-        <SectionGroup id="audience" label="Audience & guardrails" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
-          <ClaimPanel profile={profile || {}} />
-        </SectionGroup>
-        )}
       </div>
 
       <Dialog

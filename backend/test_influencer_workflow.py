@@ -106,8 +106,6 @@ NURSE_APP = {
         "from_feature": "One-tap shift logging",
         "how_it_helps": "One tap logs the whole shift so handover writes itself",
     }],
-    "claims_approved": ["Logs a shift in one tap"],
-    "claims_banned": ["cures burnout"],
     "tone_voice": "plain, tired, warm",
 }
 
@@ -126,8 +124,6 @@ BUDGET_APP = {
         "from_feature": "Subscription cancellation radar",
         "how_it_helps": "It hunts forgotten subscriptions so the leftover figure is real",
     }],
-    "claims_approved": ["Finds forgotten subscriptions"],
-    "claims_banned": ["guarantees you will save money"],
     "tone_voice": "dry, wry, a bit conspiratorial",
 }
 
@@ -172,16 +168,10 @@ def _approved_project(api, script="", hook_line="", version=1):
     project, _profile, _template = _make_project(api, NURSE_APP)
     _run(api._execute(
         "UPDATE studio_projects SET script = ?, hook_line = ?, script_version = ?,"
-        " beat_timeline = ?, safety_report = ? WHERE id = ?",
-        (script, hook_line, version, "[]", json.dumps(_CLEAN_REPORT), project["id"]),
+        " beat_timeline = ? WHERE id = ?",
+        (script, hook_line, version, "[]", project["id"]),
     ))
     return project["id"]
-
-
-# What a passing claim-safety report looks like on the row. generate_plan writes
-# the real one; tests that only need to get past the gate write this.
-_CLEAN_REPORT = {"passed": True, "blocking": [], "claims_used": [],
-                 "risk_warnings": [], "sources_used": []}
 
 
 def _mark_ready(api, project_id, script="A plain line about the shift, no promises."):
@@ -191,17 +181,12 @@ def _mark_ready(api, project_id, script="A plain line about the shift, no promis
     The hook used to be its own endpoint and its own, cheaper gate — a project
     could reach a render of the opening without a script at all. There is
     one render now, so the piece goes through the same ready gate as any
-    generation: a script on the project, and a claim report that passes.
-
-    A clean report is written only when there is none. A project whose strategy
-    was stored with a banned claim already has a FAILING report, and replacing
-    it with a clean one would quietly disarm the gate this fixture exists to
-    exercise.
+    generation: a script on the project, marked ready_for_generation.
     """
     _run(api._execute(
-        "UPDATE studio_projects SET script = ?, status = 'ready_for_generation',"
-        " safety_report = COALESCE(NULLIF(safety_report, ''), ?) WHERE id = ?",
-        (script, json.dumps(_CLEAN_REPORT), project_id),
+        "UPDATE studio_projects SET script = ?, status = 'ready_for_generation'"
+        " WHERE id = ?",
+        (script, project_id),
     ))
     return project_id
 
@@ -212,13 +197,7 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
     `cta` is still accepted and ignored: it was a required strategy key when this
     fixture was written, and callers pass it. A generated video has no call to
     action now, so `normalize_strategy` drops the field.
-
-    The claim-safety report is written in the same statement, which is what
-    generate_project_strategy does — the strategy carries the words that will
-    actually be spoken, so a banned claim in it has to be stored as failing or
-    the generation gate would never see it.
     """
-    import claim_safety
     from ai_service import normalize_strategy
     strategy = normalize_strategy({
         "strategy_summary": f"{feature} for {persona['who']}.",
@@ -268,19 +247,11 @@ def _store_strategy(api, project_id, hook_line, persona, scene, *, problem, feat
              "script": persona["payoff"], "action": persona["payoff_action"]},
         ],
     })
-    report = claim_safety.build_safety_report(
-        {"strategy": strategy},
-        _run(api._fetch_one(
-            "SELECT * FROM brand_profiles WHERE id = ("
-            "  SELECT brand_profile_id FROM studio_projects WHERE id = ?)",
-            (project_id,))),
-    )
     _run(api._execute(
         "UPDATE studio_projects SET strategy = ?, strategy_version = 1,"
-        " strategy_script_version = script_version, safety_report = ?,"
-        " safety_summary = ?, status = 'draft' WHERE id = ?",
-        (json.dumps(strategy), json.dumps(report), claim_safety.summarize(report),
-         project_id)))
+        " strategy_script_version = script_version,"
+        " status = 'draft' WHERE id = ?",
+        (json.dumps(strategy), project_id)))
     return strategy
 
 
@@ -787,10 +758,10 @@ class TestWorkflowGates:
         assert err.value.status_code == 409
         assert "approve" in str(err.value.detail).lower()
 
-    def test_a_banned_claim_in_the_strategy_blocks_the_render(self, api, monkeypatch):
+    def test_strong_wording_in_the_strategy_never_blocks_the_render(self, api, monkeypatch):
         """
-        Blocking removed: a banned claim in the strategy never refuses the
-        render. The submit proceeds to the provider.
+        Wording is never refused (ADR 0119): even a strategy whose hook line
+        promises a cure proceeds to the provider — no check scans it.
         """
         from models import StudioGenerationRequest
         project, _p, _t = _make_project(api, NURSE_APP)
@@ -1771,45 +1742,3 @@ class TestUsageMomentsAndProofMoment:
         )
         assert '"usage_moments": []' in captured["prompt"]
         assert "empty stays unspecified, never invented" in captured["prompt"]
-
-
-class TestFirstPersonClaimsAreFlagged:
-    """
-    Nothing in the system records the presenter's real relationship to the
-    product, so any first-person experience claim is invented. A founder-entered
-    relationship field was considered and dropped: asking a model for a fact
-    only a person can supply is how you get a confident wrong answer, and gating
-    on a field it might contradict is worse than forbidding the claim.
-    """
-
-    def _report(self, script):
-        import claim_safety as cs
-        return cs.build_safety_report({"script": script}, {})
-
-    def test_invented_experience_is_flagged(self):
-        for script in (
-            "I have used this every shift for two years.",
-            "I rely on this app daily.",
-            "As a nurse, I use this on every ward round.",
-            "I built this app for my patients.",
-        ):
-            report = self._report(script)
-            reasons = [w["reason"] for w in report["risk_warnings"]]
-            assert any(
-                "first-person experience claim" in r for r in reasons
-            ), f"not flagged: {script}"
-
-    def test_it_is_a_warning_not_a_block(self):
-        """Editorial control stays with the founder, like every other risk tier."""
-        report = self._report("I use this every day.")
-        assert report["passed"] is True
-        assert report["risk_warnings"]
-
-    def test_ordinary_copy_is_untouched(self):
-        for script in (
-            "One tap and the shift is logged.",
-            "Try it and see the difference.",
-            "Your notes, in your voice.",
-        ):
-            reasons = [w["reason"] for w in self._report(script)["risk_warnings"]]
-            assert not any("first-person" in r for r in reasons), script

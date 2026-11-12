@@ -969,10 +969,9 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
              icp_segments, desired_outcomes, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
              outcome_statements,
-             claims_approved, claims_review, claims_banned,
              status, version)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, name, payload.brand_description or "",
          payload.niche or "",
          payload.target_audience or "", payload.ideal_customer_profile or "",
@@ -994,9 +993,6 @@ async def create_brand(payload: BrandProfileCreateRequest, user_id: str = Depend
          payload.proof_moment or "",
           json.dumps(_normalize_objection_value(payload.viewer_objections)),
          json.dumps(_normalize_outcome_value(payload.outcome_statements)),
-         json.dumps(_normalize_str_list(payload.claims_approved)),
-         json.dumps(_normalize_str_list(payload.claims_review)),
-         json.dumps(_normalize_str_list(payload.claims_banned)),
          "draft", 1),
     )
     logger.info(f"Created brand profile {brand_id} ('{name}') from manual entry")
@@ -1189,10 +1185,9 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
              icp_segments, desired_outcomes, known_limitations,
              must_not_show, usage_moments, proof_moment, viewer_objections,
              outcome_statements,
-             claims_approved, claims_review, claims_banned,
              status, version, last_research_at, research_sources)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (brand_id, website or None, profile.get("brand_name") or "Untitled app",
 
          profile.get("brand_description") or "", profile.get("niche") or "",
@@ -1214,9 +1209,6 @@ async def research_app_profile(payload: AppProfileResearchRequest, user_id: str 
          profile.get("proof_moment") or "",
           json.dumps(_normalize_objection_value(profile.get("viewer_objections"))),
          json.dumps(_normalize_outcome_value(profile.get("outcome_statements"))),
-         json.dumps(profile.get("claims_approved") or []),
-         json.dumps(profile.get("claims_review") or []),
-         json.dumps(profile.get("claims_banned") or []),
          # Only the sources that actually returned text. `combined_raw` above is
     # already built from the same set, so the recorded list and the text the
     # model saw now agree.

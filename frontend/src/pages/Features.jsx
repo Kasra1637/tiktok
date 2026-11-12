@@ -37,7 +37,7 @@ const ROWS = [
     icon: FileText,
     eyebrow: "Script",
     title: "Make the script your own",
-    body: "Review the free script plan, edit and save the hook, story, and visual directions, then check flagged claims. Render Hook + Story in the final step.",
+    body: "Review the free script plan, edit and save the hook, story, and visual directions, then check the craft grade. Render Hook + Story in the final step.",
   },
   {
     id: "render",

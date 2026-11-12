@@ -486,7 +486,7 @@ def _score_handoff(script):
     )
 
 
-def _score_trust(hook, script, check, app_name, claims_to_respect, allows_question):
+def _score_trust(hook, script, check, app_name, allows_question):
     if not hook.strip() and not script.strip():
         return 0, ["No spoken lines to score."], "Write a hook and a script first."
     score = 10
@@ -497,7 +497,6 @@ def _score_trust(hook, script, check, app_name, claims_to_respect, allows_questi
         check.get("hook", {}).get("ceiling") or 60,
         check.get("script", {}).get("ceiling") or 150,
         allows_question=allows_question,
-        claims_to_respect=list(claims_to_respect or ()),
     )
     for issue in issues:
         score -= 3
@@ -565,7 +564,6 @@ def assess_spoken_quality(
     hook_seconds=3,
     total_seconds=15,
     app_name="",
-    claims_to_respect=None,
     allows_question=True,
     spoken_check=None,
 ):
@@ -604,7 +602,7 @@ def assess_spoken_quality(
             score, evidence, next_step = _score_handoff(body)
         else:
             score, evidence, next_step = _score_trust(
-                hook, body, check, app_name, claims_to_respect, allows_question
+                hook, body, check, app_name, allows_question
             )
         dimensions[key] = {
             "key": key,

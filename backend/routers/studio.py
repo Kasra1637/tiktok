@@ -6,7 +6,7 @@ funnels through `_submit_generation` (which stays the sole submit path in
 `server.py` — only its module address changes; `server` re-exports it).
 
 Shared stateless deps (ai_service, scene_consistency, template_library,
-claim_safety, video_providers, final_beat, opening_move, generation_planning,
+video_providers, final_beat, opening_move, generation_planning,
 feedback) import here directly. DB helpers and the render-composition
 helpers (`_fetch_one`, `_fetch_all`, `_execute`, `_log_model_call`,
 `_submit_generation`, `_public_generation`, `_public_asset`,
@@ -33,7 +33,6 @@ import creative_quality
 import scene_consistency
 import template_library
 import video_providers
-import claim_safety
 import final_beat
 import opening_move
 import generation_planning
@@ -183,10 +182,13 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     adding one column to pin it was not worth a migration.
     """
     out = dict(row)
+    # The claim-safety system is gone (ADR 0119): its stored columns stay in
+    # the schema, but no project response carries the verdict fields anymore.
+    out.pop("safety_report", None)
+    out.pop("safety_summary", None)
     out["beat_timeline"] = out.get("beat_timeline") or []
     out["overlays"] = out.get("overlays") or []
     out["assets"] = out.get("assets") or []
-    out["safety_report"] = out.get("safety_report") or None
     out["duration_seconds"] = out.get("duration_seconds") or 0
     out["script_version"] = out.get("script_version") or 0
     out["camera_setup"] = out.get("camera_setup") or "handheld"
@@ -396,29 +398,6 @@ def _project_strategy(project: dict) -> dict:
     return merged
 
 
-def _safety_report_for(project: dict, profile: dict) -> dict:
-    """
-    The claim verdict for this project as it stands RIGHT NOW.
-
-    Every stored safety_report is a cache: it was computed at plan time, at
-    strategy time, or at edit time, against the profile as it was then.
-    App Profile edits deliberately do not revoke approval, so a founder can ban a
-    claim on the profile months later and every previously-approved project keeps
-    its old "passed" verdict cached. Reading that cache at the spend boundary
-    renders the banned claim for money.
-
-    Recomputing is deterministic and cheap, and it walks the project dict, so it
-    also picks up a hook line that arrived in the strategy after the cached
-    report was written.
-    """
-    return claim_safety.build_safety_report(project or {}, profile or {})
-
-
-def _require_claims_clear(project: dict, profile: dict) -> dict:
-    """Return the live claim verdict without refusing. Nothing blocks render."""
-    return _safety_report_for(project, profile)
-
-
 def _require_spoken_words_fit(project: dict) -> dict:
     """
     Refuse a render whose approved script cannot be spoken within the piece.
@@ -426,9 +405,8 @@ def _require_spoken_words_fit(project: dict) -> dict:
     The middle's seconds hold a fixed number of characters; anything past that
     would be silently dropped from the words reaching the video model — and the
     tail is usually the payoff sentence. This is recomputed from the live row,
-    not read from a stored verdict, for the same reason the claim verdict is:
-    App Profile and plan edits must not be able to strand an approval. Returns
-    the overflow record ({} when everything fits).
+    not read from a stored verdict, so App Profile and plan edits cannot
+    strand an approval. Returns the overflow record ({} when everything fits).
     """
     _bound, overflow = bind_spoken_words(
         _project_strategy(project),
@@ -660,47 +638,7 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       clause still remains, the render is refused with the field named
       instead of sending it to the provider; spoken words are never
       rewritten or refused for this.
-    - The final script line stays inside the angle's "bounded by" limits
-      (ADR 0108): spoken words are never rewritten or auto-fixed, so a last
-      line promising a result the angle forbids refuses the render
-      with the line named. Checked even when the project carries no Location,
-      because the spoken words are the risk here, not the place.
     """
-    # Bounded-by final line (ADR 0108): see above. Runs before the Location
-    # early return so a project with no Location still cannot render a
-    # forbidden closing line.
-    if content_angle is not None and isinstance(strategy, dict) and strategy:
-        raw_bounds = (content_angle or {}).get("claims_to_respect")
-        if isinstance(raw_bounds, str):
-            try:
-                parsed_bounds = json.loads(raw_bounds)
-                raw_bounds = parsed_bounds if isinstance(parsed_bounds, list) else [raw_bounds]
-            except (json.JSONDecodeError, TypeError):
-                raw_bounds = [raw_bounds]
-        bounds = [str(b).strip() for b in (raw_bounds or []) if str(b).strip()]
-        if bounds:
-            candidates = [(project or {}).get("script")]
-            for section in strategy.get("segments") or []:
-                if isinstance(section, dict) and str(section.get("role") or "").lower() == "middle":
-                    candidates.append(section.get("script"))
-                    break
-            for candidate in candidates:
-                final_line = claim_safety.last_sentence(candidate)
-                if not final_line:
-                    continue
-                hits = claim_safety.bounded_by_conflict(final_line, bounds)
-                if hits:
-                    bound = hits[0]["claim"]
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            f"This render was stopped before it cost anything: the final line "
-                            f"\u201c{final_line}\u201d promises a result the audience "
-                            f"angle forbids (\u201c{bound}\u201d). Spoken words are never rewritten "
-                            "automatically \u2014 edit the script on Review & submit so the last line "
-                            "stays inside that bound, then generate again. Nothing has been charged."
-                        ),
-                    )
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
     location = str(project.get("location") or project.get("visual_direction") or "").strip()
@@ -1002,9 +940,6 @@ async def update_studio_project(
     Edit a draft. This is the founder's review step, so every generated field
     is editable and editing bumps script_version so a later generation can be
     traced to the exact text that was approved.
-
-    Re-running claim safety on every edit is deliberate: a founder could
-    otherwise paste a prohibited claim into the script field and generate.
     """
     row = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
@@ -1224,8 +1159,6 @@ async def update_studio_project(
                 scene_audit = scene_consistency.reconcile_scene(strategy_out, row)
                 changed = list(dict.fromkeys(audit["changed"] + scene_audit["changed"]))
                 if audit["changed"] or scene_audit["changed"]:
-                    # Claim checkout walks `merged` below, so it must see the
-                    # text that was actually stored.
                     updates["strategy"] = scene_audit["strategy"]
                     set_clauses.append("strategy = ?")
                     values.append(json.dumps(scene_audit["strategy"]))
@@ -1241,30 +1174,6 @@ async def update_studio_project(
                     "changed": changed,
                     "blocked": audit["blocked"] + scene_audit["blocked"],
                 }
-
-    # Re-check claims against the profile after any edit.
-    profile = await _fetch_one(
-        "SELECT * FROM brand_profiles WHERE id = ?", (row.get("brand_profile_id"),)
-    )
-    if profile:
-        merged = dict(row)
-        for key, value in updates.items():
-            if key in ("beat_timeline", "assets"):
-                merged[key] = value if isinstance(value, list) else []
-            elif key == "strategy":
-                # Already serialized above; claim checking walks the structure,
-                # so give it the dict rather than the JSON string.
-                try:
-                    merged[key] = json.loads(value) if isinstance(value, str) else (value or {})
-                except (json.JSONDecodeError, TypeError):
-                    merged[key] = {}
-            else:
-                merged[key] = value
-        report = claim_safety.build_safety_report(merged, profile)
-        set_clauses.append("safety_report = ?")
-        values.append(json.dumps(report))
-        set_clauses.append("safety_summary = ?")
-        values.append(claim_safety.summarize(report))
 
     # script_version tracks the WRITTEN content, so only a content edit that
     # actually changes a value bumps it. It previously bumped on key presence
@@ -1402,10 +1311,6 @@ async def generate_plan(
       1. The App Profile must be approved.
       2. A template must be chosen, since the template supplies the creative
          structure the plan adapts.
-
-    The claim-safety report is computed here and stored. A plan that trips a
-    banned claim is still RETURNED — the founder can see and fix it — but the
-    report marks it failed so Phase 5 generation refuses to run it.
     """
     require_ai_configured()
     row = await _fetch_one(
@@ -1532,7 +1437,7 @@ async def generate_plan(
     # drafts before returning them, using this project's exact hook length.
     # Such drafts pass this legacy partition unchanged: it remains for old
     # whole-piece callers that include a duplicate hook at the script's head.
-    # Claim safety and storage must see the same accepted spoken words.
+    # Storage must see the same accepted spoken words.
     #
     # hook_seconds and total_seconds are passed exactly as _require_spoken_words_fit
     # passes them. A clamp that assumed a different section split would produce
@@ -1567,9 +1472,6 @@ async def generate_plan(
             f"{clamp['middle_seconds']}s spoken budget ({clamp['budget']}); trimmed on arrival"
         )
 
-    report = claim_safety.build_safety_report(plan, profile)
-    summary = claim_safety.summarize(report)
-
     now = now_iso()
     # `cta` is no longer written: a call to action is the founder's own, added in
     # their editor after the demo they record. `feature_emphasis` is replaced by
@@ -1583,7 +1485,7 @@ async def generate_plan(
         """UPDATE studio_projects SET
              hook_line = ?, script = ?, beat_timeline = ?, location = ?, visual_direction = ?,
              demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
-             safety_report = ?, safety_summary = ?, objective = ?,
+             objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
              plan_trimmed_chars = ?, angle_scene_note = ?,
              status = 'draft', updated_at = ?
@@ -1591,7 +1493,7 @@ async def generate_plan(
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
          plan.get("location") or "", plan["visual_direction"], plan["demo_brief"], json.dumps([]),
          plan["voice_direction"], plan["sound_direction"],
-         json.dumps(report), summary, objective, duration, tone or None,
+         objective, duration, tone or None,
          trimmed_chars, look["note"] or None, now, project_id, user_id),
     )
     # Behavior, both directions. Writing this plan means moving forward with
@@ -1630,7 +1532,7 @@ async def generate_plan(
                 studio_project_id=project_id,
                 detail=f"script v{int(row.get('script_version') or 0)}")
     logger.info(
-        f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1}) — {summary}"
+        f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1})"
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
@@ -1642,15 +1544,10 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
     """
     Mark a reviewed project ready for video generation.
 
-    Refuses while the claim-safety report is failing, so a prohibited claim
-    cannot be waved through. This is the last gate before Phase 5 renders.
-
-    The verdict is recomputed against the live App Profile and written back,
-    rather than read from the row. The stored copy was computed when the plan was
-    written; if the founder has since added a claim to claims_banned, approving
-    on the stale "passed" would show them a green SafetyPanel and then block at
-    the generate button, which reads as a bug rather than a rule. Recomputing
-    here keeps the panel and the spend gate telling the same story.
+    This is the last gate before Phase 5 renders: the script, the presenter
+    photo (when the template needs one) and the objective must all be in
+    place, so the Generate button never enables on a project that can only
+    refuse at the click.
     """
     row = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
@@ -1717,12 +1614,11 @@ async def mark_project_ready(project_id: str, user_id: str = Depends(get_current
         )
 
     profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
-    report = _require_claims_clear(row, profile)
 
     await _execute(
-        "UPDATE studio_projects SET status = 'ready_for_generation', safety_report = ?, "
-        "safety_summary = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-        (json.dumps(report), claim_safety.summarize(report), now_iso(), project_id, user_id),
+        "UPDATE studio_projects SET status = 'ready_for_generation', "
+        "updated_at = ? WHERE id = ? AND user_id = ?",
+        (now_iso(), project_id, user_id),
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
@@ -1737,8 +1633,7 @@ async def submit_project_generation(
     """
     Generate the complete video as ONE job.
 
-    Refuses unless the project is reviewed and ready, and unless the claim
-    check passes, so a prohibited claim cannot reach a paid generation.
+    Refuses unless the project is reviewed and ready.
 
     The result is ONE clip: a hook and a middle. There is no extension, no
     per-segment approval and no join, so a request longer than a single pass is
@@ -2001,11 +1896,7 @@ async def generate_project_strategy(
             detail=f"AI strategy generation failed. Please try again. ({str(e)[:150]})",
         )
 
-    # The strategy carries the words that will actually be spoken, so it goes
-    # through exactly the same claim check as the plan. A banned claim in the
-    # hook line is still a banned claim, and generation is gated on this.
-    #
-    # Before that, the spoken words are rewritten from the founder's approved
+    # The spoken words are rewritten from the founder's approved
     # plan. The model writes its own section drafts, and those drafts reached
     # the provider as "spoken, performed naturally" — so a founder could
     # approve outcome-framed words on the Review step and hear the model's
@@ -2023,11 +1914,6 @@ async def generate_project_strategy(
     strategy = dict(strategy or {})
     strategy["camera_beat"] = normalize_strategy(strategy)["camera_beat"]
     strategy["camera_setup"] = row.get("camera_setup") or "handheld"
-
-    merged = dict(row)
-    merged["strategy"] = strategy
-    report = claim_safety.build_safety_report(merged, profile)
-    summary = claim_safety.summarize(report)
 
     version = int(row.get("strategy_version") or 0) + 1
     now = now_iso()
@@ -2059,10 +1945,10 @@ async def generate_project_strategy(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
              strategy_script_version = ?,
              hook_seconds = ?,
-             safety_report = ?, safety_summary = ?, updated_at = ?
+             updated_at = ?
            WHERE id = ? AND user_id = ?""",
         (json.dumps(strategy), version, script_version_at_build, hook_seconds,
-         json.dumps(report), summary, now, project_id, user_id),
+         now, project_id, user_id),
     )
     # Behavior: building the strategy moves forward with the goal behind it,
     # so the goal is adopted. Replacing a strategy that never rendered drops
@@ -2090,7 +1976,7 @@ async def generate_project_strategy(
     logger.info(
         f"Generated strategy for project {project_id} (v{version}) — hook "
         f"{hook_seconds}s, middle {total_duration - hook_seconds}s, "
-        f"{len(strategy.get('segments') or [])} section(s) — {summary}"
+        f"{len(strategy.get('segments') or [])} section(s)"
     )
     return _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
@@ -2103,14 +1989,10 @@ async def _require_renderable_project(project_id: str, user_id: str) -> tuple:
     Shared by the fresh-submit path and the retry path. Retry used to load the
     project, profile and template and call _submit_generation directly, which
     meant it inherited none of the checks below. A retry could therefore spend
-    real money on a project that had been edited back to draft since, on an App
-    Profile that was no longer approved, and past a claim block the founder had
-    been shown. Retrying is not a cheaper way around the gates; it is the same
-    render, so it answers to the same questions.
-
-    The claim verdict is recomputed here rather than read from the row, because
-    the row's copy is a cache computed against the profile as it was when the
-    plan was last written, and App Profile edits do not revoke approval.
+    real money on a project that had been edited back to draft since, or on an
+    App Profile that was no longer approved. Retrying is not a cheaper way
+    around the gates; it is the same render, so it answers to the same
+    questions.
     """
     project = await _fetch_one(
         "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
@@ -2129,7 +2011,6 @@ async def _require_renderable_project(project_id: str, user_id: str) -> tuple:
     # which the retry path skipped entirely: it loaded the profile by id and
     # rendered against whatever state the profile happened to be in.
     profile = await _require_profile_for_studio(project.get("brand_profile_id"), user_id)
-    _require_claims_clear(project, profile)
 
     template = await _fetch_one(
         "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",

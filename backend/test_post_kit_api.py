@@ -394,8 +394,6 @@ class TestPostKitCaptionGuards:
             "brand_description": "A focus timer.",
             "target_audience": "students",
             "tone_voice": "plain",
-            "claims_approved": ["3-day free trial"],
-            "claims_banned": ["cures anxiety"],
         }
         return project, profile
 
@@ -453,7 +451,10 @@ class TestPostKitCaptionGuards:
         with pytest.raises(RuntimeError, match="question"):
             _run(api.ai_service.generate_post_kit(project, profile))
 
-    def test_banned_claim_in_caption_is_loud(self, api, monkeypatch):
+    def test_strong_wording_in_caption_is_accepted(self, api, monkeypatch):
+        """Wording is never refused (ADR 0119): the kit is still generated
+        when the caption promises a cure — the wording guards that remain
+        are shape guards (hashtags, length, the closing question)."""
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — this cures anxiety fast. Ready to try?",
@@ -463,8 +464,8 @@ class TestPostKitCaptionGuards:
 
         monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
         project, profile = self._materials()
-        with pytest.raises(RuntimeError, match="banned claim"):
-            _run(api.ai_service.generate_post_kit(project, profile))
+        kit = _run(api.ai_service.generate_post_kit(project, profile))
+        assert "cures anxiety" in kit["caption"]
 
     def test_caption_outside_length_window_is_loud(self, api, monkeypatch):
         for caption in (

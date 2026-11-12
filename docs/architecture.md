@@ -6,7 +6,7 @@ exceptions live in [ADRs](adr/README.md).
 
 ## Terms
 
-- **App Profile**: researched product facts, audience and claim boundaries;
+- **App Profile**: researched product facts and audience;
   persisted in `brand_profiles` for historical schema compatibility.
 - **Angle**: audience + problem + promise + recorded feature/outcome link.
 - **Template**: an abstract opening/middle structure, not a copied performance
@@ -33,7 +33,7 @@ React routes (App.js)
         -> template_recommendations: deterministic fit + shared-note policy
         -> ai_service: OpenRouter requests and correction/retry orchestration
            -> angle_policy: normalization, recorded grounding, lexical diversity
-        -> generation_planning / claim_safety / angle_scene / video_providers
+        -> generation_planning / angle_scene / video_providers
         -> character_policy / final_beat / opening_move / scene_consistency
         -> storage_service / pipeline / media_signing
 
@@ -77,7 +77,6 @@ Paths below are relative to [backend](../backend/).
 | [opening_move.py](../backend/opening_move.py) | Opening-move check (ADR 0090): `validate_opening` / `repair` — guard refuses a static or speech-only hook before render. |
 | [scene_consistency.py](../backend/scene_consistency.py) | Scene-field agreement (ADR 0092/0103/0104): `reconcile_scene` patches what is patchable; Movement ≥600 is advisory, Props stays a hard block. |
 | [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
-| [claim_safety.py](../backend/claim_safety.py) | Deterministic claim/risk checks. Do not replace them with model self-report. |
 | [feedback.py](../backend/feedback.py) | Explicit/implicit feedback interpretation and recorded-performance ranking. Fit, momentum and performance are distinct signals. |
 | [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py`, `history.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets`/`history` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
 | [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
@@ -121,7 +120,6 @@ accepts data; it must not be mistaken for an authorization check.
 | [ReviewPanels.jsx](../frontend/src/components/studio/ReviewPanels.jsx) | Profile-matched direction dropdowns (per-dropdown refresh) and plan-phase narration. It does not own plan writes or render submission. |
 | [HookLineEditor.jsx](../frontend/src/components/studio/HookLineEditor.jsx) | Review spoken-line editor under Review & submit. |
 | [useWizardDirections.js](../frontend/src/pages/useWizardDirections.js) | Direction fetch with stale-request guard; picks reset on app switch. |
-| [SafetyPanel.jsx](../frontend/src/components/SafetyPanel.jsx) | Advisory claim report surface (ADR 0081 — never a gate). |
 | [PendingSaveCard.jsx](../frontend/src/pages/PendingSaveCard.jsx) | Surfaces a durable-save retry card without claiming that a browser check is a render failure. |
 | [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. |
 | [GenerationHistory.jsx](../frontend/src/pages/GenerationHistory.jsx), [historyPolling.js](../frontend/src/pages/historyPolling.js), [historyRepair.js](../frontend/src/pages/historyRepair.js) | Confirmed row snapshots, bounded per-row polling and durable-save recovery. Stopped browser polling does not mean provider failure. |

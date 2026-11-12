@@ -635,9 +635,11 @@ def test_a_deliberate_place_is_not_anchored_back():
 
 
 def test_plan_drafts_are_rewritten_before_they_promising_a_screen_result():
-    # A spoken line that narrates working an app surface, or promises a
-    # knowledge result the angle forbids, is an editorial defect on the
-    # draft, not a warning after approval.
+    # A spoken line that narrates working an app surface is an editorial
+    # defect on the draft, not a warning after approval. (Drafts are no
+    # longer fenced against the angle's bounded-by limits: that check ran
+    # on the claim-safety matcher and was removed with it, ADR 0119 — the
+    # bounds still steer the prompt as guidance.)
     bad_script = (
         "Leaning on this railing, I scrolled my week and saw the worry come back "
         "on Monday and Friday. Now I know how long it has been there. "
@@ -646,16 +648,13 @@ def test_plan_drafts_are_rewritten_before_they_promising_a_screen_result():
     issues = ai_service._generated_spoken_issues(
         "The same worry keeps coming back after a stressful call.",
         bad_script, 200, 400,
-        claims_to_respect=["Trends are shown in the app, not diagnosed"],
     )
     assert any("scrolling or reading a chart" in issue for issue in issues)
-    assert any("promises a result the angle forbids" in issue for issue in issues)
 
     clean = ai_service._generated_spoken_issues(
         "The same worry keeps coming back after a stressful call.",
         "Leaning on this railing, I speak my day out loud. I say there is no blank page.",
         200, 400,
-        claims_to_respect=["Trends are shown in the app, not diagnosed"],
     )
     assert clean == []
 
@@ -664,19 +663,8 @@ def test_plan_drafts_are_rewritten_before_they_promising_a_screen_result():
         "The same worry keeps coming back after a stressful call.",
         "Leaning on this railing, I looked back over the week. I speak my day out loud.",
         200, 400,
-        claims_to_respect=["Trends are shown in the app, not diagnosed"],
     )
     assert light == []
-
-    # Adding a week word does not launder a knowledge claim.
-    still_bad = ai_service._generated_spoken_issues(
-        "The same worry keeps coming back after a stressful call.",
-        "Leaning on this railing, I speak my day out loud. "
-        "Now I know how long the week has been, and I speak my day.",
-        200, 400,
-        claims_to_respect=["Trends are shown in the app, not diagnosed"],
-    )
-    assert any("promises a result the angle forbids" in issue for issue in still_bad)
 
 
 def test_the_railing_is_scenery_not_a_prop():

@@ -32,7 +32,6 @@ import angle_scene
 import final_beat
 import opening_move
 import scene_consistency
-import claim_safety
 import creative_quality
 import media_signing
 import video_providers
@@ -148,7 +147,7 @@ from routers.studio import (
     router as studio_router,
     configure_studio,
     _two_section_repairs, _public_project, _project_strategy,
-    _safety_report_for, _require_claims_clear, _require_spoken_words_fit,
+    _require_spoken_words_fit,
     _require_current_strategy, _guard_render_scene,
     _assert_model_usable, _assert_resolution_offered, _assert_within_single_pass_cap,
     _require_renderable_project, _backfill_two_section_projects,
@@ -1883,7 +1882,7 @@ async def _submit_generation(
 # file is saved here as a child generation beside the original.
 #
 # This is storage, not generation. No model is called, nothing is submitted
-# upstream, and it does not touch the ready/claim gates — those guard a paid
+# upstream, and it does not touch the ready gate — that guards a paid
 # render, and this is the founder saving a file they just exported. It
 # therefore cannot spend anything, which is why it is safe to leave off every
 # gate.
@@ -2887,19 +2886,6 @@ async def _sweep_stranded_generations(
     if fixed:
         logger.info("Stranded sweep: recovered %d of %d stranded render(s)", fixed, len(rows))
     return fixed
-
-
-def _current_safety_report(project: dict, profile: dict) -> dict:
-    """
-    Recompute the claim verdict from the project as it stands right now.
-
-    The stored report is a cache, and the hook endpoint must not trust it: the
-    strategy is the newest place a claim can appear, and a report computed
-    before the strategy existed would let a banned hook line through a paid
-    render. Recomputing is cheap and deterministic, so the gate is always
-    evaluated against the text that is actually about to be sent to the model.
-    """
-    return claim_safety.build_safety_report(project or {}, profile or {})
 
 
 # ---------------------------------------------------------------------------

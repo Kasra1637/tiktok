@@ -1,6 +1,6 @@
 # 0108 — Setup owns camera words, Location owns the place, plan owns shape
 
-- **Status:** accepted
+- **Status:** partially superseded by 0119 (the bounded-by submit refusal is removed; setup/Location/shape ownership stands)
 - **Date:** 2026-11-07
 - **Anchors:** `backend/scene_consistency.py` (`strip_location_objects`,
   `camera_setup_wording`, `carry_camera_movement`, `reconcile_scene`),

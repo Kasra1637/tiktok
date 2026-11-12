@@ -558,22 +558,18 @@ class TestGenerationGates:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert calls != []
 
-    def test_mark_ready_recomputes_the_verdict_it_stores(self, api, monkeypatch):
+    def test_mark_ready_never_refuses_wording(self, api, monkeypatch):
         """
-        Marking ready always succeeds; the stored verdict always passes.
+        Marking ready succeeds whatever the script says (ADR 0119): the
+        words are the founder's, and no verdict is stored or returned.
         """
-        from models import BrandProfileUpdateRequest
         project, profile, _ = _ready_project(api, "Stale Panel")
         _run(api._execute(
             "UPDATE studio_projects SET script = ? WHERE id = ?",
             ("Taskly cures anxiety for good.", project["id"])))
-        _run(api.update_app_profile(
-            profile_id=profile["id"],
-            payload=BrandProfileUpdateRequest(claims_banned=["cures anxiety"]),
-            user_id=ANON))
         result = _run(api.mark_project_ready(project_id=project["id"], user_id=ANON))
         assert result["status"] == "ready_for_generation"
-        assert result["safety_report"]["passed"] is True
+        assert "safety_report" not in result
 
     def test_missing_script_is_blocked(self, api, monkeypatch):
         _mock_submit(api, monkeypatch)

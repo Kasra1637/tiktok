@@ -7,7 +7,7 @@ against the ASGI app with a real SQLite database behind it — walking the
 complete studio journey in order:
 
   health -> profile create/edit/approve -> angles + goals -> templates ->
-  project -> photo upload + attach -> plan -> claim-safety gate -> strategy ->
+  project -> photo upload + attach -> plan -> strategy ->
   ready -> generate (+ idempotency, + bad-model refusal) -> poll to completed
   -> history -> feedback + analytics -> demo-cta export + media serving ->
   delete
@@ -63,8 +63,7 @@ CANNED_ANGLES = [
 ]
 
 # The plan the mocked generator returns. Two sections, as the schema
-# demands, and a claims_used entry that sits inside claims_approved so the
-# claim-safety gate passes on the clean path.
+# demands.
 FAKE_PLAN = {
     "hook_line": "Stop writing empty pages",
     "script": "Taskly gives you one short prompt and a reminder. It works offline.",
@@ -77,7 +76,6 @@ FAKE_PLAN = {
     "overlays": [{"start": 0, "end": 3, "text": "one prompt"}],
     "voice_direction": "Warm, unhurried",
     "sound_direction": "Lo-fi bed, rights-safe",
-    "claims_used": ["works offline"],
 }
 
 FAKE_STRATEGY = {
@@ -204,9 +202,6 @@ class TestE2EFullJourney:
                 "from_feature": "Task timer",
                 "how_it_helps": "The timer starts in one tap so there is nothing to set up",
             }],
-            "claims_approved": ["works offline"],
-            "claims_review": ["4.8 star rating"],
-            "claims_banned": ["cures anxiety", "guaranteed results"],
         }), "POST /api/brand")
         pid = body["id"]
         state["profile_id"] = pid
@@ -323,17 +318,18 @@ class TestE2EFullJourney:
         r = client.post(f"/api/studio/projects/{bare['id']}/plan", json={})
         assert r.status_code == 400, f"plan without template -> {r.status_code}: {r.text[:200]}"
 
-    def test_06_claims_block_then_ready(self, journey):
-        # Blocking removed: even a banned script marks ready; nothing refuses.
+    def test_06_strong_wording_still_marks_ready(self, journey):
+        # Wording is never refused (ADR 0119): even a script promising a cure
+        # marks ready, and no safety verdict rides along in the response.
         client, state = journey["client"], journey["state"]
         prid = state["project_id"]
         _ok(client.patch(f"/api/studio/projects/{prid}", json={
             "script": "Taskly cures anxiety for good.",
-        }), "PATCH banned script")
+        }), "PATCH strong-wording script")
         ready = _ok(client.post(f"/api/studio/projects/{prid}/ready"),
                     "POST ready")
         assert ready["status"] == "ready_for_generation"
-        assert ready["safety_report"]["passed"] is True
+        assert "safety_report" not in ready
 
     def test_07_strategy_generate_poll(self, journey):
         client, state = journey["client"], journey["state"]

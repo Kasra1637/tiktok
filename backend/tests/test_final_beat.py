@@ -289,36 +289,6 @@ def test_a_bare_phone_without_a_determiner_is_still_stripped_for_selfie():
     assert "camera" in kept.lower()
 
 
-def test_the_final_line_is_refused_when_it_breaks_the_bounded_by():
-    # ADR 0108: spoken words are never rewritten, so a last line promising
-    # self-understanding the angle forbids is refused with the line named.
-    strategy = {
-        "camera_setup": "handheld",
-        "hook_action": "Sits on the step",
-        "scene": {"location": "A porch step", "props": ""},
-        "performance": {"movement": "Sits on the step"},
-        "segments": [
-            {"role": "hook", "action": "Sits on the step", "script": "Waiting for the right words means the day goes unsaid."},
-            {"role": "middle", "action": "Rests hands on knees",
-             "script": "On the porch step, I stopped waiting and just talked, messy and out of order. Afterward, the reflection helped me see what had happened inside me."},
-        ],
-    }
-    project = {"id": "p1", "location": "A porch step", "beat_timeline": [],
-               "script": "On the porch step, I stopped waiting and just talked, messy and out of order. Afterward, the reflection helped me see what had happened inside me."}
-    angle = {"claims_to_respect": [
-        "Reflections are suggestions, not a verdict on your inner life",
-        "Do not claim the app makes you understand yourself or improves emotional intelligence",
-    ]}
-    try:
-        server._guard_render_scene(strategy, project, render_index=0, content_angle=angle)
-    except Exception as exc:
-        detail = str(getattr(exc, "detail", exc))
-        assert "Afterward, the reflection helped me see what had happened inside me" in detail
-        assert "Nothing has been charged" in detail
-    else:
-        raise AssertionError("expected the bounded-by refusal")
-
-
 def test_chart_scroll_and_thumb_tap_are_struck_for_selfie_but_not_in_framing():
     movement = (
         "Other hand gripping the railing, brows lift, jaw settles, and the short line "

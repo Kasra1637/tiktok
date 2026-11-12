@@ -1,6 +1,6 @@
 """
 DB-backed tests for studio projects: the approval gate, the template
-requirement, claim-safety enforcement across edits, and version bookkeeping.
+requirement, edit semantics, and version bookkeeping.
 
 The AI plan call is mocked, so these tests assert our own orchestration rules
 rather than model behaviour.
@@ -59,9 +59,6 @@ def _approved_profile(api, name="Studio App", **kwargs):
             "from_feature": "Task timer",
             "how_it_helps": "The timer starts in one tap so there is nothing to set up",
         }],
-        claims_approved=kwargs.get("claims_approved", ["works offline"]),
-        claims_review=kwargs.get("claims_review", ["4.8 star rating"]),
-        claims_banned=kwargs.get("claims_banned", ["cures anxiety", "guaranteed results"]),
         ctas=["Try it free"],
     ), user_id=ANON))
     if kwargs.get("approve", True):
@@ -144,7 +141,6 @@ FAKE_PLAN = {
     "voice_direction": "Warm, unhurried",
     "sound_direction": "Lo-fi bed, rights-safe",
     "cta": "Try the 3-day free trial",
-    "claims_used": ["works offline"],
 }
 
 BANNED_PLAN = {**FAKE_PLAN, "script": "Taskly cures anxiety for good."}
@@ -554,20 +550,10 @@ class TestPlanGating:
                                        payload=GeneratePlanRequest(), user_id=ANON))
         assert again["script_version"] == 2
 
-    def test_clean_plan_passes_safety(self, api, monkeypatch):
-        _patch_plan(monkeypatch, api, FAKE_PLAN)
-        from models import GeneratePlanRequest
-        profile = _approved_profile(api, "Clean Plan")
-        template = _a_template(api)
-        project = _a_project(api, profile, template)
-        result = _run(api.generate_plan(project_id=project["id"],
-                                        payload=GeneratePlanRequest(), user_id=ANON))
-        assert result["safety_report"]["passed"] is True
-        assert "works offline" in result["safety_report"]["claims_used"]
-        assert "Clean" in result["safety_summary"]
-
-    def test_banned_claim_fails_safety_but_is_still_returned(self, api, monkeypatch):
-        """Blocking removed: the plan is returned passing; nothing refuses."""
+    def test_a_plan_with_strong_wording_is_returned_as_written(self, api, monkeypatch):
+        """Wording is never refused (ADR 0119): a plan whose script promises a
+        cure is still returned exactly as generated — nothing scans or vetoes
+        the words, and no report rides along in the response."""
         _patch_plan(monkeypatch, api, BANNED_PLAN)
         from models import GeneratePlanRequest
         profile = _approved_profile(api, "Banned Plan")
@@ -576,28 +562,15 @@ class TestPlanGating:
         result = _run(api.generate_plan(project_id=project["id"],
                                         payload=GeneratePlanRequest(), user_id=ANON))
         assert result["script"] == BANNED_PLAN["script"]
-        assert result["safety_report"]["passed"] is True
-        assert result["safety_report"]["blocking"] == []
+        assert "safety_report" not in result
+        assert "safety_summary" not in result
 
 
-class TestClaimSafetyOnEdit:
+class TestProjectEdits:
     """
-    The report is recomputed on every edit — and never blocks.
+    Edits are validated server writes: a content change bumps script_version
+    and un-readies the project; resending unchanged values changes nothing.
     """
-
-    def test_pasting_a_banned_claim_fails_the_report(self, api, monkeypatch):
-        _patch_plan(monkeypatch, api, FAKE_PLAN)
-        from models import UpdateStudioProjectRequest
-        profile = _approved_profile(api, "Edit Safety")
-        template = _a_template(api)
-        project = _a_project(api, profile, template)
-        edited = _run(api.update_studio_project(
-            project_id=project["id"],
-            payload=UpdateStudioProjectRequest(script="Taskly cures anxiety."),
-            user_id=ANON,
-        ))
-        assert edited["safety_report"]["passed"] is True
-        assert edited["safety_report"]["blocking"] == []
 
     def test_edit_bumps_script_version(self, api):
         from models import UpdateStudioProjectRequest
@@ -2009,12 +1982,9 @@ class TestPlanArrivalClamp:
 class TestSpokenWordsGate:
     """The render refuses words the founder cannot actually speak.
 
-    Two separate refusals share this gate. The framing check (a feature
-    inventory in the spoken lines) lives in claim_safety and reaches the
-    render through the recomputed verdict; the overflow check below is the
-    second half — approved words that do not fit the middle's seconds would
-    otherwise be silently dropped from the provider prompt, and the tail is
-    usually the payoff sentence.
+    Approved words that do not fit the middle's seconds would otherwise be
+    silently dropped from the provider prompt, and the tail is usually the
+    payoff sentence — so the overflow is refused at the gate instead.
     """
 
     def _project(self, script, **overrides):
@@ -2125,19 +2095,6 @@ class TestSpokenWordsGate:
         )
         assert report["next_steps"]
         assert report["dimensions"]["trust_compliance"]["score"] >= 8
-
-    def test_a_feature_inventory_refuses_the_render(self):
-        """Blocking removed: the recomputed verdict always passes and the
-        gate never raises, even on a feature-list shape."""
-        import server
-        project = self._project(
-            "With Vocolens, you can track your emotional states and uncover "
-            "your triggers through voice journaling and mood tracking."
-        )
-        report = server._safety_report_for(project, {})
-        assert report["passed"] is True
-        assert report["blocking"] == []
-        server._require_claims_clear(project, {})
 
 
 class TestSpokenCounts:

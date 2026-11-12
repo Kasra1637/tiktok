@@ -14,7 +14,7 @@ import ai_service
 
 MESSAGES = [f"Focus timer opening idea number {i}" for i in range(20)]
 PROFILE = {"id": "app-1", "brand_name": "FocusTimer", "status": "approved",
-           "core_features": ["Focus timer"], "claims_banned": ["cures ADHD"]}
+           "core_features": ["Focus timer"]}
 
 
 def test_generator_requests_twenty_grounded_messages(monkeypatch):
@@ -28,11 +28,19 @@ def test_generator_requests_twenty_grounded_messages(monkeypatch):
 
 @pytest.mark.parametrize("messages", [MESSAGES[:10], ["same"] * 20,
     MESSAGES[:19] + [""], MESSAGES[:19] + ["x" * 121],
-    MESSAGES[:19] + ["Old opening"], MESSAGES[:19] + ["This cures ADHD"]])
-def test_generator_rejects_incomplete_repeated_or_unsafe_copy(monkeypatch, messages):
+    MESSAGES[:19] + ["Old opening"]])
+def test_generator_rejects_incomplete_or_repeated_copy(monkeypatch, messages):
     monkeypatch.setattr(ai_service, "_chat_json", AsyncMock(return_value={"messages": messages}))
     with pytest.raises(RuntimeError):
         asyncio.run(ai_service.generate_opening_messages(PROFILE, ["Old opening"]))
+
+
+def test_generator_accepts_strong_wording(monkeypatch):
+    """Wording is never refused (ADR 0119): a message promising a cure is
+    returned like any other — no claim check screens opening copy."""
+    messages = MESSAGES[:19] + ["This cures ADHD"]
+    monkeypatch.setattr(ai_service, "_chat_json", AsyncMock(return_value={"messages": messages}))
+    assert asyncio.run(ai_service.generate_opening_messages(PROFILE, ["Old opening"])) == messages
 
 
 def test_http_app_scoping_active_app_and_failures(monkeypatch):

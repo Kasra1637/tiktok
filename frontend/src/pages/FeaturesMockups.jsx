@@ -80,7 +80,7 @@ function ScriptMockup() {
         <p className="inset-panel text-base leading-relaxed text-muted-foreground">Story: three beats, your words.</p>
         <p className="inset-panel flex items-start gap-2 text-base leading-relaxed">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-coral)]" />
-          <span className="text-muted-foreground">One claim flagged — reword before rendering.</span>
+          <span className="text-muted-foreground">Craft check: grade B — one line to tighten.</span>
         </p>
       </div>
     </div>

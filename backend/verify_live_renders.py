@@ -94,8 +94,6 @@ async def _one_render(api, photo: Path, out_dir: Path, model_key: str,
         app_category="Productivity",
         core_features=["One-tap shift logging"],
         usage_moments=["Clocking on and off between shifts"],
-        claims_approved=["Logs a shift in one tap"],
-        claims_banned=["cures burnout"],
     ), user_id=USER)
     await api.approve_app_profile(
         profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=USER)

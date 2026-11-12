@@ -20,13 +20,12 @@ def row_to_dict(row, columns: list) -> dict:
         "problems_solved", "icp_segments", "desired_outcomes",
         "must_not_show", "usage_moments", "viewer_objections",
         "outcome_statements",
-        "claims_approved", "claims_review", "claims_banned",
         "ctas", "video_themes", "research_sources", "pending_research",
         # Hook Template Library (hook_templates) structured fields
         "app_categories", "audiences", "required_assets", "content_slots",
         "claims_to_respect", "evidence", "trend_evidence",
         # Studio projects (structured plan fields)
-        "beat_timeline", "overlays", "assets", "safety_report",
+        "beat_timeline", "overlays", "assets",
         # App-specific influencer strategy + per-generation continuity record
         "strategy", "continuity",
         # Generation lineage and refinement history
@@ -101,8 +100,7 @@ class ApproveAppProfileRequest(BaseModel):
 APP_PROFILE_LIST_FIELDS = (
     "support_urls", "platforms", "core_features", "primary_use_cases",
     "problems_solved", "icp_segments", "desired_outcomes",
-    "must_not_show", "usage_moments", "claims_approved",
-    "claims_review", "claims_banned",
+    "must_not_show", "usage_moments",
 )
 
 # Lists of objects. Same JSON text column, but the members cannot go through
@@ -187,9 +185,6 @@ class BrandProfileCreateRequest(BaseModel):
     proof_moment: Optional[str] = ""
     viewer_objections: Optional[List[ViewerObjection]] = None
     outcome_statements: Optional[List[OutcomeStatement]] = None
-    claims_approved: Optional[List[str]] = None
-    claims_review: Optional[List[str]] = None
-    claims_banned: Optional[List[str]] = None
 
 
 class BrandProfileUpdateRequest(BaseModel):
@@ -220,9 +215,6 @@ class BrandProfileUpdateRequest(BaseModel):
     proof_moment: Optional[str] = None
     viewer_objections: Optional[List[ViewerObjection]] = None
     outcome_statements: Optional[List[OutcomeStatement]] = None
-    claims_approved: Optional[List[str]] = None
-    claims_review: Optional[List[str]] = None
-    claims_banned: Optional[List[str]] = None
 
 
 # ---------------------------------------------------------------------------

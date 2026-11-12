@@ -77,16 +77,6 @@ def test_conflicting_example_is_flagged_for_replacement():
     assert angle_scene.template_angle_fit(tpl, OFFICE)["example_conflicts"] is True
 
 
-def test_vague_hook_is_flagged_but_never_blocks():
-    import claim_safety
-    assert claim_safety.detect_vague_hook("I don't want to type anything")
-    assert claim_safety.detect_vague_hook("Typing is the last thing I want to do")
-    assert not claim_safety.detect_vague_hook("I don't want to write in my journal today")
-    report = claim_safety.build_safety_report({"hook_line": "I don't want to type anything"}, {})
-    assert report["passed"] is True
-    assert any("vague" in w["reason"] for w in report["risk_warnings"])
-
-
 def test_prompts_bind_the_angle_moment_and_name_the_action():
     import ai_service
     assert "ANGLE SCENE" in ai_service.scene_location_guidance(OFFICE)

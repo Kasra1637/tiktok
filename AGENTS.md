@@ -69,8 +69,7 @@ One render path, single-pass video generation via OpenRouter.
   `hooks/useWizardAngleStep.js` owns the angle-step lifecycle (ADR 0112).
   Other steps navigate to the angle control, not a second selector.
   Review/editor siblings: `components/studio/HookLineEditor.jsx` (spoken-line editor),
-  `pages/useWizardDirections.js` (stale-request guard), `components/SafetyPanel.jsx`
-  (advisory per ADR 0081, never a gate), `pages/PendingSaveCard.jsx` (storage retry),
+  `pages/useWizardDirections.js` (stale-request guard), `pages/PendingSaveCard.jsx` (storage retry),
   `lib/vitals.js` (LCP/INP/CLS, window-exposed, no sink), `lib/recentDraft.js`
   (sidebar draft link), `pages/DemoCtaStudio.jsx` (starts blank ADR 0082).
 - `frontend/src/pages/GenerationHistory.jsx` (+ `historyPolling.js`,
@@ -78,8 +77,7 @@ One render path, single-pass video generation via OpenRouter.
   durable-save recovery; a stopped browser check is not a provider failure.
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
-- `backend/claim_safety.py` — deterministic claim checks, advisory only: no
-  wording flag refuses a render (ADR 0081). `backend/feedback.py` — signal vs
+- `backend/feedback.py` — signal vs
   reason, posted-performance ranking (ADRs 0055/0070/0071).
 - Persistence: Turso refuses local SQLite writes on a configured outage
   (ADR 0083). `backend/storage_service.py` + `backend/media_signing.py` own R2
@@ -111,8 +109,9 @@ One render path, single-pass video generation via OpenRouter.
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
   generic take. A refusal must name the next step. A red button that cannot
   act must navigate to what's missing instead of dying silently.
-- Claim reports are advisory: no wording flag refuses a render; banned wording
-  is rewritten during plan/strategy and gates stay at submit time (ADR 0081).
+- No claim-safety system exists (ADR 0119): wording is never checked,
+  reported on, or refused anywhere in the app; the angle's bounded-by lines
+  are prompt guidance for the generator only, never a gate on a result.
 - Review autosave is a validated server write; the Demo + CTA editing document
   is browser-local — never call browser storage a cloud backup.
 - One logical change per commit. A behavior or default change is an explicit

@@ -2191,12 +2191,12 @@ class TestSpokenLineCraft:
         assert len(rec.payloads) == 2
 
     def test_a_claimed_history_with_the_app_is_rewritten(self, monkeypatch):
-        """The generator obeying its own safety layer.
+        """The generator catching its own invented testimonial.
 
-        claim_safety warns when a spoken line claims a personal history with
-        the app, so a draft that does it is rewritten here instead of accepted
-        and then warned about. The shared patterns are what keep the two from
-        disagreeing about what counts.
+        A spoken line that claims a personal history with the app ("I use
+        this every morning") states a testimonial no record can substantiate,
+        so a draft that does it is rewritten here instead of accepted. The
+        patterns live in ai_spoken beside the check that uses them.
         """
         import ai_service
         bad = {
@@ -2223,20 +2223,17 @@ class TestSpokenLineCraft:
     def test_a_past_habit_is_not_rewritten(self, monkeypatch):
         """'I used to <verb>' is a past habit, not a usage claim.
 
-        The exclusion lives in the shared patterns, so this guards both sides
-        at once: the safety layer must not warn it, and the generator must not
-        rewrite it.
+        The exclusion lives in the shared FIRST_PERSON_PATTERNS in ai_spoken,
+        so the generator must not rewrite a draft that uses one.
         """
         import ai_service
-        import claim_safety
         good = {
             "hook_line": "I used to dread mornings.",
             "script": "One sentence each night helped me understand the pattern.",
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
-            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            "voice_direction": "vd", "sound_direction": "sd",
         }
-        assert claim_safety.find_risk_patterns(good["hook_line"]) == []
         rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
         result = _run(ai_service.generate_creative_plan(
             profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},

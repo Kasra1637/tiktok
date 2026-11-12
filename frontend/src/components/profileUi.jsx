@@ -145,30 +145,6 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
   );
 }
 
-/** Bulleted companion for longer phrases: same 12/16 nested-card tokens. */
-export function InfoListBlock({ label, items, tone = "default" }) {
-  if (!items.length) return null;
-  const toneClass =
-    tone === "banned"
-      ? "border-[color:var(--hairline-strong)] bg-secondary/30"
-      : tone === "review"
-        ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-        : "border-[color:var(--hairline)] bg-secondary/20";
-  return (
-    <div className={cn("rounded-xl border p-4", toneClass)}>
-      <GroupLabel>{label}</GroupLabel>
-      <ul className="mt-2 space-y-2 text-base leading-[22px] text-foreground/90">
-        {items.map((item, i) => (
-          <li key={i} className="flex gap-3">
-            <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--brand-indigo)]" />
-            <span className="min-w-0">{sentenceCase(item)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 /**
  * One collapsible group of cards — never per card, so equal-height rows
  * stay equal.

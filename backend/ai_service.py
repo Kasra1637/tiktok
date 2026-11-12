@@ -46,13 +46,6 @@ from angle_policy import (
     duplicate_angle_pairs as _duplicate_angle_pairs,
     normalize_content_angles as _normalize_content_angles,
 )
-from claim_safety import (
-    FIRST_PERSON_PATTERNS,
-    bounded_by_conflict,
-    find_banned_violations,
-    find_risk_patterns,
-    _is_light_week_mention,
-)
 
 # Pure clusters live in their own modules (split by flow); re-exported
 # here so existing callers, monkeypatching of ai_service.<name>, and tests
@@ -62,7 +55,7 @@ from ai_spoken import (
     _AI_FLUFF_MARKERS, _CONTINUITY_STOPWORDS,
     _FIRST_PERSON_I, _PAYOFF_VERBS, _PERSON_WORDS, _PROBLEM_MARKERS,
     _PROMOTION_MARKERS, _RESOLUTION_MARKERS, _SCENE_MOMENTS,
-    _SCENE_PLACES, _BARE_LOCATION_NOUNS, HOOK_CHARS_PER_SECOND,
+    _SCENE_PLACES, _BARE_LOCATION_NOUNS, FIRST_PERSON_PATTERNS, HOOK_CHARS_PER_SECOND,
     HOOK_TARGET_CHARS, SCRIPT_TARGET_CHARS, SPOKEN_CHARS_PER_SECOND,
     TARGET_BAND, _closes_the_problem, _continuity_stem,
     _continuity_words, _dangling_references, _ends_on_handoff,
@@ -288,8 +281,7 @@ REQUIRED_APP_PROFILE_KEYS = {
     "icp_segments", "desired_outcomes", "outcome_statements",
     "differentiation",
     "known_limitations", "must_not_show", "usage_moments", "proof_moment",
-    "viewer_objections", "tone_voice", "claims_approved", "claims_review",
-    "claims_banned",
+    "viewer_objections", "tone_voice",
 }
 
 # Phrase lists, which are lists of strings. viewer_objections and
@@ -301,8 +293,7 @@ REQUIRED_APP_PROFILE_KEYS = {
 APP_PROFILE_LIST_KEYS = (
     "platforms", "core_features", "primary_use_cases", "problems_solved",
     "icp_segments", "desired_outcomes", "must_not_show",
-    "usage_moments", "claims_approved",
-    "claims_review", "claims_banned",
+    "usage_moments",
 )
 
 
@@ -567,9 +558,6 @@ APP_PROFILE_JSON_SCHEMA = _strict_object({
         }),
     },
     "tone_voice": _str_prop(),
-    "claims_approved": _str_array_prop(),
-    "claims_review": _str_array_prop(),
-    "claims_banned": _str_array_prop(),
 })
 # Mirrors REQUIRED_APP_PROFILE_KEYS above. Deliberately no overlays/cta keys:
 # anything the normalizers drop, the schema must not invite.
@@ -618,7 +606,6 @@ PLAN_JSON_SCHEMA = _strict_object({
     "demo_brief": _str_prop(),
     "voice_direction": _str_prop(),
     "sound_direction": _str_prop(),
-    "claims_used": _str_array_prop(),
 })
 # Mirrors REQUIRED_PLAN_KEYS. No overlays key: the normalizer pops anything
 # volunteered, so the schema must not ask for it.
@@ -1674,7 +1661,7 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
 
     Returns a dict matching REQUIRED_APP_PROFILE_KEYS. List values are always
     normalized to lists of non-empty strings. Never invents store ratings,
-    download counts, or pricing — uncertain claims go in claims_review.
+    download counts, or pricing.
     """
     system_message = (
         "You are a mobile-app strategist and short-form video creative director. "
@@ -1752,15 +1739,12 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         'download, in their words", "what_they_do_now": "the alternative they use today, '
         'including doing nothing", "honest_answer": "what is true that addresses it, '
         'without a guarantee or an invented claim"}],\n'
-        '  "tone_voice": "short description of the brand voice",\n'
-        '  "claims_approved": ["factual claims safe to use in promos"],\n'
-        '  "claims_review": ["claims that need verification before use (ratings, counts, results)"],\n'
-        '  "claims_banned": ["claims promos must never make (guaranteed outcomes, fake reviews, medical/financial promises)"]\n'
+        '  "tone_voice": "short description of the brand voice"\n'
         "}\n"
         "Rules: use ONLY functionality evidenced by the sources or notes; never invent "
         "ratings, download counts, or features. Do NOT report pricing, plan names or trial "
         "terms — the App Profile deliberately carries no price, and no generated video may "
-        "state one. Put anything uncertain in claims_review, never in claims_approved. "
+        "state one. "
         # The outcome layer is what lets every later prompt pitch benefits
         # instead of listing features, so it has its own completeness bar:
         # one statement per core feature the sources actually evidence, each
@@ -1768,8 +1752,8 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         # supports is an invented claim, not an outcome.
         "Write 3-6 outcome_statements, one per evidenced core feature. Each outcome and "
         "how_it_helps must be benefit phrasing a viewer would recognise from their own "
-        "life, never a restatement of the feature spec, never a guaranteed result, and "
-        "never a banned claim. from_feature must name a core_features entry verbatim. "
+        "life, never a restatement of the feature spec, and never a guaranteed result. "
+        "from_feature must name a core_features entry verbatim. "
         "Keep every list to 8 items max. Return ONLY valid JSON."
     )
 
@@ -1901,8 +1885,7 @@ def _normalize_outcome_statements(result: dict) -> None:
 # the profile (category, usage moments, outcomes, audience) and the selected
 # angle, avoiding the options already shown. Pre-vetted by instruction like
 # the static lists: plain language, no face or body descriptions, no claims —
-# and saving still runs the normal claim check, since the dropdown is a UX
-# constraint, not a trust boundary.
+# the dropdown is a UX constraint, not a trust boundary.
 DIRECTION_REFRESH_FIELDS = ("location", "lighting", "wardrobe", "voice", "tone")
 
 _DIRECTION_FIELD_BRIEFS = {
@@ -2056,9 +2039,6 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "differentiators": profile.get("differentiation") or "(unstated)",
         "limitations": profile.get("known_limitations") or "(none recorded)",
         "voice": profile.get("tone_voice") or "(unstated)",
-        "approved_claims": _list("claims_approved"),
-        "claims_needing_review": _list("claims_review"),
-        "banned_claims": _list("claims_banned"),
         # proof_moment is DELIBERATELY NOT PASSED, for the same reason the
         # strategy prompt omits it: it is the demo the founder films
         # separately, and handing it over is how "show the app happening"
@@ -2272,8 +2252,6 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
         "viewer_objections": profile.get("viewer_objections") or [],
         "must_not_show": _list("must_not_show"),
         "limitations": profile.get("known_limitations") or "(none recorded)",
-        "approved_claims": _list("claims_approved"),
-        "banned_claims": _list("claims_banned"),
     }
     vocab = ", ".join(VIDEO_OBJECTIVES)
     system_message = (
@@ -2322,7 +2300,7 @@ async def generate_opening_messages(profile: dict, previous: list) -> list:
     context = {key: profile.get(key) for key in (
         "brand_name", "brand_description", "target_audience", "tone_voice",
         "core_features", "problems_solved", "primary_use_cases",
-        "claims_approved", "claims_banned", "known_limitations",
+        "known_limitations",
     )}
     parsed = await _chat_json(
         system_message=(
@@ -2345,12 +2323,6 @@ async def generate_opening_messages(profile: dict, previous: list) -> list:
         raise RuntimeError("Expected 20 distinct opening messages. Try again.")
     excluded = {v.strip().casefold() for v in previous}
     seen = set()
-    banned = profile.get("claims_banned") or []
-    if isinstance(banned, str):
-        try:
-            banned = json.loads(banned)
-        except (ValueError, TypeError):
-            banned = [banned]
     out = []
     for value in messages:
         if not isinstance(value, str) or not value.strip() or len(value.strip()) > 120:
@@ -2365,8 +2337,6 @@ async def generate_opening_messages(profile: dict, previous: list) -> list:
         key = value.casefold()
         if key in seen or key in excluded:
             raise RuntimeError("Opening messages repeated existing copy. Try again.")
-        if find_banned_violations(value, banned) or find_risk_patterns(value):
-            raise RuntimeError("Opening messages included an unsupported claim. Try again.")
         seen.add(key)
         out.append(value)
     return out
@@ -2484,8 +2454,6 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "plan_objective": (project or {}).get("objective") or "(unstated)",
         "plan_audience": (project or {}).get("audience") or "(unstated)",
         "demo_brief": (project or {}).get("demo_brief") or "(none)",
-        "approved_claims": _list("claims_approved"),
-        "banned_claims": _list("claims_banned"),
     }
 
     system_message = (
@@ -2523,8 +2491,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "topic, audience, category, or app name above, each a single token "
         "with no spaces. No engagement-bait tags: #fyp, #foryou, #foryoupage, "
         "#viral and #trending are never allowed \u2014 they are mass-tagged and "
-        "cannot route this clip. No "
-        "banned claim may appear. No guaranteed outcomes. No promotional or "
+        "cannot route this clip. No guaranteed outcomes. No promotional or "
         "founder voice. Return ONLY valid JSON."
     )
     parsed = await _chat_json(
@@ -2552,21 +2519,6 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
             f"Post kit caption must be 50 to 80 characters, got {len(caption)}."
         )
 
-    # Grounded means verifiable: a banned claim or a guarantee in post copy
-    # is a bug, not a nuance — the render gate holds the video to this, so
-    # the words posted beside it are held to it too.
-    banned = _list("claims_banned")
-    for text in [caption, cover_text]:
-        hits = find_banned_violations(text, banned)
-        if hits:
-            raise RuntimeError(
-                "Post kit used a banned claim: " + hits[0]["claim"]
-            )
-        risks = find_risk_patterns(text)
-        if risks:
-            raise RuntimeError(
-                "Post kit used guarantee language: " + str(risks[0].get("claim", ""))
-            )
     return {"caption": caption, "hashtags": hashtags, "cover_text": cover_text}
 
 
@@ -2830,8 +2782,6 @@ async def generate_brand_templates(
         "outcome_statements": profile.get("outcome_statements") or [],
         "differentiators": profile.get("differentiation") or "(unstated)",
         "voice": profile.get("tone_voice") or "(unstated)",
-        "approved_claims": _list("claims_approved"),
-        "banned_claims": _list("claims_banned"),
     }
     angle_briefs = []
     for brief_source in (angles or [])[:8]:
@@ -3497,8 +3447,7 @@ async def generate_creative_plan(
     and anything the viewer could read as a factual claim about the app must
     come from verified facts or stay out of frame.
 
-    Returns a dict matching REQUIRED_PLAN_KEYS plus `claims_used` (the model's
-    own account of which approved claims it used, reconciled by claim_safety).
+    Returns a dict matching REQUIRED_PLAN_KEYS.
     """
     def _list(name):
         val = profile.get(name)
@@ -3586,6 +3535,7 @@ async def generate_creative_plan(
         "angle_emotion": (angle or {}).get("desired_emotion") or "",
         "duration_seconds": duration_seconds,
         "tone": tone or "(unstated)",
+        "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
     }
     grounding = _angle_grounding(profile, angle or {})
     if grounding:
@@ -3602,12 +3552,6 @@ async def generate_creative_plan(
         # this instead of inventing a competing one.
         brief["visual_direction"] = (visual_direction or "").strip()
 
-    claims = {
-        "approved": _list("claims_approved"),
-        "needs_review": _list("claims_review"),
-        "never_use": _list("claims_banned"),
-        "brand_voice": brand_voice or profile.get("tone_voice") or "(unstated)",
-    }
     feedback_context = ""
     if profile_feedback:
         feedback_context = (
@@ -3666,7 +3610,6 @@ async def generate_creative_plan(
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"TEMPLATE STRUCTURE:\n{json.dumps(structure, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
-        f"CLAIM RULES:\n{json.dumps(claims, indent=2)}\n"
         f"{feedback_context}\n"
         f"{angle_goal_block}\n"
         "CUSTOMER PERSPECTIVE: write every spoken line as a satisfied CUSTOMER describing their "
@@ -3685,8 +3628,7 @@ async def generate_creative_plan(
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
         '  "demo_brief": "ONE sentence trading in PLAIN PERSONAL-CONTENT language, written in third person about the footage itself — the thing to record on the phone, not what you ask the founder to do. Name the specific angle-relevant state or action the phone should capture (phone already in use, specific screen or feature shown, the moment captured). This never reaches the generated video.",\n'
         '  "voice_direction": "delivery for the voiceover or on-camera talent, set from this video\'s objective, audience and angle emotion \u2014 never a generic default",\n'
-        '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)",\n'
-        '  "claims_used": ["exact strings from claims.approved that appear in the script"]\n'
+        '  "sound_direction": "sound and music direction, rights-safe (no named commercial tracks)"\n'
         "}\n"
         "Rules:\n"
         "- beat_timeline MUST have EXACTLY TWO beats, labelled \"hook\" then \"middle\", and "
@@ -3850,9 +3792,6 @@ async def generate_creative_plan(
     # BOTH attempts (3500, then 7000) and surfaced as a plan failure. 8000
     # starts with room, and the retry doubles to 16000.
     allows_question = _plan_requests_question_format(template, structure) or _angle_invites_question(angle)
-    claims_to_respect = [
-        str(c).strip() for c in ((angle or {}).get("claims_to_respect") or []) if str(c).strip()
-    ]
     attempt_prompt = prompt
     for attempt in range(3):
         result = await _chat_json(
@@ -3876,7 +3815,6 @@ async def generate_creative_plan(
         issues = _generated_spoken_issues(
             hook, script, hook_budget, middle_budget,
             allows_question=allows_question,
-            claims_to_respect=claims_to_respect,
         )
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
@@ -3933,7 +3871,6 @@ async def generate_creative_plan(
         hook_seconds=hook_seconds,
         total_seconds=duration_seconds,
         app_name=str(profile.get("brand_name") or ""),
-        claims_to_respect=claims_to_respect,
         allows_question=allows_question,
     )
     if craft["total"] < CRAFT_RETRY_BELOW:
@@ -3967,7 +3904,6 @@ async def generate_creative_plan(
                 retry_issues = _generated_spoken_issues(
                     retry_hook, retry_script, hook_budget, middle_budget,
                     allows_question=allows_question,
-                    claims_to_respect=claims_to_respect,
                 )
                 if retry_issues:
                     logger.warning(
@@ -3981,7 +3917,6 @@ async def generate_creative_plan(
                         hook_seconds=hook_seconds,
                         total_seconds=duration_seconds,
                         app_name=str(profile.get("brand_name") or ""),
-                        claims_to_respect=claims_to_respect,
                         allows_question=allows_question,
                     )
                     if retry_craft["total"] > craft["total"]:
@@ -4039,7 +3974,6 @@ async def generate_creative_plan(
     # for on-screen text and anything it volunteers is dropped here rather
     # than stored. The column keeps its old rows; nothing new is written.
     result.pop("overlays", None)
-    result["claims_used"] = [str(c).strip() for c in (result.get("claims_used") or []) if str(c).strip()][:8]
     # Validation pass: read the two accepted lines together and flag what the
     # retry loop above must not refuse. Continuity is craft, not an observable
     # defect, so a dangling reference or an unanswered hook image is logged
@@ -4405,12 +4339,6 @@ async def generate_video_strategy(
     if ((angle or {}).get("viewer_outcome") or "").strip():
         brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
 
-    claim_rules = {
-        "approved": _list("claims_approved"),
-        "needs_review": _list("claims_review"),
-        "never_use": _list("claims_banned"),
-    }
-
     # The founder-approved creative plan, when there is one. Its words are
     # already committed — the founder read and edited them before the first
     # render — so they are handed over as fixed material and the strategy is
@@ -4521,7 +4449,6 @@ async def generate_video_strategy(
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"HOOK MECHANISM (the selected template must be honoured, not replaced):\n{json.dumps(mechanism, indent=2)}\n\n"
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
-        f"CLAIM RULES:\n{json.dumps(claim_rules, indent=2)}\n"
         f"{angle_goal_block}\n"
         f"{approved_plan_context}"
         f"{feedback_context}"
