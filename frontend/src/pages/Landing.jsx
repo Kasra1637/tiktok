@@ -413,18 +413,18 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Give your app a story</span>
+            <span className="text-shine">One photo in,</span>
             <br />
-            <span className="text-gradient-brand">Worth watching.</span>
+            <span className="text-gradient-brand">a posted TikTok out.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            One photo in, a posted TikTok out. HookForge turns your app’s facts into a
-            hook that holds, a story that lands, and a finished clip — then your posted
-            results steer the next one, so every video starts smarter than the last.
+            HookForge turns your app’s facts into a hook that holds, a story that lands, and a
+            finished clip — then your posted results steer the next one, so every video starts
+            smarter than the last.
           </p>
 
           <div
