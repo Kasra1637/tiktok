@@ -114,11 +114,11 @@ export function FinalCta({ testId, secondary = false }) {
               <Zap className="h-3 w-3" /> Ready when you are
             </EyebrowPill>
             <h2 className="font-display mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Make your next app story.
+              Your next post is already in your app.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-              Start with your app&apos;s facts and a message you want to share. Review the script,
-              generate your Hook + Story, and keep the real product at the heart of your demo.
+              Start with your app&apos;s facts, review the script, and render a Hook + Story in
+              minutes — then let its results teach the next one.
             </p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
               <UnauthedOnly>

@@ -17,51 +17,51 @@ import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../comp
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "Start with your app’s facts",
+    title: "Facts first, every time",
     description:
-      "Research your website and store listings, then correct and approve the draft. Reuse that profile across your videos.",
+      "Your website and store listing become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product.",
   },
   {
     icon: Target,
-    title: "Make your message specific",
+    title: "Every video has a job",
     description:
-      "Pick a required audience angle and video goal. These guide template suggestions and the free script plan.",
+      "A required audience angle and video goal steer the templates and the script, so each post aims at one viewer and one outcome — not everyone and nothing.",
   },
   {
     icon: LayoutTemplate,
-    title: "Find an opening that fits",
+    title: "Openings that earn the watch",
     description:
-      "Compare goal-matched templates by fit score, reasons, and caveats. Choose one, then add a clear presenter photo for the generated clip.",
+      "Templates ranked by fit to your angle and goal, with reasons and caveats up front. Pick the opening built to hold your first three seconds.",
   },
   {
     icon: FileText,
-    title: "Make the script your own",
+    title: "A script that sounds like you",
     description:
-      "Review the free script plan, edit and save the hook, story, and visual directions, then check flagged claims. Render Hook + Story in the final step.",
+      "Review the free script plan: a hook and story in plain spoken words — a real person talking to their phone, never ad copy. Edit and save every line before the paid render.",
   },
   {
     icon: Clapperboard,
-    title: "Start with a photo, not a shoot",
+    title: "One photo. Zero shoot days.",
     description:
-      "The final step uses your approved plan and presenter photo to render one Hook + Story clip. It does not include your filmed demo, closing call to action, or on-screen text.",
+      "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — just edit and render again.",
   },
   {
     icon: ShieldCheck,
-    title: "Catch flagged claims early",
+    title: "Claims checked before they cost you",
     description:
-      "Review claim warnings alongside your script. Matches to your banned claims block generation; you still make the final factual review.",
+      "Claim warnings surface beside your script while you can still fix them. Matches to your banned claims block generation; you still make the final factual review.",
   },
   {
     icon: Film,
-    title: "Give your footage a polished frame",
+    title: "Your demo, finished like a post",
     description:
-      "Bring a clip to Demo + CTA. Choose a phone mockup, adjust framing and zoom, and add your own hook text and end card.",
+      "Bring your real footage to Demo + CTA: phone mockups, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one polished TikTok MP4.",
   },
   {
     icon: Video,
-    title: "Keep your next idea within reach",
+    title: "Results that teach the next video",
     description:
-      "Revisit clips in History, record posted links, views, and votes, then compare them in Analytics. Reuse a saved draft for another take; views do not prove conversions.",
+      "Post it, then paste the link and the numbers — views, 3-second retention, average watch, saves, shares. After three posted clips, Analytics shows which craft choices track with people staying, and those lessons steer your next generations.",
   },
 ];
 
@@ -69,12 +69,12 @@ const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    detail: "Add your website, App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts.",
+    detail: "Add your website, App Store or Google Play URL, with optional support links. Research the draft, correct it, then save, review, and approve the facts — every video after starts from them, not a blank page.",
   },
   {
     step: "2",
     label: "Choose a goal and audience",
-    detail: "Pick an audience angle and set a goal for the video; both are required. These choices share the Audience & template step.",
+    detail: "Pick an audience angle and set a goal for the video; both are required. Every choice downstream — templates, script, hook — answers to both.",
   },
   {
     step: "3",
@@ -84,7 +84,7 @@ const FLOW_STEPS = [
   {
     step: "4",
     label: "Review, then render",
-    detail: "Review the free script plan, edit and save it, then check flagged claims. Once the plan passes its checks, render Hook + Story in the final step.",
+    detail: "The script plan is free: review it, edit and save it, then check flagged claims. You approve every word — only the render is paid, and it takes minutes, not a shoot day.",
   },
   {
     step: "5",
@@ -102,16 +102,16 @@ const FLOW_STEPS = [
  * quietly flatters the product.
  */
 const WEEK_WITHOUT = [
-  "Describe your app from scratch whenever you start a new script.",
-  "Guess which opening fits your app and people you want to reach.",
-  "Start with a blank script and work out the story as you go.",
-  "Search your folders for clips and notes from your earlier posts.",
+  "Rewrite your app’s story from memory for every single script.",
+  "Guess which opening your audience might sit through.",
+  "Stare at a blank page and call it a content strategy.",
+  "Dig through folders hunting last month’s clips, links, and numbers.",
 ];
 
 const WEEK_WITH = [
-  "Reuse your app profile you have already reviewed and approved.",          "Compare the openings with fit scores, reasons, and limitations.",
-  "Review an editable script before you start the video render.",
-  "Find your clips and manually logged results together in History.",
+  "Start every video from the App Profile you already approved.",          "Compare openings by fit scores, reasons, limitations.",
+  "Edit a finished script draft instead of inventing one.",
+  "Find every clip beside its posted link and real results in History.",
 ];
 
 const NAV_LINKS = [
@@ -164,21 +164,21 @@ const PIPELINE_BLOCKS = [
     icon: Clapperboard,
     tone: "coral",
     kicker: "Hook + Story",
-    title: "Generate the opening, keep the demo real",
-    body: "Create one AI-generated clip: an opening hook followed by the story. Your real app demo and closing message are not generated footage. Record the demo yourself, using the separate brief as a guide.",
+    title: "The opening, written to hold",
+    body: "Create one AI-generated clip: an opening hook built to stop the scroll, followed by the story that earns the click. Your real app demo and closing message are not generated footage. Record the demo yourself, using the separate brief as a guide.",
   },
   {
     icon: Film,
     tone: "indigo",
     kicker: "Demo + CTA",
-    title: "Put your own footage in the spotlight",
-    body: "Style a base clip—your own recording or a finished Hook + Story. Add a Second clip to play after it, or use Real Video to put a separate recording in a phone over the base. Choose each clip's look, framing and zoom, plus hook text and an end card you write. Export the result as one TikTok MP4.",
+    title: "Your footage, centre stage",
+    body: "Style a base clip — your own recording or a finished Hook + Story. Add a Second clip to play after it, or use Real Video to put a separate recording in a phone over the base. Choose each clip's look, framing and zoom, plus hook text and an end card you write. Export the result as one TikTok MP4.",
   },
   {
     icon: ShieldCheck,
     tone: "indigo",
     kicker: "Your review",
-    title: "Stay in charge of the message",
+    title: "Nothing ships without your yes",
     body: "Approve your app profile and review the script before rendering. Claim checks flag language to revisit, not a guarantee that every claim is correct. Review the finished clip, download it, and choose where and when to publish.",
   },
 ];
@@ -186,11 +186,11 @@ const PIPELINE_BLOCKS = [
 const QUESTIONS = [
   {
     question: "Can I use footage I already have?",
-    answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first.",
+    answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first — the studio finishes what you bring.",
   },
   {
     question: "Can I change the script before generating?",
-    answer: "Yes. Edit the hook, script, tone, and creative directions, then save them and review the claim check. Once the plan passes its checks it is ready; rendering the video is a separate action.",
+    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the claim check — all before you pay for a render, never after.",
   },
   {
     question: "Does the video use my real face and voice?",
@@ -202,7 +202,7 @@ const QUESTIONS = [
   },
   {
     question: "Does HookForge post or track results for me?",
-    answer: "No. Download your videos and publish them yourself. In History, add the posted TikTok link, paste back views, and rate the clip. Compare those saved results in Analytics. Views are manually logged, not synced from TikTok, and do not prove conversions.",
+    answer: "No. Download your videos and publish them yourself. In History, add the posted TikTok link and paste back the results — views, 3-second retention, average watch, saves, and shares. Analytics lines those numbers up against each clip’s craft score, and from three posted clips the patterns start steering your next videos. Views are manually logged, not synced from TikTok, and do not prove conversions.",
   },
 ];
 
@@ -246,9 +246,9 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            Turn your app’s features into an editable script and an AI-generated Hook + Story
-            using your photo. Bring your own footage to Demo + CTA for phone mockups,
-            on-screen text, and an end card.
+            One photo in, a posted TikTok out. HookForge turns your app’s facts into a
+            hook that holds, a story that lands, and a finished clip — then your posted
+            results steer the next one, so every video starts smarter than the last.
           </p>
 
           <div
@@ -356,8 +356,8 @@ export default function Landing() {
         <SectionHeading
           id="how-it-works"
           eyebrow="How it works"
-          title="From app facts to your next story"
-          lede="Build the opening around what your app does. Review the message before you turn it into video."
+          title="From app facts to a video worth posting"
+          lede="Five steps, one flow — your facts in, a finished Hook + Story out, and a demo that stays unmistakably yours."
         />
 
         <div className="relative">
@@ -392,8 +392,8 @@ export default function Landing() {
         <SectionHeading
           id="your-week"
           eyebrow="The difference"
-          title="Spend less effort starting from scratch"
-          lede="Keep your app’s facts, creative choices, and past work close by—so your next idea has somewhere to start."
+          title="Your week, with the blank page removed"
+          lede="Founders don’t stop posting because they run out of ideas. They stop because every video starts at zero — HookForge makes sure it never does."
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
@@ -433,8 +433,8 @@ export default function Landing() {
         <SectionHeading
           id="features"
           eyebrow="What you get"
-          title="A clearer way to tell your app’s story"
-          lede="From the first idea to the clip you review, keep the message grounded in your product and shaped by you."
+          title="Everything between idea and posted"
+          lede="Not a video generator with a text box. A working studio that remembers your app, your choices, and what your audience actually watched."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -459,8 +459,8 @@ export default function Landing() {
         <SectionHeading
           id="pipeline"
           eyebrow="Your control"
-          title="Your story. Your real product."
-          lede="Generate the opening, show the real app, and decide what makes the final cut."
+          title="You direct. HookForge produces."
+          lede="The AI writes and renders the opening. Your product, your footage, and your judgment stay exactly where they belong — with you."
         />
 
         <div className="space-y-4">
