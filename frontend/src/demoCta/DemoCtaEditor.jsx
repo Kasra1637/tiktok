@@ -32,6 +32,8 @@ import { Switch } from "../components/ui/switch";
 import { Checkbox } from "../components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useReducedMotionPreference } from "../lib/reducedMotion";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
+import TourStartLink from "../components/onboarding/TourStartLink";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
@@ -923,6 +925,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // lg+ (lg:sticky lg:overflow-y-auto). Scrolling the window would move nothing
   // there; scrollIntoView resolves whichever ancestor actually scrolls.
   const resultCardRef = useRef(null);
+
+  // First-run help (ADR 0118): the tour may auto-open only while the editor
+  // is in its blank standalone state (ADR 0082) — no source clip loaded and
+  // nothing in flight. A pinned render, a chosen clip, or a running export
+  // is work in progress, not a first run.
+  useTourEligibility(
+    "demo-cta",
+    !loadingSource && !videoUrl && !baseMedia && !recording && !saving
+  );
 
   useEffect(() => {
     preloadHandViewImages();
@@ -2484,6 +2495,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 >
                   {historyOpen ? "Hide History" : "Choose from History"}
                 </Button>
+                <p className="mt-3">
+                  <TourStartLink tourId="demo-cta" />
+                </p>
               </div>
             )}
         </div>

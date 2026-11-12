@@ -37,28 +37,55 @@ export const TOURS = {
   // testids stay on the page — they cost nothing and are what a future test on
   // the home page would hook to.
 
-  // Targets CreateVideo — the three-step studio at /create.
+  // Targets CreateVideo — the three-step studio at /create. The tour walks
+  // the whole journey the page now carries: profile, angle/goal/template,
+  // the required presenter photo, the free plan vs the strategy that films
+  // it, the advisory Craft check, and the paid render whose result lands
+  // back in the same panel. State-dependent steps are optional so a
+  // first-run founder (profile step, nothing picked yet) simply skips them.
   create: {
     id: "create",
     label: "Create Video tour",
     steps: [
       {
         target: '[data-testid="studio-progress-segment-profile"]',
-        title: "Three steps to a finished clip",
+        title: "Start with an approved App Profile",
         body:
-          "Choose an approved App Profile here. If you have none, open App Profile to research and review your app first.",
+          "Everything here is written from one approved App Profile — its facts, claims and audience. If you have none, open App Profile to research and approve your app first; nothing renders before that.",
       },
       {
         target: '[data-testid="studio-progress-segment-angle"]',
-        title: "Angle, goal, template, photo",
+        title: "Angle, then goal, then template",
         body:
-          "Open Audience & template when your app is selected. Pick an audience angle there to see matching goals and templates.",
+          "Angles are audience angles generated from your profile. Pick one and matching goals appear; pick a goal and templates are tailored to the pair. Looking around is free — only the render costs.",
+      },
+      {
+        target: '[data-testid="template-photo"]',
+        title: "One clear presenter photo",
+        optional: true,
+        body:
+          "A render needs a photo of the person on camera: one clear face, well lit. It is the identity reference every clip is built from, so the same photo across a series keeps the same presenter.",
       },
       {
         target: '[data-testid="studio-progress-segment-review"]',
-        title: "Review the words, then render",
+        title: "The plan is words; the strategy is filming",
         body:
-          "Open Review & submit after choosing a template and photo. Read the free plan before starting a paid render; the demo and CTA stay yours.",
+          "The plan is the words — the hook line and the spoken script — and writing it is free. The strategy is how those words get filmed: the scene, the camera, the opening move. Read both before paying for a render.",
+      },
+      {
+        target: '[data-testid="quality-report"]',
+        title: "The Craft check advises, never blocks",
+        optional: true,
+        body:
+          "This scores the saved plan and names its weakest part, with a next step for each weak spot. Advisory only — a low score never stops a render; it tells you what a rewrite would buy.",
+      },
+      {
+        target: '[data-testid="render-generate-button"], [data-testid="paid-render-progress"]',
+        title: "The render is the paid step",
+        optional: true,
+        placement: "top",
+        body:
+          "Rendering takes minutes and the progress shows here. When it finishes, the video appears here to preview and download, post copy frozen beside it. Posting stays manual; the demo and close are yours, in Demo + CTA.",
       },
     ],
   },
@@ -75,7 +102,7 @@ export const TOURS = {
         target: '[data-testid="app-research-card"]',
         title: "Research, then trust but verify",
         body:
-          "Paste an App Store or Google Play URL, then choose Research app for video. Research creates a draft, not an approved profile.",
+          "Paste your app's website, App Store or Google Play URL, then choose Research app for video. Research creates a draft, not an approved profile.",
       },
       {
         target: '[data-testid="brand-manual-card"]',
@@ -211,9 +238,9 @@ export const TOURS = {
       },
       {
         target: '[data-testid="cta-controls"]',
-        title: "Give viewers a next step",
+        title: "The End Card gives the next step",
         body:
-          "A clear next step, plus your social handle if you want it. It sits as an overlay on this clip — it does not publish anything anywhere."
+          "The End Card is a clear next step, plus your social handle if you want it. It sits as an overlay on this clip — it does not publish anything anywhere."
       },
       {
         target: '[data-testid="demo-cta-export"]',
@@ -248,10 +275,10 @@ export const TOURS = {
       },
       {
         target: '[data-testid="history-detail-panel"]',
-        title: "Work the record beside the clip",
+        title: "Record what TikTok tells you",
         optional: true,
         body:
-          "Open Results & actions on a compact card to record a posted TikTok link and its views. Post copy and plan context expand separately."
+          "Open Results & actions on a posted clip. Paste its link and record views plus 3-second retention %, Average watch %, Saves and Shares, then Save results. Each save is dated, and the latest reading is the one shown."
       },
       {
         // Centered summary: with no rows both tile steps skip, so a fresh
@@ -261,7 +288,7 @@ export const TOURS = {
         target: null,
         title: "Your shelf, not your publisher",
         body:
-          "Choose Create a video to make your first clip. Return here to review and download it; nothing publishes automatically.",
+          "Post in TikTok yourself — nothing publishes automatically. Record the link and results here, and once 3 posted clips carry results and a craft score, they steer the next videos written for you. Create a video to start.",
       },
     ],
   },
@@ -273,9 +300,16 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="analytics-profile-picker"], [data-testid="analytics-header"]',
-        title: "Compare saved results",
+        title: "Scores beside results",
         body:
-          "Choose an app or All apps, including unassigned exports. Compare recorded views, posted status, and your own render votes. Views describe reach, not installs or conversions.",
+          "Choose an app or All apps. Each finished clip shows the craft score it was rendered with, beside its recorded views, posted status, and your vote. Views describe reach, not installs or conversions.",
+      },
+      {
+        target: '[data-testid="analytics-performance-summary"]',
+        title: "When the results start teaching",
+        optional: true,
+        body:
+          "This line joins craft scores to posted results. Once 3 posted clips have both, it names the craft parts that track with viewers watching past 3 seconds and staying longer. Below 3 joined clips, it only counts so far.",
       },
       {
         target: '[data-testid="analytics-results"]',

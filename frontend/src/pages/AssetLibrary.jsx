@@ -14,6 +14,7 @@ import { api, getErrorMessage, mediaUrl } from "../lib/api";
 import { FactChip, FactList } from "../components/FactChip";
 import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import {
   Images, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
   ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
@@ -557,6 +558,11 @@ export default function AssetLibrary({
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
+
+  // First-run help (ADR 0118): the tour may auto-open only once the library
+  // has loaded cleanly and is still empty — a library with photos in it is
+  // a workspace in use, not a first run.
+  useTourEligibility("assets", !loading && !error && assets.length === 0);
 
   // Choosing an app here is the same choice the editor makes, so it is
   // remembered and becomes the default the next time /assets is opened with no

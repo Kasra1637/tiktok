@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../ui/button";
 import { useReducedMotionPreference } from "../../lib/reducedMotion";
@@ -38,13 +38,27 @@ function clamp(value, min, max) {
 }
 
 /**
+ * The card's width on this viewport. Fixed at TOOLTIP_WIDTH (360 centered)
+ * on wide screens, but never wider than the viewport minus its margins:
+ * on a narrow phone the fixed width made the horizontal clamp's max
+ * negative, which pushed the card off the left edge entirely.
+ */
+function tooltipWidthFor(centered) {
+  const vw = typeof window !== "undefined" ? window.innerWidth : TOOLTIP_WIDTH + VIEWPORT_MARGIN * 2;
+  const wanted = centered ? 360 : TOOLTIP_WIDTH;
+  return Math.max(0, Math.min(wanted, vw - VIEWPORT_MARGIN * 2));
+}
+
+/**
  * Compute a fixed-position tooltip box near `rect`, preferring below,
  * flipping above if there isn't room, and clamping horizontally so it never
- * runs off-screen.
+ * runs off-screen. The height here is an estimate for the first paint only;
+ * once the card renders, a layout effect re-clamps with its real height.
  */
 function computeTooltipPosition(rect, preferredPlacement) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const tooltipWidth = tooltipWidthFor(false);
   const estimatedHeight = 190; // rough card height before layout; good enough for placement math
 
   const spaceBelow = vh - rect.bottom;
@@ -57,7 +71,7 @@ function computeTooltipPosition(rect, preferredPlacement) {
   }
 
   const centerX = rect.left + rect.width / 2;
-  const left = clamp(centerX - TOOLTIP_WIDTH / 2, VIEWPORT_MARGIN, vw - TOOLTIP_WIDTH - VIEWPORT_MARGIN);
+  const left = clamp(centerX - tooltipWidth / 2, VIEWPORT_MARGIN, vw - tooltipWidth - VIEWPORT_MARGIN);
 
   let top;
   if (placement === "bottom") {
@@ -193,6 +207,34 @@ export default function TourOverlay() {
     };
   }, [currentStep, searching, measure]);
 
+  // The first placement used an estimated card height; longer copy makes a
+  // taller card, which could overflow the viewport bottom or sit on top of
+  // its target. Once the card has rendered, measure its real height and
+  // correct: flip to the other side when this side cannot fit the real
+  // card but the other can, then clamp so the whole card stays inside the
+  // viewport with its margin. A zero height (jsdom) leaves the estimate be.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card || !currentStep?.target || !rect || !tooltipPos) return;
+    const height = card.getBoundingClientRect().height;
+    if (!height) return;
+    const vh = window.innerHeight;
+    setTooltipPos((prev) => {
+      if (!prev) return prev;
+      let { top, placement } = prev;
+      if (placement === "bottom" && top + height > vh - VIEWPORT_MARGIN && rect.top - SPOTLIGHT_PADDING - 6 - height >= VIEWPORT_MARGIN) {
+        placement = "top";
+        top = rect.top - height - SPOTLIGHT_PADDING - 6;
+      } else if (placement === "top" && top < VIEWPORT_MARGIN && rect.bottom + SPOTLIGHT_PADDING + 6 + height <= vh - VIEWPORT_MARGIN) {
+        placement = "bottom";
+        top = rect.bottom + SPOTLIGHT_PADDING + 6;
+      }
+      const clampedTop = clamp(top, VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, vh - height - VIEWPORT_MARGIN));
+      if (placement === prev.placement && clampedTop === prev.top) return prev;
+      return { ...prev, top: clampedTop, placement };
+    });
+  }, [currentStep, rect, tooltipPos]);
+
   // Keyboard shortcuts: Escape to skip, arrow keys to navigate.
   useEffect(() => {
     if (!activeTour) return;
@@ -294,7 +336,7 @@ export default function TourOverlay() {
             left: rect.left,
             width: rect.width,
             height: rect.height,
-            boxShadow: "0 0 0 9999px rgba(0,0,0,0.55), 0 0 0 3px rgba(13,148,136,0.25)",
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.55), 0 0 0 3px var(--indigo-25)",
           }}
         />
       )}
@@ -306,13 +348,13 @@ export default function TourOverlay() {
         aria-label={currentStep.title}
         tabIndex={-1}
         className="fixed z-[101] rounded-2xl border border-border bg-card shadow-2xl p-4 focus-ring animate-fade-up"
-        style={{ width: isCentered ? 360 : TOOLTIP_WIDTH, ...tooltipStyle, ...(reduceMotion ? { animation: "none" } : undefined) }}
+        style={{ width: tooltipWidthFor(isCentered), ...tooltipStyle, ...(reduceMotion ? { animation: "none" } : undefined) }}
         onClick={(e) => e.stopPropagation()}
         data-testid="onboarding-tour-tooltip"
       >
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:rgba(13,148,136,0.12)] text-[color:var(--brand-indigo)] shrink-0">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--indigo-10)] text-[color:var(--brand-indigo)] shrink-0">
                 <Sparkles className="h-2.5 w-2.5" />
               </span>
               <h3 className="font-display text-sm font-semibold leading-snug truncate">{currentStep.title}</h3>

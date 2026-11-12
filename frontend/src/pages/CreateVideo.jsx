@@ -1957,7 +1957,7 @@ export default function CreateVideo() {
                 there is nothing to attach a photo to, so the section is hidden
                 entirely rather than showing a blank label. */}
             {showAngles && templateId && (
-            <div id="template-photo" className="inset-panel scroll-mt-4 space-y-4">
+            <div id="template-photo" data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
               <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Upload one clear photo of the person you want on camera.

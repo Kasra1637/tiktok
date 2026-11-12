@@ -18,6 +18,12 @@ const OnboardingContext = createContext(null);
  */
 const AUTO_START_DELAY_MS = 400;
 
+// The core set whose tours may auto-open on a page's registered first-run
+// state (ADR 0077, expanded by ADR 0118 to the journey's fork pages:
+// Demo + CTA, Analytics, Assets). Every other tour — the per-record App
+// Profile detail included — is replay-only via "Show me around".
+const CORE_AUTO_OPEN_TOURS = ["brand", "create", "history", "demo-cta", "analytics", "assets"];
+
 // The retired first-run gating persisted seen tour ids under this key. Once
 // seen-checking came back (see lib/onboarding/seenTours) this older key is dead
 // state, and it is dropped on mount so it can never resurface as a reason a
@@ -150,7 +156,7 @@ export function OnboardingProvider({ children }) {
       clearTimeout(autoStartTimerRef.current);
       autoStartTimerRef.current = null;
     }
-    if (!["brand", "create", "history"].includes(pageTourId) || !eligibility[pageTourId]) return;
+    if (!CORE_AUTO_OPEN_TOURS.includes(pageTourId) || !eligibility[pageTourId]) return;
     if (pageTourId === "create" && (new URLSearchParams(location.search).has("project") || readRecentDraft())) return;
     // Once per tour, forever. This is the whole difference between onboarding
     // and an overlay that ambushes you every time you open a page you use

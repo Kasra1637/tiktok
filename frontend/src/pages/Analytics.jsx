@@ -15,6 +15,8 @@ import { verdictFor } from "../lib/feedback";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { ListenButton } from "../components/ListenButton";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
+import TourStartLink from "../components/onboarding/TourStartLink";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown, ChevronRight } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
@@ -72,6 +74,15 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
+
+  // First-run help (ADR 0118): the tour may auto-open only once the page
+  // has loaded cleanly and no clip has joined results yet. The summary's
+  // joined-clip count is the "the founder has started recording results"
+  // signal; past zero the tour would interrupt someone already in the loop.
+  useTourEligibility(
+    "analytics",
+    !loading && !error && generations !== null && (performanceSummary?.clips ?? 0) === 0
+  );
 
   // The profile list first, because it decides what everything else is scoped
   // to. A remembered selection is only honoured when it still names a profile
@@ -202,9 +213,12 @@ export default function Analytics() {
           title="Nothing captured yet"
           description="Create a clip, then add its posted link, views, and your vote in History."
           action={
-            <Button variant="accent" asChild>
-              <Link to={selectedId ? `/create?profile=${encodeURIComponent(selectedId)}` : "/create"}>Create Video</Link>
-            </Button>
+            <div className="flex flex-col items-center gap-3">
+              <Button variant="accent" asChild>
+                <Link to={selectedId ? `/create?profile=${encodeURIComponent(selectedId)}` : "/create"}>Create Video</Link>
+              </Button>
+              <TourStartLink tourId="analytics" />
+            </div>
           }
         />
       ) : (

@@ -43,6 +43,7 @@ import {
 import { useAwaitingHistoryPoll } from "./historyPolling";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
+import TourStartLink from "../components/onboarding/TourStartLink";
 import { sentenceCase } from "../lib/copyCase";
 import {
   History as HistoryIcon,
@@ -1208,11 +1209,14 @@ export default function GenerationHistory() {
           title="Nothing generated yet"
           description="Create Video saves generated Hook + Story clips here."
           action={
-            <Button variant="accent" asChild>
-              <Link to="/create">
-                Create a video <ChevronRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex flex-col items-center gap-3">
+              <Button variant="accent" asChild>
+                <Link to="/create">
+                  Create a video <ChevronRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <TourStartLink tourId="history" />
+            </div>
           }
         />
       ) : (

@@ -2194,13 +2194,80 @@ async function main() {
       await act(async () => { state.skip(); });
       await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
       if (state.activeTour) throw new Error("dismissed tour reopened");
-      global.__SMOKE_PATHNAME = "/analytics";
-      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, { key: "analytics" }, React.createElement(Driver, { id: "analytics" }))); });
+      global.__SMOKE_PATHNAME = "/app-profiles/p1";
+      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, { key: "app-profile" }, React.createElement(Driver, { id: "app-profile" }))); });
       await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
-      if (state.activeTour) throw new Error("secondary page auto-opened a tour");
+      if (state.activeTour) throw new Error("per-record page auto-opened a tour");
       await act(async () => { state.replayCurrentPageTour(); });
-      if (state.activeTour?.id !== "analytics") throw new Error("secondary page lost manual help");
+      if (state.activeTour?.id !== "app-profile") throw new Error("per-record page lost manual help");
     } finally { delete global.__SMOKE_PATHNAME; storage.removeItem("hookforge_seen_tours.v2"); }
+  });
+
+  await check("intent onboarding opens the fork-page tours on first-run states only", async (ctx) => {
+    const { useOnboarding, useTourEligibility } = load("components/onboarding/OnboardingProvider.jsx");
+    const storage = dom.window.localStorage;
+    let state;
+    function Driver({ id, eligible }) {
+      useTourEligibility(id, eligible);
+      state = useOnboarding();
+      return null;
+    }
+    const pages = [
+      ["analytics", "/analytics"],
+      ["demo-cta", "/demo-cta"],
+      ["assets", "/assets"],
+    ];
+    try {
+      for (const [id, path] of pages) {
+        storage.removeItem("hookforge_seen_tours.v2");
+        global.__SMOKE_PATHNAME = path;
+        const render = async (eligible) => {
+          await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, { key: `${id}-${eligible}` }, React.createElement(Driver, { id, eligible }))); });
+          await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+        };
+        await render(false);
+        if (state.activeTour) throw new Error(`${id} tour interrupted a loading or populated page`);
+        await render(true);
+        if (state.activeTour?.id !== id) throw new Error(`${id} tour did not open on its first-run state`);
+        await act(async () => { state.skip(); });
+        await render(true);
+        if (state.activeTour) throw new Error(`${id} tour reopened after being seen`);
+      }
+    } finally {
+      delete global.__SMOKE_PATHNAME;
+      storage.removeItem("hookforge_seen_tours.v2");
+    }
+  });
+
+  await check("intent onboarding empty-state link opens the page tour and renders nothing bare", async (ctx) => {
+    const TourStartLink = load("components/onboarding/TourStartLink.jsx").default;
+    const { useOnboarding } = load("components/onboarding/OnboardingProvider.jsx");
+    const storage = dom.window.localStorage;
+    storage.removeItem("hookforge_seen_tours.v2");
+    // Bare: no provider, so the link degrades to nothing instead of crashing
+    // the page it sits on.
+    await mount(TourStartLink, { tourId: "history" })(ctx);
+    if (ctx.container.querySelector('[data-testid="tour-start-link-history"]')) {
+      throw new Error("the tour link rendered without a provider");
+    }
+    // Inside the provider it offers the page's tour, and a click opens it.
+    let state;
+    function Driver() {
+      state = useOnboarding();
+      return React.createElement(TourStartLink, { tourId: "history" });
+    }
+    global.__SMOKE_PATHNAME = "/history";
+    try {
+      await act(async () => { ctx.root.render(React.createElement(OnboardingProvider, null, React.createElement(Driver))); });
+      const link = ctx.container.querySelector('[data-testid="tour-start-link-history"]');
+      if (!link) throw new Error("the tour link did not render inside the provider");
+      await act(async () => { link.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+      if (state.activeTour?.id !== "history") throw new Error("the tour link did not open the history tour");
+      await act(async () => { state.skip(); });
+    } finally {
+      delete global.__SMOKE_PATHNAME;
+      storage.removeItem("hookforge_seen_tours.v2");
+    }
   });
 
   await check("review checks describe warnings as nonblocking", async (ctx) => {
