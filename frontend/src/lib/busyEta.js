@@ -12,10 +12,13 @@
 // polling progress bar with real position — takes no countdown at all.
 //
 // Values per operation, from backend/ai_service.py token/timeout budgets:
-// - angles: 8000 tokens, timeout 90 → ~30s for six fielded angles.
-// - goals: 4000 tokens, timeout 60 → ~20s for six ranked goals.
-// - templates: 16384 tokens + possible top-up call → ~35s for 3 structures.
-// - plan: 8000 tokens, timeout 120, up to 3 editorial attempts → ~30s typical.
+// - angles: founder-measured 50s for six fielded angles (Nov 2026; the
+//   budget-derived 30s ran short against the wait founders actually see).
+// - goals: no entry — it completes under 10s in practice, so its button
+//   keeps the sweep alone and never counts down.
+// - templates: founder-measured 20s for 3 structures (Nov 2026).
+// - plan: founder-measured 50s typical (Nov 2026; up to 3 editorial
+//   attempts against the 120s timeout can still run past it, holding at 0s).
 // - strategy: 8192 tokens → ~30s typical.
 // - research: page fetches (15s timeout each, sequential) + 8000-token draft
 //   (timeout 90) → ~40s; refresh variants that also regenerate angles → ~45s.
@@ -26,10 +29,9 @@
 export const BUSY_ETA_THRESHOLD_SECONDS = 10;
 
 export const BUSY_ETA_SECONDS = {
-  angles: 30,
-  goals: 20,
-  templates: 35,
-  plan: 30,
+  angles: 50,
+  templates: 20,
+  plan: 50,
   strategy: 30,
   research: 40,
   refresh: 45,

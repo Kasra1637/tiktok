@@ -9843,6 +9843,13 @@ async function runIconChecks() {
     if (!etaValuesBlock) throw new Error("busyEta map is missing");
     const etaValues = [...etaValuesBlock[1].matchAll(/:\s*(\d+)/g)].map((m) => Number(m[1]));
     if (!etaValues.length || etaValues.some((v) => v < 10)) throw new Error("busyEta estimate falls below the 10s threshold");
+    // Founder-measured countdowns (Nov 2026): the budget-derived numbers ran
+    // short against the waits founders actually see, so angles, templates
+    // and plan carry the measured times, and goals carries none — it
+    // completes under 10s and shows the sweep alone.
+    const etaPairs = Object.fromEntries([...etaValuesBlock[1].matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
+    if (etaPairs.angles !== 50 || etaPairs.templates !== 20 || etaPairs.plan !== 50) throw new Error("busyEta countdowns drifted from the founder-measured times (angles 50, templates 20, plan 50)");
+    if ("goals" in etaPairs) throw new Error("goals carries a countdown estimate; it completes under 10s and must show the sweep alone");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of ['.btn-studio[data-busy="true"]::before', '.btn-studio[data-busy="true"][data-progress="true"]::before', "@keyframes busy-sweep", "--busy-progress"]) {
       if (!css.includes(token)) throw new Error(`index.css is missing the busy fill rule: ${token}`);

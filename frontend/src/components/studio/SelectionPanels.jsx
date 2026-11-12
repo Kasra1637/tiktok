@@ -737,7 +737,6 @@ export function AngleGoalPicker({
         onClick={onGenerate}
         disabled={generating}
         busy={generating}
-        etaSeconds={BUSY_ETA_SECONDS.goals}
         data-testid="generate-goals-button"
       >
         <Sparkles className="h-3.5 w-3.5" />
