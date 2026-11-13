@@ -1,11 +1,15 @@
-"""Performance loop: stored craft score, dated result snapshots, joined steering.
+"""Performance loop: stored craft score, dated result snapshots, the record.
 
 Seams:
 - submit freezes the craft score on the generation row (ADR 0117);
 - POST /generations/{id}/performance-snapshot stores a dated snapshot and
   History reads show the latest one;
-- feedback.summarize_posted_performance joins stored scores to snapshots
-  and only steers generation prompts at 3+ posted clips.
+- feedback.summarize_posted_performance joins stored scores to snapshots.
+
+ADR 0124 retired the join's steering role: posted metrics are the
+founder's record now, and generation learns from whole-video verdict
+bundles instead (test_video_verdicts). The join math below stays pinned
+because History and Analytics still render it as that record.
 """
 import asyncio
 import importlib
@@ -350,11 +354,13 @@ def _ready_project(api, name="Performance App"):
 
 
 class TestPerformanceSteeringWiring:
-    """The join must reach the prompt path, not just exist as functions.
+    """The join as a record layer, after ADR 0124 retired its steering.
 
     Seam: generations with stored scores + snapshots -> the posted-rows
-    fetch the studio router uses -> summarize_profile_feedback -> the
-    section ai_service embeds in plan and strategy prompts.
+    fetch -> summarize_profile_feedback -> the section builder. The
+    builder's output no longer reaches any prompt — plan and strategy
+    learn from verdict bundles instead — so what is pinned here is the
+    join itself: the numbers History and Analytics stand on.
     """
 
     def _seed_posted_clip(self, api, profile_id, score, retention):
@@ -401,7 +407,7 @@ class TestPerformanceSteeringWiring:
         assert summary["performance"]["ready"] is False
         assert "Posted results so far" not in feedback_mod.build_profile_feedback_section(summary)
 
-    def test_history_list_carries_the_analytics_join(self, api):
+    def test_history_list_carries_the_record_and_verdict_summary(self, api):
         profile_id = str(uuid.uuid4())
         seeded = [
             self._seed_posted_clip(api, profile_id, (20, 20), retention=80),
@@ -416,11 +422,14 @@ class TestPerformanceSteeringWiring:
             assert isinstance(entry.get("quality_report"), dict)
             assert entry["quality_report"]["grade"]
             assert entry["performance_snapshot"]["retention_3s_pct"] is not None
-        summary = history["performance_summary"]
-        assert summary["clips"] >= 4
-        assert summary["ready"] is True
-        dims = {d["key"]: d for d in summary["dimensions"]}
-        assert dims["hook_stopping_power"]["retention"] is not None
+        # ADR 0124: the history payload's headline summary is the verdict
+        # summary now, not the craft-correlation join. No verdicts have
+        # been cast in this module, so it honestly reports none — while
+        # the per-row record above (score + snapshot) is untouched.
+        assert "performance_summary" not in history
+        summary = history["verdict_summary"]
+        assert summary["total"] == 0
+        assert summary["ready"] is False
 
     def test_legacy_posted_rows_teach_the_join_nothing(self):
         import feedback as feedback_mod

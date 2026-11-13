@@ -1,57 +1,52 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Clapperboard, ExternalLink, Eye, Link2, X } from "lucide-react";
-import { ComponentThumbs } from "./ComponentThumbs";
+import { Check, ExternalLink, Eye, Link2, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { api, getErrorMessage } from "../lib/api";
-import { verdictFor } from "../lib/feedback";
 
 /**
- * Everything about one render's vote: the primary render vote, the posted
- * link, and the pasted-back views. Per-part ratings were removed: one vote
- * on the clip as a whole is the judgment that counts.
+ * Everything about one render after it finished: the posted link, the
+ * pasted-back views, and the dated results readings. The verdict itself
+ * — the founder's one call on the whole video (ADR 0124) — lives in the
+ * card summary beside the journey line, not here: this block is the
+ * record the verdict is read alongside, and its Winner badge follows
+ * that verdict plus the posted link.
  *
- * One owner for all vote state in the drawer. `voteOverrides` holds a
- * just-cast vote ahead of the next fetch; `freshVerdicts` is the server
- * state revalidated every time the drawer opens. The list row's verdicts
- * stand in while the refetch is in flight (or if it fails), and an override
- * always wins over both, so a thumb never visibly un-presses itself.
- *
- * Mounting is the open signal: the drawer unmounts this component on
- * collapse, so mounting means the founder just opened the render and the
- * refetch below fires exactly once per open. A vote the server already
- * confirmed re-arrives through that refetch, which is what restores the
- * highlight after a collapse without depending on the list reloading.
+ * The verdict state is revalidated every time the drawer opens, the
+ * same mounting contract the old vote block kept: mounting means the
+ * founder just opened the render, the refetch fires exactly once per
+ * open, and the list row's verdict stands in while it is in flight (or
+ * if it fails), so the badge never blanks a verdict the founder saved.
+ * A verdict cast in the summary updates the row, which supersedes the
+ * refetch until the next open.
  */
 export function HistoryFeedback({ row, signalRefs, onUpdated }) {
-  const [voteOverrides, setVoteOverrides] = useState({});
-  const [freshVerdicts, setFreshVerdicts] = useState(null);
+  const [freshVerdict, setFreshVerdict] = useState(undefined);
   useEffect(() => {
     let cancelled = false;
     api.getGeneration(row.id)
-      .then((d) => { if (!cancelled) setFreshVerdicts(d.verdicts || {}); })
-      // A failed refresh is not a lost vote: savedVerdicts falls back to the
-      // row's own verdicts, so the tile keeps showing what the founder saved.
-      .catch(() => { if (!cancelled) setFreshVerdicts(null); });
+      .then((d) => { if (!cancelled) setFreshVerdict(d.video_verdict ?? null); })
+      // A failed refresh is not a lost verdict: the row's own verdict
+      // stands in, so the badge keeps showing what the founder saved.
+      .catch(() => { if (!cancelled) setFreshVerdict(undefined); });
     return () => { cancelled = true; };
   }, [row.id]);
-  const savedVerdicts = freshVerdicts ?? row.verdicts ?? {};
-  const thumbValue = (component) =>
-    voteOverrides[component] ?? verdictFor(savedVerdicts, component);
+  useEffect(() => { setFreshVerdict(undefined); }, [row.video_verdict]);
+  const verdict = freshVerdict !== undefined ? freshVerdict : (row.video_verdict ?? null);
   // Posted link: one nullable text column, saved beside the render. A link
   // marks the render posted and opens the live video — but a link alone
-  // carries no weight. Only a thumbs up on the render PLUS a link counts
-  // as a real winner for the hook-learning loop.
+  // carries no weight. Only a "worked" verdict on the whole video PLUS a
+  // link counts as a real winner.
   const [link, setLink] = useState(row.tiktok_url || "");
   const [savedLink, setSavedLink] = useState(row.tiktok_url || null);
   const [savingLink, setSavingLink] = useState(false);
   const [linkError, setLinkError] = useState(null);
-  const isWinner = thumbValue("video") === 1 && !!savedLink;
+  const isWinner = verdict === "up" && !!savedLink;
   // Views pasted back from the posted TikTok: read by hand until any TikTok
   // API. Shown only beside a posted link — views belong to the live video,
-  // not the render. Displayed, never decided on: only a thumbs up plus a
-  // link counts as a winner.
+  // not the render. Displayed, never decided on: only a "worked" verdict
+  // plus a link counts as a winner.
   const [views, setViews] = useState(row.tiktok_views ?? "");
   const [savedViews, setSavedViews] = useState(row.tiktok_views ?? null);
   const [savingViews, setSavingViews] = useState(false);
@@ -82,10 +77,11 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
   }, [row.id, views, onUpdated]);
   // Posted results, pasted back like the views — one dated snapshot per
   // save (ADR 0117). Retention and average watch say whether the clip held
-  // people; views alone only say it was shown. These are the numbers the
-  // learning loop joins against this render's stored craft score, and the
-  // latest reading is shown with its date: saving again next week adds a
-  // new reading instead of overwriting this one.
+  // people; views alone only say it was shown. These numbers are the
+  // founder's record of how the video did — since ADR 0124 they teach
+  // nothing on their own; what generation learns from is the verdict on
+  // the whole video. The latest reading is shown with its date: saving
+  // again next week adds a new reading instead of overwriting this one.
   const [snapshot, setSnapshot] = useState(row.performance_snapshot ?? null);
   const [retention, setRetention] = useState("");
   const [avgWatch, setAvgWatch] = useState("");
@@ -179,30 +175,11 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
       setSavingLink(false);
     }
   }, [row.id, onUpdated]);
-  const rememberVote = (component, verdict) => {
-    setVoteOverrides((prev) => ({ ...prev, [component]: verdict }));
-    onUpdated?.(row.id, { verdicts: { ...savedVerdicts, ...voteOverrides, [component]: verdict } });
-  };
   return (
     <div className="history-vote-block space-y-3 border-t border-[color:var(--hairline)] pt-5" data-testid={`history-feedback-${row.id}`}>
-      <ComponentThumbs
-        component="video"
-        icon={Clapperboard}
-        question="Rate this render"
-        hint="One vote on the clip as a whole — the vote that counts most."
-        size="default"
-        resetKey={row.id}
-        initialValue={thumbValue("video")}
-        onVoted={rememberVote}
-        refs={{
-          ...signalRefs,
-          detail: row.model ? `model=${row.model}` : "",
-        }}
-        testId={`history-video-feedback-${row.id}`}
-      />
-      {/* Posted link lives next to the thumbs, inside the same vote block:
-          the winner signal (thumbs up) and the posted proof (link) are read
-          together, so they are set together. */}
+      {/* Posted link lives in the same block the verdict is read with:
+          the winner signal (a "worked" verdict) and the posted proof
+          (link) are read together, so they are set together. */}
       <div className="space-y-2" data-testid={`history-tiktok-link-${row.id}`}>
         <div className="flex flex-wrap items-center gap-2">
           {savedLink ? (
@@ -220,7 +197,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 Open live video <ExternalLink className="h-3 w-3" />
               </a>
               {isWinner && (
-                <Badge variant="indigo" data-testid={`history-winner-${row.id}`} title="Good vote plus posted link — a real winner">
+                <Badge variant="indigo" data-testid={`history-winner-${row.id}`} title="Worked verdict plus posted link — a real winner">
                   Winner
                 </Badge>
               )}
@@ -266,7 +243,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
         {linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}
         {!savedLink && (
           <p className="text-sm text-muted-foreground">
-            Marks this render posted. Only a Good vote plus a link counts as a winner.
+            Marks this render posted. Only a &ldquo;worked&rdquo; verdict plus a link counts as a winner.
           </p>
         )}
         {savedLink && (
@@ -394,8 +371,8 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
             </div>
             {resultsError && <p role="alert" className="text-sm text-destructive">{resultsError}</p>}
             <p className="text-sm text-muted-foreground">
-              Read them off TikTok's analytics for the posted video. Each save is a dated reading;
-              once 3 posted clips have both results and a craft score, the app starts learning which scores held viewers.
+              Read them off TikTok's analytics for the posted video. Each save is a dated reading —
+              your record of how it did. What new plans learn from is your verdict on the whole video, in the summary above.
             </p>
           </div>
         )}

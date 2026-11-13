@@ -23,7 +23,8 @@ import { FactChip } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
 import { ListenButton } from "../components/ListenButton";
 import { HistoryFeedback } from "../components/HistoryFeedback";
-import { recordSignal, verdictFor } from "../lib/feedback";
+import { VideoVerdict } from "../components/VideoVerdict";
+import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
@@ -107,7 +108,7 @@ function formatRenderDate(value) {
  * not a verdict on the render.
  */
 function describeResults(row) {
-  const verdict = verdictFor(row.verdicts, "video");
+  const verdict = row.video_verdict === "up" ? 1 : row.video_verdict === "down" ? -1 : 0;
   const bits = [];
   if (row.tiktok_url) {
     bits.push("Posted");
@@ -120,7 +121,7 @@ function describeResults(row) {
     bits.push("Not posted yet");
   }
   if (verdict !== 0) {
-    bits.push(verdict > 0 ? "Your vote: Good" : "Your vote: Not good");
+    bits.push(verdict > 0 ? "Your verdict: worked" : "Your verdict: didn't work");
   }
   return bits.join(" · ");
 }
@@ -656,6 +657,20 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 )}
               </div>
             )}
+            {/* The founder's one verdict on the whole video (ADR 0124),
+                beside the journey line it completes: finished, posted,
+                measured — and judged. It is the only rating in the app
+                now; the per-element thumbs that used to live in the
+                record below are gone, and this verdict — on the whole
+                video, frozen as it went out — is what new plans and
+                strategies learn from. */}
+            {(row.status === "completed" || row.status === "archived") && (
+              <VideoVerdict
+                generationId={row.id}
+                value={row.video_verdict ?? null}
+                onChanged={(video_verdict) => onUpdated?.(row.id, { video_verdict })}
+              />
+            )}
             {/* Provenance is a line, not a chip run. Four bordered pills of
                 model, attempt and two versions competed with the headline for
                 the same corner of the card; they answer a follow-up question
@@ -849,7 +864,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                         onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
                         title={isWinnerRow(row)
                           ? "Open this winner's plan in Create Video for another take like this"
-                          : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your recorded thumbs steer the next plan"}
+                          : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next plan"}
                       >
                         <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Remix this plan"}
                       </Link>

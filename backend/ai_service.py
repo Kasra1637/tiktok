@@ -3586,8 +3586,7 @@ async def generate_creative_plan(
     location: str = "",
     visual_direction: str = "",
     camera_setup: str = "handheld",
-    profile_feedback: Optional[dict] = None,
-    component_feedback: Optional[dict] = None,
+    verdict_feedback: Optional[dict] = None,
     recent_hooks=None,
     goal_rationale: str = "",
 ) -> dict:
@@ -3723,13 +3722,15 @@ async def generate_creative_plan(
         # this instead of inventing a competing one.
         brief["visual_direction"] = (visual_direction or "").strip()
 
+    # The one feedback the prompt may learn from (ADR 0124): whole-video
+    # verdict bundles, silent below 3 verdicts. Per-element thumbs and
+    # posted metrics no longer steer — neither can say which element made
+    # a video work, so their lessons were guesses wearing data's clothes.
     feedback_context = ""
-    if profile_feedback:
-        feedback_context = (
-            "\n\nPROFILE FEEDBACK:\n"
-            f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
-        )
-    feedback_context += _component_feedback_block(component_feedback, "plan")
+    if verdict_feedback:
+        verdict_section = feedback.build_verdict_feedback_section(verdict_feedback)
+        if verdict_section:
+            feedback_context = f"\n\n{verdict_section}\n"
 
     # The founder's audience, when they wrote one, is the WHO line's audience
     # too -- not just the brief's. One prompt naming two viewers is a model
@@ -4347,8 +4348,7 @@ async def generate_video_strategy(
     total_duration: int = 20,
     tone: str = "",
     brand_voice: str = "",
-    profile_feedback: Optional[dict] = None,
-    component_feedback: Optional[dict] = None,
+    verdict_feedback: Optional[dict] = None,
     plan: Optional[dict] = None,
     camera_setup: str = "handheld",
     recent_hooks=None,
@@ -4552,13 +4552,14 @@ async def generate_video_strategy(
             f"{json.dumps(approved_plan, indent=2)}\n"
         )
 
+    # The one feedback the prompt may learn from (ADR 0124): whole-video
+    # verdict bundles, silent below 3 verdicts — the same section the plan
+    # prompt carries, so both stages learn from the same whole videos.
     feedback_context = ""
-    if profile_feedback:
-        feedback_context = (
-            "\n\nPAST FEEDBACK FOR THIS APP (counts and fixed reason codes only):\n"
-            f"{feedback.build_profile_feedback_section(profile_feedback)}\n"
-        )
-    feedback_context += _component_feedback_block(component_feedback, "script")
+    if verdict_feedback:
+        verdict_section = feedback.build_verdict_feedback_section(verdict_feedback)
+        if verdict_section:
+            feedback_context = f"\n\n{verdict_section}\n"
 
     # The one route by which real performance data reaches generation, and
     # deliberately anonymous: bands and a sample size, no source video, creator,

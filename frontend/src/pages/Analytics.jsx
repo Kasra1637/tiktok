@@ -11,7 +11,6 @@ import { Skeleton } from "../components/ui/skeleton";
 import { FactChip, FactList } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
-import { verdictFor } from "../lib/feedback";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { ListenButton } from "../components/ListenButton";
@@ -70,18 +69,18 @@ export default function Analytics() {
   const [selectedId, setSelectedId] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [generations, setGenerations] = useState(null);
-  const [performanceSummary, setPerformanceSummary] = useState(null);
+  const [verdictSummary, setVerdictSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
 
   // First-run help (ADR 0118): the tour may auto-open only once the page
-  // has loaded cleanly and no clip has joined results yet. The summary's
-  // joined-clip count is the "the founder has started recording results"
+  // has loaded cleanly and no verdict has been cast yet. The summary's
+  // verdict count is the "the founder has started judging videos"
   // signal; past zero the tour would interrupt someone already in the loop.
   useTourEligibility(
     "analytics",
-    !loading && !error && generations !== null && (performanceSummary?.clips ?? 0) === 0
+    !loading && !error && generations !== null && (verdictSummary?.total ?? 0) === 0
   );
 
   // The profile list first, because it decides what everything else is scoped
@@ -119,7 +118,7 @@ export default function Analytics() {
     setError(null);
     setFeedback(null);
     setGenerations(null);
-    setPerformanceSummary(null);
+    setVerdictSummary(null);
     const scope = selectedId ? { brand_profile_id: selectedId } : {};
     Promise.all([
       api.getFeedback({ ...scope, limit: 500 }),
@@ -128,7 +127,7 @@ export default function Analytics() {
       if (cancelled) return;
       setFeedback(fb);
       setGenerations(history.generations || []);
-      setPerformanceSummary(history.performance_summary || null);
+      setVerdictSummary(history.verdict_summary || null);
     }).catch((err) => {
       if (!cancelled) setError(getErrorMessage(err));
     }).finally(() => {
@@ -228,7 +227,7 @@ export default function Analytics() {
           </p>
           {renders?.length > 0 && (
             <>
-              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} performanceSummary={performanceSummary} />
+              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} verdictSummary={verdictSummary} />
             </>
           )}
           {renders !== null && renders.length > 0 && (
@@ -268,44 +267,36 @@ function clipName(row) {
 const LEADERBOARD_PAGE_SIZE = 3;
 
 /**
- * The one line joining craft scores to posted results, or the honest
- * not-yet state. Mirrors feedback.summarize_posted_performance on the
- * server: a dimension tracks with an outcome only when its high scorers
- * averaged better than the rest on that metric, over clips carrying both
- * a stored score and a results snapshot. Below 3 joined clips there is
- * no pattern to name, and the line says so (ADR 0117).
+ * The one headline line about the founder's whole-video verdicts, or
+ * the honest not-yet state. Mirrors feedback.summarize_video_verdicts
+ * on the server: counts of worked / didn't-work verdicts, and — at 3+,
+ * the same threshold generation steering uses — what the worked
+ * bundles share. Below 3 verdicts there is no pattern to name, and
+ * the line says so (ADR 0124). Posted metrics and craft scores stay
+ * on the rows as the record; since ADR 0124 they headline nothing,
+ * because neither can say which element made a video work.
  */
-function performanceSummaryLine(summary) {
-  const clips = summary?.clips || 0;
-  if (!summary?.ready) {
-    return `Not enough posted clips yet — the loop starts learning once 3 posted clips have both a craft score and pasted results. ${clips} so far.`;
+function verdictSummaryLine(summary) {
+  const total = summary?.total || 0;
+  const up = summary?.up || 0;
+  const down = summary?.down || 0;
+  if (total === 0) {
+    return "No verdicts yet — judge a finished video in History, one call on the whole clip, and new plans start learning from what worked.";
   }
-  const best = (metric, phrase) => {
-    let chosen = null;
-    for (const dimension of summary.dimensions || []) {
-      const split = dimension[metric];
-      if (!split) continue;
-      const gap = split.high_avg - split.low_avg;
-      if (gap > 0 && (!chosen || gap > chosen.gap)) {
-        chosen = { gap, label: dimension.label, split };
-      }
-    }
-    return chosen
-      ? `clips scoring high on ${chosen.label} averaged ${chosen.split.high_avg}% ${phrase}, vs ${chosen.split.low_avg}% for the rest`
-      : null;
-  };
-  const parts = [
-    best("retention", "watched past 3 seconds"),
-    best("avg_watch", "average watch"),
-  ].filter(Boolean);
-  if (parts.length) return `Across ${clips} posted clips with results: ${parts.join("; ")}.`;
-  const facts = [
-    summary.avg_retention_3s_pct != null ? `${summary.avg_retention_3s_pct}% watched past 3 seconds on average` : null,
-    summary.avg_watch_pct != null ? `${summary.avg_watch_pct}% average watch` : null,
-  ].filter(Boolean);
-  return facts.length
-    ? `Across ${clips} posted clips with results: ${facts.join(", ")}. No single craft score splits the clips that held viewers from the rest yet.`
-    : `Across ${clips} posted clips with results.`;
+  if (!summary?.ready) {
+    return `${total} ${total === 1 ? "verdict" : "verdicts"} so far (${up} worked, ${down} didn't) — the loop starts learning at 3 verdicts, and patterns firm up around 5–7.`;
+  }
+  const shared = summary.shared || {};
+  const traits = [
+    ...(shared.templates || []).length ? ["the same opening template"] : [],
+    ...(shared.angle_kinds || []).map((kind) => `the ${humanize(kind)} angle`),
+    ...(shared.objectives || []).map((objective) => `the ${humanize(objective)} goal`),
+  ];
+  const base = `Across ${total} rated videos (${up} worked, ${down} didn't): `;
+  const body = traits.length
+    ? `the ones that worked share ${traits.join(", ")}.`
+    : "no single trait runs through all the ones that worked yet.";
+  return base + body + (total < 5 ? " Patterns firm up around 5–7 verdicts." : "");
 }
 
 /** The real numbers from a clip's latest results snapshot, as one line. */
@@ -326,7 +317,7 @@ function shortDate(value) {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function ClipResults({ generations, profileId, pick, draftIds, performanceSummary }) {
+function ClipResults({ generations, profileId, pick, draftIds, verdictSummary }) {
   const clips = generations
     .filter((row) => row.status === "completed" || row.status === "archived")
     .sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1));
@@ -338,7 +329,7 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
   const visible = expanded ? clips : clips.slice(0, LEADERBOARD_PAGE_SIZE);
   const posted = clips.filter((row) => row.tiktok_url).length;
   const counted = clips.filter((row) => row.tiktok_views != null).length;
-  const rated = clips.filter((row) => verdictFor(row.verdicts, "video") !== 0).length;
+  const rated = clips.filter((row) => row.video_verdict).length;
   const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
   const pickNext = pick ? nextTakeFor(pick, historyHref, draftIds) : null;
   // Bars scale to the highest recorded count, so the leader reads full and
@@ -363,10 +354,10 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
                 label: "Clip results",
                 values: [
                   `${posted} posted. ${counted} with recorded views. ${rated} rated.`,
-                  performanceSummaryLine(performanceSummary),
-                  "Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Your vote is your judgment. Winner still means thumbs up plus a posted link.",
+                  verdictSummaryLine(verdictSummary),
+                  "Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Your verdict is your judgment. Winner still means a worked verdict plus a posted link.",
                   pick && pickNext
-                    ? `Suggested next take: ${clipName(pick)}. Posted, ${pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good.`
+                    ? `Suggested next take: ${clipName(pick)}. Posted, ${pick.tiktok_views.toLocaleString("en-US")} recorded views, rated worked.`
                     : null,
                   ...visible.slice(0, 8).map((row) =>
                     `${clipName(row)}: ${row.tiktok_views != null ? `${row.tiktok_views.toLocaleString("en-US")} recorded views` : "no recorded views yet"}.`
@@ -398,7 +389,7 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
         <FactChip>{rated} rated</FactChip>
       </FactList>
       <p className="text-sm text-muted-foreground" data-testid="analytics-performance-summary">
-        {performanceSummaryLine(performanceSummary)}
+        {verdictSummaryLine(verdictSummary)}
       </p>
       {open && (
         <div id={panelId} className="space-y-5">
@@ -410,9 +401,9 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
             <div className="space-y-2 pb-2 text-sm text-muted-foreground">
               <p>
                 Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
-                Your vote is your judgment. Winner still means thumbs up plus a posted link, never a view threshold.
+                Your verdict is your judgment. Winner still means a worked verdict plus a posted link, never a view threshold.
               </p>
-              <p>Compare a high-reach clip you rated Good with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+              <p>Compare a high-reach clip you said worked with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
             </div>
           </details>
           {pick && pickNext && (
@@ -423,7 +414,7 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
               <div className="min-w-0 space-y-1">
               <p className="text-sm font-semibold text-foreground">Suggested next take: {clipName(pick)}</p>
               <p className="text-sm text-muted-foreground">
-                Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated Good — the highest reach among clips you rated Good.
+                Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated worked — the highest reach among clips you said worked.
                 Past reach does not promise the next take repeats it.{" "}
                 <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
               </p>
@@ -438,12 +429,12 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
                 <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
                 <thead>
                   <tr className="bg-secondary/20 text-xs text-muted-foreground">
-                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your vote", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
+                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your verdict", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((row, index) => {
-                    const vote = verdictFor(row.verdicts, "video");
+                    const vote = row.video_verdict === "up" ? 1 : row.video_verdict === "down" ? -1 : 0;
                     const next = nextTakeFor(row, historyHref, draftIds);
                     const winner = isWinnerRow(row);
                     return (
@@ -506,7 +497,7 @@ function ClipResults({ generations, profileId, pick, draftIds, performanceSummar
                             ) : (
                               <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
                             )}
-                            {vote > 0 ? "Good" : vote < 0 ? "Not good" : "Not rated"}
+                            {vote > 0 ? "Worked" : vote < 0 ? "Didn't work" : "Not rated"}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-xs">

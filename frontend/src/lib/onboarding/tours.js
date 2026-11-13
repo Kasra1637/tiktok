@@ -290,7 +290,7 @@ export const TOURS = {
         target: null,
         title: "Your shelf, not your publisher",
         body:
-          "Post in TikTok yourself — nothing publishes automatically. Record the link and results here, and once 3 posted clips carry results and a craft score, they steer the next videos written for you. Create a video to start.",
+          "Post in TikTok yourself — nothing publishes automatically. Record the link and results here, and give each finished video one verdict on the whole clip. At 3 verdicts, they steer the next videos written for you.",
       },
     ],
   },
@@ -304,14 +304,14 @@ export const TOURS = {
         target: '[data-testid="analytics-profile-picker"], [data-testid="analytics-header"]',
         title: "Scores beside results",
         body:
-          "Choose an app or All apps. Each finished clip shows the craft score it was rendered with, beside its recorded views, posted status, and your vote. Views describe reach, not installs or conversions.",
+          "Choose an app or All apps. Each finished clip shows the craft score it was rendered with, beside its recorded views, posted status, and your verdict. Views describe reach, not installs or conversions.",
       },
       {
         target: '[data-testid="analytics-performance-summary"]',
-        title: "When the results start teaching",
+        title: "When your verdicts start teaching",
         optional: true,
         body:
-          "This line joins craft scores to posted results. Once 3 posted clips have both, it names the craft parts that track with viewers watching past 3 seconds and staying longer. Below 3 joined clips, it only counts so far.",
+          "This line counts your verdicts on finished videos — one call on each whole clip, which is what new plans learn from. Once 3 verdicts are in, it names what the ones that worked share. Below 3, it only counts so far.",
       },
       {
         target: '[data-testid="analytics-results"]',

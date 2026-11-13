@@ -515,6 +515,17 @@ class PerformanceSnapshotRequest(BaseModel):
     shares: Optional[StrictInt] = None
 
 
+class VideoVerdictRequest(BaseModel):
+    """The founder's one verdict on a whole finished video (ADR 0124).
+
+    "up" means this one worked, "down" means it didn't, and null clears
+    the verdict. The verdict judges the video as posted — spoken words,
+    opening visual, captions and hashtags together — never one element,
+    so anything outside the two values is refused, not coerced.
+    """
+    verdict: Optional[Literal["up", "down"]] = None
+
+
 class FeedbackRequest(BaseModel):
     """
     Structured feedback captured at the moment something happened.

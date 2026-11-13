@@ -54,7 +54,7 @@ def test_strategy_accepts_banned_claim_without_retry(monkeypatch):
         template={"name": "T", "required_assets": ["character_reference"]},
         angle=None, objective="ease_daily_moment",
         hook_seconds=2, total_duration=15, tone="", brand_voice="",
-        profile_feedback={}))
+        verdict_feedback=None))
     assert len(calls) == 1, "wording never triggers a retry"
     assert "focus" in result["segments"][1]["script"].lower()
     report = claim_safety.build_safety_report(

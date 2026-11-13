@@ -6,8 +6,7 @@ import { Textarea } from "./ui/textarea";
 import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../lib/api";
-import { recordSignal, verdictFor } from "../lib/feedback";
-import { ComponentThumbs } from "./ComponentThumbs";
+import { recordSignal } from "../lib/feedback";
 import { PostKitSection } from "./PostKitSection";
 import { CONTROL_CLASS } from "./formControls";
 import {
@@ -160,11 +159,6 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
-  // A vote cast on this visit, ahead of the next poll: without it the thumb
-  // just pressed would reopen unpressed on the next generation refresh even
-  // though the vote already saved. Cleared when tracking moves to another
-  // render, so one clip's vote can never highlight the next.
-  const [videoOverride, setVideoOverride] = useState(null);
   // The Location editor. The plan's `visual_direction` is the single source of
   // truth for where the video happens; editing it here saves it (and rewrites
   // the strategy's place-bearing lines server-side) without leaving the render
@@ -465,12 +459,10 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   }, [generation, schedulePoll]);
 
 
-  // A new render starts unvoted: the override belongs to the previous clip.
-  // Its preview also starts unbroken: a load error on the previous clip must
-  // not hide this one's player before it has even been tried.
+  // A new render's preview starts unbroken: a load error on the previous
+  // clip must not hide this one's player before it has even been tried.
   const trackedGenerationId = generation?.id || "";
   useEffect(() => {
-    setVideoOverride(null);
     setPreviewBroken(false);
   }, [trackedGenerationId]);
 
@@ -1077,22 +1069,10 @@ const handleGenerate = async () => {
                   </div>
                 )}
               </div>
-              <ComponentThumbs
-                component="video"
-                question="Did this generated video turn out well?"
-                hint="Rates the generated video clip itself."
-                resetKey={generation.id}
-                initialValue={videoOverride ?? verdictFor(generation?.verdicts, "video")}
-                onVoted={(_component, verdict) => setVideoOverride(verdict)}
-                refs={{
-                  brand_profile_id: generation?.brand_profile_id || project?.brand_profile_id || "",
-                  studio_project_id: generation?.studio_project_id || project?.id || "",
-                  generation_id: generation?.id || "",
-                  template_id: generation?.template_id || project?.template_id || "",
-                  detail: generation?.model ? `model=${generation.model}` : "",
-                }}
-                testId="video-feedback"
-              />
+              {/* No rating on the render here (ADR 0124): the panel used
+                  to carry its own video thumbs, a second whole-video
+                  judgment beside History's. The one verdict lives on the
+                  finished video's History card, judged as posted. */}
               {/* The native next step. The download above is the finish line for
                   anyone who does not want it: this panel adds nothing to what
                   they already have, changes no gate, and takes nothing away.

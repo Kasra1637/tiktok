@@ -24,11 +24,9 @@ import { useTourEligibility } from "../components/onboarding/OnboardingProvider"
 import HookContinuityPanel from "../components/HookContinuityPanel";
 import GenerationPanel from "../components/GenerationPanel";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
-import { ThumbPair } from "../components/ThumbPair";
-import { ComponentThumbs } from "../components/ComponentThumbs";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
-import { recordSignal, recordThumb, recordBehavior, classifyScriptEdit } from "../lib/feedback";
+import { recordSignal, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { rememberDraft } from "../lib/recentDraft";
 import {
   partitionProfiles,
@@ -367,11 +365,6 @@ export default function CreateVideo() {
   // render is that long in one pass. `extendIntent` ("hook only" versus "extend
   // into a full video") asked a question about a chain that no longer exists —
   // there is no hook-only render to choose between.
-  // Thumbs verdict on the saved Review plan: up advances to the render below,
-  // down records the rejection and asks the AI for a fresh plan. Manual
-  // editing stays untouched — this is an additive fast path, not a
-  // replacement, so the craft check and ready gate keep working as before.
-  const [reviewThumb, setReviewThumb] = useState(0);
   /* Review's two halves as sub-screens: "Read the plan" then "Render &
      result". One screen in view at a time so the plan's dozen fields stop
      competing with the render below. Not a new step — STEPS, ?step= and the
@@ -382,7 +375,7 @@ export default function CreateVideo() {
   const scriptVersion = Number(project?.script_version) || 0;
   const effectiveReviewTab = scriptVersion ? reviewTab : "plan";
   // A fresh plan needs reading before it renders: whenever a new version
-  // arrives (first generate, regenerate, thumbs-down rewrite), land back on
+  // arrives (first generate or a regenerate), land back on
   // the plan half even if the founder was looking at the render.
   useEffect(() => {
     if (scriptVersion) setReviewTab("plan");
@@ -403,10 +396,6 @@ export default function CreateVideo() {
         ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
     });
   }, [step]);
-  // Consecutive AI refinements per saved plan version. Capped so a thumbs-down
-  // loop can never spin the text model unboundedly on one plan.
-  const reviewRefinesRef = useRef({});
-
   const profileId = project?.brand_profile_id || selectedProfileId;
   // Angle + goals lifecycle (angles/evidence state, click-to-view gates,
   // live billed goals, regenerate handlers) lives in its own hook; the
@@ -970,8 +959,8 @@ export default function CreateVideo() {
       setPlanFailed(true);
       return;
     }
-    // Single flight. Concurrent triggers — a double-tapped Regenerate, a
-    // thumbs-down retry racing a manual one — must not stack minute-long model
+    // Single flight. Concurrent triggers — a double-tapped Regenerate
+    // racing a manual one — must not stack minute-long model
     // calls: each holds `busy`, so stacked flights read as a frozen page
     // with every control disabled. A call already in flight owns the
     // outcome; the extra tap is dropped. The buttons it could come from are
@@ -1053,7 +1042,6 @@ export default function CreateVideo() {
       // disabled render button can read why instead of assuming the app broke.
       setError(readyError ? getErrorMessage(readyError) : null);
       dispatchDraft({ type: "plan-accepted", project: settled });
-      setReviewThumb(0);
       // Straight to the top of Review & submit, where the fresh plan reads: the
       // plan is the thing to read first, and the render section below it is the
       // first one that calls the model. Looked up by key, not written as a
@@ -1177,7 +1165,6 @@ export default function CreateVideo() {
       }
       setError(readyError ? getErrorMessage(readyError) : null);
       dispatchDraft({ type: "plan-accepted", project: settled, savedEdits });
-      setReviewThumb(0);
       if (silent) setSaveStatus("All changes saved");
     } catch (err) {
       const message = getErrorMessage(err);
@@ -1210,44 +1197,6 @@ export default function CreateVideo() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [editsSignature, busy, autosaveProjectId, hasEdits]);
-
-  // Thumbs-down on Review asks the AI for a better plan; thumbs-up records
-  // the approval and moves to the render below. Down reuses the existing plan
-  // generation (ready marking included), capped at three
-  // refinements per saved plan version so the loop always terminates.
-  const handleReviewThumb = async (next) => {
-    setReviewThumb(next);
-    if (next === 0 || !project?.id) return;
-    recordThumb("plan", next, {
-      brand_profile_id: profileId,
-      studio_project_id: project.id,
-      template_id: project.template_id,
-      detail: `plan v${Number(project.script_version) || 0}`,
-    });
-    if (next === 1) {
-      // Approval moves to the render half: thumbs-up is the moment the plan
-      // is done being read, so the founder lands on the render instead of
-      // having to notice the tab. scrollToSubmit already defers a frame, so
-      // it runs after the tab switch paints.
-      setReviewTab("render");
-      scrollToSubmit();
-      return;
-    }
-    const versionKey = String(Number(project.script_version) || 0);
-    const used = Number(reviewRefinesRef.current[versionKey] || 0);
-    if (used >= 3) {
-      setError(
-        "Three fresh plans written for this version already — edit the script by hand or pick another template before refining again."
-      );
-      // No refinement happened, so the thumb must not stay pressed: left
-      // active it claims a fourth plan is coming that the cap forbids.
-      setReviewThumb(0);
-      return;
-    }
-    reviewRefinesRef.current[versionKey] = used + 1;
-    await handleGeneratePlan();
-    setReviewThumb(0);
-  };
 
   // The selection is the resolved row, never the raw id. A templateId that
   // names nothing the founder can see — a stale ?template= link, a draft
@@ -1834,21 +1783,9 @@ export default function CreateVideo() {
               onRegenerate={handleRegenerateGoals}
               regenerating={cyclingGoals}
             />
-              {angle && objective && (
-                <ComponentThumbs
-                  component="goal"
-                  flush
-                  question="Is this the right goal for your customers?"
-                  hint="Rates the goal only. It shapes future goal suggestions for this app."
-                  resetKey={`${angleId}:${objective}`}
-                  refs={{
-                    brand_profile_id: profileId,
-                    studio_project_id: project?.id,
-                    detail: `objective=${objective};kind=${angle.kind || ""}`,
-                  }}
-                  testId="goal-feedback"
-                />
-              )}
+              {/* No goal rating (ADR 0124): per-element thumbs stopped
+                  teaching generation — the whole-video verdict in
+                  History is the one feedback that steers now. */}
               {/* Nothing starts on the goal pick — no powered generation and
                   no ranked read: every template request waits for this click
                   (ADR 0098). One reflexive tap on a neighbouring goal must
@@ -2042,20 +1979,9 @@ export default function CreateVideo() {
               </div>
             )}
 
-            {effectiveTemplateId && (
-              <ComponentThumbs
-                component="template"
-                question="Is this template a good fit for your customers?"
-                hint="Rates the template only. It reorders and reshapes future template suggestions."
-                resetKey={effectiveTemplateId}
-                refs={{
-                  brand_profile_id: profileId,
-                  studio_project_id: project?.id,
-                  template_id: effectiveTemplateId,
-                }}
-                testId="template-feedback"
-              />
-            )}
+            {/* No template rating (ADR 0124): per-element thumbs stopped
+                teaching generation — the whole-video verdict in History
+                is the one feedback that steers now. */}
 
             {/* Presentational: the photo section only renders once a template
                 is picked, so the studio never shows a blank section waiting
@@ -2313,20 +2239,13 @@ export default function CreateVideo() {
                 )}
               </div>
             )}
-            <div className="inset-panel space-y-4" data-testid="review-thumb-loop">
-              <span className="eyebrow block">Does this plan work?</span>
-              <ThumbPair
-                value={reviewThumb}
-                disabled={busy || !project?.script_version}
-                upLabel="Looks good"
-                downLabel="Write a better one"
-                testId="review-thumb"
-                onChange={handleReviewThumb}
-              />
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Thumbs up moves on; thumbs down writes a fresh plan for you.
-              </p>
-            </div>
+            {/* No plan thumbs here any more (ADR 0124): a thumbs-down used
+                to order a fresh plan, and a thumbs-up recorded a verdict
+                on the words alone. Neither could say whether the finished
+                video worked, so both are gone — the founder edits by hand
+                or regenerates from the button above, and the one verdict
+                that teaches generation waits for the finished video in
+                History, judged whole. */}
             <GroupLabel icon={FileText}>Script</GroupLabel>
             {/* What the chosen template is aiming to leave them with, above the
                 hook and script it was picked to carry. The plan step showed the
@@ -2820,21 +2739,10 @@ export default function CreateVideo() {
                       project={project}
                       onProjectChange={receiveProject}
                     />
-                    {project?.strategy && (
-                      <ComponentThumbs
-                        component="script"
-                        question="Does this script speak to your customers?"
-                        hint="Rates the generated script only. It guides future scripts for this app."
-                        resetKey={`${project.id}:${project.strategy_version || 0}`}
-                        refs={{
-                          brand_profile_id: profileId,
-                          studio_project_id: project.id,
-                          template_id: project.template_id,
-                          detail: `strategy v${Number(project.strategy_version) || 0}`,
-                        }}
-                        testId="script-feedback"
-                      />
-                    )}
+                    {/* No script rating (ADR 0124): per-element thumbs
+                        stopped teaching generation — the whole-video
+                        verdict in History is the one feedback that
+                        steers now. */}
                     <div id="review-submit" className="scroll-mt-4">
                       <GenerationPanel
                         project={project}

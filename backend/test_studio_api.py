@@ -1104,7 +1104,6 @@ class _StrategyCapture:
             template=template,
             angle=None, objective="address_user_problem",
             hook_seconds=5, total_duration=20, tone="", brand_voice="",
-            profile_feedback={},
         ))
         return self.captured["prompt"]
 
@@ -2173,9 +2172,12 @@ class TestSpokenCounts:
 
 class TestComponentFeedbackRouting:
     """
-    Each component's thumbs reach ONLY the AI stage that produces it: template
-    verdicts the template drafter, plan verdicts the plan writer, script
-    verdicts the script writer. A verdict on one never moves another.
+    Per-element thumbs used to reach ONLY the AI stage that produced the
+    element. ADR 0124 replaced that routing wholesale: component thumbs
+    now reach NO generation stage — the whole-video verdict is the only
+    feedback a prompt learns from (test_video_verdicts covers it
+    arriving). What remains here pins the absence, plus the record-layer
+    summaries, which still count historical thumbs for display.
     """
 
     class _Stop(Exception):
@@ -2201,7 +2203,7 @@ class TestComponentFeedbackRouting:
         ])
         return profile, project
 
-    def test_plan_stage_receives_only_plan_verdicts(self, api, monkeypatch):
+    def test_plan_stage_receives_no_component_verdicts(self, api, monkeypatch):
         from models import GeneratePlanRequest
         profile, project = self._setup(api, "Route Plan")
         seen = {}
@@ -2212,10 +2214,15 @@ class TestComponentFeedbackRouting:
         monkeypatch.setattr(api, "generate_creative_plan", fake_plan)
         _run(api.generate_plan(project_id=project["id"],
                                payload=GeneratePlanRequest(), user_id=ANON))
-        assert seen["component_feedback"] == {"plan": {"up": 3, "down": 0, "total": 3,
-                                                           "adopted": 0, "abandoned": 0, "shown": 0}}
+        # ADR 0124: per-element thumbs stopped steering. The thumbs this
+        # fixture recorded (3 plan up among them) arrive nowhere — the
+        # plan stage receives whole-video verdicts only, and there are
+        # none for this profile yet.
+        assert "component_feedback" not in seen
+        assert "profile_feedback" not in seen
+        assert seen["verdict_feedback"]["total"] == 0
 
-    def test_script_stage_receives_only_script_verdicts(self, api, monkeypatch):
+    def test_script_stage_receives_no_component_verdicts(self, api, monkeypatch):
         from models import GenerateStrategyRequest
         profile, project = self._setup(api, "Route Script")
         seen = {}
@@ -2227,10 +2234,11 @@ class TestComponentFeedbackRouting:
         with pytest.raises(Exception):
             _run(api.generate_project_strategy(
                 project_id=project["id"], payload=GenerateStrategyRequest(), user_id=ANON))
-        assert seen["component_feedback"] == {"script": {"up": 0, "down": 4, "total": 4,
-                                                             "adopted": 0, "abandoned": 0, "shown": 0}}
+        assert "component_feedback" not in seen
+        assert "profile_feedback" not in seen
+        assert seen["verdict_feedback"]["total"] == 0
 
-    def test_template_stage_receives_only_template_verdicts(self, api, monkeypatch):
+    def test_template_stage_receives_no_template_verdicts(self, api, monkeypatch):
         profile, _ = self._setup(api, "Route Template")
         seen = {}
 
@@ -2240,8 +2248,7 @@ class TestComponentFeedbackRouting:
             return []
         monkeypatch.setattr(api, "generate_brand_templates", fake_templates)
         _run(api._ensure_objective_templates(profile, "address_user_problem", ANON))
-        assert seen["component_feedback"] == {"template": {"up": 0, "down": 2, "total": 2,
-                                                               "adopted": 0, "abandoned": 0, "shown": 0}}
+        assert seen["component_feedback"] is None
 
     def test_goal_stage_counts_only_goal_verdicts(self, api):
         profile, _ = self._setup(api, "Route Goal")
@@ -2251,7 +2258,7 @@ class TestComponentFeedbackRouting:
             {"name": "demonstrate_feature", "wins": 1, "flops": 0,
              "adoptions": 0, "abandonments": 0, "posted": 0, "views": 0}]
 
-    def test_stage_prompts_carry_their_own_verdicts(self, monkeypatch):
+    def test_stage_prompts_carry_no_component_verdicts(self, monkeypatch):
         import ai_service
         captured = {}
 
@@ -2263,26 +2270,25 @@ class TestComponentFeedbackRouting:
         template = {"name": "Stop Doing This", "category": "pain-point-question"}
         with pytest.raises(Exception):
             _run(ai_service.generate_creative_plan(
-                profile=profile, template=template,
-                component_feedback={"plan": {"up": 0, "down": 3, "total": 3}}))
+                profile=profile, template=template))
         with pytest.raises(Exception):
             _run(ai_service.generate_video_strategy(
-                profile=profile, template=template,
-                component_feedback={"script": {"up": 5, "down": 0, "total": 5}}))
+                profile=profile, template=template))
         with pytest.raises(Exception):
             _run(ai_service.generate_brand_templates(
                 profile, [], objective="address_user_problem",
                 component_feedback={"template": {"up": 1, "down": 1, "total": 2}}))
-        prompts = list(captured.values())
-        plan = next(p for p in prompts if "on the script plan" in p)
-        script = next(p for p in prompts if "on the spoken script" in p)
-        tmpl = next(p for p in prompts if "on the hook template" in p)
-        assert "0 thumbs up, 3 thumbs down" in plan
-        assert "5 thumbs up, 0 thumbs down" in script
-        assert "1 thumbs up, 1 thumbs down" in tmpl
-        assert "VERDICTS on the spoken script" not in plan
-        assert "VERDICTS on the hook template" not in script
-        assert "VERDICTS on the script plan" not in tmpl
+        # ADR 0124: plan and strategy prompts carry no per-element
+        # verdicts at all — whole-video verdict bundles are their only
+        # feedback (test_video_verdicts covers those reaching both).
+        assert "FOUNDER VERDICTS on the" not in captured["Creative plan"]
+        assert "FOUNDER VERDICTS on the" not in captured["Video strategy"]
+        assert "thumbs up" not in captured["Creative plan"]
+        assert "thumbs up" not in captured["Video strategy"]
+        # The template drafter's own unit behavior is unchanged: handed a
+        # component summary directly, it still renders it. No production
+        # caller hands it one any more (the test above this one pins that).
+        assert "1 thumbs up, 1 thumbs down" in captured["Brand templates"]
 
     def test_goal_verdict_sticks_to_the_goal_that_was_rated(self, api):
         """Switching goal after voting must not move the vote to the new goal."""
@@ -2382,7 +2388,7 @@ class TestStrategyRefusesBannedClaims:
             template={"name": "T", "required_assets": ["character_reference"]},
             angle=None, objective="ease_daily_moment",
             hook_seconds=2, total_duration=15, tone="", brand_voice="",
-            profile_feedback={}))
+            ))
 
     def test_clean_strategy_passes(self, monkeypatch):
         result = self._strategy(monkeypatch, "h", "One prompt helped me start writing.")

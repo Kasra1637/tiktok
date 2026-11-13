@@ -1147,6 +1147,30 @@ class TestCreativePlanBudget:
         assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000, 8000]
 
 
+def _worst_verdict_bundle(i):
+    """A verdict bundle with every field past the prompt builder's caps.
+
+    The section truncates hook/caption at 160 chars and the script at
+    260, and shows at most 6 hashtags, so a bundle built from longer
+    values renders at exactly the section's maximum line length.
+    """
+    return {
+        "hook_line": f"Hook {i} " + "h" * 200,
+        "script": f"Script {i} " + "s" * 320,
+        "caption": f"Caption {i} " + "c" * 200,
+        "hashtags": [f"#tag{i}{j}" + "t" * 14 for j in range(6)],
+        "cover_text": None,
+        "opening_visual": {"poster_url": None, "poster_path": "/api/media/posters/x.jpg",
+                           "template_id": f"template-{i}-with-a-long-name",
+                           "template_version": 3},
+        "audio": {"model": "Kling 2.1", "model_id": "kling-2.1",
+                  "voice_direction": None, "sound_direction": None},
+        "context": {"angle_id": None, "angle_kind": "problem",
+                    "objective": "demonstrate_feature", "duration_seconds": 18,
+                    "segment_role": "hook_story"},
+    }
+
+
 class TestStrategyBudget:
     @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
     def test_strategy_requests_selected_camera_and_setup_specific_final_beat(self, monkeypatch, camera_setup):
@@ -1502,7 +1526,7 @@ class TestStrategyBudget:
         truncated. The strategy schema is already the largest in the codebase
         and 4000 tokens produced a real production failure, so this measures a
         worst case -- every field filled to its cap, the approved plan attached,
-        feedback history and past performance all present -- and fails with the
+        whole-video verdict bundles at their prompt cap -- and fails with the
         measured number, so raising the ceiling is a decision made with the
         figure in hand rather than a shrug.
         """
@@ -1601,11 +1625,15 @@ class TestStrategyBudget:
             },
             objective="address_user_problem", hook_seconds=5,
             total_duration=30, tone="calm", brand_voice="plain, tired, warm",
-            profile_feedback={
-                "total": 200, "template_rejections": 9, "generation_rejections": 12,
-                "heavy_script_edits": 2,
-                "top_reasons": [{"reason": "hook_too_generic", "count": 7}],
-                "selected_template": {},
+            # The worst case for the one feedback section the prompt still
+            # carries (ADR 0124): verdict bundles at the prompt cap, three
+            # per side, every field past the section builder's truncation
+            # limits, so the rendered lines are at their true maximum.
+            verdict_feedback={
+                "total": 6, "up": 3, "down": 3, "ready": True,
+                "up_bundles": [_worst_verdict_bundle(i) for i in range(3)],
+                "down_bundles": [_worst_verdict_bundle(i) for i in range(3)],
+                "shared": {"templates": [], "angle_kinds": [], "objectives": []},
             },
             plan={
                 "hook_line": "h", "cta": "c", "feature_emphasis": "f",
@@ -1725,7 +1753,21 @@ class TestStrategyBudget:
         # feature names ('now reflections sound like me' — say 'what I
         # wrote' instead). The ceiling moves by a measured 1,000 to
         # 36,250, keeping ~620 of headroom.
-        CEILING = 36_250
+        #
+        # ADR 0124 raises it again, measured: 35,633 -> 40,816 (+5,183)
+        # for swapping the prompt's feedback section. The profile-feedback
+        # counts and the posted-performance note leave (~450 rendered
+        # chars), and the whole-video verdict section enters at its cap:
+        # six frozen bundles — three that worked, three that didn't — each
+        # rendered as one line with its fields truncated (hook/caption
+        # 160, script 260, six hashtags), plus the header that names the
+        # 5–7-verdict firming note. The bundles are the founder's own past
+        # words coming back as steering, which is the trade this makes:
+        # ~1,300 more prompt tokens against the same output budget, spent
+        # on the only feedback that can actually say what went out. The
+        # ceiling moves by a measured 5,250 to 41,500, keeping ~680 of
+        # headroom.
+        CEILING = 41_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

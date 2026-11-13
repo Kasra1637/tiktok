@@ -482,7 +482,7 @@ const apiStub = {
   // must answer everywhere the list does. Empty verdicts by default, exactly
   // like a render nobody rated; checks with rated rows override this with
   // their own saved state.
-  getGeneration: async (id) => ({ id, verdicts: {} }),
+  getGeneration: async (id) => ({ id, video_verdict: null, video_verdict: null }),
   retryGeneration: async () => SEGMENT,
   markProjectReady: async () => PROJECT_WITH_STRATEGY,
   recordSignal: () => {},
@@ -4649,10 +4649,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // The refinement cap is a terminus, not a pause: the fourth thumbs-down
-  // states the cap instead of generating, and the thumb must not stay
-  // pressed as if a plan were coming.
-  await check("the fourth thumbs-down states the cap instead of generating", async (ctx) => {
+  // The thumbs-down refine loop is gone (ADR 0124): Review carries no
+  // thumbs control at all, and a fresh plan comes only from the plan's
+  // own Regenerate button — never from a rating.
+  await check("Review offers no thumbs refine loop, only the plan button", async (ctx) => {
     let planCalls = 0;
     await withApi(
       {
@@ -4666,21 +4666,19 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          const down = () => ctx.container.querySelector('[data-testid="review-thumb-down"]');
-          if (!down()) throw new Error("Review has no thumbs-down control");
-          for (let i = 0; i < 3; i++) {
-            await clickEl(ctx, down(), `thumbs-down tap ${i + 1} missing`);
+          if (ctx.container.querySelector('[data-testid="review-thumb-loop"]')) {
+            throw new Error("the retired Review thumbs panel is back");
           }
-          if (planCalls !== 3) {
-            throw new Error(`expected 3 refinements, saw ${planCalls}`);
+          for (const side of ["up", "down"]) {
+            if (ctx.container.querySelector(`[data-testid="review-thumb-${side}"]`)) {
+              throw new Error(`Review still offers a thumbs-${side} refine control`);
+            }
           }
-          await clickEl(ctx, down(), "fourth thumbs-down missing");
-          expectText(ctx, "Three fresh plans", "the refinement cap is not stated");
-          if (down().getAttribute("aria-pressed") === "true") {
-            throw new Error("the capped thumbs-down stays pressed as if a plan were coming");
+          if (planCalls !== 0) {
+            throw new Error("opening Review generated a plan without its button");
           }
-          if (planCalls !== 3) {
-            throw new Error("the capped tap generated a fourth plan");
+          if (!buttonByText(ctx, /Regenerate plan/)) {
+            throw new Error("the plan's own Regenerate button is missing");
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -4689,9 +4687,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Each component's rating is filed under its own component, so it can only
-  // teach the AI step that produces it.
-  await check("plan and template thumbs are recorded under their own component", async (ctx) => {
+  // No per-element ratings anywhere in the create flow (ADR 0124): the
+  // goal, template, plan and script thumbs all came out together — the
+  // whole-video verdict in History is the only rating left.
+  await check("the create flow carries no per-element ratings", async (ctx) => {
     await withApi(
       { generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY },
       async () => {
@@ -4699,23 +4698,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         global.__SMOKE_THUMBS = [];
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review & submit");
-          const up = ctx.container.querySelector('[data-testid="review-thumb-up"]');
-          await clickEl(ctx, up, "Review has no thumbs-up control");
-          await openStep(ctx, "Audience & template");
-          const tUp = ctx.container.querySelector('[data-testid="template-feedback-thumb-down"]');
-          await clickEl(ctx, tUp, "Template step has no template rating");
-          await act(async () => {});
-          const steps = global.__SMOKE_THUMBS.map((t) => `${t.step}:${t.verdict}`);
-          if (!steps.includes("plan:1")) {
-            throw new Error(`plan thumbs-up not filed under plan: ${steps.join(", ")}`);
+          for (const step of ["Audience & template", "Review & submit"]) {
+            await openStep(ctx, step);
+            for (const testId of ["goal-feedback", "template-feedback", "script-feedback", "review-thumb"]) {
+              if (ctx.container.querySelector(`[data-testid^="${testId}"]`)) {
+                throw new Error(`the ${testId} rating is still offered on ${step}`);
+              }
+            }
           }
-          if (!steps.includes("template:-1")) {
-            throw new Error(`template thumbs-down not filed under template: ${steps.join(", ")}`);
+          if ((global.__SMOKE_THUMBS || []).length !== 0) {
+            throw new Error("walking the create flow recorded a rating nobody cast");
           }
-          const tpl = global.__SMOKE_THUMBS.find((t) => t.step === "template");
-          if (!tpl.refs.template_id) throw new Error("template rating does not name the template");
-          expectText(ctx, "Rating saved", "template rating gives no confirmation");
         } finally {
           global.__SMOKE_PARAMS = "";
           global.__SMOKE_THUMBS = [];
@@ -9050,14 +9043,14 @@ async function runAnalyticsChecks() {
     }
   });
 
-  await check("Analytics recommends the highest-reach Good-rated posted clip", async (ctx) => {
+  await check("Analytics recommends the highest-reach worked-verdict posted clip", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
         // Higher reach, but unrated: comparison only, never the recommendation.
-        { id: "viral", status: "completed", hook_line: "Unrated viral", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", verdicts: {} },
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "viral", status: "completed", hook_line: "Unrated viral", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", video_verdict: null },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "draft1" },
         // Rated Good but never posted: not eligible either.
-        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, verdicts: { video: 1 } },
+        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, video_verdict: "up" },
         { id: "failed", status: "failed", tiktok_views: 30000 },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
@@ -9077,8 +9070,8 @@ async function runAnalyticsChecks() {
   await check("Analytics stays silent with no qualifying clip", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "unrated", status: "completed", hook_line: "Unrated", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", verdicts: {} },
-        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, verdicts: { video: 1 } },
+        { id: "unrated", status: "completed", hook_line: "Unrated", tiktok_views: 20000, tiktok_url: "https://www.tiktok.com/@founder/video/9", video_verdict: null },
+        { id: "shelf", status: "completed", hook_line: "Shelf Good", tiktok_views: 500, video_verdict: "up" },
       ] }),
     });
     if (ctx.container.querySelector('[data-testid="analytics-next-take"]')) {
@@ -9091,8 +9084,8 @@ async function runAnalyticsChecks() {
       getGenerationHistory: async () => ({ generations: [
         // Highest reach on the shelf: shelved means set aside, so it stays
         // comparison and never becomes advice.
-        { id: "vault", status: "archived", hook_line: "Shelved winner", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/7", verdicts: { video: 1 }, studio_project_id: "draft0" },
-        { id: "live", status: "completed", hook_line: "Live Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/8", verdicts: { video: 1 }, studio_project_id: "draft2" },
+        { id: "vault", status: "archived", hook_line: "Shelved winner", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/7", video_verdict: "up", studio_project_id: "draft0" },
+        { id: "live", status: "completed", hook_line: "Live Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/8", video_verdict: "up", studio_project_id: "draft2" },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "draft0" }, { id: "draft2" }] }),
     });
@@ -9114,9 +9107,9 @@ async function runAnalyticsChecks() {
       await mountAnalytics(ctx, {
         getAppProfiles: async () => ({ profiles: [PROFILE, { id: "p2", brand_name: "Second", status: "approved" }] }),
         getGenerationHistory: async (params = {}) => ({ generations: params.brand_profile_id === "p2" ? [
-          { id: "p2top", status: "completed", hook_line: "Other app hit", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/2", verdicts: { video: 1 }, studio_project_id: "draftP2" },
+          { id: "p2top", status: "completed", hook_line: "Other app hit", tiktok_views: 50000, tiktok_url: "https://www.tiktok.com/@founder/video/2", video_verdict: "up", studio_project_id: "draftP2" },
         ] : [
-          { id: "p1top", status: "completed", hook_line: "This app Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", verdicts: { video: 1 }, studio_project_id: "draftP1" },
+          { id: "p1top", status: "completed", hook_line: "This app Good", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", video_verdict: "up", studio_project_id: "draftP1" },
         ] }),
         getStudioProjects: async () => ({ projects: [{ id: "draftP1" }, { id: "draftP2" }] }),
       });
@@ -9134,7 +9127,7 @@ async function runAnalyticsChecks() {
   await check("Analytics never links a deleted draft from the recommendation", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "ghost" },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "ghost" },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "something-else" }] }),
     });
@@ -9153,7 +9146,7 @@ async function runAnalyticsChecks() {
   await check("Analytics keeps Reuse draft when draft verification fails", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "draft1" },
       ] }),
       getStudioProjects: async () => { throw new Error("offline"); },
     });
@@ -9169,8 +9162,8 @@ async function runAnalyticsChecks() {
   await check("Analytics names the winner CTA Another take like this", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "win", status: "completed", hook_line: "Winner clip", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", verdicts: { video: 1 }, studio_project_id: "wd1" },
-        { id: "plain", status: "completed", hook_line: "Plain clip", tiktok_views: 100, tiktok_url: "https://www.tiktok.com/@founder/video/2", verdicts: {}, studio_project_id: "wd2" },
+        { id: "win", status: "completed", hook_line: "Winner clip", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/1", video_verdict: "up", studio_project_id: "wd1" },
+        { id: "plain", status: "completed", hook_line: "Plain clip", tiktok_views: 100, tiktok_url: "https://www.tiktok.com/@founder/video/2", video_verdict: null, studio_project_id: "wd2" },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "wd1" }, { id: "wd2" }] }),
     });
@@ -9191,12 +9184,12 @@ async function runAnalyticsChecks() {
     }
   });
 
-  await check("clip results compare reach, posted links and votes without inferring conversions", async (ctx) => {
+  await check("clip results compare reach, posted links and verdicts without inferring conversions", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
         { id: "missing", status: "completed", segment_role: "demo_cta" },
-        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, verdicts: { video: -1 } },
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, video_verdict: "down" },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "draft1" },
         { id: "failed", status: "failed", tiktok_views: 10000 },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
@@ -9208,8 +9201,8 @@ async function runAnalyticsChecks() {
     for (const copy of ["1 posted", "2 with recorded views", "2 rated", "not installs, revenue, or conversions", "different posting dates", "never a view threshold"]) {
       if (!card.textContent.includes(copy)) throw new Error(`missing factual result/caveat: ${copy}`);
     }
-    if (!rows[0].textContent.includes("9,000") || !rows[0].textContent.includes("Good")) throw new Error("reach/vote missing");
-    if (!rows[1].textContent.includes("Not posted") || !rows[1].textContent.includes("Not good")) throw new Error("negative vote hidden");
+    if (!rows[0].textContent.includes("9,000") || !rows[0].textContent.includes("Worked")) throw new Error("reach/verdict missing");
+    if (!rows[1].textContent.includes("Not posted") || !rows[1].textContent.includes("Didn't work")) throw new Error("negative verdict hidden");
     if (!rows[2].textContent.includes("Not recorded") || !rows[2].textContent.includes("Unassigned app")) throw new Error("missing data invented");
     if (!card.querySelector('a[href="/create?project=draft1"]') || !card.querySelector('a[href$="#generation-top"]')) throw new Error("reuse/review link lost provenance");
   });
@@ -9220,9 +9213,9 @@ async function runAnalyticsChecks() {
   await check("clip results render a visual leaderboard with scaled view bars", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
-        { id: "mid", status: "completed", hook_line: "Middle", tiktok_views: 3000, verdicts: {} },
-        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, verdicts: { video: -1 } },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "draft1" },
+        { id: "mid", status: "completed", hook_line: "Middle", tiktok_views: 3000, video_verdict: null },
+        { id: "zero", status: "completed", hook_line: "Zero is recorded", tiktok_views: 0, video_verdict: "down" },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
     });
@@ -9651,7 +9644,7 @@ async function runAnalyticsChecks() {
   await check("clip views carry their recorded date, never a bare count", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
-        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_views_at: dayAgo, tiktok_url: "https://www.tiktok.com/@founder/video/123", verdicts: { video: 1 }, studio_project_id: "draft1" },
+        { id: "top", status: "completed", hook_line: "A good opening", tiktok_views: 9000, tiktok_views_at: dayAgo, tiktok_url: "https://www.tiktok.com/@founder/video/123", video_verdict: "up", studio_project_id: "draft1" },
       ] }),
       getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
     });
@@ -11364,24 +11357,21 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // The vote already saves; this is the visual restore after a reload. The
-  // panel reads the verdicts riding on the generation it already fetched, so
-  // no extra request is needed and none may be recorded by the mount itself.
+  // No rating on the render in the studio (ADR 0124): the panel used to
+  // carry its own video thumbs — a second whole-video judgment beside
+  // History's. Even a render carrying a saved verdict shows no thumbs
+  // here; the one verdict lives on its History card.
   await check(
-    "a finished render restores its saved video thumb without a new vote",
+    "a finished render shows no video rating in the studio panel",
     async (ctx) => {
       global.__SMOKE_THUMBS = [];
       try {
-        await mountStudio(ctx, [{ ...COMPLETED, verdicts: { video: -1 } }]);
-        const down = ctx.container.querySelector(
-          '[data-testid="video-feedback-thumb-down"]'
-        );
-        if (!down) throw new Error("the post-render video thumb is missing");
-        if (down.getAttribute("aria-pressed") !== "true") {
-          throw new Error("a saved thumbs-down on the video is not highlighted");
+        await mountStudio(ctx, [{ ...COMPLETED, video_verdict: "down" }]);
+        if (ctx.container.querySelector('[data-testid^="video-feedback"]')) {
+          throw new Error("the post-render video thumbs are back in the studio panel");
         }
         if ((global.__SMOKE_THUMBS || []).length !== 0) {
-          throw new Error("restoring the highlight recorded a vote that was never cast");
+          throw new Error("mounting the panel recorded a vote that was never cast");
         }
       } finally {
         global.__SMOKE_THUMBS = [];
@@ -14919,11 +14909,11 @@ async function runDemoCtaChecks() {
         // Order is the priority, and it used to be inverted: provenance chips
         // led, so the dimmest, least glance-relevant line came first and the
         // loudest one (the hook) sat third from last. Identity, headline,
-        // results, the joined finished → posted journey line, provenance —
-        // in that order, as five blocks.
+        // results, the joined finished → posted journey line, the whole-video
+        // verdict, provenance — in that order, as six blocks.
         const blocks = [...summary.children];
-        if (blocks.length !== 5) {
-          throw new Error(`the summary should read as five blocks, saw ${blocks.length}`);
+        if (blocks.length !== 6) {
+          throw new Error(`the summary should read as six blocks, saw ${blocks.length}`);
         }
         if (!blocks[0].textContent.includes("Journal") || !blocks[0].textContent.includes("Completed")) {
           throw new Error("the summary does not open with app identity and its status");
@@ -14937,7 +14927,10 @@ async function runDemoCtaChecks() {
         if (blocks[3].getAttribute("data-testid") !== "history-journey-dense-1") {
           throw new Error("the joined journey line does not follow the results line");
         }
-        if (blocks[4].tagName !== "P" || !blocks[4].textContent.includes("script v")) {
+        if (blocks[4].getAttribute("data-testid") !== "history-verdict-dense-1") {
+          throw new Error("the whole-video verdict does not follow the journey line");
+        }
+        if (blocks[5].tagName !== "P" || !blocks[5].textContent.includes("script v")) {
           throw new Error("provenance must trail the summary as a line, not a chip run");
         }
         // Identity lives once under the clip: the record beside it must not repeat the headline.
@@ -15089,6 +15082,7 @@ async function runDemoCtaChecks() {
         return { tiktok_views: count };
       },
       setTikTokLink: async (_id, link) => ({ tiktok_url: link || null }),
+      setVideoVerdict: async (_id, verdict) => ({ video_verdict: verdict }),
       recordFeedback: async () => ({}),
     }, async () => {
       await mount(GenerationHistory)(ctx);
@@ -15113,8 +15107,8 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
       expectText(ctx, "Views could not save");
       if (!onCard("history-summary").textContent.includes("1,200 views")) throw new Error("failed save changed confirmed list state");
-      await clickEl(ctx, inPanel("history-video-feedback-sync-low-thumb-up"));
-      if (!onCard("history-summary").textContent.includes("Winner")) throw new Error("saved vote did not update list");
+      await clickEl(ctx, onCard("history-verdict-sync-low-up"));
+      if (!onCard("history-summary").textContent.includes("Winner")) throw new Error("saved verdict did not update list");
       await clickEl(ctx, inPanel("history-tiktok-clear-sync-low"));
       if (!onCard("history-summary").textContent.includes("Not posted") || onCard("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
       await typeInto(ctx, inPanel("history-tiktok-input-sync-low"), first.tiktok_url);
@@ -15320,16 +15314,16 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History keeps the saved vote when its refresh fails", async (ctx) => {
+  await check("History keeps the saved verdict when its refresh fails", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     await withApi({
-      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "vote-1", verdicts: { video: 1 }, audience: "Night scrollers" }] }),
+      getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "vote-1", video_verdict: "up", audience: "Night scrollers" }] }),
       getAppProfiles: async () => ({ profiles: [PROFILE] }),
       getGeneration: async () => { throw new Error("Vote refresh unavailable"); },
     }, async () => {
       await mount(History)(ctx);
-      if (!ctx.text().includes("Your vote: Good")) {
-        throw new Error("a failed vote refresh hid the saved vote");
+      if (!ctx.text().includes("Your verdict: worked")) {
+        throw new Error("a failed verdict refresh hid the saved verdict");
       }
     });
   });
@@ -15382,42 +15376,40 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("ratings serialize saves and ignore a response for a replaced item", async (ctx) => {
-    const { ComponentThumbs } = load("components/ComponentThumbs.jsx");
+  await check("verdict saves serialize and ignore a superseded response", async (ctx) => {
+    const { VideoVerdict } = load("components/VideoVerdict.jsx");
     let finish;
     let calls = 0;
-    const voted = [];
-    await withApi({ recordFeedback: () => { calls++; return new Promise(resolve => { finish = resolve; }); } }, async () => {
-      const props = { component: "video", resetKey: "first", initialValue: 1, onVoted: (...args) => voted.push(args), testId: "race-rating" };
-      await mount(ComponentThumbs, props)(ctx);
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="race-rating-thumb-down"]'));
-      const up = ctx.container.querySelector('[data-testid="race-rating-thumb-up"]');
-      if (!up.disabled) throw new Error("a second save can race the first");
-      await clickEl(ctx, up);
-      if (calls !== 1) throw new Error("duplicate rating submitted");
-      await mount(ComponentThumbs, { ...props, resetKey: "second", initialValue: 0 })(ctx);
-      await act(async () => finish({}));
-      if (voted.length) throw new Error("old item completion notified new item");
-      if (ctx.container.querySelector('[aria-pressed="true"]')) throw new Error("old vote leaked to new item");
+    const changed = [];
+    await withApi({ setVideoVerdict: () => { calls++; return new Promise(resolve => { finish = resolve; }); } }, async () => {
+      await mount(VideoVerdict, { generationId: "race-1", value: "up", onChanged: (v) => changed.push(v) })(ctx);
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-verdict-race-1-down"]'));
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="history-verdict-race-1-up"]'));
+      if (calls !== 1) throw new Error("a second verdict tap raced the in-flight save");
+      await mount(VideoVerdict, { generationId: "race-2", value: null, onChanged: (v) => changed.push(v) })(ctx);
+      await act(async () => finish({ video_verdict: "down" }));
+      if (changed.length) throw new Error("a superseded verdict response notified for the replaced item");
+      if (ctx.container.querySelector('[aria-pressed="true"]')) throw new Error("the old verdict leaked to the new item");
     });
   });
 
-  await check("failed ratings restore the last confirmed vote and remain retryable", async (ctx) => {
-    const { ComponentThumbs } = load("components/ComponentThumbs.jsx");
+  await check("failed verdict saves restore the last confirmed verdict and remain retryable", async (ctx) => {
+    const { VideoVerdict } = load("components/VideoVerdict.jsx");
     let fail = false;
-    const voted = [];
-    await withApi({ recordFeedback: async () => { if (fail) throw new Error("offline"); return {}; } }, async () => {
-      await mount(ComponentThumbs, { component: "video", resetKey: "confirmed", initialValue: 0, onVoted: (...args) => voted.push(args), testId: "failed-rating" })(ctx);
-      const get = (direction) => ctx.container.querySelector(`[data-testid="failed-rating-thumb-${direction}"]`);
+    const changed = [];
+    await withApi({ setVideoVerdict: async (_id, verdict) => { if (fail) throw new Error("offline"); return { video_verdict: verdict }; } }, async () => {
+      await mount(VideoVerdict, { generationId: "failed-1", value: null, onChanged: (v) => changed.push(v) })(ctx);
+      const get = (side) => ctx.container.querySelector(`[data-testid="history-verdict-failed-1-${side}"]`);
       await clickEl(ctx, get("up"));
+      if (changed.length !== 1) throw new Error("the confirmed verdict did not notify");
       fail = true;
       await clickEl(ctx, get("down"));
-      if (get("up").getAttribute("aria-pressed") !== "true" || get("down").disabled) throw new Error("failed save lost confirmed vote or blocked retry");
-      expectText(ctx, "Could not save your rating");
-      if (voted.length !== 1) throw new Error("failed save notified parent");
+      if (get("up").getAttribute("aria-pressed") !== "true") throw new Error("a failed save lost the confirmed verdict");
+      expectText(ctx, "Could not save your verdict");
+      if (changed.length !== 1) throw new Error("a failed save notified the parent");
       fail = false;
       await clickEl(ctx, get("down"));
-      if (voted.length !== 2 || get("down").getAttribute("aria-pressed") !== "true") throw new Error("retry did not save");
+      if (changed.length !== 2 || get("down").getAttribute("aria-pressed") !== "true") throw new Error("the retry did not save");
     });
   });
 
@@ -15898,12 +15890,13 @@ async function runDemoCtaChecks() {
     }
   });
 
-  // One vote per render: the primary video vote only, no per-part ratings.
+  // One verdict per render: the whole-video verdict only, no part ratings.
   await check(
-    "History offers one primary video vote and no part ratings",
+    "History offers one whole-video verdict and no part ratings",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
+      const verdictCalls = [];
       try {
         await withApi(
           {
@@ -15922,23 +15915,35 @@ async function runDemoCtaChecks() {
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
+            setVideoVerdict: async (id, verdict) => {
+              verdictCalls.push(`${id}:${verdict}`);
+              return { video_verdict: verdict };
+            },
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
-            const videoUp = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+            const verdictUp = ctx.container.querySelector(
+              `[data-testid="history-verdict-${COMPLETED.id}-up"]`
             );
-            if (!videoUp) {
-              throw new Error("History is missing the primary video vote");
+            if (!verdictUp) {
+              throw new Error("History is missing the whole-video verdict");
             }
-            if (!ctx.container.textContent.includes("Rate this render")) {
-              throw new Error("the primary vote lost its Rate this render heading");
+            if (!ctx.container.textContent.includes("Did this one work?")) {
+              throw new Error("the verdict lost its Did this one work? heading");
             }
-            if (ctx.container.textContent.includes("Did this render land?")) {
-              throw new Error("the retired Did this render land? heading is back in the vote box");
+            if (!verdictUp.textContent.includes("This one worked")) {
+              throw new Error("the verdict's up side lost its plain label");
             }
-            if (!/h-11/.test(videoUp.className)) {
-              throw new Error("the primary video vote lost its size");
+            const verdictDown = ctx.container.querySelector(
+              `[data-testid="history-verdict-${COMPLETED.id}-down"]`
+            );
+            if (!verdictDown || !verdictDown.textContent.includes("didn")) {
+              throw new Error("the verdict's down side lost its plain label");
+            }
+            if (ctx.container.querySelector(
+              `[data-testid="history-video-feedback-${COMPLETED.id}"]`
+            )) {
+              throw new Error("the retired per-render thumbs are still on the card");
             }
             if (ctx.container.querySelector(
               `[data-testid="history-parts-feedback-${COMPLETED.id}"]`
@@ -15952,10 +15957,12 @@ async function runDemoCtaChecks() {
                 throw new Error(`History still offers a thumbs-up for ${part}`);
               }
             }
-            await clickEl(ctx, videoUp, "click video thumbs-up");
-            const recorded = global.__SMOKE_THUMBS.map((t) => `${t.step}:${t.verdict}`);
-            if (recorded.join(",") !== "video:1") {
-              throw new Error(`voting should file exactly video:1, got ${recorded.join(",")}`);
+            await clickEl(ctx, verdictUp, "click This one worked");
+            if (verdictCalls.join(",") !== `${COMPLETED.id}:up`) {
+              throw new Error(`the verdict should file exactly one up call, got ${verdictCalls.join(",")}`);
+            }
+            if ((global.__SMOKE_THUMBS || []).length !== 0) {
+              throw new Error("the verdict filed a per-element thumb event");
             }
           }
         );
@@ -15965,14 +15972,15 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // Votes save already; this is the visual restore. A founder returning to a
-  // rated render must see their thumbs still pressed, without the mount
-  // itself recording a single new event.
+  // Verdicts save already; this is the visual restore. A founder returning
+  // to a judged render must see their verdict still pressed, without the
+  // mount itself recording a single new event.
   await check(
-    "History restores saved thumb highlights without recording new votes",
+    "History restores the saved verdict highlight without recording new votes",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
+      let verdictCalls = 0;
       try {
         await withApi(
           {
@@ -15983,31 +15991,32 @@ async function runDemoCtaChecks() {
                   brand_name: "Test App",
                   duration: 10,
                   audience: "Night scrollers",
-                  verdicts: { video: 1 },
+                  video_verdict: "up",
                 },
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getGeneration: async () => ({ verdicts: { video: 1 } }),
+            getGeneration: async () => ({ video_verdict: "up" }),
+            setVideoVerdict: async () => { verdictCalls += 1; return {}; },
                 },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             const up = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+              `[data-testid="history-verdict-${COMPLETED.id}-up"]`
             );
             if (!up) {
-              throw new Error("History is missing the saved video vote");
+              throw new Error("History is missing the saved verdict");
             }
             if (up.getAttribute("aria-pressed") !== "true") {
-              throw new Error("a saved thumbs-up on the video is not highlighted");
+              throw new Error("a saved worked verdict is not highlighted");
             }
             if (ctx.container.querySelector(
               `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-down"]`
             )) {
-              throw new Error("a removed part vote still renders beside the video vote");
+              throw new Error("a removed part vote still renders beside the verdict");
             }
-            if ((global.__SMOKE_THUMBS || []).length !== 0) {
-              throw new Error("restoring highlights recorded votes that were never cast");
+            if (verdictCalls !== 0 || (global.__SMOKE_THUMBS || []).length !== 0) {
+              throw new Error("restoring the highlight recorded votes that were never cast");
             }
           }
         );
@@ -16017,11 +16026,12 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // Per-part ratings are gone: even a render with saved part verdicts shows
-  // no disclosure and no part thumbs, while the video vote keeps its
-  // unmistakable selected state. Old part rows stay stored server-side.
+  // Per-part ratings are gone: even a render with saved part verdicts in
+  // the legacy record shows no disclosure and no part thumbs, while the
+  // whole-video verdict keeps its unmistakable selected state. Old part
+  // rows stay stored server-side; they simply render nowhere.
   await check(
-    "History carries no per-part disclosure and keeps the video highlight",
+    "History carries no per-part disclosure and keeps the verdict highlight",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -16035,12 +16045,12 @@ async function runDemoCtaChecks() {
                   brand_name: "Test App",
                   duration: 10,
                   audience: "Night scrollers",
-                  verdicts: { video: 1, goal: -1, plan: 1 },
+                  verdicts: { goal: -1, plan: 1 }, video_verdict: "up",
                 },
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getGeneration: async () => ({ verdicts: { video: 1, goal: -1, plan: 1 } }),
+            getGeneration: async () => ({ verdicts: { goal: -1, plan: 1 }, video_verdict: "up" }),
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
@@ -16060,13 +16070,13 @@ async function runDemoCtaChecks() {
               }
             }
             const up = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+              `[data-testid="history-verdict-${COMPLETED.id}-up"]`
             );
             if (!up) {
-              throw new Error("History lost the primary video vote with the parts");
+              throw new Error("History lost the whole-video verdict with the parts");
             }
             if (up.getAttribute("aria-pressed") !== "true" || !up.classList.contains("thumb-selected")) {
-              throw new Error("a saved video thumbs-up is not unmistakably selected");
+              throw new Error("a saved worked verdict is not unmistakably selected");
             }
             const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
             if (!css.includes(".thumb-pair .thumb-selected")) {
@@ -16075,14 +16085,14 @@ async function runDemoCtaChecks() {
             if (!css.includes(".thumb-pair > button:focus-visible")) {
               throw new Error("the thumb keyboard focus ring is not defined where it ships");
             }
-            if (!css.includes(".history-vote-block .thumb-pair .thumb-selected:focus-visible")) {
-              throw new Error("a focused selected thumb is indistinguishable from a selected one");
+            if (!css.includes('[data-testid="history-summary"] .thumb-pair .thumb-selected:focus-visible')) {
+              throw new Error("a focused selected verdict is indistinguishable from a selected one");
             }
             const voteBlock = ctx.container.querySelector(
               `[data-testid="history-feedback-${COMPLETED.id}"]`
             );
             if (!voteBlock || !voteBlock.classList.contains("history-vote-block")) {
-              throw new Error("the History vote block is missing its focus scope");
+              throw new Error("the History record block is missing");
             }
           }
         );
@@ -16092,13 +16102,15 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // Changing a saved vote must move the highlight at once: the other option
-  // presses, the old one releases, and exactly one change event is filed.
+  // Changing a saved verdict must move the highlight at once: the other
+  // side presses, the old one releases, and exactly one replace call is
+  // filed — the verdict endpoint replaces, never stacks.
   await check(
-    "History moves the highlight immediately when a saved vote is changed",
+    "History moves the highlight immediately when a saved verdict is changed",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
+      const verdictCalls = [];
       try {
         await withApi(
           {
@@ -16109,37 +16121,43 @@ async function runDemoCtaChecks() {
                   brand_name: "Test App",
                   duration: 10,
                   audience: "Night scrollers",
-                  verdicts: { video: 1 },
+                  video_verdict: "up",
                 },
               ],
             }),
             getAppProfiles: async () => ({ profiles: [PROFILE] }),
-            getGeneration: async () => ({ verdicts: { video: 1 } }),
+            getGeneration: async () => ({ video_verdict: "up" }),
+            setVideoVerdict: async (id, verdict) => {
+              verdictCalls.push(`${id}:${verdict}`);
+              return { video_verdict: verdict };
+            },
           },
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             const up = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+              `[data-testid="history-verdict-${COMPLETED.id}-up"]`
             );
             const down = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
+              `[data-testid="history-verdict-${COMPLETED.id}-down"]`
             );
             if (!up || !down) {
-              throw new Error("History is missing the saved video vote");
+              throw new Error("History is missing the saved verdict");
             }
             if (up.getAttribute("aria-pressed") !== "true") {
-              throw new Error("the saved video thumbs-up is not highlighted before the change");
+              throw new Error("the saved worked verdict is not highlighted before the change");
             }
-            await clickEl(ctx, down, "change the video vote to thumbs-down");
+            await clickEl(ctx, down, "change the verdict to didn't work");
             if (down.getAttribute("aria-pressed") !== "true") {
-              throw new Error("the newly chosen thumbs-down is not highlighted");
+              throw new Error("the newly chosen didn't-work verdict is not highlighted");
             }
             if (up.getAttribute("aria-pressed") === "true") {
-              throw new Error("the old thumbs-up stayed highlighted after the change");
+              throw new Error("the old worked verdict stayed highlighted after the change");
             }
-            const recorded = (global.__SMOKE_THUMBS || []).map((t) => `${t.step}:${t.verdict}`);
-            if (recorded.join(",") !== "video:-1") {
-              throw new Error(`changing the vote should file exactly video:-1, got ${recorded.join(",")}`);
+            if (verdictCalls.join(",") !== `${COMPLETED.id}:down`) {
+              throw new Error(`changing the verdict should file exactly one down call, got ${verdictCalls.join(",")}`);
+            }
+            if ((global.__SMOKE_THUMBS || []).length !== 0) {
+              throw new Error("changing the verdict filed a per-element thumb event");
             }
           }
         );
@@ -16149,11 +16167,12 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // The list's verdicts go stale the moment a vote lands anywhere else, so
-  // the drawer revalidates on every expand: fresh server state wins, and a
-  // failed refetch keeps the list's verdicts instead of blanking the thumbs.
+  // The list's verdict can go stale the moment a judgment lands anywhere
+  // else, so the attached record revalidates on mount: the Winner badge
+  // follows the fresh server verdict, and a failed refetch keeps the
+  // list's verdict everywhere instead of blanking it.
   await check(
-    "History refetches a render's votes when its drawer opens",
+    "History revalidates the verdict behind the Winner badge on mount",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -16162,9 +16181,10 @@ async function runDemoCtaChecks() {
         brand_name: "Test App",
         duration: 10,
         audience: "Night scrollers",
-        verdicts: { video: 1 },
+        tiktok_url: "https://www.tiktok.com/@founder/video/123",
+        video_verdict: "up",
       };
-      const fresh = { ...row, verdicts: { video: -1 } };
+      const fresh = { ...row, video_verdict: "down" };
       try {
         await withApi(
           {
@@ -16175,14 +16195,10 @@ async function runDemoCtaChecks() {
           async () => {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             await act(async () => {});
-            const down = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-down"]`
-            );
-            if (!down) {
-              throw new Error("History is missing the revalidated video vote");
-            }
-            if (down.getAttribute("aria-pressed") !== "true" || !down.classList.contains("thumb-selected")) {
-              throw new Error("the drawer kept the stale list vote instead of the fresh server vote");
+            if (ctx.container.querySelector(
+              `[data-testid="history-winner-${COMPLETED.id}"]`
+            )) {
+              throw new Error("the record kept the stale Winner badge instead of the fresh verdict");
             }
             if (ctx.container.querySelector(
               `[data-testid="history-goal-feedback-${COMPLETED.id}-thumb-up"]`
@@ -16190,7 +16206,7 @@ async function runDemoCtaChecks() {
               throw new Error("a removed part vote reappeared on revalidation");
             }
             if ((global.__SMOKE_THUMBS || []).length !== 0) {
-              throw new Error("revalidating votes recorded votes that were never cast");
+              throw new Error("revalidating the verdict recorded votes that were never cast");
             }
           }
         );
@@ -16200,10 +16216,10 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // A refetch that fails must leave the list's verdicts showing: the drawer
-  // degrades to possibly-stale highlights, never to blank thumbs.
+  // A refetch that fails must leave the list's verdict showing: the record
+  // degrades to a possibly-stale highlight, never to a blank verdict.
   await check(
-    "History keeps the list votes when the vote refetch fails",
+    "History keeps the list verdict when the verdict refetch fails",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       global.__SMOKE_THUMBS = [];
@@ -16217,7 +16233,8 @@ async function runDemoCtaChecks() {
                   brand_name: "Test App",
                   duration: 10,
                   audience: "Night scrollers",
-                  verdicts: { video: 1 },
+                  tiktok_url: "https://www.tiktok.com/@founder/video/123",
+                  video_verdict: "up",
                 },
               ],
             }),
@@ -16228,13 +16245,18 @@ async function runDemoCtaChecks() {
             await mount(GenerationHistory, { onChanged: () => {} })(ctx);
             await act(async () => {});
             const up = ctx.container.querySelector(
-              `[data-testid="history-video-feedback-${COMPLETED.id}-thumb-up"]`
+              `[data-testid="history-verdict-${COMPLETED.id}-up"]`
             );
             if (!up) {
-              throw new Error("History is missing the video vote after a failed refetch");
+              throw new Error("History is missing the verdict after a failed refetch");
             }
             if (up.getAttribute("aria-pressed") !== "true" || !up.classList.contains("thumb-selected")) {
-              throw new Error("a failed refetch cleared the list's saved highlight");
+              throw new Error("a failed refetch cleared the list's saved verdict highlight");
+            }
+            if (!ctx.container.querySelector(
+              `[data-testid="history-winner-${COMPLETED.id}"]`
+            )) {
+              throw new Error("a failed refetch dropped the Winner badge the list verdict earned");
             }
           }
         );
@@ -16569,7 +16591,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-win", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "wd1", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
+            generations: [{ ...COMPLETED, id: "gen-win", hook_line: "A winner", video_verdict: "up", tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "wd1", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           getStudioProjects: async () => ({ projects: [{ id: "wd1" }] }),
@@ -16599,7 +16621,7 @@ async function runDemoCtaChecks() {
       await withApi(
         {
           getGenerationHistory: async () => ({
-            generations: [{ ...COMPLETED, id: "gen-ghost", hook_line: "A winner", verdicts: { video: 1 }, tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "ghost", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
+            generations: [{ ...COMPLETED, id: "gen-ghost", hook_line: "A winner", video_verdict: "up", tiktok_url: "https://www.tiktok.com/@founder/video/5", tiktok_views: 9000, studio_project_id: "ghost", brand_name: "Test App", duration: 10, audience: "Night scrollers" }],
           }),
           getAppProfiles: async () => ({ profiles: [PROFILE] }),
           getStudioProjects: async () => ({ projects: [{ id: "something-else" }] }),

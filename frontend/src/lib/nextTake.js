@@ -1,12 +1,11 @@
-import { verdictFor } from "./feedback";
-
 /**
- * The winner rule both surfaces share (ADR 0032): a thumbs up on the render
- * plus its posted link. A link alone carries no weight, and a vote alone is
- * judgment without proof of shipping — only the pair counts, everywhere.
+ * The winner rule both surfaces share (ADR 0032, verdict per ADR 0124):
+ * a "worked" verdict on the whole finished video plus its posted link.
+ * A link alone carries no weight, and a verdict alone is judgment
+ * without proof of shipping — only the pair counts, everywhere.
  */
 export function isWinnerRow(row) {
-  return verdictFor(row?.verdicts, "video") > 0 && !!row?.tiktok_url;
+  return row?.video_verdict === "up" && !!row?.tiktok_url;
 }
 
 /**

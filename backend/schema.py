@@ -1037,8 +1037,29 @@ async def _migration_0002_jobs(conn):
     await conn.commit()
 
 
+async def _migration_0003_video_verdicts(conn):
+    """Whole-video verdicts (ADR 0124): one current verdict per finished
+    video per user, each carrying the frozen bundle of everything that
+    went out with that render — the snapshot generation learns from."""
+    await conn.executescript("""
+        CREATE TABLE IF NOT EXISTS video_verdicts (
+            generation_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            verdict TEXT NOT NULL,
+            bundle TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            PRIMARY KEY (generation_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_verdicts_user
+            ON video_verdicts (user_id, updated_at);
+    """)
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
+    (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
 )
 
 

@@ -1476,14 +1476,14 @@ h1,
     box-shadow: 0 0 0 3px var(--indigo-15);
 }
 
-/* ---------- History vote-block focus, distinct from selection ----------
+/* ---------- History verdict focus, distinct from selection ----------
    History-only: the generic thumb halo above is identical to the selected
-   halo, so a focused-but-already-chosen thumb read as merely chosen. Here
-   keyboard focus on a selected thumb adds a second, offset outline in solid
-   brand indigo that selection alone never draws. An unselected focused thumb
-   keeps the generic halo, which is unambiguous there because no fill
-   competes with it. */
-.history-vote-block .thumb-pair .thumb-selected:focus-visible {
+   halo, so a focused-but-already-chosen verdict button read as merely
+   chosen. Here keyboard focus on a selected verdict adds a second, offset
+   outline in solid brand indigo that selection alone never draws. An
+   unselected focused button keeps the generic halo, which is unambiguous
+   there because no fill competes with it. */
+[data-testid="history-summary"] .thumb-pair .thumb-selected:focus-visible {
     outline: 2px solid var(--brand-indigo);
     outline-offset: 3px;
 }

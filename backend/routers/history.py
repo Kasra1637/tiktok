@@ -36,7 +36,10 @@ import posters
 import storage_service
 import video_providers
 from auth import get_current_user_id
-from models import PerformanceSnapshotRequest, TikTokLinkRequest, TikTokViewsRequest, now_iso
+from models import (
+    PerformanceSnapshotRequest, TikTokLinkRequest, TikTokViewsRequest,
+    VideoVerdictRequest, now_iso,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +206,8 @@ async def get_generation(generation_id: str, user_id: str = Depends(get_current_
         raise HTTPException(status_code=404, detail="Generation not found")
     detail = _public_generation_detail(row)
     detail["performance_snapshot"] = await _latest_performance_snapshot(generation_id)
+    verdicts = await _video_verdicts([generation_id], user_id)
+    detail["video_verdict"] = (verdicts.get(generation_id) or {}).get("verdict")
     return await _with_verdicts(detail, user_id)
 
 
@@ -660,11 +665,44 @@ async def _posted_performance_rows(brand_profile_id, user_id):
     return posted
 
 
+async def _video_verdicts(generation_ids, user_id):
+    """Current whole-video verdicts for a set of generations, one query.
+
+    Returns {generation_id: {"verdict": "up"|"down", "bundle": {...}}} —
+    the founder's one verdict per video (ADR 0124), with the frozen bundle
+    it was cast on. Generations without a verdict are simply absent.
+    """
+    ids = [g for g in generation_ids if g]
+    if not ids:
+        return {}
+    placeholders = ", ".join("?" for _ in ids)
+    rows = await _fetch_all(
+        f"SELECT generation_id, verdict, bundle FROM video_verdicts "
+        f"WHERE user_id = ? AND generation_id IN ({placeholders})",
+        (user_id, *ids),
+    )
+    verdicts = {}
+    for row in rows:
+        bundle = row.get("bundle")
+        if isinstance(bundle, str):
+            try:
+                bundle = json.loads(bundle)
+            except (TypeError, ValueError):
+                bundle = None
+        verdicts[row["generation_id"]] = {
+            "verdict": row.get("verdict"),
+            "bundle": bundle if isinstance(bundle, dict) else {},
+        }
+    return verdicts
+
+
 async def _generation_detail(generation_id, user_id):
     """The detail payload with its latest performance snapshot attached."""
     row = await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
     detail = _public_generation_detail(row)
     detail["performance_snapshot"] = await _latest_performance_snapshot(generation_id)
+    verdicts = await _video_verdicts([generation_id], user_id)
+    detail["video_verdict"] = (verdicts.get(generation_id) or {}).get("verdict")
     return await _with_verdicts(detail, user_id)
 
 
@@ -783,6 +821,54 @@ async def set_generation_performance_snapshot(
     return await _generation_detail(generation_id, user_id)
 
 
+@router.post("/generations/{generation_id}/verdict")
+async def set_generation_video_verdict(
+    generation_id: str, payload: VideoVerdictRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Set, replace or clear the founder's one verdict on a whole video.
+
+    The verdict judges the video exactly as it went out (ADR 0124), so
+    setting one freezes a bundle of that render — its spoken words, post
+    caption and hashtags, opening visual and audio identity — copied from
+    the generation and its project at this moment. Later edits or a
+    regenerated post kit never rewrite a stored bundle: what was judged
+    stays what was judged. One current verdict per video per user:
+    setting replaces, and a null verdict clears.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    if payload.verdict is None:
+        await _execute(
+            "DELETE FROM video_verdicts WHERE generation_id = ? AND user_id = ?",
+            (generation_id, user_id),
+        )
+        return await _generation_detail(generation_id, user_id)
+    project = None
+    angle_kind = ""
+    if row.get("studio_project_id"):
+        project = await _fetch_one(
+            "SELECT * FROM studio_projects WHERE id = ?", (row["studio_project_id"],))
+        if project and project.get("content_angle_id"):
+            angle = await _fetch_one(
+                "SELECT kind FROM content_angles WHERE id = ?",
+                (project["content_angle_id"],))
+            angle_kind = (angle or {}).get("kind") or ""
+    bundle = feedback_mod.build_verdict_bundle(
+        row, project, angle_kind=angle_kind, poster_url=_poster_url(row))
+    stamped = now_iso()
+    await _execute(
+        "INSERT INTO video_verdicts (generation_id, user_id, verdict, bundle, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(generation_id, user_id) DO UPDATE SET"
+        " verdict = excluded.verdict, bundle = excluded.bundle, updated_at = excluded.updated_at",
+        (generation_id, user_id, payload.verdict, json.dumps(bundle), stamped, stamped),
+    )
+    return await _generation_detail(generation_id, user_id)
+
+
 @router.post("/generations/{generation_id}/archive")
 async def archive_generation(generation_id: str, user_id: str = Depends(get_current_user_id)):
     row = await _fetch_one(
@@ -866,15 +952,19 @@ async def generation_history(
     for entry in out:
         entry["performance_snapshot"] = snapshots.get(entry["id"])
     await _with_verdicts(out, user_id)
-    # The join Analytics renders: stored craft scores against latest
-    # snapshots over this page of clips. Below 3 joined clips the summary
-    # says so (ready is False) instead of implying a pattern (ADR 0117).
-    performance_summary = feedback_mod.summarize_posted_performance([
-        {"quality_report": entry.get("quality_report"),
-         "performance": entry.get("performance_snapshot")}
-        for entry in out
-    ])
-    return {"generations": out, "performance_summary": performance_summary}
+    verdicts = await _video_verdicts([entry["id"] for entry in out], user_id)
+    for entry in out:
+        entry["video_verdict"] = (verdicts.get(entry["id"]) or {}).get("verdict")
+    # The headline signal Analytics renders (ADR 0124): the founder's
+    # whole-video verdicts over this page — counts, and what the worked
+    # bundles share once there are verdicts enough to share anything.
+    # Posted metrics stay on each row as the founder's record; they no
+    # longer summarize into a steering claim of their own.
+    verdict_full = feedback_mod.summarize_video_verdicts(
+        [verdicts[entry["id"]] for entry in out if entry["id"] in verdicts])
+    verdict_summary = {key: verdict_full[key]
+                       for key in ("total", "up", "down", "ready", "shared")}
+    return {"generations": out, "verdict_summary": verdict_summary}
 
 
 @router.delete("/generations/{generation_id}")
@@ -893,6 +983,10 @@ async def delete_generation(generation_id: str, user_id: str = Depends(get_curre
         raise HTTPException(status_code=404, detail="Generation not found")
 
     await _execute("DELETE FROM video_assets WHERE job_id = ?", (generation_id,))
+    # A deleted video's verdict must not keep steering generation: unlike
+    # the dated result snapshots (a record that outlives the row), the
+    # verdict is a live teaching signal, so it goes with its render.
+    await _execute("DELETE FROM video_verdicts WHERE generation_id = ? AND user_id = ?", (generation_id, user_id))
     await _execute("DELETE FROM generations WHERE id = ? AND user_id = ?", (generation_id, user_id))
     try:
         storage_service.delete_video(user_id, generation_id)

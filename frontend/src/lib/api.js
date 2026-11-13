@@ -345,6 +345,11 @@ export const api = {
   // accumulate server-side and reads show the latest.
   setPerformanceSnapshot: (id, metrics) =>
     client.post(`/generations/${id}/performance-snapshot`, metrics).then((r) => r.data),
+  // The founder's one verdict on the whole finished video (ADR 0124):
+  // "up", "down", or null to clear. Setting one freezes the bundle of
+  // everything that went out with the render, server-side.
+  setVideoVerdict: (id, verdict) =>
+    client.post(`/generations/${id}/verdict`, { verdict }).then((r) => r.data),
 
   // App-specific creative direction for the one render.
   //

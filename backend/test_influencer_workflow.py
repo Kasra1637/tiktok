@@ -986,7 +986,6 @@ class TestStrategyPromptDirectives:
             total_duration=15,
             tone="",
             brand_voice="",
-            profile_feedback={},
         ))
         assert result["template_name"] == "Stop Doing This"
         return captured
@@ -1020,7 +1019,6 @@ class TestStrategyPromptDirectives:
             },
             angle=None, objective="address_user_problem",
             hook_seconds=2, total_duration=15, tone="", brand_voice="",
-            profile_feedback={},
         ))
         prompt = captured["prompt"]
         assert "Name what the habit costs, then stop at the reach." in prompt
@@ -1043,7 +1041,6 @@ class TestStrategyPromptDirectives:
                       "continuation_structure": "Name the cost, then stop at the reach."},
             angle=None, objective="address_user_problem",
             hook_seconds=2, total_duration=15, tone="", brand_voice="",
-            profile_feedback={},
         ))
         assert "Name the cost, then stop at the reach." in captured["prompt"]
         assert '"middle_structure"' in captured["prompt"]
@@ -1202,7 +1199,6 @@ class TestStrategyPromptDirectives:
             total_duration=15,
             tone="",
             brand_voice="",
-            profile_feedback={},
         ))
         assert "character" not in result
         assert result["hook_dialogue"] == ""
@@ -1278,7 +1274,6 @@ class TestStrategyFollowsTheApprovedPlan:
             total_duration=20,
             tone="",
             brand_voice="",
-            profile_feedback={},
             plan=plan,
         ))
         return captured, result
@@ -1679,7 +1674,6 @@ class TestUsageMomentsAndProofMoment:
             template={"name": "Stop Doing This", "content_slots": {}},
             angle=None, objective="address_user_problem",
             hook_seconds=5, total_duration=20, tone="", brand_voice="",
-            profile_feedback={},
         ))
         return captured
 

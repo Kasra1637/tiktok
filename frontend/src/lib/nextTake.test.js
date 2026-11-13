@@ -5,26 +5,26 @@ const winner = (extra = {}) => ({
   status: "completed",
   tiktok_url: "https://www.tiktok.com/@founder/video/1",
   tiktok_views: 9000,
-  verdicts: { video: 1 },
+  video_verdict: "up",
   studio_project_id: "draft1",
   ...extra,
 });
 
 describe("isWinnerRow", () => {
-  test("a thumbs up plus a posted link is a winner", () => {
+  test("a worked verdict plus a posted link is a winner", () => {
     expect(isWinnerRow(winner())).toBe(true);
   });
 
   test("a link alone carries no weight", () => {
-    expect(isWinnerRow(winner({ verdicts: {} }))).toBe(false);
+    expect(isWinnerRow(winner({ video_verdict: null }))).toBe(false);
   });
 
-  test("a vote alone is judgment without proof of shipping", () => {
+  test("a verdict alone is judgment without proof of shipping", () => {
     expect(isWinnerRow(winner({ tiktok_url: "" }))).toBe(false);
   });
 
-  test("a thumbs down plus a link is not a winner", () => {
-    expect(isWinnerRow(winner({ verdicts: { video: -1 } }))).toBe(false);
+  test("a didn't-work verdict plus a link is not a winner", () => {
+    expect(isWinnerRow(winner({ video_verdict: "down" }))).toBe(false);
   });
 
   test("missing rows and verdicts read as not winners, never crash", () => {
@@ -46,7 +46,7 @@ describe("pickNextTake", () => {
     expect(pickNextTake([
       winner({ id: "shelf", status: "archived", tiktok_views: 99999 }),
       winner({ id: "bad", status: "failed", tiktok_views: 99999 }),
-      winner({ id: "quiet", verdicts: {} }),
+      winner({ id: "quiet", video_verdict: null }),
       winner({ id: "drawer", tiktok_url: "" }),
       winner({ id: "fresh", tiktok_views: null }),
     ])).toBeNull();
@@ -67,7 +67,7 @@ describe("nextTakeFor", () => {
   });
 
   test("a non-winner with a draft keeps Reuse draft", () => {
-    expect(nextTakeFor(winner({ verdicts: {} }), "/history", new Set(["draft1"])).label).toBe("Reuse draft");
+    expect(nextTakeFor(winner({ video_verdict: null }), "/history", new Set(["draft1"])).label).toBe("Reuse draft");
   });
 
   test("an unverified list fails open to the draft link", () => {

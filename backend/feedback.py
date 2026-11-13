@@ -25,6 +25,7 @@ piece has no closing beat — the middle stops at the moment the viewer would
 reach for the app, and the close is the founder's own footage. Asking why a
 generated video's CTA was unclear asked about something that was never in it.
 """
+import json
 import math
 from collections import Counter
 from datetime import datetime, timezone
@@ -1112,4 +1113,196 @@ def build_profile_feedback_section(summary: dict) -> str:
         "reasons above explain why. Avoid repeating a stated issue, but do not "
         "invent additional causes."
     )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Whole-video verdicts (ADR 0124)
+# ---------------------------------------------------------------------------
+#
+# One verdict per finished video, judged on the video exactly as it went
+# out. Neither the founder nor TikTok can say whether a video did well
+# because of its words, its opening visual, its captions or its hashtags,
+# so per-element feedback taught the loop lessons it could not support.
+# The verdict therefore attaches to a frozen bundle of the whole thing,
+# and generation learns from bundles — never from element scores, and
+# never from posted metrics on their own.
+
+MIN_VERDICTS_FOR_VERDICT_STEERING = 3
+# How many bundles per side a prompt may carry. The steering test in
+# test_ai_json_calls measures the worst case at exactly this cap.
+VERDICT_PROMPT_BUNDLES_PER_SIDE = 3
+
+
+def build_verdict_bundle(generation: dict, project: dict | None, *,
+                         angle_kind: str = "", poster_url: str = "") -> dict:
+    """
+    Freeze everything that went out with one render, at verdict time.
+
+    The words come from the render's project — the codebase's established
+    source for a render's material (the post-kit reader reads the same
+    fields) — the caption and hashtags from the generation's own frozen
+    post kit, and the visual and audio identity from the generation row
+    itself. Every value is copied into the snapshot: later edits to the
+    project or a regenerated post kit must not rewrite what was judged.
+    A field the render genuinely does not have is stored as None rather
+    than invented. There is no goal_id anywhere in the schema — the
+    project's objective IS the goal — so no goal_id key exists here.
+    """
+    generation = generation or {}
+    project = project or {}
+    post_kit = generation.get("post_kit")
+    if isinstance(post_kit, str):
+        try:
+            post_kit = json.loads(post_kit)
+        except (TypeError, ValueError):
+            post_kit = None
+    if not isinstance(post_kit, dict):
+        post_kit = {}
+    hashtags = post_kit.get("hashtags")
+    if not isinstance(hashtags, list):
+        hashtags = []
+    generation_id = generation.get("id") or ""
+    return {
+        "hook_line": (project.get("hook_line") or None),
+        "script": (project.get("script") or None),
+        "caption": (post_kit.get("caption") or None),
+        "hashtags": [str(tag) for tag in hashtags if str(tag).strip()],
+        "cover_text": (post_kit.get("cover_text") or None),
+        "opening_visual": {
+            "poster_url": poster_url or None,
+            "poster_path": f"/api/media/posters/{generation_id}.jpg" if generation_id else None,
+            "template_id": generation.get("template_id") or None,
+            "template_version": generation.get("template_version"),
+        },
+        "audio": {
+            "model": generation.get("model") or None,
+            "model_id": generation.get("model_id") or None,
+            "voice_direction": (project.get("voice_direction") or None),
+            "sound_direction": (project.get("sound_direction") or None),
+        },
+        "context": {
+            "angle_id": project.get("content_angle_id") or None,
+            "angle_kind": angle_kind or None,
+            "objective": project.get("objective") or None,
+            "duration_seconds": generation.get("duration") or generation.get("requested_duration"),
+            "segment_role": generation.get("segment_role") or None,
+        },
+    }
+
+
+def summarize_video_verdicts(rows) -> dict:
+    """
+    Count a set of verdict rows and split their bundles by side.
+
+    `rows` are {"verdict": "up"|"down", "bundle": {...}} in the caller's
+    order (newest first). `ready` is the steering threshold: below
+    MIN_VERDICTS_FOR_VERDICT_STEERING verdicts in total there is no
+    pattern to teach, and every consumer of this summary stays silent.
+    `shared` names what the worked bundles have in common — a trait only
+    counts when EVERY worked bundle carries it, and only with 2+ worked
+    bundles, where "shared" can mean anything at all.
+    """
+    up_bundles, down_bundles = [], []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        bundle = row.get("bundle")
+        if not isinstance(bundle, dict):
+            bundle = {}
+        if row.get("verdict") == "up":
+            up_bundles.append(bundle)
+        elif row.get("verdict") == "down":
+            down_bundles.append(bundle)
+    shared = {"templates": [], "angle_kinds": [], "objectives": []}
+    if len(up_bundles) >= 2:
+        def _common(values):
+            values = [v for v in values if v]
+            if not values:
+                return []
+            first, rest = values[0], values[1:]
+            return [first] if all(v == first for v in rest) else []
+
+        shared = {
+            "templates": _common(
+                [(b.get("opening_visual") or {}).get("template_id") for b in up_bundles]),
+            "angle_kinds": _common(
+                [(b.get("context") or {}).get("angle_kind") for b in up_bundles]),
+            "objectives": _common(
+                [(b.get("context") or {}).get("objective") for b in up_bundles]),
+        }
+    total = len(up_bundles) + len(down_bundles)
+    return {
+        "total": total,
+        "up": len(up_bundles),
+        "down": len(down_bundles),
+        "ready": total >= MIN_VERDICTS_FOR_VERDICT_STEERING,
+        "up_bundles": up_bundles,
+        "down_bundles": down_bundles,
+        "shared": shared,
+    }
+
+
+def _verdict_bundle_line(bundle: dict) -> str:
+    """One bundle as one prompt line: the words WITH their context."""
+    bundle = bundle or {}
+    visual = bundle.get("opening_visual") or {}
+    context = bundle.get("context") or {}
+
+    def _clip(value, limit):
+        text = str(value or "").strip()
+        return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+    parts = []
+    if bundle.get("hook_line"):
+        parts.append(f"Hook: \"{_clip(bundle['hook_line'], 160)}\"")
+    if bundle.get("script"):
+        parts.append(f"Script: \"{_clip(bundle['script'], 260)}\"")
+    if visual.get("template_id"):
+        parts.append(f"Opening: template {visual['template_id']}")
+    if context.get("angle_kind"):
+        parts.append(f"Angle: {context['angle_kind']}")
+    if context.get("objective"):
+        parts.append(f"Goal: {context['objective']}")
+    if bundle.get("caption"):
+        parts.append(f"Caption: \"{_clip(bundle['caption'], 160)}\"")
+    if bundle.get("hashtags"):
+        parts.append("Hashtags: " + " ".join(str(t) for t in bundle["hashtags"][:6]))
+    return "- " + " | ".join(parts) if parts else "- (no recorded material)"
+
+
+def build_verdict_feedback_section(summary: dict) -> str:
+    """
+    The one feedback section generation prompts may receive, or "".
+
+    Built only from whole-video verdict bundles (ADR 0124): the worked
+    bundles' words and traits to lean toward, the didn't-work bundles' to
+    steer away from, each presented as the whole video it was — words
+    with their template and angle context, never as element scores.
+    Silent below MIN_VERDICTS_FOR_VERDICT_STEERING verdicts in total:
+    one or two calls would teach noise. Patterns firm up around 5–7
+    verdicts, and the section says so, so the model leans rather than
+    obeys.
+    """
+    summary = summary or {}
+    if not summary.get("ready"):
+        return ""
+    lines = [
+        f"FOUNDER VERDICTS ON WHOLE FINISHED VIDEOS ({summary.get('total', 0)} rated: "
+        f"{summary.get('up', 0)} worked, {summary.get('down', 0)} didn't).",
+        "Each verdict judges the video exactly as it went out — spoken words, "
+        "opening visual, captions and hashtags together — so learn from each "
+        "bundle as one unit, never from one element alone. Patterns firm up "
+        "around 5–7 verdicts; treat this as a lean, not a law.",
+    ]
+    up = (summary.get("up_bundles") or [])[:VERDICT_PROMPT_BUNDLES_PER_SIDE]
+    if up:
+        lines.append("")
+        lines.append("VIDEOS THAT WORKED — lean toward their words and shape:")
+        lines.extend(_verdict_bundle_line(bundle) for bundle in up)
+    down = (summary.get("down_bundles") or [])[:VERDICT_PROMPT_BUNDLES_PER_SIDE]
+    if down:
+        lines.append("")
+        lines.append("VIDEOS THAT DIDN'T WORK — steer away from their words and shape:")
+        lines.extend(_verdict_bundle_line(bundle) for bundle in down)
     return "\n".join(lines)

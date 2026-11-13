@@ -141,6 +141,40 @@ def _request_id(*a, **k):
     return _cfg("_request_id")(*a, **k)
 
 
+async def _verdict_feedback_for_profile(brand_profile_id, user_id):
+    """This profile's whole-video verdicts, summarized for prompt steering.
+
+    The only feedback that reaches the plan and strategy prompts (ADR
+    0124): verdict rows joined to their generations' profile, newest
+    first, each carrying the bundle frozen when the verdict was cast.
+    A read failure yields an empty summary — no steering — rather than
+    failing the generation the founder asked for.
+    """
+    try:
+        rows = await _fetch_all(
+            "SELECT vv.verdict AS verdict, vv.bundle AS bundle FROM video_verdicts vv "
+            "JOIN generations g ON g.id = vv.generation_id "
+            "WHERE g.brand_profile_id = ? AND vv.user_id = ? "
+            "ORDER BY vv.updated_at DESC LIMIT 50",
+            (brand_profile_id, user_id),
+        )
+    except Exception:
+        rows = []
+    parsed = []
+    for row in rows or []:
+        bundle = row.get("bundle")
+        if isinstance(bundle, str):
+            try:
+                bundle = json.loads(bundle)
+            except (TypeError, ValueError):
+                bundle = None
+        parsed.append({
+            "verdict": row.get("verdict"),
+            "bundle": bundle if isinstance(bundle, dict) else {},
+        })
+    return feedback_mod.summarize_video_verdicts(parsed)
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers (no DB) — owned here; re-exported by server for existing callers.
 # ---------------------------------------------------------------------------
@@ -1445,26 +1479,14 @@ async def generate_plan(
     )
     tone = (payload.tone or row.get("tone") or "").strip()
 
-    # The same explicit history that moves recommendations also constrains the
-    # next draft. Only counts and fixed reason codes travel into the prompt;
-    # free-text detail never does. Posted clips travel too so plans reproduce
-    # what earned posts instead of repeating what flopped.
-    try:
-        plan_posted = await _posted_performance_rows(
-            row.get("brand_profile_id"), user_id)
-    except Exception:
-        plan_posted = []
-    profile_feedback = feedback_mod.summarize_profile_feedback(
-        await _fetch_all(
-            "SELECT event, signal, reason, template_id FROM feedback_events "
-            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
-            (row.get("brand_profile_id"), user_id),
-        ),
-        template.get("id") or "",
-        posted_rows=plan_posted,
-    )
-    plan_feedback = await _component_feedback_for_profile(
-        row.get("brand_profile_id"), user_id, "plan")
+    # The one history that constrains the next draft (ADR 0124): the
+    # founder's verdicts on whole finished videos, each with the bundle
+    # frozen when the verdict was cast. Per-element thumbs and posted
+    # metrics used to travel into this prompt too; neither can say which
+    # element made a video work, so both stopped steering — the metrics
+    # stay as the founder's record in History and Analytics.
+    verdict_feedback = await _verdict_feedback_for_profile(
+        row.get("brand_profile_id"), user_id)
     # Recent hook forms constrain the next draft: the model varies the form
     # instead of repeating the last few generations. Wording is data to
     # avoid, never instructions.
@@ -1512,8 +1534,7 @@ async def generate_plan(
                 # (ADR 0093); fixed-camera plans may.
                 camera_setup=row.get("camera_setup") or "handheld",
                 brand_voice=(profile.get("tone_voice") or "").strip(),
-                profile_feedback=profile_feedback,
-                component_feedback=plan_feedback,
+                verdict_feedback=verdict_feedback,
                 recent_hooks=recent_hooks,
                 goal_rationale=goal_rationale,
             ),
@@ -1872,24 +1893,12 @@ async def generate_project_strategy(
         min(template_library.MAX_HOOK_SECONDS, hook_seconds),
     )
 
-    # Posted clips travel into the strategy prompt the same way they travel
-    # into the plan prompt: with their stored craft scores and latest
-    # results snapshots attached, so the performance note (3+ clips only,
-    # ADR 0117) can steer the strategy too.
-    try:
-        strategy_posted = await _posted_performance_rows(
-            row.get("brand_profile_id"), user_id)
-    except Exception:
-        strategy_posted = []
-    profile_feedback = feedback_mod.summarize_profile_feedback(
-        await _fetch_all(
-            "SELECT event, signal, reason, template_id FROM feedback_events "
-            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
-            (row.get("brand_profile_id"), user_id),
-        ),
-        template.get("id") or "",
-        posted_rows=strategy_posted,
-    )
+    # The strategy prompt learns from the same whole-video verdicts as
+    # the plan prompt (ADR 0124) — the founder's calls on finished videos,
+    # bundles frozen at verdict time — and from nothing else: per-element
+    # thumbs and posted metrics no longer steer either stage.
+    verdict_feedback = await _verdict_feedback_for_profile(
+        row.get("brand_profile_id"), user_id)
 
     # The founder-approved creative plan, when one exists. The plan is written
     # and reviewed before the first render, so the strategy has to produce
@@ -1916,8 +1925,6 @@ async def generate_project_strategy(
             "sound_direction": row.get("sound_direction") or "",
             "beat_timeline": row.get("beat_timeline") or [],
         }
-    script_feedback = await _component_feedback_for_profile(
-        row.get("brand_profile_id"), user_id, "script")
     recent_hooks = []
     try:
         recent_rows = await _fetch_all(
@@ -1946,8 +1953,7 @@ async def generate_project_strategy(
                 total_duration=total_duration,
                 tone=tone,
                 brand_voice=profile.get("tone_voice") or "",
-                profile_feedback=profile_feedback,
-                component_feedback=script_feedback,
+                verdict_feedback=verdict_feedback,
                 plan=approved_plan,
                 camera_setup=row.get("camera_setup") or "handheld",
                 recent_hooks=recent_hooks,

@@ -154,14 +154,14 @@ async def _ensure_objective_templates(profile: dict, objective: str, user_id: st
             "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ?",
             (profile_id, user_id),
         )
-    template_feedback = await _component_feedback_for_profile_owned(
-        profile_id, user_id, "template")
     try:
+        # No component_feedback: template thumbs stopped steering
+        # generation (ADR 0124) — the whole-video verdict is the only
+        # feedback a prompt learns from now.
         drafts = await _cfg("_log_model_call")(
             "brand_templates", "text", TEXT_MODEL,
             lambda: _cfg("generate_brand_templates")(
-                profile, angles, objective=want_objective,
-                component_feedback=template_feedback, angle=angle),
+                profile, angles, objective=want_objective, angle=angle),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -882,10 +882,12 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     """
     _require_configured()
     try:
-        angle_feedback = await _angle_feedback_for_profile(profile.get("id"), user_id)
+        # No angle_feedback: goal thumbs stopped steering generation
+        # (ADR 0124). The summary still exists as the founder's record —
+        # it just no longer teaches the angle writer.
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile, angle_feedback=angle_feedback),
+            lambda: _cfg("generate_content_angles")(profile),
             user_id,
             brand_profile_id=profile.get("id"),
         )
@@ -1650,11 +1652,10 @@ async def generate_profile_content_angles(profile_id: str, payload: Optional[Gen
         )
 
     try:
-        angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
         objective = ((payload.objective if payload else "") or "").strip()
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile, angle_feedback=angle_feedback, objective=objective),
+            lambda: _cfg("generate_content_angles")(profile, objective=objective),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -1799,11 +1800,10 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
         )
 
     try:
-        angle_feedback = await _angle_feedback_for_profile(profile_id, user_id)
         objective = ((payload.objective if payload else "") or "").strip()
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile, angle_feedback=angle_feedback, objective=objective),
+            lambda: _cfg("generate_content_angles")(profile, objective=objective),
             user_id,
             brand_profile_id=profile_id,
         )

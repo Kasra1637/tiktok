@@ -184,7 +184,8 @@ from routers.history import (
     list_generations, get_generation, poll_generation,
     retry_generation_storage, _run_storage_repair, retry_generation,
     set_generation_tiktok_link, set_generation_tiktok_views,
-    set_generation_performance_snapshot, _posted_performance_rows,
+    set_generation_performance_snapshot, set_generation_video_verdict,
+    _posted_performance_rows,
     archive_generation, generation_history, delete_generation,
 )
 api_router.include_router(history_router)
