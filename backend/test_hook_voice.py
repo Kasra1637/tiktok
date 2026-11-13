@@ -710,6 +710,55 @@ def test_bare_place_phrases_are_issues_wherever_they_land():
         assert any("article" in issue for issue in issues), hook
 
 
+# -- ADR 0129: the gate widens past "at" ----------------------------------
+#
+# The next live pair repeated the break in shapes the first gate did
+# not watch: the hook stood the place compound bare in front of "days",
+# and the script dropped the article after "beside", before a noun the
+# class did not list. Both exact lines are pinned below.
+
+NOV13B_HOOK = "On bus stop days emotions come, words won't, I check in."
+NOV13B_SCRIPT = (
+    "I move pleasant down and calm-to-wired up each morning waiting "
+    "beside signpost until 8:15. Still don't know what sets it off "
+    "riding the bus."
+)
+
+
+def test_the_bus_stop_days_compound_is_an_issue():
+    issues = issues_for(NOV13B_HOOK, NOV13B_SCRIPT)
+    assert any("article" in issue and "bus stop" in issue for issue in issues)
+
+
+def test_beside_signpost_in_the_script_is_an_issue():
+    issues = issues_for(
+        "At the bus stop, the words won't come at all.", NOV13B_SCRIPT)
+    assert any("article" in issue and "signpost" in issue for issue in issues)
+
+
+def test_bare_places_after_other_prepositions_are_issues():
+    for hook in (
+        "I wait beside signpost until the bus pulls in.",
+        "The words dry up near office doors every morning.",
+        "I go quiet inside store, right by the door.",
+        "She paces outside gym before the class starts.",
+        "I stand by bus stop and rehearse it silently.",
+    ):
+        issues = issues_for(hook)
+        assert any("article" in issue for issue in issues), hook
+
+
+def test_determined_places_after_other_prepositions_are_not_issues():
+    for hook in (
+        "I wait beside the signpost until the bus pulls in.",
+        "The words dry up near the office doors every morning.",
+        "She paces outside the gym before the class starts.",
+        "I stand by the bus stop and rehearse it silently.",
+    ):
+        issues = issues_for(hook)
+        assert not any("article" in issue for issue in issues), hook
+
+
 def test_natural_bare_places_are_not_issues():
     # Idiomatic bare places: nobody says "at the home" or "at the work",
     # and "at school" is the standard US form for the institution — the

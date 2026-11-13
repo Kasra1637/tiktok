@@ -486,9 +486,15 @@ class _BudgetRecorder:
     even though the visible answer is one short line. This recorder
     plays exactly that: below the threshold every reply truncates;
     above it the line comes back whole.
+
+    The threshold started at 1000, between the 800 retry of the 400 era
+    and the 1500 fix. The demand grew again: at 1500 the hook rewrite
+    still truncated live, and its doubled 3000 retry with it (the typed
+    truncation message reached the founder — ADR 0129), so the gate now
+    sits between that 3000 and the raised budget.
     """
 
-    THRESHOLD = 1000
+    THRESHOLD = 4000
 
     def __init__(self):
         self.payloads = []
@@ -527,7 +533,8 @@ def test_middle_rewrite_survives_a_reasoning_sized_budget(monkeypatch):
         {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
     assert line == CLEARER
     # The first attempt's budget already clears the truncation threshold:
-    # the pre-fix 400 (and its doubled 800 retry) both came back empty.
+    # every earlier budget — 400, 800, 1500 and the 3000 retry — came
+    # back empty or cut off.
     assert rec.payloads[0]["max_tokens"] >= _BudgetRecorder.THRESHOLD
     assert len(rec.payloads) == 1
 
@@ -539,6 +546,14 @@ def test_hook_rewrite_survives_a_reasoning_sized_budget(monkeypatch):
     assert line == "I don't want to write in my journal today."
     assert rec.payloads[0]["max_tokens"] >= _BudgetRecorder.THRESHOLD
     assert len(rec.payloads) == 1
+
+
+def test_rewrite_budget_constant_keeps_reasoning_headroom():
+    # ADR 0129: pin the number itself, not just the gate behavior — a
+    # future tidy-up that shrinks the constant back under the largest
+    # budget observed to truncate for this family (3000, the doubled
+    # retry of the 1500 era) must fail here, not in production.
+    assert ai_service.REWRITE_MAX_TOKENS >= 6000
 
 
 def _raise(exc):

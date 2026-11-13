@@ -1251,6 +1251,45 @@ class TestScriptVoiceAndTarget:
         assert "repair_spoken_story(" in server_src
 
 
+class _BudgetGate:
+    """A provider whose thought tokens eat the completion budget.
+
+    The shipped text model reasons at Max and bills that reasoning
+    against max_tokens (see the note at the top of ai_service.py), so a
+    budget under the reasoning demand comes back as empty content with
+    finish_reason=length even though the model had an answer — the
+    production failure behind ADR 0129, where the plan's 8000 start AND
+    its doubled 16000 retry both came back empty. Below THRESHOLD every
+    reply truncates; at or above it the document comes back whole.
+    """
+
+    THRESHOLD = 20000
+
+    def __init__(self, body):
+        self.body = body
+        self.payloads = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.payloads.append(json)
+        if (json or {}).get("max_tokens", 0) < self.THRESHOLD:
+            return _Response(_completion("", finish_reason="length"))
+        return _Response(_completion(self.body))
+
+
+def _patch_budget_gate(monkeypatch, body):
+    import ai_service
+    rec = _BudgetGate(body)
+    monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+    monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+    return rec
+
+
 class TestCreativePlanBudget:
     """
     Production failure, 2026-10-13: the creative plan at max_tokens=3500
@@ -1258,19 +1297,66 @@ class TestCreativePlanBudget:
     budget) on both the first attempt and the doubled retry, surfacing as
     "AI plan generation failed ... cut off after 7000 tokens". Same fix as
     the research and strategy budgets before it: start with headroom.
+
+    Second production failure, 2026-11-13 (ADR 0129): at 8000 the reply
+    came back as EMPTY content with finish_reason=length — and so did
+    the doubled 16000 retry — after verdict steering, the certified-
+    promise check and the spoken gates grew the prompt. The budget now
+    lives in PLAN_MAX_TOKENS, sized at twice the largest budget observed
+    to return empty, and BOTH plan calls (the draft/editorial loop and
+    the craft correction, which re-sends the whole plan) route through
+    it.
     """
 
     def test_plan_uses_a_budget_that_fits_its_schema(self):
         """Guard the number itself, scoped to this caller."""
-        import re
+        import ai_service
         src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
-        match = re.search(
-            r"async def generate_creative_plan\(.*?max_tokens=(\d+)", src, re.S)
-        assert match, "generate_creative_plan should route through _chat_json"
-        assert int(match.group(1)) >= 8000, (
-            f"plan max_tokens is {match.group(1)}; the schema needs headroom "
-            f"for thinking tokens on top of its paragraph values"
+        assert ai_service.PLAN_MAX_TOKENS >= 32768, (
+            f"PLAN_MAX_TOKENS is {ai_service.PLAN_MAX_TOKENS}; 16000 already "
+            f"returned empty content in production on the grown plan prompt, "
+            f"so the start must clear it with headroom, not match it"
         )
+        assert src.count("max_tokens=PLAN_MAX_TOKENS") == 2, (
+            "both plan calls — the draft/editorial loop and the craft "
+            "correction — must route through PLAN_MAX_TOKENS"
+        )
+
+    def test_plan_survives_a_reasoning_sized_budget(self, monkeypatch):
+        """The user-visible failure becomes a result on the first attempt.
+
+        Mirrors the rewrite budget pin (test_spoken_line_rewrite): the
+        gate truncates any call whose budget is under the reasoning
+        demand. The pre-fix 8000 start and its 16000 retry both sit
+        under it, so the old code raises TruncatedResponse here.
+        """
+        import ai_service
+        plan = {
+            "hook_line": "Naming the feeling never worked.",
+            "script": ("The suggestions helped me find the words. "
+                       "I understood myself better after writing the entry."),
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook",
+                 "text": "Naming the feeling never worked."},
+                {"start": 3, "end": 15, "label": "middle", "text": "script"},
+            ],
+            "visual_direction": "A person reflecting at their desk.",
+            "demo_brief": "Record the emotion suggestions.",
+            "voice_direction": "Conversational.",
+            "sound_direction": "Voice only.",
+            "claims_used": [],
+        }
+        rec = _patch_budget_gate(monkeypatch, json.dumps(plan))
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == plan["hook_line"]
+        assert result["script"] == plan["script"]
+        # The first attempt's budget already clears the truncation gate:
+        # the pre-fix 8000 (and its doubled 16000 retry) both came back
+        # empty with finish_reason=length.
+        assert rec.payloads[0]["max_tokens"] >= _BudgetGate.THRESHOLD
+        assert rec.payloads[0]["max_tokens"] == ai_service.PLAN_MAX_TOKENS
 
     def test_truncated_plan_recovers_on_the_doubled_retry(self, monkeypatch):
         """The user-visible failure becomes a result: one retry is enough."""
@@ -1301,8 +1387,9 @@ class TestCreativePlanBudget:
         ))
         assert result["hook_line"] == plan["hook_line"]
         assert result["script"] == plan["script"]
-        # 8000 truncates, 16000 recovers, then the 80-bar craft correction runs.
-        assert [p["max_tokens"] for p in rec.payloads] == [8000, 16000, 8000]
+        # PLAN_MAX_TOKENS truncates, the doubled retry recovers, then the
+        # 80-bar craft correction runs at PLAN_MAX_TOKENS again.
+        assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 32768]
 
 
 def _worst_verdict_bundle(i):
@@ -1437,16 +1524,59 @@ class TestStrategyBudget:
         """
         Guard the number itself. The strategy object is the largest in the
         codebase, and 4000 tokens is what produced the production failure.
+        ADR 0129: the start also sat below the 16000 the creative plan
+        proved can return empty at Max reasoning effort on a verdict-grown
+        prompt, so the budget lives in STRATEGY_MAX_TOKENS now, at twice
+        the old 12288 start.
         """
-        import re
+        import ai_service
         src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
-        match = re.search(
-            r"raw = await _chat_json\((?:[^)]*?)max_tokens=(\d+)", src, re.S)
-        assert match, "generate_video_strategy should route through _chat_json"
-        assert int(match.group(1)) >= 8192, (
-            f"strategy max_tokens is {match.group(1)}; the schema needs headroom "
-            f"for thinking tokens on top of ~45 JSON values"
+        assert ai_service.STRATEGY_MAX_TOKENS >= 24576, (
+            f"STRATEGY_MAX_TOKENS is {ai_service.STRATEGY_MAX_TOKENS}; the "
+            f"schema needs headroom for thinking tokens on top of ~45 JSON "
+            f"values, and 12288 sat below a proven-insufficient budget"
         )
+        assert 'context="Video strategy"' in src
+        assert src.count("max_tokens=STRATEGY_MAX_TOKENS") == 1, (
+            "the strategy call must route through STRATEGY_MAX_TOKENS"
+        )
+
+    def test_strategy_survives_a_reasoning_sized_budget(self, monkeypatch):
+        """First attempt clears the gate; no recovery retry is spent.
+
+        The strategy has not been seen emptying in production yet, but
+        its old 12288 start sat below the budget the plan proved
+        insufficient (ADR 0129) while carrying the largest schema in
+        the codebase — the pin is that the FIRST attempt already
+        budgets for the reasoning, exactly as the rewrite pin does.
+        """
+        import ai_service
+        strategy = {
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "mechanism_beat": "mb",
+            "payoff_beat": "pb", "differentiation_beat": "b",
+            "scene": {"location": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 3,
+                 "goal": "g", "script": "s", "action": "a"},
+                {"index": 1, "role": "middle", "seconds": 17,
+                 "goal": "g", "script": "s", "action": "a"},
+            ],
+        }
+        rec = _patch_budget_gate(monkeypatch, json.dumps(strategy))
+        result = asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Test"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        assert result["strategy_summary"] == "s"
+        assert len(rec.payloads) == 1, "a good reply must not cost a retry"
+        assert rec.payloads[0]["max_tokens"] >= _BudgetGate.THRESHOLD
+        assert rec.payloads[0]["max_tokens"] == ai_service.STRATEGY_MAX_TOKENS
 
     def test_the_prompt_bounds_value_length(self):
         """
@@ -1966,13 +2096,14 @@ class TestStrategyBudget:
             template={"name": "T"},
             hook_seconds=3,
         ))
-        assert captured.get("max_tokens", 0) >= 12288, (
-            f"strategy floor is {captured.get('max_tokens')}; 8192 already "
-            "truncated in production"
+        assert captured.get("max_tokens", 0) >= 24576, (
+            f"strategy floor is {captured.get('max_tokens')}; 12288 sat "
+            "below the 16000 the creative plan proved can return empty "
+            "at Max reasoning effort (ADR 0129)"
         )
         assert captured.get("attempts", 0) >= 3, (
             f"strategy retries is {captured.get('attempts')}; a second "
-            "truncation at 24576 must get one more shortened attempt"
+            "truncation at 49152 must get one more shortened attempt"
         )
 
     def test_script_bar_governs_the_middle_and_leaves_the_hook(self, monkeypatch):

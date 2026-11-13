@@ -3310,11 +3310,16 @@ HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
 # of this file), so the budget is almost entirely headroom for thought.
 # At 400 — and at the 800 the retry doubled to — replies came back as
 # empty content with finish_reason=length, and every clearer-line click
-# failed as if the model had nothing to say. 1500 is the budget the post
-# kit already runs for a much larger answer; the retry doubles it to
-# 3000, and a reply that still truncates raises TruncatedResponse, which
-# the endpoint names for the founder instead of flattening.
-REWRITE_MAX_TOKENS = 1500
+# failed as if the model had nothing to say. The 1500 fix then proved
+# too small in turn: on 2026-11-13 the hook rewrite still truncated
+# live, at 1500 AND at the 3000 the retry doubled to — the founder
+# watched the typed truncation message arrive, so the honest naming
+# worked and only the budget was short (ADR 0129). 6000 starts at twice
+# the largest budget observed to truncate for this family; the retry
+# doubles it to 12000, and a reply that still truncates raises
+# TruncatedResponse, which the endpoint names for the founder instead
+# of flattening.
+REWRITE_MAX_TOKENS = 6000
 
 
 async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "") -> str:
@@ -3663,6 +3668,24 @@ def _craft_retry_block(result: dict, report: dict) -> str:
         "action. Never split a sentence between fields. Previous draft (data "
         "to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
     )
+
+
+# The budget for every creative-plan call below — the draft, the bounded
+# editorial corrections (which re-send the whole plan and demand the whole
+# plan back) and the craft correction. The visible answer is a full JSON
+# plan (hook, script, beat timeline, directions), roughly 1-2k tokens;
+# the rest of the budget is headroom for thought, because the shipped
+# text model reasons at Max and bills that reasoning against max_tokens
+# (see the model note at the top of this file). At the old 8000 start the
+# reply truncated mid-object in production (2026-10-13); after verdict
+# steering, the certified-promise check and the spoken gates grew the
+# prompt, 8000 AND its doubled 16000 retry both came back as empty
+# content with finish_reason=length (2026-11-13, ADR 0129) — the model
+# spent the whole budget thinking and never wrote. 32768 starts at twice
+# the largest budget observed to return empty; _chat_json's retry
+# doubles it from there, and a reply that still truncates raises
+# TruncatedResponse, which the endpoint names for the founder.
+PLAN_MAX_TOKENS = 32768
 
 
 async def generate_creative_plan(
@@ -4069,11 +4092,10 @@ async def generate_creative_plan(
     # Clean drafts cost one call; corrections are bounded to two extra calls.
     # A hard-valid draft below the craft bar gets one more targeted call
     # (ADR 0115); that retry never refuses the plan.
-    # Routed through _chat_json with headroom: 3500 tokens proved too small
-    # in production (2026-10-13) once GPT-5 Mini's reasoning tokens and the
-    # full strict schema share the budget — the reply truncated mid-object on
-    # BOTH attempts (3500, then 7000) and surfaced as a plan failure. 8000
-    # starts with room, and the retry doubles to 16000.
+    # Routed through _chat_json at PLAN_MAX_TOKENS: the budget history is
+    # recorded at the constant — 3500 truncated mid-object (2026-10-13),
+    # and 8000 with its doubled 16000 retry later came back as empty
+    # content once the prompt grew (2026-11-13, ADR 0129).
     allows_question = _plan_requests_question_format(template, structure) or _angle_invites_question(angle)
     attempt_prompt = prompt
     for attempt in range(3):
@@ -4081,7 +4103,7 @@ async def generate_creative_plan(
             system_message=system_message,
             prompt=attempt_prompt,
             context="Creative plan",
-            max_tokens=8000,
+            max_tokens=PLAN_MAX_TOKENS,
             timeout=120,
             json_schema=PLAN_JSON_SCHEMA,
         )
@@ -4168,7 +4190,7 @@ async def generate_creative_plan(
                 system_message=system_message,
                 prompt=prompt + _craft_retry_block(result, craft),
                 context="Creative plan craft correction",
-                max_tokens=8000,
+                max_tokens=PLAN_MAX_TOKENS,
                 timeout=120,
                 json_schema=PLAN_JSON_SCHEMA,
             )
@@ -4450,6 +4472,21 @@ REQUIRED_STRATEGY_KEYS = {
 # Words that pin the moment the opening sentence happens in.
 
 # Concrete payoff verbs: the last sentence acts rather than trails off.
+
+
+# The budget for the video-strategy call below. The strategy is the
+# largest JSON document in the codebase (~45 values across five nested
+# objects) and the shipped text model reasons at Max, billing that
+# reasoning against max_tokens (see the model note at the top of this
+# file), so the budget is mostly headroom for thought. The old 12288
+# start had never been seen to empty, but it sat BELOW the 16000 the
+# creative plan proved can return empty content with
+# finish_reason=length on a verdict-grown prompt (2026-11-13,
+# ADR 0129) — same model, same effort, larger payload. 24576 doubles
+# the old start; _chat_json's retries reach 49152, and a reply that
+# still truncates raises TruncatedResponse, which the endpoint names
+# for the founder.
+STRATEGY_MAX_TOKENS = 24576
 
 
 async def generate_video_strategy(
@@ -5053,9 +5090,10 @@ async def generate_video_strategy(
     # nested objects, several of them prose. Thinking models spend thought
     # tokens from the SAME completion budget, so a budget that looks generous
     # on paper can be exhausted before the closing brace is written. 8192
-    # truncated in production even with the doubled retry, so 12288 is the
-    # floor now (retry reaches 24576) and a third attempt gives one more
-    # shortened retry before the cut-off is named. Still inside the provider
+    # truncated in production even with the doubled retry; the reasoning
+    # for the current STRATEGY_MAX_TOKENS floor is recorded at the
+    # constant (ADR 0129). A third attempt gives one more shortened
+    # retry before the cut-off is named. Still inside the provider
     # output ceiling of the models this service can be pointed at (Muse
     # Ember's output ceiling is far above the base used here).
     # No wording gate: the strategy is accepted as written. Missing fields
@@ -5065,7 +5103,7 @@ async def generate_video_strategy(
         prompt=prompt,
         context="Video strategy",
         temperature=0.5,
-        max_tokens=12288,
+        max_tokens=STRATEGY_MAX_TOKENS,
         attempts=3,
         json_schema=STRATEGY_JSON_SCHEMA,
     )

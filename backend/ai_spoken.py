@@ -380,12 +380,36 @@ def hook_carries_certified_outcome(hook: str, outcome: str) -> bool:
 # article rule would refuse natural speech to catch one broken shape.
 # A determiner or possessive in front ("at the bus stop", "at my
 # office") never matches: the pattern starts at the noun itself.
-_BARE_PLACE_RE = re.compile(r"\bat (bus stop|office|gym|store|park)\b")
+#
+# Widened by ADR 0129 after the next live pair broke the same rule in
+# shapes the first pattern did not watch: the article dropped after
+# other prepositions a speaker locates with ("waiting beside signpost
+# until 8:15"), "signpost" joined the witnessed nouns, and the place
+# compound stood bare as a modifier ("On bus stop days emotions
+# come..."). The widening follows the prepositions, not the grammar
+# book: the exclusions above survive untouched because their nouns
+# never enter the list, and a determiner or possessive after any of
+# the new prepositions still breaks the match.
+_BARE_PLACE_NOUNS = r"bus stop|office|gym|store|park|signpost"
+_BARE_PLACE_RE = re.compile(
+    r"\b(?:at|beside|by|near|outside|inside) (?:" + _BARE_PLACE_NOUNS + r")\b"
+    r"|\bon (?:" + _BARE_PLACE_NOUNS + r") days\b"
+)
 
 def _bare_place_hit(text: str) -> str:
     """The determiner-less place phrase in a spoken line, else ""."""
     match = _BARE_PLACE_RE.search(_normalize_spoken(text))
     return match.group(0) if match else ""
+
+def _bare_place_noun(phrase: str) -> str:
+    """The place noun inside a bare-place phrase, for the fix advice.
+
+    "beside signpost" -> "signpost"; "on bus stop days" -> "bus stop".
+    The advice names the noun, so it cannot assume the phrase starts
+    with "at " the way the first version of the message did.
+    """
+    noun = phrase.split(" ", 1)[1] if " " in phrase else phrase
+    return noun[:-len(" days")] if noun.endswith(" days") else noun
 
 # Working the app's controls out loud (ADR 0128). The profile's own
 # feature names are banned by the shared craft block; what leaked
@@ -551,8 +575,8 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
         if bare_place:
             issues.append(
                 f"{name} drops the article before a place ('{bare_place}') — "
-                f"a real person says 'at the {bare_place[3:]}'; give the place "
-                f"its article or rephrase"
+                f"a real person says 'at the {_bare_place_noun(bare_place)}'; "
+                f"give the place its article or rephrase"
             )
         # The app's controls are never worked out loud (ADR 0128): a
         # control verb governing "levels"/"sliders" speaks the UI, not
