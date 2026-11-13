@@ -39,6 +39,7 @@ import {
 // the template card only has to say whether anything is still owed.
 import {
   blockingRequirements,
+  isCharacterReferenceNeed,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
 import { formatVerdicts } from "../lib/angleSubtitle";
@@ -183,6 +184,137 @@ const QUALITY_BAND_NOTES = {
 
 function qualityBandNote(report) {
   return QUALITY_BAND_NOTES[report?.band] || "Advisory craft score for the saved words.";
+}
+
+/**
+ * The craft check card: a score ring, one top fix, and the eight scored
+ * dimensions as compact tiles side by side.
+ *
+ * Presentation only — the report's fields, scores and words are the
+ * server's, unchanged. The layout is what changed, per the founder's ask:
+ * the old card stacked every dimension's full advice under its score, so
+ * the card read as a wall of copy and the server's first next step printed
+ * twice (once in the next-steps list, once under its own dimension). Now
+ * the single most important fix leads in its own callout — the server's
+ * first next step, or the weakest dimension's step when the server sent
+ * none — and no tile repeats it.
+ *
+ * The dimensions' maxima differ ON PURPOSE (the weights are the scoring:
+ * hook stopping power is /20, audience truth /15, several are /10), so
+ * tiles compare by proportion of their own max — the slim bar — never by
+ * raw score. The weakest tile(s) by that proportion wear a stronger
+ * indigo edge so the eye lands on what to fix first.
+ */
+function CraftCheckCard({ report }) {
+  const dimensions = Object.values(report?.dimensions || {});
+  const max = Number(report?.max) || 100;
+  const total = Number(report?.total) || 0;
+  const fraction = Math.max(0, Math.min(1, max > 0 ? total / max : 0));
+  const ratioOf = (dimension) => {
+    const dimensionMax = Number(dimension?.max) || 0;
+    return dimensionMax > 0 ? (Number(dimension?.score) || 0) / dimensionMax : 1;
+  };
+  const weakestRatio = dimensions.length > 0
+    ? Math.min(...dimensions.map(ratioOf))
+    : null;
+  const topFix = (Array.isArray(report?.next_steps) ? report.next_steps : [])
+    .find((step) => String(step || "").trim())
+    || dimensions.find((dimension) => ratioOf(dimension) === weakestRatio && dimension.next_step)?.next_step
+    || null;
+  const ringRadius = 26;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  return (
+    <div className="inset-panel space-y-4" data-testid="quality-report">
+      <div className="flex items-center gap-4">
+        <div
+          className="relative h-16 w-16 shrink-0"
+          role="img"
+          aria-label={`Craft score ${total} of ${max}${report?.grade ? `, grade ${report.grade}` : ""}`}
+        >
+          <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90" aria-hidden="true">
+            <circle
+              cx="32"
+              cy="32"
+              r={ringRadius}
+              fill="none"
+              strokeWidth="6"
+              style={{ stroke: "var(--indigo-15)" }}
+            />
+            <circle
+              cx="32"
+              cy="32"
+              r={ringRadius}
+              fill="none"
+              strokeWidth="6"
+              strokeLinecap="round"
+              style={{
+                stroke: "var(--brand-indigo)",
+                strokeDasharray: ringCircumference,
+                strokeDashoffset: ringCircumference * (1 - fraction),
+              }}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center font-display text-base font-semibold">
+            {report?.grade}
+          </span>
+        </div>
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-semibold">Craft check</p>
+          <p className="text-sm text-muted-foreground">
+            {total}/{max}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {qualityBandNote(report)}
+          </p>
+        </div>
+      </div>
+      {topFix && (
+        <div className="inset-panel inset-panel-strong" data-testid="quality-top-fix">
+          <p className="text-sm">{topFix}</p>
+        </div>
+      )}
+      {dimensions.length > 0 && (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="quality-dimensions">
+          {dimensions.map((dimension) => {
+            const pct = Math.round(ratioOf(dimension) * 100);
+            const isWeakest = weakestRatio !== null && ratioOf(dimension) === weakestRatio;
+            return (
+              <li
+                key={dimension.key}
+                data-testid="quality-dimension"
+                data-weakest={isWeakest ? "true" : undefined}
+                className="surface-compact space-y-2"
+                style={isWeakest
+                  ? { borderColor: "var(--indigo-45)", backgroundColor: "var(--indigo-4)" }
+                  : undefined}
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold">{dimension.label}</p>
+                  <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={Number(dimension.max) || 0}
+                  aria-valuenow={Number(dimension.score) || 0}
+                  aria-label={dimension.label}
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
+                >
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] transition-[width] duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="text-sm text-muted-foreground">
+        Advisory only — it never blocks a render.
+      </p>
+    </div>
+  );
 }
 
 /** What each progress state means, in words. Used for the pill tooltip and
@@ -353,6 +485,14 @@ export default function CreateVideo() {
   // as a step still deciding rather than a click that did not land. Cleared
   // whenever a new attempt starts.
   const [planFailed, setPlanFailed] = useState(false);
+  // When the in-flight plan pass began (ms epoch), or null when none is
+  // running. Kept here, at page level, because the Review section unmounts
+  // when the founder steps away mid-generation: the generating button
+  // derives its countdown from this start (busyStartedAt), so leaving and
+  // returning shows the wait where it actually is instead of a restarted
+  // 80s, and the flight itself — latched by planInFlightRef — lands on
+  // return exactly as if the founder never left.
+  const [planFlightStartedAt, setPlanFlightStartedAt] = useState(null);
   // Confirm-on-arrival: a ?project= link that lands with an intact plan
   // (script_version > 0) says so once, so the founder knows the Review step
   // below is their render's plan and not a blank draft. Dismissible, and
@@ -424,6 +564,15 @@ export default function CreateVideo() {
     hookLine: project?.hook_line || "",
     middle: project?.script || project?.spoken_middle || "",
   });
+  // The shared limits the templates header may read: every shared limit
+  // except the character-reference need. That one line repeats what the
+  // step already handles — each card states the character's look comes
+  // from the uploaded photo, the photo section below owns attaching it,
+  // and generation is blocked until it is attached — so the header drops
+  // it and keeps the limits that still ask the founder for something.
+  const headerLimitations = sharedFit.limitations.filter(
+    (limitation) => !isCharacterReferenceNeed(limitation)
+  );
   // The reveal state survives for the Review recovery copies only: the
   // angle step itself renders its lists on open now (Part 3), but Review's
   // pickers stay gated, so what counts as "viewed" there is still tracked —
@@ -971,6 +1120,10 @@ export default function CreateVideo() {
     // `busy`-disabled anyway, so this only ever bites on same-tick races.
     if (planInFlightRef.current) return;
     planInFlightRef.current = true;
+    // The wait starts at the click, not at the model call: the draft write
+    // below is part of what the founder sits through, and the countdown
+    // the generating button shows covers the whole of it.
+    setPlanFlightStartedAt(Date.now());
     const ready = await createProject();
     if (!ready) {
       // createProject already reported the error above. A vanished template is
@@ -979,6 +1132,7 @@ export default function CreateVideo() {
       const gone = templateGoneRef.current;
       templateGoneRef.current = false;
       planInFlightRef.current = false;
+      setPlanFlightStartedAt(null);
       setPlanFailed(!gone);
       return;
     }
@@ -1067,6 +1221,7 @@ export default function CreateVideo() {
       }
     } finally {
       planInFlightRef.current = false;
+      setPlanFlightStartedAt(null);
       setBusy(false);
     }
   };
@@ -1862,9 +2017,9 @@ export default function CreateVideo() {
             {objective && !tailoring && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="eyebrow block">
-                    {tailoredReady ? "Tailored for this app" : "Recommended"}
-                  </span>
+                  <GroupLabel icon={Target}>
+                    {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
+                  </GroupLabel>
                   {profileId && objective && (
                     <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
                       <Button
@@ -1897,19 +2052,24 @@ export default function CreateVideo() {
                     tiebreak) and cost a line each above a grid they came to
                     pick from — this block used to run six sentences and ~90
                     words, longer and louder than the cards it summarised.
-                    The limits stay, as their own lines: each one changes what
-                    the founder has to do (a template needing a photo, a draft
-                    that is not approved yet). "Bounded by" is not among them
+                    The other limits stay, as their own lines: each one changes
+                    what the founder has to do (a draft that is not approved
+                    yet). The character-reference need is not among them —
+                    the photo section below owns that ask, each card already
+                    states the look comes from the uploaded photo, and
+                    generation blocks without it, so a header line only
+                    repeated the step back to the founder (headerLimitations
+                    does the dropping). "Bounded by" is not among them
                     any more — those claims bound the ANGLE, and the picked
                     angle's panel states them directly above this list. */}
-                {(sharedFit.reasons.length > 0 || sharedFit.limitations.length > 0) && (
+                {(sharedFit.reasons.length > 0 || headerLimitations.length > 0) && (
                   <div className="space-y-1 text-sm text-muted-foreground" data-testid="templates-shared-fit">
                     {sharedFit.reasons.length > 0 && (
                       <p data-testid="templates-shared-reason">{sentenceCase(sharedFit.reasons[0])}</p>
                     )}
-                    {sharedFit.limitations.length > 0 && (
+                    {headerLimitations.length > 0 && (
                       <ul className="space-y-1">
-                        {sharedFit.limitations.map((limitation, i) => (
+                        {headerLimitations.map((limitation, i) => (
                           <li
                             key={`sl-${i + 1}`}
                             className="flex items-start gap-1.5 leading-relaxed"
@@ -2103,6 +2263,7 @@ export default function CreateVideo() {
               disabled={busy || !canGenerate || !objective || !angle}
               busy={busy}
               etaSeconds={BUSY_ETA_SECONDS.planStrategy}
+              busyStartedAt={planFlightStartedAt}
               data-testid="plan-retry-button"
             >
               <Sparkles className="h-4 w-4" />
@@ -2130,6 +2291,7 @@ export default function CreateVideo() {
               disabled={busy}
               busy={busy || loading}
               etaSeconds={busy ? BUSY_ETA_SECONDS.planStrategy : null}
+              busyStartedAt={planFlightStartedAt}
               data-testid="plan-progress-button"
             >
               {loading && !busy ? "Loading your draft" : "Generating your plan"}
@@ -2228,6 +2390,7 @@ export default function CreateVideo() {
                   disabled={busy}
                   busy={busy}
                   etaSeconds={BUSY_ETA_SECONDS.planStrategy}
+                  busyStartedAt={planFlightStartedAt}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
                 >
@@ -2365,45 +2528,7 @@ export default function CreateVideo() {
                 saved pair and the next rewrite, but no band refuses a render.
                 The hard gates are the readiness checks and the spoken counts above. */}
             {project?.quality_report && (
-              <div className="inset-panel space-y-3" data-testid="quality-report">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">Craft check</p>
-                  <p className="text-sm text-muted-foreground">
-                    {project.quality_report.grade} · {project.quality_report.total}/100
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {qualityBandNote(project.quality_report)}
-                </p>
-                {project.quality_report.next_steps?.length > 0 && (
-                  <ul className="space-y-1 text-sm">
-                    {project.quality_report.next_steps.slice(0, 2).map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ul>
-                )}
-                {/* The full breakdown the score is built from: every
-                    dimension the backend scores, with its own next step —
-                    the grade alone names no fix. */}
-                {Object.values(project.quality_report.dimensions || {}).length > 0 && (
-                  <ul className="space-y-3" data-testid="quality-dimensions">
-                    {Object.values(project.quality_report.dimensions).map((dimension) => (
-                      <li key={dimension.key} className="space-y-1">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <p className="text-sm font-semibold">{dimension.label}</p>
-                          <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
-                        </div>
-                        {dimension.next_step && (
-                          <p className="text-sm text-muted-foreground">{dimension.next_step}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Advisory only — it never blocks a render.
-                </p>
-              </div>
+              <CraftCheckCard report={project.quality_report} />
             )}
             {/* What the middle can actually speak, and what it cannot. The middle's
                 seconds hold a fixed number of characters; anything past that is

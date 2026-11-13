@@ -70,6 +70,41 @@ describe("Button generating state", () => {
     }
   });
 
+  test("a countdown handed its start time resumes from the elapsed wait after a remount", async () => {
+    // The wizard mounts only the step in view, so the generating button
+    // unmounts when the founder steps away mid-wait. Its count must derive
+    // from the flight's start, not from the mount: a remount that restarted
+    // the estimate would tell the founder the wait began again.
+    const startedAt = Date.now();
+    const props = {
+      busy: true,
+      variant: "accent",
+      etaSeconds: 30,
+      busyStartedAt: startedAt,
+      children: "Generating your plan",
+    };
+    const first = await mountButton(props);
+    try {
+      expect(first.button().textContent).toContain("· 30s");
+      await advance(5);
+      expect(first.button().textContent).toContain("· 25s");
+    } finally {
+      await first.unmount();
+    }
+    // Four more seconds pass with the button unmounted entirely.
+    await advance(4);
+    const second = await mountButton(props);
+    try {
+      expect(second.button().textContent).toContain("· 21s");
+      await advance(1);
+      expect(second.button().textContent).toContain("· 20s");
+      await advance(25);
+      expect(second.button().textContent).toContain("· 0s");
+    } finally {
+      await second.unmount();
+    }
+  });
+
   test("the countdown holds at 0s instead of going negative or restarting", async () => {
     const { button, unmount } = await mountButton({
       busy: true,

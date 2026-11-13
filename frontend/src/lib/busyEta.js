@@ -51,3 +51,25 @@ export function formatBusyCountdown(seconds) {
   if (!Number.isFinite(n)) return null;
   return `· ${Math.max(0, Math.round(n))}s`;
 }
+
+/** Seconds left on a generation wait, derived from when the wait started.
+ *
+ * `startedAtMs` is the ms-epoch moment the caller recorded when the flight
+ * began. Callers that outlive the button (a wizard page whose sections
+ * unmount on a step change) keep it, so a remounted button resumes the
+ * count where the wait actually is instead of restarting the estimate —
+ * the wizard's plan flight is the case this exists for. Without a usable
+ * start, the full estimate remains: the button's own countdown, unchanged.
+ * Elapsed time floors to whole seconds and the result holds at 0, so a
+ * wait that outruns its estimate reads "· 0s", never negative. */
+export function busyRemainingSeconds(etaSeconds, startedAtMs, nowMs) {
+  const eta = Number(etaSeconds);
+  if (!Number.isFinite(eta)) return null;
+  const started = Number(startedAtMs);
+  if (!Number.isFinite(started)) return Math.max(0, Math.round(eta));
+  const now = nowMs === undefined ? Date.now() : Number(nowMs);
+  const elapsed = Number.isFinite(now)
+    ? Math.max(0, Math.floor((now - started) / 1000))
+    : 0;
+  return Math.max(0, Math.round(eta) - elapsed);
+}

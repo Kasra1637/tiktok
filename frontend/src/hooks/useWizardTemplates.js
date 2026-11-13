@@ -127,7 +127,7 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
   // row, backfill from the current ranked rows so the picker never shows a
   // partial choice — but only from rows that are themselves tailored/custom
   // templates, never from pre-made ones. The bespoke list is the only
-  // promise the picker makes ("Tailored for this app"), and a pre-made card
+  // promise the picker makes ("Tailored template for this app"), and a pre-made card
   // appearing alongside it is a leak of a different kind.
   const visibleRecommendations = useMemo(() => {
     if (!recommendationsVisible) return [];

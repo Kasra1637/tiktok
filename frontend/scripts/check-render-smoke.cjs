@@ -1495,6 +1495,87 @@ async function main() {
     );
   });
 
+  await check("a plan generation in flight survives stepping away and back, countdown intact", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    // The founder's report: click Generate on Review, step back to Audience
+    // & template or App profile while it runs, come back — the progress had
+    // reset and the run later surfaced as a failure. The flight belongs to
+    // the click (ADR 0122), not to the section on screen: leaving must not
+    // discard it, returning must show it still running with the countdown
+    // where the wait actually is (never a restarted 80s), no second call
+    // may fire, and the plan must land from the one call already running.
+    let releasePass;
+    const passGate = new Promise((resolve) => { releasePass = resolve; });
+    let passes = 0;
+    await withApi(
+      {
+        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        // The Review re-read must see the same unplanned draft the writes
+        // echo, or the step would adopt a plan nobody generated here.
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        generatePlanAndStrategy: async () => {
+          passes += 1;
+          await passGate;
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+        await openStep(ctx, "Review & submit");
+        const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!generate) throw new Error("Review offers no Generate button for its plan");
+        await act(async () => {
+          generate.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        await act(async () => {});
+        const etaOf = () => {
+          const eta = ctx.container.querySelector('[data-testid="plan-progress-button"] [data-testid="busy-eta"]');
+          const match = eta ? /(\d+)s/.exec(eta.textContent || "") : null;
+          return match ? Number(match[1]) : null;
+        };
+        if (!ctx.container.querySelector('[data-testid="plan-progress-button"]')) {
+          throw new Error("the click did not put Review into its generating state");
+        }
+        const firstEta = etaOf();
+        if (firstEta === null || firstEta < 79) {
+          throw new Error(`the generating button opens without its full countdown (saw ${firstEta})`);
+        }
+        if (passes !== 1) throw new Error(`the click fired ${passes} passes, not one`);
+        // Away for a few real seconds — the progress button unmounts with
+        // its section — then back. Nothing on the other step may spend a
+        // second pass or drop the one in flight.
+        await openStep(ctx, "Audience & template");
+        await new Promise((resolve) => setTimeout(resolve, 3200));
+        await openStep(ctx, "Review & submit");
+        if (!ctx.container.querySelector('[data-testid="plan-progress-button"]')) {
+          throw new Error("returning to Review lost the in-flight generating state");
+        }
+        const returnedEta = etaOf();
+        if (returnedEta === null) {
+          throw new Error("the returned generating button shows no countdown");
+        }
+        if (returnedEta > 77) {
+          throw new Error(`the countdown restarted on return (saw ${returnedEta}s after 3+ seconds away)`);
+        }
+        if (passes !== 1) throw new Error(`stepping away and back fired a second pass (${passes})`);
+        await act(async () => { releasePass(); });
+        await act(async () => {});
+        await act(async () => {});
+        if (passes !== 1) throw new Error(`the plan landed after ${passes} passes, not the one click`);
+        if (!ctx.text().includes("Hook line")) {
+          throw new Error("the in-flight plan never landed after returning");
+        }
+        if (ctx.container.querySelector('[data-testid="plan-progress-button"]')) {
+          throw new Error("the generating state outlived the landed plan");
+        }
+      }
+    );
+  });
+
   await check("the wizard's last step is Demo + CTA, opening on the finished render", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     const finished = {
@@ -2692,7 +2773,37 @@ async function main() {
         expectText(ctx, "Hook stopping power", "a dimension label is missing");
         expectText(ctx, "Trust & compliance", "a dimension label is missing");
         expectText(ctx, "16/20", "a dimension score is missing");
-        expectText(ctx, "Cut the second thought from the hook.", "a dimension next step is missing");
+        // The redesign: dimensions are compact tiles side by side, each with
+        // a bar filled in proportion to its own weighted max — the maxima
+        // differ on purpose, so the bar (not the raw score) is what compares.
+        if (!list.className.includes("grid")) {
+          throw new Error("the dimensions are still a stacked list, not a side-by-side grid");
+        }
+        const hookTile = [...list.querySelectorAll("li")].find((li) => li.textContent.includes("Hook stopping power"));
+        const hookBar = hookTile && hookTile.querySelector('[role="progressbar"]');
+        if (!hookBar) throw new Error("a dimension tile carries no score bar");
+        if (hookBar.getAttribute("aria-valuenow") !== "16" || hookBar.getAttribute("aria-valuemax") !== "20") {
+          throw new Error("the hook tile's bar does not carry its 16/20 score");
+        }
+        // The weakest tile is marked so the eye lands on what to fix first:
+        // Demo handoff (6/10) is the lowest proportion in this fixture.
+        const weakest = [...list.querySelectorAll('[data-weakest="true"]')];
+        if (weakest.length !== 1 || !weakest[0].textContent.includes("Demo handoff")) {
+          throw new Error("the weakest dimension tile is not marked");
+        }
+        // One top fix, said once: the server's first next step leads the
+        // card in its own callout, and the dimension whose step it is does
+        // not repeat it — the old card printed the same advice twice.
+        const card = ctx.container.querySelector('[data-testid="quality-report"]');
+        const topFix = card.querySelector('[data-testid="quality-top-fix"]');
+        if (!topFix || !topFix.textContent.includes("Answer the hook in the first clause.")) {
+          throw new Error("the card has no top-fix callout carrying the first next step");
+        }
+        const fixCount = (card.textContent.match(/Answer the hook in the first clause\./g) || []).length;
+        if (fixCount !== 1) throw new Error(`the top fix is printed ${fixCount} times instead of once`);
+        // Per-dimension advice no longer stacks inside the tiles: a step
+        // that is not the top fix stays off the card entirely.
+        expectAbsent(ctx, "Cut the second thought from the hook.", "a dimension's advice still stacks on the card");
       });
     } finally {
       delete global.__SMOKE_PARAMS;
@@ -5921,12 +6032,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (reasonLine.textContent.includes("Open to anyone")) {
       throw new Error("the section stacks the weaker shared reasons above the grid");
     }
-    // Each shared limit is its own line. The notes are whole sentences and not
-    // all of them end in a full stop, so joining them into one paragraph ran an
-    // unterminated note straight into the next — "…for the process Needs
-    // character reference." — and the boundary between two limits disappeared.
+    // Each shared limit the header keeps is its own line. The notes are whole
+    // sentences and not all of them end in a full stop, so joining them into
+    // one paragraph ran an unterminated note straight into the next and the
+    // boundary between two limits disappeared.
     const limitLines = [...shared.querySelectorAll("li")].map((li) => li.textContent.trim());
-    for (const note of ["Needs character reference.", "No middle structure recorded; the studio will infer one."]) {
+    for (const note of ["No middle structure recorded; the studio will infer one."]) {
       const holders = limitLines.filter((line) => line.includes(note));
       if (holders.length !== 1) {
         throw new Error(`the shared limit "${note}" is on ${holders.length} lines instead of its own`);
@@ -5934,6 +6045,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (holders[0] !== note) {
         throw new Error(`the shared limit "${note}" is glued to another note: ${holders[0]}`);
       }
+    }
+    // The character-reference need is NOT read in the header any more: each
+    // card already states the look comes from the uploaded photo, the photo
+    // section owns attaching it, and generation blocks without it — the
+    // header line only repeated the step. Per-card requirement text is a
+    // different surface and is untouched by this.
+    if (shared.textContent.includes("Needs character reference.")) {
+      throw new Error("the templates header repeats the character-reference need");
     }
     // The angle's claims bound the angle, and the angle's own panel reads them
     // above this list. Rendering them here too put the same bounds on screen
@@ -5949,7 +6068,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
     }
     const bounds = (ctx.text().match(/Needs character reference\./g) || []).length;
-    if (bounds !== 1) throw new Error(`the shared asset need is on ${bounds} places instead of once`);
+    if (bounds !== 0) throw new Error(`the shared asset need is still read on ${bounds} places instead of nowhere in this section`);
     if (!ctx.text().includes("Framed for Productivity rather than Health")) {
       throw new Error("the one differentiating limitation did not stay on its own card");
     }
@@ -7959,8 +8078,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!ready.includes("Custom Pick")) {
       throw new Error("the tailored custom template is not shown once ready");
     }
-    if (!ready.includes("Tailored for this app")) {
-      throw new Error("the ready list is not labelled as the tailored set");
+    if (!ready.includes("Tailored template for this app")) {
+      throw new Error("the ready list is not labelled as the tailored template set");
     }
     if (ready.includes("Premade Pick")) {
       throw new Error("a pre-made template is shown alongside the tailored set");

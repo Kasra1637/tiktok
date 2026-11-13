@@ -2,6 +2,7 @@ import {
   requiredAssetStatus,
   allRequiredAssetsAttached,
   blockingRequirements,
+  isCharacterReferenceNeed,
 } from "./templateRequirements";
 
 describe("requiredAssetStatus", () => {
@@ -39,5 +40,18 @@ describe("blockingRequirements", () => {
 
   test("a missing retired kind never blocks", () => {
     expect(blockingRequirements(["screenshot"], [])).toEqual([]);
+  });
+});
+
+describe("isCharacterReferenceNeed", () => {
+  test("names the scorer's character-reference note, and only that note", () => {
+    expect(isCharacterReferenceNeed("Needs character reference.")).toBe(true);
+    expect(isCharacterReferenceNeed("needs character reference")).toBe(true);
+    expect(isCharacterReferenceNeed("  Needs   character reference. ")).toBe(true);
+    expect(isCharacterReferenceNeed("No middle structure recorded; the studio will infer one.")).toBe(false);
+    expect(isCharacterReferenceNeed("Needs character reference and a screenshot.")).toBe(false);
+    expect(isCharacterReferenceNeed("")).toBe(false);
+    expect(isCharacterReferenceNeed(null)).toBe(false);
+    expect(isCharacterReferenceNeed(undefined)).toBe(false);
   });
 });

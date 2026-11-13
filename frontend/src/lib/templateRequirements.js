@@ -40,6 +40,24 @@ export function allRequiredAssetsAttached(requiredAssets, attachedAssets) {
 }
 
 /**
+ * Whether a fit note is the character-reference need ("Needs character
+ * reference."). The scorer phrases a template's required assets exactly
+ * that way (backend/template_recommendations.py), and when every card in
+ * a set shares the note it is hoisted above the grid — where it only
+ * repeats what the step already handles: each card states the character's
+ * look comes from the uploaded photo, the photo section owns attaching
+ * it, and generation stays blocked until it is attached
+ * (blockingRequirements above). The templates header drops this one note;
+ * per-card requirement text and the blocking rule itself are untouched.
+ */
+export function isCharacterReferenceNeed(note) {
+  const text = typeof note === "string"
+    ? note.trim().toLowerCase().replace(/\s+/g, " ").replace(/\.+$/, "")
+    : "";
+  return text === "needs character reference";
+}
+
+/**
  * The one requirement that stops generation.
  *
  * Face-only product: the character reference is the single permitted asset

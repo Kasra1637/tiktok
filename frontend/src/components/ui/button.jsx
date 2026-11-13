@@ -3,7 +3,7 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils"
-import { formatBusyCountdown, BUSY_ETA_THRESHOLD_SECONDS } from "../../lib/busyEta"
+import { formatBusyCountdown, busyRemainingSeconds, BUSY_ETA_THRESHOLD_SECONDS } from "../../lib/busyEta"
 
 const buttonVariants = cva(
   "btn-studio inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0",
@@ -70,8 +70,11 @@ const buttonVariants = cva(
    "· 0s", holding at 0s if the endpoint runs long). The CTA's own text,
    icon, size and layout never change; only the surface and the count do, and
    both revert when the work finishes. Determinate jobs keep their real
-   position instead of a countdown, and asChild links never take one. */
-const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, etaSeconds = null, style, children, ...props }, ref) => {
+   position instead of a countdown, and asChild links never take one. A
+   caller that outlives this button may pass `busyStartedAt` (the flight's
+   start, ms epoch): the count then derives from the elapsed real time, so
+   an unmount/remount mid-wait resumes it instead of restarting it. */
+const Button = React.forwardRef(({ className, variant, size, asChild = false, busy = false, progress = null, etaSeconds = null, busyStartedAt = null, style, children, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   // `?? NaN`: Number(null) is 0, so a missing progress must not coerce — an
   // absent progress stays indeterminate and keeps the looping sweep.
@@ -83,20 +86,35 @@ const Button = React.forwardRef(({ className, variant, size, asChild = false, bu
   // determinate job already shows its real position.
   const generatingWait = Boolean(busy) && !determinate && Number(etaSeconds) >= BUSY_ETA_THRESHOLD_SECONDS;
   const effectiveVariant = generatingWait ? "secondary" : variant;
+  // A wait whose start the caller kept (`busyStartedAt`, ms epoch) derives
+  // its remaining seconds from the elapsed real time since that start, not
+  // from this button's own mount: the wizard mounts only the step in view,
+  // so the button unmounts when the founder steps away mid-wait, and a
+  // remount must resume the count where the wait actually is — never
+  // restart the full estimate. Without a start the count is the button's
+  // own decrementing state, exactly as before.
+  const startedAtMs = busyStartedAt === null || busyStartedAt === undefined ? NaN : Number(busyStartedAt);
+  const anchored = generatingWait && Number.isFinite(startedAtMs);
   const [remainingSeconds, setRemainingSeconds] = React.useState(() => (
-    generatingWait ? Math.round(Number(etaSeconds)) : null
+    generatingWait ? busyRemainingSeconds(etaSeconds, startedAtMs) : null
   ));
   React.useEffect(() => {
     if (!generatingWait) {
       setRemainingSeconds(null);
       return undefined;
     }
+    if (anchored) {
+      const tick = () => setRemainingSeconds(busyRemainingSeconds(etaSeconds, startedAtMs));
+      tick();
+      const id = setInterval(tick, 1000);
+      return () => clearInterval(id);
+    }
     setRemainingSeconds(Math.round(Number(etaSeconds)));
     const id = setInterval(() => {
       setRemainingSeconds((prev) => (prev === null ? null : Math.max(0, prev - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [generatingWait, etaSeconds]);
+  }, [generatingWait, etaSeconds, anchored, startedAtMs]);
   const countdownSuffix = generatingWait && remainingSeconds !== null
     ? formatBusyCountdown(remainingSeconds)
     : null;
