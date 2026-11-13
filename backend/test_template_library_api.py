@@ -844,25 +844,28 @@ class TestApprovalAutoGeneratesAngles:
         assert [a["label"] for a in listed["angles"]] == ["Stop stalling on starts"]
 
 
-class TestAngleBackfillOnListing:
+class TestAngleListingNeverGenerates:
     """
-    Profiles approved before auto-generation existed have zero angles and no
-    trigger left to create them. The listing backfills exactly that case —
-    approved and empty — so the next page view fills the section instead of
-    leaving it blank forever.
+    The listing is a pure read (ADR 0122): it returns the rows that are
+    stored and fires no model call, whatever the profile's state. Angles
+    arrive from the approval or from the section's own Generate click —
+    never because somebody looked at the list. (Before 0122 an approved
+    profile with zero angles was backfilled by the listing itself, so
+    opening the wizard, picking the profile or following a deep link
+    spent a model call nobody asked for.)
     """
 
-    def test_listing_backfills_once_then_stops(self, api, monkeypatch):
+    def test_listing_returns_empty_and_fires_no_generation(self, api, monkeypatch):
         profile = _make_profile(api, ANON, name="Backfill Me")
         _failing_log(api, monkeypatch)
         _approve_empty(api, profile["id"])
         calls = []
         _canned_log(api, monkeypatch, CANNED_ANGLES, calls)
         first = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
-        assert [a["label"] for a in first["angles"]] == ["Stop stalling on starts"]
+        assert first["angles"] == []
         second = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
-        assert [a["label"] for a in second["angles"]] == ["Stop stalling on starts"]
-        assert calls == ["content_angles"]
+        assert second["angles"] == []
+        assert calls == []
 
     def test_listing_never_generates_for_drafts(self, api, monkeypatch):
         profile = _make_profile(api, ANON, name="Draft Angles")

@@ -877,7 +877,8 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
 
     Awaited inline by the caller, but failures never block the response:
     angles are derived data — if generation fails the founder can still use
-    the profile and regenerate later (or the next listing backfills them).
+    the profile and regenerate later (or fill the section from its own
+    Generate button; the listing itself never generates, ADR 0122).
     """
     _require_configured()
     try:
@@ -1533,27 +1534,14 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
     )
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
-    rows = await _cfg("_fetch_all")(
-        "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? "
-        "ORDER BY rank ASC, created_at ASC",
-        (profile_id, user_id),
-    )
-    if not rows and profile.get("status") == "approved" and os.environ.get("OPENROUTER_API_KEY"):
-        # Self-heal profiles approved before auto-generation existed — and
-        # recover from a generation that returned nothing. The next view
-        # fills the section instead of leaving it blank forever. Profiles
-        # with hand-written angles (count > 0) and drafts never reach here.
-        await _auto_generate_content_angles(
-            await _cfg("_fetch_one")(
-                "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
-            ),
-            user_id,
-        )
-        rows = await _cfg("_fetch_all")(
-            "SELECT * FROM content_angles WHERE brand_profile_id = ? AND user_id = ? "
-            "ORDER BY rank ASC, created_at ASC",
-            (profile_id, user_id),
-        )
+    # A pure read (ADR 0122): the listing returns the rows that are stored
+    # and never generates. An approved profile with zero angles — approved
+    # before auto-generation existed, or its approval-time generation
+    # returned nothing — lists empty here, and the angle section's own
+    # Generate click is what fills it. Before 0122 this handler backfilled
+    # that case itself, so opening the wizard, picking the profile or
+    # following a deep link spent a model call nobody asked for.
+    #
     # One summary for the whole profile, indexed by kind and shared by every
     # angle of that kind -- two angles of the same kind carry the same counts,
     # which is honest (the attribution is per kind) and is never presented as

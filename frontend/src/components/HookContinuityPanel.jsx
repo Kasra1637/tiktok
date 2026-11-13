@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
@@ -306,33 +306,13 @@ export function HookContinuityPanel({ project, onProjectChange }) {
     }
   };
 
-  // Build the strategy automatically once the project is ready and none
-  // exists. Without this the Generate button below stays disabled behind a
-  // "Build the strategy above" note the founder can jump past via the step
-  // pills, which is the other half of "the button sometimes is not clickable".
-  // Only fires when there is NO strategy at all -- a stale one still asks,
-  // because rebuilding discards a strategy the founder may have read and the
-  // confirm dialog is the right guard for that. One attempt per mount: the ref
-  // stops a re-render storm from re-triggering a free text call.
-  const autoBuildAttempted = useRef(false);
-  useEffect(() => {
-    if (
-      autoBuildAttempted.current ||
-      project?.status !== "ready_for_generation" ||
-      hasStrategy ||
-      !projectId ||
-      busy ||
-      needsAngle
-    ) {
-      return;
-    }
-    autoBuildAttempted.current = true;
-    // Fire and forget: errors land in the panel's own error state through
-    // handleGenerateStrategy, and the Generate button stays disabled for the
-    // real reason (no strategy) rather than silently proceeding.
-    handleGenerateStrategy();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGenerateStrategy is a render-scoped closure; listing it would re-fire the free call on every render.
-  }, [project?.status, hasStrategy, projectId, busy, needsAngle]);
+  // No auto-build: mounting this panel is navigation, and navigation
+  // generates nothing (ADR 0122). A project that arrives ready with no
+  // strategy shows the empty state and the Build button above, and the
+  // founder's click on it is the build — the same discipline as every
+  // other section's Generate. A stale strategy likewise waits: rebuilding
+  // discards a strategy the founder may have read, so the confirm on the
+  // click is the guard, and nothing here spends the call on arrival.
 
   const sections = plannedSections(strategy);
   // The one-line digest of the collapsed scene group: place, camera setup and
@@ -497,7 +477,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            Built automatically once the saved plan is ready. If the build fails, use the button above to retry, then read the strategy before rendering. This step creates text, not video.
+            Built on your click — the button above writes it from your saved plan, and a failed build retries from the same button. Read the strategy before rendering. This step creates text, not video.
           </p>
         </div>
       )}

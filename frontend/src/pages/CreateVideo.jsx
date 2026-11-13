@@ -350,9 +350,9 @@ export default function CreateVideo() {
   // A plan attempt ran and failed (or draft creation refused). While true,
   // Review shows the retry path instead of the generating spinner: without
   // this the failure state is indistinguishable from an attempt in flight,
-  // and the spinner spins forever because the auto latch (below) rightly
-  // refuses to re-fire the same selection-set on its own. Cleared whenever a
-  // new attempt starts.
+  // and nothing re-fires on its own (ADR 0122), so the failure would read
+  // as a step still deciding rather than a click that did not land. Cleared
+  // whenever a new attempt starts.
   const [planFailed, setPlanFailed] = useState(false);
   // Confirm-on-arrival: a ?project= link that lands with an intact plan
   // (script_version > 0) says so once, so the founder knows the Review step
@@ -970,8 +970,8 @@ export default function CreateVideo() {
       setPlanFailed(true);
       return;
     }
-    // Single flight. Concurrent triggers — a double-tapped Regenerate, the
-    // auto effect racing a manual retry — must not stack minute-long model
+    // Single flight. Concurrent triggers — a double-tapped Regenerate, a
+    // thumbs-down retry racing a manual one — must not stack minute-long model
     // calls: each holds `busy`, so stacked flights read as a frozen page
     // with every control disabled. A call already in flight owns the
     // outcome; the extra tap is dropped. The buttons it could come from are
@@ -1346,25 +1346,27 @@ export default function CreateVideo() {
   } = useWizardDirections({ profileId, project, angle, dispatchDraft });
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
-  // draft's stored goal is the fallback so landing on Review with a complete
-  // draft always auto-fires — even when this session's state lost the choice
-  // (pill-jump, reload) while the server row kept it. Without the fallback the
-  // step shows the goal picker and waits, although everything the plan needs
-  // is already decided.
+  // draft's stored goal is the fallback, so a complete draft landing on
+  // Review reads as ready to generate even when this session's state lost
+  // the choice (pill-jump, reload) while the server row kept it. Without the
+  // fallback the step shows the goal picker and waits, although everything
+  // the plan needs is already decided.
   const effectiveObjective = objective || project?.objective || "";
 
-  // Auto-generate the plan on entering Review with a ready draft that has
-  // none yet. The step exists to READ the plan, so arriving to an empty step
-  // plus a button was a wasted click on every first pass. Same gates as the
-  // manual retry below (a profile, a template, a goal, nothing in flight):
-  // without them there is nothing to write the plan from. When a gate is
-  // unmet the step names the missing input instead of spinning; a failed
-  // attempt sets planFailed and offers the retry, and the latch below means
-  // a failure never loops. Regenerating an existing plan stays a deliberate,
-  // confirmed click. Placed after the renderability consts above:
-  // the dep array reads them during render, so this cannot live above their
-  // declarations the way the other effects do.
-  const planAutoAttempted = useRef("");
+  // Entering Review generates NOTHING (ADR 0122): going through the steps
+  // is display-only, so a draft with no plan shows this step's Generate
+  // button and the click is the generation — the same discipline as the
+  // angle step's empty set and ADR 0107's goals. (This step used to write
+  // the plan on arrival; the founder's rule retired that.) The one effect
+  // left here is state sync, not generation: when the server row holds a
+  // goal this session lost, adopt it so the gates and the Generate click
+  // read one consistent choice.
+  useEffect(() => {
+    if (step !== 2) return;
+    if (!objective && project?.objective) {
+      dispatchDraft({ type: "goal-selected", value: project.objective });
+    }
+  }, [step, objective, project?.objective]);
   // Single-flight latch for plan generation, owned by handleGeneratePlan.
   // `busy` state cannot do this job: two taps in the same tick both read the
   // still-false state, so both would start a model call. A ref flips
@@ -1373,27 +1375,6 @@ export default function CreateVideo() {
   // Set when a draft write learns the picked template is gone server-side.
   // Read once by the plan handler below to offer the gap instead of a retry.
   const templateGoneRef = useRef(false);
-  useEffect(() => {
-    // The plan needs a profile, a template and a goal. The character photo is
-    // required to RENDER, not to write the plan, so it does not gate this.
-    if (step !== 2 || busy || !canGenerate || !angle) return;
-    if (!objective && project?.objective) {
-      // The draft already holds the goal but this session's state does not:
-      // adopt it so the gates below read one consistent choice and the plan
-      // starts on arrival. Returned from, not fallen through, because the
-      // state update re-runs this effect and the fire happens there — firing
-      // here would send the draft's goal while `objective` is still empty.
-      dispatchDraft({ type: "goal-selected", value: project.objective });
-      return;
-    }
-    if (!objective) return;
-    if (project?.script_version) return;
-    const key = `${profileId}:${templateId}:${angleId || ""}:${objective || ""}:${tone || ""}`;
-    if (planAutoAttempted.current === key) return;
-    planAutoAttempted.current = key;
-    handleGeneratePlan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePlan is a render-scoped closure, same as handleGenerateStrategy in the auto-build below; the key ref guards re-fires, and listing it would re-run the effect on every render.
-  }, [step, busy, canGenerate, objective, profileId, templateId, angleId, angle, tone, project?.id, project?.script_version, project?.objective]);
 
   // Review reads the project's words, so it must read them from the server
   // rather than trust whatever the wizard last held. An eager draft update
@@ -2140,9 +2121,9 @@ export default function CreateVideo() {
         )}
         {!project?.script_version && planFailed && !busy ? (
           /* A plan attempt ran and failed. The page-level error above says why;
-             this offers the retry. Manual and enabled: the auto latch already
-             consumed this selection-set, so nothing here fires on its own. The
-             photo is not listed: it is required to render, never to plan. */
+             this offers the retry. Manual and enabled: nothing fires on its
+             own (ADR 0122), so the retry is the only way forward from here.
+             The photo is not listed: it is required to render, never to plan. */
           <div className="inset-panel space-y-4">
             {/* The retry buttons lead and the explanation follows them: one red
                 button naming the single gap, then the goal list (which shows
@@ -2207,13 +2188,11 @@ export default function CreateVideo() {
               </>
             )}
           </div>
-        ) : !project?.script_version && (busy || loading || (canGenerate && effectiveObjective && angle)) ? (
-          /* No plan and nothing wrong: an attempt is in flight, the draft is
-             still loading, or every input is present and the auto effect fires
-             next — reading the stored goal too, so a draft that already holds
-             one spins instead of flashing the picker. This panel is the only
-             narrator while the plan writes: one concise button label with a
-             looping sweep, no count line below it. */
+        ) : !project?.script_version && (busy || loading) ? (
+          /* No plan yet, and work is genuinely in flight: a click-fired
+             generation is writing, or the draft is still loading. This panel
+             is the only narrator while the plan writes: one concise button
+             label with a looping sweep, no count line below it. */
           <div className="inset-panel space-y-4">
             <Button
               variant="accent"
@@ -2225,10 +2204,36 @@ export default function CreateVideo() {
               {loading && !busy ? "Loading your draft" : "Generating your plan"}
             </Button>
           </div>
+        ) : !project?.script_version && canGenerate && effectiveObjective && angle ? (
+          /* Every input is set and no plan exists yet: the step waits for
+             the founder's click (ADR 0122). Arriving here — or going back
+             and returning — writes nothing on its own; this button is the
+             generation, carrying the same countdown the retry does. The
+             stored goal counts (effectiveObjective), so a draft that
+             already holds one offers the button instead of the picker. */
+          <div className="inset-panel space-y-4">
+            <Button
+              variant="accent"
+              onClick={handleGeneratePlan}
+              disabled={busy}
+              etaSeconds={BUSY_ETA_SECONDS.planStrategy}
+              data-testid="plan-generate-button"
+            >
+              <Sparkles className="h-4 w-4" />
+              Generate your plan
+            </Button>
+            <p className="text-base text-muted-foreground">
+              Nothing is written yet. Your choices are set — generate the free
+              plan when you&rsquo;re ready, then read it here.
+            </p>
+            <p className="text-sm text-muted-foreground" data-subtitle="">
+              Writes hook, script, shots, and demo note. Editable below.
+            </p>
+          </div>
         ) : !project?.script_version ? (
-          /* No plan and the auto effect cannot fire: a profile, a template or
-             the goal is missing. Name it and fix it here — choosing the goal
-             starts the plan on its own, no button press. */
+          /* No plan and a profile, a template or the goal is missing. Name
+             it and fix it here — picking the goal below readies this step's
+             Generate button; the plan still waits for that click. */
           <div className="inset-panel space-y-4">
             {/* One red button to the first missing choice, in flow order. The
                 two black navigation buttons this replaces named their
@@ -2249,7 +2254,7 @@ export default function CreateVideo() {
               </Button>
             )}
             <p className="text-sm text-muted-foreground" data-subtitle="">
-              Your free plan starts once all required choices are set.
+              Set the choices above, then generate your free plan here.
             </p>
             {/* Angle and goal are chosen on step 1, not here. The red button
                 above names the first missing choice, and the goal list below

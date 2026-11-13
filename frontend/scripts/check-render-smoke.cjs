@@ -1352,8 +1352,8 @@ async function main() {
     // (Part 3): a founder whose app already has angles lands on the list
     // itself — no Generate/Show click, and no generation spend for the
     // viewing — and picking an angle shows the six goal cards the same
-    // way. No small duplicate Generate action rides beside the revealed
-    // list; Shuffle is its only companion.
+    // way. The billed live-goal generation stays one click away beside
+    // the revealed list.
     global.__SMOKE_PARAMS = "";
     apiCalls.length = 0;
     try {
@@ -1375,11 +1375,8 @@ async function main() {
       if (apiCalls.includes("generateAngleGoals")) {
         throw new Error("picking an angle fired the billed live-goal generation");
       }
-      if (step.querySelector('[data-testid="generate-goals-button"]')) {
-        throw new Error("the small duplicate Generate action still rides beside the revealed list");
-      }
-      if (!step.querySelector('[data-testid="regenerate-goals-button"]')) {
-        throw new Error("Shuffle does not ride beside the revealed list");
+      if (!step.querySelector('[data-testid="generate-goals-button"]')) {
+        throw new Error("the live-goal generation is not offered beside the revealed list");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -1424,16 +1421,22 @@ async function main() {
   // from finished to posted to measured in one place.
   // -------------------------------------------------------------------------
 
-  await check("plan and strategy arrive in one pass on Review", async (ctx) => {
+  await check("the one plan pass fires from Review's Generate click, never on entry", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    // One request from the founder's point of view: entering Review with a
-    // ready draft fires the combined pass, and neither old stage endpoint is
+    // One request from the founder's point of view, and only on the click:
+    // entering Review with a ready draft fires nothing (ADR 0122 — going
+    // through the steps is display-only), and the section's own Generate
+    // fires the combined pass exactly once. Neither old stage endpoint is
     // called — two waits and two failure surfaces is the thing being removed.
     const passes = [];
     await withApi(
       {
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        // The Review re-read must see the same unplanned draft the writes
+        // echo: the default stub answers a planned project, which the step
+        // would adopt as a plan nobody generated in this check.
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         generatePlanAndStrategy: async (id, payload) => {
           passes.push(payload);
           return PROJECT_WITH_STRATEGY;
@@ -1449,21 +1452,41 @@ async function main() {
         await openStep(ctx, "Review & submit");
         await act(async () => {});
         await act(async () => {});
+        if (passes.length !== 0) {
+          throw new Error(`entering Review fired ${passes.length} combined passes before any click`);
+        }
+        const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!generate) throw new Error("Review offers no Generate button for its plan");
+        if (generate.disabled) throw new Error("Review's Generate button is disabled with every input set");
+        await act(async () => {
+          generate.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        await act(async () => {});
         const reviewCalls = apiCalls.slice(before);
         if (passes.length !== 1) {
-          throw new Error(`Review fired ${passes.length} combined passes, not one`);
+          throw new Error(`the Generate click fired ${passes.length} combined passes, not one`);
         }
         if (reviewCalls.includes("generatePlan") || reviewCalls.includes("generateStrategy")) {
           throw new Error("Review still calls the separate plan/strategy endpoints");
         }
         // The combined result populated both halves: the plan reads on the
-        // step, and the strategy panel is already built (its auto-build has
-        // nothing to fire).
+        // step, and the strategy it carried is already built — no second
+        // call follows the pass.
         if (!ctx.text().includes("Hook line")) {
           throw new Error("the one pass did not land a readable plan");
         }
         if (apiCalls.includes("generateStrategy")) {
           throw new Error("the strategy was built by a second call after the pass");
+        }
+        // Going back and returning is display-only too: the fresh plan
+        // renders from what is stored, and no second pass fires on re-entry.
+        await openStep(ctx, "Audience & template");
+        await openStep(ctx, "Review & submit");
+        await act(async () => {});
+        await act(async () => {});
+        if (passes.length !== 1) {
+          throw new Error(`re-entering Review fired another pass (${passes.length})`);
         }
       }
     );
@@ -1699,12 +1722,16 @@ async function main() {
   await check("the plan is written before a character photo is attached", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     // The plan needs a profile, a template and a goal. The photo is required to
-    // render, so it must not stop the plan from being written on Review.
+    // render, so it must not stop the plan from being written on Review —
+    // the step's Generate click stays offered without one (ADR 0122).
     const plans = [];
     await withApi(
       {
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
+        // The Review re-read must see the same unplanned, photo-less draft
+        // the writes echo, or it adopts a planned fixture nobody generated.
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
         generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
@@ -1721,6 +1748,10 @@ async function main() {
         await openStep(ctx, "Review & submit");
         await act(async () => {});
         await act(async () => {});
+        const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!generate) throw new Error("Review withholds its Generate button until a photo is attached");
+        await clickEl(ctx, generate);
+        await act(async () => {});
         if (plans.length === 0) {
           throw new Error("Review did not write the plan while the character photo was missing");
         }
@@ -1730,14 +1761,14 @@ async function main() {
 
   await check("the plan is generated from the step that reviews it", async (ctx) => {
     global.__SMOKE_PARAMS = "";
-    // Entering Review with a ready draft and no plan generates it without a
-    // click; the button below is the retry path, not the happy path. The
-    // default generatePlanAndStrategy stub answers with a planned project, so by the
+    // The plan is generated from this step's own Generate click (ADR 0122);
+    // entering Review alone writes nothing. The default
+    // generatePlanAndStrategy stub answers with a planned project, so by the
     // time the acts flush the step reads the fresh plan.
     const plans = [];
     // A create returns a fresh draft (no plan yet) -- matching the server. The
     // default stub returned a fully-planned project, which the eager create now
-    // adopts and which would hide the auto-generation this check is about.
+    // adopts and which would hide the generation this check is about.
     await withApi(
       {
         // A create echoes the angle it was sent (here: none chosen), exactly
@@ -1745,6 +1776,9 @@ async function main() {
         // disagree with the wizard's empty angle on every pass.
         createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        // The Review re-read must see the same unplanned draft the writes
+        // echo, or it adopts a planned fixture nobody generated.
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
         generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
@@ -1765,8 +1799,15 @@ async function main() {
         await act(async () => {});
         // Assert inside the stub scope: the calls above are async and would
         // otherwise land after the stub restores.
+        if (plans.length !== 0) {
+          throw new Error("Review generated the plan on entry, before any click");
+        }
+        const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!generate) throw new Error("Review offers no Generate button for its plan");
+        await clickEl(ctx, generate);
+        await act(async () => {});
         if (plans.length === 0) {
-          throw new Error("Review did not generate the plan on entry");
+          throw new Error("Review's Generate click did not generate the plan");
         }
         const text = ctx.text();
         // Either the fresh plan is already showing, or the step is mid-flight
@@ -1841,9 +1882,9 @@ async function main() {
 
   await check("Review without a goal asks for it instead of spinning forever", async (ctx) => {
     // Pills allow reaching Review before a goal exists (or opening a draft
-    // whose objective is empty). The auto effect cannot fire without one, so
-    // the step must say so and offer the picker — never the generating
-    // spinner, which previously showed while nothing was en route.
+    // whose objective is empty). No plan can be written without one, so the
+    // step must say so and offer the picker — never the generating spinner,
+    // which previously showed while nothing was en route.
     global.__SMOKE_PARAMS = "?project=p1";
     const plans = [];
     try {
@@ -1884,8 +1925,17 @@ async function main() {
           await clickEl(ctx, goalButton);
           await act(async () => {});
           await act(async () => {});
+          // ADR 0122: picking the goal readies the step, it does not start
+          // the plan — the step's own Generate click is the generation.
+          if (plans.length !== 0) {
+            throw new Error("choosing the goal on Review started the plan without the Generate click");
+          }
+          const planGenerate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!planGenerate) throw new Error("Review offers no Generate button once the goal is picked");
+          await clickEl(ctx, planGenerate);
+          await act(async () => {});
           if (plans.length === 0) {
-            throw new Error("choosing the goal on Review did not start the plan on its own");
+            throw new Error("Review's Generate click did not start the plan after the goal pick");
           }
         }
       );
@@ -1896,8 +1946,9 @@ async function main() {
 
   await check("a failed plan offers retry instead of spinning forever", async (ctx) => {
     // A rejected generation used to leave the spinner up with no way back:
-    // the auto latch rightly refuses to re-fire, and the only button lived
-    // behind a state the failure could not reach.
+    // nothing re-fires on its own (ADR 0122), and the only button lived
+    // behind a state the failure could not reach. The failure here is the
+    // step's own Generate click, since entry alone fires nothing now.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi(
@@ -1913,6 +1964,10 @@ async function main() {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
           await act(async () => {});
+          await act(async () => {});
+          const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!generate) throw new Error("Review offers no Generate button for its plan");
+          await clickEl(ctx, generate);
           await act(async () => {});
           await act(async () => {});
           if (ctx.text().includes("Generating your plan")) {
@@ -2800,6 +2855,34 @@ async function main() {
     }
   });
 
+  await check("the strategy panel builds only from its own button", async (ctx) => {
+    // A ready project with a plan, an angle and no strategy: mounting the
+    // panel is navigation, and navigation generates nothing (ADR 0122).
+    // The build waits for the panel's own button, which fires it once.
+    apiCalls.length = 0;
+    await mount(HookContinuityPanel, {
+      project: { ...PROJECT_WITH_STRATEGY, strategy: {}, strategy_version: 0 },
+    })(ctx);
+    await act(async () => {});
+    await act(async () => {});
+    if (apiCalls.includes("generateStrategy")) {
+      throw new Error("mounting the strategy panel fired a build on its own");
+    }
+    const build = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+    if (!build) throw new Error("no strategy build button to click");
+    if (build.disabled) {
+      throw new Error("the strategy build button is disabled for a ready project with an angle");
+    }
+    await act(async () => {
+      build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    const builds = apiCalls.filter((c) => c === "generateStrategy").length;
+    if (builds !== 1) {
+      throw new Error(`the button fired ${builds} strategy builds, not one`);
+    }
+  });
+
   await check("an angle change after the build marks the strategy stale", async (ctx) => {
     // strategy_is_current only tracks plan versions, so without this an angle
     // picked after the build would silently keep a strategy describing the
@@ -3590,9 +3673,10 @@ async function main() {
             strategy: {},
             strategy_version: 0,
           }),
-          // The strategy auto-builds once the project is ready; failing it here
-          // keeps the "no strategy yet" state on screen so the button this
-          // check is about stays visible.
+          // The fixture carries no strategy, so the panel shows its empty
+          // state; failing any build here keeps that state on screen so the
+          // button this check is about stays visible — and if a regression
+          // ever fired the build on mount, the throw keeps it loud.
           generateStrategy: async () => {
             throw new Error("strategy build unavailable in this check");
           },
@@ -3641,9 +3725,9 @@ async function main() {
             strategy: {},
             strategy_version: 0,
           }),
-          // The strategy auto-builds once ready; failing it keeps the
-          // "no strategy" state so the dead-button behaviour this check pins
-          // stays observable.
+          // The fixture carries no strategy, so the panel shows its empty
+          // state; failing any build keeps the "no strategy" state so the
+          // dead-button behaviour this check pins stays observable.
           generateStrategy: async () => {
             throw new Error("strategy build unavailable in this check");
           },
@@ -4044,9 +4128,10 @@ async function main() {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       // A draft that exists but has no plan: the strategy and the one render
-      // must both stay out of reach. Entering this step writes the plan on its
-      // own, so the fixture fails the write: a plan the step cannot produce is
-      // the only plan-less state reachable here.
+      // must both stay out of reach. The step's Generate click is what writes
+      // the plan (ADR 0122), so the fixture fails that write: a plan the
+      // founder asked for but the step cannot produce is the plan-less
+      // failed state this check gates on.
       await withApi(
         {
           getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
@@ -4063,6 +4148,10 @@ async function main() {
             pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
+          await act(async () => {});
+          const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!generate) throw new Error("Review offers no Generate button for its plan");
+          await clickEl(ctx, generate);
           await act(async () => {});
           // Assert inside the stub scope: the plan write is async and would
           // otherwise land after the throwing stub restores, planning the
@@ -4472,6 +4561,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (!resolveProject || reads === 0) {
             throw new Error("Review never issued the re-read it should have");
           }
+          // ADR 0122: entering Review no longer writes the plan, so the
+          // editor this check types into arrives from the step's Generate
+          // click. The held re-read above stays in flight across the click,
+          // which is exactly the ordering the guard below is tested under.
+          const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!generate) throw new Error("Review offers no Generate button for its plan");
+          await clickEl(ctx, generate);
+          await act(async () => {});
           // Type into the script box, then let the in-flight read resolve.
           const box = [...ctx.container.querySelectorAll("textarea")].find((t) =>
             (t.value || "").includes("You do not have a focus problem"),
@@ -6047,6 +6144,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await act(async () => {});
           await act(async () => {});
           await openStep(ctx, "Review & submit");
+          // ADR 0122: the plan write now waits for the step's Generate
+          // click — entry alone never reaches the deleted template.
+          const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!generate) throw new Error("Review offers no Generate button for its plan");
+          await clickEl(ctx, generate);
           // The failed write settles through create, plan, catch, re-read and
           // re-render — deeper than the happy-path checks above — so flush
           // until the gap owns the step.
@@ -6844,11 +6946,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Live goals wait for the founder's click on Review's gate: the Audience
-  // step shows its persisted six with no Generate action beside them (only
-  // Shuffle), and only the gated Review copy's Generate calls the billed
-  // endpoint, its live six replacing the gate with live copy/fits.
-  await check("live goals generate only on the Review gate click", async (ctx) => {
+  // Live goals wait for the founder's click: picking an angle shows the
+  // facet-ordered list and calls nothing; only Generate goals calls the
+  // billed endpoint, and its six replace the list with live copy/fits.
+  await check("live goals generate only on the Generate click", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const LIVE = [
       { name: "educate_viewers", description: "Leaves them with one thing they got wrong.", why_it_fits: "Fits this angle's correction.", fit_score: 9 },
@@ -6863,36 +6964,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     apiCalls.length = 0;
     await withApi(
       {
-        getStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
-        createStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
-        updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", ...patch }),
         getContentAngles: async () => ({
           angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
           objective_evidence: {},
         }),
         generateAngleGoals: async () => ({ angle_id: "a1", goals: LIVE }),
-        generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review & submit");
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await act(async () => {});
-          await act(async () => {});
-          const pickerBefore = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
-          if (!pickerBefore) throw new Error("Review goal picker never mounted");
-          if (orderOf().length !== 0) throw new Error("the gate showed a finished list before its click");
           if (apiCalls.includes("generateAngleGoals")) {
-            throw new Error("live goals fired before the founder's gate click");
+            throw new Error("live goals fired on angle pick instead of waiting for the founder click");
           }
-          const generateCta = pickerBefore.querySelector('[data-testid="generate-goals-button"]');
-          if (!generateCta) throw new Error("the Review gate offers no Generate goals button");
-          await clickEl(ctx, generateCta, "no Review gate Generate button");
+          // Revealed: the persisted six are the initial list (Part 3) —
+          // the click replaces them with the live order, it does not
+          // reveal them. The gate form's instruction line is pinned at
+          // the Review recovery copy, its only remaining home.
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the persisted six are not the initial list: ${orderOf().join(", ")}`);
+          }
+          const generateCta = ctx.container.querySelector('[data-testid="generate-goals-button"]');
+          if (!generateCta) throw new Error("the picker offers no Generate goals button beside the list");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
           await new Promise((r) => setTimeout(r, 150));
           const order = orderOf();
           if (order.join("|") !== LIVE.map((g) => g.name).join("|")) {
-            throw new Error(`live goals did not replace the gate: ${order.join(", ")}`);
+            throw new Error(`live goals did not replace the list: ${order.join(", ")}`);
           }
           const picker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
           if (!picker.textContent.includes("Fits this angle's correction")) {
@@ -6911,43 +7013,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // A failed live-goal call behind Review's gate keeps the gate itself and
-  // names the retry: the goal step is never a blank list — the gate that
-  // was showing stays up (ADR 0107's fallback rule).
-  await check("live goal failure keeps the gate and names the retry", async (ctx) => {
+  // A failed live-goal call keeps the list it was called over and names
+  // the retry: the goal step is never blank — the persisted six that were
+  // showing stay put (ADR 0107's fallback rule).
+  await check("live goal failure keeps the facet list and names the retry", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
       .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
     await withApi(
       {
-        getStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
-        createStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
-        updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", ...patch }),
         getContentAngles: async () => ({
           angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
           objective_evidence: {},
         }),
         generateAngleGoals: async () => { throw new Error("goal generation unavailable"); },
-        generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Review & submit");
-          await act(async () => {});
-          await act(async () => {});
-          if (orderOf().length !== 0) throw new Error("the gate showed a finished list before its click");
-          const picker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
-          if (!picker) throw new Error("Review goal picker never mounted");
-          const generateCta = picker.querySelector('[data-testid="generate-goals-button"]');
-          if (!generateCta) throw new Error("the Review gate offers no Generate goals button");
-          await clickEl(ctx, generateCta, "no Review gate Generate button");
-          await new Promise((r) => setTimeout(r, 150));
-          if (orderOf().length !== 0) {
-            throw new Error(`the failed live-goal call showed a list: ${orderOf().join(", ")}`);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the persisted six are not showing before the call: ${orderOf().join(", ")}`);
           }
-          const gate = picker.querySelector('[data-testid="generate-goals-button"]');
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
+          await new Promise((r) => setTimeout(r, 150));
+          if (orderOf().join("|") !== SIX.join("|")) {
+            throw new Error(`the failed live-goal call changed the list: ${orderOf().join(", ")}`);
+          }
+          const gate = ctx.container.querySelector('[data-testid="generate-goals-button"]');
           if (!gate || gate.disabled) throw new Error("the Generate button is not retryable after a failed live-goal call");
           const error = ctx.container.querySelector('[data-testid="goals-generation-error"]');
           if (!error) throw new Error("a failed live-goal call shows no error");
@@ -7178,7 +7274,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'));
         await openStep(ctx, "Review & submit");
         await act(async () => {});
-        if (plans !== 1) throw new Error(`selecting an angle started ${plans} plans instead of one`);
+        // ADR 0122: the angle pick readies the step but starts nothing —
+        // the plan waits for Review's own Generate click.
+        if (plans !== 0) throw new Error(`selecting an angle started ${plans} plans without the Generate click`);
+        const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!generate) throw new Error("Review offers no Generate button once the angle is picked");
+        await clickEl(ctx, generate);
+        await act(async () => {});
+        if (plans !== 1) throw new Error(`Review's Generate click started ${plans} plans instead of one`);
       });
     } finally { global.__SMOKE_PARAMS = ""; }
   });
@@ -7422,7 +7525,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     before(
       ctx.container,
       ctx.container.querySelector('[data-testid="goto-first-gap-button"]'),
-      hintStartingWith(ctx.container, "Your free plan starts"),
+      hintStartingWith(ctx.container, "Set the choices above"),
       "the still-missing panel"
     );
 
@@ -7458,6 +7561,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(c);
           await openStep(c, "Review & submit");
+          // ADR 0122: the failed state is reached from the step's Generate
+          // click now — entry alone fires nothing to fail.
+          const generate = c.container.querySelector('[data-testid="plan-generate-button"]');
+          if (!generate) throw new Error("Review offers no Generate button for its plan");
+          await clickEl(c, generate);
+          await act(async () => {});
           before(c.container, buttonWithText(c.container, "Try again"), hintStartingWith(c.container, "The plan didn't generate"), "the failed-plan panel");
         } finally { await c.cleanup(); }
       });
