@@ -674,3 +674,196 @@ def test_the_plan_loop_refuses_a_hook_that_keeps_breaking_the_promise(monkeypatc
         )
     assert len(calls) == 3
 
+
+# ---------------------------------------------------------------------------
+# Kasra's Nov 13 quality gates (ADR 0128, extending ADR 0123)
+#
+# The live pair he rated 4/10 and 3/10, verbatim. Three observable defects
+# in it had no deterministic check: the hook's place lost its article, the
+# script spoke the app's slider vocabulary aloud, and the ending restated
+# the hook's problem in problem words instead of opening the discovery.
+# Each check below is pinned against that pair and against the natural
+# lines that must never trip it.
+
+NOV13_HOOK = "On days at bus stop, emotions come, words won't, I check in."
+NOV13_SCRIPT = (
+    "I choose pleasant and calm levels while waiting here, and that start "
+    "feels enough. Words stay difficult to find, but I sit with it."
+)
+
+
+# -- Part 2: a place keeps its article -------------------------------------
+
+def test_a_place_without_its_article_is_an_issue():
+    issues = issues_for(NOV13_HOOK, NOV13_SCRIPT)
+    assert any("article" in issue and "bus stop" in issue for issue in issues)
+
+
+def test_bare_place_phrases_are_issues_wherever_they_land():
+    for hook in (
+        "I freeze at office doors every single morning.",
+        "My chest gets loud at gym before the class starts.",
+        "The words go missing at store, right at the till.",
+        "I go quiet at park benches when the day piles up.",
+    ):
+        issues = issues_for(hook)
+        assert any("article" in issue for issue in issues), hook
+
+
+def test_natural_bare_places_are_not_issues():
+    # Idiomatic bare places: nobody says "at the home" or "at the work",
+    # and "at school" is the standard US form for the institution — the
+    # check judges it natural and leaves it out on purpose.
+    for hook in (
+        "I finally say it out loud at home, after dinner.",
+        "The noise starts at work, before the first call.",
+        "My kid says it plain at school, in front of everyone.",
+        "The words come at night, never in the morning.",
+    ):
+        issues = issues_for(hook)
+        assert not any("article" in issue for issue in issues), hook
+
+
+def test_places_with_determiners_are_not_issues():
+    for hook in (
+        "At the bus stop, the words just won't come.",
+        "I freeze outside my office every single morning.",
+        "A park bench at noon is where it hits me.",
+        "I check in at a store I have never liked.",
+    ):
+        issues = issues_for(hook)
+        assert not any("article" in issue for issue in issues), hook
+
+
+def test_loose_friendly_speech_is_not_an_issue():
+    # The PLAIN LOOSE WORDS examples from the shared craft block: the
+    # gates must never flag the voice they exist to protect.
+    issues = issues_for(
+        "It's weirdly the same every day, and I hate that.",
+        "I don't want to write in my journal today. What I wrote yesterday "
+        "still sounds like me, every week the same.",
+    )
+    assert not any("article" in issue for issue in issues)
+    assert not any("slider" in issue for issue in issues)
+    assert not any("restates" in issue for issue in issues)
+
+
+# -- Part 3: the app is never worked out loud -------------------------------
+
+def test_working_the_sliders_out_loud_is_an_issue():
+    issues = issues_for(NOV13_HOOK, NOV13_SCRIPT)
+    assert any("slider" in issue for issue in issues)
+
+
+def test_control_verbs_governing_levels_are_issues():
+    for script in (
+        "I set the levels where the day feels calm.",
+        "She picks calm levels and waits for the bus.",
+        "I adjust my levels before I say any of it.",
+        "I tap the slider until the feeling has a name.",
+    ):
+        issues = issues_for("The words won't come at the bus stop.", script)
+        assert any("slider" in issue for issue in issues), script
+
+
+def test_levels_in_a_persons_own_words_are_not_issues():
+    for script in (
+        "My stress levels are high before the first coffee.",
+        "Energy levels crash by three, every single day.",
+        "I watch my energy levels the way I watch the weather.",
+    ):
+        issues = issues_for("The words won't come at the bus stop.", script)
+        assert not any("slider" in issue for issue in issues), script
+
+
+# -- Part 4: the ending opens the discovery ---------------------------------
+
+def test_an_ending_that_restates_the_problem_is_an_issue():
+    issues = issues_for(NOV13_HOOK, NOV13_SCRIPT)
+    assert any("restates" in issue for issue in issues)
+
+
+def test_a_problem_restatement_ending_is_an_issue_in_other_words():
+    issues = issues_for(
+        "At the bus stop, the words never come when I need them.",
+        "I breathe once and watch the street. Some days the words just won't come.",
+    )
+    assert any("restates" in issue for issue in issues)
+
+
+def test_an_ending_that_names_the_unknown_passes():
+    # ADR 0123's canonical good ending, and the not-knowing form: both
+    # open the discovery by naming what is still unknown.
+    issues = issues_for(KASRA_HOOK, KASRA_SCRIPT_STATEMENT_END)
+    assert not any("restates" in issue for issue in issues)
+    issues = issues_for(
+        "My mood flips at one, right after lunch at my desk.",
+        "I changed the label to worn out after my walk. What sets it off is still a mystery.",
+    )
+    assert not any("restates" in issue for issue in issues)
+
+
+def test_an_ending_that_moves_somewhere_new_passes():
+    # A new place or moment in the last line is the discovery opening,
+    # even when the hook's problem word comes back with it.
+    issues = issues_for(
+        "At the bus stop, the words won't come at all.",
+        "I breathe once on the steps. At the kitchen table, the words come easier.",
+    )
+    assert not any("restates" in issue for issue in issues)
+    issues = issues_for(
+        "The page stays blank every single morning.",
+        "I make the coffee first. Tomorrow morning, I say it out loud instead.",
+    )
+    assert not any("restates" in issue for issue in issues)
+
+
+def test_an_ending_that_resolves_passes():
+    issues = issues_for(STRONG_HOOK, STRONG_SCRIPT)
+    assert not any("restates" in issue for issue in issues)
+
+
+def test_the_plan_loop_rewrites_the_nov13_pair(monkeypatch):
+    bad = _plan(NOV13_HOOK, NOV13_SCRIPT)
+    good = _plan(STRONG_HOOK, STRONG_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad if len(calls) == 1 else good
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == STRONG_HOOK
+    assert len(calls) == 2
+    # The correction names all three defects, so the rewrite is targeted.
+    assert "article" in calls[1]["prompt"]
+    assert "slider" in calls[1]["prompt"]
+    assert "restates" in calls[1]["prompt"]
+
+
+def test_the_plan_loop_refuses_a_pair_that_keeps_failing_the_gates(monkeypatch):
+    bad = _plan(NOV13_HOOK, NOV13_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            ai_service.generate_creative_plan(
+                profile={"brand_name": "Journal"},
+                template={"name": "T", "hook_seconds": 3},
+                duration_seconds=15,
+            )
+        )
+    assert len(calls) == 3
+

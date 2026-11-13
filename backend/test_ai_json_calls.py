@@ -219,6 +219,33 @@ class TestChatJson:
             _run(ai_service._chat_json("sys", "prompt", "Ctx"))
         assert "no response" in str(err.value)
 
+    def test_no_choices_recovers_on_retry(self, monkeypatch):
+        # An empty-choices reply is a provider hiccup, not an answer: the
+        # call already promises `attempts` tries, so a hiccup on the first
+        # must not spend the whole call. Before the fix this raised on the
+        # spot, and a one-line rewrite died on a transient empty reply.
+        import ai_service
+        rec = _patch_client(monkeypatch, [
+            {"id": "x"},
+            _completion('{"line": "A clearer line."}'),
+        ])
+        result = _run(ai_service._chat_json("sys", "prompt", "Ctx"))
+        assert result == {"line": "A clearer line."}
+        assert len(rec.payloads) == 2
+
+    def test_an_unparseable_reply_is_an_unusable_response(self, monkeypatch):
+        # The parse failure gets its own type so callers can tell "the
+        # model answered in a shape we cannot use" from every other
+        # RuntimeError, instead of pattern-matching the message.
+        import ai_service
+        _patch_client(monkeypatch, [
+            _completion('{"line": "cut off mid-thought'),
+            _completion('{"line": "cut off mid-thought'),
+        ])
+        with pytest.raises(ai_service.UnusableResponse) as err:
+            _run(ai_service._chat_json("sys", "prompt", "Ctx"))
+        assert "valid JSON" in str(err.value)
+
     def test_empty_content_names_the_finish_reason(self, monkeypatch):
         import ai_service
         _patch_client(monkeypatch, [

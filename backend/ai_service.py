@@ -826,7 +826,7 @@ def _parse_json_response(full_text: str, context: str) -> dict:
         f"{context}: model did not return valid JSON. Raw response (first 1500 chars): "
         f"{full_text[:1500]!r}"
     )
-    raise RuntimeError(f"{context} did not return valid JSON")
+    raise UnusableResponse(f"{context} did not return valid JSON")
 
 
 class ModelRefusal(RuntimeError):
@@ -854,6 +854,19 @@ class TruncatedResponse(RuntimeError):
     from the same completion budget, so a large JSON schema can exhaust
     max_tokens before the closing brace is ever written; the headroom this
     retry adds covers that failure mode whatever model serves the call.
+    """
+
+
+class UnusableResponse(RuntimeError):
+    """
+    The model answered, but the answer is not a JSON object we can use —
+    prose-shaped JSON that never parses, or a reply with no choices at all.
+
+    Worth its own exception for the same reason as the two above: a caller
+    that must tell the founder what happened (the line rewrites) can name
+    this class — "the reply came back in a shape that couldn't be used" —
+    instead of flattening it into the same generic failure as a timeout or
+    an unclassified error, which is how distinct causes all read as one.
     """
 
 
@@ -959,10 +972,15 @@ async def _chat_json(
 
         choices = data.get("choices") or []
         if not choices:
+            # An empty reply is a provider hiccup, not an answer: it costs
+            # one of the attempts this call already promises, the same as a
+            # truncated or unparseable reply. Raising on the spot spent the
+            # whole call on a transient — a one-line rewrite died on it.
             logger.error(
                 f"{context}: no choices in response: {json.dumps(data)[:1000]}"
             )
-            raise RuntimeError(f"{context}: model returned no response")
+            last_error = UnusableResponse(f"{context}: model returned no response")
+            continue
 
         choice = choices[0]
         finish_reason = choice.get("finish_reason")
@@ -1034,7 +1052,7 @@ async def _chat_json(
 
     if last_error:
         raise last_error
-    raise RuntimeError(f"{context}: model returned no usable response")
+    raise UnusableResponse(f"{context}: model returned no usable response")
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:
@@ -3286,6 +3304,19 @@ _ANGLE_PLACE_RULE = (
 HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
 
 
+# The budget for the one-line rewrites below. The visible answer is a
+# single short sentence, but the shipped text model reasons at Max and
+# bills that reasoning against max_tokens (see the model note at the top
+# of this file), so the budget is almost entirely headroom for thought.
+# At 400 — and at the 800 the retry doubled to — replies came back as
+# empty content with finish_reason=length, and every clearer-line click
+# failed as if the model had nothing to say. 1500 is the budget the post
+# kit already runs for a much larger answer; the retry doubles it to
+# 3000, and a reply that still truncates raises TruncatedResponse, which
+# the endpoint names for the founder instead of flattening.
+REWRITE_MAX_TOKENS = 1500
+
+
 async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "") -> str:
     """A clearer version of the founder's hook that names the real action (ADR 0084).
 
@@ -3326,7 +3357,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
             prompt=prompt,
             context="Hook rewrite",
             temperature=0.6,
-            max_tokens=400,
+            max_tokens=REWRITE_MAX_TOKENS,
             attempts=2,
             json_schema=HOOK_REWRITE_JSON_SCHEMA,
         )
@@ -3448,7 +3479,7 @@ async def rewrite_spoken_line(
             prompt=prompt,
             context="Line rewrite",
             temperature=0.6,
-            max_tokens=400,
+            max_tokens=REWRITE_MAX_TOKENS,
             attempts=2,
             json_schema=LINE_REWRITE_JSON_SCHEMA,
         )

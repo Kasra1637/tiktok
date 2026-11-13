@@ -2275,6 +2275,42 @@ async function main() {
     }
   });
 
+  await check("GenerationPanel hides Generate until a strategy exists", async (ctx) => {
+    // Kasra's one-action rule, extended to the no-strategy state: the
+    // render follows the strategy, so before one exists "Generate the
+    // video" cannot function at all — it is not rendered as a greyed
+    // button beside the strategy panel's bright build control above,
+    // and the panel's note names the step instead. Once a strategy is
+    // built, generate returns. An angle IS picked in this fixture: the
+    // no-angle state keeps its own pinned behaviour (its check above),
+    // because there the standing remedy is the angle pick itself.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, strategy: {} },
+      })(ctx)
+    );
+    expectText(
+      ctx,
+      "Read the app-specific strategy above, then generate.",
+      "the no-strategy note did not render"
+    );
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate is rendered before a strategy exists");
+    }
+    const stray = [...ctx.container.querySelectorAll("button")].find((b) =>
+      /Generate the video|Generate another/.test((b.textContent || "").trim())
+    );
+    if (stray) throw new Error("a generate-labelled button is rendered before a strategy exists");
+    await act(async () =>
+      ctx.root.render(
+        React.createElement(GenerationPanel, { project: PROJECT_WITH_STRATEGY })
+      )
+    );
+    if (!ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate did not return once a strategy existed");
+    }
+  });
+
   await check("the render panel edits the Location and reports what was rewritten", async (ctx) => {
     // The Location is the single source of truth for the place (ADR 0090), and
     // it is editable HERE, on the render step: saving it sends one PATCH whose
@@ -3870,8 +3906,10 @@ async function main() {
     // Without a strategy the render falls back to a generic take with a name in
     // it. This used to build the strategy AND render inside one click, which made
     // the panel's "read the strategy" copy cosmetic: the founder never saw it
-    // before the money went. The button is now dead until a current strategy
-    // exists, and building one is a separate free action on the panel above.
+    // before the money went. Building one is a separate free action on the panel
+    // above, and Kasra's one-action rule now keeps the generate control
+    // unrendered until a strategy exists — it cannot function before then,
+    // so it does not sit greyed beside the one working button.
     global.__SMOKE_PARAMS = "?project=p1";
     let renderCalls = 0;
     try {
@@ -3896,15 +3934,15 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          const btn = renderButton(ctx);
-          if (!btn.disabled) {
-            throw new Error("the generate button is live with no strategy to render from");
+          // No generate control to click at all: the absence is the
+          // gate, so no click here can spend a render.
+          if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+            throw new Error("a generate control is rendered with no strategy to render from");
           }
-          await act(async () => {
-            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
-          await act(async () => {});
+          const stray = [...ctx.container.querySelectorAll("button")].find((b) =>
+            /Generate the video|Generate another/.test((b.textContent || "").trim())
+          );
+          if (stray) throw new Error("a generate-labelled button is rendered with no strategy");
         }
       );
     } finally {
@@ -3913,7 +3951,7 @@ async function main() {
     if (renderCalls !== 0) {
       throw new Error(`a render went out with no strategy, ${renderCalls} call(s)`);
     }
-    // A dead button with no explanation strands the founder, so the panel has to
+    // A missing button with no explanation strands the founder, so the panel has to
     // say what to do next.
     if (!ctx.text().includes("Read the app-specific strategy above")) {
       throw new Error("the blocked generate button does not explain the next step");
@@ -4071,7 +4109,7 @@ async function main() {
   await check("a failed strategy build leaves nothing generated and says so", async (ctx) => {    // The build is its own action on the panel above, so its failure is reported
     // there. What matters from this panel's side is the guarantee that no render
     // went out: nothing is generated for a video that does not exist, and the
-    // founder is told why rather than left with a dead button.
+    // founder is told why rather than left with nothing to go on.
     global.__SMOKE_PARAMS = "?project=p1";
     let renderCalls = 0;
     try {
@@ -4099,11 +4137,11 @@ async function main() {
           });
           await act(async () => {});
           await act(async () => {});
-          // Whatever the panel does with the failure, the render button must not
-          // become live as a side effect of it.
-          const btn = renderButton(ctx);
-          if (!btn.disabled) {
-            throw new Error("a failed strategy build left the generate button live");
+          // Whatever the panel does with the failure, no generate
+          // control may appear as a side effect of it: without a
+          // strategy the control is not rendered at all.
+          if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+            throw new Error("a failed strategy build left a generate control rendered");
           }
         }
       );

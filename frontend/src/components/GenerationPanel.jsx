@@ -209,6 +209,13 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // except with no angle picked at all, where the standing remedy is the
   // angle pick itself and the disabled button stays as the gate it names.
   const rebuildRequired = !noAngle && (staleStrategy || angleStale);
+  // The same one-action rule before a strategy exists at all: the render
+  // follows the strategy, so without one the generate control cannot
+  // function — it stays unrendered beside the strategy panel's bright
+  // build control, and the note below names the step. The no-angle state
+  // is carved out: there the standing remedy is the angle pick itself,
+  // and the disabled button stays as the gate that names it.
+  const strategyMissing = !noAngle && !hasStrategy;
 
   // The presenter must be the founder's own face. Judged by the asset KIND on
   // what is attached, matching the server: a project can legitimately hold other
@@ -878,14 +885,14 @@ const handleGenerate = async () => {
       )}
 
       {/* Kasra's rule: one action at a time in Review. While a strategy
-          rebuild is owed, the generate control is not rendered at all — a
-          greyed "Generate the video" beside the bright rebuild remedy below
-          reads as two competing actions, and the rebuild is the only move
-          that unblocks the render. The control returns the moment the
-          strategy matches again. A render already in flight keeps its
+          rebuild is owed — or before a strategy exists at all — the
+          generate control is not rendered at all: a greyed "Generate the
+          video" beside the one bright control that unblocks the render
+          reads as two competing actions. The control returns the moment
+          a current strategy exists. A render already in flight keeps its
           progress button: hiding that would strand the wait, and the
           rebuild remedies already stand down while one runs. */}
-      {(!rebuildRequired || busy || inFlight) && (
+      {((!rebuildRequired && !strategyMissing) || busy || inFlight) && (
         <Button
           variant="accent"
           onClick={handleGenerate}

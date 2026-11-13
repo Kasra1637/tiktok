@@ -370,6 +370,113 @@ def hook_carries_certified_outcome(hook: str, outcome: str) -> bool:
     )
     return carried >= -(-len(terms) // 2)
 
+# Determiner-less place phrases (Kasra's grammar gate, ADR 0128).
+# "On days at bus stop" reached the founder in a generated hook: the
+# place lost its article, which no real person drops for these nouns.
+# The set is deliberately the witnessed class — places a speaker
+# locates themselves at with "at" — and nothing wider: "at home", "at
+# work" and "at night" are idiomatic bare, and "at school" / "at
+# church" are the standard US forms for the institution, so a general
+# article rule would refuse natural speech to catch one broken shape.
+# A determiner or possessive in front ("at the bus stop", "at my
+# office") never matches: the pattern starts at the noun itself.
+_BARE_PLACE_RE = re.compile(r"\bat (bus stop|office|gym|store|park)\b")
+
+def _bare_place_hit(text: str) -> str:
+    """The determiner-less place phrase in a spoken line, else ""."""
+    match = _BARE_PLACE_RE.search(_normalize_spoken(text))
+    return match.group(0) if match else ""
+
+# Working the app's controls out loud (ADR 0128). The profile's own
+# feature names are banned by the shared craft block; what leaked
+# instead was generic UI vocabulary — "I choose pleasant and calm
+# levels", where "levels" names the app's sliders. The catch is the
+# CONSTRUCTION, a control verb governing the noun within a few words,
+# never the noun alone: "my stress levels are high" and "energy levels
+# crash by three" are a person describing their own state, and must
+# never flag. "Tap" stands with the control verbs because in this
+# app's own idiom one tap is how a control is worked.
+_UI_CONTROL_RE = re.compile(
+    r"\b(choose|chooses|chose|pick|picks|picked|set|sets|setting|"
+    r"select|selects|selected|adjust|adjusts|adjusted|tap|taps|tapped)"
+    r"(?:\s+[a-z0-9]+){0,3}?\s+(levels?|sliders?)\b"
+)
+
+def _ui_control_hit(text: str) -> str:
+    """The control-verb + levels/slider span in a spoken line, else ""."""
+    match = _UI_CONTROL_RE.search(_normalize_spoken(text))
+    return match.group(0) if match else ""
+
+# Problem-state vocabulary for the ending check (ADR 0128): words that
+# state the unresolved problem itself, as opposed to a response to it.
+# Narrower than _PROBLEM_MARKERS on purpose — an ending may look back
+# ("the label was wrong in a way I can finally see" closes fine), so
+# only words that can only state the problem are here, plus the
+# negated auxiliaries that state it as a thing failing to happen.
+_ENDING_PROBLEM_WORDS = frozenset((
+    "hard", "harder", "hardest", "difficult", "stuck", "struggle",
+    "struggling", "failing", "overwhelmed", "endless", "losing",
+    "forgetting", "chaos", "dread",
+))
+_ENDING_PROBLEM_PHRASES = ("won t", "can t", "cannot")
+# An ending that names what is still unknown OPENS the discovery — it
+# is the ending ADR 0123 asks for — however it is phrased: the unknown
+# named outright, or the speaker's own not-knowing stated plainly.
+_ENDING_UNKNOWN_PHRASES = (
+    "mystery", "unknown", "don t know", "do not know", "doesn t know",
+    "no idea", "can t say", "cannot say", "can t name", "cannot name",
+    "has no name", "never has a name", "no name for",
+)
+
+def _ending_restates_problem(hook: str, script: str) -> bool:
+    """Whether the script's last sentence closes on the hook's problem.
+
+    The deterministic slice of "the ending opens the discovery" that
+    word arithmetic can see (ADR 0128, extending ADR 0123's question
+    check): the final sentence is still talking about the hook's
+    problem — it shares one of the hook's image words and is still
+    phrased in problem-state words — and it opens nothing: no
+    resolution marker, no new place or moment, no naming of what is
+    still unknown. Kasra's witnessed ending is the shape: "Words stay
+    difficult to find, but I sit with it" shares the hook's "words",
+    is phrased around "difficult", and adds no place, time, turn or
+    unknown. A restatement in entirely fresh problem words is beyond
+    this arithmetic and stays the prompt's business; what is pinned
+    here is the witnessed failure, not a theory of endings.
+    """
+    sentences = _split_sentences(script)
+    if not sentences:
+        return False
+    last = sentences[-1]
+    if _sentence_is_question(last):
+        return False  # question form is the ending check's own flag
+    normalized = _normalize_spoken(last)
+    if not normalized:
+        return False
+    last_words = _continuity_words(last)
+    hook_words = _continuity_words(hook)
+    if not any(
+        _words_match(last_word, hook_word)
+        for last_word in last_words
+        for hook_word in hook_words
+    ):
+        return False
+    tokens = set(normalized.split())
+    padded = f" {normalized} "
+    problem = bool(tokens & _ENDING_PROBLEM_WORDS) or any(
+        f" {phrase} " in padded for phrase in _ENDING_PROBLEM_PHRASES
+    )
+    if not problem:
+        return False
+    if any(f" {marker} " in padded for marker in _RESOLUTION_MARKERS):
+        return False
+    scene = tokens | {_continuity_stem(token) for token in tokens}
+    if scene & _SCENE_PLACES or scene & _SCENE_MOMENTS:
+        return False
+    if any(phrase in normalized for phrase in _ENDING_UNKNOWN_PHRASES):
+        return False
+    return True
+
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
                               *, allows_question: bool = False,
                               certified_outcome: str = "") -> list:
@@ -437,6 +544,27 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 f"generated clip never shows — speak on leaning, breathing and naming "
                 f"the worry instead; the founder's demo shows the app"
             )
+        # A place keeps its article in real speech (ADR 0128): "at bus
+        # stop" is a grammar slip no prompt wording had stopped, so the
+        # observable shape is checked like the other form defects.
+        bare_place = _bare_place_hit(text)
+        if bare_place:
+            issues.append(
+                f"{name} drops the article before a place ('{bare_place}') — "
+                f"a real person says 'at the {bare_place[3:]}'; give the place "
+                f"its article or rephrase"
+            )
+        # The app's controls are never worked out loud (ADR 0128): a
+        # control verb governing "levels"/"sliders" speaks the UI, not
+        # the feeling — the generic-vocabulary leak the feature-name
+        # ban in the craft block could not see.
+        ui_control = _ui_control_hit(text)
+        if ui_control:
+            issues.append(
+                f"{name} works the app's controls out loud ('{ui_control}') — "
+                f"a person names the feeling, never the slider: say what it "
+                f"feels like instead"
+            )
         # Live POV: a script line is spoken straight to camera in the moment.
         # Quotation marks or a self-narration verb ("I said quietly",
         # "I lean ... into the camera") turn direct speech into a report of
@@ -500,6 +628,18 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
             "script ends on a question ('" + script_sentences[-1].strip() + "'); "
             "the script never asks one — end on a statement that names what is "
             "still unknown in the story's own terms, so the demo reads as the answer"
+        )
+    # A statement ending can close the story just as flatly as a
+    # question (ADR 0128): if the last sentence is still the hook's
+    # problem, phrased in problem words, opening nothing — no turn, no
+    # new place or moment, no unknown named — it restates instead of
+    # handing off, and the demo that follows has nothing to answer.
+    if script_sentences and _ending_restates_problem(hook, script):
+        issues.append(
+            "script ends on a line that restates the hook's problem ('" + script_sentences[-1].strip() + "'); "
+            "the ending must open the discovery — end on the strongest concrete "
+            "line: name what is still unknown in the story's own terms, or the "
+            "concrete thing that changed, so the demo reads as the answer"
         )
     # The hook must promise the outcome this video's goal certified
     # (ADR 0127). The goal step fitted the goal to the angle's certified

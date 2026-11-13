@@ -1324,6 +1324,68 @@ async def update_studio_project(
         result["location_change"] = location_change
     return result
 
+def _rewrite_failure_http(exc: Exception, noun: str) -> HTTPException:
+    """The HTTP error for a failed clearer-line rewrite, named by its class.
+
+    The rewrite path dies in distinguishable ways — the model handed back
+    a refusal with its reason, the reply was cut off by the token budget,
+    the model declined, the reply was not usable JSON, the provider
+    throttled or timed out — and the founder can act on each differently,
+    so each gets its own sentence. The flat generic line survives for
+    exactly one case: a failure no class claims, whose cause is in the
+    server log (both endpoints log before raising) and the model-call
+    ledger. Flattening the named classes into it is what made three
+    different live failures read as the identical error.
+    """
+    if isinstance(exc, ai_service.RewriteRefusal):
+        # The service named why no clearer line exists, in the founder's
+        # words — surface it as-is (the rule from the Nov 12 fix).
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, ai_service.TruncatedResponse):
+        detail = (
+            f"The clearer {noun} ran long and was cut off before it finished. "
+            "Try again, or edit the line yourself."
+        )
+    elif isinstance(exc, ai_service.ModelRefusal):
+        detail = (
+            f"The model declined to rewrite that {noun}. "
+            "Try again, or edit the line yourself."
+        )
+    elif isinstance(exc, ai_service.UnusableResponse):
+        detail = (
+            f"The clearer {noun} came back in a shape that couldn't be used. "
+            "Try again, or edit the line yourself."
+        )
+    elif isinstance(exc, ai_service.httpx.TimeoutException):
+        detail = (
+            f"The clearer {noun} took too long to come back. "
+            "Try again, or edit the line yourself."
+        )
+    elif isinstance(exc, ai_service.httpx.HTTPStatusError):
+        status = exc.response.status_code if exc.response is not None else 0
+        if status == 429:
+            detail = (
+                "The writing service is busy right now. "
+                "Wait a moment and try again, or edit the line yourself."
+            )
+        else:
+            detail = (
+                f"The writing service answered with an error ({status}). "
+                "Try again, or edit the line yourself."
+            )
+    elif isinstance(exc, ai_service.httpx.TransportError):
+        detail = (
+            "The writing service couldn't be reached. "
+            "Try again, or edit the line yourself."
+        )
+    else:
+        detail = (
+            f"Couldn't write a clearer {noun} just now. "
+            "Try again, or edit the line yourself."
+        )
+    return HTTPException(status_code=502, detail=detail)
+
+
 @router.post("/studio/projects/{project_id}/rewrite-hook")
 async def suggest_hook_rewrite(
     project_id: str, payload: RewriteHookRequest, user_id: str = Depends(get_current_user_id)
@@ -1354,17 +1416,11 @@ async def suggest_hook_rewrite(
             ),
             user_id, studio_project_id=project_id,
         )
-    except ai_service.RewriteRefusal as e:
-        # Same rule as the line rewrite: a refusal the service named
-        # reaches the founder as-is; the generic line is only for
-        # provider/network failures.
-        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        logger.error(f"Hook rewrite failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Couldn't write a clearer hook just now. Try again, or edit the line yourself.",
-        )
+        # Every failure class gets its own sentence (see
+        # _rewrite_failure_http); the cause is logged here either way.
+        logger.error(f"Hook rewrite failed: {type(e).__name__}: {e}")
+        raise _rewrite_failure_http(e, "hook")
     return {"hook_line": line, "original": original}
 
 @router.post("/studio/projects/{project_id}/rewrite-line")
@@ -1439,18 +1495,11 @@ async def suggest_line_rewrite(
             ),
             user_id, studio_project_id=project_id,
         )
-    except ai_service.RewriteRefusal as e:
-        # The model answered but produced no usable clearer line, and its
-        # message already names why in the founder's words — surface it.
-        # The generic line below stays for provider/network failures,
-        # where there is no reason to name.
-        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        logger.error(f"Line rewrite failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Couldn't write a clearer line just now. Try again, or edit the line yourself.",
-        )
+        # Every failure class gets its own sentence (see
+        # _rewrite_failure_http); the cause is logged here either way.
+        logger.error(f"Line rewrite failed: {type(e).__name__}: {e}")
+        raise _rewrite_failure_http(e, "line")
     return {"line": line, "original": original, "role": role}
 
 @router.post("/studio/projects/{project_id}/plan")

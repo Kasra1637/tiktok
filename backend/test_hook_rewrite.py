@@ -109,6 +109,23 @@ def test_failed_rewrite_names_the_next_step(api, monkeypatch):
     assert "Try again" in err.value.detail
 
 
+def test_a_truncated_hook_rewrite_names_the_cutoff(api, monkeypatch):
+    # The hook endpoint shares the line endpoint's failure classes: a
+    # rewrite cut off by the token budget must say so, not flatten into
+    # the generic sentence kept for unclassified failures.
+    from models import RewriteHookRequest
+    project = _project(api)
+
+    async def boom(*args, **kwargs):
+        raise api.ai_service.TruncatedResponse("Hook rewrite was cut off")
+    monkeypatch.setattr(api.ai_service, "rewrite_hook_line", boom)
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_hook_rewrite(project["id"], RewriteHookRequest(), ANON))
+    assert err.value.status_code == 502
+    assert "cut off" in err.value.detail
+    assert "Try again" in err.value.detail
+
+
 def test_a_refusal_reason_reaches_the_founder(api, monkeypatch):
     from models import RewriteHookRequest
     project = _project(api)

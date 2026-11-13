@@ -454,3 +454,189 @@ def test_middle_rewrite_prompt_cuts_softeners(monkeypatch):
     assert "One idea per sentence" in prompt
     assert "cut softeners" in prompt
     assert "I keep thinking" in prompt
+
+
+# ------------------------------------------- the Nov 13 generic failures
+#
+# All three clearer-line clicks failed live AGAIN, this time on lines the
+# Nov 12 fixes already handled, with the same flat sentence. The classes
+# below are every way the rewrite path can die, pinned one by one: the
+# token budget a Max-reasoning model truncates against, and the endpoint
+# messages, which must name the class instead of flattening all of them
+# into "Couldn't write a clearer line just now."
+
+
+class _BudgetResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+class _BudgetRecorder:
+    """A provider whose thought tokens eat the completion budget.
+
+    The shipped text model reasons at Max and bills that reasoning
+    against max_tokens (see the note at the top of ai_service.py), so a
+    small budget comes back as empty content with finish_reason=length
+    even though the visible answer is one short line. This recorder
+    plays exactly that: below the threshold every reply truncates;
+    above it the line comes back whole.
+    """
+
+    THRESHOLD = 1000
+
+    def __init__(self):
+        self.payloads = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.payloads.append(json)
+        if (json or {}).get("max_tokens", 0) < self.THRESHOLD:
+            return _BudgetResponse({"choices": [{
+                "finish_reason": "length", "message": {"content": ""}}]})
+        return _BudgetResponse({"choices": [{
+            "finish_reason": "stop",
+            "message": {"content": (
+                '{"line": "Writing in my journal is the last thing '
+                'I want at night.", "hook_line": "I don\'t want to '
+                'write in my journal today."}'
+            )},
+        }]})
+
+
+def _patch_budget_provider(monkeypatch):
+    rec = _BudgetRecorder()
+    monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+    monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+    return rec
+
+
+def test_middle_rewrite_survives_a_reasoning_sized_budget(monkeypatch):
+    rec = _patch_budget_provider(monkeypatch)
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    assert line == CLEARER
+    # The first attempt's budget already clears the truncation threshold:
+    # the pre-fix 400 (and its doubled 800 retry) both came back empty.
+    assert rec.payloads[0]["max_tokens"] >= _BudgetRecorder.THRESHOLD
+    assert len(rec.payloads) == 1
+
+
+def test_hook_rewrite_survives_a_reasoning_sized_budget(monkeypatch):
+    rec = _patch_budget_provider(monkeypatch)
+    line = asyncio.run(ai_service.rewrite_hook_line(
+        {}, None, "Typing is the last thing I want"))
+    assert line == "I don't want to write in my journal today."
+    assert rec.payloads[0]["max_tokens"] >= _BudgetRecorder.THRESHOLD
+    assert len(rec.payloads) == 1
+
+
+def _raise(exc):
+    async def boom(*args, **kwargs):
+        raise exc
+    return boom
+
+
+def test_a_truncated_rewrite_names_the_cutoff(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(ai_service.TruncatedResponse("Line rewrite was cut off")))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "cut off" in err.value.detail
+    assert "Try again" in err.value.detail
+
+
+def test_a_declined_rewrite_names_the_refusal(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(ai_service.ModelRefusal("Line rewrite was refused")))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "declined" in err.value.detail
+
+
+def test_an_unusable_reply_names_the_shape(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(ai_service.UnusableResponse("Line rewrite did not return valid JSON")))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "couldn't be used" in err.value.detail
+    # The parse class no longer hides behind the flat generic sentence.
+    assert err.value.detail != (
+        "Couldn't write a clearer line just now. "
+        "Try again, or edit the line yourself."
+    )
+
+
+def test_a_slow_rewrite_names_the_wait(api, monkeypatch):
+    import httpx
+    from models import RewriteLineRequest
+    project = _project(api)
+    request = httpx.Request("POST", "https://openrouter.example/chat")
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(httpx.TimeoutException("read timed out", request=request)))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "too long" in err.value.detail
+
+
+def test_a_busy_provider_names_the_throttle(api, monkeypatch):
+    import httpx
+    from models import RewriteLineRequest
+    project = _project(api)
+    request = httpx.Request("POST", "https://openrouter.example/chat")
+    response = httpx.Response(429, request=request)
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(httpx.HTTPStatusError("429", request=request, response=response)))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert "busy" in err.value.detail
+
+
+def test_a_truly_unknown_failure_keeps_the_generic_line(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    monkeypatch.setattr(
+        api.ai_service, "rewrite_spoken_line",
+        _raise(ValueError("an unclassified surprise")))
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    # The flat sentence survives for exactly one class: a failure nobody
+    # classified. Its cause is in the server log and the model-call
+    # ledger, not hidden — it just has no honest name to give the founder.
+    assert err.value.status_code == 502
+    assert err.value.detail == (
+        "Couldn't write a clearer line just now. "
+        "Try again, or edit the line yourself."
+    )
