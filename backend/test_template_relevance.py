@@ -11,7 +11,12 @@ template, and `angle_scene.opening_shape` builds the one opening from the First
 3 Seconds Promise.
 """
 import angle_scene
-from angle_policy import normalize_content_angles
+from angle_policy import (
+    angle_grounding,
+    duplicate_angle_pairs,
+    normalize_content_angles,
+    same_moment_angle_pairs,
+)
 from template_recommendations import (
     check_template_relevance,
     filter_relevant_templates,
@@ -278,3 +283,120 @@ DRIFTED = [
     _template("Who could pick up your phone",
               "The viewer hears their own hesitation about privacy named out loud."),
 ]
+
+
+class TestAngleGrounding:
+    """Two-tier grounding (ADR 0125): exact wording still wins, a unique
+    near match on word tokens now certifies, ambiguity never does."""
+
+    PROFILE = {"core_features": ["One-tap voice journaling", "Evening mood check-in"]}
+
+    def test_exact_match_still_links(self):
+        result = angle_grounding(self.PROFILE, {"app_feature": "One-tap voice journaling"})
+        assert result == {"feature": "One-tap voice journaling"}
+
+    def test_reordered_words_paraphrase_links_by_containment(self):
+        result = angle_grounding(self.PROFILE, {"app_feature": "voice journaling with one tap"})
+        assert result["feature"] == "One-tap voice journaling"
+
+    def test_high_overlap_paraphrase_links_by_jaccard(self):
+        profile = {"core_features": [
+            "Guided breathing exercises for calmer mornings at home every day",
+            "Evening mood check-in",
+        ]}
+        result = angle_grounding(profile, {
+            "app_feature": "Guided breathing exercises for calmer mornings at home every night"})
+        assert result["feature"] == "Guided breathing exercises for calmer mornings at home every day"
+
+    def test_a_genuinely_different_feature_does_not_link(self):
+        assert angle_grounding(self.PROFILE, {"app_feature": "Photo habit streaks"}) == {}
+
+    def test_two_qualifying_candidates_mean_no_link(self):
+        profile = {"core_features": ["One-tap voice journaling", "Voice journaling with one tap"]}
+        assert angle_grounding(profile, {"app_feature": "voice journaling one tap"}) == {}
+
+    def test_exact_match_beats_a_near_match_elsewhere(self):
+        profile = {"core_features": ["Voice journaling", "One-tap voice journaling"]}
+        result = angle_grounding(profile, {"app_feature": "Voice journaling"})
+        assert result["feature"] == "Voice journaling"
+
+    def test_outcome_link_resolves_a_paraphrased_from_feature(self):
+        profile = {
+            "core_features": ["One-tap voice journaling"],
+            "outcome_statements": [
+                {"from_feature": "voice journaling with one tap",
+                 "outcome": "The day gets said out loud"}],
+        }
+        result = angle_grounding(profile, {"app_feature": "One-tap voice journaling"})
+        assert result == {"feature": "One-tap voice journaling",
+                          "outcome": "The day gets said out loud"}
+
+    def test_an_outcome_for_another_feature_is_not_pulled_in(self):
+        profile = {
+            "core_features": ["One-tap voice journaling", "Voice journaling reminders"],
+            "outcome_statements": [
+                {"from_feature": "voice journaling reminders daily",
+                 "outcome": "Never miss the evening prompt"}],
+        }
+        result = angle_grounding(profile, {"app_feature": "One-tap voice journaling"})
+        assert result == {"feature": "One-tap voice journaling"}
+
+    def test_an_ambiguous_from_feature_links_nothing(self):
+        profile = {
+            "core_features": ["One-tap voice journaling", "Voice journaling with one tap"],
+            "outcome_statements": [
+                {"from_feature": "voice journaling one tap",
+                 "outcome": "The day gets said out loud"}],
+        }
+        result = angle_grounding(profile, {"app_feature": "One-tap voice journaling"})
+        assert result == {"feature": "One-tap voice journaling"}
+
+    def test_a_paraphrased_feature_is_certified_on_normalize(self):
+        angles = normalize_content_angles(
+            [{"kind": "problem_solution", "target_audience": "a", "user_problem": "p",
+              "hook_promise": "h", "app_feature": "voice journaling with one tap"}],
+            6, self.PROFILE)
+        assert angles[0]["app_feature"] == "One-tap voice journaling"
+
+    def test_unlinked_prose_is_left_as_written_on_normalize(self):
+        angles = normalize_content_angles(
+            [{"kind": "problem_solution", "target_audience": "a", "user_problem": "p",
+              "hook_promise": "h", "app_feature": "A quiet page for the day"}],
+            6, self.PROFILE)
+        assert angles[0]["app_feature"] == "A quiet page for the day"
+
+
+class TestSameMomentAngles:
+    """Same moment, different words (ADR 0125): token-set overlap catches
+    what the trigram check cannot see, and only that."""
+
+    FIRST = {
+        "user_problem": "At the kitchen table after dinner, the unsent message sits open and the words will not come",
+        "hook_promise": "The character pauses at the kitchen table and says the unsent message out loud",
+    }
+    SECOND = {
+        "user_problem": "The words will not come for the unsent message sitting open at the kitchen table after dinner",
+        "hook_promise": "Saying the unsent message out loud, the character pauses by the kitchen table",
+    }
+
+    def test_same_moment_in_different_words_is_flagged(self):
+        angles = [self.FIRST, self.SECOND]
+        # The lexical check cannot see this pair: wording, not moment, differs.
+        assert duplicate_angle_pairs(angles) == []
+        assert same_moment_angle_pairs(angles) == [(2, 1)]
+
+    def test_the_same_feature_with_genuinely_different_problems_is_not_flagged(self):
+        angles = [
+            {"app_feature": "Task timer",
+             "user_problem": "The grocery list is forgotten at home again and dinner becomes a guessing game all week",
+             "hook_promise": "The character reads the list out loud in the supermarket aisle"},
+            {"app_feature": "Task timer",
+             "user_problem": "A parking ticket arrives in the post for a car sold last spring",
+             "hook_promise": "The character laughs while holding the letter beside the mailbox"},
+        ]
+        assert same_moment_angle_pairs(angles) == []
+
+    def test_a_lexically_flagged_pair_still_flags_on_the_old_path(self):
+        angles = [self.FIRST, dict(self.FIRST)]
+        assert duplicate_angle_pairs(angles) == [(2, 1)]
+        assert same_moment_angle_pairs(angles) == [(2, 1)]

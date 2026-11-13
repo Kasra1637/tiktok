@@ -720,6 +720,42 @@ class TestAngleDiversity:
         with pytest.raises(RuntimeError, match="distinct"):
             _run(ai_service.generate_content_angles({}, max_angles=2))
 
+    def test_same_moment_pairs_get_one_correction(self, monkeypatch):
+        import ai_service
+        calls = []
+        first = {**TestAngleFeedbackPromptWiring.ANGLE,
+                 "user_problem": "At the kitchen table after dinner, the unsent message sits open and the words will not come",
+                 "hook_promise": "The character pauses at the kitchen table and says the unsent message out loud"}
+        second = {**first, "kind": "objection_handling",
+                  "user_problem": "The words will not come for the unsent message sitting open at the kitchen table after dinner",
+                  "hook_promise": "Saying the unsent message out loud, the character pauses by the kitchen table"}
+        other = {**first, "kind": "objection_handling", "user_problem": "Paper notes vanish before handover", "hook_promise": "Where did the shift note go?"}
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs["prompt"])
+            return [first, second] if len(calls) == 1 else [first, other]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}, max_angles=2))
+        assert len(calls) == 2
+        assert "same-moment" in calls[1].lower()
+        assert result[1]["hook_promise"] == "Where did the shift note go?"
+
+    def test_persistent_same_moment_pairs_fail_loudly(self, monkeypatch):
+        import ai_service
+        calls = []
+        first = {**TestAngleFeedbackPromptWiring.ANGLE,
+                 "user_problem": "At the kitchen table after dinner, the unsent message sits open and the words will not come",
+                 "hook_promise": "The character pauses at the kitchen table and says the unsent message out loud"}
+        second = {**first, "kind": "objection_handling",
+                  "user_problem": "The words will not come for the unsent message sitting open at the kitchen table after dinner",
+                  "hook_promise": "Saying the unsent message out loud, the character pauses by the kitchen table"}
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs["prompt"])
+            return [first, second]
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError, match="distinct"):
+            _run(ai_service.generate_content_angles({"brand_name": "Taskly"}, max_angles=2))
+        assert len(calls) == 2
+
     def test_profile_linked_outcome_replaces_invented_outcome(self, monkeypatch):
         import ai_service
         async def fake_chat_json(**kwargs):

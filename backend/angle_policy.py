@@ -14,23 +14,78 @@ def _fact_key(value) -> str:
     return " ".join(re.findall(r"\w+", str(value or "").casefold()))
 
 
+def _token_set(value) -> frozenset:
+    return frozenset(_fact_key(value).split())
+
+
+def _near_feature_match(angle_tokens: frozenset, feature_tokens: frozenset) -> bool:
+    """Tier-2 near match on word tokens: containment either way, or Jaccard >= 0.8."""
+    if not angle_tokens or not feature_tokens:
+        return False
+    if angle_tokens <= feature_tokens or feature_tokens <= angle_tokens:
+        return True
+    return len(angle_tokens & feature_tokens) / len(angle_tokens | feature_tokens) >= 0.8
+
+
+def _select_feature(features: list, feature_text) -> str:
+    """Resolve a feature text to one recorded profile feature, or "".
+
+    Tier 1 is the historical rule — exact normalized-wording equality,
+    first match — and it always wins, so a tier-2 candidate can never
+    beat another feature's exact match. Tier 2 accepts a near match
+    (see _near_feature_match) only when exactly one profile feature
+    qualifies; two qualifying features are ambiguity, not a link, and
+    identical recorded features count once. No qualifying feature
+    resolves to "".
+    """
+    selected = next((str(f).strip() for f in features
+                     if _fact_key(f) == _fact_key(feature_text)), "")
+    if selected:
+        return selected
+    tokens = _token_set(feature_text)
+    qualifying, seen = [], set()
+    for f in features:
+        key = _fact_key(f)
+        if key in seen:
+            continue
+        seen.add(key)
+        if _near_feature_match(tokens, _token_set(f)):
+            qualifying.append(str(f).strip())
+    return qualifying[0] if len(qualifying) == 1 else ""
+
+
 def angle_grounding(profile: dict, angle: dict) -> dict:
     """Resolve a recorded feature/outcome pair, never an invented promise.
 
-    Exact normalized source matching is intentionally conservative. Old/manual
-    angles can paraphrase a feature: their prose remains in the brief but is
-    not certified as a source link. Missing profile facts invent no constraint.
+    Two tiers, both conservative, because the certified feature replaces
+    the angle's own app_feature text in normalize_content_angles and the
+    pair feeds the plan and strategy briefs as verified material — a
+    wrong link would propagate as fact:
+
+    - Tier 1: exact normalized-wording equality with a profile
+      core_feature (the historical rule; it always wins).
+    - Tier 2: a near match on word tokens — one token set fully
+      contained in the other, or token Jaccard >= 0.8 — accepted ONLY
+      when exactly one profile feature qualifies. Two qualifying
+      features means no link, and a tier-2 candidate never beats
+      another feature's exact match.
+
+    Each outcome statement's from_feature is resolved through the same
+    two tiers, so an outcome links only to the feature it names, exact
+    or uniquely near. Old/manual angles can still paraphrase beyond
+    both tiers: their prose remains in the brief but is not certified
+    as a source link. Missing profile facts invent no constraint.
     """
     features = profile.get("core_features") or []
     if isinstance(features, str):
         features = [features]
-    selected = next((str(f).strip() for f in features
-                     if _fact_key(f) == _fact_key(angle.get("app_feature"))), "")
+    selected = _select_feature(features, angle.get("app_feature"))
     if not selected:
         return {}
     linked = [str(item.get("outcome") or "").strip()
               for item in profile.get("outcome_statements") or []
-              if isinstance(item, dict) and _fact_key(item.get("from_feature")) == _fact_key(selected)
+              if isinstance(item, dict)
+              and _select_feature(features, item.get("from_feature")) == selected
               and str(item.get("outcome") or "").strip()]
     outcomes = linked or profile.get("desired_outcomes") or []
     if isinstance(outcomes, str):
@@ -63,6 +118,33 @@ def duplicate_angle_pairs(angles: list) -> list:
         return len(aa & bb) / max(len(aa), len(bb)) >= 0.8
     return [(i + 1, j + 1) for i, a in enumerate(angles) for j, b in enumerate(angles[:i])
             if all(similar(a.get(field), b.get(field)) for field in ("user_problem", "hook_promise"))]
+
+
+def same_moment_angle_pairs(angles: list) -> list:
+    """Same moment in different words: token-set overlap, not wording.
+
+    duplicate_angle_pairs compares word trigrams, so a pair retelling
+    the same moment with fresh wording passes it — its own docstring
+    says it is not a claim of semantic similarity. This check compares
+    the token SETS of the same two fields instead: a pair is the same
+    moment when BOTH user_problem and hook_promise reach >= 0.6 Jaccard
+    similarity on _fact_key tokens. The bar sits below the lexical
+    check's 0.8 trigram bar because token sets ignore word order and
+    repetition: a retold moment scores high here while its trigrams
+    diverge, and requiring both fields keeps a shared topic with a
+    different problem (or the reverse) from flagging.
+
+    Deterministic and explainable by construction: this module makes
+    no model calls, so "same moment" can only ever mean this token
+    rule — a reader can reproduce any flag from the two texts alone.
+    """
+    def same_moment(left, right):
+        a, b = _token_set(left), _token_set(right)
+        if not a or not b:
+            return False
+        return len(a & b) / len(a | b) >= 0.6
+    return [(i + 1, j + 1) for i, a in enumerate(angles) for j, b in enumerate(angles[:i])
+            if all(same_moment(a.get(field), b.get(field)) for field in ("user_problem", "hook_promise"))]
 
 
 def normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:

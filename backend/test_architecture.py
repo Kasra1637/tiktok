@@ -269,11 +269,17 @@ def test_ai_service_reexports_pure_clusters_for_existing_callers():
 
 def test_ai_adapter_reuses_the_same_angle_policy_for_all_briefs():
     import ai_service
-    from angle_policy import angle_grounding, duplicate_angle_pairs, normalize_content_angles
+    from angle_policy import (
+        angle_grounding,
+        duplicate_angle_pairs,
+        normalize_content_angles,
+        same_moment_angle_pairs,
+    )
 
     assert ai_service._angle_grounding is angle_grounding
     assert ai_service._duplicate_angle_pairs is duplicate_angle_pairs
     assert ai_service._normalize_content_angles is normalize_content_angles
+    assert ai_service._same_moment_angle_pairs is same_moment_angle_pairs
 
 
 @pytest.mark.parametrize("module", ["angle_policy", "template_recommendations", "character_policy", "scene_consistency", "final_beat", "ai_spoken", "ai_strategy", "ai_text", "ai_media", "creative_quality"])
