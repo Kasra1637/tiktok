@@ -403,6 +403,7 @@ export default function CreateVideo() {
   // returned setters.
   const {
     angles, setAngles, objectiveEvidence, setObjectiveEvidence, pairEvidence,
+    verdictObjectiveEvidence, setVerdictObjectiveEvidence,
     adoptAngles, generatingAngles, angleError, setAngleError,
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,
@@ -566,6 +567,7 @@ export default function CreateVideo() {
             if (!cancelled) {
               setAngles([]);
               setObjectiveEvidence({});
+              setVerdictObjectiveEvidence({});
               setAngleError(getErrorMessage(err));
             }
           });
@@ -746,6 +748,7 @@ export default function CreateVideo() {
     } catch (err) {
       setAngles([]);
       setObjectiveEvidence({});
+      setVerdictObjectiveEvidence({});
       setAngleError(getErrorMessage(err));
     }
     setStep(1);
@@ -1775,6 +1778,7 @@ export default function CreateVideo() {
               fitReasons={objectiveFitReasons}
               objectiveEvidence={objectiveEvidence}
               pairEvidence={pairEvidence}
+              verdictObjectiveEvidence={verdictObjectiveEvidence}
               suggestions={angle?.goal_suggestions}
               liveGoals={liveGoals}
               onGenerate={handleGenerateGoals}

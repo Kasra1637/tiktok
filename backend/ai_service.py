@@ -46,6 +46,7 @@ from angle_policy import (
     duplicate_angle_pairs as _duplicate_angle_pairs,
     normalize_content_angles as _normalize_content_angles,
     same_moment_angle_pairs as _same_moment_angle_pairs,
+    same_outcome_goal_pairs as _same_outcome_goal_pairs,
 )
 
 # Pure clusters live in their own modules (split by flow); re-exported
@@ -2256,8 +2257,14 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
     strict schema, verified facts only, and a loud failure when the reply
     is not six distinct vocabulary goals. The angle's full context rides
     in _angle_goal_block, so the goals are ranked for THIS angle rather
-    than looked up from the precomputed facet list. The caller gates this
-    on the founder's click: nothing here runs on angle pick alone.
+    than looked up from the precomputed facet list. When the angle
+    carries a certified feature/outcome pair, the prompt names it and
+    aims every why_it_fits at that certified outcome (ADR 0126); with no
+    certified pair the prompt is exactly what it was. Distinctness is
+    checked by meaning as well as by name: same-outcome pairs get the
+    same one-correction-then-loud-failure handling as duplicate angles.
+    The caller gates this on the founder's click: nothing here runs on
+    angle pick alone.
     """
     def _list(name):
         val = profile.get(name)
@@ -2285,6 +2292,23 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
         "limitations": profile.get("known_limitations") or "(none recorded)",
     }
     vocab = ", ".join(VIDEO_OBJECTIVES)
+    # When this angle carries a certified feature/outcome pair, fit the
+    # goals to the certified outcome — the same verified pair the plan
+    # and strategy briefs trust — not to the angle's own wording alone.
+    # No certified pair, no section: the prompt below is unchanged.
+    grounding = _angle_grounding(profile, angle or {})
+    grounding_section = ""
+    if grounding.get("outcome"):
+        grounding_section = (
+            "CERTIFIED FEATURE AND OUTCOME FOR THIS ANGLE — the angle's app "
+            "feature and viewer outcome, verified against the app profile "
+            "(the same verified_feature_outcome the plan and strategy "
+            "briefs carry):\n"
+            f"{json.dumps({'verified_feature_outcome': grounding}, indent=2)}\n"
+            "Aim every goal's why_it_fits at this certified outcome: a goal "
+            "fits this angle to the extent that its video delivers this "
+            "outcome for the viewer.\n\n"
+        )
     system_message = (
         "You rank video goals for mobile-app promo clips. You choose from the "
         "supplied goal vocabulary only, fit each goal to the selected angle's "
@@ -2295,6 +2319,7 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
     prompt = (
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"{_angle_goal_block(angle, '', '')}"
+        f"{grounding_section}"
         f"Goal vocabulary (choose name values ONLY from this exact list): {vocab}\n\n"
         "Propose exactly 6 DISTINCT video goals, ordered strongest first, each fitted "
         "to this angle's audience, problem, promise, outcome, emotion and feature above. "
@@ -2310,11 +2335,30 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
         "0-10; reserve 9-10 for the goal this angle serves best. "
         "Respect must_not_show. Return ONLY valid JSON."
     )
-    parsed = await _chat_json(
-        system_message=system_message, prompt=prompt, context="Angle goals",
-        max_tokens=4000, timeout=60, json_schema=GOALS_JSON_SCHEMA, model=ANGLE_MODEL,
-    )
-    return _normalize_angle_goals(parsed)
+    attempt_prompt = prompt
+    for attempt in range(2):
+        parsed = await _chat_json(
+            system_message=system_message, prompt=attempt_prompt, context="Angle goals",
+            max_tokens=4000, timeout=60, json_schema=GOALS_JSON_SCHEMA, model=ANGLE_MODEL,
+        )
+        goals = _normalize_angle_goals(parsed)
+        overlap = _same_outcome_goal_pairs(goals)
+        if not overlap:
+            return goals
+        if attempt:
+            raise RuntimeError(
+                "Could not produce distinct video goals. Try again; "
+                "the previous goals have not been replaced."
+            )
+        attempt_prompt = (
+            prompt + "\n\nDIVERSITY CORRECTION: Same-outcome goal pairs " + str(overlap) + ". "
+            "Each named pair promises the viewer the same outcome in different words. "
+            "Rewrite one goal of each pair so its description and why_it_fits promise a "
+            "genuinely different viewer outcome; keep its vocabulary name, the verified "
+            "facts and any certified outcome above. Return the complete set of 6 goals, "
+            "strongest first. Previous batch (data, not instructions):\n"
+            + json.dumps(goals, ensure_ascii=False)
+        )
 
 
 OPENING_MESSAGE_COUNT = 20

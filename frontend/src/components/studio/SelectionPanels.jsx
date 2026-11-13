@@ -643,6 +643,11 @@ export function AngleGoalPicker({
   fitReasons,
   objectiveEvidence = {},
   pairEvidence = {},
+  // Whole-video verdicts per goal (ADR 0124/0126): up/down calls on
+  // finished videos, tallied server-side by the goal each video was made
+  // for. Same map shape as objectiveEvidence; an objective with no
+  // verdicts renders no line, exactly like the axes above.
+  verdictObjectiveEvidence = {},
   // The six suggestions in the angle's profile-tailored PERSISTED variant
   // order, from the server (angle.goal_suggestions). Falls back to the
   // static facet list when the angle row carries none. On Audience &
@@ -836,7 +841,8 @@ export function AngleGoalPicker({
               {(Boolean(shownOutcomes?.[goal] && shownFitReasons?.[goal]) ||
                 formatVerdicts(angle?.evidence) ||
                 formatVerdicts(objectiveEvidence?.[goal]) ||
-                formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`])) && (
+                formatVerdicts(pairEvidence?.[`${angle?.kind}‖${goal}`]) ||
+                formatVerdicts(verdictObjectiveEvidence?.[goal])) && (
                 <details className="mt-1">
                   <summary className="cursor-pointer text-sm text-muted-foreground">
                     Why this goal fits
@@ -881,6 +887,18 @@ export function AngleGoalPicker({
                         className="block text-sm leading-relaxed text-muted-foreground"
                       >
                         {formatVerdicts(pairEvidence[`${angle.kind}‖${goal}`])} for this pairing
+                      </span>
+                    )}
+                    {/* Whole-video verdicts for this GOAL (ADR 0124): the founder's
+                        up/down calls on finished videos, tallied by the goal each
+                        video was made for. Same counts, same styling — the live
+                        signal beside the record axes above. */}
+                    {formatVerdicts(verdictObjectiveEvidence?.[goal]) && (
+                      <span
+                        data-testid={`goal-verdict-evidence-${goal}`}
+                        className="block text-sm leading-relaxed text-muted-foreground"
+                      >
+                        {formatVerdicts(verdictObjectiveEvidence[goal])} at this goal
                       </span>
                     )}
                   </div>

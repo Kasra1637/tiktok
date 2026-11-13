@@ -301,6 +301,51 @@ class TestVerdictSteeringSection:
         assert "5–7 verdicts" in section
 
 
+class TestVerdictObjectiveEvidence:
+    """The goal card's verdict axis (ADR 0126): the same whole-video
+    verdicts, tallied per objective from each bundle's frozen context —
+    the goal the video was actually made for when it was judged."""
+
+    def _row(self, verdict, objective):
+        bundle = _bundle("Hook")
+        bundle["context"] = {**bundle["context"], "objective": objective}
+        return {"verdict": verdict, "bundle": bundle}
+
+    def test_tallies_verdicts_per_objective(self):
+        import feedback as feedback_mod
+
+        evidence = feedback_mod.verdict_objective_evidence([
+            self._row("up", "demonstrate_feature"),
+            self._row("up", "demonstrate_feature"),
+            self._row("down", "demonstrate_feature"),
+            self._row("up", "create_curiosity"),
+        ])
+        assert evidence["demonstrate_feature"] == {
+            "wins": 2, "flops": 1, "adoptions": 0, "posted": 0, "views": 0}
+        assert evidence["create_curiosity"] == {
+            "wins": 1, "flops": 0, "adoptions": 0, "posted": 0, "views": 0}
+
+    def test_rows_that_cannot_speak_for_a_goal_are_skipped(self):
+        import feedback as feedback_mod
+
+        no_context = _bundle("Hook")
+        no_context["context"] = {}
+        evidence = feedback_mod.verdict_objective_evidence([
+            {"verdict": "up", "bundle": no_context},
+            {"verdict": "sideways", "bundle": _bundle("Hook")},
+            {"verdict": "up", "bundle": None},
+            {"verdict": "down"},
+            "not a row",
+        ])
+        assert evidence == {}
+
+    def test_no_rows_means_no_evidence(self):
+        import feedback as feedback_mod
+
+        assert feedback_mod.verdict_objective_evidence([]) == {}
+        assert feedback_mod.verdict_objective_evidence(None) == {}
+
+
 class _Stop(Exception):
     pass
 

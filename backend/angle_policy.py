@@ -147,6 +147,42 @@ def same_moment_angle_pairs(angles: list) -> list:
             if all(same_moment(a.get(field), b.get(field)) for field in ("user_problem", "hook_promise"))]
 
 
+def same_outcome_goal_pairs(goals: list) -> list:
+    """Same promised outcome in different words: token-set overlap.
+
+    The six ranked goals are distinct by vocabulary NAME already (a
+    repeated name fails loudly), but two goals with different names can
+    still promise the viewer the same outcome — the goal-step analogue
+    of two angles staging the same moment. The outcome a goal promises
+    lives in its outcome-bearing text, description + why_it_fits read
+    as one text; a pair is the same outcome when that combined text
+    reaches >= 0.6 Jaccard similarity on _fact_key tokens — the
+    same-moment bar, for the same reason: token sets ignore word
+    order, so a retold outcome scores high while its wording diverges,
+    and 0.6 stays far above what shared connective filler ("fits
+    because the angle...") contributes on its own. One combined text
+    per goal, not a both-fields rule like the angle check: a goal's
+    two fields are one promise split across a description and a fit
+    reason, where an angle's two fields are two different claims (the
+    problem, the promise) that must EACH repeat before the moment is
+    the same.
+
+    Deterministic and explainable by construction, like every check
+    in this module: no model calls, so any flag reproduces from the
+    two texts alone.
+    """
+    def outcome_tokens(goal):
+        return _token_set(" ".join(str(goal.get(field) or "")
+                                   for field in ("description", "why_it_fits")))
+    def same_outcome(left, right):
+        a, b = outcome_tokens(left), outcome_tokens(right)
+        if not a or not b:
+            return False
+        return len(a & b) / len(a | b) >= 0.6
+    return [(i + 1, j + 1) for i, a in enumerate(goals) for j, b in enumerate(goals[:i])
+            if same_outcome(a, b)]
+
+
 def normalize_content_angles(parsed, max_angles: int, profile: dict) -> list:
     if isinstance(parsed, dict):
         parsed = parsed.get("angles") or parsed.get("content_angles") or []

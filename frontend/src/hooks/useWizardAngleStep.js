@@ -25,10 +25,17 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
   // The intersection axis: kind × objective, keyed "kind‖objective". Own
   // state for the same reason as objectiveEvidence — it is not per angle.
   const [pairEvidence, setPairEvidence] = useState({});
+  // The whole-video verdict axis (ADR 0124), keyed by objective name like
+  // objectiveEvidence but tallied from the frozen verdict bundles — the
+  // live signal beside the record axes above. Fetched with the angles
+  // (`verdict_objective_evidence` on the same response) and refreshed by
+  // the live-goals response; a pure read either way, never a trigger.
+  const [verdictObjectiveEvidence, setVerdictObjectiveEvidence] = useState({});
   const adoptAngles = useCallback((data, onAngles = () => {}) => {
     setAngles(data?.angles || []);
     setObjectiveEvidence(data?.objective_evidence || {});
     setPairEvidence(data?.pair_evidence || {});
+    setVerdictObjectiveEvidence(data?.verdict_objective_evidence || {});
     onAngles(data?.angles || []);
     return data?.angles;
   }, []);
@@ -251,6 +258,9 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     try {
       const data = await api.generateAngleGoals(profileId, angleId);
       setLiveGoals(Array.isArray(data?.goals) ? data.goals : []);
+      if (data?.verdict_objective_evidence) {
+        setVerdictObjectiveEvidence(data.verdict_objective_evidence);
+      }
       setGoalsRevealed(true);
     } catch (err) {
       setLiveGoals(null);
@@ -262,6 +272,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
 
   return {
     angles, setAngles, objectiveEvidence, setObjectiveEvidence, pairEvidence,
+    verdictObjectiveEvidence, setVerdictObjectiveEvidence,
     adoptAngles, generatingAngles, angleError, setAngleError,
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,

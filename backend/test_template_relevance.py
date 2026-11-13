@@ -16,6 +16,7 @@ from angle_policy import (
     duplicate_angle_pairs,
     normalize_content_angles,
     same_moment_angle_pairs,
+    same_outcome_goal_pairs,
 )
 from template_recommendations import (
     check_template_relevance,
@@ -400,3 +401,58 @@ class TestSameMomentAngles:
         angles = [self.FIRST, dict(self.FIRST)]
         assert duplicate_angle_pairs(angles) == [(2, 1)]
         assert same_moment_angle_pairs(angles) == [(2, 1)]
+
+
+class TestSameOutcomeGoals:
+    """Same promised outcome, different goal names (ADR 0126): the six
+    goals are distinct by vocabulary name already; this check reads the
+    outcome-bearing text (description + why_it_fits) the way the
+    same-moment check reads an angle's two fields."""
+
+    SAME_OUTCOME = [
+        {"name": "address_user_problem",
+         "description": "Shows the missed deadline at the desk while the morning slips away",
+         "why_it_fits": "Fits because the angle shows the missed deadline at the desk in the morning"},
+        {"name": "feel_seen_and_understood",
+         "description": "The missed deadline at the desk, with the morning slipping away",
+         "why_it_fits": "Fits because the angle stages the missed deadline at the desk in the morning"},
+    ]
+
+    def test_same_outcome_in_different_words_is_flagged(self):
+        assert same_outcome_goal_pairs(self.SAME_OUTCOME) == [(2, 1)]
+
+    def test_genuinely_distinct_outcomes_pass(self):
+        goals = [
+            {"name": "address_user_problem",
+             "description": "Gets them naming the problem out loud.",
+             "why_it_fits": "Fits this angle's problem."},
+            {"name": "feel_seen_and_understood",
+             "description": "Makes them feel described, not sold to.",
+             "why_it_fits": "Fits this angle's feeling."},
+            {"name": "avoid_common_mistake",
+             "description": "Catches them before the mistake.",
+             "why_it_fits": "Fits this angle's promise."},
+            {"name": "create_curiosity",
+             "description": "Leaves them wanting the answer.",
+             "why_it_fits": "Fits this angle's outcome."},
+            {"name": "ease_daily_moment",
+             "description": "Makes the daily moment feel lighter.",
+             "why_it_fits": "Fits this angle's moment."},
+            {"name": "educate_viewers",
+             "description": "Leaves them with one thing they got wrong.",
+             "why_it_fits": "Fits this angle's feature."},
+        ]
+        assert same_outcome_goal_pairs(goals) == []
+
+    def test_a_shared_fit_phrase_alone_does_not_flag(self):
+        # Both whys lean on the same filler; the promised outcomes differ,
+        # and filler alone stays far under the bar.
+        goals = [
+            {"name": "address_user_problem",
+             "description": "Names the exact bill they forgot to pay",
+             "why_it_fits": "Fits this angle"},
+            {"name": "ease_daily_moment",
+             "description": "Shows the quiet minute after the alarm rings",
+             "why_it_fits": "Fits this angle"},
+        ]
+        assert same_outcome_goal_pairs(goals) == []

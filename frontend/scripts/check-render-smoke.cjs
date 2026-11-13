@@ -6656,6 +6656,47 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
+  // The whole-video verdict axis on goal cards (ADR 0124/0126): the
+  // founder's up/down calls on finished videos, tallied by the goal each
+  // video was made for. Same counts, same styling as the record axes —
+  // and an objective with no verdicts renders no line at all.
+  await check("goal cards show whole-video verdict counts at this goal", async (ctx) => {
+    const VERDICTED = {
+      ...ANGLE,
+      objective: "address_user_problem",
+      evidence: { wins: 0, flops: 0 },
+    };
+    const payload = { angles: [VERDICTED, ANGLE_B], objective_evidence: {}, pair_evidence: {}, verdict_objective_evidence: { address_user_problem: { wins: 5, flops: 2 } } };
+    await withApi(
+      { getContentAngles: async () => payload, regenerateContentAngles: async () => payload },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await passAngleGate(ctx);
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await passGoalGate(ctx);
+          const verdictLine = ctx.container.querySelector('[data-testid="goal-verdict-evidence-address_user_problem"]');
+          if (!verdictLine) throw new Error("the goal card shows no whole-video verdict count");
+          if (!verdictLine.textContent.includes("5 wins") || !verdictLine.textContent.includes("2 flops")) {
+            throw new Error(`verdict line does not read as counts: ${verdictLine.textContent}`);
+          }
+          if (!verdictLine.textContent.includes("at this goal")) {
+            throw new Error(`verdict line does not name its axis: ${verdictLine.textContent}`);
+          }
+          if (verdictLine.textContent.includes("%")) {
+            throw new Error("verdict line presents a rate instead of counts");
+          }
+          const noneLine = ctx.container.querySelector('[data-testid="goal-verdict-evidence-create_curiosity"]');
+          if (noneLine) throw new Error("a goal with no verdicts renders a verdict line");
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
 // The intersection axis: this kind for this goal is the most specific
   // evidence on the card. A proven pairing names what neither axis alone
   // can — same counts, same styling, third line.

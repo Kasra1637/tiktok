@@ -645,6 +645,42 @@ async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> di
     return feedback_mod.summarize_angle_feedback(rows, posted_rows=posted)
 
 
+async def _verdict_objective_evidence(brand_profile_id: str, user_id: str) -> dict:
+    """Whole-video verdicts tallied per objective for this profile (ADR 0126).
+
+    The ADR 0124 signal, read for display beside the goal picker: each
+    verdict's frozen bundle names the objective its video was made for,
+    so the tally speaks for the goal itself and survives later project
+    edits — unlike the goal-thumb record above, which attributes by the
+    project's CURRENT objective. The read mirrors the studio steering
+    read (same join, same defensive bundle parsing) and is pure: it
+    never generates anything (ADR 0122), and a read failure yields an
+    empty map rather than failing the list the founder asked for.
+    """
+    try:
+        rows = await _cfg("_fetch_all")(
+            "SELECT vv.verdict AS verdict, vv.bundle AS bundle "
+            "FROM video_verdicts vv "
+            "JOIN generations g ON g.id = vv.generation_id "
+            "WHERE g.brand_profile_id = ? AND vv.user_id = ? "
+            "ORDER BY vv.updated_at DESC LIMIT 200",
+            (brand_profile_id, user_id),
+        )
+    except Exception:
+        rows = []
+    parsed = []
+    for row in rows or []:
+        bundle = row.get("bundle")
+        if isinstance(bundle, str):
+            try:
+                bundle = json.loads(bundle)
+            except (TypeError, ValueError):
+                bundle = None
+        parsed.append({"verdict": row.get("verdict"),
+                       "bundle": bundle if isinstance(bundle, dict) else {}})
+    return feedback_mod.verdict_objective_evidence(parsed)
+
+
 async def _component_feedback_for_profile_owned(
     brand_profile_id: str, user_id: str, component: str
 ) -> dict:
@@ -776,8 +812,10 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     """Re-read this profile's angles and shape the audience-step payload.
 
     The same shape as GET /content-angles: serialized rows (kind evidence
-    plus each row's goal suggestions in its saved variant order) and the
-    profile-wide objective_evidence map. POST generate/regenerate return
+    plus each row's goal suggestions in its saved variant order), the
+    profile-wide objective_evidence map, and the whole-video verdict
+    tally per objective (verdict_objective_evidence, ADR 0126).
+    POST generate/regenerate return
     this instead of the raw model rows, so the wizard never adopts a row
     shape the list endpoint would not serve — the old raw return dropped
     goal_suggestions (the goal picker silently fell back to the static
@@ -828,6 +866,10 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
         ],
         "objective_evidence": objective_evidence,
         "pair_evidence": pair_evidence,
+        # The live whole-video verdict axis (ADR 0124/0126), keyed by
+        # objective like objective_evidence but tallied from the frozen
+        # verdict bundles — the goal card shows it beside the record axes.
+        "verdict_objective_evidence": await _verdict_objective_evidence(profile_id, user_id),
     }
 
 
@@ -1959,7 +2001,11 @@ async def live_angle_goals(
     except Exception as e:
         logger.error(f"Live goal generation failed for angle {angle_id}: {e}")
         raise HTTPException(status_code=502, detail=f"AI goal generation failed. Please try again. ({str(e)[:150]})")
-    return {"angle_id": angle_id, "goals": goals}
+    # The verdict tally rides along so freshly generated goals render
+    # with the same evidence line as the persisted set (ADR 0126). It is
+    # a read attached to this click-gated response, never a trigger.
+    return {"angle_id": angle_id, "goals": goals,
+            "verdict_objective_evidence": await _verdict_objective_evidence(profile_id, user_id)}
 
 
 @router.get("/app-profiles/{profile_id}/content-angles/{angle_id}/goal-suggestions")

@@ -2071,6 +2071,67 @@ class TestLiveAngleGoalsEndpoint:
         assert err.value.status_code == 404
 
 
+class TestGoalVerdictEvidencePayload:
+    """ADR 0126: the goals payloads carry whole-video verdicts tallied per
+    objective (each verdict bundle froze the goal its video was made for),
+    so the goal card can show the same style of evidence line the angle
+    cards show. The read is pure — it never generates goals."""
+
+    def _seed_verdict(self, api, profile_id, objective, verdict, user_id=ANON):
+        import json
+
+        generation_id = str(uuid.uuid4())
+        _run(api._execute(
+            "INSERT INTO generations (id, user_id, status, brand_profile_id, "
+            "created_at, updated_at) VALUES (?, ?, 'completed', ?, "
+            "'2026-11-01T00:00:00', '2026-11-01T00:00:00')",
+            (generation_id, user_id, profile_id),
+        ))
+        bundle = json.dumps({"context": {
+            "objective": objective, "angle_kind": "problem_solution",
+            "angle_id": "a1"}})
+        _run(api._execute(
+            "INSERT INTO video_verdicts (generation_id, user_id, verdict, "
+            "bundle, created_at, updated_at) VALUES (?, ?, ?, ?, "
+            "'2026-11-01T00:00:00', '2026-11-01T00:00:00')",
+            (generation_id, user_id, verdict, bundle),
+        ))
+
+    def test_content_angles_carry_verdict_evidence_per_objective(self, api):
+        profile = _make_profile(api, ANON, name="Verdict Goals", approve=True)
+        other = _make_profile(api, ANON, name="Verdict Goals Other", approve=True)
+        for verdict in ("up", "up", "down"):
+            self._seed_verdict(api, profile["id"], "address_user_problem", verdict)
+        self._seed_verdict(api, profile["id"], "create_curiosity", "up")
+        # Another profile's verdicts and another user's verdicts stay out.
+        self._seed_verdict(api, other["id"], "address_user_problem", "up")
+        self._seed_verdict(api, profile["id"], "address_user_problem", "up",
+                            user_id="someone-else")
+        out = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        evidence = out["verdict_objective_evidence"]
+        assert evidence["address_user_problem"] == {
+            "wins": 2, "flops": 1, "adoptions": 0, "posted": 0, "views": 0}
+        assert evidence["create_curiosity"]["wins"] == 1
+
+    def test_live_goals_carry_the_same_verdict_evidence(self, api, monkeypatch):
+        profile = _make_profile(api, ANON, name="Verdict Live Goals", approve=True)
+        angle_id = TestLiveAngleGoalsEndpoint()._angle(api, profile["id"])
+        self._seed_verdict(api, profile["id"], "address_user_problem", "up")
+
+        async def fake_goals(profile, angle):
+            return [dict(g) for g in TestLiveAngleGoalsEndpoint.GOALS]
+
+        monkeypatch.setattr(api, "generate_angle_goals", fake_goals)
+        out = _run(api.live_angle_goals(
+            profile_id=profile["id"], angle_id=angle_id, user_id=ANON))
+        assert out["verdict_objective_evidence"]["address_user_problem"]["wins"] == 1
+
+    def test_no_verdicts_means_an_empty_map(self, api):
+        profile = _make_profile(api, ANON, name="Verdict Goals None", approve=True)
+        out = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert out["verdict_objective_evidence"] == {}
+
+
 class TestDirectionOptionsEndpoint:
     """Review-step dropdowns follow the profile's category group."""
 

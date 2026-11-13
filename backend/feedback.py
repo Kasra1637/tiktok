@@ -1271,6 +1271,42 @@ def _verdict_bundle_line(bundle: dict) -> str:
     return "- " + " | ".join(parts) if parts else "- (no recorded material)"
 
 
+def verdict_objective_evidence(rows) -> dict:
+    """Whole-video verdicts tallied per objective, from the frozen bundles.
+
+    `rows` are {"verdict": "up"|"down", "bundle": {...}} — the same rows
+    summarize_video_verdicts counts. The objective a verdict speaks to
+    is the one frozen in its bundle's context: the goal the video was
+    made for when the founder judged it, so a later project edit never
+    moves the count onto another goal. Counts only, in the same bucket
+    shape the pickers already render — wins are up verdicts, flops are
+    down; adoptions/posted/views stay zero because those axes belong
+    to the behavior record, not to verdicts. Rows that cannot speak
+    for a goal (no verdict, no bundle context, no objective) are
+    skipped, never guessed at.
+    """
+    evidence: dict = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        verdict = row.get("verdict")
+        if verdict not in ("up", "down"):
+            continue
+        bundle = row.get("bundle")
+        if not isinstance(bundle, dict):
+            continue
+        context = bundle.get("context")
+        if not isinstance(context, dict):
+            continue
+        objective = str(context.get("objective") or "").strip()
+        if not objective:
+            continue
+        bucket = evidence.setdefault(objective, {
+            "wins": 0, "flops": 0, "adoptions": 0, "posted": 0, "views": 0})
+        bucket["wins" if verdict == "up" else "flops"] += 1
+    return evidence
+
+
 def build_verdict_feedback_section(summary: dict) -> str:
     """
     The one feedback section generation prompts may receive, or "".

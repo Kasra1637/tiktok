@@ -587,6 +587,97 @@ class TestLiveAngleGoals:
         assert "TWO BEATS MAX" not in captured["prompt"]
         assert "70 characters" not in captured["prompt"]
 
+    # The angle's app_feature is "Task timer"; this profile records that
+    # feature and an outcome statement for it, so the angle certifies.
+    PROFILE_WITH_FACTS = {
+        "brand_name": "Taskly",
+        "core_features": ["Task timer", "Reminders"],
+        "outcome_statements": [{
+            "outcome": "Starting without stalling on setup",
+            "who_feels_it": "people who stall on starting",
+            "from_feature": "Task timer",
+            "how_it_helps": "The timer starts in one tap",
+        }],
+    }
+
+    def test_goals_are_aimed_at_the_certified_outcome(self, monkeypatch):
+        # When the angle carries a certified feature/outcome pair, the goal
+        # prompt names it (the same verified_feature_outcome the plan and
+        # strategy briefs trust) and aims every why_it_fits at it.
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_angle_goals(
+            dict(self.PROFILE_WITH_FACTS), dict(self.ANGLE)))
+        assert "verified_feature_outcome" in captured["prompt"]
+        assert "Starting without stalling on setup" in captured["prompt"]
+        assert "why_it_fits" in captured["prompt"]
+
+    def test_goal_prompt_is_unchanged_without_a_certified_pair(self, monkeypatch):
+        # No recorded feature matches the angle: no grounding section at
+        # all — the prompt is exactly today's.
+        import ai_service
+        captured = self._capture(monkeypatch)
+        _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert "verified_feature_outcome" not in captured["prompt"]
+        assert "CERTIFIED" not in captured["prompt"]
+
+    def _capture_sequence(self, monkeypatch, replies):
+        import ai_service
+        prompts = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return replies[len(prompts) - 1]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return prompts
+
+    # Two goals promising the viewer the same outcome in different words:
+    # the missed deadline at the desk, twice.
+    OVERLAPPING = [
+        {"name": "address_user_problem",
+         "description": "Shows the missed deadline at the desk while the morning slips away",
+         "why_it_fits": "Fits because the angle shows the missed deadline at the desk in the morning",
+         "fit_score": 9},
+        {"name": "feel_seen_and_understood",
+         "description": "The missed deadline at the desk, with the morning slipping away",
+         "why_it_fits": "Fits because the angle stages the missed deadline at the desk in the morning",
+         "fit_score": 8},
+    ]
+
+    def _overlapping_reply(self):
+        goals = [dict(g) for g in self.GOALS]
+        goals[0] = dict(self.OVERLAPPING[0])
+        goals[1] = dict(self.OVERLAPPING[1])
+        return {"goals": goals}
+
+    def test_same_outcome_goals_get_one_correction(self, monkeypatch):
+        import ai_service
+        prompts = self._capture_sequence(monkeypatch, [
+            self._overlapping_reply(),
+            {"goals": [dict(g) for g in self.GOALS]},
+        ])
+        out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert len(prompts) == 2
+        assert "same-outcome" in prompts[1].lower()
+        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS]
+
+    def test_persistent_same_outcome_goals_fail_loudly(self, monkeypatch):
+        import ai_service
+        prompts = self._capture_sequence(monkeypatch, [
+            self._overlapping_reply(), self._overlapping_reply()])
+        with pytest.raises(RuntimeError, match="distinct"):
+            _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert len(prompts) == 2
+
+    def test_distinct_goals_cost_one_call(self, monkeypatch):
+        import ai_service
+        prompts = self._capture_sequence(monkeypatch, [
+            {"goals": [dict(g) for g in self.GOALS]}])
+        out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert len(prompts) == 1
+        assert len(out) == 6
+
 
 class TestAngleFeedbackPromptWiring:
     ANGLE = {
