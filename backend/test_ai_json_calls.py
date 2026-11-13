@@ -1704,7 +1704,15 @@ class TestStrategyBudget:
         # so the demo feels like the answer. 34,133 leaves only ~120 of
         # headroom under 34,250, so the ceiling moves by a measured 500
         # to 34,750, keeping ~620.
-        CEILING = 34_750
+        #
+        # The SCRIPT BAR (middle script only; hook line untouched) raises it
+        # again, measured: 34,133 -> 34,833 (+~700) for the 8-or-9 bar — one
+        # real person to their phone, answer the hook first, one visual
+        # detail, filler ('just'/'really'/'actually') and metaphor ('stops
+        # winning') bans, generic/softener/vague cuts, a connected no-question
+        # ending and the read-it-out-loud pass. The ceiling moves by a
+        # measured 500 to 35,250, keeping ~417 of headroom.
+        CEILING = 35_250
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
@@ -1716,6 +1724,80 @@ class TestStrategyBudget:
                      "SHOW ONE LIVED DETAIL, NOT A SUMMARY",
                      "END ON THE STRONGEST LINE"):
             assert rule in prompt, f"the middle-voice rule {rule!r} is missing from the strategy prompt"
+
+    def test_strategy_budget_grew_and_retries_three_times(self, monkeypatch):
+        """8192 truncated twice and still 502'd; the fix is a larger floor
+        plus a third attempt, not another blind retry at the same size."""
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured.update(kwargs)
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"location": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Sleeply"},
+            template={"name": "T"},
+            hook_seconds=3,
+        ))
+        assert captured.get("max_tokens", 0) >= 12288, (
+            f"strategy floor is {captured.get('max_tokens')}; 8192 already "
+            "truncated in production"
+        )
+        assert captured.get("attempts", 0) >= 3, (
+            f"strategy retries is {captured.get('attempts')}; a second "
+            "truncation at 24576 must get one more shortened attempt"
+        )
+
+    def test_script_bar_governs_the_middle_and_leaves_the_hook(self, monkeypatch):
+        """The 8-or-9 bar is prompt-only for the middle script; the hook
+        line's form/wording rules must survive verbatim beside it."""
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"location": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [{"index": 0, "role": "hook", "seconds": 5,
+                              "goal": "g", "script": "s", "action": "a"}],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Sleeply"},
+            template={"name": "T"},
+            hook_seconds=3,
+        ))
+        prompt = captured["prompt"]
+        for needle in ("8 or 9", "answering the hook", "stops winning",
+                       "middle script only", "hook line is untouched"):
+            assert needle in prompt, f"script bar piece {needle!r} is missing"
+        # Hook writing rules survive beside the bar: form choice and the
+        # hook's own length/word floor are not swallowed by it.
+        assert "HOOK FORM" in prompt
+        assert "hook_line" in prompt
 
     def test_the_schema_still_asks_for_a_bounded_number_of_values(self):
         """

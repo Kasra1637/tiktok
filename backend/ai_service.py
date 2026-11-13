@@ -4706,6 +4706,15 @@ async def generate_video_strategy(
         "where a weaker line follows. Before you finish, say the middle aloud in your head: if "
         "any sentence reads as written copy, restates the hook, or sounds "
         "generic, rewrite that sentence and re-check until every line sounds said, not written.\n"
+        "- SCRIPT BAR (middle script only; the hook line is untouched): land the script at "
+        "an 8 or 9 for a TikTok viewer — one real person talking to their phone in short, "
+        "plain sentences, one idea each. Open by answering the hook in the first sentence, "
+        "with no warm-up. Include one concrete visual detail from a real moment. Ban filler "
+        "words like 'just', 'really' and 'actually', and ban written or metaphor phrasing "
+        "like 'stops winning'. Cut anything a viewer would scroll past: generic lines, "
+        "softeners and vague claims. End on the story just told and open the discovery with "
+        "no question, so the demo feels like the answer. Before returning, read the middle "
+        "out loud and rewrite any line that breaks this.\n"
         "- The middle develops the hook — the situation, the pain, the reaction, the action, the "
         "transition — and its job is to end at the moment the viewer would reach for the app (for "
         "a selfie, stated in words but never filmed as a reach toward the phone/camera/lens). It "
@@ -4918,9 +4927,11 @@ async def generate_video_strategy(
     # nested objects, several of them prose. Thinking models spend thought
     # tokens from the SAME completion budget, so a budget that looks generous
     # on paper can be exhausted before the closing brace is written. 8192
-    # stays the floor: it fits this schema and sits inside the provider
-    # output ceiling of the models this service can be pointed at
-    # (Muse Ember's output ceiling is far above the 8192 used here).
+    # truncated in production even with the doubled retry, so 12288 is the
+    # floor now (retry reaches 24576) and a third attempt gives one more
+    # shortened retry before the cut-off is named. Still inside the provider
+    # output ceiling of the models this service can be pointed at (Muse
+    # Ember's output ceiling is far above the base used here).
     # No wording gate: the strategy is accepted as written. Missing fields
     # still fail loudly; wording never fails a draft.
     raw = await _chat_json(
@@ -4928,8 +4939,8 @@ async def generate_video_strategy(
         prompt=prompt,
         context="Video strategy",
         temperature=0.5,
-        max_tokens=8192,
-        attempts=2,
+        max_tokens=12288,
+        attempts=3,
         json_schema=STRATEGY_JSON_SCHEMA,
     )
     if isinstance(raw.get("strategy"), dict):
