@@ -107,3 +107,22 @@ def test_failed_rewrite_names_the_next_step(api, monkeypatch):
         _run(api.suggest_hook_rewrite(project["id"], RewriteHookRequest(), ANON))
     assert err.value.status_code == 502
     assert "Try again" in err.value.detail
+
+
+def test_a_refusal_reason_reaches_the_founder(api, monkeypatch):
+    from models import RewriteHookRequest
+    project = _project(api)
+    reason = (
+        "The rewrite came back unchanged; "
+        "try again, or edit the line yourself."
+    )
+
+    async def refuse(*args, **kwargs):
+        raise api.ai_service.RewriteRefusal(reason)
+    monkeypatch.setattr(api.ai_service, "rewrite_hook_line", refuse)
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_hook_rewrite(project["id"], RewriteHookRequest(), ANON))
+    # The service named why no clearer hook exists; the founder sees that
+    # reason, not the generic sentence kept for provider failures.
+    assert err.value.status_code == 422
+    assert err.value.detail == reason

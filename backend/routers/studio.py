@@ -1294,6 +1294,11 @@ async def suggest_hook_rewrite(
             ),
             user_id, studio_project_id=project_id,
         )
+    except ai_service.RewriteRefusal as e:
+        # Same rule as the line rewrite: a refusal the service named
+        # reaches the founder as-is; the generic line is only for
+        # provider/network failures.
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Hook rewrite failed: {e}")
         raise HTTPException(
@@ -1310,10 +1315,12 @@ async def suggest_line_rewrite(
 
     Advisory like the hook rewrite (ADR 0084): writes nothing. The hook
     role runs the hook rewrite unchanged; a middle line is rewritten inside
-    the room the rest of the script leaves in the middle's seconds, so an
-    accepted suggestion cannot push the script over its ceiling — and when
-    no room is left, the refusal says to shorten the script first instead
-    of offering a rewrite that could never fit.
+    the room the rest of the script leaves in the middle's seconds, plus
+    the line's own length, which replacing it frees — so an accepted
+    suggestion can never lengthen the script, and a shorter one can pull
+    an over-ceiling body back under. When no room is left, the refusal
+    says to shorten the script first instead of offering a rewrite that
+    could never fit.
     """
     require_ai_configured()
     row = await _fetch_one(
@@ -1350,7 +1357,13 @@ async def suggest_line_rewrite(
         ceiling = check_spoken_story(
             hook_line, script, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
         )["script"]["ceiling"]
-        max_chars = ceiling - (len(script) - len(original))
+        # Replacing a line frees the line's own length, so the room is
+        # never less than the line itself. The plain remainder alone
+        # would leave an over-ceiling body no room at all: each line
+        # would get less space than it takes up today, and even a
+        # shorter rewrite — the kind that pulls the body back under —
+        # would be refused as too long.
+        max_chars = max(ceiling - (len(script) - len(original)), len(original))
         if max_chars < 16:
             raise HTTPException(
                 status_code=400,
@@ -1366,6 +1379,12 @@ async def suggest_line_rewrite(
             ),
             user_id, studio_project_id=project_id,
         )
+    except ai_service.RewriteRefusal as e:
+        # The model answered but produced no usable clearer line, and its
+        # message already names why in the founder's words — surface it.
+        # The generic line below stays for provider/network failures,
+        # where there is no reason to name.
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Line rewrite failed: {e}")
         raise HTTPException(

@@ -175,6 +175,55 @@ def test_rewrite_allows_question_when_founder_hook_asks_for_one(monkeypatch):
     assert line == "Why do Friday evenings feel so heavy?"
 
 
+def test_rewrite_corrects_an_unchanged_reply(monkeypatch):
+    # A provider that hands the current hook back — here in quotes, which
+    # the cleanup strips — has not refused the rewrite; it gets the same
+    # one bounded correction a question or a diary open gets, instead of
+    # failing the click on the spot.
+    replies = [
+        {"hook_line": '"Fridays feel off."'},
+        {"hook_line": "Friday off-feelings never come with a reason."},
+    ]
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return replies[len(calls) - 1]
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    line = asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
+    assert line == "Friday off-feelings never come with a reason."
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "unchanged" in calls[1]["prompt"]
+
+
+def test_rewrite_refuses_a_persistent_echo(monkeypatch):
+    monkeypatch.setattr(
+        ai_service,
+        "_chat_json",
+        AsyncMock(return_value={"hook_line": "Fridays feel off."}),
+    )
+    with pytest.raises(ai_service.RewriteRefusal, match="unchanged"):
+        asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
+
+
+def test_rewrite_prompt_names_the_exact_moment(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"hook_line": "Friday off-feelings never come with a reason."}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(ai_service.rewrite_hook_line(
+        {}, None, "Mood flipped again halfway down this path today."))
+    prompt = calls[0]["prompt"]
+    assert "NAME THE MOMENT" in prompt
+    assert "halfway down this path" in prompt
+    assert "names the exact moment" in prompt
+
+
 def _plan(hook, script):
     return {
         "hook_line": hook,

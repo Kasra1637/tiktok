@@ -854,6 +854,22 @@ class TruncatedResponse(RuntimeError):
     """
 
 
+class RewriteRefusal(RuntimeError):
+    """
+    The model answered a line-rewrite request, but the answer is not a
+    clearer line the founder can use — it handed the line back unchanged,
+    asked a question in the script, ran past the line's room, or narrated
+    the hook in first person.
+
+    Worth its own exception: the message is written for the founder and
+    names the next step, so an endpoint surfaces it as-is. Without the
+    type, the endpoint cannot tell this from a provider failure ("did not
+    return valid JSON", a timeout), and flattens both into one generic
+    sentence — which is how three different refusals in the Review step
+    all read as the identical error while the reason sat in the log.
+    """
+
+
 def _is_refusal_finish_reason(finish_reason) -> bool:
     """
     Whether the provider stopped the reply on safety grounds rather than
@@ -2976,6 +2992,9 @@ def _spoken_line_rules_block() -> str:
         "journal today\", not \"I don't want to type anything\" or \"typing is the "
         "last thing I want to do\". No \"it\", \"this\", \"that\", \"anything\" or "
         "\"stuff\" where the activity belongs.\n"
+        "- NAME THE MOMENT: the hook says exactly when or where it happens — a "
+        "time or a place — never a vague stand-in for the moment. Bad: 'halfway "
+        "down this path'; say the time of day or the place instead.\n"
         "- EXTENSION: the script continues the hook — it answers its question "
         "in the first clause, then finishes or develops it. One person, one "
         "story, one thought: no new problem, no second hook, no hook said "
@@ -2996,7 +3015,9 @@ def _spoken_line_rules_block() -> str:
         "seeing a chart, week, screen or app — the generated clip never "
         "shows app content and the founder's demo does.\n"
         "- CONVERSATIONAL: words you would actually say out loud, in short spoken "
-        "sentences. No corporate language, jargon or filler, and none of the "
+        "sentences. One idea per sentence in the script. Cut softeners — hedges "
+        "that pad a line without adding meaning, like 'I keep thinking'; say "
+        "the thing itself instead. No corporate language, jargon or filler, and none of the "
         "AI-sounding openers: 'in today's fast-paced world', 'imagine a world "
         "where', 'the best part?', 'take it to the next level'.\n"
         "- NO PROMOTION: never name the app, the brand or the founder, never say "
@@ -3008,7 +3029,9 @@ def _spoken_line_rules_block() -> str:
         "phone, each line holding a TikTok viewer to the next. No repeated "
         "words. No filler words, forced slang, written or ad-style phrasing, "
         "or run-on sentences. The hook carries the question; the script "
-        "never asks one, and it ends on the strongest concrete line. Before "
+        "never asks one, and it ends on the strongest concrete line — the "
+        "one that opens the discovery, so the demo that follows feels like "
+        "the answer. Before "
         "returning, read both lines out loud as if to a friend and rewrite "
         "anything robotic.\n"
     )
@@ -3194,8 +3217,11 @@ HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
 async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "") -> str:
     """A clearer version of the founder's hook that names the real action (ADR 0084).
 
-    A suggestion only: nothing is saved here. An empty hook or a reply that
-    comes back unchanged raises, so the founder never sees a fake improvement.
+    A suggestion only: nothing is saved here. A reply that fails a
+    repair-able check — the current hook handed back unchanged, a diary
+    open, a question the angle does not invite — gets one bounded
+    correction; a reply still failing after it raises RewriteRefusal with
+    the reason, so the founder never sees a fake improvement.
     """
     original = str(hook_line or "").strip()
     if not original:
@@ -3214,11 +3240,14 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         f"CURRENT HOOK: {original}\n\n"
         "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
         "words the viewer uses for that problem: name the problem first and use 'I' at most "
-        "once in the line \u2014 zero is better. Keep its meaning, its feeling and roughly its "
+        "once in the line \u2014 zero is better. The clearer hook names the exact moment "
+        "\u2014 a time or a place \u2014 wherever the current line leaves it vague. Keep its "
+        "meaning, its feeling and roughly its "
         "length (one short spoken sentence). Never name the app. No quotation marks. "
         'Return JSON: {"hook_line": "..."}'
     )
     line = ""
+    refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
     for _ in range(2):
         raw = await _chat_json(
             system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
@@ -3235,7 +3264,17 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         # after the rewrite so a purely neutral-wording change still counts as one.
         line = character_policy.neutralize(line)
         if not line or line.lower() == character_policy.neutralize(original).lower():
-            raise RuntimeError("The rewrite came back unchanged.")
+            # An echo is a repair-able reply, not a refusal: the model
+            # handed the hook back (often merely re-quoted, which the
+            # cleanup above strips away), so it gets the same one bounded
+            # correction the form failures below get instead of failing
+            # the founder's click on the spot.
+            refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
+            prompt += (
+                "\n\nCORRECTION: that was the current hook handed back unchanged. "
+                "Write a genuinely different, clearer version — same meaning, new words."
+            )
+            continue
         # The rewrite keeps the founder's form unless the angle/problem
         # only fits a question: preserving a founder-approved question is
         # preserving their request, not defaulting to one.
@@ -3246,16 +3285,18 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         # so a diary-open or question rewrite is not an improvement worth
         # returning.
         if len(_FIRST_PERSON_I.findall(line)) > 1:
+            refusal = "The rewrite kept narrating in first person; try again, or edit the line yourself."
             prompt += (
                 "\n\nCORRECTION: that rewrite narrated in first person more than once. "
                 "Rewrite it as a problem statement the viewer recognises \u2014 'I' at most once."
             )
         else:
+            refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
             prompt += (
                 "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
                 "names the viewer's feeling or situation directly, not a question."
             )
-    raise RuntimeError("The rewrite kept narrating in first person or asking a question; try again.")
+    raise RewriteRefusal(refusal)
 
 
 LINE_REWRITE_JSON_SCHEMA = _strict_object({"line": {"type": "string"}})
@@ -3283,8 +3324,10 @@ async def rewrite_spoken_line(
     ceiling leaves it. It stays a statement: the hook carries the question
     and the script never asks one.
 
-    A suggestion only: nothing is saved here. An empty line or a reply that
-    comes back unchanged raises, so the founder never sees a fake
+    A suggestion only: nothing is saved here. A reply that fails a
+    repair-able check — handed back unchanged, a question, over the room —
+    gets one correction; a reply still failing after it raises
+    RewriteRefusal with the reason, so the founder never sees a fake
     improvement.
     """
     if role == "hook":
@@ -3320,10 +3363,13 @@ async def rewrite_spoken_line(
         "the plain loose words a real person says out loud to a friend. Keep "
         "its meaning, its place in the story and its feeling: it still has "
         "to follow the hook and sit inside the full script without repeating "
-        "either. One spoken sentence, a statement — never a question."
+        "either. One spoken sentence, a statement — never a question. Keep "
+        "it to the line's one idea, and cut softeners like 'I keep thinking' "
+        "instead of carrying them into the clearer line."
         f"{budget} Never name the app. No quotation marks. "
         'Return JSON: {"line": "..."}'
     )
+    refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
     for _ in range(2):
         raw = await _chat_json(
             system_message="You sharpen one spoken line from a TikTok script. Return one JSON object only.",
@@ -3339,8 +3385,17 @@ async def rewrite_spoken_line(
         # every other spoken line (ADR 0089).
         candidate = character_policy.neutralize(candidate)
         if not candidate or candidate.lower() == character_policy.neutralize(original).lower():
-            raise RuntimeError("The rewrite came back unchanged.")
+            # An echo is a repair-able reply, not a refusal: it gets the
+            # same one bounded correction the question and length failures
+            # below get instead of failing the founder's click on the spot.
+            refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
+            prompt += (
+                "\n\nCORRECTION: that was the line itself handed back unchanged. "
+                "Say the same thing in genuinely different, clearer words."
+            )
+            continue
         if "?" in candidate:
+            refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
             prompt += (
                 "\n\nCORRECTION: that rewrite asked a question. The hook "
                 "carries the question and the script never asks one — rewrite "
@@ -3348,6 +3403,10 @@ async def rewrite_spoken_line(
             )
             continue
         if max_chars and len(candidate) > max_chars:
+            refusal = (
+                f"The rewrite kept running long — past the {max_chars} characters "
+                "this line's seconds hold; try again, or edit the line yourself."
+            )
             prompt += (
                 f"\n\nCORRECTION: that rewrite is {len(candidate)} characters, "
                 f"but this line's seconds hold {max_chars}. Say the same "
@@ -3355,7 +3414,7 @@ async def rewrite_spoken_line(
             )
             continue
         return candidate
-    raise RuntimeError("The rewrite kept asking a question or running long; try again.")
+    raise RewriteRefusal(refusal)
 
 
 def _angle_scene_moment(angle: Optional[dict]) -> str:

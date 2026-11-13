@@ -260,3 +260,197 @@ def test_hook_role_delegates_to_the_hook_rewrite(monkeypatch):
     monkeypatch.setattr(ai_service, "rewrite_hook_line", fake_hook)
     line = asyncio.run(ai_service.rewrite_spoken_line({}, None, "A dull hook.", "hook"))
     assert line == "A sharper hook."
+
+
+# ------------------------------------------------- the Nov 12 screenshot
+#
+# Kasra's Review step: the script body sat over its ceiling, and every
+# clearer-line click — the hook and both script sentences — came back with
+# the one generic failure. Three defects compounded. The room the endpoint
+# leaves a line did not credit the line's own length, so a rewrite shorter
+# than the line it replaced was refused as running long. An unchanged
+# reply (the current hook handed back in quotes) raised with no correction
+# retry, though question and length failures got one. And the endpoint
+# flattened every failure into the same sentence, so the reason the
+# service had already named never reached the founder.
+
+SHOT_HOOK = "Mood flipped again halfway down this path today."
+SHOT_S1 = (
+    "It turns at one, after I eat lunch at my desk most days, and "
+    "I keep thinking that flipped mood is not random."
+)
+SHOT_S2 = "I still don't know what sets that flip off."
+SHOT_SCRIPT = SHOT_S1 + " " + SHOT_S2
+# Clearer replies a real provider gives: each shorter than the line it
+# replaces, the softener gone — but each longer than the room the old
+# math left (106 of 109 for the first line, 40 of 43 for the second).
+SHOT_S1_CLEARER = (
+    "It turns at one, after I eat lunch at my desk most days, and "
+    "I have noticed that flipped mood is not random."
+)
+SHOT_S2_CLEARER = "I still don't know what's setting it off."
+SHOT_HOOK_CLEARER = "My mood flips at one every day, right after lunch at my desk."
+
+
+def _shot_project(api):
+    from models import (
+        ApproveAppProfileRequest, BrandProfileCreateRequest,
+        CreateStudioProjectRequest, UpdateStudioProjectRequest,
+    )
+    profile = _run(api.create_brand(payload=BrandProfileCreateRequest(
+        brand_name="Voice Journal", app_category="Wellness",
+        brand_description="Speak your journal entry instead of writing it.",
+        core_features=["Voice entries"],
+        usage_moments=["Winding down after work"],
+        outcome_statements=[{
+            "outcome": "Clearing the day's thoughts out loud",
+            "who_feels_it": "people too tired to write",
+            "from_feature": "Voice entries",
+            "how_it_helps": "Talking replaces writing the entry",
+        }],
+    ), user_id=ANON))
+    _run(api.approve_app_profile(
+        profile_id=profile["id"], payload=ApproveAppProfileRequest(), user_id=ANON))
+    project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+        brand_profile_id=profile["id"]), user_id=ANON))
+    # The screenshot's shape, written in one update: a 3-second hook in a
+    # 13-second piece leaves the script a 150-character ceiling, and the
+    # body is 153 — over it.
+    _run(api.update_studio_project(
+        project["id"],
+        UpdateStudioProjectRequest(
+            hook_line=SHOT_HOOK, script=SHOT_SCRIPT,
+            hook_seconds=3, duration_seconds=13),
+        ANON,
+    ))
+    return _run(api.get_studio_project(project["id"], ANON))
+
+
+def test_over_ceiling_body_credits_the_lines_own_length(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _shot_project(api)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls))
+    for line in (SHOT_S1, SHOT_S2):
+        _run(api.suggest_line_rewrite(
+            project["id"],
+            RewriteLineRequest(
+                line=line, role="middle", hook_line=SHOT_HOOK, script=SHOT_SCRIPT),
+            ANON))
+    # Replacing a line frees the line's own length, so the room a line is
+    # handed can never be smaller than the line itself — even when the
+    # body is already over its ceiling, which is exactly when a shorter
+    # rewrite helps most.
+    assert [c["max_chars"] for c in calls] == [len(SHOT_S1), len(SHOT_S2)]
+
+
+def test_the_screenshot_clicks_all_succeed(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _shot_project(api)
+    queues = {
+        # The provider first hands the current hook back in quotes; the
+        # correction retry is what wins the clearer line.
+        "Hook rewrite": [
+            {"hook_line": f'"{SHOT_HOOK}"'},
+            {"hook_line": SHOT_HOOK_CLEARER},
+        ],
+        "Line rewrite": [
+            {"line": SHOT_S1_CLEARER},
+            {"line": SHOT_S2_CLEARER},
+        ],
+    }
+
+    async def fake_chat(**kwargs):
+        return queues[kwargs["context"]].pop(0)
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    hook = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(line=SHOT_HOOK, role="hook"), ANON))
+    assert hook["line"] == SHOT_HOOK_CLEARER
+    first = _run(api.suggest_line_rewrite(
+        project["id"],
+        RewriteLineRequest(
+            line=SHOT_S1, role="middle", hook_line=SHOT_HOOK, script=SHOT_SCRIPT),
+        ANON))
+    assert first["line"] == SHOT_S1_CLEARER
+    second = _run(api.suggest_line_rewrite(
+        project["id"],
+        RewriteLineRequest(
+            line=SHOT_S2, role="middle", hook_line=SHOT_HOOK, script=SHOT_SCRIPT),
+        ANON))
+    assert second["line"] == SHOT_S2_CLEARER
+    # Suggestions still never save themselves.
+    stored = _run(api.get_studio_project(project["id"], ANON))
+    assert stored["script"] == SHOT_SCRIPT
+    assert stored["hook_line"] == SHOT_HOOK
+
+
+def test_a_refusal_reason_reaches_the_founder(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    reason = (
+        "The rewrite kept running long — past the characters this line's "
+        "seconds hold; try again, or edit the line yourself."
+    )
+
+    async def refuse(*args, **kwargs):
+        raise ai_service.RewriteRefusal(reason)
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", refuse)
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    # The service named why no clearer line exists; the founder sees that
+    # reason, not the generic sentence kept for provider failures.
+    assert err.value.status_code == 422
+    assert err.value.detail == reason
+
+
+def test_a_provider_failure_keeps_the_generic_line(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("Line rewrite did not return valid JSON")
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", boom)
+    with pytest.raises(HTTPException) as err:
+        _run(api.suggest_line_rewrite(
+            project["id"], RewriteLineRequest(line=FIRST_LINE, role="middle"), ANON))
+    assert err.value.status_code == 502
+    assert err.value.detail == (
+        "Couldn't write a clearer line just now. "
+        "Try again, or edit the line yourself."
+    )
+
+
+def test_middle_rewrite_corrects_an_unchanged_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": FIRST_LINE},
+        {"line": CLEARER},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    assert line == CLEARER
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "unchanged" in calls[1]["prompt"]
+
+
+def test_middle_rewrite_refuses_a_persistent_echo(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": FIRST_LINE}),
+    )
+    with pytest.raises(ai_service.RewriteRefusal, match="unchanged"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+
+
+def test_middle_rewrite_prompt_cuts_softeners(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([{"line": CLEARER}], calls))
+    asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    prompt = calls[0]["prompt"]
+    assert "One idea per sentence" in prompt
+    assert "cut softeners" in prompt
+    assert "I keep thinking" in prompt

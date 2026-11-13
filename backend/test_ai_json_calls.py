@@ -1694,7 +1694,17 @@ class TestStrategyBudget:
         # the hook only, the script ending on its strongest concrete line,
         # and a read-it-out-loud rewrite pass before returning. The ceiling
         # moves by a measured 750 to 34,250, keeping ~480 of headroom.
-        CEILING = 34_250
+        #
+        # Kasra's three line rules (Nov 12) raise it again, measured:
+        # 33,696 -> 34,133 (+437, exactly the shared block's growth) for
+        # NAME THE MOMENT (the hook names a time or a place, never 'halfway
+        # down this path'), one idea per sentence with softeners like
+        # 'I keep thinking' cut, and the ending rule merged into one line —
+        # the strongest concrete line is the one that opens the discovery,
+        # so the demo feels like the answer. 34,133 leaves only ~120 of
+        # headroom under 34,250, so the ceiling moves by a measured 500
+        # to 34,750, keeping ~620.
+        CEILING = 34_750
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
@@ -2539,6 +2549,51 @@ class TestHookScriptContinuity:
         assert "REAL PERSON, HOLDING THE VIEWER" in prompt
         assert "script never asks one" in prompt
         assert "strongest concrete line" in prompt
+
+    def test_the_prompt_names_the_moment_cuts_softeners_and_opens_the_discovery(self, monkeypatch):
+        """Kasra's three line rules, in the shared spoken block.
+
+        The hook names the exact moment — a time or a place — instead of
+        something vague like the screenshot's 'halfway down this path'.
+        The script keeps one idea per sentence and cuts softeners like
+        'I keep thinking', hedges that pad a line without adding meaning.
+        And the ending stays ONE instruction, not two that fight: the
+        script ends on its strongest concrete line, and that line opens
+        the discovery, so the demo feels like the answer.
+        """
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "NAME THE MOMENT" in block
+        assert "halfway down this path" in block
+        assert "One idea per sentence" in block
+        assert "softeners" in block
+        assert "I keep thinking" in block
+        assert "strongest concrete line" in block
+        assert "opens the discovery" in block
+        assert "feels like the answer" in block
+        captured = {}
+
+        async def capture(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "hook_line": "Naming what I felt never worked.",
+                "script": "One sentence each night helped me understand the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        ))
+        prompt = captured["prompt"]
+        assert "NAME THE MOMENT" in prompt
+        assert "halfway down this path" in prompt
+        assert "One idea per sentence" in prompt
+        assert "I keep thinking" in prompt
+        assert "opens the discovery" in prompt
 
     def test_the_prompt_grounds_object_nouns_in_product_facts(self, monkeypatch):
         """The ownership rule must work for any product, not just journaling.
