@@ -285,6 +285,46 @@ def trim_spoken_body(text: str, limit: int):
         head = trim_to_sentence(kept[0], room)[0] if room > 0 else ""
         joined = (head + " " + payoff).strip() if head else payoff
     return joined, len(text) - len(joined)
+
+
+# Question form without the mark is only the inversion: an auxiliary
+# first ("Can I say it out loud"), or a wh-word with the auxiliary in the
+# second slot ("What does it mean"). A wh-word with no auxiliary there is
+# NOT flagged: "What sets it off is still a mystery" is the statement form
+# that names the unknown, which is exactly the ending the craft asks for,
+# so a fuzzy read would refuse the lines the rule wants.
+_QUESTION_AUX = frozenset((
+    "am", "is", "are", "was", "were", "do", "does", "did", "can", "could",
+    "will", "would", "shall", "should", "have", "has", "had", "may",
+    "might", "must",
+))
+_QUESTION_WH = frozenset((
+    "what", "why", "how", "when", "where", "who", "whom", "whose", "which",
+))
+
+def _sentence_is_question(sentence: str) -> bool:
+    """Whether one spoken sentence is in question form (deterministic).
+
+    The terminal mark is the observable case. Without it, only inversion
+    gives the form away — see _QUESTION_AUX/_QUESTION_WH for why the line
+    is drawn there. Everything else is a statement, however it is phrased.
+    """
+    plain = str(sentence or "").strip().rstrip('"\u201d\u2019').strip()
+    if not plain:
+        return False
+    if plain.endswith("?"):
+        return True
+    words = _normalize_spoken(plain).split()
+    if not words:
+        return False
+    if words[0] in _QUESTION_AUX:
+        return True
+    return (
+        words[0] in _QUESTION_WH
+        and len(words) > 1
+        and words[1] in _QUESTION_AUX
+    )
+
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
                               *, allows_question: bool = False) -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
@@ -398,6 +438,20 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
             "hook_line is a question; use a question only when the problem is "
             "something viewers silently ask themselves — otherwise name it "
             "with a statement, confession, or blunt observation"
+        )
+    # The script never asks: the question lives in the hook, and the script
+    # ends on the statement that opens the discovery. A question in the
+    # LAST sentence is detectable by its form the same way the hook's
+    # question is, so a draft that ends on one is rewritten through the
+    # editorial loop instead of shipped. Scoped to the ending on purpose:
+    # a question mid-script is the prompt's business, and the ending is
+    # where the handoff to the founder's demo lives.
+    script_sentences = _split_sentences(script)
+    if script_sentences and _sentence_is_question(script_sentences[-1]):
+        issues.append(
+            "script ends on a question ('" + script_sentences[-1].strip() + "'); "
+            "the script never asks one — end on a statement that names what is "
+            "still unknown in the story's own terms, so the demo reads as the answer"
         )
     return issues
 def _summarize_line(text: str, spec: dict) -> dict:

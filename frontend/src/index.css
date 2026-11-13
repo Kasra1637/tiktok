@@ -454,6 +454,27 @@ body {
     }
 }
 
+/* The per-line rewrite group in Review: each script sentence with its
+ * clearer-line action, in one bordered stack. Post copy's rows established
+ * the pattern — one gutter, hairline dividers between rows — so a script's
+ * lines read as one organised list under the field instead of loose
+ * paragraphs. The frame is chrome only (the nested aside's 12px radius);
+ * the row owns the rhythm, and a row's suggestion keeps its own
+ * `.inset-panel` inside the row. */
+.script-line-group {
+    border: 1px solid var(--hairline);
+    border-radius: 0.75rem;
+    padding-inline: 1rem;
+}
+.script-line-row {
+    display: grid;
+    gap: 0.5rem;
+    padding-block: 0.875rem;
+}
+.script-line-row + .script-line-row {
+    border-top: 1px solid var(--hairline);
+}
+
 .surface-glass {
     background-color: hsl(228 14% 9% / 0.7);
     backdrop-filter: blur(16px) saturate(140%);

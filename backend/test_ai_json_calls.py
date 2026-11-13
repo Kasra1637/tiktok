@@ -1712,7 +1712,20 @@ class TestStrategyBudget:
         # winning') bans, generic/softener/vague cuts, a connected no-question
         # ending and the read-it-out-loud pass. The ceiling moves by a
         # measured 500 to 35,250, keeping ~417 of headroom.
-        CEILING = 35_250
+        #
+        # Kasra's question-ending fix (Nov 12) raises it once more,
+        # measured: 34,833 -> 35,633 (+800, exactly the shared block's
+        # growth 3,926 -> 4,726) for three strengthenings in
+        # _spoken_line_rules_block: the last line stays on the hook's own
+        # subject and names what is still unknown in the story's own terms
+        # as a statement, never switching to a new topic in the final line;
+        # the hook and the script are one text for repeated words ('still
+        # felt wrong' in the hook, 'not wrong' in the script is the same
+        # word spent twice); and a spoken line never uses the app's own
+        # feature names ('now reflections sound like me' — say 'what I
+        # wrote' instead). The ceiling moves by a measured 1,000 to
+        # 36,250, keeping ~620 of headroom.
+        CEILING = 36_250
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

@@ -48,28 +48,34 @@ export default function ScriptLineRewrites({ projectId, hookLine, script, onChan
   const spans = splitScriptSentences(script);
   if (!spans.length) return null;
   return (
-    <div className="space-y-4" data-testid="script-line-rewrites">
+    <div className="space-y-3" data-testid="script-line-rewrites">
       <p className="text-sm text-muted-foreground">
         Or sharpen one line at a time. A suggestion appears beside your words,
         and only the line you accept changes.
       </p>
-      {spans.map((span, i) => (
-        <div key={`${span.start}-${span.text}`} className="space-y-2">
-          <p className="text-sm">{span.text}</p>
-          <LineRewriteAction
-            projectId={projectId}
-            line={span.text}
-            role="middle"
-            hookLine={hookLine}
-            script={script}
-            onAccept={(next) => onChange(replaceScriptSentence(script, span, next))}
-            disabled={disabled}
-            testIdPrefix={`script-rewrite-${i}`}
-            buttonLabel="Suggest a clearer line"
-            busyLabel="Writing line"
-          />
-        </div>
-      ))}
+      {/* One organised stack, not loose paragraphs under the field: the
+          group frame and row rhythm live in index.css (.script-line-group /
+          .script-line-row, the post-kit rows' pattern). The buttons inside
+          are untouched — same component, same labels, one per line. */}
+      <div className="script-line-group">
+        {spans.map((span, i) => (
+          <div key={`${span.start}-${span.text}`} className="script-line-row">
+            <p className="text-sm">{span.text}</p>
+            <LineRewriteAction
+              projectId={projectId}
+              line={span.text}
+              role="middle"
+              hookLine={hookLine}
+              script={script}
+              onAccept={(next) => onChange(replaceScriptSentence(script, span, next))}
+              disabled={disabled}
+              testIdPrefix={`script-rewrite-${i}`}
+              buttonLabel="Suggest a clearer line"
+              busyLabel="Writing line"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

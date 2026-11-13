@@ -1352,8 +1352,8 @@ async function main() {
     // (Part 3): a founder whose app already has angles lands on the list
     // itself — no Generate/Show click, and no generation spend for the
     // viewing — and picking an angle shows the six goal cards the same
-    // way. The billed live-goal generation stays one click away beside
-    // the revealed list.
+    // way. No small duplicate Generate action rides beside the revealed
+    // list; Shuffle is its only companion.
     global.__SMOKE_PARAMS = "";
     apiCalls.length = 0;
     try {
@@ -1375,8 +1375,11 @@ async function main() {
       if (apiCalls.includes("generateAngleGoals")) {
         throw new Error("picking an angle fired the billed live-goal generation");
       }
-      if (!step.querySelector('[data-testid="generate-goals-button"]')) {
-        throw new Error("the live-goal generation is not offered beside the revealed list");
+      if (step.querySelector('[data-testid="generate-goals-button"]')) {
+        throw new Error("the small duplicate Generate action still rides beside the revealed list");
+      }
+      if (!step.querySelector('[data-testid="regenerate-goals-button"]')) {
+        throw new Error("Shuffle does not ride beside the revealed list");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -6946,10 +6949,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Live goals wait for the founder's click: picking an angle shows the
-  // facet-ordered list and calls nothing; only Generate goals calls the
-  // billed endpoint, and its six replace the list with live copy/fits.
-  await check("live goals generate only on the Generate click", async (ctx) => {
+  // Live goals wait for the founder's click on Review's gate: the Audience
+  // step shows its persisted six with no Generate action beside them (only
+  // Shuffle), and only the gated Review copy's Generate calls the billed
+  // endpoint, its live six replacing the gate with live copy/fits.
+  await check("live goals generate only on the Review gate click", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const LIVE = [
       { name: "educate_viewers", description: "Leaves them with one thing they got wrong.", why_it_fits: "Fits this angle's correction.", fit_score: 9 },
@@ -6964,37 +6968,36 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     apiCalls.length = 0;
     await withApi(
       {
+        getStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
+        createStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
+        updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", ...patch }),
         getContentAngles: async () => ({
           angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
           objective_evidence: {},
         }),
         generateAngleGoals: async () => ({ angle_id: "a1", goals: LIVE }),
+        generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "";
+        global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & template");
-          await passAngleGate(ctx);
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
+          await openStep(ctx, "Review & submit");
           await act(async () => {});
+          await act(async () => {});
+          const pickerBefore = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
+          if (!pickerBefore) throw new Error("Review goal picker never mounted");
+          if (orderOf().length !== 0) throw new Error("the gate showed a finished list before its click");
           if (apiCalls.includes("generateAngleGoals")) {
-            throw new Error("live goals fired on angle pick instead of waiting for the founder click");
+            throw new Error("live goals fired before the founder's gate click");
           }
-          // Revealed: the persisted six are the initial list (Part 3) —
-          // the click replaces them with the live order, it does not
-          // reveal them. The gate form's instruction line is pinned at
-          // the Review recovery copy, its only remaining home.
-          if (orderOf().join("|") !== SIX.join("|")) {
-            throw new Error(`the persisted six are not the initial list: ${orderOf().join(", ")}`);
-          }
-          const generateCta = ctx.container.querySelector('[data-testid="generate-goals-button"]');
-          if (!generateCta) throw new Error("the picker offers no Generate goals button beside the list");
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
+          const generateCta = pickerBefore.querySelector('[data-testid="generate-goals-button"]');
+          if (!generateCta) throw new Error("the Review gate offers no Generate goals button");
+          await clickEl(ctx, generateCta, "no Review gate Generate button");
           await new Promise((r) => setTimeout(r, 150));
           const order = orderOf();
           if (order.join("|") !== LIVE.map((g) => g.name).join("|")) {
-            throw new Error(`live goals did not replace the list: ${order.join(", ")}`);
+            throw new Error(`live goals did not replace the gate: ${order.join(", ")}`);
           }
           const picker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
           if (!picker.textContent.includes("Fits this angle's correction")) {
@@ -7013,37 +7016,43 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // A failed live-goal call keeps the list it was called over and names
-  // the retry: the goal step is never blank — the persisted six that were
-  // showing stay put (ADR 0107's fallback rule).
-  await check("live goal failure keeps the facet list and names the retry", async (ctx) => {
+  // A failed live-goal call behind Review's gate keeps the gate itself and
+  // names the retry: the goal step is never a blank list — the gate that
+  // was showing stays up (ADR 0107's fallback rule).
+  await check("live goal failure keeps the gate and names the retry", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
       .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
     await withApi(
       {
+        getStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
+        createStudioProject: async () => ({ ...BASE_PROJECT, objective: "" }),
+        updateStudioProject: async (id, patch) => ({ ...BASE_PROJECT, objective: "", ...patch }),
         getContentAngles: async () => ({
           angles: [{ ...ANGLE, goal_variant: 0, goal_suggestions: [...SIX] }],
           objective_evidence: {},
         }),
         generateAngleGoals: async () => { throw new Error("goal generation unavailable"); },
+        generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "";
+        global.__SMOKE_PARAMS = "?project=p1";
         try {
           await mount(CreateVideo, {})(ctx);
-          await openStep(ctx, "Audience & template");
-          await passAngleGate(ctx);
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
-          if (orderOf().join("|") !== SIX.join("|")) {
-            throw new Error(`the persisted six are not showing before the call: ${orderOf().join(", ")}`);
-          }
-          await clickEl(ctx, ctx.container.querySelector('[data-testid="generate-goals-button"]'), "no Generate goals button");
+          await openStep(ctx, "Review & submit");
+          await act(async () => {});
+          await act(async () => {});
+          if (orderOf().length !== 0) throw new Error("the gate showed a finished list before its click");
+          const picker = ctx.container.querySelector('[data-testid="angle-goal-picker"]');
+          if (!picker) throw new Error("Review goal picker never mounted");
+          const generateCta = picker.querySelector('[data-testid="generate-goals-button"]');
+          if (!generateCta) throw new Error("the Review gate offers no Generate goals button");
+          await clickEl(ctx, generateCta, "no Review gate Generate button");
           await new Promise((r) => setTimeout(r, 150));
-          if (orderOf().join("|") !== SIX.join("|")) {
-            throw new Error(`the failed live-goal call changed the list: ${orderOf().join(", ")}`);
+          if (orderOf().length !== 0) {
+            throw new Error(`the failed live-goal call showed a list: ${orderOf().join(", ")}`);
           }
-          const gate = ctx.container.querySelector('[data-testid="generate-goals-button"]');
+          const gate = picker.querySelector('[data-testid="generate-goals-button"]');
           if (!gate || gate.disabled) throw new Error("the Generate button is not retryable after a failed live-goal call");
           const error = ctx.container.querySelector('[data-testid="goals-generation-error"]');
           if (!error) throw new Error("a failed live-goal call shows no error");

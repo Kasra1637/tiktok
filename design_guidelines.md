@@ -137,6 +137,8 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.inset-panel-strong` | The same aside, one step louder, for a group that carries a state the reader must not miss |
 | `.surface-flush` | A card that owns its own inner padding — accordion groups and list rows |
 | `.row-pad` | The row rhythm inside a card: 16px gutter, 12px block |
+| `.script-line-group` | The Review per-line rewrite stack: one bordered group (12px radius, 16px inline gutter) holding every script line's row |
+| `.script-line-row` | One spoken line + its clearer-line action: grid with 8px gap, 14px block, hairline above every row but the first |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
 | `.pill-studio` | Raised beveled pill (`Chip`, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
 | `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Carried by the shared `Chip`, `PILL_SELECT_CLASS` (every filter bar includes `AppPicker`), the wizard progress segments and in-step picks, and `ThumbPair`. A new chip control that is not already 44px tall takes it rather than opting out |

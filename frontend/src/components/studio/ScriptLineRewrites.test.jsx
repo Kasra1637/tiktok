@@ -63,6 +63,21 @@ describe("ScriptLineRewrites", () => {
     await view.unmount();
   });
 
+  test("groups the lines in one row stack, one organised row per line", async () => {
+    const view = await mount({});
+    const group = view.q("script-line-rewrites").querySelector(".script-line-group");
+    expect(group).not.toBeNull();
+    const rows = group.querySelectorAll(".script-line-row");
+    expect(rows).toHaveLength(2);
+    // The buttons themselves are unchanged: same testids, one per row,
+    // under the line they rewrite.
+    expect(rows[0].querySelector('[data-testid="script-rewrite-0-button"]')).not.toBeNull();
+    expect(rows[1].querySelector('[data-testid="script-rewrite-1-button"]')).not.toBeNull();
+    expect(rows[0].textContent).toContain("Typing is the last thing I want to do at night.");
+    expect(rows[1].textContent).toContain("My head is still loud from the whole day.");
+    await view.unmount();
+  });
+
   test("accepting a line's suggestion changes only that sentence", async () => {
     api.rewriteLine.mockResolvedValue({ line: "My head stays loud all day." });
     const view = await mount({});

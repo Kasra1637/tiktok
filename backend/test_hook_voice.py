@@ -397,3 +397,118 @@ def test_a_good_draft_gets_no_craft_retry(monkeypatch):
     assert result["hook_line"] == STRONG_HOOK
     assert len(calls) == 1
 
+
+# Kasra's reviewed pair (Nov 12): the rules already said the script never
+# asks one, yet the plan shipped "What sets it off?" as its last line — and
+# the line had drifted off the story (a mood label, not a trigger). The
+# prompt rule alone drifted, so the ending is now an observable defect in
+# the same list the hook's question has always been checked in.
+KASRA_HOOK = "On this sidewalk, that generic label still felt wrong."
+KASRA_SCRIPT_QUESTION_END = (
+    "I changed it to worn out on this sidewalk after my evening walk. "
+    "Now reflections sound like me, not wrong. What sets it off?"
+)
+KASRA_SCRIPT_STATEMENT_END = (
+    "I changed it to worn out on this sidewalk after my evening walk. "
+    "Now the words sound like me. I still don't know what sets it off."
+)
+
+
+def test_a_script_ending_on_a_question_is_an_issue():
+    issues = issues_for(KASRA_HOOK, KASRA_SCRIPT_QUESTION_END)
+    assert any("ends on a question" in issue for issue in issues)
+
+
+def test_a_script_naming_the_unknown_as_a_statement_passes():
+    # The discovery stays open — what is unknown is named in the story's
+    # own terms — but as a statement, not a question.
+    issues = issues_for(KASRA_HOOK, KASRA_SCRIPT_STATEMENT_END)
+    assert not any("ends on a question" in issue for issue in issues)
+
+
+def test_a_question_ending_without_its_mark_is_an_issue():
+    # Subject-auxiliary inversion is question form even when the model
+    # drops the mark: the sentence still asks.
+    issues = issues_for(
+        KASRA_HOOK,
+        "I changed it to worn out after my evening walk. Can I say it out loud",
+    )
+    assert any("ends on a question" in issue for issue in issues)
+
+
+def test_the_question_guard_is_scoped_to_the_ending():
+    # A question in the middle is the prompt's business (the rules ban it
+    # there too); the deterministic guard owns only the ending, where the
+    # handoff to the demo lives.
+    issues = issues_for(
+        KASRA_HOOK,
+        "What sets it off? I still do not know, and I keep walking.",
+    )
+    assert not any("ends on a question" in issue for issue in issues)
+
+
+def test_the_craft_block_bans_the_apps_own_feature_nouns():
+    block = ai_service._spoken_line_rules_block()
+    assert "feature names" in block
+    assert "reflections sound like me" in block
+    assert "what I wrote" in block
+
+
+def test_the_craft_block_treats_hook_and_script_as_one_text():
+    block = ai_service._spoken_line_rules_block()
+    assert "one text" in block
+    assert "still felt wrong" in block
+    assert "not wrong" in block
+
+
+def test_the_craft_block_keeps_the_last_line_on_the_subject():
+    block = ai_service._spoken_line_rules_block()
+    assert "stays on the hook's own subject" in block
+    assert "still unknown" in block
+    assert "new topic" in block
+
+
+def test_the_plan_loop_rewrites_a_question_ending_script(monkeypatch):
+    bad = _plan(KASRA_HOOK, KASRA_SCRIPT_QUESTION_END)
+    good = _plan(STRONG_HOOK, STRONG_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad if len(calls) == 1 else good
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert result["script"] == STRONG_SCRIPT
+    assert len(calls) == 2
+    # The correction names the defect, so the rewrite is targeted.
+    assert "ends on a question" in calls[1]["prompt"]
+
+
+def test_the_plan_loop_refuses_a_script_that_keeps_ending_on_a_question(monkeypatch):
+    bad = _plan(KASRA_HOOK, KASRA_SCRIPT_QUESTION_END)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            ai_service.generate_creative_plan(
+                profile={"brand_name": "Journal"},
+                template={"name": "T", "hook_seconds": 3},
+                duration_seconds=15,
+            )
+        )
+    # The bounded editorial loop, no more: three attempts, then an honest
+    # refusal instead of a shipped question.
+    assert len(calls) == 3
+
