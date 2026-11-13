@@ -1,22 +1,16 @@
 """Blocking removed: wording never fails a draft or the render.
 
-The word-boundary matcher is kept for the advisory helpers, but neither
-the plan nor the strategy retries on wording — the draft is accepted as
-written in a single attempt and the report always passes.
+No claim-safety system exists (ADR 0119): wording is never checked,
+reported on, or refused anywhere in the app, so a strategy whose words
+contain a profile's banned-listed word is accepted as written, in a
+single attempt, with no retry.
 """
 
 import asyncio
 
-import claim_safety
-
 
 def _run(coro):
     return asyncio.run(coro)
-
-
-def test_single_word_ban_needs_whole_word():
-    assert claim_safety.find_banned_violations("stay focused daily", ["focus"]) == []
-    assert claim_safety.find_banned_violations("time to focus daily", ["focus"]) != []
 
 
 def test_strategy_accepts_banned_claim_without_retry(monkeypatch):
@@ -57,10 +51,3 @@ def test_strategy_accepts_banned_claim_without_retry(monkeypatch):
         verdict_feedback=None))
     assert len(calls) == 1, "wording never triggers a retry"
     assert "focus" in result["segments"][1]["script"].lower()
-    report = claim_safety.build_safety_report(
-        {"hook_line": "Morning rush.", "script": "This helps you focus daily.",
-         "strategy": result},
-        {"brand_name": "V", "claims_banned": ["focus"]},
-    )
-    assert report["passed"] is True
-    assert report["blocking"] == []

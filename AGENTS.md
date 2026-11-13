@@ -81,8 +81,10 @@ One render path, single-pass video generation via OpenRouter.
   durable-save recovery; a stopped browser check is not a provider failure.
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
-- `backend/feedback.py` — signal vs
-  reason, posted-performance ranking (ADRs 0055/0070/0071).
+- `backend/feedback.py` — the whole-video verdict bundles and their
+  prompt section, plus the posted-performance record math (dated
+  snapshots, the craft score frozen at submit) (ADRs 0055/0070/0071,
+  0117's record half, 0124).
 - Persistence: Turso refuses local SQLite writes on a configured outage
   (ADR 0083). `backend/storage_service.py` + `backend/media_signing.py` own R2
   durability and signed playback — a provider URL is not a durable link, and a
@@ -116,6 +118,14 @@ One render path, single-pass video generation via OpenRouter.
 - No claim-safety system exists (ADR 0119): wording is never checked,
   reported on, or refused anywhere in the app; the angle's bounded-by lines
   are prompt guidance for the generator only, never a gate on a result.
+- Feedback learning is one verdict on the whole video (ADR 0124): a single
+  thumbs up or down per finished video on its History card, with the whole
+  bundle (spoken words, post kit, opening visual, audio identity) frozen
+  at verdict time — that bundle is the only signal that steers the plan
+  and strategy prompts. Per-element ratings were removed because neither
+  the founder nor TikTok can attribute a posted result to one element of
+  the video; do not reintroduce them. Posted snapshots and the craft
+  score frozen at submit are the record (ADR 0117), never steering.
 - Review autosave is a validated server write; the Demo + CTA editing document
   is browser-local — never call browser storage a cloud backup.
 - One logical change per commit. A behavior or default change is an explicit
