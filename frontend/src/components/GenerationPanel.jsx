@@ -203,6 +203,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     hasStrategy &&
     (project?.strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
   const strategyReady = hasStrategy && !staleStrategy && !angleStale;
+  // A rebuild is owed whenever a strategy exists but no longer matches what
+  // it would render: the plan moved after the build (staleStrategy) or the
+  // angle did (angleStale). The remedies below offer exactly that rebuild —
+  // except with no angle picked at all, where the standing remedy is the
+  // angle pick itself and the disabled button stays as the gate it names.
+  const rebuildRequired = !noAngle && (staleStrategy || angleStale);
 
   // The presenter must be the founder's own face. Judged by the asset KIND on
   // what is attached, matching the server: a project can legitimately hold other
@@ -871,22 +877,32 @@ const handleGenerate = async () => {
         </div>
       )}
 
-      <Button
-        variant="accent"
-        onClick={handleGenerate}
-        disabled={
-          busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
-        }
-        busy={busy || inFlight}
-        data-testid="render-generate-button"
-      >
-        <Play className="h-4 w-4" />
-        {inFlight || busy
-          ? "Generating video"
-          : generation
-            ? "Generate another"
-            : "Generate the video"}
-      </Button>
+      {/* Kasra's rule: one action at a time in Review. While a strategy
+          rebuild is owed, the generate control is not rendered at all — a
+          greyed "Generate the video" beside the bright rebuild remedy below
+          reads as two competing actions, and the rebuild is the only move
+          that unblocks the render. The control returns the moment the
+          strategy matches again. A render already in flight keeps its
+          progress button: hiding that would strand the wait, and the
+          rebuild remedies already stand down while one runs. */}
+      {(!rebuildRequired || busy || inFlight) && (
+        <Button
+          variant="accent"
+          onClick={handleGenerate}
+          disabled={
+            busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
+          }
+          busy={busy || inFlight}
+          data-testid="render-generate-button"
+        >
+          <Play className="h-4 w-4" />
+          {inFlight || busy
+            ? "Generating video"
+            : generation
+              ? "Generate another"
+              : "Generate the video"}
+        </Button>
+      )}
 
       {remedies.length > 0 && !(busy || inFlight) && (
         <div className="flex flex-wrap gap-2" data-testid="render-remedies">

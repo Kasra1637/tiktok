@@ -2224,11 +2224,54 @@ async function main() {
       "Rebuild the strategy for the angle now picked",
       "the angle drift remedy did not render as a jump"
     );
-    const generate = [...ctx.container.querySelectorAll("button")]
-      .find((b) => (b.textContent || "").includes("Generate the video"));
-    if (!generate) throw new Error("no Generate button to gate");
-    if (!generate.disabled) {
-      throw new Error("Generate stays enabled on a strategy built for another angle");
+    // A rebuild is owed here too, so Kasra's one-action rule applies the same
+    // way: the generate control is not rendered at all, not greyed beside the
+    // rebuild button.
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate is rendered while a strategy rebuild is owed");
+    }
+  });
+
+  await check("GenerationPanel shows only the rebuild while the strategy is stale", async (ctx) => {
+    // Kasra's rule: one action at a time in Review. While the strategy is
+    // stale against the saved plan, "Generate the video" is not rendered at
+    // all — a greyed generate button beside the bright rebuild button reads
+    // as two competing actions. Once the rebuild lands and the strategy
+    // matches the plan again, generate returns and the rebuild prompt goes.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, strategy_is_current: false },
+      })(ctx)
+    );
+    expectText(
+      ctx,
+      "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render.",
+      "the stale-plan note did not render"
+    );
+    expectText(
+      ctx,
+      "Rebuild the strategy so it matches your saved plan",
+      "the rebuild remedy did not render"
+    );
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate is rendered while a strategy rebuild is owed");
+    }
+    const stray = [...ctx.container.querySelectorAll("button")].find((b) =>
+      /Generate the video|Generate another/.test((b.textContent || "").trim())
+    );
+    if (stray) throw new Error("a generate-labelled button is rendered while a rebuild is owed");
+    await act(async () =>
+      ctx.root.render(
+        React.createElement(GenerationPanel, {
+          project: { ...PROJECT_WITH_STRATEGY, strategy_is_current: true },
+        })
+      )
+    );
+    if (!ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate did not return once the strategy matched the plan");
+    }
+    if (ctx.text().includes("Rebuild the strategy so it matches your saved plan")) {
+      throw new Error("the rebuild prompt survived a current strategy");
     }
   });
 
@@ -4122,10 +4165,11 @@ async function main() {
     if (!/plan v1/.test(text) || !/now v3/.test(text)) {
       throw new Error("the drift warning does not name the plan versions involved");
     }
-    // And the click has to match the promise.
-    const btn = renderButton(ctx);
-    if (!btn.disabled) {
-      throw new Error("the generate button is live against a stale strategy");
+    // And the page has to match the promise: while the rebuild is owed, the
+    // generate control is not on the page at all (Kasra's rule — one action
+    // at a time in Review), not a greyed button sitting beside the rebuild.
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("the generate button is still rendered against a stale strategy");
     }
     if (!text.includes("Rebuild it so it matches your saved plan")) {
       throw new Error("the drift warning does not say what to do about it");
