@@ -615,9 +615,9 @@ export function AngleSelector({
  *
  * On Audience & template the six render on angle pick (Part 3 removed the
  * click-to-reveal gate here too): the persisted, facet-ordered suggestions
- * are the initial list, and the billed live generation moves to a
- * "Generate goals" action beside the list, where its six replace the
- * persisted order with per-goal fit scores. The Review recovery copies
+ * are the list — no duplicate Generate action rides beside it, only
+ * "Shuffle" to reshuffle that same six. The billed live generation lives
+ * on live goals only where the gate still gates. The Review recovery copies
  * pass `landingGate` and keep the gated landing: one "Generate goals"
  * action, never a finished list — the facet-ordered `suggestions` fallback
  * is never rendered there as the initial list, so a founder fixing a plan
@@ -665,7 +665,7 @@ export function AngleGoalPicker({
   // The gated landing form, kept only for the Review recovery copies (see
   // the docstring above): the six stay behind the Generate action there.
   // The Audience & template step never passes this — its six render on
-  // angle pick, with Generate riding beside the list instead.
+  // angle pick, with no Generate action beside them (Shuffle only).
   landingGate = false,
 }) {
   const knownGoals = Array.isArray(options) ? options : [];
@@ -906,26 +906,12 @@ export function AngleGoalPicker({
           <GroupLabel as="h3" icon={Target} id="video-goal-label">
             Video goal <span className="text-muted-foreground">(required)</span>
           </GroupLabel>
-          {((!landingGate && onGenerate) || (onRegenerate && revealed && featured.length > 0)) && (
+          {(onRegenerate && revealed && featured.length > 0) && (
             <div className="flex shrink-0 items-center gap-1.5">
-              {/* Ungated form only: the billed live generation the gate's
-                  click used to be, riding beside the list it refreshes.
-                  Behind the gate (Review) the same action is the gate
-                  button itself, so it never renders twice. */}
-              {!landingGate && onGenerate && (
-                <Button
-                  variant="accent"
-                  size="sm"
-                  className="gap-1.5 shrink-0"
-                  onClick={onGenerate}
-                  disabled={generating}
-                  busy={generating}
-                  data-testid="generate-goals-button"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {generating ? "Generating goals" : "Generate goals"}
-                </Button>
-              )}
+              {/* Only Shuffle rides beside the revealed list now: the
+                  small duplicate Generate action is gone (the six
+                  suggestions are already here). The gated Review copies
+                  keep their Generate action as the gate button below. */}
               {onRegenerate && revealed && featured.length > 0 && (
                 <Button
                   variant="ghost"
