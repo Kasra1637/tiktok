@@ -758,14 +758,18 @@ h1,
  *
  * The stage keeps the dark spotlight and contained video; the media column
  * owns the stage plus the identity summary beneath it. The detail column
- * owns facts, post copy, votes and actions. The card itself is `flush`
- * (zero padding) and each band brings its own gutter.
+ * owns the journey line, the whole-video verdict, facts, post copy and
+ * actions. The card itself is `flush` (zero padding) and each band brings
+ * its own gutter.
  *
  * Stacked (phones), the preview keeps a fixed height so a 9:16 clip stays
- * modest. Side by side, the clip fills its column edge to edge instead:
- * width-driven with a 9:16 box (TikTok is the only output size), because a
- * fixed-height contained box left ~80px of dark stage on each side of a
- * 190px-wide clip.
+ * modest. Side by side, the card splits into two balanced columns,
+ * top-aligned and each sized to its own content, so neither column
+ * stretches an empty box under the other's content. The clip keeps its
+ * capped 9:16 size — 560px tall at most — framed and centered on the
+ * transparent stage instead of filling the wider column edge to edge:
+ * a width-driven box there would letterbox black bars around a tall
+ * clip (TikTok is the only output size).
  *
  * The stacked preview height and padding are declared together as custom
  * properties, because the stage's flat height is the tallest thing it can
@@ -779,6 +783,7 @@ h1,
 .history-row-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
 }
 .history-media {
     display: flex;
@@ -877,7 +882,7 @@ h1,
 }
 @media (min-width: 900px) {
     .history-row-grid {
-        grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
     .history-media {
         border-bottom: none;
@@ -893,7 +898,11 @@ h1,
         background: transparent;
     }
     .history-preview-frame {
-        max-width: none;
+        /* The clip's height cap below (560px) sets its width at 9:16; the
+           frame hugs exactly that plus its own 10px of padding and border,
+           so the balanced column never widens the frame into a black box
+           around a tall clip. */
+        max-width: calc((560px * 9 / 16) + 10px);
     }
     .history-preview {
         width: 100%;
@@ -1483,7 +1492,7 @@ h1,
    outline in solid brand indigo that selection alone never draws. An
    unselected focused button keeps the generic halo, which is unambiguous
    there because no fill competes with it. */
-[data-testid="history-summary"] .thumb-pair .thumb-selected:focus-visible {
+[data-testid="history-detail-panel"] .thumb-pair .thumb-selected:focus-visible {
     outline: 2px solid var(--brand-indigo);
     outline-offset: 3px;
 }

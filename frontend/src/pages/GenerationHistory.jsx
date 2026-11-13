@@ -603,18 +603,28 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
             {/* Read top to bottom in the order a founder actually scans: which
-                render this is (app, state, date), then the hook that tells one
-                row from another, then what happened to it (posted, views,
-                vote), then provenance last — model, attempt, template and
-                script versions answer a follow-up question ("why does this
-                take look different from the last one?"), not the glance. They
-                used to lead, which put the dimmest, least decision-relevant
-                line first and the loudest one third from last. Length and goal
-                stay on the preview above, where the clip they describe plays. */}
+                render this is (app, state, date), with its provenance facts
+                riding in the same header row as chips — model, attempt and
+                the template/script versions are how one take is told from
+                the next ("why does this take look different from the last
+                one?"), and as small labels in the header they answer that
+                without reading as a loose technical line under the clip —
+                then the hook that tells one row from another, then what
+                happened to it (posted, views, vote). The joined journey line
+                and the whole-video verdict lead the record beside the clip
+                now: the card's right side holds the video's state and the
+                founder's one call together. Length and goal stay on the
+                preview above, where the clip they describe plays. */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
               <StatusBadge status={row.status} />
               <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
+              <span className="flex flex-wrap items-center gap-1.5" data-testid="history-provenance">
+                {row.model && <FactChip>{row.model}</FactChip>}
+                {row.attempt > 1 && <FactChip>{`attempt ${row.attempt}`}</FactChip>}
+                {row.template_id && <FactChip>{`template v${row.template_version}`}</FactChip>}
+                <FactChip>{`script v${row.script_version}`}</FactChip>
+              </span>
             </div>
             <p className="break-words text-base font-semibold">
               {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`}
@@ -623,68 +633,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               <span data-testid="history-result-line">{describeResults(row)}</span>
               {isWinnerRow(row) && <FactChip>Winner</FactChip>}
             </div>
-            {/* The video's one home from finished to posted to measured:
-                export, post copy, posted link and recorded results as a
-                single line in the always-visible summary, each item naming
-                its state and walking to the control that owns it. The
-                controls themselves stay where they were — this line is
-                their join, not a second set. */}
-            {showJourney && (
-              <div
-                className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[color:var(--hairline)] pt-2 text-xs"
-                data-testid={`history-journey-${row.id}`}
-                data-stage={journeyStage(row)}
-              >
-                <span className="font-semibold text-muted-foreground">Finished → posted:</span>
-                <span>Export ready</span>
-                <span aria-hidden="true" className="text-muted-foreground">·</span>
-                {row.post_kit ? (
-                  <button type="button" className="underline" onClick={openPostCopy}>Post copy written</button>
-                ) : (
-                  <button type="button" className="underline" onClick={openPostCopy}>Post copy not written yet</button>
-                )}
-                <span aria-hidden="true" className="text-muted-foreground">·</span>
-                {row.tiktok_url ? (
-                  <span>Posted</span>
-                ) : (
-                  <button type="button" className="underline" onClick={openResults}>Not posted yet</button>
-                )}
-                <span aria-hidden="true" className="text-muted-foreground">·</span>
-                {resultsLine ? (
-                  <span>Results: {resultsLine}</span>
-                ) : (
-                  <button type="button" className="underline" onClick={openResults}>No results yet</button>
-                )}
-              </div>
-            )}
-            {/* The founder's one verdict on the whole video (ADR 0124),
-                beside the journey line it completes: finished, posted,
-                measured — and judged. It is the only rating in the app
-                now; the per-element thumbs that used to live in the
-                record below are gone, and this verdict — on the whole
-                video, frozen as it went out — is what new plans and
-                strategies learn from. */}
-            {(row.status === "completed" || row.status === "archived") && (
-              <VideoVerdict
-                generationId={row.id}
-                value={row.video_verdict ?? null}
-                onChanged={(video_verdict) => onUpdated?.(row.id, { video_verdict })}
-              />
-            )}
-            {/* Provenance is a line, not a chip run. Four bordered pills of
-                model, attempt and two versions competed with the headline for
-                the same corner of the card; they answer a follow-up question
-                ("why does this take look different?"), so they read as muted
-                metadata now and stop borrowing the badge language the status
-                and the winner use. */}
-            <p className="text-xs text-muted-foreground" data-testid="history-provenance">
-              {[
-                row.model,
-                row.attempt > 1 ? `attempt ${row.attempt}` : null,
-                row.template_id ? `template v${row.template_version}` : null,
-                `script v${row.script_version}`,
-              ].filter(Boolean).join(" · ")}
-            </p>
           </div>
         </div>
 
@@ -698,6 +646,58 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
           <div className="history-body">
             <div className="min-w-0 space-y-5">
               {compactNotice && notice}
+              {/* The video's state and the founder's one call lead the
+                  record. The joined finished → posted line: export, post
+                  copy, posted link and recorded results as a single line,
+                  each item naming its state and walking to the control that
+                  owns it — the controls themselves stay where they were, so
+                  this line is their join, not a second set. Under it, the
+                  one verdict on the whole video (ADR 0124): finished,
+                  posted, measured — and judged. It is the only rating in
+                  the app now; the per-element thumbs are gone, and this
+                  verdict — on the whole video, frozen as it went out — is
+                  what new plans and strategies learn from. Both used to
+                  trail the summary under the clip; the card's right side
+                  is where they belong, beside the record they complete. */}
+              {(showJourney || row.status === "completed" || row.status === "archived") && (
+                <div className="space-y-2">
+                  {showJourney && (
+                    <div
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+                      data-testid={`history-journey-${row.id}`}
+                      data-stage={journeyStage(row)}
+                    >
+                      <span className="font-semibold text-muted-foreground">Finished → posted:</span>
+                      <span>Export ready</span>
+                      <span aria-hidden="true" className="text-muted-foreground">·</span>
+                      {row.post_kit ? (
+                        <button type="button" className="underline" onClick={openPostCopy}>Post copy written</button>
+                      ) : (
+                        <button type="button" className="underline" onClick={openPostCopy}>Post copy not written yet</button>
+                      )}
+                      <span aria-hidden="true" className="text-muted-foreground">·</span>
+                      {row.tiktok_url ? (
+                        <span>Posted</span>
+                      ) : (
+                        <button type="button" className="underline" onClick={openResults}>Not posted yet</button>
+                      )}
+                      <span aria-hidden="true" className="text-muted-foreground">·</span>
+                      {resultsLine ? (
+                        <span>Results: {resultsLine}</span>
+                      ) : (
+                        <button type="button" className="underline" onClick={openResults}>No results yet</button>
+                      )}
+                    </div>
+                  )}
+                  {(row.status === "completed" || row.status === "archived") && (
+                    <VideoVerdict
+                      generationId={row.id}
+                      value={row.video_verdict ?? null}
+                      onChanged={(video_verdict) => onUpdated?.(row.id, { video_verdict })}
+                    />
+                  )}
+                </div>
+              )}
               {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
               {(row.post_kit || row.audience || row.demo_brief || row.location) && (
                 <div className="grid grid-cols-1 items-start gap-2">

@@ -308,13 +308,19 @@ step — the video, identity, facts, votes and actions are all visible
 together, so a record can never read as a separate section or stretch a
 neighbor. A card that has a clip to play leads with a full-bleed stage and
 its identity summary beneath the footage: stacked, the clip is a contained
-320px video; side by side it fills its 280–320px column edge to edge
-(width-driven 9:16 box on a transparent stage, 12px padding) instead of
-floating centered in a fixed-height box. A card with nothing to play keeps a notice in place of
-the video, because a blank card explains nothing.
+320px video; side by side the card splits into two balanced columns,
+top-aligned and each sized to its own content so neither stretches dead
+space under the other, and the clip keeps its capped 9:16 size (560px tall
+at most) framed and centered on the transparent stage, 12px padding,
+instead of filling the wider column into a letterboxed box. A card with
+nothing to play keeps a notice in place of the video, because a blank card
+explains nothing.
 
-The record beside the clip holds the app name, status, hook, facts,
-audience, demo brief, votes and every action. Deep links scroll to the named
+The summary beneath the clip holds the app name, status, date, the
+provenance facts (model, attempt, template and script versions) as chips in
+the same header row, the hook and the results line. The record beside the
+clip leads with the joined finished → posted line and the whole-video
+verdict, then facts, audience, demo brief and every action. Deep links scroll to the named
 card and, when it still awaits its TikTok link, focus that input. The
 preview and the stage padding are custom properties on `.history-card`
 (`--history-preview-h`, `--history-stage-pad`).

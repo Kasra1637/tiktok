@@ -15148,17 +15148,25 @@ async function runDemoCtaChecks() {
             throw new Error(`an untouched render still prints ${JSON.stringify(gone)}`);
           }
         }
-        // Order is the priority, and it used to be inverted: provenance chips
-        // led, so the dimmest, least glance-relevant line came first and the
-        // loudest one (the hook) sat third from last. Identity, headline,
-        // results, the joined finished → posted journey line, the whole-video
-        // verdict, provenance — in that order, as six blocks.
+        // Order is the priority. Under the clip the summary reads as three
+        // blocks: identity first — app, status, date, with the provenance
+        // facts (model, template and script versions) riding in the same
+        // header row as tidy chips instead of a loose technical line — then
+        // the hook headline, then the results line. The joined finished →
+        // posted journey line and the whole-video verdict used to trail the
+        // summary; they lead the record beside the clip now, journey first
+        // and the verdict under it, so the card's right side holds the
+        // video's state and the founder's one call together.
         const blocks = [...summary.children];
-        if (blocks.length !== 6) {
-          throw new Error(`the summary should read as six blocks, saw ${blocks.length}`);
+        if (blocks.length !== 3) {
+          throw new Error(`the summary should read as three blocks, saw ${blocks.length}`);
         }
         if (!blocks[0].textContent.includes("Journal") || !blocks[0].textContent.includes("Completed")) {
           throw new Error("the summary does not open with app identity and its status");
+        }
+        const provenance = blocks[0].querySelector('[data-testid="history-provenance"]');
+        if (!provenance || !provenance.textContent.includes("script v")) {
+          throw new Error("the version facts do not ride in the summary header as chips");
         }
         if (blocks[1].tagName !== "P" || !blocks[1].textContent.includes("Find your next thought.")) {
           throw new Error("the hook line is not the summary headline");
@@ -15166,14 +15174,17 @@ async function runDemoCtaChecks() {
         if (!blocks[2].textContent.includes("Not posted yet")) {
           throw new Error("the results line does not follow the headline");
         }
-        if (blocks[3].getAttribute("data-testid") !== "history-journey-dense-1") {
-          throw new Error("the joined journey line does not follow the results line");
+        const journey = panel.querySelector('[data-testid="history-journey-dense-1"]');
+        const verdict = panel.querySelector('[data-testid="history-verdict-dense-1"]');
+        if (!journey || !verdict) {
+          throw new Error("the journey line and the verdict do not lead the record beside the clip");
         }
-        if (blocks[4].getAttribute("data-testid") !== "history-verdict-dense-1") {
-          throw new Error("the whole-video verdict does not follow the journey line");
+        const recordOrder = [...panel.querySelectorAll('[data-testid="history-journey-dense-1"], [data-testid="history-verdict-dense-1"]')];
+        if (recordOrder[0] !== journey || recordOrder[1] !== verdict) {
+          throw new Error("the verdict does not follow the journey line in the record");
         }
-        if (blocks[5].tagName !== "P" || !blocks[5].textContent.includes("script v")) {
-          throw new Error("provenance must trail the summary as a line, not a chip run");
+        if (summary.querySelector('[data-testid="history-journey-dense-1"], [data-testid="history-verdict-dense-1"]')) {
+          throw new Error("the journey line or the verdict still sits under the clip");
         }
         // Identity lives once under the clip: the record beside it must not repeat the headline.
         const panelText = panel.textContent || "";
@@ -15245,8 +15256,11 @@ async function runDemoCtaChecks() {
     if (!/\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
       throw new Error("the card lost its stacked narrow layout");
     }
-    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?minmax\(280px,\s*320px\)/.test(css)) {
-      throw new Error("the wide card does not lay video beside its record");
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("the wide card does not split into two balanced columns");
+    }
+    if (!/\.history-row-grid\s*\{[^}]*align-items:\s*start/.test(css)) {
+      throw new Error("the card columns stretch to the taller side, leaving dead space under the shorter column's content");
     }
     if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-preview\s*\{[\s\S]*?width:\s*100%[\s\S]*?aspect-ratio:\s*9\s*\/\s*16/.test(css)) {
       throw new Error("the wide clip does not fill its column; the fixed-height box leaves dead stage beside it");
@@ -16327,7 +16341,7 @@ async function runDemoCtaChecks() {
             if (!css.includes(".thumb-pair > button:focus-visible")) {
               throw new Error("the thumb keyboard focus ring is not defined where it ships");
             }
-            if (!css.includes('[data-testid="history-summary"] .thumb-pair .thumb-selected:focus-visible')) {
+            if (!css.includes('[data-testid="history-detail-panel"] .thumb-pair .thumb-selected:focus-visible')) {
               throw new Error("a focused selected verdict is indistinguishable from a selected one");
             }
             const voteBlock = ctx.container.querySelector(

@@ -8,10 +8,10 @@ import { api, getErrorMessage } from "../lib/api";
 /**
  * Everything about one render after it finished: the posted link, the
  * pasted-back views, and the dated results readings. The verdict itself
- * — the founder's one call on the whole video (ADR 0124) — lives in the
- * card summary beside the journey line, not here: this block is the
- * record the verdict is read alongside, and its Winner badge follows
- * that verdict plus the posted link.
+ * — the founder's one call on the whole video (ADR 0124) — leads the
+ * record beside the journey line, not here: this block is the record the
+ * verdict is read alongside, and its Winner badge follows that verdict
+ * plus the posted link.
  *
  * The verdict state is revalidated every time the drawer opens, the
  * same mounting contract the old vote block kept: mounting means the
@@ -372,7 +372,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
             {resultsError && <p role="alert" className="text-sm text-destructive">{resultsError}</p>}
             <p className="text-sm text-muted-foreground">
               Read them off TikTok's analytics for the posted video. Each save is a dated reading —
-              your record of how it did. What new plans learn from is your verdict on the whole video, in the summary above.
+              your record of how it did. What new plans learn from is your verdict on the whole video, at the top of this record.
             </p>
           </div>
         )}
