@@ -141,7 +141,7 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.script-line-row` | One spoken line + its clearer-line action: grid with 8px gap, 14px block, hairline above every row but the first |
 | `.border-gradient` | Masked pseudo-element for a lit top-left edge |
 | `.pill-studio` | Raised beveled pill (`Chip`, `AppPicker`) with top specular rim + `-1px` hover lift + icon scale |
-| `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Carried by the shared `Chip`, `PILL_SELECT_CLASS` (every filter bar includes `AppPicker`), the wizard progress segments and in-step picks, and `ThumbPair`. A new chip control that is not already 44px tall takes it rather than opting out |
+| `.tap-chip` | Touch target for a chip-shaped control: 44×44 minimum under `pointer: coarse` only, so desktop density is untouched. Carried by the shared `Chip`, `PILL_SELECT_CLASS` (every filter bar includes `AppPicker`), the wizard progress segments and in-step picks. A new chip control that is not already 44px tall takes it rather than opting out |
 | `.card-pickable` | Selectable option card (`aria-pressed`) with lit indigo top rim when selected |
 | `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
@@ -386,7 +386,7 @@ how the primitives look, not how many exist. The chrome you will reach for most:
 
 `AppShell` · `Sidebar` · `PageFrame` · `PageHeader` · `IconTile` · `Chip` /
 `FactChip` / `FitBadge` · `StatusBadge` · `Disclosure` · `EmptyState` ·
-`SectionCard` / `SectionHeading` / `GroupLabel` · `AppPicker` · `ThumbPair` ·
+`SectionCard` / `SectionHeading` / `GroupLabel` · `AppPicker` · `VideoVerdict` ·
 `PageTransition` · `ErrorBoundary` · `LegalPage` · `GenerationPanel` /
 `HookContinuityPanel` · `PostKitSection` · `SelectionPanels` / `ReviewPanels` ·
 `OnboardingProvider` · `DemoCtaEditor`
