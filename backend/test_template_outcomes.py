@@ -1,4 +1,10 @@
-"""Recorded outcomes lift template ranking within a small cap."""
+"""Recorded outcomes are the founder's record; verdicts rank (ADR 0127).
+
+template_outcome_adjustment still computes the posted/winner facts —
+they serve the record surfaces — but template ranking stopped reading
+them: a post's metrics cannot say the template is what made a video
+work, so only whole-video verdicts move a template's score now.
+"""
 
 from feedback import template_outcome_adjustment
 from template_recommendations import score_template_for_angle
@@ -45,13 +51,17 @@ def test_outcome_boost_caps_and_views_nudge_inside_budget():
     assert template_outcome_adjustment(rows, "tpl-1")["delta"] <= 2.0
 
 
-def test_posted_template_outranks_identical_unposted_template():
+def test_posted_outcomes_no_longer_move_the_score():
+    # The scorer takes verdict rows now, not outcome rows: two identical
+    # templates score identically however their posts performed, and no
+    # posted reason is claimed on the card. The outcome facts themselves
+    # are unchanged — the tests above pin them as record math.
     profile = {"id": "app-1"}
-    posted = score_template_for_angle(
-        _template("tpl-1"), profile, {}, "create_curiosity", [], [
-            {"template_id": "tpl-1", "tiktok_url": "https://tiktok.example/1", "tiktok_views": 5000},
-        ],
+    first = score_template_for_angle(
+        _template("tpl-1"), profile, {}, "create_curiosity", [],
     )
-    quiet = score_template_for_angle(_template("tpl-2"), profile, {}, "create_curiosity", [], [])
-    assert posted["score"] > quiet["score"]
-    assert any("Posted in 1 clip" in reason for reason in posted["reasons"])
+    second = score_template_for_angle(
+        _template("tpl-2"), profile, {}, "create_curiosity", [],
+    )
+    assert first["score"] == second["score"]
+    assert not any("Posted in" in reason for reason in first["reasons"])

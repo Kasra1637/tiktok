@@ -223,7 +223,7 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           leads with its verdict, and the rest opens on demand. The verdict
           stays outside any list, and a single-reason card with no limits
           renders no disclosure at all. */}
-      {(detail.length > 0 || limits.length > 0) && (
+      {(detail.length > 0 || limits.length > 0 || formatVerdicts(r.verdict_evidence)) && (
         <details className="mt-2">
           <summary className="cursor-pointer text-sm text-muted-foreground">
             More on this fit
@@ -254,6 +254,19 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
                   </li>
                 ))}
               </ul>
+            )}
+            {/* Whole-video verdicts for this TEMPLATE (ADR 0127): the
+                founder's up/down calls on finished videos that went out
+                with this template, tallied from the frozen bundles. Same
+                counts, same styling as the goal cards' verdict lines —
+                the signal that now ranks this card, shown on it. */}
+            {formatVerdicts(r.verdict_evidence) && (
+              <span
+                data-testid={`template-verdict-evidence-${r.template.id}`}
+                className="block text-sm leading-relaxed text-muted-foreground"
+              >
+                {formatVerdicts(r.verdict_evidence)} at this template
+              </span>
             )}
           </div>
         </details>

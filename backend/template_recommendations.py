@@ -1,6 +1,6 @@
 """Deterministic template fit policy, independent of HTTP, persistence and AI.
 
-score_template_for_angle owns weighted reasons, limitations and feedback.
+score_template_for_angle owns weighted reasons, limitations and verdict facts.
 split_shared_notes shapes the visible comparison set in place (ADR 0074).
 """
 from typing import Optional
@@ -209,8 +209,7 @@ def score_template_for_angle(
     profile: dict,
     angle: Optional[dict],
     objective: str,
-    feedback_events=(),
-    outcome_rows=(),
+    verdict_rows=(),
     hook_line=None,
     middle=None,
 ) -> dict:
@@ -223,9 +222,17 @@ def score_template_for_angle(
     reasons are ranked by weight so the first one shown is the strongest
     factor. The founder-facing scale is 0–10 (the template step shows
     "Fit X/10"), so the sum is clamped into that range at the single return
-    below — after feedback, which would otherwise push strong matches above
-    10 or heavily rejected ones below 0. Clamping is monotonic, so the
-    ranking the sort uses is unchanged.
+    below — after the verdict adjustment, which would otherwise push strong
+    matches above 10 or heavily flopped ones below 0. Clamping is monotonic,
+    so the ranking the sort uses is unchanged.
+
+    The one learning input is the founder's whole-video verdicts (ADR
+    0127), attributed by the template frozen in each verdict bundle:
+    `verdict_rows` are {"verdict", "bundle"} rows for this profile. The
+    per-element record (thumbs, rejections, behavior, posted outcomes)
+    used to adjust this score too; it stays as the founder's record but
+    no longer ranks, for the same reason it no longer steers generation
+    (ADR 0124) — a posted result cannot be attributed to one element.
 
     URL-analysis factors are real inputs, with the angle taking precedence
     and the profile as fallback: app category, target audience (normalized
@@ -453,79 +460,43 @@ def score_template_for_angle(
         limitations.insert(0, scene_fit["structure"])
 
     # Strongest factor first. Stable sort keeps same-weight reasons in
-    # insertion order, and feedback still lands at the very top below.
+    # insertion order, and the verdict line still lands at the very top below.
     weighted.sort(key=lambda item: -item[0])
     reasons = [reason for _, reason in weighted]
 
-    feedback = feedback_mod.template_feedback_adjustment(
-        feedback_events, template.get("id") or ""
+    # Whole-video verdicts are the one learning input (ADR 0127): the
+    # founder's up/down calls on finished videos, attributed by the
+    # template frozen in each bundle's opening visual. The per-element
+    # record — thumbs, rejections, behavior counts, posted outcomes —
+    # used to adjust this score through template_feedback_adjustment and
+    # template_outcome_adjustment; those functions stay as the record,
+    # but ranking stopped reading them, because neither a thumb on one
+    # element nor a post's metrics can say the template is what made a
+    # video work (ADR 0124). No verdicts yet means no adjustment at all:
+    # the base fit order above is the order.
+    verdicts = feedback_mod.template_verdict_facts(
+        verdict_rows, template.get("id") or ""
     )
-    if feedback["delta"]:
-        score += feedback["delta"]
-        if feedback["explicit_rejections"] or feedback["automatic_changes"]:
-            rejections = feedback["explicit_rejections"] + feedback["automatic_changes"]
+    if verdicts["delta"]:
+        score += verdicts["delta"]
+        if verdicts["worked"]:
+            reasons.insert(
+                0,
+                f"Finished videos with this template worked {verdicts['worked']} time(s).",
+            )
+        if verdicts["didnt_work"]:
             limitations.insert(
                 0,
-                f"Rejected or replaced {rejections} time(s) for this app.",
+                f"Finished videos with this template didn't work {verdicts['didnt_work']} time(s).",
             )
-        if feedback["thumb_downs"]:
-            limitations.insert(
-                0,
-                f"Rated a poor template {feedback['thumb_downs']} time(s) for this app.",
-            )
-        if feedback["thumb_ups"]:
-            reasons.insert(
-                0,
-                f"Rated a good template {feedback['thumb_ups']} time(s) for this app.",
-            )
-        # Behavior beside the verdicts: moving forward with this template is
-        # the strongest signal in the loop, so its line leads; dropping it
-        # after picking it reads as a limitation; being shown and passed over
-        # is only noted, not headlined.
-        if feedback["adoptions"]:
-            reasons.insert(
-                0,
-                f"Moved forward with this template {feedback['adoptions']} time(s) for this app.",
-            )
-        if feedback["abandonments"]:
-            limitations.insert(
-                0,
-                f"Picked then dropped without rendering {feedback['abandonments']} time(s) for this app.",
-            )
-        if feedback["impressions"]:
-            limitations.append(
-                f"Shown but not picked {feedback['impressions']} time(s) for this app.",
-            )
-
-    # Recorded outcomes beside verdicts: posted clips and winner verdicts lift
-    # a template within a small cap. They never bury a template — an unposted
-    # template simply gets no boost — and views only nudge inside that budget.
-    outcome = feedback_mod.template_outcome_adjustment(
-        outcome_rows, template.get("id") or ""
-    )
-    if outcome["delta"]:
-        score += outcome["delta"]
-        if outcome["posted_clips"]:
-            views = outcome["posted_views"]
-            suffix = f", {views} views" if views else ""
-            reasons.insert(
-                0,
-                f"Posted in {outcome['posted_clips']} clip(s){suffix} for this app.",
-            )
-        if outcome["wins"]:
-            reasons.insert(
-                0,
-                f"Marked a winner {outcome['wins']} time(s) for this app.",
-            )
-    feedback["outcome"] = outcome
-    retired = feedback_mod.is_template_retired(feedback, outcome)
+    retired = feedback_mod.is_template_retired_by_verdicts(verdicts)
     if retired:
         score -= 3.0
         limitations.insert(
             0,
-            "Retired after repeated poor fit — deprioritized until a post proves otherwise.",
+            "Retired after repeated didn't-work verdicts and no worked ones — "
+            "deprioritized until a finished video proves otherwise.",
         )
-    feedback["retired"] = retired
 
     # The 0–10 bound lives here, not in the caller: this is the single
     # return every recommendation flows through, so no consumer can ever
@@ -535,7 +506,7 @@ def score_template_for_angle(
         "score": round(score, 2),
         "reasons": reasons,
         "limitations": limitations,
-        "feedback": feedback,
+        "verdicts": verdicts,
         "matched": matched,
         "retired": retired,
         "relevance": relevance,
@@ -581,3 +552,90 @@ def split_shared_notes(recs):
         for r in recs:
             r[rec_key] = [note for note in (r.get(rec_key) or []) if note not in common_set]
     return shared
+
+
+def _structure_text(value) -> str:
+    """Normalized wording for structure comparison: case and punctuation off."""
+    return " ".join(re.findall(r"\w+", str(value or "").casefold()))
+
+
+def template_structure_key(template: dict) -> tuple:
+    """What a template IS, structurally — everything except its identity.
+
+    The shape a founder actually picks between: the opening and middle
+    segment layout (structure prose plus the hook split), the camera
+    setup, the assets a shoot needs, and the content slots the plan must
+    fill. Name, outcome, objective, category and audiences are identity
+    and fit, not structure — two templates equal on this key differ only
+    in how they are labelled and aimed, never in what filming one makes.
+    """
+    template = template or {}
+    slots = template.get("content_slots")
+    slot_keys = (
+        tuple(sorted(str(k).strip().lower() for k in slots.keys()))
+        if isinstance(slots, dict) else ()
+    )
+    try:
+        hook_seconds = int(template.get("hook_seconds") or 0)
+    except (TypeError, ValueError):
+        hook_seconds = 0
+    return (
+        _structure_text(template.get("opening_structure")),
+        _structure_text(
+            template.get("middle_structure")
+            or template.get("continuation_structure")
+        ),
+        hook_seconds,
+        _structure_text(template.get("camera_pacing")),
+        tuple(sorted(
+            str(a).strip().lower()
+            for a in (template.get("required_assets") or [])
+        )),
+        slot_keys,
+    )
+
+
+def same_structure_template_pairs(templates) -> list:
+    """Pairs of templates that are one structure under two names (ADR 0127).
+
+    The template-step analogue of the same-moment angle check: equality
+    on the structure key, nothing softer — a shared opening with a
+    different middle is a different template, and a near miss here would
+    hide a real choice. Returned as (later id, earlier id) pairs, the
+    convention the angle and goal pair checks use. Deterministic by
+    construction: any flag reproduces from the two rows alone.
+    """
+    rows = list(templates or [])
+    keys = [template_structure_key(row) for row in rows]
+    return [
+        (str(rows[j].get("id") or ""), str(rows[i].get("id") or ""))
+        for j in range(len(rows)) for i in range(j)
+        if keys[j] == keys[i]
+    ]
+
+
+def diversify_template_recommendations(scored: list, want: int) -> list:
+    """Choose the presented set: rank order, structurally distinct first.
+
+    `scored` is the caller's rank-ordered list (retired last, then score,
+    then name — the order the picker has always used). The pool rule is
+    unchanged (ADR 0096): non-retired entries while at least `want`
+    exist, otherwise the whole list. Within the pool, a template whose
+    structure an earlier pick already presented is deferred behind
+    every structurally distinct candidate; deferred duplicates then
+    backfill in rank order, so the presented set never shrinks below
+    the count the picker shows today — it only stops spending two of
+    its three cards on the same shape under two names.
+    """
+    rows = list(scored or [])
+    active = [r for r in rows if not r.get("retired")]
+    pool = active if len(active) >= want else rows
+    picked, deferred, seen = [], [], set()
+    for rec in pool:
+        key = template_structure_key(rec.get("template") or {})
+        if key in seen:
+            deferred.append(rec)
+        else:
+            seen.add(key)
+            picked.append(rec)
+    return (picked + deferred)[:want]

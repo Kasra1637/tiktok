@@ -651,6 +651,22 @@ OUTCOME_WEIGHTS = {
 OUTCOME_CAPS = {
     "approval": 2.0,
 }
+# Whole-video verdicts (ADR 0124) as template-ranking weights (ADR 0127).
+# The founder's one call on a finished video is the strongest per-template
+# evidence the app has — it judges the template as part of the whole clip
+# that went out, which is the only honest attribution available — so a
+# didn't-work call weighs what a template thumb-down weighed, and a worked
+# call what a thumb-up weighed. The caps keep a template's history from
+# permanently burying or crowning it: verdicts inform the order, they do
+# not end the conversation.
+VERDICT_WEIGHTS = {
+    "worked": 1.0,
+    "didnt_work": -1.5,
+}
+VERDICT_CAPS = {
+    "worked": 3.0,
+    "didnt_work": -4.5,
+}
 
 
 def summarize(events) -> dict:
@@ -701,6 +717,95 @@ def is_template_retired(feedback: dict, outcome: dict) -> bool:
         and int(outcome.get("posted_clips") or 0) == 0
         and int(outcome.get("wins") or 0) == 0
     )
+
+
+def _bundle_template_id(bundle) -> str:
+    """The template a verdict bundle froze, or "" when it cannot say."""
+    if not isinstance(bundle, dict):
+        return ""
+    visual = bundle.get("opening_visual")
+    if not isinstance(visual, dict):
+        return ""
+    return str(visual.get("template_id") or "")
+
+
+def template_verdict_facts(rows, template_id: str) -> dict:
+    """One template's whole-video verdict tally, from the frozen bundles.
+
+    `rows` are {"verdict": "up"|"down", "bundle": {...}} — the same rows
+    summarize_video_verdicts counts. A verdict speaks for the template
+    frozen in its bundle's opening visual: the template the finished
+    video actually went out with, so a later project edit never moves
+    the count onto another template. This is the ONLY learning input
+    template ranking reads (ADR 0127): the per-element record above
+    (template_feedback_adjustment, template_outcome_adjustment) stays
+    as the founder's record, but a thumb on one element of a video can
+    no more rank its template than it can steer a plan (ADR 0124).
+    """
+    worked = 0
+    didnt_work = 0
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if _bundle_template_id(row.get("bundle")) != (template_id or ""):
+            continue
+        if row.get("verdict") == "up":
+            worked += 1
+        elif row.get("verdict") == "down":
+            didnt_work += 1
+    delta = (
+        min(VERDICT_CAPS["worked"], worked * VERDICT_WEIGHTS["worked"])
+        + max(VERDICT_CAPS["didnt_work"], didnt_work * VERDICT_WEIGHTS["didnt_work"])
+    )
+    return {
+        "template_id": template_id or "",
+        "worked": worked,
+        "didnt_work": didnt_work,
+        "delta": round(delta, 2),
+    }
+
+
+def is_template_retired_by_verdicts(facts: dict) -> bool:
+    """A template whose finished videos keep not working retires.
+
+    The verdict-era form of is_template_retired: two didn't-work verdicts
+    and not one worked verdict means the founder twice judged the whole
+    video — this template's shape included — a failure, and no finished
+    video proved otherwise. One worked verdict revives it immediately.
+    Retired is deprioritized, not deleted, exactly as before.
+    """
+    facts = facts or {}
+    return (
+        int(facts.get("didnt_work") or 0) >= 2
+        and int(facts.get("worked") or 0) == 0
+    )
+
+
+def verdict_template_evidence(rows) -> dict:
+    """Whole-video verdicts tallied per template, from the frozen bundles.
+
+    The display twin of verdict_objective_evidence: the same rows, the
+    same bucket shape the pickers already render ({wins, flops, ...}),
+    keyed by the template id frozen in each bundle's opening visual.
+    Counts only — wins are worked verdicts, flops are didn't-work;
+    adoptions/posted/views stay zero because those axes belong to the
+    behavior record, not to verdicts. Rows that cannot name a template
+    are skipped, never guessed at.
+    """
+    evidence: dict = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        verdict = row.get("verdict")
+        if verdict not in ("up", "down"):
+            continue
+        template_id = _bundle_template_id(row.get("bundle"))
+        if not template_id:
+            continue
+        bucket = evidence.setdefault(template_id, {
+            "wins": 0, "flops": 0, "adoptions": 0, "posted": 0, "views": 0})
+        bucket["wins" if verdict == "up" else "flops"] += 1
+    return evidence
 
 
 def summarize_profile_feedback(events, template_id: str = "", posted_rows=()) -> dict:

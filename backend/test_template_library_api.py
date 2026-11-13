@@ -1182,75 +1182,114 @@ class TestFeedbackInfluence:
             "AND opening_structure IS NOT NULL AND opening_structure != ''",
             (ANON,),
         ))
-        events = _run(api._fetch_all(
-            "SELECT event, signal, reason, template_id, step FROM feedback_events "
-            "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
-            (profile["id"], ANON),
-        ))
+        verdict_rows = self._verdict_rows(api, profile)
         scored = []
         for row in rows:
-            result = api._score_template_for_angle(row, profile, None, "", events, [])
+            result = api._score_template_for_angle(row, profile, None, "", verdict_rows)
             scored.append({
                 "template": {"id": row["id"], "name": row.get("name") or ""},
                 "score": result["score"],
                 "why_it_fits": result["reasons"],
                 "limitations": result["limitations"],
-                "feedback": result["feedback"],
+                "verdicts": result["verdicts"],
                 "retired": result["retired"],
             })
         scored.sort(key=lambda r: (r["retired"], -r["score"], r["template"]["name"]))
         return scored
 
+    def _verdict_rows(self, api, profile):
+        """The profile's parsed verdict rows, mirroring the endpoint's read."""
+        import json as _json
+        rows = _run(api._fetch_all(
+            "SELECT vv.verdict AS verdict, vv.bundle AS bundle "
+            "FROM video_verdicts vv "
+            "JOIN generations g ON g.id = vv.generation_id "
+            "WHERE g.brand_profile_id = ? AND vv.user_id = ? "
+            "ORDER BY vv.updated_at DESC LIMIT 200",
+            (profile["id"], ANON),
+        ))
+        parsed = []
+        for row in rows:
+            bundle = row.get("bundle")
+            if isinstance(bundle, str):
+                try:
+                    bundle = _json.loads(bundle)
+                except (TypeError, ValueError):
+                    bundle = None
+            parsed.append({"verdict": row.get("verdict"),
+                           "bundle": bundle if isinstance(bundle, dict) else {}})
+        return parsed
+
+    def _seed_verdict(self, api, profile, template_id, verdict):
+        """A finished render on this profile, judged whole (ADR 0124)."""
+        import json as _json
+        from models import now_iso
+        generation_id = str(uuid.uuid4())
+        now = now_iso()
+        _run(api._execute(
+            "INSERT INTO generations (id, user_id, brand_profile_id, template_id, "
+            "template_version, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 3, 'completed', ?, ?)",
+            (generation_id, ANON, profile["id"], template_id, now, now),
+        ))
+        bundle = {"opening_visual": {"template_id": template_id, "template_version": 3}}
+        _run(api._execute(
+            "INSERT INTO video_verdicts (generation_id, user_id, verdict, bundle, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (generation_id, ANON, verdict, _json.dumps(bundle), now, now),
+        ))
+        return generation_id
+
     def _after(self, api, profile, template_id):
         return next(r for r in self._scored(api, profile) if r["template"]["id"] == template_id)
 
-    def test_repeated_template_rejection_lowers_score_and_names_it(self, api):
-        profile = _approve_profile(api, name="Feedback Penalty")
+    def test_the_old_record_no_longer_moves_a_template_score(self, api):
+        # ADR 0127: the per-element record (template rejections, thumbs)
+        # is kept as the founder's record, but ranking stopped reading it —
+        # only whole-video verdicts move a template now.
+        profile = _approve_profile(api, name="Feedback Record Only")
         _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
         self._record(api, profile, template_id, "template_rejected", reason="hook_too_weak")
-        updated = self._after(api, profile, template_id)
-        # Scores live on the founder-facing 0–10 scale, so a penalty that
-        # would push the raw sum below zero floors at 0 rather than going
-        # negative; the delta itself is still exact in feedback.
-        assert updated["score"] == pytest.approx(max(0.0, before - 4.0))
-        assert updated["limitations"][0] == "Rejected or replaced 2 time(s) for this app."
-        assert updated["feedback"]["explicit_rejections"] == 2
-        assert updated["feedback"]["delta"] == pytest.approx(-4.0)
-
-    def test_automatic_change_counts_less_than_an_explicit_rejection(self, api):
-        profile = _approve_profile(api, name="Feedback Signal")
-        _, template_id, before = self._target(api, profile)
-        self._record(api, profile, template_id, "template_rejected", signal="template_changed")
-        updated = self._after(api, profile, template_id)
-        assert updated["score"] == pytest.approx(before - 1.0)
-        assert updated["feedback"]["automatic_changes"] == 1
-
-    def test_a_template_thumb_up_raises_score_and_names_it(self, api):
-        profile = _approve_profile(api, name="Feedback Success")
-        _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "thumb_up", step="template")
-        updated = self._after(api, profile, template_id)
-        assert updated["score"] == pytest.approx(min(10.0, before + 1.0))
-        assert updated["why_it_fits"][0] == "Rated a good template 1 time(s) for this app."
-
-    def test_a_template_thumb_down_lowers_score_and_names_it(self, api):
-        profile = _approve_profile(api, name="Feedback Thumb Down")
-        _, template_id, before = self._target(api, profile)
         self._record(api, profile, template_id, "thumb_down", step="template")
         updated = self._after(api, profile, template_id)
-        assert updated["score"] == pytest.approx(max(0.0, before - 1.5))
-        assert updated["limitations"][0] == "Rated a poor template 1 time(s) for this app."
-
-    def test_a_verdict_on_another_component_cannot_move_a_template_score(self, api):
-        profile = _approve_profile(api, name="Feedback Isolation")
-        _, template_id, before = self._target(api, profile)
-        for component in ("goal", "plan", "script"):
-            self._record(api, profile, template_id, "thumb_down", step=component)
-        updated = self._after(api, profile, template_id)
         assert updated["score"] == pytest.approx(before)
-        assert updated["feedback"]["thumb_downs"] == 0
-        assert updated["feedback"]["delta"] == 0
+        assert updated["verdicts"]["worked"] == 0
+        assert updated["verdicts"]["didnt_work"] == 0
+        assert updated["verdicts"]["delta"] == 0
+
+    def test_a_worked_verdict_raises_score_and_names_it(self, api):
+        profile = _approve_profile(api, name="Verdict Success")
+        _, template_id, before = self._target(api, profile)
+        self._seed_verdict(api, profile, template_id, "up")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(min(10.0, before + 1.0))
+        assert updated["verdicts"]["worked"] == 1
+        assert any("worked 1 time(s)" in r for r in updated["why_it_fits"])
+
+    def test_a_didnt_work_verdict_lowers_score_and_names_it(self, api):
+        profile = _approve_profile(api, name="Verdict Flop")
+        _, template_id, before = self._target(api, profile)
+        self._seed_verdict(api, profile, template_id, "down")
+        updated = self._after(api, profile, template_id)
+        assert updated["score"] == pytest.approx(max(0.0, before - 1.5))
+        assert updated["verdicts"]["didnt_work"] == 1
+        assert any("didn't work 1 time(s)" in lim for lim in updated["limitations"])
+
+    def test_recommendations_carry_the_templates_verdict_evidence(self, api):
+        profile = _approve_profile(api, name="Verdict Evidence")
+        _, template_id, _ = self._target(api, profile)
+        self._seed_verdict(api, profile, template_id, "up")
+        self._seed_verdict(api, profile, template_id, "up")
+        recs = _run(api.recommend_templates(
+            profile_id=profile["id"], user_id=ANON))["recommendations"]
+        target = next(r for r in recs if r["template"]["id"] == template_id)
+        assert target["verdict_evidence"]["wins"] == 2
+        assert target["verdict_evidence"]["flops"] == 0
+        # A template with no finished-video verdicts carries no evidence.
+        others = [r for r in recs if r["template"]["id"] != template_id]
+        assert all(r["verdict_evidence"] is None for r in others)
 
     def test_feedback_is_capped_and_template_scoped(self, api):
         import feedback as feedback_mod

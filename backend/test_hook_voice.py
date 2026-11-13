@@ -512,3 +512,165 @@ def test_the_plan_loop_refuses_a_script_that_keeps_ending_on_a_question(monkeypa
     # refusal instead of a shipped question.
     assert len(calls) == 3
 
+
+# ---------------------------------------------------------------------------
+# The hook must promise the certified outcome (ADR 0127)
+#
+# The goal step fits goals to the angle's certified outcome; the plan is
+# where that promise is either kept or quietly swapped for another one.
+# The check is deterministic, like the script-ending question rule: the
+# hook must carry the certified outcome's key terms, normalized the way
+# the angle grounding near-match normalizes, or the editorial loop
+# rewrites it — and a hook that still promises something else after the
+# bounded attempts refuses the plan rather than shipping.
+# ---------------------------------------------------------------------------
+
+CERTIFIED_PROFILE = {
+    "brand_name": "Taskly",
+    "core_features": ["Task timer"],
+    "outcome_statements": [{
+        "from_feature": "Task timer",
+        "outcome": "Start before the kettle boils",
+    }],
+}
+CERTIFIED_ANGLE = {
+    "kind": "problem_solution",
+    "app_feature": "Task timer",
+    "target_audience": "People who stall on starting",
+    "user_problem": "The task sits there while the kettle boils.",
+    "hook_promise": "A person at the counter, kettle on, task not started.",
+}
+CERTIFIED_OUTCOME = "Start before the kettle boils"
+GOOD_HOOK = "I start before the kettle boils."
+GOOD_SCRIPT = (
+    "The kettle is on and the timer is already counting at my desk. "
+    "I start the task before my tea is ready."
+)
+OFF_PROMISE_HOOK = "Naming the feeling never worked."
+
+
+def _promise_issues(hook, outcome=CERTIFIED_OUTCOME):
+    return ai_service._generated_spoken_issues(
+        hook, GOOD_SCRIPT, 60, 300, certified_outcome=outcome)
+
+
+def test_a_hook_carrying_the_certified_outcome_passes():
+    issues = _promise_issues(GOOD_HOOK)
+    assert not any("certified outcome" in issue for issue in issues)
+
+
+def test_a_hook_promising_something_else_is_an_issue():
+    issues = _promise_issues(OFF_PROMISE_HOOK)
+    assert any("certified outcome" in issue and CERTIFIED_OUTCOME in issue
+               for issue in issues)
+
+
+def test_no_certified_outcome_means_no_promise_check():
+    # Older projects and uncertified angles behave exactly as today: the
+    # same hook that fails above is not an issue at all.
+    issues = ai_service._generated_spoken_issues(
+        OFF_PROMISE_HOOK, GOOD_SCRIPT, 60, 300)
+    assert not any("certified outcome" in issue for issue in issues)
+
+
+def test_half_the_key_terms_is_the_bar():
+    outcome = "fall asleep without checking your phone"
+    passing = ai_service._generated_spoken_issues(
+        "Midnight, and I am still checking my phone.", GOOD_SCRIPT, 60, 300,
+        certified_outcome=outcome)
+    assert not any("certified outcome" in issue for issue in passing)
+    failing = ai_service._generated_spoken_issues(
+        "I keep checking the time at midnight.", GOOD_SCRIPT, 60, 300,
+        certified_outcome=outcome)
+    assert any("certified outcome" in issue for issue in failing)
+
+
+def test_the_plan_prompt_names_the_certified_outcome_as_the_hook_promise(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return _plan(GOOD_HOOK, GOOD_SCRIPT)
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile=dict(CERTIFIED_PROFILE),
+            template={"name": "T", "hook_seconds": 3},
+            angle=dict(CERTIFIED_ANGLE),
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == GOOD_HOOK
+    assert "HOOK PROMISE" in calls[0]["prompt"]
+    assert CERTIFIED_OUTCOME in calls[0]["prompt"]
+    # A compliant first draft needs no correction pass.
+    assert all("EDITORIAL CORRECTION" not in c["prompt"] for c in calls)
+
+
+def test_the_plan_prompt_has_no_promise_rule_without_a_certified_outcome(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return _plan(OFF_PROMISE_HOOK, GOOD_SCRIPT)
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Taskly"},
+            template={"name": "T", "hook_seconds": 3},
+            angle=dict(CERTIFIED_ANGLE),
+            duration_seconds=15,
+        )
+    )
+    # Nothing certified, nothing enforced: the off-promise hook ships,
+    # exactly as plans behaved before the promise match existed.
+    assert result["hook_line"] == OFF_PROMISE_HOOK
+    assert "HOOK PROMISE" not in calls[0]["prompt"]
+
+
+def test_the_plan_loop_rewrites_a_hook_that_breaks_the_promise(monkeypatch):
+    bad = _plan(OFF_PROMISE_HOOK, GOOD_SCRIPT)
+    good = _plan(GOOD_HOOK, GOOD_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad if len(calls) == 1 else good
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile=dict(CERTIFIED_PROFILE),
+            template={"name": "T", "hook_seconds": 3},
+            angle=dict(CERTIFIED_ANGLE),
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == GOOD_HOOK
+    assert len(calls) >= 2
+    # The correction names the broken promise, so the rewrite is targeted.
+    assert "certified outcome" in calls[1]["prompt"]
+
+
+def test_the_plan_loop_refuses_a_hook_that_keeps_breaking_the_promise(monkeypatch):
+    bad = _plan(OFF_PROMISE_HOOK, GOOD_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            ai_service.generate_creative_plan(
+                profile=dict(CERTIFIED_PROFILE),
+                template={"name": "T", "hook_seconds": 3},
+                angle=dict(CERTIFIED_ANGLE),
+                duration_seconds=15,
+            )
+        )
+    assert len(calls) == 3
+

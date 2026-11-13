@@ -64,7 +64,8 @@ from ai_spoken import (
     _first_sentence, _generated_spoken_issues, _keep_tail,
     _normalize_spoken, _opens_a_problem, _script_echoes_hook,
     _sets_scene, _spoken_marker_hit, _split_sentences, _summarize_line,
-    _words_match, bind_spoken_words, check_spoken_story, hook_ceiling,
+    _words_match, bind_spoken_words, certified_outcome_key_terms,
+    check_spoken_story, hook_ceiling,
     partition_spoken_words, repair_spoken_story, spoken_budget,
     strip_quote_marks,
     spoken_targets, strategy_text, strip_leading_hook,
@@ -3771,6 +3772,25 @@ async def generate_creative_plan(
         brief["verified_feature_outcome"] = grounding
     if grounding.get("outcome"):
         angle = {**(angle or {}), "viewer_outcome": grounding["outcome"]}
+    # The hook's promise target (ADR 0127): the outcome the goal step
+    # certified against the verified facts. The prompt names it as the
+    # one outcome the hook may promise, and the editorial loop enforces
+    # it deterministically (see _generated_spoken_issues) — a hook that
+    # promises something else is rewritten, then refused, never shipped.
+    # No certified outcome (older projects, uncertified angles) leaves
+    # both the prompt and the check exactly as they were.
+    certified_outcome = (grounding.get("outcome") or "").strip()
+    promise_rule = ""
+    if certified_outcome:
+        promise_rule = (
+            "\nHOOK PROMISE — THE CERTIFIED OUTCOME: this video's goal certified one "
+            f"outcome from the verified facts: \"{certified_outcome}\". The hook line "
+            "must promise exactly that outcome in the viewer's own words: carry its "
+            "key words (" + ", ".join(certified_outcome_key_terms(certified_outcome)) + ") "
+            "in the hook itself. Never promise a different benefit, and never a "
+            "vaguer one — a hook that does not carry the certified outcome is "
+            "refused and rewritten.\n"
+        )
     # Source-linked outcome wins before both the brief and angle-goal block.
     if ((angle or {}).get("viewer_outcome") or "").strip():
         brief["angle_outcome"] = (angle or {}).get("viewer_outcome").strip()
@@ -3843,6 +3863,7 @@ async def generate_creative_plan(
         f"CREATIVE BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"{feedback_context}\n"
         f"{angle_goal_block}\n"
+        f"{promise_rule}"
         "CUSTOMER PERSPECTIVE: write every spoken line as a satisfied CUSTOMER describing their "
         "own experience using this app — their situation, what they felt, and the value they get. "
         "The speaker is a real user, never the app's founder, owner, developer or marketer. Never "
@@ -4046,6 +4067,7 @@ async def generate_creative_plan(
         issues = _generated_spoken_issues(
             hook, script, hook_budget, middle_budget,
             allows_question=allows_question,
+            certified_outcome=certified_outcome,
         )
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
@@ -4135,6 +4157,7 @@ async def generate_creative_plan(
                 retry_issues = _generated_spoken_issues(
                     retry_hook, retry_script, hook_budget, middle_budget,
                     allows_question=allows_question,
+                    certified_outcome=certified_outcome,
                 )
                 if retry_issues:
                     logger.warning(

@@ -325,8 +325,54 @@ def _sentence_is_question(sentence: str) -> bool:
         and words[1] in _QUESTION_AUX
     )
 
+# Words that carry no promise of their own, on top of the continuity
+# stopwords: pronouns and possessives a certified outcome is phrased
+# with ("without checking YOUR phone") that no hook should have to echo.
+_PROMISE_EXTRA_STOPWORDS = frozenset((
+    "without", "you", "your", "yours", "our", "ours",
+))
+
+def certified_outcome_key_terms(outcome: str) -> list:
+    """The words a certified outcome's promise is made of, in order.
+
+    Normalized the way the angle grounding near-match normalizes — the
+    same lowercase word tokens — then reduced to the terms that carry
+    the promise: at least four letters, not a stopword. Short function
+    words ("start before the kettle boils" keeps start/kettle/boils,
+    drops "before"/"the") are connective tissue, not the promise.
+    """
+    stopwords = _CONTINUITY_STOPWORDS | _PROMISE_EXTRA_STOPWORDS
+    terms = []
+    for word in _normalize_spoken(outcome).split():
+        if len(word) >= 4 and word not in stopwords and word not in terms:
+            terms.append(word)
+    return terms
+
+def hook_carries_certified_outcome(hook: str, outcome: str) -> bool:
+    """Whether the hook's own words carry the certified outcome's promise.
+
+    The bar is half the outcome's key terms, rounded up — the hook is
+    one short spoken line, so demanding every term would refuse hooks
+    that plainly promise the outcome, while a single shared word would
+    pass hooks that promise something else entirely. Matching is the
+    continuity matcher (same word, same stem, or one containing the
+    other), so "started" carries "start". An outcome with no key terms
+    certifies nothing checkable and always passes: the plan then
+    behaves exactly as it did before the promise match existed.
+    """
+    terms = certified_outcome_key_terms(outcome)
+    if not terms:
+        return True
+    hook_words = _normalize_spoken(hook).split()
+    carried = sum(
+        1 for term in terms
+        if any(_words_match(term, word) for word in hook_words)
+    )
+    return carried >= -(-len(terms) // 2)
+
 def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_budget: int,
-                              *, allows_question: bool = False) -> list:
+                              *, allows_question: bool = False,
+                              certified_outcome: str = "") -> list:
     """Reject observable draft defects before any sentence-splitting clamp.
 
     This is not a general grammar parser or a semantic coherence score. It
@@ -345,7 +391,9 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
     the prompt allows at most one 'I' in the whole hook line. So is the
     statement default: a hook-line question is detectable (it ends in '?'),
     so a non-question plan that drafts one is rewritten through the editorial
-    loop instead of shipped.
+    loop instead of shipped. So is the promise match: when the caller
+    certifies an outcome, the hook either carries that outcome's key terms
+    or it does not — word arithmetic again, never a judgment of quality.
     """
     issues = []
     # Prepositions/pronouns CAN end grammatical English ("look forward to",
@@ -453,6 +501,25 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
             "the script never asks one — end on a statement that names what is "
             "still unknown in the story's own terms, so the demo reads as the answer"
         )
+    # The hook must promise the outcome this video's goal certified
+    # (ADR 0127). The goal step fitted the goal to the angle's certified
+    # outcome; a hook whose words carry none of that outcome is promising
+    # something else — the same drift as a script ending that leaves the
+    # story's subject, and just as observable: the outcome's key terms
+    # are either in the hook or they are not. Enforced here, in the
+    # bounded editorial loop, for the same reason as the ending rule —
+    # a prompt-only promise drifts. No certified outcome (older
+    # projects, uncertified angles) means no check, exactly as before.
+    if certified_outcome and str(hook or "").strip():
+        if not hook_carries_certified_outcome(hook, certified_outcome):
+            terms = certified_outcome_key_terms(certified_outcome)
+            issues.append(
+                "hook_line does not carry the certified outcome this video's "
+                f"goal promises ('{certified_outcome}'): the hook must promise "
+                "that outcome in the viewer's own words — carry its key words "
+                f"({', '.join(terms)}) in the hook itself rather than "
+                "promising something else"
+            )
     return issues
 def _summarize_line(text: str, spec: dict) -> dict:
     """One line's count, the target it aims at, and the ceiling it must hold."""

@@ -42,6 +42,7 @@ from ai_service import (
     generate_content_angles,
 )
 from template_recommendations import (
+    diversify_template_recommendations as _diversify_template_recommendations,
     score_template_for_angle as _score_template_for_angle,
     split_shared_notes as _split_shared_notes,
     filter_relevant_templates as _filter_relevant_templates,
@@ -645,17 +646,15 @@ async def _angle_feedback_for_profile(brand_profile_id: str, user_id: str) -> di
     return feedback_mod.summarize_angle_feedback(rows, posted_rows=posted)
 
 
-async def _verdict_objective_evidence(brand_profile_id: str, user_id: str) -> dict:
-    """Whole-video verdicts tallied per objective for this profile (ADR 0126).
+async def _verdict_rows_for_profile(brand_profile_id: str, user_id: str) -> list:
+    """This profile's whole-video verdict rows, bundles parsed (ADR 0124).
 
-    The ADR 0124 signal, read for display beside the goal picker: each
-    verdict's frozen bundle names the objective its video was made for,
-    so the tally speaks for the goal itself and survives later project
-    edits — unlike the goal-thumb record above, which attributes by the
-    project's CURRENT objective. The read mirrors the studio steering
-    read (same join, same defensive bundle parsing) and is pure: it
-    never generates anything (ADR 0122), and a read failure yields an
-    empty map rather than failing the list the founder asked for.
+    The one read behind every verdict surface: verdict rows joined to
+    their generations' profile, newest first, each carrying the bundle
+    frozen when the verdict was cast. Defensive by design — a read
+    failure or an unparseable bundle yields an empty/partial list
+    rather than failing the surface the founder asked for, because
+    every consumer treats "no rows" as "no signal yet".
     """
     try:
         rows = await _cfg("_fetch_all")(
@@ -678,6 +677,22 @@ async def _verdict_objective_evidence(brand_profile_id: str, user_id: str) -> di
                 bundle = None
         parsed.append({"verdict": row.get("verdict"),
                        "bundle": bundle if isinstance(bundle, dict) else {}})
+    return parsed
+
+
+async def _verdict_objective_evidence(brand_profile_id: str, user_id: str) -> dict:
+    """Whole-video verdicts tallied per objective for this profile (ADR 0126).
+
+    The ADR 0124 signal, read for display beside the goal picker: each
+    verdict's frozen bundle names the objective its video was made for,
+    so the tally speaks for the goal itself and survives later project
+    edits — unlike the goal-thumb record above, which attributes by the
+    project's CURRENT objective. The read mirrors the studio steering
+    read (same join, same defensive bundle parsing) and is pure: it
+    never generates anything (ADR 0122), and a read failure yields an
+    empty map rather than failing the list the founder asked for.
+    """
+    parsed = await _verdict_rows_for_profile(brand_profile_id, user_id)
     return feedback_mod.verdict_objective_evidence(parsed)
 
 
@@ -2289,29 +2304,18 @@ async def recommend_templates(
     if not templates:
         return {"recommendations": [], "angle": _serialize_angle_row(angle) if angle else None}
 
-    # Past behavior informs the order, but it is bounded and explainable: the
-    # exact adjustment and its factual basis travel with each recommendation.
-    feedback_events = await _cfg("_fetch_all")(
-        "SELECT event, signal, reason, template_id, step FROM feedback_events "
-        "WHERE brand_profile_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 200",
-        (profile_id, user_id),
-    )
-    # Recorded outcomes beside verdicts: posted links/views per template lift
-    # ranking within a small cap. A query failure must not break the list —
-    # an empty outcome set simply means no boost.
-    try:
-        outcome_rows = await _cfg("_fetch_all")(
-            "SELECT template_id, tiktok_url, tiktok_views FROM generations "
-            "WHERE brand_profile_id = ? AND user_id = ? AND template_id IS NOT NULL "
-            "ORDER BY created_at DESC LIMIT 200",
-            (profile_id, user_id),
-        )
-    except Exception:
-        outcome_rows = []
+    # The one learning input ranking reads (ADR 0127): the founder's
+    # whole-video verdicts for this profile, each verdict attributed by
+    # the template frozen in its bundle. The per-element record and the
+    # posted outcomes used to be fetched here too; ranking stopped
+    # reading them (the record itself is untouched — it still serves
+    # History, Analytics and the profile summary).
+    verdict_rows = await _verdict_rows_for_profile(profile_id, user_id)
+    verdict_evidence = feedback_mod.verdict_template_evidence(verdict_rows)
     scored = []
     for tpl in templates:
         result = _score_template_for_angle(
-            tpl, profile, angle, norm_objective, feedback_events, outcome_rows,
+            tpl, profile, angle, norm_objective, verdict_rows,
             hook_line=hook_line or None, middle=middle or None,
         )
         # A tailored row generated for a different problem is not a candidate
@@ -2335,7 +2339,8 @@ async def recommend_templates(
             "required_assets": tpl.get("required_assets") or [],
             "suggested_duration": tpl.get("default_duration") or template_library.DEFAULT_DURATION,
             "limitations": result["limitations"],
-            "feedback": result["feedback"],
+            "verdicts": result["verdicts"],
+            "verdict_evidence": verdict_evidence.get(tpl.get("id") or ""),
             "retired": result["retired"],
             "relevance": result["relevance"],
             "angle_scene": result["angle_scene"],
@@ -2344,10 +2349,13 @@ async def recommend_templates(
     # Exactly three rows, always (ADR 0096): the scored top three from the
     # longest list available, so the picker never shows fewer (some templates
     # are retired) and never more — a client-supplied limit can only ask for
-    # fewer, and the product never offers a "show more".
+    # fewer, and the product never offers a "show more". Within that rule the
+    # set prefers structurally distinct templates (ADR 0127): two cards on
+    # one shape under two names is one choice presented twice, so a
+    # duplicate yields to the next distinct shape and backfills only when
+    # nothing distinct remains.
     want = max(1, min(int(limit or 3), 3))
-    active = [r for r in scored if not r["retired"]]
-    visible = (active if len(active) >= want else scored)[:want]
+    visible = _diversify_template_recommendations(scored, want)
     # Shared across the visible set, not the whole table: the section line
     # must describe exactly the cards beside it.
     shared = _split_shared_notes(visible)

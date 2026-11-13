@@ -20,9 +20,12 @@ from angle_policy import (
 )
 from template_recommendations import (
     check_template_relevance,
+    diversify_template_recommendations,
     filter_relevant_templates,
     problem_anchors,
+    same_structure_template_pairs,
     score_template_for_angle,
+    template_structure_key,
 )
 
 # One angle, stated the way the wizard shows it: the Problem and the Promise
@@ -456,3 +459,180 @@ class TestSameOutcomeGoals:
              "why_it_fits": "Fits this angle"},
         ]
         assert same_outcome_goal_pairs(goals) == []
+
+
+def _verdict_row(verdict, template_id):
+    """One whole-video verdict row, the shape the recommendation read parses."""
+    return {"verdict": verdict, "bundle": {"opening_visual": {
+        "template_id": template_id, "template_version": 3}}}
+
+
+def _bare_template(tid="tpl-1", name="Quiet demo"):
+    return {
+        "id": tid, "objective": "create_curiosity", "app_categories": [],
+        "audiences": [], "content_slots": {}, "name": name,
+        "category": "demo",
+    }
+
+
+class TestVerdictTemplateRanking:
+    """Template ranking learns from whole-video verdicts only (ADR 0127).
+
+    ADR 0124 flagged the scorer's thumbs/outcome inputs as a deliberate
+    keep pending a founder decision; the decision is made, so the frozen
+    bundles' template ids are the ranking input and the per-element
+    record no longer moves a template's score.
+    """
+
+    PROFILE = {"id": "app-1"}
+
+    def _score(self, template, rows=()):
+        return score_template_for_angle(
+            template, self.PROFILE, {}, "create_curiosity", rows)
+
+    def test_worked_verdicts_raise_the_score_and_name_it(self):
+        base = self._score(_bare_template())
+        lifted = self._score(_bare_template(), [
+            _verdict_row("up", "tpl-1"), _verdict_row("up", "tpl-1")])
+        assert lifted["score"] == min(10.0, base["score"] + 2.0)
+        assert lifted["verdicts"]["worked"] == 2
+        assert lifted["verdicts"]["delta"] == 2.0
+        assert any("worked 2 time(s)" in r for r in lifted["reasons"])
+
+    def test_a_didnt_work_verdict_pulls_the_score_down(self):
+        base = self._score(_bare_template())
+        lowered = self._score(_bare_template(), [_verdict_row("down", "tpl-1")])
+        assert lowered["score"] == max(0.0, base["score"] - 1.5)
+        assert lowered["verdicts"]["didnt_work"] == 1
+        assert any("didn't work 1 time(s)" in lim for lim in lowered["limitations"])
+
+    def test_a_worked_verdict_outranks_an_equal_fit_template_without_one(self):
+        plain = self._score(_bare_template("tpl-1"))
+        proven = self._score(_bare_template("tpl-2"), [_verdict_row("up", "tpl-2")])
+        assert proven["score"] > plain["score"]
+
+    def test_verdicts_for_other_templates_do_not_move_this_one(self):
+        base = self._score(_bare_template("tpl-1"))
+        other = self._score(_bare_template("tpl-1"), [
+            _verdict_row("up", "tpl-2"), _verdict_row("down", "tpl-2")])
+        assert other["score"] == base["score"]
+        assert other["verdicts"]["delta"] == 0
+
+    def test_zero_verdicts_is_exactly_the_base_order(self):
+        # No signal, no change: with no verdict rows the score is the base
+        # fit score and no verdict reason or limitation appears.
+        result = self._score(_bare_template(), [])
+        assert result["verdicts"] == {
+            "template_id": "tpl-1", "worked": 0, "didnt_work": 0, "delta": 0.0}
+        assert not any("worked" in r or "didn't work" in r for r in result["reasons"])
+        assert not any("didn't work" in lim for lim in result["limitations"])
+        assert result["retired"] is False
+
+    def test_the_verdict_lift_is_capped(self):
+        rows = [_verdict_row("up", "tpl-1") for _ in range(10)]
+        result = self._score(_bare_template(), rows)
+        assert result["verdicts"]["worked"] == 10
+        assert result["verdicts"]["delta"] == 3.0
+
+
+def _structured_template(tid, name, opening="Open on the back step at night.",
+                         middle="Then it stops at the reach for the phone.",
+                         **overrides):
+    template = {
+        "id": tid, "name": name, "category": "demo",
+        "objective": "create_curiosity", "app_categories": [], "audiences": [],
+        "opening_structure": opening, "middle_structure": middle,
+        "hook_seconds": 3, "camera_pacing": "quick handheld, hard cut",
+        "required_assets": ["character_reference"],
+        "content_slots": {"moment": "the reach for the phone"},
+    }
+    template.update(overrides)
+    return template
+
+
+class TestSameStructureTemplates:
+    """Same structure under a different name is one template twice (ADR 0127)."""
+
+    def test_same_structure_different_name_is_flagged(self):
+        pair = same_structure_template_pairs([
+            _structured_template("tpl-1", "Quiet demo"),
+            _structured_template("tpl-2", "Morning version"),
+        ])
+        assert pair == [("tpl-2", "tpl-1")]
+
+    def test_a_different_middle_is_a_different_structure(self):
+        assert same_structure_template_pairs([
+            _structured_template("tpl-1", "Quiet demo"),
+            _structured_template("tpl-2", "Morning version",
+                                 middle="Then a slow zoom on the empty chair."),
+        ]) == []
+
+    def test_a_different_camera_setup_is_a_different_structure(self):
+        assert same_structure_template_pairs([
+            _structured_template("tpl-1", "Quiet demo"),
+            _structured_template("tpl-2", "Morning version",
+                                 camera_pacing="locked tripod, one slow push"),
+        ]) == []
+
+    def test_different_required_assets_are_a_different_structure(self):
+        assert same_structure_template_pairs([
+            _structured_template("tpl-1", "Quiet demo"),
+            _structured_template("tpl-2", "Morning version",
+                                 required_assets=["character_reference", "logo"]),
+        ]) == []
+
+    def test_the_key_ignores_name_outcome_and_objective(self):
+        left = _structured_template("tpl-1", "Quiet demo")
+        right = _structured_template(
+            "tpl-2", "Morning version", objective="build_trust",
+            outcome="A completely different promise to the viewer.")
+        assert template_structure_key(left) == template_structure_key(right)
+
+
+class TestDiversifyRecommendations:
+    """The presented set prefers structurally distinct templates (ADR 0127).
+
+    Rank order still rules: diversification only reorders WITHIN the
+    presented set's reach, and the set never shrinks below the count the
+    picker shows today — duplicates backfill in rank order.
+    """
+
+    def _scored(self, specs):
+        return [{
+            "template": _structured_template(tid, name, **kw),
+            "score": 9.0 - i, "retired": retired,
+        } for i, (tid, name, retired, kw) in enumerate(specs)]
+
+    def test_a_structural_duplicate_yields_to_a_distinct_template(self):
+        scored = self._scored([
+            ("tpl-1", "First", False, {}),
+            ("tpl-2", "First again", False, {}),
+            ("tpl-3", "Distinct", False, {"middle": "A slow zoom instead."}),
+            ("tpl-4", "Also distinct", False, {"opening": "Open at the sink."}),
+        ])
+        visible = diversify_template_recommendations(scored, 3)
+        assert [r["template"]["id"] for r in visible] == ["tpl-1", "tpl-3", "tpl-4"]
+
+    def test_duplicates_backfill_when_nothing_distinct_remains(self):
+        scored = self._scored([
+            ("tpl-1", "First", False, {}),
+            ("tpl-2", "First again", False, {}),
+            ("tpl-3", "First once more", False, {}),
+        ])
+        visible = diversify_template_recommendations(scored, 3)
+        assert [r["template"]["id"] for r in visible] == ["tpl-1", "tpl-2", "tpl-3"]
+
+    def test_retired_templates_stay_out_of_the_pool_while_enough_active_exist(self):
+        scored = self._scored([
+            ("tpl-1", "First", False, {}),
+            ("tpl-2", "Retired twin", True, {}),
+            ("tpl-3", "Distinct", False, {"middle": "A slow zoom instead."}),
+            ("tpl-4", "Also distinct", False, {"opening": "Open at the sink."}),
+        ])
+        visible = diversify_template_recommendations(scored, 3)
+        assert [r["template"]["id"] for r in visible] == ["tpl-1", "tpl-3", "tpl-4"]
+
+    def test_fewer_candidates_than_wanted_returns_what_exists(self):
+        scored = self._scored([("tpl-1", "Only", False, {})])
+        visible = diversify_template_recommendations(scored, 3)
+        assert [r["template"]["id"] for r in visible] == ["tpl-1"]

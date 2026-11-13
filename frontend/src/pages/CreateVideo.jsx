@@ -41,6 +41,7 @@ import {
   blockingRequirements,
 } from "../lib/templateRequirements";
 import { sentenceCase } from "../lib/copyCase";
+import { formatVerdicts } from "../lib/angleSubtitle";
 import { useReducedMotionPreference } from "../lib/reducedMotion";
 
 import { readPieceSeconds } from "../lib/videoLength";
@@ -2250,6 +2251,23 @@ export default function CreateVideo() {
                 or regenerates from the button above, and the one verdict
                 that teaches generation waits for the finished video in
                 History, judged whole. */}
+            {/* What the verdicts say so far, in the same evidence-line
+                style as the pickers (ADR 0127): the plan above was
+                steered by these whole-video calls, so Review shows the
+                tally it leaned on. Display only, and nothing at all
+                before the first verdict exists. */}
+            {Number(project?.verdict_summary?.total) > 0 && (
+              <p
+                className="text-sm leading-relaxed text-muted-foreground"
+                data-testid="review-verdict-evidence"
+              >
+                {formatVerdicts({
+                  wins: project.verdict_summary.up,
+                  flops: project.verdict_summary.down,
+                })}{" "}
+                on finished videos for this app — this plan leans on what worked.
+              </p>
+            )}
             <GroupLabel icon={FileText}>Script</GroupLabel>
             {/* What the chosen template is aiming to leave them with, above the
                 hook and script it was picked to carry. The plan step showed the

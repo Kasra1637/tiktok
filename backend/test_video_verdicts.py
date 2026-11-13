@@ -565,3 +565,26 @@ class TestStudioVerdictWiring:
         assert seen["verdict_feedback"]["total"] == 0
         assert "profile_feedback" not in seen
         assert "component_feedback" not in seen
+
+
+class TestReviewVerdictSummary:
+    """The project read carries the counts Review displays (ADR 0127).
+
+    Display only: the summary rides the project payload so the Review
+    step can show the founder's verdict history for this app in the
+    established evidence-line style, and it is absent — not zeroed —
+    when the profile has no verdicts yet.
+    """
+
+    def test_project_read_carries_the_profiles_verdict_summary(self, api):
+        profile = _approved_profile(api, "Review Summary")
+        project = _a_project(api, profile)
+        _seed_verdicts(api, profile["id"], ["up", "up", "down"])
+        payload = _run(api.get_studio_project(project["id"], ANON))
+        assert payload["verdict_summary"] == {"total": 3, "up": 2, "down": 1}
+
+    def test_project_read_without_verdicts_carries_no_summary(self, api):
+        profile = _approved_profile(api, "Review Quiet")
+        project = _a_project(api, profile)
+        payload = _run(api.get_studio_project(project["id"], ANON))
+        assert "verdict_summary" not in payload

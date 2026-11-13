@@ -458,6 +458,45 @@ class TestPlanGating:
         assert result["overlays"] == []
         assert result["script_version"] == 1
 
+    def test_plan_response_carries_the_profiles_verdict_summary(self, api, monkeypatch):
+        # Review shows the founder's verdict history for this app (ADR
+        # 0127): the plan response carries the same worked / didn't-work
+        # counts the Analytics headline uses, from the verdict summary
+        # the plan prompt already computed for steering.
+        import json as _json
+        from models import GeneratePlanRequest, now_iso
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        profile = _approved_profile(api, "Plan Verdicts")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        generation_id = str(uuid.uuid4())
+        now = now_iso()
+        _run(api._execute(
+            "INSERT INTO generations (id, user_id, brand_profile_id, template_id, "
+            "template_version, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 3, 'completed', ?, ?)",
+            (generation_id, ANON, profile["id"], template["id"], now, now),
+        ))
+        bundle = {"opening_visual": {"template_id": template["id"], "template_version": 3}}
+        _run(api._execute(
+            "INSERT INTO video_verdicts (generation_id, user_id, verdict, bundle, "
+            "created_at, updated_at) VALUES (?, ?, 'up', ?, ?, ?)",
+            (generation_id, ANON, _json.dumps(bundle), now, now),
+        ))
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert result["verdict_summary"] == {"total": 1, "up": 1, "down": 0}
+
+    def test_plan_response_without_verdicts_carries_no_summary(self, api, monkeypatch):
+        _patch_plan(monkeypatch, api, FAKE_PLAN)
+        from models import GeneratePlanRequest
+        profile = _approved_profile(api, "Plan No Verdicts")
+        template = _a_template(api)
+        project = _a_project(api, profile, template)
+        result = _run(api.generate_plan(project_id=project["id"],
+                                        payload=GeneratePlanRequest(), user_id=ANON))
+        assert "verdict_summary" not in result
+
     def test_duration_cannot_be_changed_once_a_plan_exists(self, api, monkeypatch):
         """
         The plan's beat timeline is built for the length the plan was generated

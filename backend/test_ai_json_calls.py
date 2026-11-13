@@ -1017,8 +1017,12 @@ class TestAngleGoalPromptWiring:
 
         captured = {}
         plan = {
-            "hook_line": "Too many lists pile up before work.", "script": "One timer makes the list feel smaller.",
-            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Too many lists pile up before work."},
+            # The hook carries the certified outcome's key terms (ADR
+            # 0127): this profile certifies "Starting without setup
+            # friction", so a hook promising only the problem would now
+            # be rewritten by the editorial loop instead of accepted.
+            "hook_line": "Starting is where the setup friction wins.", "script": "One timer makes the list feel smaller.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Starting is where the setup friction wins."},
                               {"start": 3, "end": 15, "label": "middle", "text": "One timer makes the list feel smaller."}],
             "visual_direction": "Desk", "demo_brief": "Record the timer afterwards.",
             "voice_direction": "Calm", "sound_direction": "Room tone", "claims_used": [],

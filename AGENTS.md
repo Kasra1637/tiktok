@@ -122,7 +122,11 @@ One render path, single-pass video generation via OpenRouter.
   thumbs up or down per finished video on its History card, with the whole
   bundle (spoken words, post kit, opening visual, audio identity) frozen
   at verdict time — that bundle is the only signal that steers the plan
-  and strategy prompts. Per-element ratings were removed because neither
+  and strategy prompts, fits the goals (ADR 0126), and ranks the templates
+  (ADR 0127: the scorer reads verdict bundles only, and the presented set
+  prefers structurally distinct templates). The plan's hook must carry the
+  certified outcome's key terms, enforced in the editorial loop (ADR 0127).
+  Per-element ratings were removed because neither
   the founder nor TikTok can attribute a posted result to one element of
   the video; do not reintroduce them. Posted snapshots and the craft
   score frozen at submit are the record (ADR 0117), never steering.

@@ -175,6 +175,26 @@ async def _verdict_feedback_for_profile(brand_profile_id, user_id):
     return feedback_mod.summarize_video_verdicts(parsed)
 
 
+def _verdict_summary_payload(verdict_feedback) -> dict:
+    """The Review evidence counts (ADR 0127), or {} when there are none.
+
+    Display only: the same verdict summary the plan and strategy prompts
+    steer from, projected to the three counts the Analytics headline
+    uses — total, worked, didn't. Projected here so every project
+    payload that carries it carries the same shape; when the profile
+    has no verdicts yet the dict is empty and the payload simply has no
+    verdict_summary key, so Review renders nothing.
+    """
+    summary = verdict_feedback or {}
+    if not summary.get("total"):
+        return {}
+    return {"verdict_summary": {
+        "total": int(summary.get("total") or 0),
+        "up": int(summary.get("up") or 0),
+        "down": int(summary.get("down") or 0),
+    }}
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers (no DB) — owned here; re-exported by server for existing callers.
 # ---------------------------------------------------------------------------
@@ -966,7 +986,13 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     # A project from before one-render generation is brought forward here, so
     # reopening it is what repairs it — see _backfill_two_section_projects.
     await _backfill_two_section_projects([row])
-    return _public_project(row)
+    payload = _public_project(row)
+    # The Review step's verdict evidence (ADR 0127): a pure read of the
+    # profile's verdict summary, attached for display only — it never
+    # generates anything (ADR 0122) and is absent when there are none.
+    payload.update(_verdict_summary_payload(
+        await _verdict_feedback_for_profile(row.get("brand_profile_id"), user_id)))
+    return payload
 
 @router.patch("/studio/projects/{project_id}")
 async def update_studio_project(
@@ -1648,10 +1674,14 @@ async def generate_plan(
     logger.info(
         f"Generated plan for project {project_id} (script v{int(row.get('script_version') or 0) + 1})"
     )
-    return _public_project(
+    payload = _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
         brand_name=(profile.get("brand_name") or "").strip(),
     )
+    # Review's verdict evidence rides the plan response (ADR 0127): the
+    # summary this plan just steered from, shown — never re-derived.
+    payload.update(_verdict_summary_payload(verdict_feedback))
+    return payload
 
 @router.post("/studio/projects/{project_id}/ready")
 async def mark_project_ready(project_id: str, user_id: str = Depends(get_current_user_id)):
@@ -2077,9 +2107,13 @@ async def generate_project_strategy(
         f"{hook_seconds}s, middle {total_duration - hook_seconds}s, "
         f"{len(strategy.get('segments') or [])} section(s)"
     )
-    return _public_project(
+    payload = _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,))
     )
+    # The one-pass plan+strategy flow returns this response, so Review's
+    # verdict evidence (ADR 0127) rides it the same way it rides the plan.
+    payload.update(_verdict_summary_payload(verdict_feedback))
+    return payload
 
 @router.post("/studio/projects/{project_id}/plan-and-strategy")
 async def generate_plan_and_strategy(
