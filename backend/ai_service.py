@@ -2269,8 +2269,68 @@ def _normalize_angle_goals(parsed) -> list:
     return out
 
 
+# How many of the generated goals the picker shows (ADR 0131). The pool
+# stays six — selection needs a pool, and the meaning-diversity check
+# needs the full set to judge — but the founder is shown the top 3 for
+# the selected angle only.
+GOAL_DISPLAY_LIMIT = 3
+
+
+def _goal_outcome_coverage(goal: dict, key_terms: list) -> int:
+    """How many of the certified outcome's key terms the goal's own words carry.
+
+    The goal-step analogue of hook_carries_certified_outcome's measure
+    (ADR 0127): the promise a goal makes lives in its description +
+    why_it_fits read as one text (the same combined text the
+    same-outcome check reads), matched with the same continuity matcher,
+    so "starting" carries "start". Zero when there are no key terms —
+    an outcome with no checkable terms ranks nothing.
+    """
+    if not key_terms:
+        return 0
+    text_words = _normalize_spoken(
+        " ".join(str(goal.get(field) or "") for field in ("description", "why_it_fits"))
+    ).split()
+    return sum(
+        1 for term in key_terms
+        if any(_words_match(term, word) for word in text_words)
+    )
+
+
+def _select_display_goals(goals: list, certified_outcome: str = "") -> list:
+    """The top GOAL_DISPLAY_LIMIT goals for the picker, best first (ADR 0131).
+
+    Ranking basis, strongest signal first:
+    1. certified-outcome coverage — how many of the certified outcome's
+       key terms the goal's own description + why_it_fits carry. Only
+       live when the angle certifies an outcome; ADR 0126 fits goals to
+       that outcome, so carrying its words is the measured fit, counted
+       from the text rather than asserted by the model.
+    2. the generation's own fit_score for this angle;
+    3. generation order (the pool already returns strongest first), so
+       a full tie keeps the model's order instead of reshuffling.
+    The selection is internal: shown goals keep exactly the fields they
+    had in the pool, and no ranking number is added for display.
+    """
+    key_terms = certified_outcome_key_terms(certified_outcome) if certified_outcome else []
+
+    def rank(indexed):
+        index, goal = indexed
+        return (
+            -_goal_outcome_coverage(goal, key_terms),
+            -(goal.get("fit_score") or 0),
+            index,
+        )
+
+    return [goal for _index, goal in sorted(enumerate(goals), key=rank)][:GOAL_DISPLAY_LIMIT]
+
+
 async def generate_angle_goals(profile: dict, angle: dict) -> list:
-    """Six live video goals for one selected angle, strongest first.
+    """The top 3 live video goals for one selected angle, best first.
+
+    A pool of six is generated and meaning-checked; only the top
+    GOAL_DISPLAY_LIMIT by relevance to this angle are returned for
+    display (ADR 0131 — see _select_display_goals for the ranking basis).
 
     Same JSON-call pattern as generate_content_angles — _chat_json with a
     strict schema, verified facts only, and a loud failure when the reply
@@ -2363,7 +2423,7 @@ async def generate_angle_goals(profile: dict, angle: dict) -> list:
         goals = _normalize_angle_goals(parsed)
         overlap = _same_outcome_goal_pairs(goals)
         if not overlap:
-            return goals
+            return _select_display_goals(goals, grounding.get("outcome") or "")
         if attempt:
             raise RuntimeError(
                 "Could not produce distinct video goals. Try again; "

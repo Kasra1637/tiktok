@@ -576,7 +576,7 @@ class TestLiveAngleGoals:
         import ai_service
         captured = self._capture(monkeypatch)
         out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
-        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS]
+        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS[:3]]
         assert captured["context"] == "Angle goals"
         for fragment in ("Busy professionals", "Nothing gets finished", "Finish one thing",
                          "Task timer", "Relief", "Starting without setup friction",
@@ -687,7 +687,7 @@ class TestLiveAngleGoals:
         out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
         assert len(prompts) == 2
         assert "same-outcome" in prompts[1].lower()
-        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS]
+        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS[:3]]
 
     def test_persistent_same_outcome_goals_fail_loudly(self, monkeypatch):
         import ai_service
@@ -703,7 +703,45 @@ class TestLiveAngleGoals:
             {"goals": [dict(g) for g in self.GOALS]}])
         out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
         assert len(prompts) == 1
-        assert len(out) == 6
+        assert len(out) == 3
+
+    def test_only_the_top_three_goals_are_returned(self, monkeypatch):
+        # ADR 0131: the picker shows only the top 3 goals for the angle.
+        # The generated pool is still six (normalization demands exactly
+        # six, diversity runs over the whole pool); the return is the top
+        # 3 by the ranking rule — with no certified outcome that is
+        # fit_score, generation order breaking ties.
+        import ai_service
+        self._capture(monkeypatch)
+        out = _run(ai_service.generate_angle_goals({"brand_name": "Taskly"}, dict(self.ANGLE)))
+        assert len(out) == 3
+        assert [g["name"] for g in out] == [g["name"] for g in self.GOALS[:3]]
+        # The three shown keep every field they had in the pool.
+        for goal in out:
+            assert set(goal) == {"name", "description", "why_it_fits", "fit_score"}
+
+    def test_outcome_coverage_outranks_fit_score_for_the_top_three(self, monkeypatch):
+        # ADR 0131 ranking, certified case: the certified outcome for
+        # PROFILE_WITH_FACTS + ANGLE is "Starting without stalling on
+        # setup" (key terms: starting, stalling, setup). A low-fit goal
+        # whose own words carry those terms outranks a high-fit goal
+        # that never touches them — carrying the certified outcome is
+        # the measured fit (ADR 0126), fit_score only breaks the tie.
+        import ai_service
+        goals = [dict(g) for g in self.GOALS]
+        goals[0] = dict(goals[0],
+                        description="Gets them naming the problem out loud.",
+                        why_it_fits="Fits this angle's problem.",
+                        fit_score=10)
+        goals[5] = dict(goals[5],
+                        description="Helps them start without stalling on setup.",
+                        why_it_fits="Fits because starting without stalling on setup is the win.",
+                        fit_score=4)
+        self._capture(monkeypatch, reply={"goals": goals})
+        out = _run(ai_service.generate_angle_goals(
+            dict(self.PROFILE_WITH_FACTS), dict(self.ANGLE)))
+        assert [g["name"] for g in out] == [
+            "educate_viewers", "address_user_problem", "feel_seen_and_understood"]
 
 
 class TestAngleFeedbackPromptWiring:

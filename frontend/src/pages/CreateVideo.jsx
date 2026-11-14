@@ -616,7 +616,7 @@ export default function CreateVideo() {
     : {};
   // Live goals replace the persisted facet order only after the founder's
   // Generate click: the angle step opens on the facet list itself, and the
-  // click swaps in the live six with their fit scores.
+  // click swaps in the live three with their fit scores.
 
   // The deep-link inputs as plain strings, so the load below depends on what
   // it reads rather than on the params object: the ?step= mirror rewriting
@@ -851,14 +851,14 @@ export default function CreateVideo() {
   };
   const handleGoalPick = (value) => {
     if (value && value !== objective) {
-      // The six the picker actually shows: ranked suggestions first, then
-      // the facet list — the same order AngleGoalPicker renders.
+      // The three the picker actually shows (ADR 0131): ranked suggestions
+      // first, then the facet list — the same order AngleGoalPicker renders.
       const knownGoals = Array.isArray(objectiveOptions) ? objectiveOptions : [];
       const suggestions = Array.isArray(angle?.goal_suggestions) ? angle.goal_suggestions : [];
       const ordered = suggestions.length > 0
         ? suggestions.filter((goal) => knownGoals.includes(goal))
         : (recommendedObjectives || []).filter((goal) => knownGoals.includes(goal));
-      const featured = [...new Set([...ordered, ...knownGoals])].slice(0, 6);
+      const featured = [...new Set([...ordered, ...knownGoals])].slice(0, 3);
       const refs = behaviorRefs();
       const kind = (angle?.kind || "").trim();
       featured.forEach((goal) => {

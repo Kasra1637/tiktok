@@ -35,7 +35,7 @@ const ANGLES_CTA_COPY = "Get your six audience angles, then pick one to move for
    different words, and the step stalled on reading instead of moving. The
    verb is deliberately neutral — "get" covers generating fresh goals and
    revealing pre-generated ones, so the line never disagrees with its button. */
-const GOALS_CTA_COPY = "Get your six video goals for this angle, then pick one to move forward.";
+const GOALS_CTA_COPY = "Get your top three video goals for this angle, then pick one to move forward.";
 
 function formatTemplateUse(n) {
   if (!n) return "Never used";
@@ -623,13 +623,19 @@ export function AngleSelector({
 
 /**
  * Goal picker shared by the Audience & template step and Review recovery. Its
- * six angle-conditioned suggestions use the same state, so
+ * angle-conditioned suggestions use the same state, so
  * selecting a goal still triggers the existing template/plan synchronization.
  *
- * On Audience & template the six render on angle pick (Part 3 removed the
+ * Only the top 3 suggestions for the selected angle are shown (ADR 0131):
+ * the ranked order — the server's live-goal selection when live goals
+ * exist, the persisted facet order otherwise — is the relevance order,
+ * and the cards stop at three. A goal already picked from outside the
+ * three stays selected and is named by the outside note below.
+ *
+ * On Audience & template the three render on angle pick (Part 3 removed the
  * click-to-reveal gate here too): the persisted, facet-ordered suggestions
  * are the list — no duplicate Generate action rides beside it, only
- * "Shuffle" to reshuffle that same six. The billed live generation lives
+ * "Shuffle" to reshuffle that same ranked set. The billed live generation lives
  * on live goals only where the gate still gates. The Review recovery copies
  * pass `landingGate` and keep the gated landing: one "Generate goals"
  * action, never a finished list — the facet-ordered `suggestions` fallback
@@ -706,7 +712,7 @@ export function AngleGoalPicker({
   const rankedGoals = orderedGoals.length > 0
     ? orderedGoals
     : (recommendations || []).filter((goal) => knownGoals.includes(goal));
-  // Visibility of the six. On Audience & template they render on angle
+  // Visibility of the suggestions. On Audience & template they render on angle
   // pick — `landingGate` is false and the list is simply there. Behind the
   // gate (the Review recovery copies) the list is visible only when the
   // founder clicked Generate (showGoals / liveGoals) or when a goal is
@@ -718,8 +724,13 @@ export function AngleGoalPicker({
   // picked, so resuming never strands the founder on an empty required
   // control.
   const revealed = !landingGate || showGoals || Boolean(value) || (Array.isArray(liveGoals) && liveGoals.length > 0);
+  // Top 3 only (ADR 0131): rankedGoals is already in relevance order for
+  // this angle — the live selection when live goals exist, the persisted
+  // suggestion order otherwise — so the cards are its first three. The
+  // vocabulary padding behind them only ever filled the old six-card
+  // grid; with the cap at three it can never surface.
   const featured = revealed
-    ? [...new Set([...rankedGoals, ...knownGoals])].slice(0, 6)
+    ? [...new Set([...rankedGoals, ...knownGoals])].slice(0, 3)
     : [];
   const outsideRecommendation = Boolean(value && !featured.includes(value));
   const liveOutcomes = {};
@@ -804,7 +815,7 @@ export function AngleGoalPicker({
         {featured.map((goal, index) => {
           const selected = value === goal;
           // 0–10 fit for this goal under the selected angle: annotates the
-          // card, never reorders the six. Rank is this angle's persisted
+          // card, never reorders the three. Rank is this angle's persisted
           // suggestion order, tally is the goal's own win share. A live-goal
           // fit_score replaces the computed score; when no score exists, no
           // badge renders rather than summing thumbs.
@@ -924,7 +935,7 @@ export function AngleGoalPicker({
       </div>
       {outsideRecommendation && (
         <p className="text-sm text-muted-foreground" data-testid="goal-outside-recommendations">
-          Your current goal, {humanize(value)}, is outside these six suggestions. It stays selected unless you choose a suggested goal.
+          Your current goal, {humanize(value)}, is outside these suggestions. It stays selected unless you choose a suggested goal.
         </p>
       )}
   </div>
@@ -951,7 +962,7 @@ export function AngleGoalPicker({
                   onClick={onRegenerate}
                   disabled={regenerating}
                   busy={regenerating}
-                  title="Same six suggestions, a different ranking. Shuffling never changes the six goals — regenerate angles for genuinely new direction. Your selection is kept."
+                  title="Same suggestions, a different ranking — which three sit on top changes. Shuffling never changes the set itself — regenerate angles for genuinely new direction. Your selection is kept."
                   data-testid="regenerate-goals-button"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -963,7 +974,7 @@ export function AngleGoalPicker({
         </div>
         <p className="text-sm text-muted-foreground">
           {revealed && featured.length > 0
-            ? `${featured.length === 6 ? "Six" : featured.length} suggestions for “${angle.label}”.`
+            ? `${featured.length === 3 ? "Three" : featured.length} suggestions for “${angle.label}”.`
             : `Goal suggestions for “${angle.label}” are ready when you click.`}{" "}
           The angle shapes this video — the goal shapes the campaign it serves.
         </p>

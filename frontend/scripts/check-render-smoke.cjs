@@ -423,15 +423,16 @@ const apiStub = {
   // that override the read to empty and then exercise the generate button.
   generateContentAngles: async () => ({ angles: [] }),
   // The goal gate generates fresh live goals on click. Default answers with
-  // the facet order for the angle, so gate-passing checks land on the six
-  // cards in the order the old facet-fallback checks asserted. Name-only:
-  // description/fit/why fall back to the facet outcomes so evidence, fit
-  // scores and disclosures read as before. Checks that pin live-vs-facet
-  // behavior override this with their own set.
+  // the facet order's top three for the angle (ADR 0131: the live endpoint
+  // returns the selected top 3, not the whole pool), so gate-passing checks
+  // land on the three cards in the order the facet-fallback checks assert.
+  // Name-only: description/fit/why fall back to the facet outcomes so
+  // evidence, fit scores and disclosures read as before. Checks that pin
+  // live-vs-facet behavior override this with their own set.
   generateAngleGoals: async (profileId, angleId) => {
-    const names = angleId === "a2"
+    const names = (angleId === "a2"
       ? ANGLE_GOALS.feature_demonstration
-      : ANGLE_GOALS.problem_solution;
+      : ANGLE_GOALS.problem_solution).slice(0, 3);
     return {
       angle_id: angleId,
       goals: names.map((name) => ({
@@ -1351,9 +1352,9 @@ async function main() {
     // The click-to-reveal gate is gone from the Audience & template step
     // (Part 3): a founder whose app already has angles lands on the list
     // itself — no Generate/Show click, and no generation spend for the
-    // viewing — and picking an angle shows the six goal cards the same
-    // way. No small duplicate Generate action rides beside the revealed
-    // list; Shuffle is its only companion.
+    // viewing — and picking an angle shows the top three goal cards the
+    // same way. No small duplicate Generate action rides beside the
+    // revealed list; Shuffle is its only companion.
     global.__SMOKE_PARAMS = "";
     apiCalls.length = 0;
     try {
@@ -1371,7 +1372,7 @@ async function main() {
       }
       await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
       const goals = [...step.querySelectorAll('[data-testid^="recommended-goal-"]')];
-      if (goals.length !== 6) throw new Error(`expected six goal cards on angle pick, saw ${goals.length}`);
+      if (goals.length !== 3) throw new Error(`expected three goal cards on angle pick, saw ${goals.length}`);
       if (apiCalls.includes("generateAngleGoals")) {
         throw new Error("picking an angle fired the billed live-goal generation");
       }
@@ -6427,7 +6428,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  await check("six goals are tailored when an angle is selected without an all-goals control", async (ctx) => {
+  await check("three goals are tailored when an angle is selected without an all-goals control", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Audience & template");
@@ -6440,8 +6441,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await clickEl(ctx, angleButton);
     await passGoalGate(ctx);
     const featured = [...step.querySelectorAll('[data-testid^="recommended-goal-"]')];
-    if (featured.length !== 6) throw new Error(`expected six featured goals, saw ${featured.length}`);
-    const expected = ANGLE_GOALS.problem_solution;
+    if (featured.length !== 3) throw new Error(`expected three featured goals, saw ${featured.length}`);
+    const expected = ANGLE_GOALS.problem_solution.slice(0, 3);
     const shown = featured.map((button) => button.getAttribute("data-testid").slice("recommended-goal-".length));
     if (JSON.stringify(shown) !== JSON.stringify(expected)) {
       throw new Error(`the wrong goals were recommended: ${JSON.stringify(shown)}`);
@@ -6452,7 +6453,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (step.querySelector("select, details") || step.textContent.includes("See all goals")) {
       throw new Error("the removed all-goals control is still present");
     }
-    if (!step.textContent.includes("Six suggestions")) throw new Error("the copy does not describe six suggestions");
+    if (!step.textContent.includes("Three suggestions")) throw new Error("the copy does not describe three suggestions");
   });
 
   await check("changing an angle reranks goals without changing a chosen goal", async (ctx) => {
@@ -6710,8 +6711,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // The goal cards annotate with the picked angle kind's counts; the six stay
-  // in fetched order. Evidence must never become a second ranking.
+  // The goal cards annotate with the picked angle kind's counts; the three
+  // shown stay in fetched order. Evidence must never become a second ranking.
   await check("goal cards carry the angle kind's counts without reordering", async (ctx) => {
     const PROVEN = { ...ANGLE, evidence: { wins: 2, flops: 1 } };
     await withApi({ getContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }), regenerateContentAngles: async () => ({ angles: [PROVEN, ANGLE_B] }) }, async () => {
@@ -6729,7 +6730,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
         const order = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
           .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
-        const expected = ANGLE_GOALS.problem_solution;
+        const expected = ANGLE_GOALS.problem_solution.slice(0, 3);
         if (order.join("|") !== expected.join("|")) {
           throw new Error(`goal order moved: ${order.join(", ")}`);
         }
@@ -7016,7 +7017,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-// The objective axis must not reorder the six-goal list — it annotates.
+// The objective axis must not reorder the goal list — it annotates.
   await check("objective evidence does not reorder the goal list", async (ctx) => {
     const PROVEN_OBJ = {
       ...ANGLE,
@@ -7049,7 +7050,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             const html = ctx.container.innerHTML;
             throw new Error(`no goal cards found. HTML: ${html.slice(0, 3000)}`);
           }
-          const expected = ANGLE_GOALS.problem_solution;
+          const expected = ANGLE_GOALS.problem_solution.slice(0, 3);
           if (goals.join("|") !== expected.join("|")) {
             throw new Error(`goal order moved: ${goals.join(", ")}`);
           }
@@ -7060,12 +7061,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Shuffle advances the six goal suggestions on every press and always
-  // shows six. The stub mirrors the server contract: the variant persists
+  // Shuffle advances the goal suggestions on every press; the display
+  // always shows the top three of the rotated order (ADR 0131). The stub
+  // mirrors the server contract: the variant persists
   // server-side and the list re-read drives the display (the POST return is
   // ignored by the client, so a stub that only answers the POST proves
   // nothing — the GET must reflect the new order).
-  await check("shuffle advances the six goal suggestions on every press", async (ctx) => {
+  await check("shuffle advances the goal suggestions on every press", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const rotate = (list, step) => [...list.slice(step), ...list.slice(0, step)];
     let variant = 0;
@@ -7102,8 +7104,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
           await passGoalGate(ctx);
           const first = orderOf();
-          if (first.length !== 6) throw new Error(`expected six goal cards, saw ${first.length}`);
-          if (first.join("|") !== SIX.join("|")) throw new Error(`initial goal order moved: ${first.join(", ")}`);
+          if (first.length !== 3) throw new Error(`expected three goal cards, saw ${first.length}`);
+          if (first.join("|") !== SIX.slice(0, 3).join("|")) throw new Error(`initial goal order moved: ${first.join(", ")}`);
           // The picker heading is a GroupLabel now; its id must still land
           // on the h3 or aria-labelledby points nowhere.
           const goalLabel = ctx.container.querySelector("#video-goal-label");
@@ -7115,7 +7117,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
             await new Promise((r) => setTimeout(r, 150));
             const order = orderOf();
-            if (order.length !== 6) throw new Error(`press ${press + 1}: expected six goal cards, saw ${order.length}`);
+            if (order.length !== 3) throw new Error(`press ${press + 1}: expected three goal cards, saw ${order.length}`);
             if (seen.includes(order.join("|"))) throw new Error(`press ${press + 1}: goal order repeats an earlier one`);
             seen.push(order.join("|"));
           }
@@ -7129,9 +7131,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Shuffle narrates on the button itself while cycling, then the six arrive
-  // staggered — never a spinner-to-grid blink, and never a leftover sweep
-  // beside an error.
+  // Shuffle narrates on the button itself while cycling, then the three
+  // arrive staggered — never a spinner-to-grid blink, and never a leftover
+  // sweep beside an error.
   await check("goal shuffle counts up in flight, then cascades cards in", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     let releaseShuffle;
@@ -7174,7 +7176,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error("the count survived its own reshuffle");
           }
           const cards = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
-          if (cards.length !== 6) throw new Error(`expected six goal cards, saw ${cards.length}`);
+          if (cards.length !== 3) throw new Error(`expected three goal cards, saw ${cards.length}`);
           const delays = cards.map((card) => {
             const host = card.closest(".animate-fade-up");
             if (!host) throw new Error("a fresh goal card carries no arrival animation");
@@ -7191,18 +7193,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // Live goals wait for the founder's click on Review's gate: the Audience
-  // step shows its persisted six with no Generate action beside them (only
-  // Shuffle), and only the gated Review copy's Generate calls the billed
-  // endpoint, its live six replacing the gate with live copy/fits.
+  // step shows its persisted suggestions with no Generate action beside
+  // them (only Shuffle), and only the gated Review copy's Generate calls
+  // the billed endpoint, its live three (the server's top-3 selection,
+  // ADR 0131) replacing the gate with live copy/fits.
   await check("live goals generate only on the Review gate click", async (ctx) => {
     const SIX = ANGLE_GOALS.problem_solution;
     const LIVE = [
       { name: "educate_viewers", description: "Leaves them with one thing they got wrong.", why_it_fits: "Fits this angle's correction.", fit_score: 9 },
       { name: "address_user_problem", description: "Gets them naming the problem out loud.", why_it_fits: "Fits this angle's problem.", fit_score: 8 },
       { name: "ease_daily_moment", description: "Makes the daily moment feel lighter.", why_it_fits: "Fits this angle's moment.", fit_score: 7 },
-      { name: "create_curiosity", description: "Leaves them wanting the answer.", why_it_fits: "Fits this angle's promise.", fit_score: 6 },
-      { name: "demonstrate_feature", description: "Keeps them watching long enough to see it work.", why_it_fits: "Fits this angle's feature.", fit_score: 5 },
-      { name: "explain_app", description: "Walks them into what the app is.", why_it_fits: "Fits this angle's outcome.", fit_score: 4 },
     ];
     const orderOf = () => [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')]
       .map((el) => el.getAttribute("data-testid").replace("recommended-goal-", ""));
@@ -7347,7 +7347,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error("the angle list did not refresh with new options");
           }
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
-          if (goals.length !== 6) throw new Error(`expected six goal cards after regen, saw ${goals.length}`);
+          if (goals.length !== 3) throw new Error(`expected three goal cards after regen, saw ${goals.length}`);
           const glyphs = [...ctx.container.querySelectorAll('[data-testid="angle-row-check"]')];
           if (glyphs.length !== 6) {
             throw new Error(`the six fresh rows lost their check marks: saw ${glyphs.length}`);
@@ -7484,18 +7484,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       // goal switch to update.
       await passTemplatesGate(ctx);
       await openStep(ctx, "Audience & template");
-      const goal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
+      // The switch target is one of the three shown for this angle
+      // (ADR 0131): feel_seen_and_understood sits second in the order.
+      const goal = ctx.container.querySelector('[data-testid="recommended-goal-feel_seen_and_understood"]');
       await clickEl(ctx, goal);
-      if (goal.getAttribute("aria-pressed") !== "true") throw new Error("the sixth goal was not selected");
+      if (goal.getAttribute("aria-pressed") !== "true") throw new Error("the switched goal was not selected");
       await openStep(ctx, "Audience & template");
-      if (rankings.some((query) => query.objective === "educate_viewers")) {
+      if (rankings.some((query) => query.objective === "feel_seen_and_understood")) {
         throw new Error("switching goals queued a ranked-template read for the pick");
       }
       if (!rankings.some((query) => query.objective === "address_user_problem" && query.angle_id === "a1")) {
         throw new Error("the CTA flight ranked for the wrong goal and angle");
       }
-      if (!writes.some((payload) => payload.objective === "educate_viewers" && payload.content_angle_id === "a1")) {
-        throw new Error("project persistence did not receive the sixth suggested goal and selected angle");
+      if (!writes.some((payload) => payload.objective === "feel_seen_and_understood" && payload.content_angle_id === "a1")) {
+        throw new Error("project persistence did not receive the switched goal and selected angle");
       }
     });
   });
@@ -7705,19 +7707,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // A kind the goal map predates still gets the same picking surface: six
-  // fallback goals and no all-goals selector. An unknown kind must not shrink
-  // the list or resurrect the control the six cards replaced.
-  await check("an unknown angle kind provides six fallback goals without all-goals controls", async (ctx) => {
+  // A kind the goal map predates still gets the same picking surface: the
+  // top three fallback goals (ADR 0131) and no all-goals selector. An
+  // unknown kind must not shrink the list further or resurrect the control
+  // the cards replaced.
+  await check("an unknown angle kind provides three fallback goals without all-goals controls", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({ getContentAngles: async () => ({ angles: [{ ...ANGLE, kind: "legacy" }] }) }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Audience & template");
         const goals = ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]');
-        if (goals.length !== 6) throw new Error("legacy angle does not provide six fallback goals");
+        if (goals.length !== 3) throw new Error("legacy angle does not provide three fallback goals");
         if (ctx.container.querySelector("#all-video-goals")) throw new Error("legacy angle shows the removed selector");
-        const goal = ctx.container.querySelector('[data-testid="recommended-goal-demonstrate_feature"]');
+        const goal = ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]');
         await clickEl(ctx, goal);
         if (goal.getAttribute("aria-pressed") !== "true") throw new Error("legacy angle blocks fallback selection");
       });
@@ -8355,9 +8358,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // moved, and a write that does not happen proves nothing about what it
         // would have sent.
         await openStep(ctx, "Audience & template");
-        const otherGoal = ctx.container.querySelector('[data-testid="recommended-goal-educate_viewers"]');
+        // A top-three goal that is not the project's current one
+        // (ADR 0131): the switch is what makes the draft need rewriting.
+        const otherGoal = ctx.container.querySelector('[data-testid="recommended-goal-feel_seen_and_understood"]');
         await clickEl(ctx, otherGoal);
-        if (otherGoal.getAttribute("aria-pressed") !== "true") throw new Error("the goal picker did not retain the sixth goal");
+        if (otherGoal.getAttribute("aria-pressed") !== "true") throw new Error("the goal picker did not retain the switched goal");
         await openStep(ctx, "Review & submit");
         const generate = [...ctx.container.querySelectorAll("button")]
           .find((b) => /^(Generate|Regenerate) (the )?plan/.test((b.textContent || "").trim()));
