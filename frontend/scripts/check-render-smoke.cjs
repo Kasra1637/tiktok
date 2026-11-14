@@ -2319,6 +2319,46 @@ async function main() {
     }
   });
 
+  await check("GenerationPanel shows only the save remedy while the plan is unsaved", async (ctx) => {
+    // Kasra's one-action rule, extended to the un-saved plan (his Nov 14
+    // screenshot: a greyed "Generate the video" stacked on the bright
+    // "Review and save the plan"). The strategy here exists and is current,
+    // but the plan itself is not saved — saving a content edit returns the
+    // project to draft — so the save is the one action that unblocks the
+    // render, and Generate is not rendered at all beside it. Once the plan
+    // is saved (status flips to ready), Generate returns and the remedy
+    // goes.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, status: "draft" },
+      })(ctx)
+    );
+    expectText(
+      ctx,
+      "Review and save your script plan first. A saved plan is checked before rendering.",
+      "the un-saved plan note did not render"
+    );
+    expectText(ctx, "Review and save the plan", "the save remedy did not render");
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate is rendered while the plan still needs saving");
+    }
+    const stray = [...ctx.container.querySelectorAll("button")].find((b) =>
+      /Generate the video|Generate another/.test((b.textContent || "").trim())
+    );
+    if (stray) throw new Error("a generate-labelled button is rendered while the plan needs saving");
+    await act(async () =>
+      ctx.root.render(
+        React.createElement(GenerationPanel, { project: PROJECT_WITH_STRATEGY })
+      )
+    );
+    if (!ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate did not return once the plan was saved");
+    }
+    if (ctx.text().includes("Review and save the plan")) {
+      throw new Error("the save remedy survived a saved plan");
+    }
+  });
+
   await check("the render panel edits the Location and reports what was rewritten", async (ctx) => {
     // The Location is the single source of truth for the place (ADR 0090), and
     // it is editable HERE, on the render step: saving it sends one PATCH whose
@@ -2948,7 +2988,6 @@ async function main() {
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectText(ctx, "What the viewer ends up with", "the outcome framing is not on the review");
     for (const [label, value] of [
-      ["The change this supports", STRATEGY.desired_outcome],
       ["How it works, as a benefit", STRATEGY.mechanism_beat],
       // Renamed from "The last thing said": the row's text is unchanged, but
       // the label now names what the viewer is left with rather than when the
@@ -2958,6 +2997,18 @@ async function main() {
       if (!ctx.text().includes(label)) throw new Error(`missing outcome row label: ${label}`);
       if (!ctx.text().includes(value)) throw new Error(`missing outcome row value: ${label}`);
     }
+    // The change itself is the group's one-line digest, and only that: the
+    // expanded block used to repeat the digest sentence as its first row
+    // ("The change this supports"), so one sentence printed twice in a
+    // single group — the duplication Kasra named on Nov 14. The row is
+    // gone; the digest carries the line, exactly once.
+    if (ctx.text().includes("The change this supports")) {
+      throw new Error("the outcome block still repeats the digest as its first row");
+    }
+    const changeCount = ctx.text().split(STRATEGY.desired_outcome).length - 1;
+    if (changeCount !== 1) {
+      throw new Error(`the change line prints ${changeCount} times on the panel, expected exactly once`);
+    }
     if (ctx.text().includes("The last thing said")) {
       throw new Error("the outcome block still labels the payoff row by when it is spoken");
     }
@@ -2965,6 +3016,55 @@ async function main() {
     // written from the viewer's point of view.
     expectText(ctx, "from the viewer's point of view", "the outcome block does not name whose point of view it is");
     expectText(ctx, "never promise it as a result", "the outcome block reads as a guarantee");
+  });
+
+  await check("the strategy groups state each fact once", async (ctx) => {
+    // Kasra's Nov 14 duplication call, from his full-page screenshots: the
+    // collapsed digest of a group and its expanded body printed the same
+    // sentence twice, and the scene digest concatenated the location and
+    // the wardrobe that the expanded rows then repeated verbatim. Each
+    // fact now prints once: a text group's digest is its first sentence
+    // and the expansion adds only what follows it; the scene digest names
+    // only the camera setup, and the place and the wardrobe live in their
+    // rows.
+    const strategy = {
+      ...STRATEGY,
+      hook_concept: "Walk the path in one selfie take. The mood surprise lands mid-step.",
+      strategy_summary: "A Sunday walk turns a mood surprise into curiosity. It fits viewers who want patterns without a blank page.",
+      scene: {
+        location: "A tree-lined outdoor path with trees on both sides.",
+        camera_angle: "Eye-level handheld selfie.",
+        wardrobe: "A light jacket over a plain t-shirt.",
+        lighting: "Soft afternoon light.",
+      },
+      performance: {},
+    };
+    await mount(HookContinuityPanel, { project: { ...PROJECT_WITH_STRATEGY, strategy } })(ctx);
+    const text = ctx.text();
+    const count = (needle) => text.split(needle).length - 1;
+    for (const [needle, where] of [
+      ["Walk the path in one selfie take.", "the hook concept digest sentence"],
+      ["The mood surprise lands mid-step.", "the hook concept's second sentence"],
+      ["A Sunday walk turns a mood surprise into curiosity.", "the why-it-works digest sentence"],
+      ["It fits viewers who want patterns without a blank page.", "the why-it-works' second sentence"],
+      ["A tree-lined outdoor path with trees on both sides.", "the scene location"],
+      ["A light jacket over a plain t-shirt.", "the scene wardrobe"],
+    ]) {
+      if (count(needle) !== 1) {
+        throw new Error(`${where} prints ${count(needle)} times, expected exactly once: ${needle}`);
+      }
+    }
+    const sceneSummary = ctx.container.querySelector('[data-testid="strategy-scene-details"] summary');
+    if (!sceneSummary) throw new Error("the scene group has no summary");
+    if (!sceneSummary.textContent.toLowerCase().includes("handheld selfie")) {
+      throw new Error("the scene digest no longer names the camera setup");
+    }
+    if (sceneSummary.textContent.includes("tree-lined")) {
+      throw new Error("the scene digest still repeats the location");
+    }
+    if (sceneSummary.textContent.includes("light jacket")) {
+      throw new Error("the scene digest still repeats the wardrobe");
+    }
   });
 
   await check("the scene block points at the Location editor for its place", async (ctx) => {
@@ -2994,8 +3094,13 @@ async function main() {
       const group = ctx.container.querySelector(`[data-testid="${testId}"]`);
       if (!group) throw new Error(`missing collapsed group: ${testId}`);
       if (group.open) throw new Error(`${testId} is open by default`);
+      // A group whose whole content is its digest (a one-sentence
+      // why-it-works) renders as a static header instead of a disclosure:
+      // there is nothing behind the click that is not already on the
+      // summary line. Either form must carry the one-line summary.
       const summary = group.querySelector("summary");
-      if (!summary || summary.textContent.trim().length < 12) {
+      const headerText = summary ? summary.textContent : group.textContent;
+      if (!headerText || headerText.trim().length < 12) {
         throw new Error(`${testId} has no one-line summary of what it holds`);
       }
     }
@@ -9004,6 +9109,64 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
+    }
+  });
+
+  // Kasra trimmed the hero (Nov 14): the slides carry the illustration and
+  // the badge + title only — the step's descriptive line lives in the How
+  // it works section below, not repeated in the hero — and the browse dots
+  // sit centered under the frame with the pause control at the row's edge
+  // so it cannot pull them off-center.
+  await check("the hero slides carry no subtitle and the dots sit centered", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+    if (!shot) throw new Error("no hero frame rendered");
+    if (shot.querySelector(".hero-flow-line")) {
+      throw new Error("a hero slide still renders its descriptive line");
+    }
+    const slides = [...shot.querySelectorAll(".hero-flow-slide")];
+    for (const slide of slides) {
+      if (!slide.querySelector(".how-badge") || !slide.querySelector(".hero-flow-title")) {
+        throw new Error("a hero slide lost its badge + title caption");
+      }
+    }
+    // The descriptive lines still exist — in the How it works section.
+    if (!ctx.container.textContent.includes("approve the facts")) {
+      throw new Error("the step lines vanished from the How it works section");
+    }
+    const landing = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
+    if (landing.includes("hero-flow-line")) {
+      throw new Error("Landing.jsx still renders the hero-flow-line element");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (css.includes(".hero-flow-line")) {
+      throw new Error("the dead .hero-flow-line rule is still in index.css");
+    }
+    if (!/\.hero-flow-nav\s*\{[^}]*justify-content:\s*center/.test(css)) {
+      throw new Error("the hero dot row is not centered");
+    }
+    if (!/\.hero-flow-toggle\s*\{[^}]*position:\s*absolute/.test(css)) {
+      throw new Error("the pause control is not taken out of the dot row's flow");
+    }
+  });
+
+  // The hero sub-headline is Kasra's short approved line (Nov 14) — the
+  // longer "posted results steer the next one" version is retired.
+  await check("the hero sub-headline is the short approved line", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
+    if (!hero) throw new Error("no hero section rendered");
+    const text = hero.textContent.replace(/\s+/g, " ");
+    if (
+      !text.includes(
+        "One photo in, a posted TikTok out. Your app’s facts become a hook that holds " +
+          "and a story that lands — and every post makes the next video smarter."
+      )
+    ) {
+      throw new Error("the hero sub-headline is not the short approved line");
+    }
+    if (text.includes("steer the next one")) {
+      throw new Error("the retired long sub-headline is still on the hero");
     }
   });
 

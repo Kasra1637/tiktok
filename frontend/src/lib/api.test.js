@@ -70,3 +70,84 @@ test("a standalone large export completes with a null generation", async () => {
   const completeBody = mockPost.mock.calls[mockPost.mock.calls.length - 1][1];
   expect(completeBody).toEqual({ generation_id: null, filename: "big.mp4", total: 2 });
 });
+
+// The 120s client default is ONE server-side model call's budget
+// (ai_service._chat_json: timeout=120, attempts=2+). Every AI generation
+// endpoint chains calls or retries inside one request, so on the default
+// the browser aborted healthy work mid-flight and the founder met the raw
+// "timeout of 120000ms exceeded". The long calls carry their own limit,
+// sized to the chain behind them; ordinary calls keep the default.
+describe("AI generation calls carry a timeout sized to their server chain", () => {
+  const configOf = (callIndex = 0) => mockPost.mock.calls[callIndex][2];
+
+  test("the plan pass and its chained forms get the chain limit", async () => {
+    await api.generatePlan("p1");
+    expect(configOf()).toEqual({ timeout: 600000 });
+    mockPost.mockClear();
+    await api.generatePlanAndStrategy("p1");
+    expect(configOf()).toEqual({ timeout: 600000 });
+    mockPost.mockClear();
+    await api.suggestStrategyRefresh("p1");
+    expect(configOf()).toEqual({ timeout: 600000 });
+  });
+
+  test("the strategy build retries three 120s attempts server-side, so it gets the chain limit", async () => {
+    await api.generateStrategy("p1", {});
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 600000 }));
+  });
+
+  test("angle generation and its server-chained forms get the chain limit", async () => {
+    await api.generateContentAngles("b1");
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 600000 }));
+    mockPost.mockClear();
+    await api.regenerateContentAngles("b1");
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 600000 }));
+    mockPost.mockClear();
+    await api.approveAppProfile("b1");
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 600000 }));
+    mockPost.mockClear();
+    await api.refreshAppProfile("b1");
+    expect(configOf()).toEqual({ timeout: 600000 });
+    mockPost.mockClear();
+    await api.regenerateEverything("b1");
+    expect(configOf()).toEqual({ timeout: 600000 });
+  });
+
+  test("the clearer-line rewrites get the chain limit", async () => {
+    await api.rewriteHook("p1", "A hook.");
+    expect(configOf()).toEqual({ timeout: 600000 });
+    mockPost.mockClear();
+    await api.rewriteLine("p1", { line: "A line." });
+    expect(configOf()).toEqual({ timeout: 600000 });
+  });
+
+  test("single-call text generations get the single-call limit", async () => {
+    await api.researchAppProfile({});
+    expect(configOf()).toEqual({ timeout: 300000 });
+    mockPost.mockClear();
+    await api.generateAngleGoals("b1", "a1");
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 300000 }));
+    mockPost.mockClear();
+    await api.ensureObjectiveTemplates("b1", {});
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 300000 }));
+    mockPost.mockClear();
+    await api.generateOpeningMessages("b1");
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 300000 }));
+    mockPost.mockClear();
+    await api.refreshDirectionOptions("b1", { field: "location" });
+    expect(configOf()).toEqual(expect.objectContaining({ timeout: 300000 }));
+    mockPost.mockClear();
+    await api.regeneratePostKit("g1");
+    expect(configOf()).toEqual({ timeout: 300000 });
+  });
+
+  test("ordinary calls keep the client default — no override is sent", async () => {
+    await api.markProjectReady("p1");
+    expect(configOf()).toBeUndefined();
+    mockPost.mockClear();
+    // The render submit stays on the default too: its wait is the polling
+    // progress bar with real position, not this request.
+    await api.generateVideo("p1", {});
+    expect(configOf()).toBeUndefined();
+  });
+});

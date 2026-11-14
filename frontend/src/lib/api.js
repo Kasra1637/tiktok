@@ -73,6 +73,27 @@ export const downloadMediaUrl = (row) => {
 
 const client = axios.create({ baseURL: API, timeout: 120000 });
 
+// AI generation gets its own limits, because the 120s default is exactly
+// ONE server-side model call's budget: ai_service._chat_json runs with
+// timeout=120 per attempt and attempts=2 by default, and the generation
+// endpoints chain those calls inside a single request (the plan pass is
+// a draft + a hook bake-off + editorial attempts; refresh and approve
+// run research and then angle generation; the strategy call alone
+// retries three 120s attempts). On the default the browser aborted
+// healthy work mid-flight and the founder met axios' raw "timeout of
+// 120000ms exceeded" — the recurring error of Nov 14. The limits follow
+// the two shapes of server work, not the endpoints' typical ETAs:
+// - AI_CALL_TIMEOUT: one model-call family, plus the bounded correction
+//   or retry it may make (research, goals, templates, opening messages,
+//   direction refresh, post kit).
+// - AI_CHAIN_TIMEOUT: endpoints that serially chain model calls (plan,
+//   plan-and-strategy, strategy, strategy suggestions, angles, the
+//   rewrites, and the profile flows that generate angles in-request).
+// Ordinary calls — saves, reads, the render submit — keep the default:
+// their waits are short, or are the polling progress, not this request.
+const AI_CALL_TIMEOUT = 300000;
+const AI_CHAIN_TIMEOUT = 600000;
+
 /**
  * The session token source, registered once from inside <ClerkProvider> (see
  * components/auth/AuthTokenBridge.jsx). A module slot rather than an import of
@@ -203,17 +224,17 @@ export const api = {
   updateBrand: (id, payload) => client.patch(`/brand/${id}`, payload).then((r) => r.data),
 
   // App Profiles (template-studio workflow: research -> review/approve -> refresh)
-  researchAppProfile: (payload) => client.post("/app-profiles/research", payload).then((r) => r.data),
+  researchAppProfile: (payload) => client.post("/app-profiles/research", payload, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
   getAppProfiles: () => client.get("/app-profiles").then((r) => r.data),
   generateOpeningMessages: (profileId, previous) =>
-    client.post("/demo-cta/opening-messages", { profile_id: profileId || null, previous }).then((r) => r.data),
+    client.post("/demo-cta/opening-messages", { profile_id: profileId || null, previous }, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
   getAppProfile: (id) => client.get(`/app-profiles/${id}`).then((r) => r.data),
   deleteAppProfile: (id) => client.delete(`/app-profiles/${id}`).then((r) => r.data),
   updateAppProfile: (id, payload) => client.patch(`/app-profiles/${id}`, payload).then((r) => r.data),
   approveAppProfile: (id, applyPending = true) =>
-    client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }).then((r) => r.data),
-  refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`).then((r) => r.data),
-  regenerateEverything: (id) => client.post(`/app-profiles/${id}/regenerate-everything`).then((r) => r.data),
+    client.post(`/app-profiles/${id}/approve`, { apply_pending: applyPending }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`, null, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  regenerateEverything: (id) => client.post(`/app-profiles/${id}/regenerate-everything`, null, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
 
   // Content angles (per App Profile)
   getContentAngles: (profileId) =>
@@ -223,13 +244,13 @@ export const api = {
   generateContentAngles: (profileId, { objective } = {}) =>
     client.post(`/app-profiles/${profileId}/content-angles`, {
       ...(objective ? { objective } : {}),
-    }).then((r) => r.data),
+    }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // Regenerate replaces only the AI-derived angles; hand-written angles are
   // kept server-side, so this is safe to offer on a populated list.
   regenerateContentAngles: (profileId, { objective } = {}) =>
     client.post(`/app-profiles/${profileId}/content-angles/regenerate`, {
       ...(objective ? { objective } : {}),
-    }).then((r) => r.data),
+    }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // Cycle this angle's six goal suggestions to the next deterministic variant
   // order. Free: no model call. Persisted server-side, so reloads keep it.
   regenerateContentAngleGoals: (profileId, angleId) =>
@@ -241,7 +262,7 @@ export const api = {
   // founder's Generate click, never on angle pick.
   generateAngleGoals: (profileId, angleId) =>
     client
-      .post(`/app-profiles/${profileId}/content-angles/${angleId}/live-goals`)
+      .post(`/app-profiles/${profileId}/content-angles/${angleId}/live-goals`, null, { timeout: AI_CALL_TIMEOUT })
       .then((r) => r.data),
   getContentAngleGoalSuggestions: (profileId, angleId) =>
     client
@@ -269,7 +290,7 @@ export const api = {
   refreshDirectionOptions: (profileId, { field, avoid = [], angleId = "" } = {}) =>
     client.post(`/app-profiles/${profileId}/direction-options/refresh`, {
       field, avoid, angle_id: angleId || undefined,
-    }).then((r) => r.data),
+    }, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
 
   // Hook templates. The standalone library is gone: the wizard picks from
   // profile-scoped recommendations. Only the read endpoints the wizard needs
@@ -285,22 +306,22 @@ export const api = {
   // Problem, First 3 Seconds Promise and Audience, so `angle_id` is part of the
   // request and of the cached set it returns (ADR 0089).
   ensureObjectiveTemplates: (profileId, payload) =>
-    client.post(`/app-profiles/${profileId}/objective-templates`, payload).then((r) => r.data),
+    client.post(`/app-profiles/${profileId}/objective-templates`, payload, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
 
   // Studio projects (guided creation)
   getStudioProjects: (params = {}) => client.get("/studio/projects", { params }).then((r) => r.data),
   getStudioProject: (id) => client.get(`/studio/projects/${id}`).then((r) => r.data),
   createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
-  generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload).then((r) => r.data),
+  generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The one-pass form of the two above: the server writes the plan, then
   // builds the strategy from it, and answers once with both. This is the
   // call the Review step's generate action makes; generatePlan and
   // generateStrategy stay for the strategy panel's own rebuild, which is a
   // repair of one half, not the pass that writes both.
-  generatePlanAndStrategy: (id, payload = {}) => client.post(`/studio/projects/${id}/plan-and-strategy`, payload).then((r) => r.data),
-  rewriteHook: (id, hookLine) => client.post(`/studio/projects/${id}/rewrite-hook`, { hook_line: hookLine }).then((r) => r.data),
-  rewriteLine: (id, payload) => client.post(`/studio/projects/${id}/rewrite-line`, payload).then((r) => r.data),
+  generatePlanAndStrategy: (id, payload = {}) => client.post(`/studio/projects/${id}/plan-and-strategy`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  rewriteHook: (id, hookLine) => client.post(`/studio/projects/${id}/rewrite-hook`, { hook_line: hookLine }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  rewriteLine: (id, payload) => client.post(`/studio/projects/${id}/rewrite-line`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
   // `duration_seconds` is not sent from here. The length is computed — a template
   // declares a `default_duration` and the project seeds from it — and the plan
@@ -326,7 +347,7 @@ export const api = {
   getGeneration: (id) => client.get(`/generations/${id}`).then((r) => r.data),
   pollGeneration: (id) => client.post(`/generations/${id}/poll`).then((r) => r.data),
   regeneratePostKit: (id) =>
-    client.post(`/generations/${id}/post-kit/regenerate`).then((r) => r.data),
+    client.post(`/generations/${id}/post-kit/regenerate`, null, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
   retryGeneration: (id) => client.post(`/generations/${id}/retry`).then((r) => r.data),
   retryGenerationStorage: (id) =>
     // Not a bare re-upload: when the provider download was what failed there is
@@ -362,7 +383,7 @@ export const api = {
   // five ways of describing a workflow that no longer exists, and every one of
   // them was a button a founder could click to start a render.
   generateStrategy: (id, payload = {}) =>
-    client.post(`/studio/projects/${id}/strategy`, payload).then((r) => r.data),
+    client.post(`/studio/projects/${id}/strategy`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
 
   // Before a rebuild, ask whether the saved Visual & audio direction moved
   // since the strategy was built (ADR 0133). Free when nothing changed —
@@ -371,7 +392,7 @@ export const api = {
   // Nothing is saved by this call: the panel shows the suggestion, and
   // only the founder's Accept writes it, through updateStudioProject.
   suggestStrategyRefresh: (id) =>
-    client.post(`/studio/projects/${id}/strategy-suggestions`).then((r) => r.data),
+    client.post(`/studio/projects/${id}/strategy-suggestions`, null, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
 
   // Asset library (per App Profile)
   getAssets: (profileId, params = {}) =>

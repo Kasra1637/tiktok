@@ -45,5 +45,16 @@ export function errorMessageFor(err) {
       "Wait a moment and try again."
     );
   }
+  if (err?.code === "ECONNABORTED") {
+    // The browser gave up waiting while the server was still working.
+    // Axios' own message for this ("timeout of 120000ms exceeded") names
+    // a number that means nothing to the founder — it was the recurring
+    // Nov 14 error — so the plain reading is stated instead: the work
+    // outran the wait limit for one request.
+    return (
+      "That is taking longer than the wait limit for one request, so the browser gave up waiting. " +
+      "Wait a moment and try again."
+    );
+  }
   return err?.message || "Something went wrong. Please try again.";
 }

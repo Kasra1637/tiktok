@@ -224,6 +224,16 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     (a) => String(a?.kind || "").trim().toLowerCase() === "character_reference"
   );
 
+  // The plan itself is not saved yet (a content edit returns the project
+  // to draft), so saving it is the one action that unblocks the render.
+  // Named once so the remedy below and the generate gate further down
+  // cannot drift apart: where this holds, the remedy is the only primary
+  // action the panel shows (Kasra's one-action rule, extended to the
+  // un-saved plan on Nov 14 — a greyed Generate stacked on the bright
+  // save remedy read as two competing actions).
+  const planSaveRequired =
+    !ready && !noPhoto && !noAngle && !staleStrategy && !angleStale;
+
   // Every refusal the panel can name must also name its remedy: the step and
   // the control that fixes it. A block with no jump button is a wall, not a
   // guard — the founders who hit it stop trusting the panel and ask whether
@@ -248,7 +258,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     remedies.push({ label: "Rebuild strategy", action: "rebuild-strategy" });
   }
   if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
-  if (!ready && !noPhoto && !noAngle && !staleStrategy && !angleStale) {
+  if (planSaveRequired) {
     remedies.push({ label: "Review and save the plan", action: "save-edits" });
   }
 
@@ -879,14 +889,15 @@ const handleGenerate = async () => {
       )}
 
       {/* Kasra's rule: one action at a time in Review. While a strategy
-          rebuild is owed — or before a strategy exists at all — the
-          generate control is not rendered at all: a greyed "Generate the
-          video" beside the one bright control that unblocks the render
-          reads as two competing actions. The control returns the moment
-          a current strategy exists. A render already in flight keeps its
-          progress button: hiding that would strand the wait, and the
-          rebuild remedies already stand down while one runs. */}
-      {((!rebuildRequired && !strategyMissing) || busy || inFlight) && (
+          rebuild is owed — or before a strategy exists at all, or while
+          the plan itself still needs saving — the generate control is
+          not rendered at all: a greyed "Generate the video" beside the
+          one bright control that unblocks the render reads as two
+          competing actions. The control returns the moment nothing is
+          owed. A render already in flight keeps its progress button:
+          hiding that would strand the wait, and the remedies already
+          stand down while one runs. */}
+      {((!rebuildRequired && !strategyMissing && !planSaveRequired) || busy || inFlight) && (
         <Button
           variant="accent"
           onClick={handleGenerate}

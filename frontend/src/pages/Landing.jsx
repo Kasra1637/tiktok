@@ -185,8 +185,11 @@ const FLOW_STEPS = [
  * illustrations the How it works strip uses, one at a time, so the whole
  * flow plays in one place with no video bytes at all. The pace is set to
  * stay comfortable: four seconds a step with a slow crossfade, a pause
- * while the pointer rests on the frame, and a pause control beside the
- * dots (an autoplaying loop needs a way to stop it). Under reduced motion
+ * while the pointer rests on the frame, and a pause control at the edge
+ * of the centered dot row (an autoplaying loop needs a way to stop it).
+ * The slides carry the illustration and the badge + title only — Kasra
+ * trimmed the step's descriptive line out of the hero (Nov 14); the line
+ * itself still runs in the How it works section below. Under reduced motion
  * the loop never starts — the first step sits still and the dots step
  * through by hand.
  */
@@ -231,7 +234,6 @@ function HeroFlow() {
               <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
               <span className="hero-flow-title font-display">{s.label}</span>
             </div>
-            <p className="hero-flow-line">{s.line}</p>
           </div>
         ))}
       </div>
@@ -422,9 +424,8 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            HookForge turns your app’s facts into a hook that holds, a story that lands, and a
-            finished clip — then your posted results steer the next one, so every video starts
-            smarter than the last.
+            One photo in, a posted TikTok out. Your app’s facts become a hook that holds
+            and a story that lands — and every post makes the next video smarter.
           </p>
 
           <div

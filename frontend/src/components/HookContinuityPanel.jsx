@@ -150,27 +150,58 @@ function summaryLine(text, limit = 108) {
 }
 
 /**
+ * What a text adds beyond its digest sentence, or "" when it adds nothing.
+ *
+ * The digest IS the first sentence (see summaryLine), so an expanded group
+ * that reprinted the whole text stated its first sentence twice — the
+ * duplication the founder named on Nov 14 across the hook concept, the
+ * why-it-works and the outcome groups. The expansion shows only what
+ * follows the digest sentence; a one-sentence text has nothing behind the
+ * click, and its group renders without an expansion at all.
+ */
+function afterFirstSentence(text) {
+  const full = String(text || "").trim().split(/\s+/).join(" ");
+  if (!full) return "";
+  const firstSentenceIndex = full.search(/[.!?] /);
+  if (firstSentenceIndex < 0) return "";
+  return full.slice(firstSentenceIndex + 2).trim();
+}
+
+/**
  * A collapsed strategy group: a title, a one-line digest of its contents, and
  * the full text behind one click. The panels people ACT on (the two sections,
  * the Location editor, the rating and the render controls) stay open; the
  * explanations do not have to be read to use the page.
  */
-function CollapsedGroup({ testId, title, digest, children }) {
+function CollapsedGroup({ testId, title, digest, expandable = true, children }) {
+  const header = (
+    <span className="flex min-w-0 flex-col gap-1 text-left">
+      <GroupLabel>{title}</GroupLabel>
+      {digest && (
+        <span className="text-sm font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+          {digest}
+        </span>
+      )}
+    </span>
+  );
+  // A group whose whole content is its digest has nothing behind the
+  // click: it renders as a static header in the same box, so the founder
+  // is never offered an expansion that only repeats the summary line.
+  if (!expandable) {
+    return (
+      <div className="group inset-panel space-y-3" data-testid={testId}>
+        <div className="flex w-full flex-wrap items-start justify-between gap-2 py-1">
+          {header}
+        </div>
+      </div>
+    );
+  }
   return (
     <Disclosure
       testId={testId}
       detailsClassName="group inset-panel space-y-3"
       summaryClassName="flex w-full cursor-pointer list-none flex-wrap items-start justify-between gap-2 py-1 [&::-webkit-details-marker]:hidden"
-      summary={
-        <span className="flex min-w-0 flex-col gap-1 text-left">
-          <GroupLabel>{title}</GroupLabel>
-          {digest && (
-            <span className="text-sm font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-              {digest}
-            </span>
-          )}
-        </span>
-      }
+      summary={header}
     >
       <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3">
         {children}
@@ -432,9 +463,32 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
   // click is the guard, and nothing here spends the call on arrival.
 
   const sections = plannedSections(strategy);
-  // The one-line digest of the collapsed scene group: place, camera setup and
-  // what the person wears (or the light when the wardrobe is unset). The
-  // Location editor itself stays open on the render panel below.
+  // What the two text groups add beyond their digest sentences. The digest
+  // is the first sentence, so the expansions below show only these
+  // remainders — the whole text used to print its first sentence twice,
+  // once as the digest and once as the body's first line.
+  const hookConceptRest = afterFirstSentence(strategy?.hook_concept);
+  const summaryRest = afterFirstSentence(strategy?.strategy_summary);
+  // The outcome rows the expanded block adds beyond its digest. The digest
+  // is the first of the three fields that is set, so that field's row
+  // keeps only what follows its first sentence — dropped entirely when
+  // the field is one sentence — and the other two rows stay whole.
+  const outcomeFields = [
+    ["The change this supports", "desired_outcome"],
+    ["How it works, as a benefit", "mechanism_beat"],
+    ["What the viewer is left with", "payoff_beat"],
+  ];
+  const outcomeDigestField = outcomeFields
+    .map(([, field]) => field)
+    .find((field) => String(strategy?.[field] || "").trim());
+  const outcomeRows = outcomeFields
+    .map(([label, field]) => [
+      label,
+      field === outcomeDigestField
+        ? afterFirstSentence(strategy?.[field])
+        : strategy?.[field],
+    ])
+    .filter(([, value]) => String(value || "").trim());
   const scene = strategy?.scene || {};
   const sceneRows = [
     ...Object.entries(scene),
@@ -448,14 +502,15 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
   // phone handoff, a handheld selfie cannot (the camera is the phone in their
   // hand), so the copy follows the setup rather than promising one take.
   const cameraSetup = project?.camera_setup === "fixed" ? "fixed" : "handheld";
-  const sceneDigest = [
-    scene.location,
-    cameraLabel,
-    scene.wardrobe || scene.lighting,
-  ]
-    .filter((part) => String(part || "").trim())
-    .map((part) => sentenceCase(String(part).trim()))
-    .join(", ");
+  // The scene digest names only how the piece is filmed. It used to
+  // concatenate the location and the wardrobe (or the light) ahead of the
+  // camera label, and the expanded rows then printed both again verbatim
+  // — the founder's Nov 14 screenshot showed the location sentence three
+  // times on one page (digest, Location row, and the render panel's
+  // editor, which stays as the one editable source). Each fact now lives
+  // in exactly one place in this panel: the digest carries the camera
+  // setup, the rows carry everything else.
+  const sceneDigest = sentenceCase(cameraLabel);
 
   return (
     <div className="inset-panel space-y-3">
@@ -699,7 +754,14 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
               digest={summaryLine(strategy.hook_concept)}
             >
               <div className="max-w-3xl space-y-2 border-l-2 border-[color:var(--indigo-35)] pl-4">
-                <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.hook_concept)}</p>
+                {/* Only what follows the digest sentence: the concept's
+                    first sentence is the digest above, and reprinting it
+                    here stated it twice in one group. A one-sentence
+                    concept leaves just the note below, which is the
+                    expansion's own content. */}
+                {hookConceptRest && (
+                  <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(hookConceptRest)}</p>
+                )}
                 {/* The hook line itself is NOT printed here. It is the same string as
                     the Review step's "Hook line", verbatim, because the strategy
                     prompt is told to echo the founder-approved line rather than write
@@ -720,8 +782,11 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
               testId="strategy-why-it-works"
               title="Why this works for this app"
               digest={summaryLine(strategy.strategy_summary)}
+              expandable={Boolean(summaryRest)}
             >
-              <p className="max-w-3xl text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(strategy.strategy_summary)}</p>
+              {summaryRest && (
+                <p className="max-w-3xl text-base leading-relaxed [overflow-wrap:anywhere]">{sentenceCase(summaryRest)}</p>
+              )}
             </CollapsedGroup>
           )}
 
@@ -729,33 +794,32 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
               whole render (generation_planning reads them into the segment
               prompt) and were invisible here. Framed as a change the app
               supports, never a result it promises — the same rule the template
-              outcome line and the evidence note follow. The first row is the
-              one-line digest of the closed group: the change it supports. */}
+              outcome line and the evidence note follow. The digest is the
+              change it supports; the rows below it add only what the digest
+              has not already said (outcomeRows), so the change is stated
+              once, not once as the digest and again as the first row. */}
           {hasOutcome && (
             <CollapsedGroup
               testId="strategy-viewer-outcome"
               title="What the viewer ends up with"
               digest={summaryLine(strategy.desired_outcome || strategy.mechanism_beat || strategy.payoff_beat)}
+              expandable={outcomeRows.length > 0}
             >
               <StrategyBlock
                 title="What the viewer ends up with"
                 description="How the viewer sees this app: the change, the benefit, and what they are left with — all from the viewer's point of view. The render is written from this framing — aim at it, never promise it as a result."
                 icon={Target}
                 hideTitle
-                rows={[
-                  ["The change this supports", strategy.desired_outcome],
-                  ["How it works, as a benefit", strategy.mechanism_beat],
-                  ["What the viewer is left with", strategy.payoff_beat],
-                ]}
+                rows={outcomeRows}
               />
             </CollapsedGroup>
           )}
 
           {/* Scene and performance are ONE group, not two: movement and voice
               delivery are locked by exactly the same mechanism as camera angle
-              and lighting. The digest shows the place, the camera setup and the
-              wardrobe/light — "Footbridge at dusk, handheld selfie, olive
-              jacket" — so the group reads at a glance without opening. */}
+              and lighting. The digest names only the camera setup — the
+              place, the light and the wardrobe are the rows below, stated
+              once each. */}
           {sceneRows.length > 0 && (
             <CollapsedGroup
               testId="strategy-scene-details"

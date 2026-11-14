@@ -37,4 +37,17 @@ describe("errorMessageFor", () => {
     expect(message).toContain("try again");
     expect(message).not.toContain("429");
   });
+
+  test("a client timeout says the wait limit was hit, not the raw axios text", () => {
+    // What the founder actually saw (Nov 14): "Something went wrong /
+    // timeout of 120000ms exceeded" — axios' own message for a request the
+    // browser gave up on while the server was still working. The plain
+    // reading is that generation outran the wait limit, and the raw
+    // milliseconds help nobody.
+    const message = errorMessageFor({ code: "ECONNABORTED", message: "timeout of 120000ms exceeded" });
+    expect(message).toContain("wait limit");
+    expect(message).toContain("try again");
+    expect(message).not.toContain("120000");
+    expect(message).not.toContain("timeout of");
+  });
 });
