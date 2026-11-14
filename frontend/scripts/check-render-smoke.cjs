@@ -478,6 +478,13 @@ const apiStub = {
   // separate calls remain on the stub for the strategy panel's own rebuild.
   generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
   generateStrategy: async () => PROJECT_WITH_STRATEGY,
+  // No direction change by default (ADR 0133): a rebuild click checks,
+  // hears nothing moved, and rebuilds directly. Checks that exercise the
+  // suggestion modal override this with a changed answer.
+  suggestStrategyRefresh: async () => ({
+    direction_changed: false, changed_fields: [], suggestion: null,
+    current: { hook_line: "", script: "" },
+  }),
   generateVideo: async () => SEGMENT,
   // The drawer revalidates votes on every expand, so the detail endpoint
   // must answer everywhere the list does. Empty verdicts by default, exactly
@@ -2222,7 +2229,7 @@ async function main() {
     );
     expectText(
       ctx,
-      "Rebuild the strategy for the angle now picked",
+      "Rebuild strategy",
       "the angle drift remedy did not render as a jump"
     );
     // A rebuild is owed here too, so Kasra's one-action rule applies the same
@@ -2251,7 +2258,7 @@ async function main() {
     );
     expectText(
       ctx,
-      "Rebuild the strategy so it matches your saved plan",
+      "Rebuild strategy",
       "the rebuild remedy did not render"
     );
     if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
@@ -2871,16 +2878,15 @@ async function main() {
         if (weakest.length !== 1 || !weakest[0].textContent.includes("Demo handoff")) {
           throw new Error("the weakest dimension tile is not marked");
         }
-        // One top fix, said once: the server's first next step leads the
-        // card in its own callout, and the dimension whose step it is does
-        // not repeat it — the old card printed the same advice twice.
+        // No advice callout at all: the card leads with the grade and the
+        // tiles, and the server's first next step appears nowhere on it —
+        // the top-fix callout that used to sit under the header is gone
+        // (Kasra's call), so the score is what the card says, not a lecture.
         const card = ctx.container.querySelector('[data-testid="quality-report"]');
-        const topFix = card.querySelector('[data-testid="quality-top-fix"]');
-        if (!topFix || !topFix.textContent.includes("Answer the hook in the first clause.")) {
-          throw new Error("the card has no top-fix callout carrying the first next step");
+        if (card.querySelector('[data-testid="quality-top-fix"]')) {
+          throw new Error("the card still carries the removed top-fix callout");
         }
-        const fixCount = (card.textContent.match(/Answer the hook in the first clause\./g) || []).length;
-        if (fixCount !== 1) throw new Error(`the top fix is printed ${fixCount} times instead of once`);
+        expectAbsent(ctx, "Answer the hook in the first clause.", "the top fix still prints on the card");
         // Per-dimension advice no longer stacks inside the tiles: a step
         // that is not the top fix stays off the card entirely.
         expectAbsent(ctx, "Cut the second thought from the hook.", "a dimension's advice still stacks on the card");
@@ -3036,7 +3042,7 @@ async function main() {
     })(ctx);
     await act(async () => {});
     const build = [...ctx.container.querySelectorAll("button")]
-      .find((b) => (b.textContent || "").includes("Build the app-specific strategy"));
+      .find((b) => (b.textContent || "").includes("Build the strategy"));
     if (!build) throw new Error("no strategy build button to gate");
     if (!build.disabled) {
       throw new Error("the strategy builds with no audience angle picked");
@@ -3074,6 +3080,166 @@ async function main() {
     const builds = apiCalls.filter((c) => c === "generateStrategy").length;
     if (builds !== 1) {
       throw new Error(`the button fired ${builds} strategy builds, not one`);
+    }
+  });
+
+  // The direction-change suggestion (ADR 0133): a rebuild click on a
+  // strategy whose saved direction has moved first shows the refreshed
+  // words in a modal. Nothing is applied — and no rebuild runs — before
+  // the founder chooses.
+  const SUGGESTION_ANSWER = {
+    direction_changed: true,
+    changed_fields: ["location"],
+    current: {
+      hook_line: "Old hook at the bus stop.",
+      script: "Old script, waiting where the old scene put me.",
+    },
+    suggestion: {
+      hook_line: "New hook in the rooftop garden.",
+      script: "New script, written for the garden at dawn.",
+    },
+  };
+
+  await check("a direction change offers refreshed words before any rebuild", async (ctx) => {
+    apiCalls.length = 0;
+    await withApi(
+      { suggestStrategyRefresh: async () => SUGGESTION_ANSWER },
+      async () => {
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+        if (!rebuild) throw new Error("no rebuild button to click");
+        await act(async () => {
+          rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        const modal = ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]');
+        if (!modal) throw new Error("the suggestion modal did not open before the rebuild");
+        expectText(ctx, "Suggested update", "the modal does not name itself");
+        expectText(ctx, "Old hook at the bus stop.", "the modal lost the saved hook");
+        expectText(ctx, "New hook in the rooftop garden.", "the modal lost the refreshed hook");
+        expectText(ctx, "New script, written for the garden at dawn.", "the modal lost the refreshed script");
+        if (apiCalls.includes("generateStrategy")) {
+          throw new Error("the rebuild ran before the founder chose");
+        }
+        if (apiCalls.includes("updateStudioProject")) {
+          throw new Error("words were saved before the founder chose");
+        }
+        // Keep mine: the rebuild runs once, against the saved words, and
+        // nothing is written.
+        const keep = ctx.container.querySelector('[data-testid="suggestion-keep-button"]');
+        await act(async () => {
+          keep.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+          throw new Error("the modal stayed open after Keep mine");
+        }
+        const builds = apiCalls.filter((c) => c === "generateStrategy").length;
+        if (builds !== 1) {
+          throw new Error(`Keep mine fired ${builds} rebuilds, not one`);
+        }
+        if (apiCalls.includes("updateStudioProject")) {
+          throw new Error("Keep mine wrote words it promised to leave alone");
+        }
+      }
+    );
+  });
+
+  await check("accepting the suggestion saves the words, then rebuilds once", async (ctx) => {
+    apiCalls.length = 0;
+    const order = [];
+    let savedWords = null;
+    await withApi(
+      {
+        suggestStrategyRefresh: async () => SUGGESTION_ANSWER,
+        updateStudioProject: async (id, payload) => {
+          order.push("save");
+          savedWords = payload;
+          return PROJECT_WITH_STRATEGY;
+        },
+        generateStrategy: async () => {
+          order.push("rebuild");
+          return PROJECT_WITH_STRATEGY;
+        },
+      },
+      async () => {
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+        await act(async () => {
+          rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        const accept = ctx.container.querySelector('[data-testid="suggestion-accept-button"]');
+        if (!accept) throw new Error("the modal offered no Accept");
+        await act(async () => {
+          accept.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+      }
+    );
+    if (JSON.stringify(order) !== JSON.stringify(["save", "rebuild"])) {
+      throw new Error(`Accept must save first, then rebuild once; ran: ${JSON.stringify(order)}`);
+    }
+    if (
+      !savedWords ||
+      savedWords.hook_line !== SUGGESTION_ANSWER.suggestion.hook_line ||
+      savedWords.script !== SUGGESTION_ANSWER.suggestion.script
+    ) {
+      throw new Error(`Accept saved the wrong words: ${JSON.stringify(savedWords)}`);
+    }
+  });
+
+  await check("a failed suggestion still rebuilds, with an honest note", async (ctx) => {
+    apiCalls.length = 0;
+    await withApi(
+      {
+        suggestStrategyRefresh: async () => {
+          throw new Error("provider down");
+        },
+      },
+      async () => {
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+        await act(async () => {
+          rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        });
+        await act(async () => {});
+        if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+          throw new Error("a modal opened for a suggestion that never arrived");
+        }
+        if (!ctx.container.querySelector('[data-testid="strategy-suggest-note"]')) {
+          throw new Error("the fallback rebuilt silently, with no note");
+        }
+        expectText(
+          ctx,
+          "Direction suggestions were unavailable",
+          "the fallback note does not say what happened"
+        );
+        const builds = apiCalls.filter((c) => c === "generateStrategy").length;
+        if (builds !== 1) {
+          throw new Error(`the fallback fired ${builds} rebuilds, not one`);
+        }
+      }
+    );
+  });
+
+  await check("no direction change rebuilds directly, with no modal", async (ctx) => {
+    apiCalls.length = 0;
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
+    await act(async () => {
+      rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    if (!apiCalls.includes("suggestStrategyRefresh")) {
+      throw new Error("the rebuild click never checked for a direction change");
+    }
+    if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+      throw new Error("a modal opened when no direction changed");
+    }
+    const builds = apiCalls.filter((c) => c === "generateStrategy").length;
+    if (builds !== 1) {
+      throw new Error(`the direct path fired ${builds} rebuilds, not one`);
     }
   });
 
@@ -3190,7 +3356,7 @@ async function main() {
 
   await check("the strategy review mounts with no strategy", async (ctx) => {
     await mount(HookContinuityPanel, { project: BASE_PROJECT })(ctx);
-    expectText(ctx, "Build the app-specific strategy", "the free strategy button did not render");
+    expectText(ctx, "Build the strategy", "the free strategy button did not render");
     expectAbsent(ctx, "The two sections", "sections rendered for a project with no strategy");
   });
 
@@ -3853,7 +4019,7 @@ async function main() {
       });
       await act(async () => {});
       const text = ctx.text();
-      for (const control of ["Generate the video", "Build the app-specific strategy"]) {
+      for (const control of ["Generate the video", "Build the strategy"]) {
         if (text.includes(control)) {
           throw new Error(`step ${JSON.stringify(label)} renders a render control: ${JSON.stringify(control)}`);
         }
@@ -3890,7 +4056,7 @@ async function main() {
           await act(async () => {});
         }
       );
-      if (!ctx.text().includes("Build the app-specific strategy")) {
+      if (!ctx.text().includes("Build the strategy")) {
         throw new Error("Review & submit no longer offers the strategy button");
       }
       // The button now has an empty state behind it. Previously every panel
@@ -4138,7 +4304,7 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          const build = buttonByText(ctx, /Build the app-specific strategy|Rebuild strategy/);
+          const build = buttonByText(ctx, /Build the strategy|Rebuild strategy/);
           await act(async () => {
             build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -4327,6 +4493,103 @@ async function main() {
     }
   });
 
+  // The sticky bar carries the one unblocking action (ADR 0133): while a
+  // step is blocked, the bar's primary slot is that action's real button
+  // and no forward arrow shows beside it; when the step can proceed
+  // as-is, the bar offers the way forward instead.
+  await check("the bar carries Build the strategy while no strategy exists", async (ctx) => {
+    apiCalls.length = 0;
+    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY, strategy: {}, strategy_version: 0,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          const bar = ctx.container.querySelector('[data-testid="wizard-bar-action"]');
+          if (!bar) throw new Error("the bar offers no action while the strategy is missing");
+          if (!(bar.textContent || "").includes("Build the strategy")) {
+            throw new Error(`the bar's action is not the strategy build: ${bar.textContent}`);
+          }
+          if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+            throw new Error("a forward arrow shows beside the bar's unblocking action");
+          }
+          await act(async () => {
+            bar.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+          });
+          await act(async () => {});
+        }
+      );
+      if (!apiCalls.includes("generateStrategy")) {
+        throw new Error("the bar's Build button did not run the build");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
+    }
+  });
+
+  await check("the bar carries Generate your plan while no plan exists", async (ctx) => {
+    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      await withApi(
+        { getStudioProject: async () => ({ ...BASE_PROJECT }) },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          const bar = ctx.container.querySelector('[data-testid="wizard-bar-action"]');
+          if (!bar) throw new Error("the bar offers no action while the plan is missing");
+          if (!(bar.textContent || "").includes("Generate your plan")) {
+            throw new Error(`the bar's action is not the plan generation: ${bar.textContent}`);
+          }
+          if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+            throw new Error("a forward arrow shows beside the bar's unblocking action");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
+    }
+  });
+
+  await check("the bar offers the way forward once Review can proceed", async (ctx) => {
+    try {
+      global.__SMOKE_PARAMS = "?project=p1";
+      await withApi(
+        {
+          getStudioProject: async () => ({
+            ...PROJECT_WITH_STRATEGY,
+            strategy_version: 2,
+            strategy_script_version: 1,
+            script_version: 1,
+            strategy_is_current: true,
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
+            throw new Error("the bar carries an action for a step that can proceed as-is");
+          }
+          if (!ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+            throw new Error("a ready Review lost its Go to render bar action");
+          }
+          if (!ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+            throw new Error("a ready Review lost its forward arrow");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
+    }
+  });
+
   await check("Review & submit refuses to run without an approved plan", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
@@ -4368,7 +4631,7 @@ async function main() {
               )}`
             );
           }
-          for (const control of ["Build the app-specific strategy", "Generate the video", "Extend"]) {
+          for (const control of ["Build the strategy", "Generate the video", "Extend"]) {
             if (text.includes(control)) {
               throw new Error(`Review & submit offers ${JSON.stringify(control)} with no approved plan`);
             }

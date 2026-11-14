@@ -187,17 +187,15 @@ function qualityBandNote(report) {
 }
 
 /**
- * The craft check card: a score ring, one top fix, and the eight scored
- * dimensions as compact tiles side by side.
+ * The craft check card: a score ring and the eight scored dimensions as
+ * compact tiles side by side.
  *
  * Presentation only — the report's fields, scores and words are the
  * server's, unchanged. The layout is what changed, per the founder's ask:
  * the old card stacked every dimension's full advice under its score, so
- * the card read as a wall of copy and the server's first next step printed
- * twice (once in the next-steps list, once under its own dimension). Now
- * the single most important fix leads in its own callout — the server's
- * first next step, or the weakest dimension's step when the server sent
- * none — and no tile repeats it.
+ * the card read as a wall of copy. No advice text prints on the card at
+ * all now: a top-fix callout under the header was removed on the
+ * founder's word, so the card is the grade and the tiles, nothing more.
  *
  * The dimensions' maxima differ ON PURPOSE (the weights are the scoring:
  * hook stopping power is /20, audience truth /15, several are /10), so
@@ -217,10 +215,6 @@ function CraftCheckCard({ report }) {
   const weakestRatio = dimensions.length > 0
     ? Math.min(...dimensions.map(ratioOf))
     : null;
-  const topFix = (Array.isArray(report?.next_steps) ? report.next_steps : [])
-    .find((step) => String(step || "").trim())
-    || dimensions.find((dimension) => ratioOf(dimension) === weakestRatio && dimension.next_step)?.next_step
-    || null;
   const ringRadius = 26;
   const ringCircumference = 2 * Math.PI * ringRadius;
   return (
@@ -268,11 +262,6 @@ function CraftCheckCard({ report }) {
           </p>
         </div>
       </div>
-      {topFix && (
-        <div className="inset-panel inset-panel-strong" data-testid="quality-top-fix">
-          <p className="text-sm">{topFix}</p>
-        </div>
-      )}
       {dimensions.length > 0 && (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="quality-dimensions">
           {dimensions.map((dimension) => {
@@ -493,6 +482,13 @@ export default function CreateVideo() {
   // 80s, and the flight itself — latched by planInFlightRef — lands on
   // return exactly as if the founder never left.
   const [planFlightStartedAt, setPlanFlightStartedAt] = useState(null);
+  // The strategy panel's action, registered while Review is the step in
+  // view so the sticky bar can carry it (ADR 0133). The panel owns the
+  // handler and its busy anchor; the bar only renders what it is given.
+  const [strategyBarAction, setStrategyBarAction] = useState(null);
+  const registerStrategyBarAction = useCallback((action) => {
+    setStrategyBarAction(action);
+  }, []);
   // Confirm-on-arrival: a ?project= link that lands with an intact plan
   // (script_version > 0) says so once, so the founder knows the Review step
   // below is their render's plan and not a blank draft. Dismissible, and
@@ -1663,6 +1659,111 @@ export default function CreateVideo() {
     // The review is done: nothing left to ask, so the bar states readiness
     // and the button beside it opens the render half.
     footerHint = "Ready \u2014 review the render below.";
+  }
+  /* The sticky bar's primary slot (ADR 0133): the ONE action that unblocks
+     the step in view, carried by the bar itself — the section's own button,
+     same handler, same busy/countdown behavior — and the forward arrow
+     shows only when the step can proceed as-is. This generalizes the
+     review step's "Go to render" state, which already worked this way:
+     a blocked step's bar offers the unblocking action, never a disabled
+     arrow beside it. Picks (an angle card, a goal, a template, a photo)
+     are clicks on content, not buttons, so those states keep the locked
+     arrow and the hint line names the pick. In-flight generations mirror
+     their progress here too, anchored where the flight began. */
+  let barAction = null;
+  if (STEPS[step].key === "angle" && activeStepState?.state !== "done") {
+    if (generatingAngles) {
+      barAction = {
+        label: "Generating angles", busy: true, disabled: true,
+        etaSeconds: BUSY_ETA_SECONDS.angles,
+      };
+    } else if (!angles?.length) {
+      barAction = {
+        label: "Generate angles", onClick: handleGenerateAngles,
+        etaSeconds: BUSY_ETA_SECONDS.angles,
+      };
+    } else if (
+      angle && objective && profileId &&
+      !(recommendationsVisible && visibleRecommendations.length > 0)
+    ) {
+      barAction = tailoring
+        ? {
+            label: "Tailoring templates", busy: true, disabled: true,
+            etaSeconds: BUSY_ETA_SECONDS.templates,
+          }
+        : {
+            label: "Generate tailored templates",
+            onClick: () => runTailoring(false),
+            etaSeconds: BUSY_ETA_SECONDS.templates,
+          };
+    }
+  } else if (STEPS[step].key === "review") {
+    if (!project?.script_version) {
+      if (busy || loading) {
+        barAction = {
+          label: loading && !busy ? "Loading your draft" : "Generating your plan",
+          busy: true, disabled: true,
+          etaSeconds: busy ? BUSY_ETA_SECONDS.planStrategy : null,
+          busyStartedAt: planFlightStartedAt,
+        };
+      } else if (planFailed && !firstGap) {
+        barAction = {
+          label: "Try again", onClick: handleGeneratePlan,
+          disabled: !canGenerate || !objective || !angle,
+          etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+          busyStartedAt: planFlightStartedAt,
+        };
+      } else if (!planFailed && canGenerate && effectiveObjective && angle) {
+        barAction = {
+          label: "Generate your plan", onClick: handleGeneratePlan,
+          etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+          busyStartedAt: planFlightStartedAt,
+        };
+      }
+      // The missing-input states carry no bar action: their one unblocking
+      // control is the first-gap button on the panel, and exactly one
+      // 'first' action ever renders (the bar mirroring it would print the
+      // competing duplicate that rule exists to prevent). The locked
+      // arrow and the hint line carry those states, as today.
+    } else if (busy && planFlightStartedAt) {
+      barAction = {
+        label: "Regenerating plan", busy: true, disabled: true,
+        etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+        busyStartedAt: planFlightStartedAt,
+      };
+    } else if (hasEdits) {
+      barAction = {
+        label: busy ? "Saving edits" : "Save edits",
+        onClick: () => handleSaveEdits(),
+        busy, disabled: busy,
+      };
+    } else if (strategyBarAction) {
+      barAction = strategyBarAction;
+    } else if (activeStepState?.state === "done") {
+      // Not an unblocker: the step can already proceed, so this keeps its
+      // old place beside the forward arrow rather than displacing it.
+      barAction = {
+        label: "Go to render", testId: "wizard-goto-render", icon: "render",
+        blocks: false,
+        onClick: () => {
+          setReviewTab("render");
+          scrollToSubmit();
+        },
+      };
+    }
+  } else if (
+    STEPS[step].key === "finish" &&
+    !finishedGeneration &&
+    finishedGeneration !== undefined
+  ) {
+    barAction = {
+      label: "Go to the render", icon: "render", blocks: false,
+      onClick: () => {
+        setStep(STEPS.findIndex((s) => s.key === "review"));
+        setReviewTab("render");
+        scrollToSubmit();
+      },
+    };
   }
   // The rail score, derived per segment so the bar, the quarters and the
   // number can never disagree: a done step claims its full quarter, the step
@@ -2885,6 +2986,7 @@ export default function CreateVideo() {
                     <HookContinuityPanel
                       project={project}
                       onProjectChange={receiveProject}
+                      onActionChange={registerStrategyBarAction}
                     />
                     {/* No script rating (ADR 0124): per-element thumbs
                         stopped teaching generation — the whole-video
@@ -3303,21 +3405,32 @@ export default function CreateVideo() {
           >
             {footerHint}
           </span>
-          {/* A ready review has no arrow left to walk: the bar carries the
-              one forward action itself, opening the render half the plan was
-              read for. Navigation only — the render stays GenerationPanel's. */}
-          {STEPS[step].key === "review" && activeStepState?.state === "done" && (
+          {/* The bar's primary slot (ADR 0133): when the step in view is
+              blocked, the slot carries the ONE action that unblocks it —
+              the section's own button, same handler and busy behavior —
+              and no forward arrow shows beside it. When the step can
+              proceed as-is there is no bar action, and the arrow below is
+              the way forward. A ready review's bar action is "Go to
+              render", opening the render half the plan was read for:
+              navigation only — the render stays GenerationPanel's. */}
+          {barAction && (
             <Button
               variant="accent"
               size="sm"
               className="gap-1.5"
-              onClick={() => {
-                setReviewTab("render");
-                scrollToSubmit();
-              }}
-              data-testid="wizard-goto-render"
+              onClick={barAction.onClick}
+              disabled={barAction.disabled}
+              busy={barAction.busy}
+              etaSeconds={barAction.etaSeconds ?? null}
+              busyStartedAt={barAction.busyStartedAt ?? null}
+              data-testid={barAction.testId || "wizard-bar-action"}
             >
-              <Clapperboard className="h-3.5 w-3.5" /> Go to render
+              {barAction.icon === "render" ? (
+                <Clapperboard className="h-3.5 w-3.5" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {barAction.label}
             </Button>
           )}
           {/* Earns prominence: a finished step turns Continue primary, so the
@@ -3325,8 +3438,9 @@ export default function CreateVideo() {
               unfinished step locks Continue: the button is disabled and
               wears a padlock, so the founder sees they must finish this
               step before the next unlocks. The line beside it names what
-              is still missing. */}
-          {step < STEPS.length - 1 && (
+              is still missing. While a blocking bar action is offered it
+              replaces this arrow entirely — one working action at a time. */}
+          {(!barAction || barAction.blocks === false) && step < STEPS.length - 1 && (
             <Button
               variant={activeStepState?.state === "done" ? "accent" : "secondary"}
               size="icon"

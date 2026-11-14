@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
@@ -235,10 +235,22 @@ function SectionRow({ section, cameraSetup }) {
   );
 }
 
-export function HookContinuityPanel({ project, onProjectChange }) {
+export function HookContinuityPanel({ project, onProjectChange, onActionChange }) {
   const [busy, setBusy] = useState(false);
+  const [busyStartedAt, setBusyStartedAt] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  // The direction-change suggestion (ADR 0133): a rebuild click first asks
+  // the server whether the saved direction moved since this strategy was
+  // built. `suggesting` is that check (a plan generation when it did);
+  // `suggestion` is the server's answer waiting on the founder's choice —
+  // nothing is applied before Accept. `suggestNote` is the honest fallback
+  // line when the suggestion could not be made: the rebuild still runs,
+  // with the saved words, and says so.
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [applying, setApplying] = useState(false);
+  const [suggestNote, setSuggestNote] = useState(null);
 
   const projectId = project?.id;
   const strategy = project?.strategy;
@@ -260,15 +272,17 @@ export function HookContinuityPanel({ project, onProjectChange }) {
     (strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
   const needsAngle = !project?.content_angle_id;
 
-  const handleGenerateStrategy = async () => {
+  const runRebuild = async ({ skipConfirm = false } = {}) => {
     // Confirm only when the plan has moved on or the angle has changed. A
     // rebuild then means something specific — it discards a strategy built
     // against an older plan or a different angle, and nothing else on screen
     // says that is what the button does. An ordinary rebuild of a strategy
     // that is already current is harmless and stays one click; interrupting
     // that every time would just teach the founder to dismiss the prompt
-    // without reading it.
-    if (hasStrategy && (staleStrategy || angleStale)) {
+    // without reading it. A founder who just answered the suggestion modal
+    // has already made this choice with the words in front of them, so the
+    // modal paths skip the second prompt (skipConfirm).
+    if (!skipConfirm && hasStrategy && (staleStrategy || angleStale)) {
       const ok = typeof window === "undefined" || typeof window.confirm !== "function"
         ? true
         : window.confirm(
@@ -282,6 +296,7 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       if (!ok) return;
     }
     setBusy(true);
+    setBusyStartedAt(Date.now());
     setError(null);
     setNotice(null);
     try {
@@ -298,8 +313,115 @@ export function HookContinuityPanel({ project, onProjectChange }) {
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);
+      setBusyStartedAt(null);
     }
   };
+
+  const handleGenerateStrategy = async () => {
+    if (busy || suggesting || !projectId || needsAngle) return;
+    // A first build has nothing to compare against: no popup, ever.
+    if (!hasStrategy) {
+      await runRebuild();
+      return;
+    }
+    // ADR 0133: before the rebuild, ask whether the saved direction moved
+    // since this strategy was built. The check itself is free (the server
+    // answers without a model call when nothing changed); only a real
+    // change spends a plan generation on refreshed words. A suggestion
+    // waits for the founder's choice in the modal — nothing is applied
+    // before it — and any failure falls back to today's rebuild with the
+    // saved words, with a note saying suggestions were unavailable.
+    setSuggesting(true);
+    setBusyStartedAt(Date.now());
+    setSuggestNote(null);
+    try {
+      const answer = await api.suggestStrategyRefresh(projectId);
+      if (answer?.suggestion) {
+        setSuggestion(answer);
+        return;
+      }
+    } catch (err) {
+      setSuggestNote(
+        "Direction suggestions were unavailable, so the strategy was rebuilt " +
+        "with your saved words."
+      );
+    } finally {
+      setSuggesting(false);
+      setBusyStartedAt(null);
+    }
+    await runRebuild();
+  };
+
+  const acceptSuggestion = async () => {
+    if (!suggestion || applying) return;
+    const words = suggestion.suggestion || {};
+    const payload = {};
+    if (words.hook_line) payload.hook_line = words.hook_line;
+    if (words.script) payload.script = words.script;
+    setApplying(true);
+    setError(null);
+    try {
+      // The normal plan-save path: the words land as a plan edit (the plan
+      // version bumps), and only then does the rebuild run — once, against
+      // the words the founder just accepted.
+      const updated = await api.updateStudioProject(projectId, payload);
+      onProjectChange?.(updated);
+      setSuggestion(null);
+      await runRebuild({ skipConfirm: true });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const keepSuggestion = async () => {
+    if (applying) return;
+    // Keep mine: the saved words stay byte-identical — nothing is written —
+    // and the rebuild runs against them, once.
+    setSuggestion(null);
+    await runRebuild({ skipConfirm: true });
+  };
+
+  // The sticky wizard bar carries this panel's one action while Review is
+  // the step in view (ADR 0133): the same handler, the same busy anchor,
+  // so the bar and the button above are one control in two places, never
+  // two competing ones. Registration is keyed on the action's visible
+  // state; the click goes through a ref so a re-render never re-registers
+  // a stale closure, and unmounting clears the slot.
+  const clickRef = useRef(null);
+  clickRef.current = handleGenerateStrategy;
+  const stableClick = useRef(() => clickRef.current?.()).current;
+  const actionLabel = suggesting
+    ? "Checking direction"
+    : busy
+      ? "Building strategy"
+      : hasStrategy ? "Rebuild strategy" : "Build the strategy";
+  // The bar carries this action only while it is the step's unblocker:
+  // no strategy yet, a rebuild owed, an angle still to pick, or a flight
+  // in progress. A current strategy's rebuild is optional — the step can
+  // proceed as-is — so it never displaces the bar's way forward.
+  const barOwed = Boolean(
+    busy || suggesting || needsAngle || !hasStrategy || staleStrategy || angleStale
+  );
+  const barSig = [
+    barOwed ? "owed" : "free", actionLabel,
+    busy || suggesting ? "busy" : "idle",
+    needsAngle ? "needs-angle" : "ready", busyStartedAt || "",
+  ].join("|");
+  useEffect(() => {
+    if (!onActionChange) return;
+    onActionChange(barOwed ? {
+      label: actionLabel,
+      busy: busy || suggesting,
+      disabled: busy || suggesting || !projectId || needsAngle,
+      etaSeconds: suggesting ? BUSY_ETA_SECONDS.planStrategy : BUSY_ETA_SECONDS.strategy,
+      busyStartedAt,
+      onClick: stableClick,
+    } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barSig]);
+  useEffect(() => () => onActionChange?.(null), [onActionChange]);
 
   // No auto-build: mounting this panel is navigation, and navigation
   // generates nothing (ADR 0122). A project that arrives ready with no
@@ -404,24 +526,32 @@ export function HookContinuityPanel({ project, onProjectChange }) {
         </Alert>
       )}
 
+      {suggestNote && (
+        <Alert variant="warning" data-testid="strategy-suggest-note">
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertDescription>{suggestNote}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
         <Button
           variant="accent"
           onClick={handleGenerateStrategy}
-          disabled={busy || !projectId || needsAngle}
-          busy={busy}
-          etaSeconds={BUSY_ETA_SECONDS.strategy}
+          disabled={busy || suggesting || applying || !projectId || needsAngle}
+          busy={busy || suggesting}
+          etaSeconds={suggesting ? BUSY_ETA_SECONDS.planStrategy : BUSY_ETA_SECONDS.strategy}
+          busyStartedAt={busyStartedAt}
           data-testid="strategy-build-button"
         >
           <Sparkles className="h-4 w-4" />
-          {busy ? "Building strategy" : hasStrategy ? "Rebuild strategy" : "Build the app-specific strategy"}
+          {actionLabel}
         </Button>
-        {!busy && needsAngle && (
+        {!busy && !suggesting && needsAngle && (
           <p className="text-sm text-muted-foreground" data-testid="strategy-needs-angle">
             Pick an audience angle on the Audience &amp; template step first — the strategy is built around it.
           </p>
         )}
-        {!busy && !hasStrategy && !needsAngle && (
+        {!busy && !suggesting && !hasStrategy && !needsAngle && (
           <p className="text-sm text-muted-foreground">
             Text only. It fixes the concept, the words and the locked scene so
             the one render is about this app rather than a generic take with a
@@ -429,6 +559,91 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </p>
         )}
       </div>
+
+      {suggestion && (
+        /* The suggestion modal (ADR 0133). The saved words and the refreshed
+           pair sit side by side; nothing has been applied — Accept saves the
+           new words through the normal plan-save path and then rebuilds,
+           Keep mine rebuilds against the words already saved. Closing the
+           modal any other way is not offered: the rebuild the founder
+           clicked is waiting on this choice. */
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4"
+          data-testid="strategy-suggestion-modal"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Suggested update"
+            className="w-full max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-2xl"
+          >
+            <h3 className="font-display text-base font-semibold">Suggested update</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your direction changed after this strategy was built, so your saved
+              words may no longer match the scene. Here is a refreshed pair
+              written for the direction as it stands now — take it, or keep
+              yours. Either way the strategy is then rebuilt once, against the
+              words you choose.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-3">
+                <p className="eyebrow">Your saved words</p>
+                <div>
+                  <p className="text-sm font-semibold">Hook</p>
+                  <p className="text-base leading-relaxed" data-testid="suggestion-current-hook">
+                    {suggestion.current?.hook_line}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Script</p>
+                  <p className="text-base leading-relaxed" data-testid="suggestion-current-script">
+                    {suggestion.current?.script}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <p className="eyebrow">Refreshed for the new direction</p>
+                <div>
+                  <p className="text-sm font-semibold">Hook</p>
+                  <p className="text-base leading-relaxed" data-testid="suggestion-new-hook">
+                    {suggestion.suggestion?.hook_line || suggestion.current?.hook_line}
+                  </p>
+                  {!suggestion.suggestion?.hook_line && (
+                    <p className="text-sm text-muted-foreground">
+                      Your hook stays — it scored stronger than the refresh.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Script</p>
+                  <p className="text-base leading-relaxed" data-testid="suggestion-new-script">
+                    {suggestion.suggestion?.script || suggestion.current?.script}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={keepSuggestion}
+                disabled={applying}
+                data-testid="suggestion-keep-button"
+              >
+                Keep mine
+              </Button>
+              <Button
+                variant="accent"
+                onClick={acceptSuggestion}
+                disabled={applying}
+                busy={applying}
+                data-testid="suggestion-accept-button"
+              >
+                {applying ? "Saving the new words" : "Accept the update"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!hasStrategy && (
         /* The empty state. Everything above this point used to render nothing

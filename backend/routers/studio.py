@@ -454,6 +454,41 @@ def _project_strategy(project: dict) -> dict:
     return merged
 
 
+# The Visual & audio direction the founder reviews and edits on the project
+# row. A strategy's spoken words are written against one state of these
+# fields; when the saved direction later moves (ADR 0090 reconciles the
+# strategy's scene in the same save but deliberately never rewrites the
+# spoken words), the words can name a place the video no longer shows.
+DIRECTION_FIELDS = (
+    "location", "visual_direction", "voice_direction", "sound_direction",
+)
+
+
+def _direction_snapshot(row: dict) -> dict:
+    """The direction fields of a project row, normalized for comparison."""
+    return {f: str((row or {}).get(f) or "").strip() for f in DIRECTION_FIELDS}
+
+
+def _strategy_direction_changes(row: dict, strategy: dict) -> list:
+    """Direction fields whose saved value differs from the snapshot the
+    strategy was built against (ADR 0133).
+
+    The snapshot rides inside the strategy JSON itself, stamped by the
+    strategy build, so no parallel tracker exists to drift from the record
+    it describes. A strategy built before the stamp existed carries no
+    snapshot: the diff is unknown, so no changes are reported — the
+    suggestion popup must never fire on a guess.
+    """
+    snapshot = (strategy or {}).get("direction_snapshot")
+    if not isinstance(snapshot, dict):
+        return []
+    current = _direction_snapshot(row)
+    return [
+        f for f in DIRECTION_FIELDS
+        if current[f] != str(snapshot.get(f) or "").strip()
+    ]
+
+
 def _require_spoken_words_fit(project: dict) -> dict:
     """
     Refuse a render whose approved script cannot be spoken within the piece.
@@ -2140,6 +2175,13 @@ async def generate_project_strategy(
     # boundary the plan and strategy both agreed on, rather than each
     # re-deriving it from the template and risking a disagreement.
     script_version_at_build = int(row.get("script_version") or 0)
+    # The direction this strategy's words were built against (ADR 0133),
+    # stamped inside the strategy record itself: a later direction edit is
+    # diffed against this, so a rebuild can first offer words refreshed for
+    # the new direction instead of binding the old words to the new scene.
+    # Inside the JSON rather than a column, like the angle stamp — the
+    # record it describes is the record that carries it.
+    strategy["direction_snapshot"] = _direction_snapshot(row)
     await _execute(
         """UPDATE studio_projects SET strategy = ?, strategy_version = ?,
              strategy_script_version = ?,
@@ -2184,6 +2226,170 @@ async def generate_project_strategy(
     # verdict evidence (ADR 0127) rides it the same way it rides the plan.
     payload.update(_verdict_summary_payload(verdict_feedback))
     return payload
+
+@router.post("/studio/projects/{project_id}/strategy-suggestions")
+async def suggest_strategy_refresh(
+    project_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Offer refreshed spoken words when a rebuild follows a direction change
+    (ADR 0133).
+
+    The strategy build stamps the direction it was built against inside
+    the strategy record. When the saved direction has since moved, this
+    regenerates the plan's words for the CURRENT direction through the
+    same machinery the plan route uses — same prompt inputs, same arrival
+    clamp — and offers the pair, gated on the craft scorer: the suggested
+    hook must score at least the saved hook on hook stopping power, or
+    only the script is offered; words identical to the saved ones are no
+    suggestion at all. Nothing is written here: the founder accepts
+    (the words save through the normal plan-save path) or keeps theirs,
+    and only then does the rebuild run, against the final words.
+
+    No strategy, or no direction change, answers without a model call —
+    the check is free, only a real change spends a generation. A provider
+    failure is a 502 like the plan route's, so the client can fall back
+    to rebuilding with the saved words and say so honestly.
+    """
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?",
+        (project_id, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+
+    current_words = {
+        "hook_line": row.get("hook_line") or "",
+        "script": row.get("script") or "",
+    }
+    strategy = _project_strategy(row)
+    changed = _strategy_direction_changes(row, strategy) if strategy else []
+    if not changed:
+        return {
+            "direction_changed": False,
+            "changed_fields": [],
+            "suggestion": None,
+            "current": current_words,
+        }
+
+    require_ai_configured()
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+    if not row.get("template_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a hook template before generating a plan.",
+        )
+    template = await _fetch_one(
+        "SELECT * FROM hook_templates WHERE id = ? AND (user_id = ? OR user_id = 'system')",
+        (row["template_id"], user_id),
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    angle = None
+    if row.get("content_angle_id"):
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (row["content_angle_id"], row.get("brand_profile_id"), user_id),
+        )
+        if not angle:
+            raise HTTPException(
+                status_code=404,
+                detail="Content angle not found for this App Profile",
+            )
+    objective = template_library.normalize_objective(row.get("objective") or "")
+    duration = template_library.clamp_duration(row.get("duration_seconds"))
+    tone = (row.get("tone") or "").strip()
+    verdict_feedback = await _verdict_feedback_for_profile(
+        row.get("brand_profile_id"), user_id)
+    recent_hooks = []
+    try:
+        recent_rows = await _fetch_all(
+            "SELECT hook_line FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
+            "AND hook_line IS NOT NULL AND TRIM(hook_line) != '' ORDER BY created_at DESC LIMIT 3",
+            (row.get("brand_profile_id"), user_id),
+        )
+        recent_hooks = [str(r.get("hook_line") or "").strip() for r in recent_rows]
+    except Exception:
+        recent_hooks = []
+    goal_rationale = ""
+    if angle and objective:
+        goal_rationale = template_library.angle_goal_fit_reason(
+            angle.get("kind"), objective) or ""
+    look = angle_scene.reconcile_look(row.get("visual_direction") or "", angle)
+    try:
+        plan = await _log_model_call(
+            "creative_plan", "text", TEXT_MODEL,
+            lambda: _cfg("generate_creative_plan")(
+                profile=profile,
+                template={**template, "hook_seconds": int(row.get("hook_seconds") or 3)},
+                angle=angle,
+                objective=objective,
+                duration_seconds=duration,
+                tone=tone,
+                audience=(row.get("audience") or "").strip(),
+                location=(row.get("location") or "").strip(),
+                visual_direction=look["visual_direction"],
+                camera_setup=row.get("camera_setup") or "handheld",
+                brand_voice=(profile.get("tone_voice") or "").strip(),
+                verdict_feedback=verdict_feedback,
+                recent_hooks=recent_hooks,
+                goal_rationale=goal_rationale,
+            ),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=project_id,
+            template_id=template.get("id"),
+        )
+    except Exception as e:
+        logger.error(
+            f"Strategy-refresh suggestion failed for project {project_id}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI plan generation failed. Please try again. ({str(e)[:150]})")
+
+    # The same arrival partition the plan route stores by, so the offered
+    # words are exactly the words Accept would save.
+    clamp = ai_service.partition_spoken_words(
+        plan, int(row.get("hook_seconds") or 3), duration
+    )
+    trimmed_chars = int(clamp["dropped_chars"] or 0) + int(clamp["hook_dropped_chars"] or 0)
+    if trimmed_chars or clamp["middle_text"] != (plan.get("script") or "").strip():
+        suggested = {"hook_line": clamp["hook_line"], "script": clamp["kept"]}
+    else:
+        suggested = {
+            "hook_line": plan.get("hook_line") or "",
+            "script": plan.get("script") or "",
+        }
+
+    suggestion = None
+    if suggested != current_words:
+        hook_seconds = int(row.get("hook_seconds") or 3)
+        app_name = (profile.get("brand_name") or "").strip()
+
+        def _hook_score(words):
+            report = creative_quality.assess_spoken_quality(
+                words["hook_line"], words["script"],
+                hook_seconds=hook_seconds, total_seconds=duration,
+                app_name=app_name,
+            )
+            return (
+                ((report or {}).get("dimensions") or {})
+                .get("hook_stopping_power") or {}
+            ).get("score") or 0
+
+        if suggested["hook_line"] and _hook_score(suggested) >= _hook_score(current_words):
+            suggestion = suggested
+        elif suggested["script"] and suggested["script"] != current_words["script"]:
+            # The refreshed hook is weaker than the saved one: never offer
+            # a downgrade. The script alone may still be worth taking.
+            suggestion = {"hook_line": None, "script": suggested["script"]}
+    return {
+        "direction_changed": True,
+        "changed_fields": changed,
+        "suggestion": suggestion,
+        "current": current_words,
+    }
+
 
 @router.post("/studio/projects/{project_id}/plan-and-strategy")
 async def generate_plan_and_strategy(

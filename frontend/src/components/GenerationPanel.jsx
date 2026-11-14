@@ -241,10 +241,11 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // through with no jump — the button is still disabled with the reason.
   const remedies = [];
   if (noAngle) remedies.push({ label: "Pick an audience angle first", action: "goto-angle" });
-  else if (angleStale) {
-    remedies.push({ label: "Rebuild the strategy for the angle now picked", action: "rebuild-strategy" });
-  } else if (staleStrategy) {
-    remedies.push({ label: "Rebuild the strategy so it matches your saved plan", action: "rebuild-strategy" });
+  else if (angleStale || staleStrategy) {
+    // One label for the rebuild everywhere it is offered (the strategy
+    // panel's button reads the same): the reason it is owed lives in the
+    // alert above, and two phrasings of one action read as two actions.
+    remedies.push({ label: "Rebuild strategy", action: "rebuild-strategy" });
   }
   if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
   if (!ready && !noPhoto && !noAngle && !staleStrategy && !angleStale) {

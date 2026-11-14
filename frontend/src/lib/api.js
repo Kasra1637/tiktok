@@ -364,6 +364,15 @@ export const api = {
   generateStrategy: (id, payload = {}) =>
     client.post(`/studio/projects/${id}/strategy`, payload).then((r) => r.data),
 
+  // Before a rebuild, ask whether the saved Visual & audio direction moved
+  // since the strategy was built (ADR 0133). Free when nothing changed —
+  // the server answers without a model call — and only a real change
+  // spends one plan generation on the refreshed words it offers back.
+  // Nothing is saved by this call: the panel shows the suggestion, and
+  // only the founder's Accept writes it, through updateStudioProject.
+  suggestStrategyRefresh: (id) =>
+    client.post(`/studio/projects/${id}/strategy-suggestions`).then((r) => r.data),
+
   // Asset library (per App Profile)
   getAssets: (profileId, params = {}) =>
     client.get(`/app-profiles/${profileId}/assets`, { params }).then((r) => r.data),
