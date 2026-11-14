@@ -3191,6 +3191,26 @@ def _spoken_line_rules_block() -> str:
         "- NAME THE MOMENT: the hook says exactly when or where it happens — a "
         "time or a place — never a vague stand-in for the moment. Bad: 'halfway "
         "down this path'; say the time of day or the place instead.\n"
+        "- HOOK POWER (the hook line only — it earns the stop, or nothing after "
+        "it matters): speak as the person living the moment, never as a report "
+        "about it. FIRST PERSON, LIVED FEELING: the feeling in the speaker's "
+        "own words — my words, my voice, mine — never label-voice or meta talk "
+        "about labels and wording, and never third-person report voice. "
+        "WITHHOLD THE RESOLUTION: name the problem and stop there — no fix, "
+        "no payoff, no what worked; the demo that follows is the answer. ONE "
+        "STATEMENT: one thought only, never two statements jammed into one "
+        "line. FELT DETAIL, NOT VERDICTS: a concrete thing the moment or the "
+        "body does, never an abstract verdict word like 'borrowed'. The "
+        "moment rule above doubles here: a time or a place, exact. Scored "
+        "proof, from real hooks rated by the app's own craft check: 'Label "
+        "isn't me after masking, I talk it out in quiet garden' scored 7/20 — "
+        "label-voice, and 'talk it out' hands over the resolution. 'Generic "
+        "label after masking in quiet garden isn't your words' scored 12/20 "
+        "— label-voice, third person, resolution given away. 'after masking "
+        "all day quiet garden words feel borrowed' scored 13/20 — 'borrowed' "
+        "is a verdict word, not a felt detail. The shape that stops the "
+        "scroll: 'After masking all day words in the quiet garden aren't "
+        "mine' — moment and place named, first person, resolution withheld.\n"
         "- EXTENSION: the script continues the hook — it answers its question "
         "in the first clause, then finishes or develops it. One person, one "
         "story, one thought: no new problem, no second hook, no hook said "
@@ -3883,9 +3903,10 @@ async def _hook_bake_off(
     candidate is measured with the accepted script by the same
     `_generated_spoken_issues` the editorial loop enforces, so a
     candidate that would be rewritten there — a bare place, a control
-    verb working the app's sliders, a line past the hook's set length,
-    or a hook that does not carry the certified outcome when one exists
-    — is out however well it would score. The certified outcome is a
+    verb working the app's sliders, an app feature noun spoken aloud
+    (ADR 0135), a line past the hook's set length, or a hook that does
+    not carry the certified outcome when one exists — is out however
+    well it would score. The certified outcome is a
     requirement, never a scoring bonus. The existing craft scorer then
     chooses among the survivors only, and a candidate ships only when
     it scores strictly above the draft, so the bake-off can never make

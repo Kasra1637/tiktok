@@ -431,6 +431,27 @@ def _ui_control_hit(text: str) -> str:
     match = _UI_CONTROL_RE.search(_normalize_spoken(text))
     return match.group(0) if match else ""
 
+# The app's own feature nouns are never spoken (ADR 0135). The shared
+# craft block has banned them since the line was first written, but the
+# ban was prompt-side only and it still shipped: "reflections" reached
+# the founder inside a generated hook ("now reflections sound like
+# me"). The noun is the product's own vocabulary for the thing the
+# speaker wrote; nobody says it to their phone — they say "what I
+# wrote", "my notes", "the words on the screen". The list is kept to
+# the one noun the prompts themselves name as the app's feature word:
+# growing it means witnessing another leak, not guessing at vocabulary.
+# Matching is whole-token on normalized text, so ordinary speech never
+# flags: "a quiet reflection on the porch" (the act, singular) and
+# "the lake reflects the last light" (a plain verb) are a person
+# talking, not the product's noun.
+_FEATURE_NOUNS = ("reflections",)
+_FEATURE_NOUN_RE = re.compile(r"\b(?:" + "|".join(_FEATURE_NOUNS) + r")\b")
+
+def _feature_noun_hit(text: str) -> str:
+    """The app feature noun spoken in a line, else ""."""
+    match = _FEATURE_NOUN_RE.search(_normalize_spoken(text))
+    return match.group(0) if match else ""
+
 # Problem-state vocabulary for the ending check (ADR 0128): words that
 # state the unresolved problem itself, as opposed to a response to it.
 # Narrower than _PROBLEM_MARKERS on purpose — an ending may look back
@@ -588,6 +609,20 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 f"{name} works the app's controls out loud ('{ui_control}') — "
                 f"a person names the feeling, never the slider: say what it "
                 f"feels like instead"
+            )
+        # The app's own feature nouns are never spoken (ADR 0135): the
+        # craft block's ban was prompt-side only and the noun still
+        # reached the founder inside a hook, so the observable word is
+        # checked like the other leaks. Living in this list is what
+        # wires it into both callers at once — the plan's editorial
+        # loop corrects it, and the bake-off's hard filter (ADR 0130)
+        # removes any candidate carrying it before scoring.
+        feature_noun = _feature_noun_hit(text)
+        if feature_noun:
+            issues.append(
+                f"{name} speaks the app's feature name ('{feature_noun}') — "
+                f"nobody says the product's nouns to their phone: name the "
+                f"thing in everyday words instead ('what I wrote', 'my notes')"
             )
         # Live POV: a script line is spoken straight to camera in the moment.
         # Quotation marks or a self-narration verb ("I said quietly",

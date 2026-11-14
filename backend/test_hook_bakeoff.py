@@ -107,6 +107,11 @@ LOW_CLEAN = "At 7 a.m. the first line never comes, whatever I try."
 BEST_CLEAN = "Every morning the blank page wins and work never starts."
 GATED_STAR = "At bus stop the blank page wins again, every morning."
 GATED_OFFICE = "At office the blank page wins again, every morning."
+# ADR 0135: otherwise clean and the strongest draw in its set (85,
+# measured on the shipped scorer, against the draft's 79) — but it
+# speaks the app's own feature noun, so the gate, not the score,
+# decides here too.
+FEATURE_STAR = "The reflections never sound like me on Monday mornings."
 OVER_LONG = (
     "Every morning the blank page wins, the work never starts, and the "
     "first line never comes before the coffee goes cold."
@@ -148,6 +153,18 @@ class TestHookBakeOff:
         provider = _ScriptedProvider(
             _plan(DRAFT_HOOK, SCRIPT_1),
             candidates=[GATED_STAR, LOW_CLEAN, OVER_LONG],
+        )
+        result = _generate_1(monkeypatch, provider)
+        assert result["hook_line"] == DRAFT_HOOK
+
+    def test_a_feature_word_candidate_cannot_win_the_bakeoff(self, monkeypatch):
+        """The feature star (85) outscores the draft (79) and the one
+        clean candidate (78), and breaks no other gate — but a spoken
+        line never uses the app's feature nouns (ADR 0135), so the
+        hard filter removes it before scoring and the draft stays."""
+        provider = _ScriptedProvider(
+            _plan(DRAFT_HOOK, SCRIPT_1),
+            candidates=[FEATURE_STAR, LOW_CLEAN],
         )
         result = _generate_1(monkeypatch, provider)
         assert result["hook_line"] == DRAFT_HOOK

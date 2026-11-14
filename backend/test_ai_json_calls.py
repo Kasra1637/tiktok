@@ -2207,7 +2207,18 @@ class TestStrategyBudget:
         # on the only feedback that can actually say what went out. The
         # ceiling moves by a measured 5,250 to 41,500, keeping ~680 of
         # headroom.
-        CEILING = 41_500
+        #
+        # ADR 0135 raises it again, measured: 40,816 -> 42,153 (+1,337,
+        # exactly the shared block's growth 4,726 -> 6,063) for the HOOK
+        # POWER bullet — the five hook rules (first person lived feeling,
+        # resolution withheld, one statement, felt detail over verdict
+        # words, the moment rule doubled) taught with the founder's own
+        # scored pairs (7/20, 12/20, 13/20 and the strong shape). The
+        # block rides in every prompt that writes a hook, strategy
+        # included, because a strategy with no approved plan writes its
+        # own hook line. The ceiling moves by a measured 1,300 to
+        # 42,800, keeping ~650 of headroom.
+        CEILING = 42_800
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

@@ -916,3 +916,139 @@ def test_the_plan_loop_refuses_a_pair_that_keeps_failing_the_gates(monkeypatch):
         )
     assert len(calls) == 3
 
+
+
+# ---------------------------------------------------------------------------
+# Kasra's Nov 14 hook rules (ADR 0135): hook power as instruction, and
+# the feature-noun ban as a code gate.
+#
+# He walked six live garden/masking hooks scored 7-13/20 on Hook
+# stopping power and set the bar at 15/20. The leaks he named: the hook
+# gives away the resolution, meta talk about labels instead of the
+# lived feeling, third-person report voice, abstract verdict words,
+# and one app feature noun spoken aloud ("reflections" reached him in
+# a hook — the ban was prompt-side only). His choice was the soft
+# approach: stronger instructions so 15 becomes typical, no hard floor
+# — and the feature ban becomes a deterministic gate in the same list
+# as the grammar and UI-control gates, so the bake-off's hard filter
+# inherits it.
+# ---------------------------------------------------------------------------
+
+def test_the_craft_block_teaches_hook_power_from_the_scored_pairs():
+    block = ai_service._spoken_line_rules_block()
+    assert "HOOK POWER" in block
+    assert "WITHHOLD THE RESOLUTION" in block
+    assert "ONE STATEMENT" in block
+    # His fixtures, verbatim, scores attached.
+    assert "Label isn't me after masking, I talk it out in quiet garden" in block
+    assert "7/20" in block
+    assert "Generic label after masking in quiet garden isn't your words" in block
+    assert "12/20" in block
+    assert "after masking all day quiet garden words feel borrowed" in block
+    assert "13/20" in block
+    assert "After masking all day words in the quiet garden aren't mine" in block
+
+
+def test_the_plan_prompt_carries_the_hook_power_rules(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return _plan(STRONG_HOOK, STRONG_SCRIPT)
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert "HOOK POWER" in calls[0]["prompt"]
+
+
+def test_the_hook_rewrite_prompt_carries_the_hook_power_rules(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"hook_line": "After masking all day, the words still are not mine."}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.rewrite_hook_line(
+            {"brand_name": "Journal"}, None,
+            "Now reflections sound like me after a long day.",
+        )
+    )
+    assert result == "After masking all day, the words still are not mine."
+    assert "HOOK POWER" in calls[0]["prompt"]
+
+
+# -- The feature-noun gate ---------------------------------------------------
+
+def test_a_hook_speaking_a_feature_noun_is_an_issue():
+    # Kasra's witnessed hook: the line the craft block already quotes
+    # as the bad example. The ban was prompt-side only and it shipped.
+    issues = issues_for("Now reflections sound like me, every time.")
+    assert any(
+        "feature name" in issue and "reflections" in issue for issue in issues
+    )
+
+
+def test_a_script_speaking_a_feature_noun_is_an_issue():
+    issues = issues_for(
+        "Friday evenings feel off, and the reason never has a name.",
+        "I read my reflections back on the walk home, and they finally "
+        "sounded like me.",
+    )
+    assert any(
+        "feature name" in issue and "reflections" in issue for issue in issues
+    )
+
+
+def test_the_everyday_names_for_the_thing_are_not_issues():
+    # What the craft block offers instead — the words a person actually
+    # says — must never trip the gate.
+    for script in (
+        "What I wrote yesterday still sounds like me, every week the same.",
+        "My notes from the walk home say it plainer than I can.",
+        "The words on the screen were mine for once, out in the garden.",
+    ):
+        issues = issues_for(
+            "Friday evenings feel off, and the reason never has a name.", script)
+        assert not any("feature name" in issue for issue in issues), script
+
+
+def test_ordinary_words_that_only_share_the_letters_are_not_issues():
+    # Whole-token matching: 'reflection' as an ordinary act of thought
+    # and 'reflects' as a plain verb are a person talking, not the
+    # product's noun.
+    for hook in (
+        "A quiet reflection on the porch is all I get some days.",
+        "The lake reflects the last light on my evening walk.",
+    ):
+        issues = issues_for(hook)
+        assert not any("feature name" in issue for issue in issues), hook
+
+
+def test_the_plan_loop_rewrites_a_hook_that_speaks_a_feature_noun(monkeypatch):
+    bad = _plan("Now reflections sound like me, every time.", STRONG_SCRIPT)
+    good = _plan(STRONG_HOOK, STRONG_SCRIPT)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return bad if len(calls) == 1 else good
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    result = asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    assert result["hook_line"] == STRONG_HOOK
+    # The correction names the defect, so the rewrite is targeted.
+    assert "feature name" in calls[1]["prompt"]
