@@ -2417,11 +2417,7 @@ export default function CreateVideo() {
               Generate your plan
             </Button>
             <p className="text-base text-muted-foreground">
-              Nothing is written yet. Your choices are set — generate the free
-              plan when you&rsquo;re ready, then read it here.
-            </p>
-            <p className="text-sm text-muted-foreground" data-subtitle="">
-              Writes hook, script, shots, and demo note. Editable below.
+              Your choices are set — generate the free plan and your hook, script, shots, and demo note land here, ready to edit.
             </p>
           </div>
         ) : !project?.script_version ? (

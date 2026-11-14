@@ -191,6 +191,61 @@ class TestOpeningShape:
         assert development == "on the porch step, I stopped waiting and just talked, messy and out of order"
         assert "pick up the phone" not in development
 
+    def test_a_long_development_beat_is_never_cut_mid_thought(self):
+        # Regression: the card clipped the beat at 150 characters with an
+        # ellipsis, so a founder comparing templates read a sentence that
+        # stopped mid-thought ("…and that speaking the…"). The beat is one
+        # sentence by construction, so the card prints it whole.
+        development = angle_scene.opening_development(
+            ANGLE,
+            _template(
+                "Name it", "ignored",
+                "The person keeps typing and deleting the same first word, "
+                "noticing that a tight jaw, a shallow breath and a restless "
+                "hand all arrive together again, and that saying the feeling "
+                "out loud is what finally settles it.",
+            ),
+        )
+        assert len(development) > 150
+        assert "\u2026" not in development
+        assert development == (
+            "the person keeps typing and deleting the same first word, "
+            "noticing that a tight jaw, a shallow breath and a restless "
+            "hand all arrive together again, and that saying the feeling "
+            "out loud is what finally settles it"
+        )
+
+    def test_a_long_approved_middle_is_never_cut_mid_thought(self):
+        # The approved plan's middle takes the same card line, so it is held
+        # to the same rule: whole first sentence, real final word.
+        development = angle_scene.opening_development(
+            ANGLE,
+            _template("Name it", "ignored"),
+            middle=(
+                "The person continues along the same tree lined path, "
+                "noticing that a vague body sensation and a mood shift "
+                "arrive together again, and that speaking the words out "
+                "loud is what finally settles both of them."
+            ),
+        )
+        assert len(development) > 150
+        assert "\u2026" not in development
+        assert development.endswith("what finally settles both of them")
+
+    def test_a_long_shape_is_never_cut_mid_thought(self):
+        # The shape clipped at 220 characters the same way. An approved hook
+        # line is quoted exactly as written (ADR 0108), however long it is.
+        hook = (
+            "Standing on the back step I keep typing the word tired and "
+            "deleting it again because it is not the word and neither is "
+            "fine and neither is okay and the longer I stand there the "
+            "clearer it gets that I need to say the real one out loud."
+        )
+        assert len(hook) > 220
+        shape = angle_scene.opening_shape(ANGLE, _template("Name it", "ignored"), hook_line=hook)
+        assert shape == hook
+        assert "\u2026" not in shape
+
     def test_the_scored_card_quotes_the_plan_when_one_exists(self):
         profile = {"id": "p1", "brand_name": "Vocolens", "app_category": "Health"}
         hook = "Waiting for the right words means the day goes unsaid."

@@ -193,9 +193,10 @@ def _capitalise(text: str) -> str:
 
 # Card lines, not paragraphs: the shape is the opening alone and the
 # development is one beat, because a founder comparing six cards reads one line
-# of each.
-_SHAPE_LIMIT = 220
-_BEAT_LIMIT = 150
+# of each. They are bounded by construction — the shape is one hook or
+# promise line, the development is the middle's first sentence — and they are
+# printed whole: a character cut left founders reading a sentence that stopped
+# mid-thought behind an ellipsis, so no card line is ever clipped here.
 
 
 def _first_sentence(text: str) -> str:
@@ -205,15 +206,6 @@ def _first_sentence(text: str) -> str:
         return ""
     match = re.match(r"(.+?[.!?])(?:\s|$)", blob)
     return (match.group(1) if match else blob).strip()
-
-
-def _clip(text: str, limit: int) -> str:
-    """`text` cut at a word boundary, with an ellipsis when anything was cut."""
-    text = str(text or "").strip()
-    if len(text) <= limit:
-        return text
-    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-\u2014")
-    return cut + "\u2026"
 
 
 def _development_beat(template: dict, scene: dict) -> str:
@@ -273,7 +265,7 @@ def _development_beat(template: dict, scene: dict) -> str:
         beat, flags=re.IGNORECASE,
     ):
         return ""
-    return _clip(beat, _BEAT_LIMIT)
+    return beat
 
 
 def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_line=None, middle=None) -> str:
@@ -297,7 +289,7 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_l
         text = hook.rstrip()
         if text and text[-1] not in ".!?":
             text += "."
-        return _clip(text, _SHAPE_LIMIT)
+        return text
     promise = angle_moment(angle)
     if not promise:
         # No promise on this angle: the template's own staging is the only
@@ -316,7 +308,7 @@ def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_l
         if stripped != opening:
             return stripped.rstrip(".") + "."
         return opening
-    return _clip(promise.rstrip(".") + ".", _SHAPE_LIMIT)
+    return promise.rstrip(".") + "."
 
 
 def opening_development(angle: Optional[dict], template: Optional[dict] = None, hook_line=None, middle=None) -> str:
@@ -342,7 +334,7 @@ def opening_development(angle: Optional[dict], template: Optional[dict] = None, 
             beat = beat[:1].lower() + beat[1:]
         if not beat:
             return ""
-        return _clip(beat, _BEAT_LIMIT)
+        return beat
     if not angle_moment(angle):
         return ""
     return _development_beat(template or {}, video_scene(angle))
