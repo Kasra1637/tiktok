@@ -31,9 +31,10 @@ def test_banned_word_in_direction_is_accepted(monkeypatch):
         template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
     # The banned WORDING never triggers the hard editorial retry; this draft
     # scores 67 on craft, below the 80 bar, so exactly one script-only craft
-    # correction runs (and keeps first draft, same words back).
-    assert len(calls) == 2, calls[1][:200] if len(calls) > 1 else calls
-    assert "CRAFT CORRECTION" in calls[1]
+    # correction runs (and keeps first draft, same words back). The hook
+    # candidates call (ADR 0130) runs between the draft and that correction.
+    assert len(calls) == 3, calls[2][:200] if len(calls) > 2 else calls
+    assert "CRAFT CORRECTION" in calls[2]
     assert "focus" in result["visual_direction"].lower()
 
 

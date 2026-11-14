@@ -3322,7 +3322,7 @@ HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
 REWRITE_MAX_TOKENS = 6000
 
 
-async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "") -> str:
+async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "", *, max_chars: int = 0) -> str:
     """A clearer version of the founder's hook that names the real action (ADR 0084).
 
     A suggestion only: nothing is saved here. A reply that fails a
@@ -3330,6 +3330,16 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     open, a question the angle does not invite — gets one bounded
     correction; a reply still failing after it raises RewriteRefusal with
     the reason, so the founder never sees a fake improvement.
+
+    `max_chars`, when given, is the hook's set length — the aim its
+    seconds hold, the number Review prints ("aiming for about 60" on a
+    three-second hook, where the target and the ceiling meet). Length is
+    a hard acceptance rule, not a preference (ADR 0130): the spoken
+    words are laid over the video when rendered, so a line past its set
+    length overlaps and breaks the visual. Generation is therefore sized
+    by the set length rather than checked after the fact — an
+    over-length reply is rejected, corrected once with the count named,
+    and still refused if it stays over.
     """
     original = str(hook_line or "").strip()
     if not original:
@@ -3339,6 +3349,13 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         f"- {k}: {str(p.get(k)).strip()}"
         for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
         if str(p.get(k) or "").strip()
+    )
+    budget = (
+        f" The hook's set length is {max_chars} characters — the aim its "
+        "seconds hold, the number Review shows — and the rewrite must fit "
+        "inside it: the words are laid over the video when rendered, so a "
+        "longer line overlaps and breaks the visual."
+        if max_chars else ""
     )
     prompt = (
         f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
@@ -3351,7 +3368,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         "once in the line \u2014 zero is better. The clearer hook names the exact moment "
         "\u2014 a time or a place \u2014 wherever the current line leaves it vague. Keep its "
         "meaning, its feeling and roughly its "
-        "length (one short spoken sentence). Never name the app. No quotation marks. "
+        f"length (one short spoken sentence).{budget} Never name the app. No quotation marks. "
         'Return JSON: {"hook_line": "..."}'
     )
     line = ""
@@ -3381,6 +3398,21 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
             prompt += (
                 "\n\nCORRECTION: that was the current hook handed back unchanged. "
                 "Write a genuinely different, clearer version — same meaning, new words."
+            )
+            continue
+        if max_chars and len(line) > max_chars:
+            # Length is an acceptance rule (ADR 0130), checked before the
+            # form rules so an over-length line can never slip out on a
+            # passing form: it gets the same one bounded correction, with
+            # the count named, and the typed refusal if it stays over.
+            refusal = (
+                f"The rewrite kept running long — past the {max_chars} characters "
+                "the hook holds; try again, or edit the line yourself."
+            )
+            prompt += (
+                f"\n\nCORRECTION: that rewrite is {len(line)} characters, but the "
+                f"hook's set length is {max_chars}. Say the same thing in fewer, "
+                "plainer words."
             )
             continue
         # The rewrite keeps the founder's form unless the angle/problem
@@ -3425,11 +3457,16 @@ async def rewrite_spoken_line(
 
     The hook role delegates to `rewrite_hook_line`: its form rules (problem
     first, "I" at most once, a question only when the founder's hook asks)
-    are hook-only (ADR 0084). A middle line is one sentence of the script,
+    are hook-only (ADR 0084), and `max_chars` forwards with it as the
+    hook's set length. A middle line is one sentence of the script,
     rewritten inside its story: it keeps its meaning, its place and roughly
     its length, because its seconds are already spoken for by the rest of
-    the script — `max_chars`, when given, is the exact room the middle's
-    ceiling leaves it. It stays a statement: the hook carries the question
+    the script — `max_chars`, when given, is the line's share of the
+    script's set length: the room the middle's ceiling leaves it after
+    the rest of the script. A suggestion past that share is rejected,
+    never accepted and trimmed (ADR 0130): the words are laid over the
+    video when rendered, so an over-length line overlaps and breaks the
+    visual. It stays a statement: the hook carries the question
     and the script never asks one.
 
     A suggestion only: nothing is saved here. A reply that fails a
@@ -3439,7 +3476,7 @@ async def rewrite_spoken_line(
     improvement.
     """
     if role == "hook":
-        return await rewrite_hook_line(profile, angle, line, objective)
+        return await rewrite_hook_line(profile, angle, line, objective, max_chars=max_chars)
     original = str(line or "").strip()
     if not original:
         raise RuntimeError("There is no line to rewrite yet.")
@@ -3449,11 +3486,12 @@ async def rewrite_spoken_line(
         for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
         if str(p.get(k) or "").strip()
     )
-    if max_chars and max_chars < len(original):
+    if max_chars:
         budget = (
             f" The middle's seconds hold {max_chars} characters for this line "
             "— the rest of the script already uses the remainder — so the "
-            "rewrite must fit inside that."
+            "rewrite must fit inside that: the words are laid over the video "
+            "when rendered, so a longer line overlaps and breaks the visual."
         )
     else:
         budget = (
@@ -3686,6 +3724,193 @@ def _craft_retry_block(result: dict, report: dict) -> str:
 # doubles it from there, and a reply that still truncates raises
 # TruncatedResponse, which the endpoint names for the founder.
 PLAN_MAX_TOKENS = 32768
+
+
+HOOK_CANDIDATES_JSON_SCHEMA = _strict_object({"hooks": _str_array_prop()})
+
+
+# The budget for the hook bake-off's candidates call (ADR 0130). The
+# visible answer is three short hook lines, but the shipped text model
+# reasons at Max and bills that reasoning against max_tokens (ADR 0129),
+# so the budget is almost entirely headroom for thought. The family
+# history is the one-line rewrites': 400 and its doubled 800 came back
+# empty, then 1500 AND its doubled 3000 truncated live, which is why
+# REWRITE_MAX_TOKENS starts at 6000. Three hooks reason about the same
+# spoken rules against one story, so the candidates call starts at the
+# same 6000; _chat_json's retry doubles it from there, and a reply that
+# still truncates raises — the bake-off catches that and keeps the
+# draft hook, so a failed candidates call costs the plan nothing.
+HOOK_CANDIDATES_MAX_TOKENS = 6000
+
+
+async def _hook_bake_off(
+    *,
+    system_message: str,
+    draft_hook: str,
+    script: str,
+    hook_budget: int,
+    middle_budget: int,
+    hook_target: int,
+    hook_seconds: int,
+    duration_seconds: int,
+    app_name: str,
+    allows_question: bool,
+    certified_outcome: str,
+    story_context: str,
+    rules_block: str,
+    hook_form_block: str,
+    promise_rule: str,
+) -> tuple:
+    """Three alternative hooks for an accepted story; the strongest ships.
+
+    Returns (hook, craft_report): the draft hook and its report unless a
+    candidate beats it. The order of operations is ADR 0130's, and the
+    order is the design. The deterministic gates are HARD: each
+    candidate is measured with the accepted script by the same
+    `_generated_spoken_issues` the editorial loop enforces, so a
+    candidate that would be rewritten there — a bare place, a control
+    verb working the app's sliders, a line past the hook's set length,
+    or a hook that does not carry the certified outcome when one exists
+    — is out however well it would score. The certified outcome is a
+    requirement, never a scoring bonus. The existing craft scorer then
+    chooses among the survivors only, and a candidate ships only when
+    it scores strictly above the draft, so the bake-off can never make
+    a plan worse than the single-hook flow it replaces.
+
+    When every candidate breaks a gate, the best of them (fewest
+    issues, then highest craft) gets ONE bounded correction in the
+    editorial style, problems named. A correction that still breaks a
+    gate, or scores no higher than the draft, is discarded: the plan
+    already holds a hard-valid hook, so the editorial loop's loud stop
+    applies to the candidate, never to the plan. Any failure of the
+    candidates call itself returns the draft untouched — byte-for-byte
+    the plan the single-hook flow would have produced.
+    """
+    def _issues(candidate: str) -> list:
+        return _generated_spoken_issues(
+            candidate, script, hook_budget, middle_budget,
+            allows_question=allows_question,
+            certified_outcome=certified_outcome,
+        )
+
+    def _score(candidate: str) -> dict:
+        return creative_quality.assess_spoken_quality(
+            candidate, script,
+            hook_seconds=hook_seconds, total_seconds=duration_seconds,
+            app_name=app_name, allows_question=allows_question,
+        )
+
+    incumbent = _score(draft_hook)
+    prompt = (
+        f"{story_context}\n"
+        f"THE STORY (the accepted script these hooks must open — never rewrite it):\n{script}\n\n"
+        f"CURRENT HOOK (data to beat, not a candidate): {draft_hook}\n\n"
+        f"{rules_block}\n"
+        f"{hook_form_block}\n"
+        f"{promise_rule}"
+        "HOOK BAKE-OFF: write THREE alternative hook lines for this one story, "
+        "each a complete standalone spoken sentence of at most "
+        f"{hook_budget} characters (aim for about {hook_target}), 'I' at most "
+        "once, in the form the HOOK FORM rule picks. Three genuinely different "
+        "openings — for example a confession, a blunt observation, and a cold "
+        "open inside the moment — never one hook reworded three ways, and none "
+        "a copy of the CURRENT HOOK. Each names the story's one specific "
+        "moment or feeling and opens the question the script answers right "
+        "away. The character limit is a hard limit, not an aim: the words are "
+        "laid over the video when rendered, so a line past its set length "
+        "overlaps and breaks the visual.\n"
+        'Return ONLY JSON: {"hooks": ["...", "...", "..."]}'
+    )
+    try:
+        raw = await _chat_json(
+            system_message=system_message,
+            prompt=prompt,
+            context="Creative plan hook candidates",
+            temperature=0.7,
+            max_tokens=HOOK_CANDIDATES_MAX_TOKENS,
+            timeout=120,
+            json_schema=HOOK_CANDIDATES_JSON_SCHEMA,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Hook bake-off candidates call failed (%s); keeping the draft hook.", exc
+        )
+        return draft_hook, incumbent
+    seen = {character_policy.neutralize(draft_hook).lower()}
+    candidates = []
+    for item in (raw or {}).get("hooks") or []:
+        line = re.sub(r"\s+", " ", str(item or "")).strip().strip('"“”')
+        line = character_policy.neutralize(line)
+        if line and line.lower() not in seen:
+            seen.add(line.lower())
+            candidates.append(line)
+    if not candidates:
+        return draft_hook, incumbent
+    best_hook, best_craft = draft_hook, incumbent
+    broken = []
+    survivors = 0
+    for candidate in candidates:
+        issues = _issues(candidate)
+        if issues:
+            broken.append((issues, candidate))
+            continue
+        survivors += 1
+        craft = _score(candidate)
+        if craft["total"] > best_craft["total"]:
+            best_hook, best_craft = candidate, craft
+    if best_hook != draft_hook:
+        logger.info(
+            "Hook bake-off: candidate %r beat the draft hook (%s -> %s/100).",
+            best_hook, incumbent["total"], best_craft["total"],
+        )
+        return best_hook, best_craft
+    if survivors or not broken:
+        return draft_hook, incumbent
+    # Every candidate broke a gate: the best of them gets one bounded
+    # correction, the editorial loop's own pattern at line size.
+    broken.sort(key=lambda item: (len(item[0]), -_score(item[1])["total"]))
+    issues, candidate = broken[0]
+    correction_prompt = (
+        f"{story_context}\n"
+        f"THE STORY (the accepted script this hook must open — never rewrite it):\n{script}\n\n"
+        f"{rules_block}\n"
+        f"{hook_form_block}\n"
+        f"{promise_rule}"
+        f"BAKE-OFF CORRECTION: this candidate hook breaks the spoken-line rules: {candidate}\n"
+        "Problems found: " + "; ".join(issues) + "\n"
+        "Rewrite ONLY the hook so none of those problems remain: one complete "
+        f"standalone spoken sentence of at most {hook_budget} characters, 'I' at "
+        "most once, same story, same moment, same promise.\n"
+        'Return ONLY JSON: {"hook_line": "..."}'
+    )
+    try:
+        fixed_raw = await _chat_json(
+            system_message=system_message,
+            prompt=correction_prompt,
+            context="Creative plan hook correction",
+            temperature=0.6,
+            max_tokens=REWRITE_MAX_TOKENS,
+            timeout=120,
+            json_schema=HOOK_REWRITE_JSON_SCHEMA,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Hook bake-off correction failed (%s); keeping the draft hook.", exc
+        )
+        return draft_hook, incumbent
+    fixed = re.sub(
+        r"\s+", " ", str((fixed_raw or {}).get("hook_line") or "")
+    ).strip().strip('"“”')
+    fixed = character_policy.neutralize(fixed)
+    if fixed and fixed.lower() != draft_hook.lower() and not _issues(fixed):
+        craft = _score(fixed)
+        if craft["total"] > best_craft["total"]:
+            logger.info(
+                "Hook bake-off: corrected candidate %r beat the draft hook (%s -> %s/100).",
+                fixed, incumbent["total"], craft["total"],
+            )
+            return fixed, craft
+    return draft_hook, incumbent
 
 
 async def generate_creative_plan(
@@ -4167,18 +4392,52 @@ async def generate_creative_plan(
             "Problems found: " + "; ".join(issues) + "\n"
             "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
         )
-    # The hard loop has accepted a complete, fitting draft. The craft score is
-    # the next bar, but it is advisory: one targeted retry, then keep whichever
-    # hard-valid draft scores higher. A failed, invalid or weaker retry never
-    # refuses a plan the founder can already review.
-    craft = creative_quality.assess_spoken_quality(
-        hook,
-        script,
+    # The hard loop has accepted a complete, fitting draft. HOOK BAKE-OFF
+    # (ADR 0130): the draft's hook is the incumbent, not the answer — three
+    # alternatives are written for the same story, the hard gates filter
+    # them, and the craft score picks the strongest survivor. Kasra's
+    # directive was hooks that land around 8-9 every time; choice raises
+    # the floor in a way one more prompt rule never did, because the weak
+    # hooks are filtered before they can ship. The bake-off is never
+    # worse than the single-hook flow: any failure inside it returns the
+    # draft hook and its craft score untouched, and the craft correction
+    # below then runs exactly as before on whichever hook won.
+    bakeoff_context = (
+        f"VIEWER: {brief['audience']}\n"
+        f"THE VIEWER'S PROBLEM: {brief['angle_user_problem'] or brief['objective']}\n"
+        f"THE ANGLE'S PROMISE: {brief['angle_hook_promise']}\n"
+        f"THE FEATURE IN THE STORY: {brief['angle_feature']}\n"
+        f"THE FEELING TO LEAVE: {brief['angle_emotion']}\n"
+    )
+    draft_hook = hook
+    hook, craft = await _hook_bake_off(
+        system_message=system_message,
+        draft_hook=draft_hook,
+        script=script,
+        hook_budget=hook_budget,
+        middle_budget=middle_budget,
+        hook_target=hook_target,
         hook_seconds=hook_seconds,
-        total_seconds=duration_seconds,
+        duration_seconds=duration_seconds,
         app_name=str(profile.get("brand_name") or ""),
         allows_question=allows_question,
+        certified_outcome=certified_outcome,
+        story_context=bakeoff_context,
+        rules_block=_spoken_line_rules_block(),
+        hook_form_block=_hook_form,
+        promise_rule=promise_rule,
     )
+    if hook != draft_hook:
+        result["hook_line"] = hook
+        # A beat that quotes the draft hook verbatim follows the swap, so
+        # the timeline and the spoken line never disagree about the words.
+        for beat in result.get("beat_timeline") or []:
+            if isinstance(beat, dict) and isinstance(beat.get("text"), str) and draft_hook in beat["text"]:
+                beat["text"] = beat["text"].replace(draft_hook, hook)
+    # The craft score is the next bar, but it is advisory: one targeted
+    # retry, then keep whichever hard-valid draft scores higher. A failed,
+    # invalid or weaker retry never refuses a plan the founder can already
+    # review.
     if craft["total"] < CRAFT_RETRY_BELOW:
         first_total = craft["total"]
         logger.info(

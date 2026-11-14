@@ -743,17 +743,10 @@ const handleGenerate = async () => {
           Review and save your script plan first. A saved plan is checked before rendering.
         </p>
       )}
-      {overflowBlocked && (
-        <Alert variant="destructive" data-testid="generate-overflow-blocked">
-          <AlertTitle>Script too long for this piece</AlertTitle>
-          <AlertDescription>
-            Your approved script has {project.spoken_overflow.dropped_chars} characters that do not
-            fit in the {project.spoken_overflow.middle_seconds}s middle. A generated plan is trimmed
-            to fit on arrival, so this is your own edit above — shorten it, or press Regenerate plan
-            above on Review &amp; submit, then rebuild the strategy and generate.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* No overflow alert in this panel either: the strategy panel above
+          carries the one detailed notice for this state (Kasra's one-notice
+          rule). This panel's part of the stop is the disabled Generate
+          button — the gate still refuses the render, it just speaks once. */}
 
       {/* Location, editable here on the render step. The plan's saved location
           is the single source of truth for where the video happens: saving a

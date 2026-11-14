@@ -123,7 +123,11 @@ def test_hook_role_falls_back_to_the_saved_hook(api, monkeypatch):
         project["id"], RewriteLineRequest(role="hook"), ANON))
     assert out == {"line": CLEARER, "original": HOOK, "role": "hook"}
     assert calls[0]["line"] == HOOK
-    assert calls[0]["max_chars"] == 0
+    # The hook role is bounded by the hook's set length (ADR 0130) — the
+    # aim Review prints for its seconds — not left unbounded as before.
+    assert calls[0]["max_chars"] == spoken_targets(
+        project.get("hook_seconds") or 3, project.get("duration_seconds") or 15,
+    )["hook"]["target"]
 
 
 def test_unknown_project_bad_role_and_empty_line_are_refused(api):
@@ -255,7 +259,7 @@ def test_middle_rewrite_unchanged_reply_raises(monkeypatch):
 
 
 def test_hook_role_delegates_to_the_hook_rewrite(monkeypatch):
-    async def fake_hook(profile, angle, hook_line, objective=""):
+    async def fake_hook(profile, angle, hook_line, objective="", **kwargs):
         return "A sharper hook."
     monkeypatch.setattr(ai_service, "rewrite_hook_line", fake_hook)
     line = asyncio.run(ai_service.rewrite_spoken_line({}, None, "A dull hook.", "hook"))
@@ -273,6 +277,12 @@ def test_hook_role_delegates_to_the_hook_rewrite(monkeypatch):
 # retry, though question and length failures got one. And the endpoint
 # flattened every failure into the same sentence, so the reason the
 # service had already named never reached the founder.
+#
+# The room rule itself was superseded by ADR 0130: the own-length credit
+# is gone, a line is handed only its share of the set length, and the
+# canned replies below fit those shares (the stored project measures
+# the middle at nine seconds — a 135 ceiling, not the 150 the original
+# fixture comment claimed; the credit had masked the difference).
 
 SHOT_HOOK = "Mood flipped again halfway down this path today."
 SHOT_S1 = (
@@ -282,14 +292,15 @@ SHOT_S1 = (
 SHOT_S2 = "I still don't know what sets that flip off."
 SHOT_SCRIPT = SHOT_S1 + " " + SHOT_S2
 # Clearer replies a real provider gives: each shorter than the line it
-# replaces, the softener gone — but each longer than the room the old
-# math left (106 of 109 for the first line, 40 of 43 for the second).
-SHOT_S1_CLEARER = (
-    "It turns at one, after I eat lunch at my desk most days, and "
-    "I have noticed that flipped mood is not random."
-)
-SHOT_S2_CLEARER = "I still don't know what's setting it off."
-SHOT_HOOK_CLEARER = "My mood flips at one every day, right after lunch at my desk."
+# replaces, the softener gone — and each inside its line's share of the
+# set length (91 and 25 against the 135 ceiling the stored seconds
+# yield; the hook inside its 60). They used to sit a few characters
+# over the shares the old formula left and were accepted under the
+# own-length credit; ADR 0130's length rule removed the credit, so the
+# replies themselves had to learn to fit.
+SHOT_S1_CLEARER = "It turns at one, after lunch at my desk, and I notice the flipped mood is not random."
+SHOT_S2_CLEARER = "Unsure what flips it."
+SHOT_HOOK_CLEARER = "My mood flips at one daily, right after lunch at my desk."
 
 
 def _shot_project(api):
@@ -314,8 +325,8 @@ def _shot_project(api):
     project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
         brand_profile_id=profile["id"]), user_id=ANON))
     # The screenshot's shape, written in one update: a 3-second hook in a
-    # 13-second piece leaves the script a 150-character ceiling, and the
-    # body is 153 — over it.
+    # 13-second piece (the stored middle measures nine seconds — a
+    # 135-character ceiling), and the body is 153 — over it.
     _run(api.update_studio_project(
         project["id"],
         UpdateStudioProjectRequest(
@@ -326,7 +337,7 @@ def _shot_project(api):
     return _run(api.get_studio_project(project["id"], ANON))
 
 
-def test_over_ceiling_body_credits_the_lines_own_length(api, monkeypatch):
+def test_over_ceiling_body_hands_a_line_only_its_share(api, monkeypatch):
     from models import RewriteLineRequest
     project = _shot_project(api)
     calls = []
@@ -337,11 +348,19 @@ def test_over_ceiling_body_credits_the_lines_own_length(api, monkeypatch):
             RewriteLineRequest(
                 line=line, role="middle", hook_line=SHOT_HOOK, script=SHOT_SCRIPT),
             ANON))
-    # Replacing a line frees the line's own length, so the room a line is
-    # handed can never be smaller than the line itself — even when the
-    # body is already over its ceiling, which is exactly when a shorter
-    # rewrite helps most.
-    assert [c["max_chars"] for c in calls] == [len(SHOT_S1), len(SHOT_S2)]
+    # The room a line is handed is its share of the set length — the
+    # ceiling minus what the rest of the script uses (ADR 0130). An
+    # earlier rule credited the line's own length on top, so a
+    # suggestion could be accepted at the length of a line that was
+    # itself over its share; the founder's length rule removed the
+    # credit, because an over-length line overlaps when rendered.
+    ceiling = spoken_targets(
+        project.get("hook_seconds") or 3, project.get("duration_seconds") or 15,
+    )["script"]["ceiling"]
+    assert [c["max_chars"] for c in calls] == [
+        ceiling - (len(SHOT_SCRIPT) - len(SHOT_S1)),
+        ceiling - (len(SHOT_SCRIPT) - len(SHOT_S2)),
+    ]
 
 
 def test_the_screenshot_clicks_all_succeed(api, monkeypatch):

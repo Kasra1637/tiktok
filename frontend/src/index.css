@@ -475,6 +475,22 @@ body {
     border-top: 1px solid var(--hairline);
 }
 
+/* One row per line on desktop: the line's words take the flexible column
+ * and its clearer-line button sits at the right, so the stack reads
+ * compact instead of doubling its height with a button under every line.
+ * An open suggestion is a panel, not a button, so that row stacks again
+ * and the panel keeps the full width. Narrow screens keep the stack. */
+@media (min-width: 768px) {
+    .script-line-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        column-gap: 1rem;
+    }
+    .script-line-row:has(.inset-panel) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .surface-glass {
     background-color: hsl(228 14% 9% / 0.7);
     backdrop-filter: blur(16px) saturate(140%);

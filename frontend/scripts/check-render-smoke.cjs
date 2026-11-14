@@ -3135,6 +3135,11 @@ async function main() {
     // plan, and the render refuses it. The copy has to say the rebuild is the
     // next step, or the founder trims, generates, and meets a second refusal.
     expectText(ctx, "rebuild the strategy", "the overflow warning does not say a rebuild follows the trim");
+    // One notice per state (Kasra's rule): this detailed warning is the only
+    // overflow notice — the red "Script too long for this piece" duplicate
+    // that sat at the top of this panel, and its twin in the generation
+    // panel, are gone at their sources.
+    expectAbsent(ctx, "Script too long for this piece", "the red duplicate overflow notice still renders");
   });
 
   // The property the running-total and coverage checks used to protect: nothing
@@ -3263,9 +3268,11 @@ async function main() {
   });
 
   // Words that do not fit are not spoken, and the gate refuses the render — so
-  // the button has to be disabled with the fix named, not enabled into a 409.
-  // An enabled Generate under a blocking overflow warning is the gate working
-  // and the UI lying about it.
+  // the button has to be disabled, not enabled into a 409. An enabled Generate
+  // under a blocking overflow is the gate working and the UI lying about it.
+  // The stop itself is named once, by the detailed overflow warning in the
+  // strategy panel mounted above this one (Kasra's one-notice rule), so this
+  // panel disables the button and carries no second copy of the notice.
   await check("GenerationPanel disables Generate while words do not fit", async (ctx) => {
     await mount(GenerationPanel, {
       project: {
@@ -3279,8 +3286,7 @@ async function main() {
     if (!generate.disabled) {
       throw new Error("Generate stays enabled while approved words do not fit");
     }
-    expectText(ctx, "Script too long for this piece", "the overflow block does not name the stop");
-    expectText(ctx, "Regenerate plan", "the overflow block does not name the fix");
+    expectAbsent(ctx, "Script too long for this piece", "the red duplicate overflow notice still renders");
   });
 
   // -------------------------------------------------------------------------

@@ -264,7 +264,7 @@ def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
         )
     )
     assert result["hook_line"] == good["hook_line"]
-    assert len(calls) == 2
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
     # The correction names the defect, so the rewrite is targeted.
     assert "first person" in calls[1]["prompt"]
 
@@ -293,7 +293,7 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
         )
     )
     assert result["hook_line"] == good["hook_line"]
-    assert len(calls) == 2
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
     assert "question" in calls[1]["prompt"].lower()
 
 
@@ -345,10 +345,10 @@ def test_the_plan_loop_retries_a_hard_valid_but_craft_weak_draft(monkeypatch):
     # generic "try again".
     assert result["hook_line"] == WEAK_HOOK
     assert result["script"] == STRONG_SCRIPT
-    assert len(calls) == 2
-    assert "CRAFT CORRECTION" in calls[1]["prompt"]
-    assert "Rewrite ONLY the script" in calls[1]["prompt"]
-    assert "EXACTLY as written" in calls[1]["prompt"]
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
+    assert "CRAFT CORRECTION" in calls[2]["prompt"]
+    assert "Rewrite ONLY the script" in calls[2]["prompt"]
+    assert "EXACTLY as written" in calls[2]["prompt"]
 
 
 def test_a_craft_retry_never_refuses_the_plan(monkeypatch):
@@ -375,7 +375,7 @@ def test_a_craft_retry_never_refuses_the_plan(monkeypatch):
     # hard-valid draft instead of failing a plan the founder can already use.
     assert result["hook_line"] == WEAK_HOOK
     assert result["script"] == WEAK_SCRIPT
-    assert len(calls) == 2
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
 
 
 def test_a_good_draft_gets_no_craft_retry(monkeypatch):
@@ -395,7 +395,7 @@ def test_a_good_draft_gets_no_craft_retry(monkeypatch):
         )
     )
     assert result["hook_line"] == STRONG_HOOK
-    assert len(calls) == 1
+    assert len(calls) == 2  # draft + hook candidates call (ADR 0130); still no craft retry
 
 
 # Kasra's reviewed pair (Nov 12): the rules already said the script never
@@ -486,7 +486,7 @@ def test_the_plan_loop_rewrites_a_question_ending_script(monkeypatch):
         )
     )
     assert result["script"] == STRONG_SCRIPT
-    assert len(calls) == 2
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
     # The correction names the defect, so the rewrite is targeted.
     assert "ends on a question" in calls[1]["prompt"]
 
@@ -890,7 +890,7 @@ def test_the_plan_loop_rewrites_the_nov13_pair(monkeypatch):
         )
     )
     assert result["hook_line"] == STRONG_HOOK
-    assert len(calls) == 2
+    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
     # The correction names all three defects, so the rewrite is targeted.
     assert "article" in calls[1]["prompt"]
     assert "slider" in calls[1]["prompt"]

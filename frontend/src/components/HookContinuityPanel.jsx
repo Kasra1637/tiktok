@@ -245,11 +245,6 @@ export function HookContinuityPanel({ project, onProjectChange }) {
   const hasStrategy = Boolean(strategy?.hook_line);
   const assets = project?.assets || [];
   const hasCharacter = assets.some((a) => a.kind === "character_reference");
-  // Same render gate as the Generate button's: words that cannot be spoken in
-  // the piece's seconds refuse the render, recomputed from the live plan. The
-  // founder is stopped here too, so the block has to name the Review-step fix
-  // rather than only appearing as a strategy-panel warning below.
-  const overflowBlocked = (project?.spoken_overflow?.dropped_chars || 0) > 0;
   // The strategy is built from one specific version of the plan. Edit the plan
   // afterwards and the strategy is describing a video that is no longer the
   // approved one, so this reads the flag the server already computes rather
@@ -393,17 +388,10 @@ export function HookContinuityPanel({ project, onProjectChange }) {
           </AlertDescription>
         </Alert>
       )}
-      {overflowBlocked && (
-        <Alert variant="destructive">
-          <AlertTitle>Script too long for this piece</AlertTitle>
-          <AlertDescription>
-            Trim the script above on Review &amp; submit — the middle&apos;s spoken words are shown
-            there, with a button that keeps only what fits. Then rebuild the strategy
-            here, because a trim is a plan edit. Rendering is blocked until every approved
-            word fits in the piece&apos;s seconds.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* No overflow alert at the top of this panel: the detailed
+          spoken-overflow warning in the strategy detail below is the one
+          notice for that state (Kasra's one-notice rule) — a red duplicate
+          used to sit here saying the same thing in fewer words. */}
 
       {angleStale && (
         <Alert variant="warning">

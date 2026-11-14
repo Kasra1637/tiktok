@@ -536,7 +536,7 @@ class TestChatModelRequestShape:
         _run(ai_service.generate_content_angles({"brand_name": "B"}))
         _run(ai_service.generate_creative_plan(
             profile={"brand_name": "B"}, template={"name": "T"}))
-        assert len(rec.payloads) == 4  # +1 script-only craft correction at the 80 bar
+        assert len(rec.payloads) == 5  # +1 hook candidates call (ADR 0130), +1 script-only craft correction at the 80 bar
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
             assert payload["reasoning_effort"] == "max"
@@ -1388,8 +1388,9 @@ class TestCreativePlanBudget:
         assert result["hook_line"] == plan["hook_line"]
         assert result["script"] == plan["script"]
         # PLAN_MAX_TOKENS truncates, the doubled retry recovers, then the
-        # 80-bar craft correction runs at PLAN_MAX_TOKENS again.
-        assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 32768]
+        # hook candidates call runs at HOOK_CANDIDATES_MAX_TOKENS
+        # (ADR 0130), and the 80-bar craft correction at PLAN_MAX_TOKENS again.
+        assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
 
 
 def _worst_verdict_bundle(i):
@@ -2422,7 +2423,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
         correction = rec.payloads[1]["messages"][1]["content"]
         assert bad["hook_line"] in correction
         assert "Rewrite" in correction
@@ -2447,7 +2448,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
 
     def test_oversized_middle_is_rewritten_without_losing_its_resolution(self, monkeypatch):
         import ai_service
@@ -2468,7 +2469,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
 
     def test_grammatical_preposition_endings_do_not_trigger_retries(self, monkeypatch):
         import ai_service
@@ -2482,7 +2483,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3  # +1 hook candidates call (ADR 0130)
 
     def test_repeated_bad_drafts_fail_without_returning_chopped_copy(self, monkeypatch):
         import ai_service
@@ -2506,7 +2507,7 @@ class TestGeneratedStoryRepair:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3  # +1 hook candidates call (ADR 0130)
         prompt = rec.payloads[0]["messages"][1]["content"]
         assert "MIDDLE ONLY" in prompt
         assert "full spoken script for BOTH" not in prompt
@@ -2573,7 +2574,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert "download" not in result["script"].lower()
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
         assert "download" in rec.payloads[1]["messages"][1]["content"]
 
     def test_an_ai_sounding_draft_is_rewritten(self, monkeypatch):
@@ -2595,7 +2596,7 @@ class TestSpokenLineCraft:
             profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
             duration_seconds=15,
         ))
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
 
     def test_a_genuine_customer_draft_is_not_rewritten(self, monkeypatch):
         """The false-positive guard: these are real lines, so one call only.
@@ -2624,7 +2625,7 @@ class TestSpokenLineCraft:
         ))
         assert result["hook_line"] == good["hook_line"]
         assert result["script"] == good["script"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3  # +1 hook candidates call (ADR 0130)
 
     def test_a_claimed_history_with_the_app_is_rewritten(self, monkeypatch):
         """The generator catching its own invented testimonial.
@@ -2652,7 +2653,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert result["hook_line"] == good["hook_line"]
-        assert len(rec.payloads) == 3
+        assert len(rec.payloads) == 4  # +1 hook candidates call (ADR 0130)
         correction = rec.payloads[1]["messages"][1]["content"]
         assert "personal history" in correction
 
@@ -2676,7 +2677,7 @@ class TestSpokenLineCraft:
             duration_seconds=15,
         ))
         assert result["hook_line"] == good["hook_line"]
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3  # +1 hook candidates call (ADR 0130)
 
     def test_the_character_limits_are_untouched(self):
         """Rule one of the brief, pinned as a number rather than a promise.
@@ -3113,7 +3114,7 @@ class TestHookScriptContinuity:
         ))
         assert result["hook_line"] == self.HOOK
         assert result["script"] == self.DANGLING_SCRIPT
-        assert len(rec.payloads) == 2
+        assert len(rec.payloads) == 3  # +1 hook candidates call (ADR 0130)
 
 
 class TestCompleteSentences:

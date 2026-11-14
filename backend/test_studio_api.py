@@ -1545,8 +1545,9 @@ class TestGeneratedPlanEditorialFlow:
         assert bound["segments"][0]["script"] == good["hook_line"]
         assert bound["segments"][1]["script"] == good["script"]
         assert overflow == {}
-        # 2 editorial payloads + 1 script-only craft correction at the 80 bar.
-        assert len(rec.payloads) == 3
+        # 2 editorial payloads + 1 hook candidates call (ADR 0130)
+        # + 1 script-only craft correction at the 80 bar.
+        assert len(rec.payloads) == 4
 
     def test_generation_uses_project_hook_length_not_template_length(self, api, monkeypatch):
         from models import GeneratePlanRequest, UpdateStudioProjectRequest
@@ -2375,10 +2376,11 @@ class TestPlanRewriteAvoidsBannedClaims:
             profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},
             template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
         # One craft retry may run for this weak pair, but it is not a wording
-        # correction: the accepted claim is returned exactly as written.
-        assert len(calls) == 2
-        assert "CRAFT CORRECTION" in calls[1]
-        assert "EDITORIAL CORRECTION" not in calls[1]
+        # correction: the accepted claim is returned exactly as written. The
+        # hook candidates call (ADR 0130) runs before that retry.
+        assert len(calls) == 3
+        assert "CRAFT CORRECTION" in calls[2]
+        assert "EDITORIAL CORRECTION" not in calls[2]
         assert "cures anxiety" in result["script"].lower()
 
     def test_persistent_banned_claim_fails_loudly(self, monkeypatch):

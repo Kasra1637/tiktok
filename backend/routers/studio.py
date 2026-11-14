@@ -1408,11 +1408,21 @@ async def suggest_hook_rewrite(
         "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
         (row["content_angle_id"], user_id),
     ) if row.get("content_angle_id") else None
+    # The hook's set length — the aim Review prints for its seconds — is
+    # a hard bound for a suggestion (ADR 0130): the spoken words are
+    # laid over the video when rendered, so a line past its set length
+    # overlaps and breaks the visual. Generation is sized by the set
+    # length, not checked after the fact.
+    hook_max_chars = check_spoken_story(
+        original, row.get("script") or "", row.get("hook_seconds") or 3,
+        row.get("duration_seconds") or 15,
+    )["hook"]["target"]
     try:
         line = await _log_model_call(
             "hook_rewrite", "text", TEXT_MODEL,
             lambda: ai_service.rewrite_hook_line(
-                profile or {}, angle, original, row.get("objective") or ""
+                profile or {}, angle, original, row.get("objective") or "",
+                max_chars=hook_max_chars,
             ),
             user_id, studio_project_id=project_id,
         )
@@ -1430,13 +1440,17 @@ async def suggest_line_rewrite(
     """A clearer version of any spoken line the founder may accept.
 
     Advisory like the hook rewrite (ADR 0084): writes nothing. The hook
-    role runs the hook rewrite unchanged; a middle line is rewritten inside
-    the room the rest of the script leaves in the middle's seconds, plus
-    the line's own length, which replacing it frees — so an accepted
-    suggestion can never lengthen the script, and a shorter one can pull
-    an over-ceiling body back under. When no room is left, the refusal
-    says to shorten the script first instead of offering a rewrite that
-    could never fit.
+    role runs the hook rewrite bounded by the hook's set length; a
+    middle line is rewritten inside its share of the middle's set
+    length — the room the rest of the script leaves in the middle's
+    seconds. A suggestion past its line's set length is rejected, never
+    accepted and trimmed (ADR 0130): the spoken words are laid over
+    the video when rendered, so an over-length line overlaps and breaks
+    the visual, which is why generation is sized by the set lengths
+    rather than checked after the fact. A shorter suggestion is exactly
+    how an over-ceiling body gets pulled back under. When no share is
+    left, the refusal says to shorten the script first instead of
+    offering a rewrite that could never fit.
     """
     require_ai_configured()
     row = await _fetch_one(
@@ -1466,6 +1480,12 @@ async def suggest_line_rewrite(
     hook_line = (payload.hook_line or row.get("hook_line") or "").strip()
     script = (payload.script or row.get("script") or "").strip()
     max_chars = 0
+    if role == "hook":
+        # The hook's set length, the same aim the hook endpoint above
+        # hands the hook rewrite (ADR 0130).
+        max_chars = check_spoken_story(
+            original, script, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
+        )["hook"]["target"]
     if role == "middle":
         # A missing duration falls back to fifteen seconds, the same reading
         # the craft score gives an old project: it must not be measured
@@ -1473,13 +1493,14 @@ async def suggest_line_rewrite(
         ceiling = check_spoken_story(
             hook_line, script, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
         )["script"]["ceiling"]
-        # Replacing a line frees the line's own length, so the room is
-        # never less than the line itself. The plain remainder alone
-        # would leave an over-ceiling body no room at all: each line
-        # would get less space than it takes up today, and even a
-        # shorter rewrite — the kind that pulls the body back under —
-        # would be refused as too long.
-        max_chars = max(ceiling - (len(script) - len(original)), len(original))
+        # The line's share of the set length: the ceiling minus what the
+        # rest of the script already uses. An earlier rule credited the
+        # line's own length on top, so a suggestion could be accepted at
+        # the length of a line that was itself over its share — the set
+        # length is the requirement now (ADR 0130), and a suggestion
+        # that fits the share is precisely how an over-ceiling body
+        # gets pulled back under it.
+        max_chars = ceiling - (len(script) - len(original))
         if max_chars < 16:
             raise HTTPException(
                 status_code=400,

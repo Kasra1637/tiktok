@@ -58,7 +58,7 @@ def _project(api, hook_line="I don't want to type anything"):
 
 
 def _fake(calls, reply="I don't want to write in my journal today"):
-    async def fake(profile, angle, hook_line, objective=""):
+    async def fake(profile, angle, hook_line, objective="", **kwargs):
         calls.append(hook_line)
         return reply
     return fake
