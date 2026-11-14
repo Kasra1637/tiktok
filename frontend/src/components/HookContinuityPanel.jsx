@@ -828,7 +828,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
             >
               <StrategyBlock
                 title="The scene"
-                description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Render your Hook + Story below; lighting and wardrobe live on Review & submit."
+                description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Visual & audio direction on the plan, where the wardrobe is picked too; lighting is set from this video's scene."
                 icon={MapPin}
                 hideTitle
                 rows={[

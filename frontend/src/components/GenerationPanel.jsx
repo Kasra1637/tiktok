@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Textarea } from "./ui/textarea";
 import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../lib/api";
@@ -14,7 +13,7 @@ import {
 } from "../lib/videoLength";
 import {
   Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Smartphone, Check, Film, MapPin, Save,
+  Play, Info, Clock, Smartphone, Check, Film,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 
@@ -159,14 +158,6 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
-  // The Location editor. The plan's `visual_direction` is the single source of
-  // truth for where the video happens; editing it here saves it (and rewrites
-  // the strategy's place-bearing lines server-side) without leaving the render
-  // step. The draft follows the saved value so a re-render never shows a stale
-  // local edit.
-  const [locationDraft, setLocationDraft] = useState("");
-  const [savingLocation, setSavingLocation] = useState(false);
-  const [locationNote, setLocationNote] = useState(null);
   const timer = useRef(null);
   const generationRef = useRef(null);
   // Keep generationRef current so visibility resumes can read the live row
@@ -490,57 +481,6 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     setPreviewBroken(false);
   }, [trackedGenerationId]);
 
-  // The Location draft follows the saved plan's value whenever the project
-  // reloads — an autosave elsewhere, a sync, or this panel's own save — so the
-  // input never shows text that is not what will render. `location` is the
-  // canonical field; `visual_direction` is the legacy mirror.
-  useEffect(() => {
-    setLocationDraft(project?.location || project?.visual_direction || "");
-  }, [projectId, project?.location, project?.visual_direction]);
-
-  const handleSaveLocation = async () => {
-    const value = locationDraft.trim();
-    if (value === (project?.location || project?.visual_direction || "").trim()) return;
-    setSavingLocation(true);
-    setError(null);
-    setLocationNote(null);
-    try {
-      const updated = await api.updateStudioProject(projectId, { location: value });
-      // Same rule as every other saved edit on Review: a content save
-      // re-marks the project ready, because the founder reviewed the exact
-      // text they saved. A server refusal (a location the scene
-      // checks reject) is reported rather than hidden, and the draft state stands.
-      let settled = updated;
-      try {
-        settled = await api.markProjectReady(updated.id);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      }
-      onProjectChange?.(settled);
-      const change = updated?.location_change || {};
-      const changed = change.changed || [];
-      const blocked = change.blocked || [];
-      const parts = [];
-      if (changed.length) {
-        parts.push(`Rewritten to match: ${changed.join(", ")}.`);
-      }
-      if (blocked.length) {
-        // Spoken words are never rewritten; a props or movement list that
-        // cannot hold everything is reported instead of cut (ADR 0092).
-        parts.push(
-          `Something still disagrees (${blocked
-            .map((b) => `${b.field} ${b.reason}`)
-            .join("; ")}). Fix it on Review & submit, or the render will refuse.`
-        );
-      }
-      setLocationNote(parts.join(" ") || "Location saved.");
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setSavingLocation(false);
-    }
-  };
-
 const handleGenerate = async () => {
     // "Generate another" runs a second render on a video the founder has
     // already seen. Idempotency stops accidental duplicates of one click, not a
@@ -758,64 +698,6 @@ const handleGenerate = async () => {
           carries the one detailed notice for this state (Kasra's one-notice
           rule). This panel's part of the stop is the disabled Generate
           button — the gate still refuses the render, it just speaks once. */}
-
-      {/* Location, editable here on the render step. The plan's saved location
-          is the single source of truth for where the video happens: saving a
-          change rewrites the strategy's place-bearing lines to match on the
-          server (hook concept, position in frame, what they do, movement,
-          lighting, colour palette) and keeps the strategy current, so no
-          second tab and no paid rebuild are needed to move the video. Spoken
-          lines, wardrobe, props, voice and camera are deliberately untouched. */}
-      <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="render-location">
-        <GroupLabel icon={MapPin}>Location</GroupLabel>
-        <p className="text-sm text-muted-foreground">
-          The one place this video happens. Editing it rewrites the hook concept, position in
-          frame, what they do, movement, lighting and colour palette to match; your spoken lines,
-          wardrobe, props, voice and camera are untouched.
-        </p>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-0 flex-1 space-y-1">
-            <label htmlFor="render-location" className="text-sm font-semibold">Where it happens</label>
-            {/* A place is a sentence, not a single line: a text input cut a
-                long Location off at the edge, so the founder could never read
-                the whole description they were about to save. The shared
-                Textarea wraps and grows with the text. */}
-            <Textarea
-              id="render-location"
-              data-testid="render-location-input"
-              rows={2}
-              value={locationDraft}
-              onChange={(e) => setLocationDraft(e.target.value)}
-              disabled={inFlight || savingLocation}
-              placeholder="For example: A tidy kitchen with a coffee maker on the counter"
-            />
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleSaveLocation}
-            disabled={
-              inFlight
-              || savingLocation
-              || !projectId
-              || locationDraft.trim() === (project?.location || project?.visual_direction || "").trim()
-            }
-            busy={savingLocation}
-          >
-            <Save className="h-3.5 w-3.5" /> {savingLocation ? "Saving" : "Save location"}
-          </Button>
-        </div>
-        {!locationNote && (
-          <p className="text-sm text-muted-foreground">
-            Lighting and time of day live in the strategy panel above; saving moves only what matches the place.
-          </p>
-        )}
-        {locationNote && (
-          <p className="text-sm text-muted-foreground" data-testid="render-location-note">
-            {locationNote}
-          </p>
-        )}
-      </div>
 
       {models && (
         <div className="space-y-2">
@@ -1064,6 +946,11 @@ const handleGenerate = async () => {
                       src={previewUrl}
                       controls
                       playsInline
+                      // Same native-controls contract as the History card
+                      // (ADR 0137): play, seek, volume and fullscreen stay;
+                      // the browser's three-dots overflow stays empty and gone.
+                      controlsList="nodownload noremoteplayback"
+                      disablePictureInPicture
                       preload="none"
                       poster={posterUrl || undefined}
                       onError={() => setPreviewBroken(true)}

@@ -254,6 +254,10 @@ def normalize_strategy(raw: dict) -> dict:
     result["scene"]["props"], _ = scene_consistency.prune_scenery_props(
         result["scene"].get("props"), result["scene"].get("location")
     )
+    # The outfit is worn, not carried: Props never restate the Wardrobe.
+    result["scene"]["props"], _ = scene_consistency.prune_wardrobe_props(
+        result["scene"].get("props"), result["scene"].get("wardrobe")
+    )
     result["performance"] = _normalize_strategy_section(
         raw.get("performance"), STRATEGY_PERFORMANCE_FIELDS,
         {"movement": scene_consistency.MOVEMENT_LIMIT},

@@ -363,8 +363,15 @@ class TestE2EFullJourney:
         assert first["status"] == "generating"
         second = _ok(client.post(f"/api/generations/{gen['id']}/poll"),
                      "POST poll #2")
-        assert second["status"] == "completed"
-        assert second["video_url"] == "https://example.invalid/e2e-clip.mp4"
+        # ADR 0138: the poll that notices the finish answers with the row's
+        # current state — the durable save rides that response's
+        # BackgroundTasks (which the TestClient has run by the time the
+        # call returns), and the NEXT poll serves the completed row.
+        assert second["status"] == "generating"
+        third = _ok(client.post(f"/api/generations/{gen['id']}/poll"),
+                    "POST poll #3")
+        assert third["status"] == "completed"
+        assert third["video_url"] == "https://example.invalid/e2e-clip.mp4"
 
         fetched = _ok(client.get(f"/api/generations/{gen['id']}"),
                       "GET generation")

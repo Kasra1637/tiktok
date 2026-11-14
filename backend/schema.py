@@ -1081,10 +1081,27 @@ async def _migration_0004_offered_angle_history(conn):
     await conn.commit()
 
 
+async def _migration_0005_hashtag_volume_cache(conn):
+    """Researched hashtag post counts (ADR 0139): the post kit's volume
+    research caches what it learns per tag, with the fetch time, so the
+    same niche is not re-researched on every render. Counts are
+    approximate and best-effort; the cache is a courtesy, never a gate —
+    a missing or stale row only means the next kit looks again."""
+    await conn.executescript("""
+        CREATE TABLE IF NOT EXISTS hashtag_volume_cache (
+            tag TEXT PRIMARY KEY,
+            post_count INTEGER NOT NULL,
+            fetched_at TEXT NOT NULL
+        );
+    """)
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
     (4, "per-profile offered angle history", _migration_0004_offered_angle_history),
+    (5, "hashtag volume research cache", _migration_0005_hashtag_volume_cache),
 )
 
 

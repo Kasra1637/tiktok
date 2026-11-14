@@ -39,6 +39,7 @@ import angle_scene as _angle_scene_policy
 import character_policy
 import creative_quality
 import final_beat
+import hashtag_volume
 import scene_consistency
 import template_recommendations
 from angle_policy import (
@@ -2552,22 +2553,52 @@ async def generate_opening_messages(profile: dict, previous: list) -> list:
 
 POST_KIT_JSON_SCHEMA = _strict_object({
     "caption": _str_prop(),
-    "hashtags": {"type": "array", "items": _str_prop(), "minItems": 4, "maxItems": 6},
+    # The model proposes a candidate pool (12 to 15 asked, 5 to 15
+    # bounded); research then selects exactly five from it (ADR 0139).
+    "hashtags": {"type": "array", "items": _str_prop(), "minItems": 5, "maxItems": 15},
     "cover_text": _str_prop(),
 })
 
 # The fresh-account hashtag strategy, as data. A new account has no authority
 # for the algorithm to lean on, so the tags' job is classification, not reach:
 # the set states the specific problem, the community, and the category in
-# balanced volume. The engagement-bait family is banned outright — it is
+# balanced volume. Since ADR 0139 the balance is chosen by researched size,
+# not wording alone: the model proposes the niche candidate pool, each
+# candidate's post count is looked up best-effort (hashtag_volume), and
+# exactly five are selected — three small, two larger, nothing at a
+# million-plus posts. When the research cannot speak, the pool's first
+# five ship on wording alone; the kit never waits on, or dies with, the
+# research. The engagement-bait family is banned outright — it is
 # mass-tagged, irrelevant, and routes a clip to nobody in particular.
 POST_KIT_BAIT_TAGS = frozenset(
     {"fyp", "foryou", "foryoupage", "foryourpage", "viral", "trending"}
 )
 
 
+def _validate_post_kit_hashtag(item) -> str:
+    """One hashtag, normalized ('#' added, whitespace stripped) or raised
+    with the tag named: plain ASCII, one token, ≤60 chars, not bait."""
+    tag = str(item or "").strip()
+    if not tag.startswith("#"):
+        tag = "#" + tag
+    body = tag[1:]
+    if not body or not body.isascii():
+        raise RuntimeError(f"Post kit hashtag {tag!r} is not a plain ASCII tag.")
+    if not re.fullmatch(r"[A-Za-z0-9_]+", body):
+        raise RuntimeError(
+            f"Post kit hashtag {tag!r} must be one token of letters, numbers and underscores."
+        )
+    if len(tag) > 60:
+        raise RuntimeError(f"Post kit hashtag {tag!r} is longer than 60 characters.")
+    if body.lower() in POST_KIT_BAIT_TAGS:
+        raise RuntimeError(
+            f"Post kit hashtag {tag!r} is engagement bait; it cannot route this clip."
+        )
+    return tag
+
+
 def normalize_post_kit_hashtags(raw) -> list:
-    """The hashtag strategy's gate: 4 to 6 single-token, unique tags.
+    """The hashtag strategy's gate: exactly five single-token, unique tags.
 
     Normalizes a missing '#' and surrounding whitespace, then raises with the
     offending tag named — a kit that breaks the strategy fails loudly and is
@@ -2578,49 +2609,68 @@ def normalize_post_kit_hashtags(raw) -> list:
     tags: list = []
     seen = set()
     for item in raw or []:
-        tag = str(item or "").strip()
-        if not tag:
+        if not str(item or "").strip():
             continue
-        if not tag.startswith("#"):
-            tag = "#" + tag
-        body = tag[1:]
-        if not body or not body.isascii():
-            raise RuntimeError(f"Post kit hashtag {tag!r} is not a plain ASCII tag.")
-        if not re.fullmatch(r"[A-Za-z0-9_]+", body):
-            raise RuntimeError(
-                f"Post kit hashtag {tag!r} must be one token of letters, numbers and underscores."
-            )
-        if len(tag) > 60:
-            raise RuntimeError(f"Post kit hashtag {tag!r} is longer than 60 characters.")
-        key = body.lower()
-        if key in POST_KIT_BAIT_TAGS:
-            raise RuntimeError(
-                f"Post kit hashtag {tag!r} is engagement bait; it cannot route this clip."
-            )
+        tag = _validate_post_kit_hashtag(item)
+        key = tag[1:].lower()
         if key in seen:
             raise RuntimeError(f"Post kit hashtag {tag!r} is repeated.")
         seen.add(key)
         tags.append(tag)
-    if not 4 <= len(tags) <= 6:
+    if len(tags) != hashtag_volume.HASHTAG_TARGET_COUNT:
         raise RuntimeError(
-            f"Post kit needs 4 to 6 hashtags for a fresh account, got {len(tags)}."
+            f"Post kit needs exactly {hashtag_volume.HASHTAG_TARGET_COUNT} "
+            f"hashtags for a fresh account, got {len(tags)}."
         )
     return tags
 
 
+def _post_kit_candidate_pool(raw) -> list:
+    """The model's candidate pool, cleaned leniently: each candidate is
+    validated on its own and the unusable ones (malformed, bait, repeats)
+    are dropped, never fatal — a pool exists to be selected FROM, and a
+    bad extra candidate must not cost the kit. Pool order is the model's
+    relevance order and is preserved."""
+    if isinstance(raw, str):
+        raw = raw.split()
+    pool: list = []
+    seen = set()
+    for item in raw or []:
+        if not str(item or "").strip():
+            continue
+        try:
+            tag = _validate_post_kit_hashtag(item)
+        except RuntimeError:
+            continue
+        key = tag[1:].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        pool.append(tag)
+    return pool
+
+
 async def generate_post_kit(project: dict, profile: dict) -> dict:
     """
-    Post kit for one render: 1 caption, 4 to 6 hashtags, cover text.
+    Post kit for one render: 1 caption, exactly 5 hashtags, cover text.
 
-    The hashtag set follows the fresh-account strategy: one or two tags naming
-    the exact problem or behaviour the clip is about (the low-competition
-    classification anchor), one or two from the niche's community vocabulary,
-    and one broad app-category tag — never the engagement-bait family, which
-    routes a clip to nobody in particular. Grounded strictly in this render's
-    own hook, script, and CTA plus the profile's verified facts. Anything
-    outside that fails loudly instead of shipping as post copy: banned claims
-    raise, guarantee language raises, unmentioned prices/plans/outcomes are
-    forbidden with clamped lengths, and a hashtag set off the strategy raises.
+    The hashtag set follows the fresh-account strategy (ADR 0139):
+    the model proposes a pool of 12 to 15 niche candidates for THIS clip
+    — one or two naming the exact problem or behaviour the clip is about
+    (the low-competition classification anchor), one or two from the
+    niche's community vocabulary, and one broad app-category tag, ordered
+    most relevant first — and the five that ship are then selected by
+    researched post count: three small (10k-50k posts) and two larger
+    (100k-500k), nothing at a million-plus. Never the engagement-bait
+    family, which routes a clip to nobody in particular. When the volume
+    research cannot speak (no source, no counts), the pool's first five
+    ship on wording alone — the kit never waits on, or dies with, the
+    research. Grounded strictly in this render's own hook, script, and
+    CTA plus the profile's verified facts. Anything outside that fails
+    loudly instead of shipping as post copy: banned claims raise,
+    guarantee language raises, unmentioned prices/plans/outcomes are
+    forbidden with clamped lengths, and a hashtag set off the strategy
+    raises.
     """
     def _list(name):
         val = profile.get(name)
@@ -2686,21 +2736,24 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '    promotional, never founder or marketer voice), name what the app "\n'
         '    did for you using the profile facts and plan above, then end with "\n'
         '    a short question — the caption\u2019s final character must be \u2018?\u2019"],\n'
-        '  "hashtags": ["4 to 6 tags for THIS clip, written the way its audience "\n'
-        '    "writes them: one or two naming the exact problem or behaviour the "\n'
-        '    "clip is about (the low-competition classification anchor), one or "\n'
-        '    "two from the niche\'s own community or interest vocabulary, and one "\n'
+        '  "hashtags": ["12 to 15 candidate tags for THIS clip, ordered most "\n'
+        '    "relevant first and written the way its audience writes them: "\n'
+        '    "one or two naming the exact problem or behaviour the clip is "\n'
+        '    "about (the low-competition classification anchor), one or two "\n'
+        '    "from the niche\'s own community or interest vocabulary, and one "\n'
         '    "broad app-category tag; the app\'s own name may be one of them"],\n'
         '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
         "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
-        "Hashtags must be 4 to 6 total, each grounded in the hook, caption "
-        "topic, audience, category, or app name above, each a single token "
-        "with no spaces. No engagement-bait tags: #fyp, #foryou, #foryoupage, "
-        "#viral and #trending are never allowed \u2014 they are mass-tagged and "
-        "cannot route this clip. No guaranteed outcomes. No promotional or "
-        "founder voice. Return ONLY valid JSON."
+        "Hashtag candidates: propose 12 to 15, each grounded in the hook, "
+        "caption topic, audience, category, or app name above, each a single "
+        "token with no spaces, ordered most relevant first — the kit keeps "
+        "five of them by researched audience size after you answer, never "
+        "generic popular tags. No engagement-bait tags: #fyp, #foryou, "
+        "#foryoupage, #viral and #trending are never allowed \u2014 they are "
+        "mass-tagged and cannot route this clip. No guaranteed outcomes. No "
+        "promotional or founder voice. Return ONLY valid JSON."
     )
     parsed = await _chat_json(
         system_message=system_message,
@@ -2716,7 +2769,19 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     # The schema guarantees a string; anything else fails loudly below
     # instead of being coerced into copy.
     caption = str(parsed.get("caption") or "").strip()
-    hashtags = normalize_post_kit_hashtags(parsed.get("hashtags"))
+    # Research first, then select (ADR 0139): the model's pool is cleaned
+    # leniently, each candidate's post count is looked up best-effort, and
+    # exactly five are selected by size. Any research outage — no source,
+    # no counts, too few researched tags — falls back to the pool's first
+    # five on wording alone, and the strict gate below still applies, so
+    # a short pool fails loudly exactly as it did before research existed.
+    pool = _post_kit_candidate_pool(parsed.get("hashtags"))
+    counts = await hashtag_volume.lookup_hashtag_counts(pool)
+    selected = hashtag_volume.select_hashtags_by_volume(pool, counts)
+    hashtags = normalize_post_kit_hashtags(
+        selected if selected is not None
+        else pool[:hashtag_volume.HASHTAG_TARGET_COUNT]
+    )
     cover_text = str(parsed.get("cover_text") or "").strip()[:100]
     if not caption or not cover_text:
         raise RuntimeError("Post kit response was missing caption or cover text.")

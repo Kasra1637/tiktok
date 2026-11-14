@@ -6,7 +6,8 @@ Six rules are pinned here:
 
 1. Location names the place only; lighting and time of day move into Lighting.
 2. Props lists every object the person carries, wears or uses in the
-   hook/middle actions and the shot timeline — never scenery Location names.
+   hook/middle actions and the shot timeline — never scenery Location
+   names, and never the outfit the Wardrobe already states.
 3. Movement covers every action those lines show.
 4. Internal wording ("Use STARTING SHOT") never survives as a scene value, and
    a list that cannot hold everything it must is reported, never cut.
@@ -694,3 +695,64 @@ def test_normalize_strategy_applies_the_handheld_repairs_for_the_panel():
     assert "phone" not in normalized["scene"]["location"].lower()
     assert "handheld" in normalized["scene"]["camera_angle"].lower()
     assert "handheld" in normalized["scene"]["framing"].lower()
+
+
+def test_props_never_restate_the_wardrobe():
+    # The outfit is worn, not held. A strategy whose Props repeat its
+    # Wardrobe nearly word for word (Kasra's porch-step strategy) shows the
+    # same clothes twice on the card \u2014 Wardrobe row and Props row \u2014 and
+    # tells the model to carry the outfit.
+    strategy = {
+        "camera_setup": "fixed",
+        "scene": {
+            "location": "An outdoor residential porch step",
+            "wardrobe": "A warm knit jumper and a light jacket for cool night air",
+            "props": "A warm knit jumper and a light jacket",
+        },
+        "performance": {"movement": ""},
+        "segments": [{"role": "middle", "action": "Sits quietly on the step"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert out["strategy"]["scene"]["props"] == ""
+    assert "Props" in out["changed"]
+
+
+def test_props_beyond_the_wardrobe_stay_whole():
+    # Only a full restatement goes. An entry naming anything the outfit
+    # does not \u2014 even beside a garment \u2014 is a real prop list and stays
+    # exactly as written.
+    strategy = {
+        "camera_setup": "fixed",
+        "scene": {
+            "location": "An outdoor residential porch step",
+            "wardrobe": "A warm knit jumper and a light jacket for cool night air",
+            "props": "A ceramic mug, a light jacket and a phone",
+        },
+        "performance": {"movement": ""},
+        "segments": [{"role": "middle", "action": "Sits quietly on the step"}],
+    }
+    out = scene_consistency.reconcile_scene(strategy)
+    assert out["strategy"]["scene"]["props"] == "A ceramic mug, a light jacket and a phone"
+    assert "Props" not in out["changed"]
+
+
+def test_prune_wardrobe_props_edges():
+    prune = scene_consistency.prune_wardrobe_props
+    wardrobe = "A warm knit jumper and a light jacket for cool night air"
+    # No wardrobe stated: nothing can restate it.
+    assert prune("A warm knit jumper", "") == ("A warm knit jumper", False)
+    # The empty-marker list is the model's own "nothing" and stays.
+    assert prune("None", wardrobe) == ("None", False)
+    # One restated entry among real props: only the restatement goes.
+    assert prune("A ceramic mug, a light jacket", wardrobe) == ("A ceramic mug", True)
+
+
+def test_normalize_strategy_drops_props_that_restate_the_wardrobe():
+    # The read path cleans the same duplication (rule 6 above): the panel
+    # never shows the outfit twice.
+    normalized = ai_service.normalize_strategy({"scene": {
+        "location": "An outdoor residential porch step",
+        "wardrobe": "A warm knit jumper and a light jacket for cool night air",
+        "props": "A warm knit jumper and a light jacket",
+    }})
+    assert normalized["scene"]["props"] == ""

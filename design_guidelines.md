@@ -325,19 +325,22 @@ card and, when it still awaits its TikTok link, focus that input. The
 preview and the stage padding are custom properties on `.history-card`
 (`--history-preview-h`, `--history-stage-pad`).
 
-Every playable clip wears the studio's own edge: `.history-preview-frame`
-is a hairline indigo surround (`--indigo-25`) with two `--brand-indigo`
-corner marks. The frame lives in its own 4px padding, outside the footage,
-so it never covers a pixel, stays visible through playback, and never
-reaches a download. Compact without-copy cards shrink the frame to its
-fixed 135px clip (`width: max-content`) rather than drawing gutters beside
-it. Cards with no playable clip keep their notice and no frame.
+Every playable clip sits flush in its column: `.history-preview-frame`
+spans the media column edge to edge at the Download row's width — no
+padding, no width cap, at most the card hairline (`--hairline`) for an
+edge; no surround, no corner marks (ADR 0137). The height follows the 9:16
+width. Compact without-copy cards shrink the frame to its fixed 135px clip
+(`width: max-content`) rather than drawing gutters beside it. Cards with no
+playable clip keep their notice and no frame. The finished clip's native
+controls carry `controlsList="nodownload noremoteplayback"` and
+`disablePictureInPicture`, so the browser's three-dots overflow menu has
+nothing in it and does not render.
 
-Inside the record, actions are grouped by consequence rather than by kind:
-Download and Demo + CTA are the wide pair, and Retry render joins them on a
-failed row. Delete is the quieter icon-only button beside Download directly
-below the clip — it never floats over the footage. Related-render links are
-capped at two per card.
+Actions sit under the clip in consequence order: the Download row (with
+the quieter icon-only Delete beside it — it never floats over the footage),
+then the Work with this render row, Demo + CTA and Remix this plan as a
+pair. Retry render joins the record's actions on a failed row.
+Related-render links are capped at two per card.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
   persisted to `localStorage`) plus a mobile-only sticky top bar with a drawer.

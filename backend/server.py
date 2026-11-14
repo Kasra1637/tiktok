@@ -2871,19 +2871,80 @@ async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: st
         await _schedule_poster(background_tasks, generation_id, user_id)
 
 
+async def _run_detached_persist(job: dict, generation_id: str, user_id: str,
+                                video_url: str, delivered_seconds: int) -> None:
+    """
+    Run one claimed persist job off the request path and apply its outcome.
+
+    This is the poll response's BackgroundTask (ADR 0138). The poll that
+    noticed the finish used to run the whole download / trim / rescale /
+    upload inline before it could answer. The panel's poll carries the
+    client's 120s default timeout while the storage retry of the same
+    pipeline carries 600s, so a save that ran long aborted the poll
+    mid-persist: the request's work died with it, the job sat claimed
+    under a lease nothing heartbeated, later polls either answered
+    "generating" against the live lease or re-claimed after it lapsed and
+    restarted the save into the same abort — the live panel never saw the
+    flip, and only an unattached run (the startup sweep after a cold
+    start) ever landed the completion. As a background task the pipeline
+    takes as long as it takes; the lease is heartbeated so a long save is
+    never re-claimed mid-flight; a failure fails the job back to the queue
+    (inside _execute_claimed_persist_job) and names the error on the row,
+    exactly as the inline path's caller did.
+    """
+    async def heartbeat():
+        while True:
+            await asyncio.sleep(60)
+            if not await _heartbeat_job(job["id"], _JOB_WORKER):
+                return
+
+    beat = asyncio.create_task(heartbeat())
+    try:
+        outcome = await _execute_claimed_persist_job(job)
+    except Exception as e:
+        storage_error = str(e)[:500]
+        logger.warning(f"Generation {generation_id}: storage step failed: {e}")
+        await _apply_persist_outcome(
+            generation_id, user_id, video_url,
+            None, storage_error, delivered_seconds, None,
+        )
+    else:
+        await _apply_persist_outcome(
+            generation_id, user_id, video_url,
+            outcome[0], outcome[1], outcome[2], None,
+        )
+    finally:
+        beat.cancel()
+
+
 async def _persist_via_queue(generation_id: str, user_id: str, video_url: str,
-                             background_tasks: BackgroundTasks = None):
+                             background_tasks: BackgroundTasks = None,
+                             *, detach: bool = False,
+                             delivered_seconds: int = 0):
     """
     Poll's path: record the persist job, claim it, run it, apply the outcome.
 
-    Returns the persist outcome, or None when another worker already holds
-    the job (the startup sweep draining in this same process) — that worker
-    applies the outcome when it finishes, and the caller answers with the
-    row's current state, exactly as for a throttled status check.
+    Returns the persist outcome, or None when the outcome is not this
+    caller's to apply: another worker already holds the job (the startup
+    sweep draining in this same process), or — with detach=True — this
+    process claimed it and handed it to the response's BackgroundTasks
+    (see _run_detached_persist). Either way that worker applies the
+    outcome when it finishes, and the caller answers with the row's
+    current state, exactly as for a throttled status check.
+
+    Detach needs the BackgroundTasks carrier a live request provides;
+    without one (the sweep's inline calls, direct test calls) the save
+    runs inline — the same convention the post-kit scheduling follows.
     """
     job_id = await _enqueue_persist_job(generation_id, user_id, video_url)
     job = await _claim_job_by_id(job_id, _JOB_WORKER)
     if job is None:
+        return None
+    if detach and background_tasks is not None:
+        background_tasks.add_task(
+            _run_detached_persist, job, generation_id, user_id, video_url,
+            delivered_seconds,
+        )
         return None
     outcome = await _execute_claimed_persist_job(job)
     await _apply_persist_outcome(

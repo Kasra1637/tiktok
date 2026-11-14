@@ -49,6 +49,19 @@ LEGACY_KIT = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _hashtag_research_silent(monkeypatch):
+    """The volume source is not part of these API tests (ADR 0139): the
+    research stays silent, so generated kits take the wording fallback."""
+    from unittest.mock import AsyncMock
+
+    import hashtag_volume
+
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts", AsyncMock(return_value={})
+    )
+
+
 @pytest.fixture(scope="module")
 def api():
     tmpdir = tempfile.mkdtemp(prefix="tiktok-postkit-")
@@ -206,8 +219,10 @@ class TestPostKitFrozenOnCompletion:
         assert json.loads(stored["post_kit"]) == KIT
 
     def test_kit_write_runs_after_the_poll_response(self, api, monkeypatch):
-        """The completion poll must not wait on the kit's text call: on HTTP
-        the write is a BackgroundTask, and direct callers stay inline.
+        """The completion poll must not wait on the durable save or the
+        kit's text call: on HTTP both ride the response's BackgroundTasks
+        (the save since ADR 0138, the kit since it was frozen at
+        completion), and direct callers stay inline.
         """
         from starlette.background import BackgroundTasks
 
@@ -225,17 +240,21 @@ class TestPostKitFrozenOnCompletion:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
 
         tasks = BackgroundTasks()
-        completed = _run(api.poll_generation(gen["id"], ANON, tasks))
-        assert completed["status"] == "completed"
-        # The video is done but the kit has not been written yet: the
-        # response did not wait for it.
-        assert completed.get("post_kit") is None
+        answered = _run(api.poll_generation(gen["id"], ANON, tasks))
+        # The response did not wait for the save, let alone the kit: it
+        # answers with the row's current state and the completion lands
+        # when the background work runs (ADR 0138).
+        assert answered["status"] == "generating"
+        assert answered.get("post_kit") is None
         stored = _run(api._fetch_one(
-            "SELECT post_kit FROM generations WHERE id = ?", (gen["id"],)))
+            "SELECT status, post_kit FROM generations WHERE id = ?", (gen["id"],)))
+        assert stored["status"] == "generating"
         assert stored["post_kit"] is None
 
         _run(tasks())
-        assert _run(api.get_generation(gen["id"], ANON)).get("post_kit") == KIT
+        landed = _run(api.get_generation(gen["id"], ANON))
+        assert landed["status"] == "completed"
+        assert landed.get("post_kit") == KIT
 
 
 class TestStrandedRender:
@@ -401,7 +420,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
 
@@ -410,7 +429,7 @@ class TestPostKitCaptionGuards:
         kit = _run(api.ai_service.generate_post_kit(project, profile))
         assert kit["caption"].startswith("Stop writing empty pages")
         assert "captions" not in kit
-        assert len(kit["hashtags"]) == 4
+        assert len(kit["hashtags"]) == 5
 
     def test_too_few_hashtags_is_loud(self, api, monkeypatch):
         async def fake_chat(**kwargs):
@@ -429,7 +448,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             return {
                 "caption": "   ",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
 
@@ -442,7 +461,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap.",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
 
@@ -458,7 +477,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — this cures anxiety fast. Ready to try?",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
 
@@ -477,7 +496,7 @@ class TestPostKitCaptionGuards:
             async def fake_chat(**kwargs):
                 return {
                     "caption": caption,
-                    "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                    "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                     "cover_text": "Stop writing empty pages",
                 }
 
@@ -486,30 +505,30 @@ class TestPostKitCaptionGuards:
             with pytest.raises(RuntimeError, match="50 to 80"):
                 _run(api.ai_service.generate_post_kit(project, profile))
 
-    def test_four_classified_hashtags_are_enough(self, api, monkeypatch):
+    def test_five_classified_hashtags_are_enough(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
-                "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits"],
+                "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits", "#phonehabits"],
                 "cover_text": "Stop writing empty pages",
             }
 
         monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
         project, profile = self._materials()
         kit = _run(api.ai_service.generate_post_kit(project, profile))
-        assert len(kit["hashtags"]) == 4
+        assert len(kit["hashtags"]) == 5
 
-    def test_seven_hashtags_is_loud(self, api, monkeypatch):
+    def test_four_candidates_cannot_make_a_kit(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d", "#e", "#f"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
                 "cover_text": "Stop writing empty pages",
             }
 
         monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
         project, profile = self._materials()
-        with pytest.raises(RuntimeError, match="4 to 6"):
+        with pytest.raises(RuntimeError, match="exactly 5"):
             _run(api.ai_service.generate_post_kit(project, profile))
 
     def test_hashtag_prompt_demands_the_fresh_account_strategy(self, api, monkeypatch):
@@ -519,7 +538,7 @@ class TestPostKitCaptionGuards:
             seen.update(kwargs)
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
-                "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits"],
+                "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits", "#phonehabits"],
                 "cover_text": "Stop writing empty pages",
             }
 
@@ -527,7 +546,7 @@ class TestPostKitCaptionGuards:
         project, profile = self._materials()
         _run(api.ai_service.generate_post_kit(project, profile))
         brief = str(seen.get("system_message", "")) + str(seen.get("prompt", ""))
-        assert "4 to 6" in brief
+        assert "12 to 15" in brief
         # The bait family is named and refused, not merely discouraged.
         assert "#fyp" in brief
         assert "never allowed" in brief
@@ -540,7 +559,7 @@ class TestPostKitCaptionGuards:
             seen.update(kwargs)
             return {
                 "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
-                "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
 

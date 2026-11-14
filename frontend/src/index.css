@@ -781,11 +781,10 @@ h1,
  * Stacked (phones), the preview keeps a fixed height so a 9:16 clip stays
  * modest. Side by side, the card splits into two balanced columns,
  * top-aligned and each sized to its own content, so neither column
- * stretches an empty box under the other's content. The clip keeps its
- * capped 9:16 size — 560px tall at most — framed and centered on the
- * transparent stage instead of filling the wider column edge to edge:
- * a width-driven box there would letterbox black bars around a tall
- * clip (TikTok is the only output size).
+ * stretches an empty box under the other's content. The clip fills its
+ * column edge to edge at every width (ADR 0137): its height follows the
+ * 9:16 width, and the Download and render rows beneath it share its
+ * edges, so the four rows read as one block.
  *
  * The stacked preview height and padding are declared together as custom
  * properties, because the stage's flat height is the tallest thing it can
@@ -824,45 +823,15 @@ h1,
 .history-preview-frame {
     position: relative;
     width: 100%;
-    max-width: calc(var(--history-preview-h) * 9 / 16);
     margin-inline: auto;
-    /* Every playable History clip wears the studio's own edge: a hairline
-     * indigo surround with two corner marks. The surround lives in this
-     * frame's padding, outside the footage, so it never covers a pixel,
-     * stays put through playback, and never reaches a download. */
-    padding: 4px;
-    border: 1px solid var(--indigo-25);
-    border-radius: calc(0.75rem + 5px);
-    background:
-        linear-gradient(160deg, var(--indigo-15), var(--indigo-4) 55%, transparent),
-        hsl(228 20% 6%);
-    box-shadow: 0 18px 40px -30px rgba(0, 0, 0, 0.95);
-}
-.history-preview-frame::before,
-.history-preview-frame::after {
-    content: "";
-    position: absolute;
-    bottom: 3px;
-    z-index: 5;
-    width: 12px;
-    height: 12px;
-    pointer-events: none;
-    border-style: solid;
-    border-width: 0;
-    border-color: var(--brand-indigo);
-    opacity: 0.75;
-}
-.history-preview-frame::before {
-    left: 3px;
-    border-left-width: 1.5px;
-    border-bottom-width: 1.5px;
-    border-bottom-left-radius: 7px;
-}
-.history-preview-frame::after {
-    right: 3px;
-    border-right-width: 1.5px;
-    border-bottom-width: 1.5px;
-    border-bottom-right-radius: 7px;
+    /* The clip sits flush in its column (ADR 0137): no surround, no
+     * marks, no width cap — the frame is the column's full width, the
+     * same width as the Download row beneath it, with at most the card
+     * hairline for an edge. The height follows the 9:16 width. */
+    padding: 0;
+    border: 1px solid var(--hairline);
+    border-radius: 0.75rem;
+    background: #000;
 }
 .history-preview {
     display: block;
@@ -870,7 +839,6 @@ h1,
     max-width: 100%;
     height: auto;
     aspect-ratio: 9 / 16;
-    max-height: var(--history-preview-h);
     object-fit: contain;
     background: #000;
     border-radius: 0.75rem;
@@ -913,26 +881,29 @@ h1,
         padding: var(--history-stage-pad);
         background: transparent;
     }
-    .history-preview-frame {
-        /* The clip's height cap below (560px) sets its width at 9:16; the
-           frame hugs exactly that plus its own 10px of padding and border,
-           so the balanced column never widens the frame into a black box
-           around a tall clip. */
-        max-width: calc((560px * 9 / 16) + 10px);
-    }
     .history-preview {
         width: 100%;
         height: auto;
         aspect-ratio: 9 / 16;
         object-fit: contain;
-        /* Bounds freak metadata, not the common case: a 320px column fills
-           to ~570px, so this cap almost never bites. Letterboxing inside the
-           black frame on a near-black stage is invisible when it does. */
-        max-height: 560px;
+        /* No height cap (ADR 0137): the width is the column's, edge to
+           edge, and the height is whatever 9:16 makes it — a cap here
+           would letterbox the footage inside a full-width element. */
     }
     .history-body {
         padding: 24px 24px 28px;
     }
+}
+
+/* When the clip plays, the stage goes flush (ADR 0137): no padding, no
+ * fixed box, no stage slab — the frame fills the media column edge to
+ * edge at every width. The empty/notice state keeps the padded stage.
+ * Compact cards never take this class; their stage stays a small
+ * centered stage by design. */
+.history-stage-flush {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
 }
 
 /* Without-copy records are shorter: pair them only where the available

@@ -1,10 +1,16 @@
-"""The fresh-account hashtag strategy: 4 to 6 single-token tags, unique, no bait.
+"""The fresh-account hashtag strategy: a researched five, or wording alone.
 
-The strategy lives in two places by design: the prompt asks for the balanced
-mix (problem anchor, community, one category), and `normalize_post_kit_hashtags`
-is the gate that fails loudly when the reply steps off it. These tests pin
-both halves — a prompt-only strategy drifts, and a validator without the
-prompt burns billed calls on refused kits.
+The strategy lives in three places by design (ADR 0139): the prompt asks
+for a candidate pool (12 to 15 niche tags, relevance-ordered — the
+problem anchor, the community vocabulary, one category tag),
+`hashtag_volume` researches each candidate's post count and selects
+exactly five by size (three small, two larger, nothing million-plus),
+and `normalize_post_kit_hashtags` is the gate that fails loudly when the
+final set steps off the shape rules. When the research cannot speak,
+the pool's first five ship on wording alone. These tests pin all three
+places — a prompt-only strategy drifts, and a validator without the
+prompt burns billed calls on refused kits. The volume lookup is stubbed
+to "no counts" here; test_hashtag_volume.py pins the research itself.
 """
 import asyncio
 import sys
@@ -15,6 +21,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ai_service
+import hashtag_volume
 
 
 PROJECT = {
@@ -42,43 +49,46 @@ def kit(tags):
 
 def generate(monkeypatch, payload):
     monkeypatch.setattr(ai_service, "_chat_json", AsyncMock(return_value=payload))
+    # No volume source in these tests: the research stays silent and the
+    # wording-only fallback is what the assertions below exercise.
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts",
+        AsyncMock(return_value={}),
+    )
     return asyncio.run(ai_service.generate_post_kit(PROJECT, PROFILE))
 
 
-def test_four_to_six_tags_are_accepted_and_normalized(monkeypatch):
+def test_the_pool_is_accepted_and_the_fallback_takes_its_first_five(monkeypatch):
     # Missing '#' and stray whitespace normalize; the tag itself stays as the
-    # audience writes it (case is not the point, the token is).
+    # audience writes it (case is not the point, the token is). With the
+    # research silent, the kit ships the pool's first five in pool order.
     out = generate(
         monkeypatch,
-        kit(["doomscrolling", " #productivitytok ", "#productivity", "#FocusTimer"]),
+        kit(
+            [
+                "doomscrolling",
+                " #productivitytok ",
+                "#productivity",
+                "#FocusTimer",
+                "#deepwork",
+                "#phonehabits",
+            ]
+        ),
     )
     assert out["hashtags"] == [
         "#doomscrolling",
         "#productivitytok",
         "#productivity",
         "#FocusTimer",
+        "#deepwork",
     ]
-    six = generate(
-        monkeypatch,
-        kit(
-            [
-                "#doomscrolling",
-                "#phonehabits",
-                "#productivitytok",
-                "#deepwork",
-                "#productivity",
-                "#FocusTimer",
-            ]
-        ),
-    )
-    assert len(six["hashtags"]) == 6
 
 
 @pytest.mark.parametrize(
     "tags, why",
     [
-        (["#one", "#two", "#three"], "three tags is under the floor"),
-        (["#a", "#b", "#c", "#d", "#e", "#f", "#g"], "seven tags is over the ceiling"),
+        (["#one", "#two", "#three"], "three candidates cannot make five"),
+        (["#fyp", "#viral", "#deep work", "#tren ding"], "no usable candidates at all"),
         (["#doomscrolling", "#DoomScrolling", "#productivitytok", "#productivity"], "a repeat"),
         (["#doomscrolling", "#fyp", "#productivitytok", "#productivity"], "#fyp bait"),
         (["#doomscrolling", "#viral", "#productivitytok", "#productivity"], "#viral bait"),
@@ -95,19 +105,31 @@ def test_off_strategy_sets_fail_loudly(monkeypatch, tags, why):
 def test_the_prompt_states_the_strategy_and_the_schema_bounds_it(monkeypatch):
     chat = AsyncMock(
         return_value=kit(
-            ["#doomscrolling", "#productivitytok", "#productivity", "#FocusTimer"]
+            [
+                "#doomscrolling",
+                "#productivitytok",
+                "#productivity",
+                "#FocusTimer",
+                "#deepwork",
+            ]
         )
     )
     monkeypatch.setattr(ai_service, "_chat_json", chat)
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts",
+        AsyncMock(return_value={}),
+    )
     asyncio.run(ai_service.generate_post_kit(PROJECT, PROFILE))
     prompt = chat.call_args.kwargs["prompt"]
-    # The mix the founder pays for is asked for in words: the specific
-    # problem anchor, the community vocabulary, and one category tag.
-    assert "4 to 6" in prompt
+    # The pool the founder pays for is asked for in words: 12 to 15 niche
+    # candidates, most relevant first — the specific problem anchor, the
+    # community vocabulary, and one category tag — from which research
+    # later selects the five by size.
+    assert "12 to 15" in prompt
     assert "problem or behaviour" in prompt
     assert "community" in prompt
     assert "app-category" in prompt
     assert "#fyp" in prompt and "never allowed" in prompt
     schema = chat.call_args.kwargs["json_schema"]
-    assert schema["properties"]["hashtags"]["minItems"] == 4
-    assert schema["properties"]["hashtags"]["maxItems"] == 6
+    assert schema["properties"]["hashtags"]["minItems"] == 5
+    assert schema["properties"]["hashtags"]["maxItems"] == 15

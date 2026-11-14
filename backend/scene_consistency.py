@@ -1010,6 +1010,58 @@ def prune_scenery_props(props, location: str = ""):
     return ", ".join(kept), True
 
 
+def _outfit_tokens(text) -> set:
+    """Content words of a text for the wardrobe containment check.
+
+    Words of three or more letters, plural-folded, minus the glue words —
+    a looser net than `_content_tokens` (which serves action coverage),
+    because a restated garment list is short and every word in it counts.
+    """
+    tokens = set()
+    for word in re.findall(r"[a-z][a-z'’-]*", " ".join(str(text or "").casefold().split())):
+        word = word.strip("'’-")
+        if len(word) < 3 or word in ("a", "an", "the", "and", "or", "for",
+                                     "with", "of", "on", "in", "at", "to"):
+            continue
+        tokens.add(word)
+        if word.endswith("s") and len(word) > 3:
+            tokens.add(word[:-1])
+    return tokens
+
+
+def prune_wardrobe_props(props, wardrobe):
+    """Props as (text, changed): carried objects only, never the outfit.
+
+    Wardrobe is what the person wears. A props entry whose every content
+    word already appears in the Wardrobe text is the outfit restated as
+    something held: it prints the same clothes twice on the card (Wardrobe
+    row, Props row) and tells the model to carry them. Only a fully
+    covered entry is dropped — an entry naming anything beyond the outfit
+    ("a light jacket and a phone") is a real prop list and stays whole.
+    A list that becomes empty comes back as "" so the row disappears,
+    the same contract as prune_scenery_props.
+    """
+    raw = " ".join(str(props or "").split()).strip()
+    wardrobe_tokens = _outfit_tokens(wardrobe)
+    if not raw or not wardrobe_tokens:
+        return raw, False
+    parts = [part.strip() for part in re.split(r"\s*[,;]\s*", raw) if part.strip()]
+    if not parts:
+        return raw, False
+    if len(parts) == 1 and parts[0].casefold() in ("none", "no props", "n/a", "-"):
+        return raw, False
+    kept, changed = [], False
+    for part in parts:
+        tokens = _outfit_tokens(_prop_item(part))
+        if tokens and tokens <= wardrobe_tokens:
+            changed = True
+            continue
+        kept.append(part)
+    if not changed:
+        return raw, False
+    return ", ".join(kept), True
+
+
 def append_clause(existing, addition) -> str:
     """Append a clause to a text field, capitalised, without double punctuation."""
     base = " ".join(str(existing or "").split()).strip(" .;")
@@ -1260,6 +1312,17 @@ def reconcile_scene(strategy, plan=None) -> dict:
             else:
                 scene["props"] = props_text
                 changed.append("Props")
+
+        # Wardrobe is worn, not carried: a props entry that only restates
+        # the outfit repeats the Wardrobe row and tells the model to hold
+        # the clothes. Runs after the completion pass above, so nothing it
+        # added escapes the same rule.
+        props_text, wardrobe_pruned = prune_wardrobe_props(
+            scene.get("props"), scene.get("wardrobe")
+        )
+        if wardrobe_pruned:
+            scene["props"] = props_text
+            changed.append("Props")
 
     performance = result.get("performance") if isinstance(result.get("performance"), dict) else None
     if performance is not None:

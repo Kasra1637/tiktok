@@ -2671,22 +2671,11 @@ export default function CreateVideo() {
                 A note about your own recording — never reaches the render.
               </p>
             </div>
-            <div className="space-y-2" data-testid="review-location-field">
-              <label htmlFor="review-location" className="text-sm font-semibold text-foreground">
-                Location
-              </label>
-              <Textarea
-                id="review-location"
-                value={editValue("location", "")}
-                onChange={(e) => dispatchDraft({ type: "edit-field", field: "location", value: e.target.value })}
-                className="min-h-[86px]"
-                placeholder="Describe the place and its visible surroundings."
-                data-testid="review-location-input"
-              />
-              <p className="text-sm text-muted-foreground" data-subtitle="" data-testid="review-location-help">
-                This Location feeds the strategy, the prompt and the result.
-              </p>
-            </div>
+            {/* No standalone Location field here (ADR 0136): the place is
+                edited in exactly one place, the Location pick inside Visual
+                & audio direction below. This free-text field and the pick
+                wrote the same project.location through the same save, so
+                the plan carried two editors for one fact. */}
             {/* Direction is optional refinement, and it was the densest stack
                 in the step: two section labels, a camera select, four
                 dropdowns and a live preview between the plan's words and the
@@ -2734,7 +2723,7 @@ export default function CreateVideo() {
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <p className="text-sm font-semibold">Location &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">Updates the field above; wardrobe refines the saved look.</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">The place is picked here; wardrobe refines the saved look.</p>
                 <DirectionSelect
                   id="review-location-direction"
                   testId="review-location-direction"

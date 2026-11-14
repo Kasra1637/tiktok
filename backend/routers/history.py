@@ -295,18 +295,29 @@ async def poll_generation(
         # the job is still in the table for the next process's sweep to
         # drain, instead of the save being owed by nobody.
         #
+        # The claimed job runs DETACHED (ADR 0138): this request only
+        # records and claims the save, then answers with the row's current
+        # state. Running the pipeline inline held the poll open past the
+        # client's 120s poll timeout on any long save, and the aborted
+        # request stranded the job under its lease — the live panel sat at
+        # its 85% stage while only an unattached run could ever land the
+        # completion. Detached, the outcome is applied when the save
+        # finishes and the panel's next poll serves the completed row.
+        #
         # The pipeline resolves error precedence for us: a real problem
         # outranks a trim note, so "the upload fell back to local storage"
         # is never overwritten by "Cut down to 5s", and a clean run reports
         # neither.
         try:
             outcome = await _persist_via_queue(
-                generation_id, user_id, video_url, background_tasks
+                generation_id, user_id, video_url, background_tasks,
+                detach=True, delivered_seconds=delivered_seconds,
             )
         except Exception as e:
-            # The job was already failed back to the queue for a later
-            # drain; the row still completes with the error named, exactly
-            # as it did when the persist ran inline here.
+            # Recording or claiming the job failed before any save ran;
+            # the row still completes with the error named, exactly as it
+            # did when the persist ran inline here. (A failure inside the
+            # detached save itself is applied by its runner, the same way.)
             storage_error = str(e)[:500]
             logger.warning(f"Generation {generation_id}: storage step failed: {e}")
             await _apply_persist_outcome(
@@ -315,9 +326,11 @@ async def poll_generation(
             )
         else:
             if outcome is None:
-                # Another worker holds the persist job — the startup sweep
-                # draining in this same process. It applies the outcome
-                # when it finishes; answer with the row's current state
+                # The persist is not this request's to finish: another
+                # worker holds the job (the startup sweep draining in this
+                # same process), or this process claimed it and is running
+                # it detached. Either way the outcome is applied when the
+                # save finishes; answer with the row's current state
                 # (still generating) and let the panel keep polling, the
                 # same contract as a throttled status check.
                 return await _with_verdicts(_public_generation_detail(row), user_id)

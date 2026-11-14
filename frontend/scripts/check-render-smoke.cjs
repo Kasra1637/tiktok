@@ -2359,110 +2359,64 @@ async function main() {
     }
   });
 
-  await check("the render panel edits the Location and reports what was rewritten", async (ctx) => {
-    // The Location is the single source of truth for the place (ADR 0090), and
-    // it is editable HERE, on the render step: saving it sends one PATCH whose
-    // server-side rewrite touches only the place-bearing strategy lines, then
-    // re-marks the project ready — no trip to another tab, no paid rebuild.
-    // The fixture carries only the legacy mirror, so this also pins that the
-    // editor falls back to it for projects saved before the rename.
-    const seen = [];
-    const saved = {
-      ...PROJECT_WITH_STRATEGY,
-      location: "A park bench on a sunny afternoon",
-      visual_direction: "A park bench on a sunny afternoon",
-      location_change: { changed: ["Location", "Lighting"], blocked: [] },
-    };
-    await withApi({
-      getGenerations: async () => ({ generations: [] }),
-      updateStudioProject: async (id, payload) => {
-        if (id !== "p1") throw new Error(`Location saved for the wrong project: ${id}`);
-        if (payload.location !== "A park bench on a sunny afternoon") {
-          throw new Error(`the save did not carry the new Location: ${JSON.stringify(payload)}`);
-        }
-        return saved;
-      },
-      markProjectReady: async (id) => {
-        if (id !== "p1") throw new Error(`ready re-marked for the wrong project: ${id}`);
-        return saved;
-      },
-    }, async () => {
-      await mount(GenerationPanel, {
-        project: { ...PROJECT_WITH_STRATEGY },
-        onProjectChange: (next) => seen.push(next),
-      })(ctx);
-      const input = ctx.container.querySelector('[data-testid="render-location-input"]');
-      if (!input) throw new Error("the render panel does not offer the Location editor");
-      if (input.value !== PROJECT_WITH_STRATEGY.visual_direction) {
-        throw new Error(`the editor does not show the saved Location: ${JSON.stringify(input.value)}`);
-      }
-      const save = buttonByText(ctx, /Save location/);
-      if (!save.disabled) throw new Error("Save location is enabled with nothing changed");
-      await typeInto(ctx, input, "A park bench on a sunny afternoon");
-      await clickEl(ctx, buttonByText(ctx, /Save location/), "no Save location button to click");
-      expectText(ctx, "Rewritten to match: Location, Lighting.", "the rewrite note did not render");
-      if (!apiCalls.includes("updateStudioProject") || !apiCalls.includes("markProjectReady")) {
-        throw new Error(`the Location save did not run the full write: ${JSON.stringify(apiCalls.slice(-4))}`);
-      }
-      if (seen[seen.length - 1]?.location !== "A park bench on a sunny afternoon") {
-        throw new Error("the saved project did not reach the page");
-      }
-    });
-  });
-
-  await check("the Location editor wraps a long place instead of cutting it off", async (ctx) => {
-    // A place is a sentence, not a line. The old <input> clipped a long
-    // Location at the edge, so the founder could not read the description
-    // they were about to save. The editor is a Textarea and holds the whole
-    // value, including a long one typed after mount.
-    const longPlace =
-      "A narrow corner of a busy neighbourhood cafe, with a wooden counter, "
-      + "a chalkboard sign by the door and a window onto the street";
+  await check("the render panel offers no Location editor \u2014 one place edits the place", async (ctx) => {
+    // ADR 0136: the Location is edited in exactly one place, the direction
+    // pick inside Visual & audio direction on the plan. This panel used to
+    // carry a second editor (a textarea plus "Save location") whose save
+    // PATCHed the same field through the same endpoint; two editors for one
+    // fact is the duplication Kasra ordered removed. The scene reconcile
+    // that save relied on lives in the shared PATCH handler (ADR 0090), so
+    // the direction pick's save \u2014 manual or autosave \u2014 gets it unchanged;
+    // the backend tests pin that reconcile.
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
-      mount(GenerationPanel, {
-        project: { ...PROJECT_WITH_STRATEGY, location: longPlace, visual_direction: longPlace },
-      })(ctx)
+      mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx)
     );
-    const field = ctx.container.querySelector('[data-testid="render-location-input"]');
-    if (!field) throw new Error("the render panel does not offer the Location editor");
-    if (field.tagName !== "TEXTAREA") {
-      throw new Error("the Location editor is a single-line input, so a long place is cut off");
+    if (ctx.container.querySelector('[data-testid="render-location"]')) {
+      throw new Error("the render panel still carries a Location block");
     }
-    if (field.value !== longPlace) {
-      throw new Error("the Location editor does not hold the whole saved place");
+    if (ctx.container.querySelector('[data-testid="render-location-input"]')) {
+      throw new Error("the render panel still offers a Location editor");
     }
-    const longer = `${longPlace} and a second table by the window`;
-    await typeInto(ctx, field, longer);
-    if (field.value !== longer) {
-      throw new Error("the Location editor did not keep a long typed place");
+    const saveLocation = [...ctx.container.querySelectorAll("button")].find((b) =>
+      /Save location/.test((b.textContent || "").trim())
+    );
+    if (saveLocation) throw new Error("the render panel still offers Save location");
+    if ((ctx.container.textContent || "").includes("Where it happens")) {
+      throw new Error("the render panel still labels a Location editor");
     }
   });
 
-  await check("the Location editor names what still disagrees after a save", async (ctx) => {
-    // Spoken lines are the founder's own words and are never rewritten, and a
-    // props or movement list that cannot hold everything is reported instead
-    // of cut (ADR 0092) — either way the note names the field and where to
-    // fix it, instead of silently rendering a contradiction.
-    const saved = {
-      ...PROJECT_WITH_STRATEGY,
-      location: "A park bench on a sunny afternoon",
-      location_change: {
-        changed: ["Location"],
-        blocked: [{ field: "Hook line", reason: "is set indoors" }],
-      },
-    };
-    await withApi({
-      getGenerations: async () => ({ generations: [] }),
-      updateStudioProject: async () => saved,
-      markProjectReady: async () => saved,
-    }, async () => {
-      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
-      const input = ctx.container.querySelector('[data-testid="render-location-input"]');
-      await typeInto(ctx, input, "A park bench on a sunny afternoon");
-      await clickEl(ctx, buttonByText(ctx, /Save location/), "no Save location button to click");
-      expectText(ctx, "Hook line is set indoors", "the blocked field was not named");
-      expectText(ctx, "the render will refuse", "the note does not say what happens if it stays");
-    });
+  await check("the plan view edits the Location only through the direction pick", async (ctx) => {
+    // The standalone Location textarea that sat above Visual & audio
+    // direction is gone (ADR 0136): one fact had a free-text field here and
+    // a pick in the direction section below it. The pick remains, and the
+    // direction check further down pins that picking and saving it writes
+    // project.location through the shared PATCH.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        if (ctx.container.querySelector('[data-testid="review-location-field"]')) {
+          throw new Error("the plan still carries the standalone Location field");
+        }
+        if (ctx.container.querySelector("#review-location")) {
+          throw new Error("the plan still offers a free-text Location editor");
+        }
+        if (!ctx.container.querySelector("#review-location-direction")) {
+          throw new Error("the direction section lost the Location pick");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -3069,12 +3023,14 @@ async function main() {
 
   await check("the scene block points at the Location editor for its place", async (ctx) => {
     // The helper used to say the scene was built on Review & submit, which is
-    // not where the Location can be edited: the Location editor lives on the
-    // render panel below this block (ADR 0092). The scene fields now live in
+    // not where the Location can be edited. It then pointed at the render
+    // panel's editor (ADR 0092); that editor is gone (ADR 0136), and the one
+    // Location editor is the direction pick in Visual & audio direction on
+    // the plan, so the pointer names it. The scene fields now live in
     // one closed "Scene details" group with a one-line digest.
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectText(ctx, "Scene details", "the scene fields are not collapsed into one group");
-    expectText(ctx, "Render your Hook + Story below", "the scene block does not point at the Location editor");
+    expectText(ctx, "Visual & audio direction on the plan", "the scene block does not point at the Location editor");
     const group = ctx.container.querySelector('[data-testid="strategy-scene-details"]');
     if (!group || group.open) throw new Error("Scene details is not a closed group");
     if (!group.querySelector("summary")?.textContent.toLowerCase().includes("handheld selfie")) {
@@ -15484,17 +15440,46 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History frames every playable clip in the studio brand edge", async (ctx) => {
+  await check("History clips sit flush in a clean frame, work row under the Download row", async (ctx) => {
+    // Kasra's modernization (ADR 0137): the old studio brand edge \u2014 a 4px
+    // indigo surround with corner marks, the frame capped narrower than
+    // its column \u2014 is gone. The clip spans the media column edge to
+    // edge at the same width as the Download row beneath it, in a frame
+    // with no padding, at most a hairline border, and no corner marks;
+    // the height follows the 9:16 width, never a cap. The work row
+    // (Demo + CTA, Remix this plan) moved out of the record column into
+    // the media column, directly under the Download row. And the finished
+    // clip's native controls lose the browser's three-dots overflow:
+    // controlsList strips its Download / speed / PiP items and
+    // disablePictureInPicture removes PiP, so the menu button goes away
+    // in Chrome while play, seek, volume and fullscreen stay.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const frame = css.match(/\.history-preview-frame\s*\{[^}]*\}/);
-    if (!frame || !/padding:\s*4px/.test(frame[0]) || !/border:\s*1px solid var\(--indigo-25\)/.test(frame[0])) {
-      throw new Error("the History clip frame lost its hairline indigo surround");
+    if (!frame) throw new Error("the History clip frame rule is gone");
+    if (/max-width/.test(frame[0])) {
+      throw new Error("the clip frame still caps the clip below the column width");
     }
-    if (!/\.history-preview-frame::before,[\s\S]*?\.history-preview-frame::after\s*\{[^}]*border-color:\s*var\(--brand-indigo\)/.test(css)) {
-      throw new Error("the History clip frame lost its indigo corner marks");
+    if (/padding:\s*4px/.test(frame[0]) || /--indigo-25/.test(frame[0])) {
+      throw new Error("the clip frame kept its indigo surround");
+    }
+    if (!/border:\s*1px solid var\(--hairline\)/.test(frame[0])) {
+      throw new Error("the clip frame's edge is heavier than the card hairline");
+    }
+    if (/\.history-preview-frame::before/.test(css)) {
+      throw new Error("the clip frame kept its corner marks");
+    }
+    if (css.includes("560px * 9 / 16") || css.includes("--history-preview-h) * 9 / 16")) {
+      throw new Error("a height-derived cap still narrows the clip frame");
+    }
+    if (!/\.history-stage-flush\s*\{[^}]*padding:\s*0/.test(css)) {
+      throw new Error("the stage does not go flush when the clip plays");
     }
     if (!/\.history-card-compact \.history-preview-frame\s*\{[^}]*width:\s*max-content/.test(css)) {
       throw new Error("compact clips draw frame-only gutters beside the fixed-width video");
+    }
+    const panelSource = fs.readFileSync(path.join(SRC, "components/GenerationPanel.jsx"), "utf8");
+    if (!panelSource.includes('controlsList="nodownload noremoteplayback"')) {
+      throw new Error("the render panel's finished preview kept the browser overflow menu");
     }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
@@ -15514,26 +15499,48 @@ async function runDemoCtaChecks() {
         const card = ctx.container.querySelector("#generation-brand-frame");
         const framed = card?.querySelector('[data-testid="history-brand-frame"]');
         if (!framed || !framed.querySelector("video.history-preview")) {
-          throw new Error("the playable History clip is not inside the brand frame");
+          throw new Error("the playable History clip is not inside the frame");
         }
         if (!framed.classList.contains("history-preview-frame")) {
-          throw new Error("the brand frame is not the clip frame itself");
+          throw new Error("the frame is not the clip frame itself");
         }
         if (ctx.container.querySelector("#generation-brand-frame-empty [data-testid=\"history-brand-frame\"]")) {
           throw new Error("a card with no playable clip still wears a video frame");
         }
         const video = framed.querySelector("video");
+        const controlsList = (video.getAttribute("controlslist") || "").toLowerCase();
+        if (!controlsList.includes("nodownload") || !controlsList.includes("noremoteplayback")) {
+          throw new Error("the finished clip's controls still offer the browser overflow items");
+        }
+        if (!video.hasAttribute("disablepictureinpicture")) {
+          throw new Error("the finished clip still offers picture-in-picture");
+        }
+        // The work row lives in the media column, under the Download row;
+        // the record column no longer carries it.
+        const media = card.querySelector(".history-media");
+        const actionsRow = media?.querySelector('[data-testid="history-media-actions"]');
+        const workRow = media?.querySelector('[data-testid="history-actions"]');
+        if (!actionsRow || !workRow) {
+          throw new Error("the work row is not in the media column");
+        }
+        if (!(actionsRow.compareDocumentPosition(workRow) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the work row does not follow the Download row");
+        }
+        const panel = card.querySelector('[data-testid="history-detail-panel"]');
+        if (panel?.querySelector('[data-testid="history-actions"]')) {
+          throw new Error("the record column still carries the work row");
+        }
         await act(async () => {
           video.dispatchEvent(new dom.window.Event("play", { bubbles: true }));
         });
         if (!card.querySelector('[data-testid="history-brand-frame"]')) {
-          throw new Error("the brand frame disappears once the clip starts playing");
+          throw new Error("the frame disappears once the clip starts playing");
         }
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
         const compact = ctx.container.querySelector("#generation-brand-frame-compact");
         if (!compact?.classList.contains("history-card-compact") || !compact.querySelector('[data-testid="history-brand-frame"] video')) {
-          throw new Error("compact History cards lost the brand frame around their clip");
+          throw new Error("compact History cards lost the frame around their clip");
         }
       });
     } finally {
@@ -15709,8 +15716,9 @@ async function runDemoCtaChecks() {
     if (!stackedPreview || !/object-fit:\s*contain/.test(stackedPreview[0])) {
       throw new Error("the stacked clip can crop or stretch the footage instead of containing the full frame");
     }
-    if (!/\.history-preview-frame\s*\{[\s\S]*?max-width/.test(css)) {
-      throw new Error("the clip frame does not bound the reserved box, so badges float off the footage");
+    const frameRule = css.match(/\.history-preview-frame\s*\{[^}]*\}/);
+    if (!frameRule || /max-width/.test(frameRule[0])) {
+      throw new Error("the clip frame still caps the clip below the column width instead of spanning it edge to edge");
     }
     if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-stage\s*\{[\s\S]*?min-height:\s*0/.test(css)) {
       throw new Error("the wide stage keeps its fixed box instead of hugging the clip");

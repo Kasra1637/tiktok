@@ -497,7 +497,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
     >
       <div className="history-row-grid">
         <div className="history-media min-w-0">
-          {!compactNotice && <div className="history-stage">
+          {!compactNotice && <div className={`history-stage${!compact && downloadUrl && !previewBroken ? " history-stage-flush" : ""}`}>
             {downloadUrl && !previewBroken ? (
               /* The idle frame carries exactly two facts and no controls: the
                  goal angle top-left (where a viewer looks first) and the
@@ -507,11 +507,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                  floats over the clip: Delete lives beside Download in the row
                  below, for playable and dead rows alike. pointer-events-none
                  on the chips so they never intercept a play tap. */
-              /* The clip wears the studio's own edge, not the app's: a
-                 hairline indigo surround with two corner marks. It lives in
-                 the frame's padding — outside the footage — so it never
-                 covers a pixel, survives playback, and never reaches a
-                 download. */
+              /* The clip sits flush in its column (ADR 0137): the frame
+                 spans the media column edge to edge at the Download row's
+                 width, with at most the card hairline for an edge — no
+                 surround, no corner marks, nothing over the footage but
+                 the two facts above. */
               <span
                 className="history-preview-frame relative block w-full max-w-full"
                 data-testid="history-brand-frame"
@@ -521,6 +521,12 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                   src={downloadUrl}
                   controls
                   playsInline
+                  // The native controls keep play, seek, volume and
+                  // fullscreen; controlsList empties Chrome's three-dots
+                  // overflow (Download, playback speed, PiP) and PiP is
+                  // off, so the overflow button itself goes away.
+                  controlsList="nodownload noremoteplayback"
+                  disablePictureInPicture
                   // Poster first: the thumbnail is a tiny JPEG image, so the card
                   // shows a frame without fetching video bytes. preload="none"
                   // means the clip itself loads only on Play.
@@ -599,6 +605,51 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
+          </div>
+
+          {/* Work with this render lives under the Download row now
+              (ADR 0137): one flush block in the media column — clip,
+              Download, then the two things you do with the render — while
+              the record column keeps the facts and the verdict. */}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
+            <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Work with this render"
+              data-testid="history-actions"
+            >
+              {hasClip && (
+                <Button
+                  variant="accent"
+                  asChild
+                  data-testid={`demo-cta-history-${row.id}`}
+                  className="min-w-[150px] flex-1"
+                >
+                  <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
+                    <Smartphone className="h-4 w-4" /> Demo + CTA
+                  </Link>
+                </Button>
+              )}
+              {shouldOfferDraftLink(row.studio_project_id, draftIds) && (
+                <Button
+                  variant="secondary"
+                  asChild
+                  data-testid={`history-variation-${row.id}`}
+                  className="min-w-[150px] flex-1"
+                >
+                  <Link
+                    to={`/create?project=${row.studio_project_id}`}
+                    onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
+                    title={isWinnerRow(row)
+                      ? "Open this winner's plan in Create Video for another take like this"
+                      : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next plan"}
+                  >
+                    <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Remix this plan"}
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
@@ -832,46 +883,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               <div id={`${detailId}-secondary`} className="history-compact-secondary space-y-5" data-expanded={secondaryOpen}>
               <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
 
-              <div className="space-y-3 border-t border-[color:var(--hairline)] pt-5">
-                <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
-                <div
-                  className="flex flex-wrap gap-2"
-                  role="group"
-                  aria-label="Work with this render"
-                  data-testid="history-actions"
-                >
-                  {hasClip && (
-                    <Button
-                      variant="accent"
-                      asChild
-                      data-testid={`demo-cta-history-${row.id}`}
-                      className="min-w-[150px] flex-1"
-                    >
-                      <Link to={`/demo-cta/${row.id}`} title="Wrap this clip in a phone mockup and add your close">
-                        <Smartphone className="h-4 w-4" /> Demo + CTA
-                      </Link>
-                    </Button>
-                  )}
-                  {shouldOfferDraftLink(row.studio_project_id, draftIds) && (
-                    <Button
-                      variant="secondary"
-                      asChild
-                      data-testid={`history-variation-${row.id}`}
-                      className="min-w-[150px] flex-1"
-                    >
-                      <Link
-                        to={`/create?project=${row.studio_project_id}`}
-                        onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
-                        title={isWinnerRow(row)
-                          ? "Open this winner's plan in Create Video for another take like this"
-                          : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next plan"}
-                      >
-                        <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Remix this plan"}
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </div>
+              {/* Work with this render moved under the Download row (ADR 0137). */}
               </div>
             </div>
           </div>

@@ -59,6 +59,18 @@ async def _insert_generation(api, generation_id, status="generating"):
     )
 
 
+async def _wait_for_row_status(api, generation_id, status, tries=100):
+    row = None
+    for _ in range(tries):
+        row = await api._fetch_one(
+            "SELECT status FROM generations WHERE id = ?", (generation_id,)
+        )
+        if row and row["status"] == status:
+            return row
+        await asyncio.sleep(0.05)
+    return row
+
+
 class TestPollPersistsThroughTheQueue:
     def test_poll_enqueues_claims_and_completes_a_persist_job(self, api, monkeypatch):
         async def main():
@@ -83,8 +95,22 @@ class TestPollPersistsThroughTheQueue:
 
             monkeypatch.setattr("server._schedule_post_kit", no_kit)
 
-            out = await api.poll_generation("gen-poll-1", user_id=ANON)
-            assert out["status"] == "completed"
+            # The poll answers with the row's current state (ADR 0138): the
+            # persist it just claimed rides the response's BackgroundTasks,
+            # and the completion lands on the row — and on the queue job —
+            # when they run, without the poll request having to outlive
+            # the whole save.
+            from starlette.background import BackgroundTasks
+
+            tasks = BackgroundTasks()
+            out = await api.poll_generation(
+                "gen-poll-1", user_id=ANON, background_tasks=tasks
+            )
+            assert out["status"] == "generating"
+
+            await tasks()
+            row = await _wait_for_row_status(api, "gen-poll-1", "completed")
+            assert row["status"] == "completed"
             assert calls == [("gen-poll-1", ANON, "https://provider.example/v.mp4")]
 
             jobs = await api._fetch_all(
@@ -93,6 +119,70 @@ class TestPollPersistsThroughTheQueue:
             assert len(jobs) == 1
             assert jobs[0]["status"] == "completed"
             assert jobs[0]["dedupe_key"] == "persist:gen-poll-1"
+
+            out = await api.poll_generation("gen-poll-1", user_id=ANON)
+            assert out["status"] == "completed"
+
+        _run(main())
+
+
+class TestPollDetachesASlowPersist:
+    def test_poll_answers_while_the_persist_is_still_running(self, api, monkeypatch):
+        async def main():
+            await _insert_generation(api, "gen-detach-1")
+
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def slow_persist(row, user_id, video_url=""):
+                started.set()
+                await release.wait()
+                return ("https://storage.example/gen-detach-1.mp4", None, 10)
+
+            async def fake_poll(job_id):
+                return {"status": "completed",
+                        "unsigned_urls": ["https://provider.example/v.mp4"]}
+
+            monkeypatch.setattr("server._persist_generation_clip", slow_persist)
+            monkeypatch.setattr("server.poll_video_job", fake_poll)
+
+            async def no_kit(background_tasks, generation_id, user_id):
+                return None
+
+            monkeypatch.setattr("server._schedule_post_kit", no_kit)
+
+            # The founder's freeze, reproduced: the save outlasts any
+            # single request budget. The poll must still answer — with the
+            # row's current state — instead of being held open (and, in the
+            # browser, aborted) until the pipeline finishes.
+            from starlette.background import BackgroundTasks
+
+            tasks = BackgroundTasks()
+            out = await asyncio.wait_for(
+                api.poll_generation(
+                    "gen-detach-1", user_id=ANON, background_tasks=tasks
+                ),
+                timeout=5,
+            )
+            assert out["status"] == "generating"
+
+            running = asyncio.create_task(tasks())
+            await asyncio.wait_for(started.wait(), timeout=5)
+
+            # A second poll while the save runs starts no second save: the
+            # queue dedupe + live lease answer "still generating".
+            out = await asyncio.wait_for(
+                api.poll_generation("gen-detach-1", user_id=ANON), timeout=5
+            )
+            assert out["status"] == "generating"
+
+            release.set()
+            await asyncio.wait_for(running, timeout=5)
+            row = await _wait_for_row_status(api, "gen-detach-1", "completed")
+            assert row["status"] == "completed"
+
+            out = await api.poll_generation("gen-detach-1", user_id=ANON)
+            assert out["status"] == "completed"
 
         _run(main())
 
