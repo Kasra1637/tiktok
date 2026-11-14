@@ -1,6 +1,7 @@
 # 0099 — The studio canvas: every step on one page, the active one expanded
 
-- **Status:** accepted
+- **Status:** partially superseded by 0141 (at desktop widths the wizard is
+  paged — only the step in view stands; this canvas stands below lg)
 - **Date:** 2026-11-06
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (navigable
   `studio-progress-rail` with the `studio-progress-segment-*` buttons and the

@@ -51,6 +51,7 @@ import {
 import { sentenceCase } from "../lib/copyCase";
 import { formatVerdicts } from "../lib/angleSubtitle";
 import { useReducedMotionPreference } from "../lib/reducedMotion";
+import { useDesktopWidth } from "../lib/desktopWidth";
 
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
@@ -455,6 +456,13 @@ export default function CreateVideo() {
       { replace: true }
     );
   }, [step, setSearchParams, params]);
+  // The step's presentation, not its state: at desktop widths the wizard
+  // stands one step at a time, the step in view as its own page (ADR 0141);
+  // below lg the canvas stacks every step (ADR 0099). The step machine,
+  // the ?step= mirror and every gate read `step` alone, so the two shapes
+  // can never disagree about where the founder is — only about how much of
+  // the workflow stands around the step in view.
+  const desktopPages = useDesktopWidth();
   const [profiles, setProfiles] = useState([]);
   // Inline approval on the profile step: which draft is mid-approval, and
   // the refusal each draft last earned, keyed by profile id so one app's
@@ -3348,16 +3356,29 @@ export default function CreateVideo() {
         </Alert>
       )}
 
-      {/* The canvas: every step stands on the page as a section, the one in
-          view expanded and the rest collapsed to a header and a state chip.
-          A locked header cannot open until its predecessor is done; the
-          padlock, dimming and "locked — finish <prev> first" banner name
-          the seal. Opening an unlocked header walks there exactly like its
-          segment — one state machine, one gate set. Disclosure queues no
-          request of any kind (ADR 0098). */}
-      <div className="page-content-enter space-y-3">
+      {/* The canvas, in its two shapes. Below lg every step stands on the
+          page as a section, the one in view expanded and the rest collapsed
+          to a header and a state chip (ADR 0099). At lg and up only the
+          step in view stands, as its own page: the other steps' sections
+          are not rendered, so navigation — a segment, a header, the bar's
+          arrows — swaps the page instead of expanding a section in one
+          long scroll (ADR 0141). A locked header cannot open until its
+          predecessor is done; the padlock, dimming and "locked — finish
+          <prev> first" banner name the seal. Opening an unlocked header
+          walks there exactly like its segment — one state machine, one
+          gate set, at either width. Disclosure queues no request of any
+          kind (ADR 0098), and paging queues none either (ADR 0122). */}
+      <div
+        className="page-content-enter space-y-3"
+        data-testid="wizard-canvas"
+        data-layout={desktopPages ? "pages" : "canvas"}
+      >
         {STEPS.map((s, i) => {
           const active = i === step;
+          // Paged at desktop: a step that is not in view has no section on
+          // the page at all — its header is not a collapsed rung of a
+          // scroll, it is simply another page, reached by the same nav.
+          if (desktopPages && !active) return null;
           const state = stepStates.find((x) => x.step.key === s.key)?.state || "todo";
           const value = state === "done" ? pillValue(s.key) : null;
           const isLocked = !unlocked[i];

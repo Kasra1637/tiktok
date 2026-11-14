@@ -3751,6 +3751,122 @@ async function main() {
     }
   });
 
+  // ADR 0141: at desktop widths (Tailwind lg, 1024px) the canvas becomes
+  // pages — only the step in view stands, as its own page, and navigation
+  // swaps the page instead of expanding a section in one long scroll. Below
+  // lg the stacked canvas above is untouched. The desktop stub answers true
+  // only for the 1024px query, so every other media question (reduced
+  // motion included) keeps the harness's default answer.
+  const desktopMatchMedia = (query) => ({
+    matches: /min-width:\s*1024px/.test(String(query)),
+    media: String(query),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  });
+
+  await check("at desktop width the wizard stands one step at a time, as pages", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const prevMatchMedia = dom.window.matchMedia;
+    dom.window.matchMedia = desktopMatchMedia;
+    try {
+      await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+        mount(CreateVideo, {})(ctx)
+      );
+      const canvas = ctx.container.querySelector('[data-testid="wizard-canvas"]');
+      if (!canvas) throw new Error("the wizard renders no canvas");
+      if (canvas.getAttribute("data-layout") !== "pages") {
+        throw new Error("the desktop wizard is not standing in its paged layout");
+      }
+      const keys = ["profile", "angle", "review", "finish"];
+      const standing = () =>
+        keys.filter((key) => ctx.container.querySelector(`[data-testid="wizard-section-${key}"]`));
+      if (standing().length !== 1 || standing()[0] !== "profile") {
+        throw new Error(`the desktop wizard stands ${standing().length} steps, not one page`);
+      }
+      if (!ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
+        throw new Error("the standing page renders no body");
+      }
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
+        "the Audience segment"
+      );
+      if (standing().length !== 1 || standing()[0] !== "angle") {
+        throw new Error("paging to Audience did not swap the page");
+      }
+      if (!ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
+        throw new Error("the Audience page renders no body");
+      }
+      await clickEl(
+        ctx,
+        ctx.container.querySelector('[data-testid="studio-progress-segment-review"]'),
+        "the Review segment"
+      );
+      if (standing().length !== 1 || standing()[0] !== "review") {
+        throw new Error("paging to Review did not swap the page");
+      }
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="wizard-back-button"]'), "Back to the angle step");
+      if (standing().length !== 1 || standing()[0] !== "angle") {
+        throw new Error("the Back arrow did not return to the Audience page");
+      }
+    } finally {
+      dom.window.matchMedia = prevMatchMedia;
+    }
+  });
+
+  // ADR 0122 holds in the paged layout too: walking page to page is
+  // display-only, so a full circuit of the wizard — segments both ways —
+  // spends no generation call of any kind. Generation still belongs to each
+  // section's own Generate button, at every width.
+  await check("paging between step pages fires no generation call", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    const prevMatchMedia = dom.window.matchMedia;
+    dom.window.matchMedia = desktopMatchMedia;
+    try {
+      await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, async () => {
+        apiCalls.length = 0;
+        await mount(CreateVideo, {})(ctx);
+        // The pin only means anything in the paged layout: assert the
+        // wizard is actually standing in pages before walking it.
+        const canvas = ctx.container.querySelector('[data-testid="wizard-canvas"]');
+        if (!canvas || canvas.getAttribute("data-layout") !== "pages") {
+          throw new Error("the wizard is not in its paged layout for the circuit");
+        }
+        const GENERATION_CALLS = [
+          "generateContentAngles",
+          "regenerateContentAngles",
+          "generateAngleGoals",
+          "regenerateContentAngleGoals",
+          "generatePlan",
+          "generateStrategy",
+          "generatePlanAndStrategy",
+          "generateVideo",
+          "regenerateEverything",
+          "generateOpeningMessages",
+        ];
+        const spent = () => apiCalls.filter((name) => GENERATION_CALLS.includes(name));
+        if (spent().length) {
+          throw new Error(`mounting the wizard already spent generation calls: ${spent().join(", ")}`);
+        }
+        for (const key of ["angle", "review", "finish", "profile"]) {
+          await clickEl(
+            ctx,
+            ctx.container.querySelector(`[data-testid="studio-progress-segment-${key}"]`),
+            `the ${key} segment`
+          );
+          await act(async () => {});
+        }
+        if (spent().length) {
+          throw new Error(`paging spent generation calls: ${spent().join(", ")}`);
+        }
+      });
+    } finally {
+      dom.window.matchMedia = prevMatchMedia;
+    }
+  });
+
   // The bar is the nav: each segment above states its step's cumulative
   // quarter, moving to a step walks there, and the bar's fill tracks the same
   // states so the readouts can never disagree. The pills are gone — the

@@ -178,7 +178,7 @@ card is `.inset-panel`.
 |---|---|---|---|
 | Page | `PageHeader` | 40px `IconTile size="page"` | page title |
 | Section card | `SectionCard` + `SectionHeading` | 16px outline glyph, no tile | `h2`, 14px/600 uppercase, tracked 0.08em, muted |
-| Wizard step | one `.surface surface-step` section per step in the studio canvas; the header row is the step toggle — number, filled indigo glyph disc (the step's own icon in every state), `text-sm` label, state chip | the state chip names done/blocked; the disc carries identity, never state |
+| Wizard step | one `.surface surface-step` section per step in the studio canvas (at `lg` and up only the active step's section stands — a page, not a rung of the stack; ADR 0141); the header row is the step toggle — number, filled indigo glyph disc (the step's own icon in every state), `text-sm` label, state chip | the state chip names done/blocked; the disc carries identity, never state |
 | Group inside a card | `GroupLabel` + hairline divider, never a nested box | 16px glyph on the bar, 12px on the card's own `.eyebrow` | `.eyebrow` (all caps) |
 | Aside inside a card | `.inset-panel` (12px radius, 20px gutter; 16px in a wizard step) | none | 14px semibold, or an `.eyebrow` |
 | Disclosure row | `.row-pad` inside one `.surface surface-flush` card, hairline between rows | none, or 16px on an accordion bar | 14px semibold label, or uppercase tracked on the bar |
@@ -266,7 +266,11 @@ The canvas below shows every step as a
 section: the active one expanded, the rest collapsed to a header row with the
 same state in words (a done step shows its pick chip). Opening a collapsed
 header walks there exactly like its segment — one state machine, never a second
-navigation model.
+navigation model. That stacked canvas is the shape below `lg`; at `lg` and up
+only the active step's section stands, as its own page, and navigation swaps
+the page instead of expanding a section in one long scroll (ADR 0141 — the
+step machine, the `?step=` mirror and the gates are shared, so the two shapes
+never disagree about where the founder is).
 
 Spacing, in these steps and no others:
 
@@ -378,6 +382,21 @@ Related-render links are capped at two per card.
   the exact class string instead of re-typing a pixel value that can drift. A page embedded in another page
   (Asset Library inside Create Video's template step) passes `default`: it is
   inside a card, not a frame.
+
+### Settled shapes (ADR 0141)
+
+Three layout questions the Nov 14 2026 desktop audit reserved for the
+founder are decided, and are not open questions for the next audit:
+
+- **Review is one column at every width.** Read-the-plan never becomes a
+  two-column layout with a Craft-check rail; the single calm column is
+  the chosen feel.
+- **The wizard is paged at desktop, stacked below.** At `lg` and up only
+  the active step stands, as its own page; below `lg` the canvas stacks
+  every step as a section (ADR 0099). One step machine serves both.
+- **Analytics is a calm ledger.** Its summary/verdict band grids
+  two-across at `lg` and the clip ledger keeps the full width; that is
+  its final shape, not a dashboard waiting for density.
 
 ### Responsive rules
 
