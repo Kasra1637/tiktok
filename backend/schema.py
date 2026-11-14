@@ -1057,9 +1057,34 @@ async def _migration_0003_video_verdicts(conn):
     await conn.commit()
 
 
+async def _migration_0004_offered_angle_history(conn):
+    """Per-profile history of offered angles (ADR 0132): every generated
+    angle a profile has ever been offered, kept after the live
+    content_angles set is replaced, so a later generation can be checked
+    against all of them. Stores the comparison signature the uniqueness
+    judges read — problem and promise — plus the label that names the
+    angle in prompts and corrections."""
+    await conn.executescript("""
+        CREATE TABLE IF NOT EXISTS offered_angle_history (
+            id TEXT PRIMARY KEY,
+            brand_profile_id TEXT NOT NULL,
+            user_id TEXT,
+            kind TEXT,
+            label TEXT,
+            user_problem TEXT,
+            hook_promise TEXT,
+            created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_offered_angle_history_profile
+            ON offered_angle_history (brand_profile_id, created_at);
+    """)
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
+    (4, "per-profile offered angle history", _migration_0004_offered_angle_history),
 )
 
 

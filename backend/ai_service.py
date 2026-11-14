@@ -42,6 +42,7 @@ import final_beat
 import scene_consistency
 import template_recommendations
 from angle_policy import (
+    angle_collisions_with_prior as _angle_collisions_with_prior,
     angle_grounding as _angle_grounding,
     duplicate_angle_pairs as _duplicate_angle_pairs,
     normalize_content_angles as _normalize_content_angles,
@@ -2007,7 +2008,8 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
 
 async def generate_content_angles(profile: dict, max_angles: int = 6,
                                   angle_feedback: Optional[dict] = None,
-                                  objective: str = "") -> list:
+                                  objective: str = "",
+                                  prior_angles: Optional[list] = None) -> list:
     """
     Generate content angles for an approved App Profile.
 
@@ -2036,6 +2038,14 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         angle_feedback: Goal thumbs attributed to angle kinds and
             objectives (feedback.summarize_angle_feedback). Counts only;
             rendered into the prompt, or a stated none-yet when empty.
+        prior_angles: every angle this profile has already been offered
+            (ADR 0132), as dicts with at least label / user_problem /
+            hook_promise. A candidate that repeats one — by wording or
+            by retelling its moment, the ADR 0125 judges — goes through
+            the same one-correction pattern as an in-set duplicate, and
+            a persistent repeat fails loudly: a generation is never
+            allowed to re-offer an angle. Empty/omitted leaves the
+            prompt and the checks exactly as they were.
     """
     def _list(name):
         val = profile.get(name)
@@ -2188,6 +2198,25 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     if angle_feedback is not None:
         prompt += f"\n\n{feedback.build_angle_feedback_section(angle_feedback)}"
 
+    # Angles this profile has already been offered (ADR 0132). The list
+    # rides in the prompt so the first attempt can steer clear of them;
+    # the deterministic collision check in the loop below is the
+    # enforcement, not this text. Rendered compactly (label + problem)
+    # and capped at the most recent 30 — the check runs against the
+    # full record regardless.
+    prior_list = [a for a in (prior_angles or []) if isinstance(a, dict)]
+    if prior_list:
+        offered = [
+            {"label": a.get("label") or "", "user_problem": a.get("user_problem") or ""}
+            for a in prior_list[-30:]
+        ]
+        prompt += (
+            "\n\nALREADY OFFERED FOR THIS APP — every angle below has been "
+            "offered to this app before. Never repeat one: not its moment, "
+            "not its argument, not a rewording of either.\n"
+            + json.dumps(offered, ensure_ascii=False)
+        )
+
 
     # Routed through _chat_json so truncation is detected and retried
     # doubled instead of surfacing as unparseable JSON. The list-or-dict
@@ -2213,9 +2242,22 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         # not named twice.
         moment_pairs = [pair for pair in _same_moment_angle_pairs(angles)
                         if pair not in duplicates]
-        if not duplicates and not moment_pairs and len(angles) >= original_count:
+        # Already-offered collisions (ADR 0132): the same two judges run
+        # across the boundary between this batch and the profile's
+        # offered history. A repeat joins the same single correction;
+        # a repeat that survives it fails loudly below, because shipping
+        # it would silently break the never-the-same-angle rule.
+        collisions = _angle_collisions_with_prior(angles, prior_list)
+        if (not duplicates and not moment_pairs and not collisions
+                and len(angles) >= original_count):
             return angles
         if attempt:
+            if collisions and not duplicates and not moment_pairs:
+                raise RuntimeError(
+                    "Could not produce content angles that are new for this app: "
+                    "the model kept offering an angle this app has already been "
+                    "offered. Regenerate again; the previous set has not been replaced."
+                )
             raise RuntimeError("Could not produce distinct content angles. Regenerate again; the previous set has not been replaced.")
         correction = (
             prompt + "\n\nDIVERSITY CORRECTION: Duplicate argument pairs " + str(duplicates) + ". "
@@ -2225,6 +2267,18 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
                 f"Same-moment pairs {moment_pairs}: each pair stages the same moment "
                 "in different words — replace one angle of each pair with a genuinely "
                 "different moment, not a rewording. "
+            )
+        if collisions:
+            repeated = "; ".join(
+                f"new angle #{new_index} repeats the already-offered angle "
+                f"{prior_list[prior_index - 1].get('label')!r} "
+                f"(problem: {prior_list[prior_index - 1].get('user_problem')})"
+                for new_index, prior_index in collisions
+            )
+            correction += (
+                f"ALREADY-OFFERED CORRECTION: {repeated}. Replace each named "
+                "new angle with a genuinely different moment and argument — "
+                "not a rewording of the offered one. "
             )
         attempt_prompt = correction + (
             "Replace overlapping arguments and return the complete requested set. Do not merely rename labels. "

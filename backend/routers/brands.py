@@ -928,6 +928,73 @@ async def _with_favorites(rows: list, user_id: str) -> list:
     return out
 
 
+def _offered_signature(angle: dict) -> str:
+    """The identity of an offered angle for history de-duplication: the
+    label plus the two fields the uniqueness judges compare."""
+    return "|".join(
+        " ".join(str(angle.get(field) or "").casefold().split())
+        for field in ("label", "user_problem", "hook_promise")
+    )
+
+
+async def _prior_offered_angles(profile_id: str, user_id: str) -> list:
+    """Every angle this profile has already been offered (ADR 0132).
+
+    The durable history (offered_angle_history, migration 0004) UNION
+    the live content_angles rows: the live set predates the history for
+    profiles generated before the migration, and the set a regeneration
+    is about to replace must count as offered even if a past write path
+    skipped the record. Live rows of any origin count — a hand-written
+    angle is on the founder's list too, and a generated twin of it
+    would read as a repeat. De-duplicated by signature, oldest first.
+    """
+    _require_configured()
+    history = await _cfg("_fetch_all")(
+        "SELECT kind, label, user_problem, hook_promise FROM offered_angle_history "
+        "WHERE brand_profile_id = ? ORDER BY created_at ASC, label ASC",
+        (profile_id,),
+    )
+    current = await _cfg("_fetch_all")(
+        "SELECT kind, label, user_problem, hook_promise FROM content_angles "
+        "WHERE brand_profile_id = ? AND user_id = ? ORDER BY rank ASC, created_at ASC",
+        (profile_id, user_id),
+    )
+    prior, seen = [], set()
+    for row in list(history) + list(current):
+        signature = _offered_signature(row)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        prior.append({
+            "kind": row.get("kind") or "",
+            "label": row.get("label") or "",
+            "user_problem": row.get("user_problem") or "",
+            "hook_promise": row.get("hook_promise") or "",
+        })
+    return prior
+
+
+async def _record_offered_angles(profile_id: str, user_id: str, angles: list) -> None:
+    """Append a freshly generated set to the profile's offered history.
+
+    Called at the same moment the set is written to content_angles, in
+    every generation flow, so the record can never drift behind the
+    sets the founder has actually seen (ADR 0132).
+    """
+    _require_configured()
+    now = now_iso()
+    for angle in angles:
+        await _cfg("_execute")(
+            """INSERT INTO offered_angle_history
+               (id, brand_profile_id, user_id, kind, label, user_problem,
+                hook_promise, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (str(uuid.uuid4()), profile_id, user_id, angle.get("kind") or "",
+             angle.get("label") or "", angle.get("user_problem") or "",
+             angle.get("hook_promise") or "", now),
+        )
+
+
 async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
     """
     Best-effort content angle generation after a profile is approved.
@@ -942,9 +1009,10 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
         # No angle_feedback: goal thumbs stopped steering generation
         # (ADR 0124). The summary still exists as the founder's record —
         # it just no longer teaches the angle writer.
+        prior = await _prior_offered_angles(profile.get("id"), user_id)
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile),
+            lambda: _cfg("generate_content_angles")(profile, prior_angles=prior),
             user_id,
             brand_profile_id=profile.get("id"),
         )
@@ -974,6 +1042,7 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
              angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
+    await _record_offered_angles(profile.get("id"), user_id, angles)
     logger.info(f"Auto-generated %d content angle(s) for profile {profile.get('id')}", len(angles))
 
 
@@ -1710,9 +1779,10 @@ async def generate_profile_content_angles(profile_id: str, payload: Optional[Gen
 
     try:
         objective = ((payload.objective if payload else "") or "").strip()
+        prior = await _prior_offered_angles(profile_id, user_id)
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile, objective=objective),
+            lambda: _cfg("generate_content_angles")(profile, objective=objective, prior_angles=prior),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -1736,6 +1806,7 @@ async def generate_profile_content_angles(profile_id: str, payload: Optional[Gen
              angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
+    await _record_offered_angles(profile_id, user_id, angles)
     # Re-read, never echo the model rows: the wizard adopts this response
     # into the same state the list endpoint feeds, so it must carry the
     # serialized shape (goal suggestions, evidence, origin) or the goal
@@ -1858,9 +1929,10 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
 
     try:
         objective = ((payload.objective if payload else "") or "").strip()
+        prior = await _prior_offered_angles(profile_id, user_id)
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
-            lambda: _cfg("generate_content_angles")(profile, objective=objective),
+            lambda: _cfg("generate_content_angles")(profile, objective=objective, prior_angles=prior),
             user_id,
             brand_profile_id=profile_id,
         )
@@ -1909,6 +1981,7 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
              angle.get("viewer_outcome") or "",
              json.dumps(angle["claims_to_respect"]), rank, now, user_id),
         )
+    await _record_offered_angles(profile_id, user_id, angles)
     # Manual rows move to the back of the generated set's rank range -- the
     # same back-of-list position the manual endpoint gives a newly hand-written
     # angle -- so the fresh AI set presents first.

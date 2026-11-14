@@ -1832,7 +1832,7 @@ class TestRegenerateContentAngles:
         _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
         seen = {}
 
-        async def fake_generate(profile_arg, max_angles=6, angle_feedback=None, objective=""):
+        async def fake_generate(profile_arg, max_angles=6, angle_feedback=None, objective="", prior_angles=None):
             seen["objective"] = objective
             return [dict(a) for a in CANNED_ANGLES]
 
@@ -2108,6 +2108,88 @@ class TestLiveAngleGoalsEndpoint:
         with pytest.raises(HTTPException) as err:
             _run(api.live_angle_goals(profile_id=profile["id"], angle_id=str(uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
+
+
+class TestOfferedAngleHistory:
+    """ADR 0132: every generated set is recorded per profile, and a later
+    generation never re-offers an angle from the record — the replacement
+    set differs from the set it replaces and from every earlier set."""
+
+    SET_A = [
+        {"kind": "problem_solution", "label": "Too many lists",
+         "target_audience": "Busy professionals", "user_problem": "Nothing gets finished",
+         "hook_promise": "Finish one thing", "app_feature": "Task timer",
+         "desired_emotion": "Relief", "claims_to_respect": []},
+        {"kind": "daily_life_use_case", "label": "Bus ride focus",
+         "target_audience": "Busy professionals", "user_problem": "Late bus loses focus time",
+         "hook_promise": "One task on the bus", "app_feature": "Task timer",
+         "desired_emotion": "Calm", "claims_to_respect": []},
+    ]
+    SET_B = [
+        {"kind": "common_mistake", "label": "Inbox first",
+         "target_audience": "Busy professionals", "user_problem": "Inbox buries urgent work",
+         "hook_promise": "Which task comes first?", "app_feature": "Task timer",
+         "desired_emotion": "Relief", "claims_to_respect": []},
+        {"kind": "fast_tutorial", "label": "First hour",
+         "target_audience": "Busy professionals", "user_problem": "Meetings eat the morning",
+         "hook_promise": "Protect the first hour", "app_feature": "Task timer",
+         "desired_emotion": "Focus", "claims_to_respect": []},
+    ]
+
+    def _sequence(self, monkeypatch, replies):
+        import ai_service
+        calls = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            calls.append(context)
+            return replies[len(calls) - 1]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return calls
+
+    def _history_labels(self, api, profile_id):
+        rows = _run(api._fetch_all(
+            "SELECT label FROM offered_angle_history WHERE brand_profile_id = ?",
+            (profile_id,)))
+        return sorted(r["label"] for r in rows)
+
+    def test_regeneration_records_history_and_never_reoffers(self, api, monkeypatch):
+        # Approval offers SET_A. The regeneration's provider re-offers
+        # SET_A verbatim; the uniqueness correction replaces it with
+        # SET_B, and both sets land in the profile's history.
+        calls = self._sequence(monkeypatch, [
+            [dict(a) for a in self.SET_A],
+            [dict(a) for a in self.SET_A],
+            [dict(a) for a in self.SET_B],
+        ])
+        profile = _make_profile(api, ANON, name="History Rider")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        out = _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in out["angles"]] == [a["label"] for a in self.SET_B]
+        assert self._history_labels(api, profile["id"]) == sorted(
+            [a["label"] for a in self.SET_A + self.SET_B])
+        assert len(calls) == 3
+
+    def test_regeneration_that_only_repeats_fails_and_keeps_the_old_set(self, api, monkeypatch):
+        # Both regeneration attempts re-offer the approval set: the
+        # endpoint fails loudly (502) and the founder keeps SET_A —
+        # a repeat is never silently written.
+        calls = self._sequence(monkeypatch, [
+            [dict(a) for a in self.SET_A],
+            [dict(a) for a in self.SET_A],
+            [dict(a) for a in self.SET_A],
+        ])
+        profile = _make_profile(api, ANON, name="History Stubborn")
+        _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
+        with pytest.raises(HTTPException) as err:
+            _run(api.regenerate_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 502
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        assert [a["label"] for a in listed["angles"]] == [a["label"] for a in self.SET_A]
+        # The failed regeneration recorded nothing new.
+        assert self._history_labels(api, profile["id"]) == sorted(
+            [a["label"] for a in self.SET_A])
+        assert len(calls) == 3
 
 
 class TestGoalVerdictEvidencePayload:

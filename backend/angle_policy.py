@@ -147,6 +147,31 @@ def same_moment_angle_pairs(angles: list) -> list:
             if all(same_moment(a.get(field), b.get(field)) for field in ("user_problem", "hook_promise"))]
 
 
+def angle_collisions_with_prior(new_angles: list, prior_angles: list) -> list:
+    """New angles that repeat an already-offered one (ADR 0132).
+
+    Across-generation uniqueness runs the same two judges as within-set
+    diversity — duplicate_angle_pairs (wording) and
+    same_moment_angle_pairs (the moment retold) — over prior + new as
+    one list, and keeps only the pairs that cross the boundary: one
+    side already offered, the other a fresh candidate. Pairs inside
+    either side are not this check's business (within-set diversity
+    owns the new batch; the prior record is history, not a set under
+    review). Returns (new_index, prior_index) pairs, 1-based on each
+    side, sorted by new index — the correction names candidates by the
+    position the model gave them.
+    """
+    if not new_angles or not prior_angles:
+        return []
+    combined = list(prior_angles) + list(new_angles)
+    boundary = len(prior_angles)
+    hits = set()
+    for later, earlier in duplicate_angle_pairs(combined) + same_moment_angle_pairs(combined):
+        if earlier <= boundary < later:
+            hits.add((later - boundary, earlier))
+    return sorted(hits)
+
+
 def same_outcome_goal_pairs(goals: list) -> list:
     """Same promised outcome in different words: token-set overlap.
 

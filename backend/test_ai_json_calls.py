@@ -924,6 +924,119 @@ class TestAngleDiversity:
         assert result[0]["viewer_outcome"] == "Start before the kettle boils"
 
 
+class TestAngleUniquenessAcrossGenerations:
+    """ADR 0132: a profile is never offered the same angle twice.
+
+    Within-set diversity (ADR 0125) judges one batch. These pin the
+    across-generation rule: candidates are checked against the angles
+    the profile has already been offered (prior_angles) with the same
+    two judges — wording duplicates and same-moment retellings — get
+    the same one bounded correction, and then fail loudly rather than
+    repeat an old angle.
+    """
+    BASE = TestAngleFeedbackPromptWiring.ANGLE
+    FRESH_1 = {**BASE, "kind": "daily_life_use_case", "label": "Bus ride focus",
+               "user_problem": "Late bus loses focus time",
+               "hook_promise": "One task on the bus"}
+    FRESH_2 = {**BASE, "kind": "common_mistake", "label": "Inbox first",
+               "user_problem": "Inbox buries urgent work",
+               "hook_promise": "Which task comes first?"}
+
+    def _sequence(self, monkeypatch, replies):
+        import ai_service
+        calls = []
+
+        async def fake_chat_json(**kwargs):
+            calls.append(kwargs["prompt"])
+            return replies[len(calls) - 1]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        return calls
+
+    def test_a_previously_offered_angle_is_corrected_away(self, monkeypatch):
+        import ai_service
+        calls = self._sequence(monkeypatch, [
+            [dict(self.BASE), dict(self.FRESH_1)],
+            [dict(self.FRESH_1), dict(self.FRESH_2)],
+        ])
+        result = _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"}, max_angles=2,
+            prior_angles=[dict(self.BASE)]))
+        assert len(calls) == 2
+        assert "already" in calls[1].lower()
+        assert [a["label"] for a in result] == ["Bus ride focus", "Inbox first"]
+
+    def test_a_persistent_repeat_fails_loudly(self, monkeypatch):
+        import ai_service
+        calls = self._sequence(monkeypatch, [
+            [dict(self.BASE), dict(self.FRESH_1)],
+            [dict(self.BASE), dict(self.FRESH_2)],
+        ])
+        with pytest.raises(RuntimeError, match="new for this app"):
+            _run(ai_service.generate_content_angles(
+                {"brand_name": "Taskly"}, max_angles=2,
+                prior_angles=[dict(self.BASE)]))
+        assert len(calls) == 2
+
+    def test_a_same_moment_retelling_of_an_offered_angle_is_a_repeat(self, monkeypatch):
+        import ai_service
+        prior = [{**self.BASE,
+                  "user_problem": "At the kitchen table after dinner, the unsent message sits open and the words will not come",
+                  "hook_promise": "The character pauses at the kitchen table and says the unsent message out loud"}]
+        retelling = {**self.BASE, "kind": "objection_handling",
+                     "user_problem": "The words will not come for the unsent message sitting open at the kitchen table after dinner",
+                     "hook_promise": "Saying the unsent message out loud, the character pauses by the kitchen table"}
+        calls = self._sequence(monkeypatch, [
+            [retelling, dict(self.FRESH_1)],
+            [dict(self.FRESH_1), dict(self.FRESH_2)],
+        ])
+        result = _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"}, max_angles=2, prior_angles=prior))
+        assert len(calls) == 2
+        assert [a["label"] for a in result] == ["Bus ride focus", "Inbox first"]
+
+    def test_the_second_generation_repairs_away_from_the_first(self, monkeypatch):
+        # The disjointness contract end to end: generation two is handed
+        # generation one's set as prior_angles; a provider that simply
+        # re-offers it is corrected, and the two offered sets share no
+        # angle by either judge.
+        import angle_policy
+        import ai_service
+        first_calls = self._sequence(monkeypatch, [
+            [dict(self.BASE), dict(self.FRESH_1)]])
+        first = _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"}, max_angles=2))
+        assert len(first_calls) == 1
+        second_calls = self._sequence(monkeypatch, [
+            [dict(self.BASE), dict(self.FRESH_1)],
+            [dict(self.FRESH_2), {**self.BASE, "kind": "fast_tutorial",
+                                  "label": "First hour",
+                                  "user_problem": "Meetings eat the morning",
+                                  "hook_promise": "Protect the first hour"}],
+        ])
+        second = _run(ai_service.generate_content_angles(
+            {"brand_name": "Taskly"}, max_angles=2, prior_angles=first))
+        assert len(second_calls) == 2
+        combined = list(first) + list(second)
+        cross = [(i, j) for i, j in (
+            angle_policy.duplicate_angle_pairs(combined)
+            + angle_policy.same_moment_angle_pairs(combined))
+            if j <= len(first) < i]
+        assert cross == []
+
+    def test_no_prior_angles_leaves_the_prompt_untouched(self, monkeypatch):
+        import ai_service
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return [dict(self.BASE)]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        _run(ai_service.generate_content_angles({"brand_name": "Taskly"}, max_angles=1))
+        assert "ALREADY OFFERED" not in captured["prompt"]
+
+
 class TestAngleBudget:
     """
     Production failure, 2026-11-01: angle generation at max_tokens=3000
