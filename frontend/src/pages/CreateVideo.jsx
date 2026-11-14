@@ -22,6 +22,13 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 
 import HookContinuityPanel from "../components/HookContinuityPanel";
+import { ListenButton } from "../components/ListenButton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
 import GenerationPanel from "../components/GenerationPanel";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { api, getErrorMessage } from "../lib/api";
@@ -202,6 +209,12 @@ function qualityBandNote(report) {
  * tiles compare by proportion of their own max — the slim bar — never by
  * raw score. The weakest tile(s) by that proportion wear a stronger
  * indigo edge so the eye lands on what to fix first.
+ *
+ * Each tile explains itself on hover, focus or tap (audit 2026-11-14,
+ * finding 4): the tooltip carries the rubric's OWN words for that
+ * dimension — the evidence lines and next step the server scored this
+ * pair with — so the explanation can never disagree with the scorer.
+ * Nothing new prints on the card; the explanation is on demand only.
  */
 function CraftCheckCard({ report }) {
   const dimensions = Object.values(report?.dimensions || {});
@@ -263,41 +276,64 @@ function CraftCheckCard({ report }) {
         </div>
       </div>
       {dimensions.length > 0 && (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="quality-dimensions">
-          {dimensions.map((dimension) => {
-            const pct = Math.round(ratioOf(dimension) * 100);
-            const isWeakest = weakestRatio !== null && ratioOf(dimension) === weakestRatio;
-            return (
-              <li
-                key={dimension.key}
-                data-testid="quality-dimension"
-                data-weakest={isWeakest ? "true" : undefined}
-                className="surface-compact space-y-2"
-                style={isWeakest
-                  ? { borderColor: "var(--indigo-45)", backgroundColor: "var(--indigo-4)" }
-                  : undefined}
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">{dimension.label}</p>
-                  <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
-                </div>
-                <div
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={Number(dimension.max) || 0}
-                  aria-valuenow={Number(dimension.score) || 0}
-                  aria-label={dimension.label}
-                  className="h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
-                >
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] transition-[width] duration-500"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <TooltipProvider delayDuration={200}>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="quality-dimensions">
+            {dimensions.map((dimension) => {
+              const pct = Math.round(ratioOf(dimension) * 100);
+              const isWeakest = weakestRatio !== null && ratioOf(dimension) === weakestRatio;
+              const evidence = Array.isArray(dimension.evidence)
+                ? dimension.evidence.filter((line) => String(line || "").trim())
+                : [];
+              return (
+                <Tooltip key={dimension.key}>
+                  <TooltipTrigger asChild>
+                    <li
+                      data-testid="quality-dimension"
+                      data-weakest={isWeakest ? "true" : undefined}
+                      tabIndex={0}
+                      className="surface-compact space-y-2"
+                      style={isWeakest
+                        ? { borderColor: "var(--indigo-45)", backgroundColor: "var(--indigo-4)" }
+                        : undefined}
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-semibold">{dimension.label}</p>
+                        <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={Number(dimension.max) || 0}
+                        aria-valuenow={Number(dimension.score) || 0}
+                        aria-label={dimension.label}
+                        className="h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
+                      >
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] transition-[width] duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </li>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    data-testid={`quality-dimension-tip-${dimension.key}`}
+                    className="max-w-xs space-y-1"
+                  >
+                    {evidence.map((line, index) => (
+                      <p key={index}>{line}</p>
+                    ))}
+                    {dimension.next_step && (
+                      <p>Next step: {dimension.next_step}</p>
+                    )}
+                    {!evidence.length && !dimension.next_step && (
+                      <p>{dimension.label} — scored out of {dimension.max}.</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </ul>
+        </TooltipProvider>
       )}
       <p className="text-sm text-muted-foreground">
         Advisory only — it never blocks a render.
@@ -1878,7 +1914,7 @@ export default function CreateVideo() {
                         </dl>
                         {approveErrors[p.id] && (
                           <div className="space-y-2">
-                            <p role="alert" className="text-sm text-destructive" data-testid={`inline-approve-error-${p.id}`}>
+                            <p role="alert" className="text-sm text-destructive-text" data-testid={`inline-approve-error-${p.id}`}>
                               {approveErrors[p.id]}
                             </p>
                             <Button variant="secondary" size="sm" asChild>
@@ -2018,7 +2054,7 @@ export default function CreateVideo() {
                 section, not two stacked cards. */}
             <div id="substep-goal" className={angle ? "inset-panel scroll-mt-4 space-y-4" : "hidden"}>
               {angle && facetsError && (
-                <p className="text-sm text-destructive" role="alert">
+                <p className="text-sm text-destructive-text" role="alert">
                   {facetsError}{" "}
                   <button type="button" className="underline" onClick={loadFacets} data-testid="goal-options-retry">
                     Try again
@@ -2284,31 +2320,78 @@ export default function CreateVideo() {
             that the plan states below (failed / generating / missing) are the
             whole step and there is nothing to render yet, so no tabs. */}
         {scriptVersion > 0 && (
-          <div
-            className="inline-flex items-center gap-1 self-start rounded-xl border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] p-1"
-            role="tablist"
-            aria-label="Review sections"
-          >
-            {[
-              { key: "plan", label: "Read the plan" },
-              { key: "render", label: "Render & result" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={effectiveReviewTab === tab.key}
-                onClick={() => setReviewTab(tab.key)}
-                data-testid={`review-tab-${tab.key}`}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
-                  effectiveReviewTab === tab.key
-                    ? "bg-[color:var(--indigo-15)] text-foreground shadow-[var(--shadow-xs)]"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="inline-flex items-center gap-1 self-start rounded-xl border border-[color:var(--hairline)] bg-[color:var(--indigo-6)] p-1"
+              role="tablist"
+              aria-label="Review sections"
+            >
+              {[
+                { key: "plan", label: "Read the plan" },
+                { key: "render", label: "Render & result" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={effectiveReviewTab === tab.key}
+                  onClick={() => setReviewTab(tab.key)}
+                  data-testid={`review-tab-${tab.key}`}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                    effectiveReviewTab === tab.key
+                      ? "bg-[color:var(--indigo-15)] text-foreground shadow-[var(--shadow-xs)]"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Read-aloud for the step that carries the most text in the
+                app (audit 2026-11-14, finding 3): the plan and the
+                strategy, built from the data model like every other
+                section's listen button — never scraped from the DOM. It
+                sits in the step header so both halves of the step reach
+                it, and renders nothing where the browser cannot speak. */}
+            <ListenButton
+              id="review-plan"
+              label="The plan and strategy"
+              testId="listen-review-plan"
+              className="ml-auto"
+              getBlocks={() => {
+                const strategy = project?.strategy;
+                const sceneRows = strategy
+                  ? [...Object.entries(strategy.scene || {}), ...Object.entries(strategy.performance || {})]
+                  : [];
+                const report = project?.quality_report;
+                return [
+                  { label: "Hook", values: [editValue("hook_line", "")] },
+                  { label: "Script", values: [editValue("script", "")] },
+                  { label: "What the demo should show", values: [editValue("demo_brief", "")] },
+                  ...(report
+                    ? [{
+                        label: "Craft check",
+                        values: [
+                          `${Number(report.total) || 0} of ${Number(report.max) || 100}. ${qualityBandNote(report)}`,
+                          ...Object.values(report.dimensions || {}).map(
+                            (d) => `${d.label}: ${d.score} of ${d.max}.`
+                          ),
+                        ],
+                      }]
+                    : []),
+                  ...(strategy
+                    ? [
+                        { label: "Hook concept", values: [strategy.hook_concept] },
+                        { label: "Why this works for this app", values: [strategy.strategy_summary] },
+                        {
+                          label: "Scene details",
+                          values: sceneRows.map(([key, value]) => `${String(key).replaceAll("_", " ")}: ${value}`),
+                        },
+                      ]
+                    : []),
+                ];
+              }}
+            />
           </div>
         )}
         {!project?.script_version && planFailed && !busy ? (

@@ -664,7 +664,7 @@ return (
               aria-label="Delete app profile"
               title="Delete this app profile and everything built on it"
               data-testid="delete-profile-button"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive-text"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -891,7 +891,7 @@ return (
               provider call log is kept.
             </DialogDescription>
             {countsError && (
-              <p className="mt-2 text-sm text-destructive" data-testid="delete-counts-warning">
+              <p className="mt-2 text-sm text-destructive-text" data-testid="delete-counts-warning">
                 Could not load the full list ({countsError}) — delete still
                 removes everything built on this app.{" "}
                 <button type="button" className="underline" onClick={() => load({ background: true })} data-testid="delete-counts-retry">

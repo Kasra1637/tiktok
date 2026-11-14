@@ -46,7 +46,7 @@ export function ListenDock() {
     >
       {state.error ? (
         <>
-          <span className="max-w-[320px] truncate text-sm text-destructive" title={state.error}>
+          <span className="max-w-[320px] truncate text-sm text-destructive-text" title={state.error}>
             {state.error}
           </span>
           <button type="button" onClick={stop} aria-label="Dismiss voice message" className={ICON_BUTTON}>

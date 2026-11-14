@@ -71,7 +71,11 @@ module.exports = {
         },
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))'
+          foreground: 'hsl(var(--destructive-foreground))',
+          // `text-destructive-text`: the AA-clearing red for error TEXT.
+          // The DEFAULT stays the solid for fills/borders; it fails AA as
+          // text (3.7:1 on card), so no text utility reads it.
+          text: 'hsl(var(--destructive-text))'
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

@@ -21,7 +21,7 @@ const buttonVariants = cva(
          * hover — so the action still reads as destructive without shouting
          * across the page. */
         destructive:
-          "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/70 text-destructive hover:border-destructive/45 hover:bg-destructive/10 hover:text-destructive",
+          "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/70 text-destructive-text hover:border-destructive/45 hover:bg-destructive/10 hover:text-destructive-text",
         outline:
           "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/30 text-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground",
         secondary:

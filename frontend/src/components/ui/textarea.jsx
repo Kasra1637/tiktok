@@ -27,7 +27,7 @@ const Textarea = React.forwardRef(({ className, onInput, ...props }, ref) => {
     <textarea
       className={cn(
         "input-well flex max-h-[50vh] min-h-[72px] w-full overflow-y-auto rounded-xl border border-[color:var(--hairline)] px-3.5 py-2.5 text-base",
-        "placeholder:text-muted-foreground/70",
+        "placeholder:text-muted-foreground",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}

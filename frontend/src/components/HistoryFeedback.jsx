@@ -240,7 +240,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
             </>
           )}
         </div>
-        {linkError && <p role="alert" className="text-sm text-destructive">{linkError}</p>}
+        {linkError && <p role="alert" className="text-sm text-destructive-text">{linkError}</p>}
         {!savedLink && (
           <p className="text-sm text-muted-foreground">
             Marks this render posted. Only a &ldquo;worked&rdquo; verdict plus a link counts as a winner.
@@ -281,7 +281,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 {savingViews ? "Saving views" : "Save views"}
               </Button>
             </div>
-            {viewsError && <p role="alert" className="text-sm text-destructive">{viewsError}</p>}
+            {viewsError && <p role="alert" className="text-sm text-destructive-text">{viewsError}</p>}
             {savedViews == null && (
               <p className="text-sm text-muted-foreground">
                 Read the count off TikTok and paste it back — most-viewed renders sort first.
@@ -369,7 +369,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 {savingResults ? "Saving results" : "Save results"}
               </Button>
             </div>
-            {resultsError && <p role="alert" className="text-sm text-destructive">{resultsError}</p>}
+            {resultsError && <p role="alert" className="text-sm text-destructive-text">{resultsError}</p>}
             <p className="text-sm text-muted-foreground">
               Read them off TikTok's analytics for the posted video. Each save is a dated reading —
               your record of how it did. What new plans learn from is your verdict on the whole video, at the top of this record.

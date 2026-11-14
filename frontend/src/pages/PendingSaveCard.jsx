@@ -67,7 +67,7 @@ export function PendingSaveCard({ entry, onResolved }) {
             ? "Download it here so nothing is lost, then press Retry save."
             : "The file bytes left with the editor tab, so re-export it from Demo + CTA."}
         </span>
-        {error ? <span role="alert" className="text-destructive">{error}</span> : null}
+        {error ? <span role="alert" className="text-destructive-text">{error}</span> : null}
         <span className="flex flex-wrap items-center gap-2">
           {url ? (
             <Button variant="secondary" size="sm" asChild>

@@ -1905,7 +1905,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </Button>
             )}
           </div>
-          {appendError && <p role="alert" className="text-sm text-destructive">{appendError}</p>}
+          {appendError && <p role="alert" className="text-sm text-destructive-text">{appendError}</p>}
           {appendUrl && !appendMeta && !appendError && <p role="status" className="text-sm text-muted-foreground">Loading added clip…</p>}
           {appendUrl && (
             <StylePicker
@@ -1985,7 +1985,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             />
           </div>
           {openingMessages.error && (
-            <p role="alert" className="text-sm text-destructive" data-testid="hook-message-error">
+            <p role="alert" className="text-sm text-destructive-text" data-testid="hook-message-error">
               {openingMessages.error} <Link to="/brand">Review App Profile</Link>
             </p>
           )}
@@ -2512,7 +2512,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         <div className="space-y-2" data-testid="demo-cta-history-source">
           {historyOpen && (
             <div id={historyPanelId} className="space-y-1.5" role="group" aria-label="History renders">
-              {historyError && <p className="text-sm text-destructive">{historyError}</p>}
+              {historyError && <p className="text-sm text-destructive-text">{historyError}</p>}
               {historyRows === null && !historyError && (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   Loading finished renders…
@@ -2798,7 +2798,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                           <button
                             type="button"
                             onClick={() => handleRemoveZoomKeyframe(kf.id)}
-                            className="focus-ring flex-shrink-0 rounded p-1.5 -m-1.5 text-muted-foreground/60 opacity-0 transition hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                            className="focus-ring flex-shrink-0 rounded p-1.5 -m-1.5 text-muted-foreground opacity-0 transition hover:text-destructive-text group-hover:opacity-100 focus-visible:opacity-100"
                             title="Remove this keyframe"
                             aria-label="Remove this keyframe"
                           >

@@ -102,7 +102,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         Written for this clip when it finished, from its approved hook.
       </p>
       {regenError && (
-        <p className="text-sm text-destructive" role="alert" data-testid="postkit-regenerate-error">
+        <p className="text-sm text-destructive-text" role="alert" data-testid="postkit-regenerate-error">
           {regenError}
         </p>
       )}

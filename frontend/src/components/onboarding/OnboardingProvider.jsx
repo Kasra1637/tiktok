@@ -1,7 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { TOURS, getTourIdForPath } from "../../lib/onboarding/tours";
-import { readSeenTours, markTourSeen, hasSeenTour } from "../../lib/onboarding/seenTours";
+import {
+  readSeenTours, markTourSeen, hasSeenTour,
+  readDismissedTours, markTourDismissed, shouldAutoOpenTour,
+} from "../../lib/onboarding/seenTours";
 import { readRecentDraft } from "../../lib/recentDraft";
 import TourOverlay from "./TourOverlay";
 import TourHelpButton from "./TourHelpButton";
@@ -67,10 +70,11 @@ export function useTourEligibility(tourId, eligible) {
  * current location) and:
  *  - Auto-opens core introductions only after the page reports a first-run
  *    state ready for help. Other tours are manual. Escape, the close button, or a
- *    click outside dismisses it. Reaching the same page later is silent, because
- *    a tour that re-greets you every time you navigate back is noise rather than
- *    onboarding — and the sidebar's "Show me around" is one click away for
- *    anyone who wants it again.
+ *    click outside dismisses it. A completed tour never auto-opens again;
+ *    a tour dismissed early offers itself once more on the next eligible
+ *    visit, then never again (lib/onboarding/seenTours owns the rule) —
+ *    and the sidebar's "Show me around" is one click away for anyone who
+ *    wants any tour again on purpose.
  *  - Exposes controls (next/back/skip/replay) consumed by <TourOverlay />.
  *  - Publishes `hasTourForPage` so the sidebar can offer "Show me around" as
  *    an explicit replay, and renders the spotlight/tooltip overlay itself.
@@ -86,6 +90,14 @@ export function OnboardingProvider({ children }) {
   // Read once at mount and then owned here, so the auto-start effect below
   // compares against a value it can also update without a storage round-trip.
   const [seenTours, setSeenTours] = useState(() => readSeenTours(window.localStorage));
+  // The dismissal ledger beside the seen set: how many times each tour was
+  // closed early. Together they answer "may this tour offer itself?" —
+  // seenTours alone used to answer it, from the moment a tour opened.
+  const [dismissedTours, setDismissedTours] = useState(() => readDismissedTours(window.localStorage));
+  const seenToursRef = useRef(seenTours);
+  useEffect(() => {
+    seenToursRef.current = seenTours;
+  }, [seenTours]);
   const autoStartTimerRef = useRef(null);
   // Tracks which page pathname we've already auto-opened a tour for during
   // THIS mount, so re-rendering the same page (e.g. state updates) doesn't
@@ -116,29 +128,49 @@ export function OnboardingProvider({ children }) {
 
   const startTour = useCallback((tourId) => {
     if (!TOURS[tourId]) return;
-    // Recorded here rather than only on the auto-start path, so a tour opened
-    // by hand also counts as seen: it is on screen now, so auto-opening it
-    // again on the next arrival would greet someone who just read it.
-    setSeenTours((prev) => markTourSeen(window.localStorage, prev, tourId));
+    // Opening records nothing (audit 2026-11-14, finding 13): a tour used
+    // to be marked seen here, on open, so dismissing it in its first
+    // second — mid-task, meaning to return — suppressed it forever. What
+    // a tour's ending means is recorded where it ends (next / stopTour),
+    // as completion or as dismissal.
     setActiveTourId(tourId);
     setStepIndex(0);
   }, []);
 
+  // A tour closed early. Recorded unless the tour was already completed
+  // once: replaying a seen tour and closing it early changes nothing.
+  const recordDismissal = useCallback((tourId) => {
+    if (!tourId || hasSeenTour(seenToursRef.current, tourId)) return;
+    setDismissedTours((prev) => markTourDismissed(window.localStorage, prev, tourId));
+  }, []);
+
+  const recordCompletion = useCallback((tourId) => {
+    if (!tourId) return;
+    setSeenTours((prev) => markTourSeen(window.localStorage, prev, tourId));
+  }, []);
+
   const stopTour = useCallback(() => {
+    recordDismissal(activeTourIdRef.current);
+    // This page has had its tour moment for this mount: the re-offer the
+    // dismissal earned belongs to the NEXT visit, not to a timer firing
+    // 400ms after the founder closed the tour by hand.
+    autoStartedForPathRef.current = location.pathname;
     setActiveTourId(null);
     setStepIndex(0);
-  }, []);
+  }, [recordDismissal, location.pathname]);
 
   const next = useCallback(() => {
     if (!activeTour) return;
     if (stepIndex + 1 >= activeTour.steps.length) {
-      // Last step — close out the tour instead of stepping past the end.
+      // Last step — the tour is complete, and completion is what marks it
+      // seen: close out instead of stepping past the end.
+      recordCompletion(activeTourIdRef.current);
       setActiveTourId(null);
       setStepIndex(0);
       return;
     }
     setStepIndex((i) => i + 1);
-  }, [activeTour, stepIndex]);
+  }, [activeTour, stepIndex, recordCompletion]);
 
   const back = useCallback(() => {
     setStepIndex((i) => Math.max(0, i - 1));
@@ -158,10 +190,11 @@ export function OnboardingProvider({ children }) {
     }
     if (!CORE_AUTO_OPEN_TOURS.includes(pageTourId) || !eligibility[pageTourId]) return;
     if (pageTourId === "create" && (new URLSearchParams(location.search).has("project") || readRecentDraft())) return;
-    // Once per tour, forever. This is the whole difference between onboarding
-    // and an overlay that ambushes you every time you open a page you use
-    // daily; "Show me around" covers the deliberate revisit.
-    if (hasSeenTour(seenTours, pageTourId)) return;
+    // Completed once, silent forever; dismissed early, offered once more.
+    // This is the whole difference between onboarding and an overlay that
+    // ambushes you every time you open a page you use daily; "Show me
+    // around" covers the deliberate revisit.
+    if (!shouldAutoOpenTour(seenTours, dismissedTours, pageTourId)) return;
     // Re-renders of the same page must not restart the tour out from under
     // the user; navigating away and back is a fresh arrival and does open it,
     // until it has been seen.
@@ -179,14 +212,20 @@ export function OnboardingProvider({ children }) {
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageTourId, location.pathname, location.search, seenTours, eligibility, startTour]);
+  }, [pageTourId, location.pathname, location.search, seenTours, dismissedTours, eligibility, startTour]);
 
   // If the user navigates to a page with a different (or no) tour while one
   // is open, close the overlay rather than letting it follow them somewhere
-  // its steps no longer apply. The arrival effect above then opens the new
-  // page's own tour.
+  // its steps no longer apply. Leaving mid-tour is a dismissal like any
+  // other, so it is recorded as one. The arrival effect above then opens
+  // the new page's own tour.
   useEffect(() => {
-    setActiveTourId((currentId) => (currentId && currentId !== pageTourId ? null : currentId));
+    const currentId = activeTourIdRef.current;
+    if (currentId && currentId !== pageTourId) {
+      recordDismissal(currentId);
+      setActiveTourId(null);
+      setStepIndex(0);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 

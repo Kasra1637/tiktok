@@ -772,6 +772,46 @@ check("storage that throws still lets the tour be treated as unseen, then seen",
     return ST.hasSeenTour(seen, "create");
   })());
 
+// Seen means COMPLETED now, not opened (audit 2026-11-14, finding 13). A
+// tour dismissed early is recorded as a dismissal: it earns exactly one
+// re-offer on the next eligible visit, and a second dismissal ends the
+// offers. These checks pin that arithmetic as behaviour.
+check("a tour never opened and never dismissed may auto-open",
+  ST.shouldAutoOpenTour({}, {}, "create") === true);
+check("a completed tour never auto-opens again",
+  ST.shouldAutoOpenTour({ create: 1 }, {}, "create") === false);
+check("one early dismissal earns exactly one re-offer",
+  (() => {
+    const s = fakeStorage();
+    const once = ST.markTourDismissed(s, {}, "create");
+    if (ST.tourDismissalCount(once, "create") !== 1) return false;
+    if (!ST.shouldAutoOpenTour({}, once, "create")) return false;
+    // The dismissal survives a reload, so the re-offer lands next visit.
+    return ST.tourDismissalCount(ST.readDismissedTours(s), "create") === 1;
+  })());
+check("a second early dismissal ends the offers, and the count is capped",
+  (() => {
+    const s = fakeStorage();
+    let dismissed = ST.markTourDismissed(s, {}, "create");
+    dismissed = ST.markTourDismissed(s, dismissed, "create");
+    if (ST.shouldAutoOpenTour({}, dismissed, "create")) return false;
+    // Past the cap the ledger stops changing — identity, like markTourSeen.
+    return ST.markTourDismissed(s, dismissed, "create") === dismissed;
+  })());
+check("completion wins over dismissals: a seen tour stays silent",
+  (() => {
+    const s = fakeStorage();
+    let dismissed = ST.markTourDismissed(s, {}, "create");
+    dismissed = ST.markTourDismissed(s, dismissed, "create");
+    return ST.shouldAutoOpenTour({ create: 1 }, dismissed, "create") === false;
+  })());
+check("corrupt dismissal state reads as never dismissed",
+  ["not json at all", "[1,2,3]", '"a string"', "42", "null", "[]",
+   '{"create": "yes"}', '{"create": -2}', '{"create": 0}'].every((raw) => {
+    const s = fakeStorage({ [ST.DISMISSED_TOURS_STORAGE_KEY]: raw });
+    return ST.tourDismissalCount(ST.readDismissedTours(s), "create") === 0;
+  }));
+
 // How a clip is fitted to the phone screen. The bug these exist for: "fill" was
 // unreachable in the floating phone because the only branch was
 // `contain ? min : max`, so the one control whose purpose is "no bars" silently

@@ -807,7 +807,7 @@ export function AngleGoalPicker({
   ) : (
   <div className="space-y-4">
     {generationError && (
-      <p className="text-sm text-destructive" role="alert" data-testid="goals-generation-error">
+      <p className="text-sm text-destructive-text" role="alert" data-testid="goals-generation-error">
         {generationError} The suggested goals below are unchanged.
       </p>
     )}

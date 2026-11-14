@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "./ui/dialog";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
@@ -94,8 +100,14 @@ function strategyLabel(key) {
  * Post copy and History context use. Only the grid differs — strategy keys
  * are long, so these rows stay stacked while short-labelled rows go two
  * columns — never the label or body itself.
+ *
+ * The one exception is Scene details (`specGrid`): its rows are short spec
+ * values (camera, lighting, wardrobe), not prose, so at desktop width they
+ * read as a two-column definition grid instead of one long stack (audit
+ * 2026-11-14, finding 6). Prose blocks — the outcome rows above all — keep
+ * the stacked single column at every width.
  */
-function StrategyBlock({ title, icon: Icon, rows, description, hideTitle = false }) {
+function StrategyBlock({ title, icon: Icon, rows, description, hideTitle = false, specGrid = false }) {
   const filled = rows.filter(([, value]) => String(value || "").trim());
   if (!filled.length) return null;
   return (
@@ -112,9 +124,13 @@ function StrategyBlock({ title, icon: Icon, rows, description, hideTitle = false
           )}
         </div>
       )}
-      <dl className="max-w-3xl divide-y divide-[color:var(--hairline)]">
+      <dl className={specGrid ? "grid gap-x-10 lg:grid-cols-2" : "max-w-3xl divide-y divide-[color:var(--hairline)]"}>
         {filled.map(([label, value]) => (
-          <div key={label} className="py-3 first:pt-0 last:pb-0" data-testid={`strategy-${String(label).replaceAll("_", "-")}`}>
+          <div
+            key={label}
+            className={specGrid ? "border-b border-[color:var(--hairline)] py-3" : "py-3 first:pt-0 last:pb-0"}
+            data-testid={`strategy-${String(label).replaceAll("_", "-")}`}
+          >
             <dt className="eyebrow">
               {strategyLabel(label)}
             </dt>
@@ -616,30 +632,35 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
       </div>
 
       {suggestion && (
-        /* The suggestion modal (ADR 0133). The saved words and the refreshed
-           pair sit side by side; nothing has been applied — Accept saves the
-           new words through the normal plan-save path and then rebuilds,
-           Keep mine rebuilds against the words already saved. Closing the
-           modal any other way is not offered: the rebuild the founder
-           clicked is waiting on this choice. */
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4"
-          data-testid="strategy-suggestion-modal"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
+        /* The suggestion modal (ADR 0133), on the shared Dialog (audit
+           2026-11-14, finding 11): it used to be a hand-rolled overlay with
+           a role and an aria-modal but no initial focus, no focus trap and
+           no return-focus — the keyboard path into the two choices was the
+           gap. Radix supplies all three. The saved words and the refreshed
+           pair sit side by side; nothing has been applied — Accept saves
+           the new words through the normal plan-save path and then
+           rebuilds, Keep mine rebuilds against the words already saved.
+           Closing the modal any other way is not offered (no X, Escape and
+           outside press disabled): the rebuild the founder clicked is
+           waiting on this choice. Copy and layout are exactly as they were. */
+        <Dialog open onOpenChange={() => {}}>
+          <DialogContent
+            hideClose
+            data-testid="strategy-suggestion-modal"
             aria-label="Suggested update"
-            className="w-full max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-2xl"
+            className="max-w-2xl gap-0 p-5"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
           >
-            <h3 className="font-display text-base font-semibold">Suggested update</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <DialogTitle>Suggested update</DialogTitle>
+            <DialogDescription className="mt-1 text-sm">
               Your direction changed after this strategy was built, so your saved
               words may no longer match the scene. Here is a refreshed pair
               written for the direction as it stands now — take it, or keep
               yours. Either way the strategy is then rebuilt once, against the
               words you choose.
-            </p>
+            </DialogDescription>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-3">
                 <p className="eyebrow">Your saved words</p>
@@ -696,8 +717,8 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
                 {applying ? "Saving the new words" : "Accept the update"}
               </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {!hasStrategy && (
@@ -831,6 +852,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
                 description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Visual & audio direction on the plan, where the wardrobe is picked too; lighting is set from this video's scene."
                 icon={MapPin}
                 hideTitle
+                specGrid
                 rows={[
                   ...Object.entries(strategy.scene || {}),
                   ...Object.entries(strategy.performance || {}),

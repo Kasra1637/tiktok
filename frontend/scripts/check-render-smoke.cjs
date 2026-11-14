@@ -2116,8 +2116,19 @@ async function main() {
     expectText(ctx, "Stitching one clip", "the paid in-flight stages did not render");
     const bar = ctx.container.querySelector('[data-testid="paid-render-progress"] [role="progressbar"]');
     if (!bar) throw new Error("the paid render progress bar did not render");
-    if (bar.getAttribute("aria-valuenow") !== "85") {
-      throw new Error(`paid progress should sit at 85 during generating, got ${JSON.stringify(bar.getAttribute("aria-valuenow"))}`);
+    // The wait is narrated in words plus elapsed time, never a percentage:
+    // the staged figure (25/85/100 read off the status alone) claimed a
+    // precision the system does not have (audit 2026-11-14, finding 5), so
+    // the bar is indeterminate — no aria-valuenow — and no % prints.
+    if (bar.getAttribute("aria-valuenow") !== null) {
+      throw new Error(`paid progress must be indeterminate during generating, got aria-valuenow ${JSON.stringify(bar.getAttribute("aria-valuenow"))}`);
+    }
+    const progressBlock = ctx.container.querySelector('[data-testid="paid-render-progress"]');
+    if (!/\d+:\d{2} elapsed/.test(progressBlock.textContent || "")) {
+      throw new Error("the paid render progress does not narrate the elapsed time");
+    }
+    if (/\d+%/.test(progressBlock.textContent || "")) {
+      throw new Error("the paid render progress still prints a percentage figure");
     }
     expectAbsent(ctx, "Hypothetical", "the removed mock preview still renders beside the paid render");
     expectAbsent(ctx, "Show hypothetical processing", "the mock preview trigger still renders");
@@ -3167,18 +3178,33 @@ async function main() {
       { suggestStrategyRefresh: async () => SUGGESTION_ANSWER },
       async () => {
         await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        // The suggestion modal rides the shared Dialog now (audit
+        // 2026-11-14, finding 11), so it portals into the document body —
+        // read it there, purging any stale portal first (the delete-dialog
+        // checks' pattern).
+        const doc = ctx.container.ownerDocument;
+        doc.querySelectorAll('[data-testid="strategy-suggestion-modal"]').forEach((n) => n.remove());
         const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
         if (!rebuild) throw new Error("no rebuild button to click");
         await act(async () => {
           rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        const modal = ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]');
+        const modal = doc.querySelector('[data-testid="strategy-suggestion-modal"]');
         if (!modal) throw new Error("the suggestion modal did not open before the rebuild");
-        expectText(ctx, "Suggested update", "the modal does not name itself");
-        expectText(ctx, "Old hook at the bus stop.", "the modal lost the saved hook");
-        expectText(ctx, "New hook in the rooftop garden.", "the modal lost the refreshed hook");
-        expectText(ctx, "New script, written for the garden at dawn.", "the modal lost the refreshed script");
+        if (modal.getAttribute("role") !== "dialog") {
+          throw new Error("the suggestion modal is not a real dialog");
+        }
+        for (const words of ["Suggested update", "Old hook at the bus stop.", "New hook in the rooftop garden.", "New script, written for the garden at dawn."]) {
+          if (!modal.textContent.includes(words)) {
+            throw new Error(`the modal lost its words: ${JSON.stringify(words)}`);
+          }
+        }
+        // No dismissal is offered: the rebuild waits on one of the two
+        // choices, so the dialog carries no close control.
+        if (modal.querySelector('[aria-label="Close"]')) {
+          throw new Error("the suggestion modal offers a dismissal its design forbids");
+        }
         if (apiCalls.includes("generateStrategy")) {
           throw new Error("the rebuild ran before the founder chose");
         }
@@ -3187,12 +3213,12 @@ async function main() {
         }
         // Keep mine: the rebuild runs once, against the saved words, and
         // nothing is written.
-        const keep = ctx.container.querySelector('[data-testid="suggestion-keep-button"]');
+        const keep = doc.querySelector('[data-testid="suggestion-keep-button"]');
         await act(async () => {
           keep.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+        if (doc.querySelector('[data-testid="strategy-suggestion-modal"]')) {
           throw new Error("the modal stayed open after Keep mine");
         }
         const builds = apiCalls.filter((c) => c === "generateStrategy").length;
@@ -3225,12 +3251,14 @@ async function main() {
       },
       async () => {
         await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        const doc = ctx.container.ownerDocument;
+        doc.querySelectorAll('[data-testid="strategy-suggestion-modal"]').forEach((n) => n.remove());
         const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
         await act(async () => {
           rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        const accept = ctx.container.querySelector('[data-testid="suggestion-accept-button"]');
+        const accept = doc.querySelector('[data-testid="suggestion-accept-button"]');
         if (!accept) throw new Error("the modal offered no Accept");
         await act(async () => {
           accept.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -3260,12 +3288,13 @@ async function main() {
       },
       async () => {
         await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        const doc = ctx.container.ownerDocument;
         const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
         await act(async () => {
           rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
-        if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+        if (doc.querySelector('[data-testid="strategy-suggestion-modal"]')) {
           throw new Error("a modal opened for a suggestion that never arrived");
         }
         if (!ctx.container.querySelector('[data-testid="strategy-suggest-note"]')) {
@@ -3287,6 +3316,7 @@ async function main() {
   await check("no direction change rebuilds directly, with no modal", async (ctx) => {
     apiCalls.length = 0;
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    const doc = ctx.container.ownerDocument;
     const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
     await act(async () => {
       rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -3295,7 +3325,7 @@ async function main() {
     if (!apiCalls.includes("suggestStrategyRefresh")) {
       throw new Error("the rebuild click never checked for a direction change");
     }
-    if (ctx.container.querySelector('[data-testid="strategy-suggestion-modal"]')) {
+    if (doc.querySelector('[data-testid="strategy-suggestion-modal"]')) {
       throw new Error("a modal opened when no direction changed");
     }
     const builds = apiCalls.filter((c) => c === "generateStrategy").length;
@@ -7025,7 +7055,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
         const badge = ctx.container.querySelector('[data-testid="angle-row-fit-a1"]');
         if (!badge) throw new Error("the picked angle row lost its fit badge");
-        const basis = badge.getAttribute("title") || "";
+        // The basis rides the shared tooltip since ADR 0140 (the native
+        // title is gone): focus the badge and read the tooltip in the
+        // document, where Radix portals it.
+        if (badge.getAttribute("title")) {
+          throw new Error("the angle badge still carries a native title");
+        }
+        await act(async () => { badge.focus(); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 900)); });
+        const basis = [...ctx.container.ownerDocument.querySelectorAll('[role="tooltip"]')]
+          .map((n) => n.textContent).join(" ");
         if (!basis.includes("2 wins in 3") || !basis.includes("at this angle kind")) {
           throw new Error(`angle badge names no kind basis: ${basis}`);
         }
@@ -18309,6 +18348,198 @@ await check(
       }
     }
   );
+
+  // -------------------------------------------------------------------------
+  // Desktop UI/UX audit 2026-11-14 — the fix bundle (ADR 0140). Each check
+  // below pins one finding's fix so it cannot drift back silently.
+  // -------------------------------------------------------------------------
+
+  // Finding 9: an opacity modifier on muted text composites it toward the
+  // surface and out of AA (the /60 and /70 sites measured ~3.4:1). The
+  // design guidelines already ban the pattern; this makes the ban a gate.
+  await check("muted text never carries an opacity modifier", async () => {
+    const offenders = [];
+    for (const abs of sourceFiles()) {
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
+      if (/text-muted-foreground\//.test(src)) {
+        offenders.push(path.relative(SRC, abs));
+      }
+    }
+    if (offenders.length) {
+      throw new Error(
+        `text-muted-foreground/ appears in ${offenders.join(", ")} — the composite falls below AA; use the full token`
+      );
+    }
+  });
+
+  // Finding 1: error text reads the text-grade token, never the solid.
+  // The solid --destructive is 3.7:1 as text; the utility that carried it
+  // is retired everywhere, and the config maps the text grade instead.
+  await check("error text reads the text-grade destructive token", async () => {
+    const offenders = [];
+    for (const abs of sourceFiles()) {
+      const src = stripComments(fs.readFileSync(abs, "utf8"));
+      if (/text-destructive(?![-\w])/.test(src)) {
+        offenders.push(path.relative(SRC, abs));
+      }
+    }
+    if (offenders.length) {
+      throw new Error(
+        `plain text-destructive survives in ${offenders.join(", ")} — error text must use text-destructive-text`
+      );
+    }
+    const config = fs.readFileSync(path.join(__dirname, "..", "tailwind.config.js"), "utf8");
+    if (!/text:\s*'hsl\(var\(--destructive-text\)\)'/.test(config)) {
+      throw new Error("tailwind.config no longer maps the destructive text grade");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/--destructive-text:\s*0 85% 70%/.test(css)) {
+      throw new Error("index.css no longer defines --destructive-text at 0 85% 70%");
+    }
+  });
+
+  // Finding 12: one control height — fields and the selects that share
+  // their skin sit at the button default's 44px, not 40px.
+  await check("fields and buttons share one 44px control height", async () => {
+    const input = fs.readFileSync(path.join(SRC, "components", "ui", "input.jsx"), "utf8");
+    if (!/input-well flex h-11/.test(input)) {
+      throw new Error("ui/input is not at the shared h-11 control height");
+    }
+    const controls = fs.readFileSync(path.join(SRC, "components", "formControls.js"), "utf8");
+    if (!/input-well h-11/.test(controls) || /input-well h-10/.test(controls)) {
+      throw new Error("CONTROL_CLASS is not at the shared h-11 control height");
+    }
+  });
+
+  // Finding 7: the landing how-it-works cards carry the shared
+  // surface-compact spec (10% background, 16px padding), not a hand-rolled
+  // cousin (12% background, 14px padding).
+  await check("the how-it-works cards carry the shared compact surface", async () => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const block = (css.match(/\.how-step\s*\{([\s\S]*?)\}/) || [])[1] || "";
+    if (!/background-color:\s*hsl\(228 14% 10% \/ 0\.72\)/.test(block)) {
+      throw new Error(".how-step no longer uses the surface background (228 14% 10% / 0.72)");
+    }
+    if (!/padding:\s*16px/.test(block) || /padding:\s*14px/.test(block)) {
+      throw new Error(".how-step no longer uses the compact surface's 16px padding");
+    }
+  });
+
+  // Finding 14: the trim timeline's timecodes sit at the app's 12px floor
+  // (text-xs), not below it at 11px.
+  await check("trim timecodes sit at the 12px floor", async () => {
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "TrimTimeline.jsx"), "utf8");
+    if (/0\.6875rem|text-\[11px\]/.test(src)) {
+      throw new Error("TrimTimeline still sets a sub-12px timecode size");
+    }
+  });
+
+  // Finding 3: the Create wizard's Review step — the longest, densest
+  // page in the app — carries the same read-aloud every other text-heavy
+  // page has. jsdom cannot speak, so the button itself never renders
+  // here (it hides where speechSynthesis is missing, by design); the pin
+  // is on the wiring: the import and the mounted builder over the plan
+  // and strategy.
+  await check("the Review step wires read-aloud over the plan and strategy", async () => {
+    const src = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
+    if (!/import \{ ListenButton \} from "\.\.\/components\/ListenButton"/.test(src)) {
+      throw new Error("CreateVideo no longer imports the shared ListenButton");
+    }
+    if (!/testId="listen-review-plan"/.test(src)) {
+      throw new Error("the Review step no longer mounts its listen button");
+    }
+  });
+
+  // Finding 4: a craft tile explains its score on focus — the rubric's own
+  // evidence and next step for that dimension, in the shared tooltip. The
+  // card itself still prints no advice (the top-fix callout stays gone);
+  // the explanation is on demand, and it is the scorer's words, so screen
+  // and scorer cannot disagree.
+  await check("a craft tile explains its score from the rubric on focus", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const dimension = (key, label, score, max, evidence, next_step) => ({
+      key, label, weight: max, score, max, evidence, next_step,
+    });
+    const report = {
+      version: 1,
+      advisory: true,
+      total: 79,
+      max: 100,
+      grade: "B",
+      band: "strong",
+      dimensions: {
+        hook_stopping_power: dimension(
+          "hook_stopping_power", "Hook stopping power", 16, 20,
+          ["Names the problem in the first line."],
+          "Open on the problem, not the diary."
+        ),
+        audience_truth: dimension("audience_truth", "Audience truth / customer voice", 12, 15, [], "Say it the way the viewer would."),
+        clarity: dimension("clarity", "Clarity / one thought", 8, 10, [], "Cut the second thought from the hook."),
+        concreteness: dimension("concreteness", "Concreteness", 7, 10, [], "Name one place and one time."),
+        story_arc: dimension("story_arc", "Story arc / payoff", 11, 15, [], "Answer the hook in the first clause."),
+        spoken_naturalness: dimension("spoken_naturalness", "Spoken naturalness", 9, 10, [], "Read it aloud and fix the written phrase."),
+        demo_handoff: dimension("demo_handoff", "Demo handoff", 6, 10, [], "End on the question the demo answers."),
+        trust_compliance: dimension("trust_compliance", "Trust & compliance", 10, 10, [], "Keep it a customer story, not an ad."),
+      },
+      next_steps: ["Answer the hook in the first clause."],
+    };
+    const project = { ...PROJECT_WITH_STRATEGY, quality_report: report };
+    try {
+      await withApi({ getStudioProject: async () => project }, async () => {
+        await mount(CreateVideo)(ctx);
+        const list = ctx.container.querySelector('[data-testid="quality-dimensions"]');
+        if (!list) throw new Error("the craft card does not list the dimensions");
+        const hookTile = [...list.querySelectorAll("li")].find((li) => li.textContent.includes("Hook stopping power"));
+        if (!hookTile) throw new Error("the hook tile did not render");
+        if (hookTile.getAttribute("tabindex") !== "0") {
+          throw new Error("the craft tile is not keyboard-focusable, so its explanation is hover-only");
+        }
+        await act(async () => { hookTile.focus(); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 600)); });
+        const tip = dom.window.document.body.querySelector('[data-testid="quality-dimension-tip-hook_stopping_power"]');
+        if (!tip) throw new Error("focusing the hook tile opened no explanation tooltip");
+        if (!tip.textContent.includes("Names the problem in the first line.")) {
+          throw new Error("the tooltip does not carry the rubric's evidence for the dimension");
+        }
+        if (!tip.textContent.includes("Open on the problem, not the diary.")) {
+          throw new Error("the tooltip does not carry the rubric's next step for the dimension");
+        }
+      });
+    } finally {
+      delete global.__SMOKE_PARAMS;
+    }
+  });
+
+  // Finding 6: two desktop surfaces use the width the desktop gives them.
+  // Analytics' summary/verdict band sits two-across at lg (the clip ledger
+  // and the weekly chart keep the full width), and Scene details' spec
+  // rows form a two-column definition grid at lg while prose stays stacked.
+  await check("Analytics and Scene details use the desktop width", async () => {
+    const analytics = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
+    if (!/grid items-start gap-6 lg:grid-cols-2[\s\S]{0,300}<ClipResults/.test(analytics)) {
+      throw new Error("the Analytics summary/verdict band is not gridded two-across at lg");
+    }
+    const panel = fs.readFileSync(path.join(SRC, "components", "HookContinuityPanel.jsx"), "utf8");
+    if (!/specGrid\s*\n\s*rows=\{\[/.test(panel) && !/specGrid/.test(panel)) {
+      throw new Error("the Scene details block no longer opts into the spec grid");
+    }
+    if (!/lg:grid-cols-2/.test(panel)) {
+      throw new Error("the Scene details spec grid lost its two-column desktop layout");
+    }
+  });
+
+  // Finding 10: when a row's polling pauses after 20 attempts, the row
+  // says so in a banner — "Still rendering — check again" — instead of a
+  // muted line indistinguishable from the active state.
+  await check("a paused History poll announces itself on the row", async () => {
+    const src = fs.readFileSync(path.join(SRC, "pages", "GenerationHistory.jsx"), "utf8");
+    if (!/pollState === "paused"[\s\S]{0,900}Still rendering — check again/.test(src)) {
+      throw new Error("the paused poll state no longer renders its banner on the row");
+    }
+    if (!/Still rendering — check again\. Automatic checks paused after\s*\n?\s*20 attempts/.test(src)) {
+      throw new Error("the paused banner lost its words");
+    }
+  });
 }
 
 /**

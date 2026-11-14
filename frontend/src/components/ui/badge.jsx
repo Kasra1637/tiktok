@@ -13,7 +13,7 @@ const badgeVariants = cva(
         secondary:
           "border-[color:var(--hairline)] bg-secondary/70 text-secondary-foreground hover:bg-secondary",
         destructive:
-          "border-transparent bg-destructive/15 text-destructive hover:bg-destructive/25",
+          "border-transparent bg-destructive/15 text-destructive-text hover:bg-destructive/25",
         outline: "border-[color:var(--hairline-strong)] text-foreground",
         // Brand tints — subtle chips that read as accents rather than buttons.
         indigo:

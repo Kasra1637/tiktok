@@ -50,7 +50,7 @@ export default function LineRewriteAction({
           {busy ? busyLabel : buttonLabel}
         </Button>
       )}
-      {error && <p className="text-sm text-destructive" role="alert" data-testid={`${testIdPrefix}-error`}>{error}</p>}
+      {error && <p className="text-sm text-destructive-text" role="alert" data-testid={`${testIdPrefix}-error`}>{error}</p>}
       {live && (
         <div className="inset-panel space-y-3" data-testid={`${testIdPrefix}-suggestion`}>
           <p className="text-base font-semibold">&ldquo;{live}&rdquo;</p>

@@ -15,7 +15,7 @@ const alertVariants = cva(
         // guidance, not as filled banners. Severity is carried by the
         // colored text and icon, not by a box around them.
         destructive:
-          "text-destructive [&>svg]:text-destructive",
+          "text-destructive-text [&>svg]:text-destructive-text",
         // Non-error warnings (blocked, stale, awaiting action): transparent
         // like destructive, but in the normal foreground so they do not claim
         // danger.

@@ -593,7 +593,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             <Button
               variant="ghost"
               size="icon"
-              className={`shrink-0 text-muted-foreground hover:text-destructive${compact ? " h-11 w-11" : " h-9 w-9"}`}
+              className={`shrink-0 text-muted-foreground hover:text-destructive-text${compact ? " h-11 w-11" : " h-9 w-9"}`}
               disabled={busy}
               onClick={() => {
                 setDeleteError(null);
@@ -844,7 +844,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </div>
               )}
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p className="text-sm text-destructive-text">{error}</p>}
               {checkingRecovery && (
                 <p className="text-sm text-muted-foreground" role="status">Checking recovered video\u2026</p>
               )}
@@ -852,13 +852,24 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 <p className="text-sm text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
-              {awaitingProvider && (
+              {awaitingProvider && pollState === "paused" ? (
+                /* The paused state gets the repair banner, not the muted
+                   status line (audit 2026-11-14, finding 10): it used to
+                   read exactly like the active state, so a slow-but-healthy
+                   render and a stuck one were indistinguishable on the row. */
+                <Alert variant="warning" data-testid={`history-poll-state-${row.id}`}>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Still rendering — check again. Automatic checks paused after
+                    20 attempts; the provider may still be finishing this clip.
+                    Use Check again, or return later.
+                  </AlertDescription>
+                </Alert>
+              ) : awaitingProvider && (
                 <p role="status" className="text-sm text-muted-foreground" data-testid={`history-poll-state-${row.id}`}>
-                  {pollState === "paused"
-                    ? "Automatic checks paused after 20 attempts. The provider may still be rendering. Use Check again, or return later."
-                    : pollState === "error"
-                      ? "Automatic checks stopped after a request failed. This does not mean the render failed. Use Check again to retry."
-                      : "Automatic checks are active, up to 20 attempts. You can also use Check again or return later."}
+                  {pollState === "error"
+                    ? "Automatic checks stopped after a request failed. This does not mean the render failed. Use Check again to retry."
+                    : "Automatic checks are active, up to 20 attempts. You can also use Check again or return later."}
                 </p>
               )}
               {compact && hasClip && (
@@ -1247,7 +1258,7 @@ export default function GenerationHistory() {
             </select>
         </div>
         {profilesError && (
-          <span role="alert" className="flex items-center gap-1 text-sm text-destructive">
+          <span role="alert" className="flex items-center gap-1 text-sm text-destructive-text">
             {profilesError}{" "}
             <button type="button" className="underline" onClick={loadProfiles} data-testid="profiles-retry">Try again</button>
           </span>

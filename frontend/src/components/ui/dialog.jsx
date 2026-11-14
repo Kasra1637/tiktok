@@ -23,7 +23,7 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
+const DialogContent = React.forwardRef(({ className, children, hideClose = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -34,11 +34,18 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       )}
       {...props}>
       {children}
-      <DialogPrimitive.Close
-        className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[color:var(--indigo-8)] hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      {/* hideClose is for the dialogs whose design offers no dismissal at
+          all — the strategy suggestion (ADR 0133) waits on one of its two
+          choices, so an X would promise an exit the flow does not have.
+          Dismissal is then disabled on the content too (Escape / outside
+          press), by the caller. */}
+      {!hideClose && (
+        <DialogPrimitive.Close
+          className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[color:var(--indigo-8)] hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      )}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

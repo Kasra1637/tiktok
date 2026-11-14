@@ -17,6 +17,10 @@
  *
  * Filter pills are a different control and keep `PILL_SELECT_CLASS`
  * (AppPicker): h-8, rounded-full, a chip beside a heading, not a field.
+ *
+ * One control height: 44px (h-11), the button default's height, so a field
+ * and the button beside it in a shared row share top and bottom edges
+ * (audit 2026-11-14, finding 12 — the two used to disagree by 4px).
  */
 export const CONTROL_CLASS =
-  "input-well h-10 w-full rounded-xl border border-[color:var(--hairline)] px-3 text-base text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50";
+  "input-well h-11 w-full rounded-xl border border-[color:var(--hairline)] px-3 text-base text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50";

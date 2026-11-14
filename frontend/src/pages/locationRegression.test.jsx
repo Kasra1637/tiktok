@@ -22,6 +22,15 @@ jest.mock("../components/ui/alert", () => ({
   AlertDescription: ({ children }) => <div>{children}</div>,
 }));
 jest.mock("../components/SectionCard", () => ({ GroupLabel: ({ children }) => <span>{children}</span> }));
+// The suggestion modal rides the shared Dialog since ADR 0140; the real
+// one pulls in the "@/lib/utils" alias jest cannot resolve, and these
+// tests never open the modal — a stand-in with the same shape suffices.
+jest.mock("../components/ui/dialog", () => ({
+  Dialog: ({ children, open }) => (open ? <div>{children}</div> : null),
+  DialogContent: ({ children }) => <div>{children}</div>,
+  DialogTitle: ({ children }) => <div>{children}</div>,
+  DialogDescription: ({ children }) => <div>{children}</div>,
+}));
 import { HookContinuityPanel } from "../components/HookContinuityPanel";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

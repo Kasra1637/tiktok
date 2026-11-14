@@ -225,13 +225,18 @@ export default function Analytics() {
           <p data-testid="analytics-scope" className="text-sm text-muted-foreground">
             Showing {renders?.length ?? 0} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200) and up to 500 saved events. Activity and feedback below use this same set.
           </p>
+          {/* The summary/verdict band shares the desktop width two-across
+              (audit 2026-11-14, finding 6): these cards used to stack
+              full-width in one long ledger. The per-clip ledger inside
+              Clip results and the weekly chart below keep the full width —
+              they are the wide reads. */}
           {renders?.length > 0 && (
-            <>
+            <div className="grid items-start gap-6 lg:grid-cols-2">
               <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} verdictSummary={verdictSummary} />
-            </>
-          )}
-          {renders !== null && renders.length > 0 && (
-            <RenderFunnel generations={renders} profileId={selectedId} />
+              {renders !== null && renders.length > 0 && (
+                <RenderFunnel generations={renders} profileId={selectedId} />
+              )}
+            </div>
           )}
           {renders !== null && renders.length > 0 && (
             <RenderActivity generations={renders} />
@@ -245,11 +250,15 @@ export default function Analytics() {
           {hasFeedback && (
             <p className="text-sm text-muted-foreground">Repeated ratings are events, not unique clips or measured outcomes.</p>
           )}
-          {signals.length > 0 && (
-            <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
-          )}
-          {reasons.length > 0 && (
-            <SignalReasons summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
+          {(signals.length > 0 || reasons.length > 0) && (
+            <div className={`grid items-start gap-6 ${signals.length > 0 && reasons.length > 0 ? "lg:grid-cols-2" : ""}`}>
+              {signals.length > 0 && (
+                <SignalCounts summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
+              )}
+              {reasons.length > 0 && (
+                <SignalReasons summary={feedback.summary} events={feedback.feedback || []} profileId={selectedId} />
+              )}
+            </div>
           )}
         </div>
       )}

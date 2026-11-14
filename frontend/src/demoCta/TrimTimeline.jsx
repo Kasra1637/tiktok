@@ -24,7 +24,7 @@ function Ruler({ duration }) {
       {labels.map((s) => (
         <span
           key={`label-${s}`}
-          className="absolute top-0 -translate-x-1/2 font-mono text-[0.6875rem] leading-none text-muted-foreground"
+          className="absolute top-0 -translate-x-1/2 font-mono text-xs leading-none text-muted-foreground"
           style={{ left: `${Math.min(100, Math.max(0, (s / duration) * 100))}%` }}
         >
           {s}s
@@ -32,7 +32,7 @@ function Ruler({ duration }) {
       ))}
       {endLabel && (
         <span
-          className="absolute right-0 top-0 font-mono text-[0.6875rem] leading-none text-muted-foreground"
+          className="absolute right-0 top-0 font-mono text-xs leading-none text-muted-foreground"
           style={{ transform: "none" }}
         >
           {endLabel}

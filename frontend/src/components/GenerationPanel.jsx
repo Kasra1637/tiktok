@@ -23,7 +23,13 @@ import { GroupLabel } from "./SectionCard";
  * Three stages, one progress bar, one checklist. Driven by the real
  * generation row, not timers: submitted means the script lock stage,
  * generating means the provider is working the single-pass clip (shown as
- * the final "Stitching one clip" stage at 85%, matching the capture).
+ * the final "Stitching one clip" stage).
+ *
+ * The state is carried in WORDS plus the elapsed time, never a percentage:
+ * the old staged figure (25 / 85 / 100, read off the row's status alone)
+ * sat at 85 for the entire provider wait however long it ran, claiming a
+ * precision the system does not have (audit 2026-11-14, finding 5). The
+ * bar is indeterminate for the same reason — it moves, it does not measure.
  * No mock frame, no replay, no hypothetical copy — this only renders while
  * a paid render is in flight.
  */
@@ -42,11 +48,33 @@ function stageLabel(status, hasUrl) {
   return "Rendering hook + story in one pass";
 }
 
-function PaidRenderProgress({ status, modelName, videoUrl }) {
+/** Elapsed time as m:ss — the honest measure of a wait whose total is unknown. */
+function formatElapsed(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function PaidRenderProgress({ status, modelName, videoUrl, startedAt }) {
   const hasUrl = Boolean(videoUrl);
   const isDone = status === "completed" || hasUrl;
   const stageIndex = isDone ? 3 : status === "generating" ? 2 : 0;
-  const progress = isDone ? 100 : status === "generating" ? 85 : 25;
+  // The wait's anchor: the row's own creation time when the server sent
+  // one, else the moment this panel first showed the render. A poll
+  // refresh hands back the same row with the same created_at, so the
+  // clock never restarts mid-wait.
+  const anchorRef = useRef(null);
+  if (anchorRef.current === null) {
+    const parsed = Date.parse(startedAt || "");
+    anchorRef.current = Number.isFinite(parsed) ? parsed : Date.now();
+  }
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (isDone) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isDone]);
   return (
     <div className="space-y-3" aria-live="polite" data-testid="paid-render-progress">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -54,19 +82,21 @@ function PaidRenderProgress({ status, modelName, videoUrl }) {
       </div>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">{stageLabel(status, hasUrl)}…</p>
-        <span className="text-xs text-muted-foreground">{progress}%</span>
+        {!isDone && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatElapsed(now - anchorRef.current)} elapsed
+          </span>
+        )}
       </div>
       <div
         role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress}
         aria-label="Paid render progress"
         className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
       >
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] transition-[width] duration-500"
-          style={{ width: `${progress}%` }}
+          className={`h-full rounded-full bg-gradient-to-r from-[color:var(--brand-indigo)] to-[color:var(--brand-indigo-dark)] ${
+            isDone ? "w-full" : "render-progress-fill"
+          }`}
         />
       </div>
       <ul className="space-y-1.5">
@@ -322,12 +352,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // at the provider (see server ADR 0061: 429 is throttling, never a render
   // failure). Sustained 429s are still BOUNDED: after MAX_POLL_429s the
   // panel surfaces a visible "still rendering — check History once" state
-  // instead of looping silently at 85% forever. Polling stops permanently
+  // instead of looping silently on the in-flight stage forever. Polling stops permanently
   // ONLY on a terminal row status; a transient network/5xx failure walks
   // the outage budget and, once spent, names History as the next step —
   // never a frozen progress bar.
   //
-  // The poll chain is the only thing that flips the panel off 85%. If the
+  // The poll chain is the only thing that flips the panel off the in-flight stage. If the
   // chain dies — tab backgrounded past browser timer floors, unmount, a
   // missed timeout — the founder is left staring at a frozen bar while the
   // backend keeps rendering and History later shows the clip completed.
@@ -459,7 +489,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   }, [projectId, schedulePoll]);
 
   // A HeyGen render that the polling chain died on leaves the panel frozen
-  // at 85% while History shows completed. Re-arm the chain whenever the
+  // on the in-flight stage while History shows completed. Re-arm the chain whenever the
   // panel mounts or the project changes and the newest row is still in
   // flight: this catches the "reload kept showing the message" case, where
   // getGenerations returned the in-flight row but the fetch died before
@@ -731,7 +761,7 @@ const handleGenerate = async () => {
             ))}
           </select>
           {cameraIncompatible && (
-            <p className="text-sm text-destructive" role="alert" data-testid="fixed-camera-model-warning">
+            <p className="text-sm text-destructive-text" role="alert" data-testid="fixed-camera-model-warning">
               This model uses your face photo as its literal first frame. For Fixed camera,
               select a model that accepts an identity reference image, or save Handheld selfie
               and rebuild the strategy. No model is switched automatically.
@@ -855,17 +885,19 @@ const handleGenerate = async () => {
         </p>
       )}
 
-      {/* Paid render progress is the stage checklist with a real bar — the
-          button's looping sweep alone cannot carry a minutes-long paid wait
-          with a stage state, so this stays as the result/queue narrator and
-          is not a helper line under an idle CTA. It flips to a checkmark the
-          second the row has a playable URL, so a completed render can never
-          leave the panel frozen at 85% with History already showing it. */}
+      {/* Paid render progress is the stage checklist with an indeterminate
+          bar — the button's looping sweep alone cannot carry a minutes-long
+          paid wait with a stage state, so this stays as the result/queue
+          narrator and is not a helper line under an idle CTA. It flips to a
+          checkmark the second the row has a playable URL, so a completed
+          render can never leave the panel narrating a wait History already
+          finished. */}
       {(busy || inFlight || (generation && (generation.playback_url || generation.r2_url || generation.video_url))) && (
         <PaidRenderProgress
           status={generation?.status || "submitted"}
           modelName={capability?.name || selectedModel || ""}
           videoUrl={generation?.playback_url || generation?.r2_url || generation?.video_url}
+          startedAt={generation?.created_at}
         />
       )}
 
@@ -1022,7 +1054,7 @@ const handleGenerate = async () => {
 
           {generation.status === "failed" && (
             <div className="space-y-2">
-              <p className="text-sm text-destructive break-words whitespace-pre-wrap">{generation.error}</p>
+              <p className="text-sm text-destructive-text break-words whitespace-pre-wrap">{generation.error}</p>
               {generation.retryable ? (
                 <Button variant="secondary" size="sm" onClick={handleRetry} disabled={busy} busy={busy}>
                   <RotateCcw className="h-3.5 w-3.5" /> Render it again

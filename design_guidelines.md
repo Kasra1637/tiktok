@@ -54,11 +54,19 @@ because the loudest thing on the screen is no longer a colour.
 
 ```
 --background 228 14% 7%     --foreground        220 20% 93%
---card       228 14% 10%    --muted-foreground  220 10% 58%
+--card       228 14% 10%    --muted-foreground  220 10% 62%
 --secondary  228 12% 16%    --border            228 12% 17%
 --primary    244 75% 63%    --ring              244 75% 63%
 --radius     0.75rem
 ```
+
+**Error text has its own token.** `--destructive` (0 72% 51%) is fills and
+borders only — as text it measures 3.7:1 on card, below AA. Error text uses
+`text-destructive-text` (`--destructive-text` 0 85% 70%, 6.3:1 on card).
+`--muted-foreground` sits at 62% so its worst surface (`--secondary`) keeps
+margin at 5.4:1. Every named text/surface pair is asserted at ≥4.5:1 by
+`scripts/check-contrast.cjs` in the `check` chain — a token change that
+breaks a pair breaks the gate, on purpose.
 
 ### Translucent tints
 

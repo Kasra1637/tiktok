@@ -717,7 +717,7 @@ export default function BrandSetup() {
               />
             )}
             {profilesError && (
-              <span role="alert" className="flex items-center gap-1 text-sm text-destructive">
+              <span role="alert" className="flex items-center gap-1 text-sm text-destructive-text">
                 {profilesError}{" "}
                 <button type="button" className="underline" onClick={refreshProfilesList} data-testid="profiles-retry">
                   Try again

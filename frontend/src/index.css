@@ -197,11 +197,21 @@ select option:checked {
         --secondary: 228 12% 16%;
         --secondary-foreground: 220 20% 85%;
         --muted: 228 12% 14%;
-        --muted-foreground: 220 10% 58%;
+        /* 62%, not 58%: at 58% this measured 4.73:1 on --secondary — an AA
+           pass with no margin, and any surface tint under it failed. At 62%
+           it clears 5.4:1 on its worst surface (audit 2026-11-14, finding 9).
+           The contrast gate (scripts/check-contrast.cjs) holds the floor. */
+        --muted-foreground: 220 10% 62%;
         --accent: 228 12% 16%;
         --accent-foreground: 220 20% 93%;
         --destructive: 0 72% 51%;
         --destructive-foreground: 0 0% 100%;
+        /* The TEXT grade of the destructive red. The solid above measures
+           3.7:1 as text on card — below AA for the error messages a founder
+           most needs to read — so it serves fills and borders only, and
+           `text-destructive-text` utilities resolve here instead (6.3:1 on card).
+           Audit 2026-11-14, finding 1. */
+        --destructive-text: 0 85% 70%;
         --border: 228 12% 17%;
         --input: 228 12% 17%;
         --ring: 244 75% 63%;
@@ -1110,6 +1120,14 @@ h1,
         -webkit-mask-image: none;
     }
 }
+/* The surface is the shared `.surface-compact` spec — same border, radius,
+   shadow, background and 16px padding as every compact card in the app —
+   declared here in full because the landing stylesheet loads as one file;
+   only the layout extras (flex column, snap alignment) are this strip's
+   own. It hand-rolled its own surface before (12% background, 14px
+   padding, a value on no token step), so the marketing cards read as
+   cousins of the product cards instead of the same card (audit
+   2026-11-14, finding 7). */
 .how-step {
     flex: 0 0 228px;
     scroll-snap-align: start;
@@ -1117,9 +1135,9 @@ h1,
     flex-direction: column;
     border: 1px solid var(--hairline);
     border-radius: 1rem;
-    background-color: hsl(228 14% 12% / 0.72);
+    background-color: hsl(228 14% 10% / 0.72);
     box-shadow: var(--shadow-md), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-    padding: 14px;
+    padding: 16px;
     text-align: left;
     list-style: none;
 }
@@ -1145,6 +1163,21 @@ h1,
 @keyframes how-float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-4px); }
+}
+/* The paid render's indeterminate bar (audit 2026-11-14, finding 5): a
+   segment in motion, never a measured width — the wait's length is the
+   provider's, so the bar says "working" and the elapsed clock beside it
+   says how long. Under reduced motion it rests as a still segment. */
+.render-progress-fill {
+    width: 36%;
+    animation: render-progress-slide 1.6s ease-in-out infinite;
+}
+@keyframes render-progress-slide {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(290%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .render-progress-fill { animation: none; }
 }
 .how-head {
     display: flex;
