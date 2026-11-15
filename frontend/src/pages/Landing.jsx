@@ -400,7 +400,7 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-shine">Yours in minutes,</span> <span className="text-gradient-brand">and only yours.</span>
+            <span className="text-shine">Turn your App Store link into a tailored TikTok,</span> <span className="text-gradient-brand">in minutes.</span>
           </h1>
 
           <p
@@ -408,7 +408,7 @@ export default function Landing() {
             style={{ animationDelay: "120ms" }}
           >
             No filming, no editing, no blank page. Your app's facts become a hook, a script,
-            and a finished video in minutes, tailored to your app alone, and learning from
+            and a finished video, tailored to your app alone, and learning from
             every video you judge.
           </p>
 
