@@ -4334,61 +4334,139 @@ async function main() {
   // The bar must name only the real blocker. A ready review (plan, photo,
   // no edits) used to fall through to the blocked copy and ask for a save and
   // a photo that were already done.
-  await check("the ready review names no blocker and the bar offers the render itself", async (ctx) => {
+  await check("the ready review names no blocker and the bar offers the render itself only on the render half", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
-      await mount(CreateVideo, {})(ctx);
-      await openStep(ctx, "Review & submit");
-      const hint = () =>
-        (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
-      if (/attach a photo|save your edits/i.test(hint())) {
-        throw new Error(`the ready review still names a blocker: ${JSON.stringify(hint())}`);
-      }
-      if (!/ready/i.test(hint())) throw new Error("the ready review bar does not say it is ready");
-      // The ready-state invitation (ADR 0144): the bar carries the render
-      // itself — the panel's own Generate, same words and invitation as
-      // the panel's button — not the old navigation-only shortcut, which
-      // promised a render and delivered a scroll.
-      if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
-        throw new Error("the navigation-only render shortcut survives on a ready review");
-      }
-      const go = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
-      if (!go) throw new Error("the ready review offers no Generate from the bar");
-      const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
-      if (!panelButton || (go.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
-        throw new Error(`the bar's action does not carry the panel's own Generate words: ${go.textContent} vs ${panelButton?.textContent}`);
-      }
-      if (!go.classList.contains("generate-invite")) {
-        throw new Error("the bar's Generate carries no invitation");
-      }
-      if (!panelButton || !panelButton.classList.contains("generate-invite")) {
-        throw new Error("the panel's Generate carries no invitation");
-      }
-      // The render section stands as its own card, detached from the
-      // strategy panel above it by the normal section gap (ADR 0144).
-      const submit = ctx.container.querySelector("#review-submit");
-      if (!submit || !submit.classList.contains("mt-4")) {
-        throw new Error("the render section has no section gap above it");
-      }
-      apiCalls.length = 0;
-      // The fixture carries a finished render, so the panel's Generate
-      // is a re-roll and asks first — its own deliberate-click guard.
-      // The founder this check stands in for confirms, stubbed the same
-      // way the panel's confirmed-render check stubs it.
-      const originalConfirm = dom.window.confirm;
-      dom.window.confirm = () => true;
-      try {
+      // No finished render exists for this project, so the ready state
+      // is the bar's to fill (ADR 0147). A finished row would retire
+      // Generate from the bar to the forward arrow alone — that state
+      // has its own check ("the bar leaves a finished review to the
+      // forward arrow alone").
+      await withApi({ getGenerations: async () => ({ generations: [] }) }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review & submit");
+        const hint = () =>
+          (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+        if (/attach a photo|save your edits/i.test(hint())) {
+          throw new Error(`the ready review still names a blocker: ${JSON.stringify(hint())}`);
+        }
+        if (!/ready/i.test(hint())) throw new Error("the ready review bar does not say it is ready");
+        // A fresh plan lands on the plan half first, and Kasra's tab rule
+        // (ADR 0147) scopes the bar's Generate to the render half: on the
+        // plan half the bar is the navigation-only shortcut — the pre-0144
+        // way forward, no play icon, no invitation — and the round forward
+        // arrow stays hidden until a finished render exists.
+        const planTab = ctx.container.querySelector('[data-testid="review-tab-plan"]');
+        if (!planTab || planTab.getAttribute("aria-selected") !== "true") {
+          throw new Error("the ready review did not land on the plan half");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+          throw new Error("the bar offers Generate on the plan half");
+        }
+        const shortcut = ctx.container.querySelector('[data-testid="wizard-goto-render"]');
+        if (!shortcut) throw new Error("the ready review offers no way to the render half from the bar");
+        if ((shortcut.textContent || "").trim() !== "Go to render") {
+          throw new Error(`the plan half's bar action is not the render shortcut: ${shortcut.textContent}`);
+        }
+        if (shortcut.classList.contains("generate-invite") || (shortcut.innerHTML || "").includes("lucide-play")) {
+          throw new Error("the render shortcut wears Generate's invitation");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+          throw new Error("the forward arrow shows on a ready review before any render exists");
+        }
+        // The render section stands as its own card, detached from the
+        // strategy panel above it by the normal section gap (ADR 0144).
+        const submit = ctx.container.querySelector("#review-submit");
+        if (!submit || !submit.classList.contains("mt-4")) {
+          throw new Error("the render section has no section gap above it");
+        }
+        // The shortcut only navigates (ADR 0122): it switches the half in
+        // view and submits nothing.
+        apiCalls.length = 0;
+        await clickEl(ctx, shortcut, "the bar's Go to render");
+        if (apiCalls.includes("generateVideo")) {
+          throw new Error("the bar's shortcut submitted a render");
+        }
+        const renderTab = ctx.container.querySelector('[data-testid="review-tab-render"]');
+        if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
+          throw new Error("the bar's shortcut did not bring the render half into view");
+        }
+        // On the render half the bar carries the render itself (ADR
+        // 0144): the panel's own Generate, same words and invitation as
+        // the panel's button — and still no forward arrow beside it.
+        if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+          throw new Error("the navigation-only render shortcut survives on the render half");
+        }
+        const go = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
+        if (!go) throw new Error("the render half offers no Generate from the bar");
+        const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
+        if (!panelButton || (go.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
+          throw new Error(`the bar's action does not carry the panel's own Generate words: ${go.textContent} vs ${panelButton?.textContent}`);
+        }
+        if (!go.classList.contains("generate-invite")) {
+          throw new Error("the bar's Generate carries no invitation");
+        }
+        if (!panelButton || !panelButton.classList.contains("generate-invite")) {
+          throw new Error("the panel's Generate carries no invitation");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+          throw new Error("the forward arrow shows beside the bar's Generate");
+        }
+        apiCalls.length = 0;
         await clickEl(ctx, go, "the bar's Generate the video");
-      } finally {
-        dom.window.confirm = originalConfirm;
-      }
-      if (!apiCalls.includes("generateVideo")) {
-        throw new Error("the bar's Generate did not run the render");
-      }
-      const renderTab = ctx.container.querySelector('[data-testid="review-tab-render"]');
-      if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
-        throw new Error("the bar's Generate did not bring the render half into view");
-      }
+        if (!apiCalls.includes("generateVideo")) {
+          throw new Error("the bar's Generate did not run the render");
+        }
+        const renderTabAfter = ctx.container.querySelector('[data-testid="review-tab-render"]');
+        if (!renderTabAfter || renderTabAfter.getAttribute("aria-selected") !== "true") {
+          throw new Error("the bar's Generate did not bring the render half into view");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
+    }
+  });
+
+  await check("the bar narrates a render in flight and offers neither Generate nor the arrow", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      const generating = { ...SEGMENT, id: "gen-flight", status: "generating", playback_url: null, r2_url: null, video_url: null };
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [generating] }),
+          pollGeneration: async () => generating,
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          await act(async () => {});
+          await act(async () => {});
+          // The render is already running, so Kasra's flight rule (ADR
+          // 0147) retires the CTA from the bar entirely — no Generate,
+          // no shortcut, no forward arrow — and the bar carries the
+          // panel's busy presentation instead: disabled, busy, the
+          // panel's own words for the wait, never Generate's invitation.
+          if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+            throw new Error("the bar offers Generate while a render is in flight");
+          }
+          if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+            throw new Error("the bar offers the render shortcut while a render is in flight");
+          }
+          if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+            throw new Error("the forward arrow shows while a render is in flight");
+          }
+          const progress = ctx.container.querySelector('[data-testid="wizard-render-progress"]');
+          if (!progress) throw new Error("the bar carries no render progress during the flight");
+          if (!progress.disabled) throw new Error("the bar's render progress is not disabled");
+          if ((progress.textContent || "").trim() !== "Generating video") {
+            throw new Error(`the bar's flight presentation is not the panel's busy words: ${progress.textContent}`);
+          }
+          if (progress.classList.contains("generate-invite") || (progress.innerHTML || "").includes("lucide-play")) {
+            throw new Error("the bar's flight presentation wears Generate's invitation");
+          }
+        }
+      );
     } finally {
       global.__SMOKE_PARAMS = "";
       apiCalls.length = 0;
@@ -5119,7 +5197,7 @@ async function main() {
     }
   });
 
-  await check("the bar offers Generate and the way forward once Review can proceed", async (ctx) => {
+  await check("the bar leaves a finished review to the forward arrow alone", async (ctx) => {
     try {
       global.__SMOKE_PARAMS = "?project=p1";
       await withApi(
@@ -5135,21 +5213,29 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
+          await act(async () => {});
+          await act(async () => {});
           if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
             throw new Error("the bar carries an action for a step that can proceed as-is");
           }
-          // The ready bar's promise is the render itself (ADR 0144): the
-          // panel's Generate, beside the forward arrow it never displaces.
-          const generate = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
-          const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
-          if (!generate || !panelButton || (generate.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
-            throw new Error("a ready Review lost its Generate bar action");
+          // The default generations fixture carries this project's
+          // finished render (SEGMENT, completed), so this review is in
+          // Kasra's finished state (ADR 0147): Generate retires from
+          // the bar — the panel keeps its own re-roll — the shortcut
+          // goes with it, and the round forward arrow is the bar's only
+          // way onward, to Demo + CTA.
+          if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+            throw new Error("the bar still offers Generate beside a finished render");
           }
           if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
-            throw new Error("the navigation-only render shortcut survives beside the bar's Generate");
+            throw new Error("the navigation-only render shortcut survives beside the forward arrow");
           }
-          if (!ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
-            throw new Error("a ready Review lost its forward arrow");
+          const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+          if (!next) {
+            throw new Error("a finished review lost its forward arrow");
+          }
+          if (next.disabled) {
+            throw new Error("the finished review's forward arrow is locked");
           }
         }
       );
@@ -15963,7 +16049,9 @@ async function runDemoCtaChecks() {
     // its column \u2014 is gone. The clip spans the media column edge to
     // edge at the same width as the Download row beneath it, in a frame
     // with no padding, at most a hairline border, and no corner marks;
-    // the height follows the 9:16 width, never a cap. The work row
+    // the height follows the 9:16 width \u2014 the frame itself is never
+    // capped; since ADR 0149 it is the media column that is narrower,
+    // and the frame still spans it whole. The work row
     // (Demo + CTA, Remix this plan) moved out of the record column into
     // the media column, directly under the Download row. And the finished
     // clip's native controls lose the browser's three-dots overflow:
@@ -16205,7 +16293,7 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History lays one card per row and splits video from record wide", async (ctx) => {
+  await check("History lays one card per row and gives the record the wide share", async (ctx) => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const base = css.match(/\.history-grid\s*\{[^}]*\}/);
     if (!base || !/grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(base[0])) {
@@ -16217,8 +16305,16 @@ async function runDemoCtaChecks() {
     if (!/\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css)) {
       throw new Error("the card lost its stacked narrow layout");
     }
-    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/.test(css)) {
-      throw new Error("the wide card does not split into two balanced columns");
+    // Kasra's proportion (ADR 0149): the balanced split made the 9:16
+    // clip over a thousand pixels tall at the design width and the
+    // card was a video with a record attached. The media column is
+    // capped, so the clip stands at about half that height and the
+    // record takes the freed width.
+    if (!/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*288px\)\s+minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("the wide card does not cap the media column at the half-height proportion");
+    }
+    if (/@media\s*\(min-width:\s*900px\)[\s\S]*?\.history-row-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/.test(css)) {
+      throw new Error("the wide card still splits into two balanced columns");
     }
     if (!/\.history-row-grid\s*\{[^}]*align-items:\s*start/.test(css)) {
       throw new Error("the card columns stretch to the taller side, leaving dead space under the shorter column's content");
@@ -16417,15 +16513,18 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("the finished History card's columns stand equal and the skeleton fills the same way", async (ctx) => {
-    // Equal columns (ADR 0143): at desktop widths the record column
-    // fills the height the media column's 9:16 frame sets, its blocks
-    // distributing the leftover space instead of ending over a void —
-    // the video is never shrunk to meet it (ADR 0137). jsdom runs no
-    // layout, so the pin is the structure the rules act on — the
-    // .history-record wrapper on the finished card and in the skeleton
-    // alike — plus the shipped stylesheet's own stretch/distribute
-    // rules, scoped to standard cards inside the desktop breakpoint.
+  await check("the finished History card's columns stand equal without filler and the skeleton fills the same way", async (ctx) => {
+    // Equal columns (ADR 0143, proportion and fill refined by 0149):
+    // at desktop widths the two columns stand the same height, but the
+    // record no longer distributes its blocks over the filled height —
+    // Kasra read the spread gaps as filler between boxes, not as one
+    // card. The blocks keep their natural 20px rhythm and the leftover
+    // height collects at the column's foot. jsdom runs no layout, so
+    // the pin is the structure the rules act on — the .history-record
+    // wrapper on the finished card and in the skeleton alike — plus
+    // the shipped stylesheet's own stretch rule, scoped to standard
+    // cards inside the desktop breakpoint, and the absence of the
+    // distribution rule it replaces.
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -16450,8 +16549,8 @@ async function runDemoCtaChecks() {
       if (!/\.history-card:not\(\.history-card-compact\) \.history-row-grid \{\s*align-items: stretch;/.test(desktop)) {
         throw new Error("the desktop history row does not stretch its columns equal");
       }
-      if (!/\.history-card:not\(\.history-card-compact\) \.history-record \{[^}]*justify-content: space-between;/.test(desktop)) {
-        throw new Error("the record column does not distribute its blocks over the filled height");
+      if (/\.history-card:not\(\.history-card-compact\) \.history-record \{[^}]*justify-content: space-between;/.test(desktop)) {
+        throw new Error("the record column still distributes its blocks as filler over the filled height");
       }
     } finally {
       global.__SMOKE_PARAMS = previousParams;
@@ -16461,7 +16560,7 @@ async function runDemoCtaChecks() {
 
   await check("the History loading skeleton's record fills the same equal height", async (ctx) => {
     // The skeleton wears the finished card's classes (ADR 0143), so the
-    // equal-height record wrapper the desktop rules distribute is part
+    // equal-height record wrapper the desktop rules stretch is part
     // of the loading structure too — the finished card lands in a
     // column already filled the same way, with no shift.
     const History = load("pages/GenerationHistory.jsx").default;

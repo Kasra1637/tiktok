@@ -8,7 +8,7 @@ One render path, single-pass video generation via OpenRouter.
 - Backend tests: `python -m pytest backend/ -q` (media cases need ffmpeg/ffprobe
   on PATH; a missing ffmpeg is a setup failure, not a reason to skip).
 - Frontend gates: `yarn --cwd frontend run check` (imports, logic, demo-cta draft,
-  render smoke, tour targets — not Jest or the build). Focused smoke:
+  contrast gate, render smoke, tour targets — not Jest or the build). Focused smoke:
   `SMOKE_ONLY='wizard' node frontend/scripts/check-render-smoke.cjs` — a filter
   that selects zero checks verifies nothing.
 - Frontend tests/build: `CI=true yarn --cwd frontend test --watchAll=false` /
@@ -58,14 +58,18 @@ One render path, single-pass video generation via OpenRouter.
 - `backend/generation_planning.py` — prompt assembly + `is_recoverable_error`
   (retry policy). Prompt budget + sacred-script rule live here.
 - `frontend/src/components/GenerationPanel.jsx` — the render panel; errors via
-  `lib/errorMessage.js`. Card padding/spacing tokens live in `index.css`.
+  `lib/errorMessage.js`. It registers the wizard bar's render states with the
+  page — the ready Generate, and the in-flight busy presentation while a
+  render runs (ADRs 0144/0147); the model, resolution and render handler live
+  here and nowhere else. Card padding/spacing tokens live in `index.css`.
 - `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
   pure function of video time (export matches preview), faces come from
   `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007.
 - `frontend/src/pages/CreateVideo.jsx` — four-step wizard orchestration:
   App Profile → Audience & template → Review & submit → Demo + CTA (the
   finishing step renders the Demo+CTA editor loader on the project's newest
-  finished render; ADR 0121). Selection UI lives in
+  finished render; ADR 0121). At desktop widths the wizard stands one step
+  at a time, as pages; below, the canvas stacks (ADR 0141). Selection UI lives in
   `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); direction
   dropdowns and plan-phase narration in `ReviewPanels.jsx`. Project writes stay
   in the page. `pages/wizardDraft.js` owns coupled draft transitions;
@@ -79,6 +83,11 @@ One render path, single-pass video generation via OpenRouter.
 - `frontend/src/pages/GenerationHistory.jsx` (+ `historyPolling.js`,
   `historyRepair.js`) — confirmed row snapshots, bounded per-row polling and
   durable-save recovery; a stopped browser check is not a provider failure.
+  The generating skeleton mirrors the finished card. At desktop widths the
+  media column is capped (288px) so the clip stands at about half its
+  former height and the record takes the freed width; the columns stand
+  equal, and the record fills by its natural spacing rhythm, never by
+  distributing filler between its blocks (ADR 0149, refining 0143).
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
 - `backend/feedback.py` — the whole-video verdict bundles and their
@@ -118,6 +127,39 @@ One render path, single-pass video generation via OpenRouter.
 - No claim-safety system exists (ADR 0119): wording is never checked,
   reported on, or refused anywhere in the app; the angle's bounded-by lines
   are prompt guidance for the generator only, never a gate on a result.
+- The strategy drift gate diffs raw values only (ADRs 0142/0146): the
+  frontend helper (`frontend/src/lib/strategyStaleness.js`) mirrors the
+  server diff over the payload's `direction_saved` — the saved direction
+  before any display transform — and the two sides must never disagree.
+  `_public_project`'s location display transforms (scene fill, object-clause
+  strip, fragment repair) must never feed a comparison.
+- A claimed persist execution is bounded (ADR 0148): every path (detached,
+  inline, startup drain) executes through `_execute_claimed_persist_job`,
+  which runs under `_PERSIST_EXECUTION_LIMIT_SECONDS` (1800). A bound-expired
+  save fails its job through the ordinary bookkeeping and lands on the row
+  as a named `storage_error` — completed, retry offered — never an eternal
+  `generating`. The detached heartbeat extends the lease only inside the
+  bound; it protects a slow save, it cannot keep a hung one alive.
+- The Review sticky bar follows the half in view and the render's state
+  (ADR 0147, refining 0144): in the ready state the bar carries the real
+  Generate only on the Render & result half — Read the plan gets the
+  navigation-only "Go to render" shortcut, which switches the half and
+  submits nothing (ADR 0122). During a render the bar carries the panel's
+  busy presentation instead — no Generate, no shortcut. The round forward
+  arrow renders on Review only once a finished render exists and none is
+  in flight; then it is the bar's only way forward.
+- The craft scorer (`backend/creative_quality.py`) rewards first person and
+  penalizes only diary framing; the story arc ends open, the demo completes
+  it, and the cover text is scored with the hook (ADR 0145). Generation
+  prompts follow the same doctrine — 'I' is the goal, never a ration. The
+  plan drafts `cover_text` to the shared cover best-practice rules; Review
+  shows it as plain text and regenerates it only as a suggestion the founder
+  accepts — never auto-saved, never hand-edited in place — and the post kit
+  ships the accepted cover verbatim.
+- Settled layout decisions are not open questions (ADR 0141): Review stays
+  one column at every width, Analytics stays a calm ledger, and the wizard
+  is paged at desktop widths, stacked below. Render progress is narrated in
+  words with an elapsed clock — never a staged percentage (ADR 0140).
 - Feedback learning is one verdict on the whole video (ADR 0124): a single
   thumbs up or down per finished video on its History card, with the whole
   bundle (spoken words, post kit, opening visual, audio identity) frozen
@@ -148,7 +190,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and eleven decisions (0001–0111) now
+Read `docs/adr/README.md` first. One hundred and forty-seven decisions (0001–0147) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
@@ -157,7 +199,12 @@ pre-render), 0083 (database durability), 0090 (Location is the single source
 of truth; the hook opens on a visible move), 0092 (Render & result scene
 fields agree — fix or block) and 0097 (a selfie never shows a phone, a reach
 toward the lens, or a second free hand); 0099 stacks the wizard as one canvas.
-Post kits follow 0100: 4 to 6 classified hashtags, never bait.
+Post kits follow 0100 as amended by 0139: the model proposes a 12–15
+hashtag candidate pool, post counts are researched best-effort
+(`backend/hashtag_volume.py`, cached 7 days), and exactly five are selected
+by size — about three at 10k–50k posts and two at 100k–500k, never
+million-plus, never bait; a lookup outage falls back to the pool's first
+five on wording alone, so a kit never breaks.
 `provider_capabilities.py` compares
 the catalog to OpenRouter's live listing at boot as a warning only — never a
 gate. Frontend design constraints live in `design_guidelines.md`.

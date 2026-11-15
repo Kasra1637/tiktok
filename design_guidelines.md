@@ -153,10 +153,21 @@ Composite classes in `index.css`; prefer them over ad-hoc borders and shadows.
 | `.card-pickable` | Selectable option card (`aria-pressed`) with lit indigo top rim when selected |
 | `.input-well` | Recessed studio field (`Input`, `Textarea`, `CONTROL_CLASS` `<select>`) with inner top shadow and 3px indigo focus aura |
 
+**Review's cover text is presentation, not a field.** It stands once as plain
+text directly under its section subtitle, left-aligned with the hook and
+script lines — no 9:16 frame, no box, no in-place editing. A regenerated
+cover arrives as a plain-text suggestion the founder accepts or dismisses;
+the words shown are the words that ship (ADR 0145).
+
 Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-lg` →
 `--shadow-xl` (layered, not a single flat blur). The indigo glow (`--glow-indigo`)
 is for the acting button on a screen and active states **only**; `--glow-coral`
-is left with the brand tokens and no button surface uses it (ADR 0010).
+is left with the brand tokens and no button surface uses it (ADR 0010). The
+ready Generate's invitation is its own treatment on top of that rule:
+`.generate-invite`, a soft breathing indigo glow worn by the render panel's
+Generate and — on the Render & result half only — the wizard bar's, exactly
+while the click will work; `prefers-reduced-motion` turns it off (ADRs
+0144/0147).
 
 Radii: cards `rounded-2xl` (16px), asides and rows `rounded-xl` (12px), pills
 `rounded-full`. **`.surface` owns its own radius and padding** — do not re-type
@@ -304,7 +315,7 @@ the same control wherever the founder meets it. It is related blocks, not a
 field's own stack: the action is a CTA that navigates, not a control the label
 belongs to. Every step sits in its own `.surface-step` section card on the
 canvas, and every aside in it is `.inset-panel`, so the padding is identical on
-all three steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared
+every canvas step. `frontend/scripts/check-render-smoke.cjs` asserts the shared
 token. One aside is a deliberate exception: Review's render panel is a full
 `.surface` card of its own, standing below the strategy panel with the normal
 section gap between them (ADR 0144), because Review's two halves — read the
@@ -319,16 +330,16 @@ card the divider-group discipline stands: no boxes in the box.
 
 History is one attached card per render: the clip on the left, its record on
 the right (stacked on phones, video beside content from 900px via
-`.history-row-grid`), with 16px gutters and top-aligned cards. No expand
+`.history-row-grid`), with 16px gutters. No expand
 step — the video, identity, facts, votes and actions are all visible
-together, so a record can never read as a separate section or stretch a
-neighbor. A card that has a clip to play leads with a full-bleed stage and
+together, so a record can never read as a separate section. A card that has
+a clip to play leads with a full-bleed stage and
 its identity summary beneath the footage: stacked, the clip is a contained
-320px video; side by side the card splits into two balanced columns,
-top-aligned and each sized to its own content so neither stretches dead
-space under the other, and the clip keeps its capped 9:16 size (560px tall
-at most) framed and centered on the transparent stage, 12px padding,
-instead of filling the wider column into a letterboxed box. A card with
+320px video; side by side the card splits into two columns that
+stand equal height — a capped media column and the record taking the wide
+share, per the proportion and equal-height rules below (ADRs 0143/0149) —
+and the clip's own geometry is the
+flush frame described below, never a letterboxed box. A card with
 nothing to play keeps a notice in place of the video, because a blank card
 explains nothing.
 
@@ -345,7 +356,10 @@ Every playable clip sits flush in its column: `.history-preview-frame`
 spans the media column edge to edge at the Download row's width — no
 padding, no width cap, at most the card hairline (`--hairline`) for an
 edge; no surround, no corner marks (ADR 0137). The height follows the 9:16
-width. Compact without-copy cards shrink the frame to its fixed 135px clip
+width — and since ADR 0149 the desktop media column is capped at 288px,
+so that height lands at about half what the old balanced split produced;
+the proportion lives in the column, never in a cap on the frame itself.
+Compact without-copy cards shrink the frame to its fixed 135px clip
 (`width: max-content`) rather than drawing gutters beside it. Cards with no
 playable clip keep their notice, and on a regular card the notice stands in
 the finished frame's geometry — flush stage, full-width 9:16 frame
@@ -355,10 +369,11 @@ notice in the record instead. The History loading skeleton mirrors the
 finished card the same way: two columns, full-size frame placeholder, and
 placeholder rows for the Download row, the work row, the summary and the
 record — never a lone phone-shaped box. At desktop widths the card's two
-columns stand equal: the row stretches to the height the media column's
-frame sets, and the record column fills that height, its blocks
-distributing the leftover space between them so no void sits under the
-record — the video is never shrunk or capped to meet it (ADR 0143). The finished clip's native
+columns stand equal: the row stretches to its taller side and the record
+column fills that height — but its blocks keep their natural 20px rhythm
+rather than distributing the leftover space between them, so no filler
+gaps open up inside the record and any leftover collects at the column's
+foot (ADR 0149, refining 0143). The finished clip's native
 controls carry `controlsList="nodownload noremoteplayback"` and
 `disablePictureInPicture`, so the browser's three-dots overflow menu has
 nothing in it and does not render.
@@ -493,6 +508,18 @@ Progress is scoped to a single screen's steps, not the whole app pipeline —
 cross-page position is conveyed by the sidebar's active nav item. An earlier
 four-stage pipeline stepper (find → analyze → swap → video) was specified here
 but never imported by anything; the shipped model is the one documented above.
+
+### Score tooltips
+
+The Craft check's eight tiles explain themselves through the shared Radix
+tooltip, and every layer of it wears one label style: the metric's title and
+the "On this clip" evidence heading both use the shared all-caps tracked
+label class (the `.section-heading` format and color), so the title never
+reads as body copy. Between them sit two short plain sentences of rubric —
+how the score is calculated, at a glance — and nothing else; the weighted
+maxima and the scoring are the scorer's (`backend/creative_quality.py`), and
+the tooltip's words are the rubric's own, so screen and scorer cannot
+disagree (ADRs 0140/0145).
 
 ### Voice (read aloud)
 

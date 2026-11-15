@@ -81,11 +81,12 @@ exact browser origin in `CORS_ORIGINS`; an empty value means `*`, not deny-all.
 ### Provider refuses the prompt or returns 429
 
 - Keep the quoted provider error and next-step instructions visible. Review
-  claim findings, identity requirements, camera conflicts and model limits.
+  the quoted refusal, identity requirements, camera conflicts and model limits.
 - Provider 429 is throttling, not a successful submit. Polling can wait; a
   failed submit needs the explicit retry described by the app.
-- Correct unsupported claims rather than disguising them. No phrase filter,
-  claim checker or model setting guarantees acceptance or TikTok approval.
+- Correct unsupported claims rather than disguising them. The app runs no
+  phrase filter or claim checker (ADR 0119), and no model setting guarantees
+  acceptance or TikTok approval.
 - Check the selected model/allowlist and
   [capability rules](../backend/video_providers.py), not only the public
   provider catalog. Do not add a fallback or a second render path.

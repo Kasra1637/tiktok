@@ -2276,6 +2276,13 @@ async def complete_demo_cta_upload(
 _DOWNLOAD_ATTEMPTS = 3
 _DOWNLOAD_TIMEOUT = 240
 _DOWNLOAD_BACKOFF = (2, 5)
+# The httpx timeout above is per socket operation, so a source that
+# drip-feeds bytes — each chunk arriving just inside the read window —
+# can hold one attempt open indefinitely. The attempt as a whole carries
+# its own cap (ADR 0148): generous beside the per-operation timeout, so
+# a slow-but-moving download of a big 2K file still lands, while a
+# stalled one fails as an ordinary retryable attempt.
+_DOWNLOAD_ATTEMPT_LIMIT_SECONDS = 600
 # Browser-like headers for the same reason: some provider CDNs refuse
 # non-browser clients while the URL plays fine in a browser.
 _DOWNLOAD_HEADERS = {
@@ -2476,18 +2483,24 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     headers = dict(_DOWNLOAD_HEADERS)
     headers.update(ai_service.provider_download_headers(video_url))
     last_detail = "no attempt made"
+
+    async def _stream_attempt() -> None:
+        async with httpx.AsyncClient(
+            timeout=_DOWNLOAD_TIMEOUT,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            async with client.stream("GET", video_url) as resp:
+                resp.raise_for_status()
+                with open(target, "wb") as fh:
+                    async for chunk in resp.aiter_bytes():
+                        fh.write(chunk)
+
     for attempt in range(1, _DOWNLOAD_ATTEMPTS + 1):
         try:
-            async with httpx.AsyncClient(
-                timeout=_DOWNLOAD_TIMEOUT,
-                follow_redirects=True,
-                headers=headers,
-            ) as client:
-                async with client.stream("GET", video_url) as resp:
-                    resp.raise_for_status()
-                    with open(target, "wb") as fh:
-                        async for chunk in resp.aiter_bytes():
-                            fh.write(chunk)
+            await asyncio.wait_for(
+                _stream_attempt(), timeout=_DOWNLOAD_ATTEMPT_LIMIT_SECONDS
+            )
             if target.exists() and target.stat().st_size > 0:
                 if await asyncio.to_thread(storage_service.is_usable_video, target):
                     target.replace(destination)
@@ -2511,6 +2524,22 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
                     pass
             else:
                 last_detail = "downloaded file was empty"
+        except asyncio.TimeoutError:
+            # The attempt as a whole stalled past its cap (ADR 0148) —
+            # the per-operation httpx timeout cannot see a drip-feed.
+            # A failed attempt like any other: drop the partial file so
+            # it cannot look reusable, name the stall, back off, retry.
+            last_detail = (
+                f"download stalled past {_DOWNLOAD_ATTEMPT_LIMIT_SECONDS}s"
+            )
+            logger.warning(
+                f"Could not download generation video {generation_id} "
+                f"(attempt {attempt}/{_DOWNLOAD_ATTEMPTS}): {last_detail}"
+            )
+            try:
+                target.unlink()
+            except OSError:
+                pass
         except httpx.HTTPStatusError as e:
             code = e.response.status_code
             last_detail = f"HTTP {code} {(e.response.reason_phrase or '').strip()}".strip()
@@ -2795,6 +2824,23 @@ _PERSIST_JOB_KIND = "persist_generation_clip"
 # processes' claims distinguishable in the jobs table if that ever changes.
 _JOB_WORKER = f"proc-{os.getpid()}"
 
+# The detached runner's heartbeat cadence, and the hard bound on one
+# claimed persist execution (ADR 0148). The heartbeat extends the 300s
+# lease while a save runs — ADR 0138's protection for a save that is
+# merely slow — but it answers to the bound: an execution that runs past
+# the limit is cut off, its job failed back to the queue through the
+# ordinary bookkeeping, and its outcome applied as a named storage
+# error, instead of the heartbeat holding the lease (and the generation
+# row at `generating`) forever. The limit is sized off the pipeline's
+# own contracts: the storage-retry request already budgets 600s for
+# this same save, and every step inside carries a tighter timeout of
+# its own (a download attempt is capped below, the encodes carry
+# 25–600s, the storage client reads at 30s), so a healthy save — a 2K
+# download retrying, then the full encode chain — lands far inside it.
+# The bound exists for the step that hangs anyway.
+_PERSIST_HEARTBEAT_SECONDS = 60
+_PERSIST_EXECUTION_LIMIT_SECONDS = 1800
+
 
 async def _enqueue_persist_job(generation_id: str, user_id: str, video_url: str = "") -> str:
     """Record that a finished render's persist is owed. Deduped per render."""
@@ -2825,12 +2871,28 @@ async def _execute_claimed_persist_job(job: dict) -> tuple:
     park, per attempts) and re-raises, so the caller keeps the error for
     its own reporting — poll turns it into the row's storage_error exactly
     as it did when the persist ran inline.
+
+    The execution is bounded (ADR 0148): every caller of this function —
+    the detached runner, the inline queue path, the startup drain — gets
+    the same hard limit, so no path can hold a claim past it. A timeout
+    is converted to a named error and flows through the same fail-job
+    bookkeeping as any other raised persist.
     """
     try:
-        outcome = await _execute_persist_job(job)
+        outcome = await asyncio.wait_for(
+            _execute_persist_job(job),
+            timeout=_PERSIST_EXECUTION_LIMIT_SECONDS,
+        )
     except Exception as e:
+        if isinstance(e, asyncio.TimeoutError):
+            e = RuntimeError(
+                "The durable save timed out after "
+                f"{_PERSIST_EXECUTION_LIMIT_SECONDS // 60} minutes and was "
+                "stopped so the video cannot strand at generating; "
+                "retry the save."
+            )
         await _fail_job(job["id"], _JOB_WORKER, f"{type(e).__name__}: {e}")
-        raise
+        raise e
     payload = json.loads(job.get("payload") or "{}")
     await _complete_job(job["id"], _JOB_WORKER, result={
         "generation_id": payload.get("generation_id"),
@@ -2895,10 +2957,15 @@ async def _run_detached_persist(job: dict, generation_id: str, user_id: str,
     never re-claimed mid-flight; a failure fails the job back to the queue
     (inside _execute_claimed_persist_job) and names the error on the row,
     exactly as the inline path's caller did.
+
+    The execution it heartbeats is bounded (ADR 0148): the heartbeat
+    protects a save that is merely slow, and stops with the execution
+    when the bound cuts a hung one off — it never holds a lease past
+    the limit.
     """
     async def heartbeat():
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(_PERSIST_HEARTBEAT_SECONDS)
             if not await _heartbeat_job(job["id"], _JOB_WORKER):
                 return
 

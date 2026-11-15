@@ -876,7 +876,15 @@ h1,
 }
 @media (min-width: 900px) {
     .history-row-grid {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        /* Kasra's proportion (ADR 0149): the balanced split made the
+           9:16 clip over a thousand pixels tall at the design width,
+           so the card read as a video with a record attached. The
+           media column is capped at 288px — the frame lands at about
+           half its former height — and the record takes the freed
+           width. The frame itself stays flush in its column (ADR
+           0137); only the column narrowed. Compact cards override
+           this template with their own geometry below. */
+        grid-template-columns: minmax(0, 288px) minmax(0, 1fr);
     }
     .history-media {
         border-bottom: none;
@@ -896,22 +904,25 @@ h1,
         height: auto;
         aspect-ratio: 9 / 16;
         object-fit: contain;
-        /* No height cap (ADR 0137): the width is the column's, edge to
-           edge, and the height is whatever 9:16 makes it — a cap here
-           would letterbox the footage inside a full-width element. */
+        /* No height cap on the element (ADR 0137): the width is the
+           column's, edge to edge, and the height is whatever 9:16
+           makes it — a cap here would letterbox the footage inside a
+           full-width element. The proportion is set by the column's
+           width instead (ADR 0149). */
     }
     .history-body {
         padding: 24px 24px 28px;
     }
-    /* Equal columns (ADR 0143): the row stretches to its taller side —
-       almost always the media column, whose 9:16 frame sets the card's
-       height — and the record column fills that same height, its blocks
-       distributing the leftover space between them instead of ending
-       early over a void. The video's geometry does the opposite of
-       shrinking: the frame keeps the column's full width (ADR 0137)
-       and the record side does all the filling. Standard cards only;
-       compact cards keep their own geometry. The loading skeleton
-       wears the same classes, so it fills the same way. */
+    /* Equal columns (ADR 0143, fill refined by ADR 0149): the row
+       stretches to its taller side and the record column fills that
+       same height, so the two sides of the card always end together.
+       What changed is how the record fills: it no longer distributes
+       its blocks over the height — Kasra read the spread gaps as
+       filler between boxes, not as one cohesive card. The blocks keep
+       their natural space-y-5 rhythm and any leftover height collects
+       at the column's foot, inside the body's own padding. Standard
+       cards only; compact cards keep their own geometry. The loading
+       skeleton wears the same classes, so it fills the same way. */
     .history-card:not(.history-card-compact) .history-row-grid {
         align-items: stretch;
     }
@@ -928,7 +939,6 @@ h1,
         flex: 1;
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
     }
 }
 

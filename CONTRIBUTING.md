@@ -54,8 +54,9 @@ Run the full local frontend gates when the change spans their owners:
 yarn --cwd frontend run check
 ```
 
-This includes imports, pure logic, editing-document checks, render smoke and the
-tour-target audit. It does **not** include Jest or the production build.
+This includes imports, pure logic, editing-document checks, the AA contrast
+gate, render smoke and the tour-target audit. It does **not** include Jest or
+the production build.
 
 ### Focused smoke checks
 

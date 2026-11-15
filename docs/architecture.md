@@ -16,7 +16,9 @@ exceptions live in [ADRs](adr/README.md).
   provenance record. Not the project itself.
 - **Editing document**: the browser-local Demo + CTA draft. It is not the
   server's reviewed script or a durable cloud backup.
-- **Post kit**: generated caption/copy attached to a completed generation.
+- **Post kit**: generated caption/copy attached to a completed generation,
+  with five hashtags selected from researched post counts (ADR 0139) and the
+  plan's approved cover text shipped verbatim (ADR 0145).
 
 ## Runtime and dependency direction
 
@@ -78,6 +80,8 @@ Paths below are relative to [backend](../backend/).
 | [scene_consistency.py](../backend/scene_consistency.py) | Scene-field agreement (ADR 0092/0103/0104): `reconcile_scene` patches what is patchable; Movement ≥600 is advisory, Props stays a hard block. |
 | [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
 | [feedback.py](../backend/feedback.py) | Whole-video verdict bundles and the prompt section built from them, plus the posted-performance record math (dated snapshots, the craft score frozen at submit). The verdict bundle is the only steering signal — and, for templates, the only ranking signal (ADR 0127); the record never steers or ranks (ADR 0124). |
+| [creative_quality.py](../backend/creative_quality.py) | The craft scorer: eight weighted dimensions over the hook, script and cover text. First person earns, only diary framing is penalized, the story arc pays the deliberately open ending, and the cover is scored with the hook (ADR 0145). Advisory only — it explains itself in Review's tooltips and never gates a render. |
+| [hashtag_volume.py](../backend/hashtag_volume.py) | Post-count research for post kits (ADR 0139): best-effort lookups over the prompt's 12–15 candidate pool, cached 7 days (migration 0005), selecting exactly five by size band (three at 10k–50k posts, two at 100k–500k, never million-plus). Any lookup failure falls back to the pool's first five on wording alone. |
 | [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py`, `history.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets`/`history` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
 | [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
 | [pipeline.py](../backend/pipeline.py), [storage_service.py](../backend/storage_service.py), [media_signing.py](../backend/media_signing.py) | Local media operations, R2 durability and signed app URLs. Provider URLs are not durable browser playback links. |
@@ -121,7 +125,9 @@ accepts data; it must not be mistaken for an authorization check.
 | [HookLineEditor.jsx](../frontend/src/components/studio/HookLineEditor.jsx) | Review spoken-line editor under Review & submit. |
 | [useWizardDirections.js](../frontend/src/pages/useWizardDirections.js) | Direction fetch with stale-request guard; picks reset on app switch. |
 | [PendingSaveCard.jsx](../frontend/src/pages/PendingSaveCard.jsx) | Surfaces a durable-save retry card without claiming that a browser check is a render failure. |
-| [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. |
+| [GenerationPanel.jsx](../frontend/src/components/GenerationPanel.jsx), [HookContinuityPanel.jsx](../frontend/src/components/HookContinuityPanel.jsx) | Render preconditions and strategy building/review. Keep their server gates authoritative. GenerationPanel also registers the wizard bar's render states with the page — its ready Generate, and its busy presentation while a render is in flight (ADRs 0144/0147). |
+| [strategyStaleness.js](../frontend/src/lib/strategyStaleness.js) | The client drift gate: diffs the strategy's direction stamp against the payload's raw `direction_saved`, mirroring the server diff (ADRs 0142/0146). Display text never feeds the comparison. |
+| [CoverTextEditor.jsx](../frontend/src/components/studio/CoverTextEditor.jsx) | Review's cover-text block: the plan's drafted cover stands as plain text under its subtitle; a regeneration arrives as a suggestion the founder accepts or dismisses — never auto-saved, never hand-edited in place (ADR 0145). |
 | [GenerationHistory.jsx](../frontend/src/pages/GenerationHistory.jsx), [historyPolling.js](../frontend/src/pages/historyPolling.js), [historyRepair.js](../frontend/src/pages/historyRepair.js) | Confirmed row snapshots, bounded per-row polling and durable-save recovery. Stopped browser polling does not mean provider failure. |
 | [OnboardingProvider.jsx](../frontend/src/components/onboarding/OnboardingProvider.jsx), [tours.js](../frontend/src/lib/onboarding/tours.js) | First-run readiness and manual help; deferred tours are not marked completed. |
 | [DemoCtaEditor.jsx](../frontend/src/demoCta/DemoCtaEditor.jsx) | Editor controls and composition state. |
@@ -147,7 +153,8 @@ errors the production compiler may not report.
 
 - Schema is versioned in `schema.apply_schema` (ADR 0120): the historical
   bootstrap is the recorded baseline in `schema_migrations`, and later
-  changes append numbered steps the runner applies once. Back up before
+  changes append numbered steps the runner applies once (currently through
+  0006, the plan's cover text). Back up before
   applying a new schema (operations runbook); an image rollback is not a
   database rollback.
 - Post-render persistence runs through the `jobs` table with claim/lease/

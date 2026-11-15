@@ -23,4 +23,4 @@ ALLOW_LIVE_SAMPLE=1 OPENROUTER_API_KEY=<key> python backend/live_sample.py \
 
 Then submit one render through the studio, save the clip under the out dir,
 and complete the checklist: end-to-end playback, identity likeness, no
-generated demo/CTA, and the claim-check outcome with its next step.
+generated demo/CTA, and any provider refusal with its next step.

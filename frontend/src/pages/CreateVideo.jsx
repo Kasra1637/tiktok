@@ -635,12 +635,15 @@ export default function CreateVideo() {
   const registerStrategyBarAction = useCallback((action) => {
     setStrategyBarAction(action);
   }, []);
-  // The render panel's ready-state action, registered while Review is
-  // the step in view (ADR 0144): when nothing holds the founder back,
-  // the bar carries the panel's own Generate — same words, play icon
-  // and invitation — and its click runs the render in the panel. The
-  // panel owns the handler, the model and the resolution; the bar only
-  // renders what it is given, exactly like the strategy action above.
+  // The render panel's bar registrations, while Review is the step in
+  // view (ADR 0144, scoped by ADR 0147): in the ready state the panel
+  // registers its own Generate — same words, play icon and invitation —
+  // whose click runs the render in the panel; during a render it
+  // registers its busy presentation instead, marked `flight`, so the
+  // bar narrates the wait. The panel owns the handler, the model and
+  // the resolution; the bar only renders what it is given, and decides
+  // by the half in view and the render's state which registration — if
+  // any — it carries, exactly like the strategy action above.
   const [renderBarAction, setRenderBarAction] = useState(null);
   const registerRenderBarAction = useCallback((action) => {
     setRenderBarAction(action);
@@ -1896,18 +1899,35 @@ export default function CreateVideo() {
     } else if (strategyBarAction) {
       barAction = strategyBarAction;
     } else if (activeStepState?.state === "done") {
-      // Not an unblocker: the step can already proceed, so this keeps its
-      // old place beside the forward arrow rather than displacing it.
-      // Ready (ADR 0144): the bar carries the render itself — the
-      // panel's registered Generate, same words, play icon and
-      // invitation as the panel's own button — in the place the old
-      // navigation-only shortcut held. The shortcut remains only as
-      // the fallback for a state where the panel cannot register (its
-      // gates refuse the render): it never generates, it only ever
-      // navigates, and the panel's gates still decide.
-      if (renderBarAction) {
+      // The settled half of Review, in Kasra's order (ADR 0147): a
+      // render in flight narrates itself and offers nothing else; a
+      // finished render leaves the bar to the forward arrow alone;
+      // only with neither does the bar carry an action of its own, and
+      // which one depends on the half in view. None of these is an
+      // unblocker — the states above this branch own those.
+      if (renderBarAction?.flight) {
+        // In flight: the panel's registered busy presentation. It
+        // carries no blocks:false, so the forward arrow stands down
+        // beside it like beside every blocking action — the way
+        // forward opens only when the render lands.
+        barAction = renderBarAction;
+      } else if (finishedGeneration) {
+        // Finished: Generate retires from the bar. The forward arrow
+        // (rendered below, and on Review only in this state) is the
+        // way onward to Demo + CTA; the panel keeps its own Generate
+        // for a founder who wants another render.
+        barAction = null;
+      } else if (renderBarAction && effectiveReviewTab === "render") {
+        // Ready on the render half (ADR 0144): the bar carries the
+        // render itself — the panel's registered Generate, same words,
+        // play icon and invitation as the panel's own button.
         barAction = renderBarAction;
       } else {
+        // Ready on the plan half — and the fallback for a render half
+        // whose panel cannot register (its gates refuse the render):
+        // the navigation-only shortcut, restored to the plan half by
+        // ADR 0147. It never generates (ADR 0122); it only switches
+        // the half in view, and the panel's gates still decide.
         barAction = {
           label: "Go to render", testId: "wizard-goto-render", icon: "render",
           blocks: false,
@@ -1932,6 +1952,19 @@ export default function CreateVideo() {
       },
     };
   }
+  // Kasra's arrow rule (ADR 0147): on Review the round forward arrow is
+  // the finished render's way forward and nothing else's. It renders
+  // only once a finished render exists for the project and no render is
+  // in flight — every earlier Review state leaves the bar to its one
+  // action or its hint line, so the arrow never walks a founder past
+  // the Generate this step exists to offer. Other steps keep the
+  // standing rule: the arrow shows beside a non-blocking bar action,
+  // or where there is no bar action at all.
+  const showContinueArrow =
+    (!barAction || barAction.blocks === false) &&
+    step < STEPS.length - 1 &&
+    (STEPS[step].key !== "review" ||
+      (Boolean(finishedGeneration) && !renderBarAction?.flight));
   // The rail score, derived per segment so the bar, the quarters and the
   // number can never disagree: a done step claims its full quarter, the step
   // in view claims half until it is done, the rest claim nothing.
@@ -3644,11 +3677,15 @@ export default function CreateVideo() {
               the section's own button, same handler and busy behavior —
               and no forward arrow shows beside it. When the step can
               proceed as-is there is no bar action, and the arrow below is
-              the way forward. A ready review's bar action is the render
-              itself (ADR 0144): the panel's registered Generate, wearing
-              the same invitation as the panel's button, and its click
-              runs the render in the panel — the words and the click
-              finally promise the same thing. */}
+              the way forward. A ready review's bar action is scoped by
+              the half in view and the render's state (ADR 0147, refining
+              0144): on the render half it is the render itself — the
+              panel's registered Generate, wearing the same invitation as
+              the panel's button, its click running the render in the
+              panel; on the plan half it is the navigation-only shortcut;
+              during a flight it is the panel's busy presentation; and
+              once a render has finished it retires entirely, leaving
+              the arrow as the only way onward. */}
           {barAction && (
             <Button
               variant="accent"
@@ -3677,8 +3714,11 @@ export default function CreateVideo() {
               wears a padlock, so the founder sees they must finish this
               step before the next unlocks. The line beside it names what
               is still missing. While a blocking bar action is offered it
-              replaces this arrow entirely — one working action at a time. */}
-          {(!barAction || barAction.blocks === false) && step < STEPS.length - 1 && (
+              replaces this arrow entirely — one working action at a time.
+              On Review the arrow answers to Kasra's rule instead (ADR
+              0147): it renders only once a finished render exists and no
+              render is in flight, computed as showContinueArrow above. */}
+          {showContinueArrow && (
             <Button
               variant={activeStepState?.state === "done" ? "accent" : "secondary"}
               size="icon"

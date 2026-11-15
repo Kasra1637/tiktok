@@ -6,8 +6,10 @@ The Demo + CTA editor adds the founder's own footage, product presentation,
 and optional text overlays before a manual download and post.
 
 **Nothing posts automatically.** There is no platform-posting or scheduling
-workflow. A claim-check pass does not guarantee video-provider acceptance,
-TikTok approval, engagement, or medical accuracy.
+workflow. There is also no claim-safety system: wording is never checked,
+reported on, or refused anywhere in the app, and no wording rule can
+guarantee video-provider acceptance, TikTok approval, engagement, or
+medical accuracy.
 
 ## Start here
 
@@ -68,7 +70,8 @@ backend settings.
 - Storage/inventory diagnostic: `GET /api/health` (requires sign-in when auth
   is configured; inspect `database`, `durable`, and `your_rows`, not just HTTP 200).
 
-Startup runs idempotent table creation, column additions and template seeding.
+Startup applies the versioned schema — a recorded baseline plus numbered
+steps, currently through 0006 (the plan's cover text) — and seeds templates.
 Without Turso settings, local data lives at `backend/storage/hookforge.db`.
 Do not point a development process or test fixture at production data.
 
@@ -115,14 +118,22 @@ URL for same-origin API calls.
 
 ## Current workflow
 
-The creation wizard has **three steps**, not five:
+The creation wizard has **four steps**, not five:
 
 1. **App Profile** — research or select a profile, review its facts,
    and approve it. Profile editing/research lives at `/brand`.
 2. **Audience & template** — choose an angle and goal, compare templates, and
    attach the presenter's photograph. There is one angle selector.
-3. **Review & submit** — generate and edit the text plan, inspect the craft
-   grade, build/review the matching strategy, and explicitly submit a video.
+3. **Review & submit** — generate and edit the text plan (which also drafts
+   the clip's cover text), inspect the craft grade, build/review the matching
+   strategy, and explicitly submit a video from the Render & result tab.
+4. **Demo + CTA** — the finishing step: the Demo + CTA editor over the
+   project's newest finished render.
+
+Review is two tabs — Read the plan, then Render & result — and the wizard's
+sticky bar follows them: it offers the render only while Render & result is
+open, narrates the render while it runs, and shows the way forward only
+once a finished render exists.
 
 Rendering remains gated on approved profile, valid angle/template/photograph,
 saved/current plan and strategy, and project readiness. Review
@@ -138,10 +149,15 @@ must remain visible with an actionable next step.
 After generation:
 
 - `/history` shows render state, durable playback/download, storage recovery,
-  post copy, and manually entered TikTok links, views and verdicts.
+  post copy, and manually entered TikTok links and views. Feedback is one
+  verdict on the whole video — a single thumbs up or down per finished
+  video; per-element ratings do not exist. A post kit's caption ships with
+  five hashtags selected from researched post counts (a candidate pool is
+  proposed, counts are looked up best-effort, and the picks favor the
+  10k–500k range over million-plus tags).
 - `/demo-cta` or `/demo-cta/:generationId` opens the **browser-side** editor.
   Its editing document is saved on that browser/device, not as the server's
-  claim-checked plan. Preview/export share time-based drawing logic.
+  reviewed plan. Preview/export share time-based drawing logic.
 - `/analytics` summarizes recorded results; it does not retrieve TikTok stats
   automatically or report provider spend.
 - `/upscale` is a separate browser-side video tool.
@@ -158,14 +174,14 @@ focused commands and their limits.
 
 ```bash
 python -m pytest backend/ -q
-node frontend/scripts/check-imports.cjs
-node frontend/scripts/check-frontend-logic.cjs
-node frontend/scripts/check-render-smoke.cjs
+yarn --cwd frontend run check
 CI=true yarn --cwd frontend build
 ```
 
 Backend pytest uses the repository's fixed two-worker configuration. The full
-suite needs ffmpeg. The render-smoke harness mounts real React modules with
+suite needs ffmpeg. The frontend `check` chain covers imports, pure logic,
+the editing-document draft, the AA contrast gate, the render smoke and the
+tour-target audit. The render-smoke harness mounts real React modules with
 stubbed infrastructure; it is not a browser or a live-provider acceptance test.
 Frontend checks are currently **local gates**, not a GitHub CI job.
 

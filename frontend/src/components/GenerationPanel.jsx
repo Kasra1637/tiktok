@@ -702,8 +702,8 @@ const handleGenerate = async () => {
   // own handleGenerate — with the model and resolution chosen here,
   // which live in this panel and nowhere else — and then asks the page
   // to bring the generation section into view, so the founder watches
-  // the render where it happens. In every owed, blocked or busy state
-  // the panel registers nothing and invites nothing: the bar keeps the
+  // the render where it happens. In every owed or blocked state the
+  // panel registers nothing and invites nothing: the bar keeps the
   // unblocking action or the plain way forward (ADRs 0133/0142). The
   // click is an explicit press on a generate button, the sanctioned
   // trigger — navigation still generates nothing (ADR 0122).
@@ -722,17 +722,42 @@ const handleGenerate = async () => {
     onNavigate?.("goto-render-section");
   };
   const stableGenerateClick = useRef(() => generateClickRef.current?.()).current;
-  const renderBarSig = generateReady ? `ready|${generateLabel}` : "not-ready";
+  // A render in flight registers its own bar state (ADR 0147): this
+  // panel's busy presentation — the same "Generating video" words the
+  // button below carries, disabled and busy — so the bar narrates the
+  // wait instead of offering the CTA again. It is not the ready action
+  // with a busier label: no play icon, no invitation and no click,
+  // because the click already happened. `busy` here is only ever the
+  // render submit's own flight (the storage and preview retries carry
+  // their own state), and `inFlight` is the submitted/generating row.
+  const renderInFlight = busy || Boolean(inFlight);
+  const renderBarSig = generateReady
+    ? `ready|${generateLabel}`
+    : renderInFlight
+      ? `flight|${generation?.id || "starting"}`
+      : "not-ready";
   useEffect(() => {
     if (!onRenderActionChange) return;
-    onRenderActionChange(generateReady ? {
-      label: generateLabel,
-      icon: "play",
-      invite: true,
-      blocks: false,
-      testId: "wizard-generate-video",
-      onClick: stableGenerateClick,
-    } : null);
+    if (generateReady) {
+      onRenderActionChange({
+        label: generateLabel,
+        icon: "play",
+        invite: true,
+        blocks: false,
+        testId: "wizard-generate-video",
+        onClick: stableGenerateClick,
+      });
+    } else if (renderInFlight) {
+      onRenderActionChange({
+        label: "Generating video",
+        busy: true,
+        disabled: true,
+        flight: true,
+        testId: "wizard-render-progress",
+      });
+    } else {
+      onRenderActionChange(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderBarSig]);
   useEffect(() => () => onRenderActionChange?.(null), [onRenderActionChange]);
