@@ -12,6 +12,7 @@ import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { plannedSections } from "../lib/videoLength";
 import { sentenceCase } from "../lib/copyCase";
+import { directionDrifted } from "../lib/strategyStaleness";
 import {
   AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
 } from "lucide-react";
@@ -317,6 +318,12 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
   const angleStale =
     hasStrategy &&
     (strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
+  // Direction drift (ADR 0142): the saved direction — place, look, voice,
+  // sound — no longer matches the snapshot the strategy was built against
+  // (ADR 0133). A manual direction update is a manual update like a plan
+  // or angle change, so the rebuild is owed on this ground too. A strategy
+  // with no snapshot is missing history, not drifted.
+  const directionStale = hasStrategy && directionDrifted(project);
   const needsAngle = !project?.content_angle_id;
 
   const runRebuild = async ({ skipConfirm = false } = {}) => {
@@ -449,7 +456,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
   // in progress. A current strategy's rebuild is optional — the step can
   // proceed as-is — so it never displaces the bar's way forward.
   const barOwed = Boolean(
-    busy || suggesting || needsAngle || !hasStrategy || staleStrategy || angleStale
+    busy || suggesting || needsAngle || !hasStrategy || staleStrategy || angleStale || directionStale
   );
   const barSig = [
     barOwed ? "owed" : "free", actionLabel,
@@ -597,6 +604,18 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
         </Alert>
       )}
 
+      {directionStale && (
+        <Alert variant="warning">
+          <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
+          <AlertTitle>Direction changed since this strategy was built</AlertTitle>
+          <AlertDescription>
+            This strategy was built for a different direction — the place, look, voice or sound has
+            been edited since. Rendering is blocked until you rebuild it for the direction now
+            saved; otherwise the clip would follow the older scene.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {suggestNote && (
         <Alert variant="warning" data-testid="strategy-suggest-note">
           <Info className="h-4 w-4 text-[color:var(--brand-indigo)]" />
@@ -605,18 +624,27 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
       )}
 
       <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-        <Button
-          variant="accent"
-          onClick={handleGenerateStrategy}
-          disabled={busy || suggesting || applying || !projectId || needsAngle}
-          busy={busy || suggesting}
-          etaSeconds={suggesting ? BUSY_ETA_SECONDS.planStrategy : BUSY_ETA_SECONDS.strategy}
-          busyStartedAt={busyStartedAt}
-          data-testid="strategy-build-button"
-        >
-          <Sparkles className="h-4 w-4" />
-          {actionLabel}
-        </Button>
+        {/* Kasra's rule (ADR 0142): the build control exists only while it
+            is the step's unblocker — no strategy yet, or a rebuild owed
+            because the plan, the angle or the direction moved after the
+            build — or while a build flight it started is still running.
+            A current strategy shows no button at all: a big primary
+            "Rebuild strategy" sitting beside an available Generate read
+            as a required step it is not. */}
+        {(!hasStrategy || staleStrategy || angleStale || directionStale || busy || suggesting || applying) && (
+          <Button
+            variant="accent"
+            onClick={handleGenerateStrategy}
+            disabled={busy || suggesting || applying || !projectId || needsAngle}
+            busy={busy || suggesting}
+            etaSeconds={suggesting ? BUSY_ETA_SECONDS.planStrategy : BUSY_ETA_SECONDS.strategy}
+            busyStartedAt={busyStartedAt}
+            data-testid="strategy-build-button"
+          >
+            <Sparkles className="h-4 w-4" />
+            {actionLabel}
+          </Button>
+        )}
         {!busy && !suggesting && needsAngle && (
           <p className="text-sm text-muted-foreground" data-testid="strategy-needs-angle">
             Pick an audience angle on the Audience &amp; template step first — the strategy is built around it.

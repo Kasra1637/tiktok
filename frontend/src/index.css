@@ -903,17 +903,57 @@ h1,
     .history-body {
         padding: 24px 24px 28px;
     }
+    /* Equal columns (ADR 0143): the row stretches to its taller side —
+       almost always the media column, whose 9:16 frame sets the card's
+       height — and the record column fills that same height, its blocks
+       distributing the leftover space between them instead of ending
+       early over a void. The video's geometry does the opposite of
+       shrinking: the frame keeps the column's full width (ADR 0137)
+       and the record side does all the filling. Standard cards only;
+       compact cards keep their own geometry. The loading skeleton
+       wears the same classes, so it fills the same way. */
+    .history-card:not(.history-card-compact) .history-row-grid {
+        align-items: stretch;
+    }
+    .history-card:not(.history-card-compact) .history-detail {
+        display: flex;
+        flex-direction: column;
+    }
+    .history-card:not(.history-card-compact) .history-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .history-card:not(.history-card-compact) .history-record {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
 }
 
 /* When the clip plays, the stage goes flush (ADR 0137): no padding, no
  * fixed box, no stage slab — the frame fills the media column edge to
- * edge at every width. The empty/notice state keeps the padded stage.
- * Compact cards never take this class; their stage stays a small
- * centered stage by design. */
+ * edge at every width. A regular card's empty/notice state takes the
+ * same flush stage and stands in the finished frame's geometry
+ * (ADR 0143, .history-stage-frame below). Compact cards never take
+ * this class; their stage stays a small centered stage by design. */
 .history-stage-flush {
     min-height: 0;
     padding: 0;
     background: transparent;
+}
+
+/* The no-clip stage on a regular card (ADR 0143): the notice that
+ * explains the state is centered inside the finished frame's exact
+ * geometry — full column width, 9:16 — wearing .history-preview-frame's
+ * edge, so a generating card already occupies the footprint the clip
+ * will fill and the finished render swaps in with no layout shift. */
+.history-stage-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 9 / 16;
 }
 
 /* Without-copy records are shorter: pair them only where the available
@@ -1070,6 +1110,17 @@ h1,
 .animate-float-slower { animation: float-slower 22s ease-in-out infinite; }
 .animate-fade-up { animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-marquee { animation: marquee-x 40s linear infinite; }
+
+/* The ready-state invitation on the one paid action (ADR 0144): a soft
+ * indigo glow breathing around Generate — in the render panel and on
+ * the wizard bar alike — only while nothing holds the founder back.
+ * Owed, blocked and busy states never wear it, and reduced motion
+ * turns it off with the other animations below. */
+@keyframes generate-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45); }
+    50% { box-shadow: 0 0 22px 5px rgba(129, 140, 248, 0.35); }
+}
+.generate-invite { animation: generate-glow 2.2s ease-in-out infinite; }
 
 /* Light sweep across a surface on hover — used on feature/step cards. */
 .shimmer-on-hover {
@@ -1538,7 +1589,8 @@ h1,
     .animate-float-slow,
     .animate-float-slower,
     .animate-fade-up,
-    .animate-marquee {
+    .animate-marquee,
+    .generate-invite {
         animation: none !important;
     }
     .shimmer-on-hover:hover::after,

@@ -6,6 +6,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
+import { directionDrifted } from "../lib/strategyStaleness";
 import { PostKitSection } from "./PostKitSection";
 import { CONTROL_CLASS } from "./formControls";
 import {
@@ -171,7 +172,7 @@ function resolutionStorageKey(projectId) {
   return `studio-video-resolution:${projectId}`;
 }
 
-export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate, onRenderActionChange }) {
   const [models, setModels] = useState(null);
   const [modelError, setModelError] = useState(null);
   const [modelRetry, setModelRetry] = useState(0);
@@ -223,13 +224,20 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const angleStale =
     hasStrategy &&
     (project?.strategy?.content_angle_id || "") !== (project?.content_angle_id || "");
-  const strategyReady = hasStrategy && !staleStrategy && !angleStale;
+  // Direction drift, the same ground the strategy panel names (ADR 0142):
+  // the saved direction no longer matches the snapshot the strategy was
+  // built against (ADR 0133), so the strategy describes a scene the render
+  // would no longer follow. A strategy with no snapshot is missing
+  // history, not drifted.
+  const directionStale = hasStrategy && directionDrifted(project);
+  const strategyReady = hasStrategy && !staleStrategy && !angleStale && !directionStale;
   // A rebuild is owed whenever a strategy exists but no longer matches what
-  // it would render: the plan moved after the build (staleStrategy) or the
-  // angle did (angleStale). The remedies below offer exactly that rebuild —
+  // it would render: the plan moved after the build (staleStrategy), the
+  // angle did (angleStale) or the direction did (directionStale). The
+  // remedies below offer exactly that rebuild —
   // except with no angle picked at all, where the standing remedy is the
   // angle pick itself and the disabled button stays as the gate it names.
-  const rebuildRequired = !noAngle && (staleStrategy || angleStale);
+  const rebuildRequired = !noAngle && (staleStrategy || angleStale || directionStale);
   // The same one-action rule before a strategy exists at all: the render
   // follows the strategy, so without one the generate control cannot
   // function — it stays unrendered beside the strategy panel's bright
@@ -253,7 +261,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // un-saved plan on Nov 14 — a greyed Generate stacked on the bright
   // save remedy read as two competing actions).
   const planSaveRequired =
-    !ready && !noPhoto && !noAngle && !staleStrategy && !angleStale;
+    !ready && !noPhoto && !noAngle && !staleStrategy && !angleStale && !directionStale;
 
   // Every refusal the panel can name must also name its remedy: the step and
   // the control that fixes it. A block with no jump button is a wall, not a
@@ -265,6 +273,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   //   hasUnsavedEdits -> save edits on Review & submit (same page)
   //   angleStale      -> rebuild the strategy on Review & submit (same page)
   //   staleStrategy   -> rebuild the strategy on Review & submit (same page)
+  //   directionStale  -> rebuild the strategy on Review & submit (same page)
   //   !ready          -> Review & submit (same page, save the plan)
   // Anything the panel cannot name here (overflow, camera-incompatible,
   // tooLong, model load) is self-evident from its own alert, so it needs no
@@ -272,7 +281,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   // through with no jump — the button is still disabled with the reason.
   const remedies = [];
   if (noAngle) remedies.push({ label: "Pick an audience angle first", action: "goto-angle" });
-  else if (angleStale || staleStrategy) {
+  else if (angleStale || staleStrategy || directionStale) {
     // One label for the rebuild everywhere it is offered (the strategy
     // panel's button reads the same): the reason it is owed lives in the
     // alert above, and two phrasings of one action read as two actions.
@@ -680,16 +689,64 @@ const handleGenerate = async () => {
   const ceiling = singlePassCeiling(capability);
   const tooLong = exceedsSinglePass(pieceSeconds, capability);
 
+  // The ready-state invitation (ADR 0144): when nothing holds the founder
+  // back — strategy current, plan saved, models loaded, no render in
+  // flight — the Generate button below wears the invitation (the play
+  // icon it already carries, plus the generate-invite glow), and the
+  // panel registers the SAME action for the wizard's sticky bar: same
+  // words, same icon, same invitation. The bar's click runs this panel's
+  // own handleGenerate — with the model and resolution chosen here,
+  // which live in this panel and nowhere else — and then asks the page
+  // to bring the generation section into view, so the founder watches
+  // the render where it happens. In every owed, blocked or busy state
+  // the panel registers nothing and invites nothing: the bar keeps the
+  // unblocking action or the plain way forward (ADRs 0133/0142). The
+  // click is an explicit press on a generate button, the sanctioned
+  // trigger — navigation still generates nothing (ADR 0122).
+  // Registration follows the strategy panel's pattern: keyed on the
+  // action's visible state, the click goes through a ref so a re-render
+  // never re-registers a stale closure, and unmounting clears the slot.
+  const generateReady =
+    !rebuildRequired && !strategyMissing && !planSaveRequired &&
+    !busy && !inFlight && Boolean(models) && !hasUnsavedEdits && ready &&
+    !blocked && !tooLong && !cameraIncompatible && Boolean(projectId) &&
+    strategyReady && !noPhoto && !noAngle;
+  const generateLabel = generation ? "Generate another" : "Generate the video";
+  const generateClickRef = useRef(null);
+  generateClickRef.current = () => {
+    handleGenerate();
+    onNavigate?.("goto-render-section");
+  };
+  const stableGenerateClick = useRef(() => generateClickRef.current?.()).current;
+  const renderBarSig = generateReady ? `ready|${generateLabel}` : "not-ready";
+  useEffect(() => {
+    if (!onRenderActionChange) return;
+    onRenderActionChange(generateReady ? {
+      label: generateLabel,
+      icon: "play",
+      invite: true,
+      blocks: false,
+      testId: "wizard-generate-video",
+      onClick: stableGenerateClick,
+    } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderBarSig]);
+  useEffect(() => () => onRenderActionChange?.(null), [onRenderActionChange]);
+
   return (
-    /* This panel is an aside inside the step card, so it is the LAST border in
-       the stack: everything grouped under it is separated by a hairline, not by
-       another bordered box. The pre-render summary, "what you have", and the
-       Product Demo call-out were each an inset or an indigo box inside the
-       inset — three boxes in a box, each with its own 12px gutter and radius,
-       which is what made this panel read as a stack of frames rather than one
-       panel. They are divider-separated groups now, the level
-       design_guidelines.md §4 calls "group inside a card". */
-    <div className="inset-panel space-y-3">
+    /* This panel is its own card now (ADR 0144): a full .surface below
+       the strategy panel, with the section gap the page leaves above
+       it, so Review's two halves read as two sections rather than one
+       attached block. Inside the card the old discipline stands:
+       everything grouped under it is separated by a hairline, not by
+       another bordered box. The pre-render summary, "what you have",
+       and the Product Demo call-out were each an inset or an indigo box
+       inside the panel — three boxes in a box, each with its own 12px
+       gutter and radius, which is what made this panel read as a stack
+       of frames rather than one panel. They are divider-separated
+       groups now, the level design_guidelines.md §4 calls "group
+       inside a card". */
+    <div className="surface space-y-3" data-testid="generation-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={Clapperboard}>Render your Hook + Story</GroupLabel>
         {generation && <StatusBadge status={generation.status} />}
@@ -813,6 +870,7 @@ const handleGenerate = async () => {
         <Button
           variant="accent"
           onClick={handleGenerate}
+          className={generateReady ? "generate-invite" : undefined}
           disabled={
             busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
           }
@@ -820,11 +878,7 @@ const handleGenerate = async () => {
           data-testid="render-generate-button"
         >
           <Play className="h-4 w-4" />
-          {inFlight || busy
-            ? "Generating video"
-            : generation
-              ? "Generate another"
-              : "Generate the video"}
+          {inFlight || busy ? "Generating video" : generateLabel}
         </Button>
       )}
 
@@ -879,9 +933,11 @@ const handleGenerate = async () => {
         <p className="text-base text-muted-foreground">
           {angleStale
             ? "The audience angle changed after this strategy was built. Rebuild it for the angle now picked, then render."
-            : staleStrategy
-              ? "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render."
-              : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
+            : directionStale
+              ? "The direction changed after this strategy was built. Rebuild it for the direction now saved, then render."
+              : staleStrategy
+                ? "The plan changed after this strategy was built. Rebuild it so it matches your saved plan, then render."
+                : "Read the app-specific strategy above, then generate. It guides the Hook + Story clip and is separate from your filmed product demo."}
         </p>
       )}
 

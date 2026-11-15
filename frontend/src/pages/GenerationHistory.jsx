@@ -497,7 +497,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
     >
       <div className="history-row-grid">
         <div className="history-media min-w-0">
-          {!compactNotice && <div className={`history-stage${!compact && downloadUrl && !previewBroken ? " history-stage-flush" : ""}`}>
+          {!compactNotice && <div className={`history-stage${!compact ? " history-stage-flush" : ""}`}>
             {downloadUrl && !previewBroken ? (
               /* The idle frame carries exactly two facts and no controls: the
                  goal angle top-left (where a viewer looks first) and the
@@ -566,7 +566,19 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 ) : null}
               </span>
             ) : (
-              notice
+              /* No clip yet — most often a render still generating. The
+                 notice stands inside the finished frame's geometry
+                 (ADR 0143): a flush stage and a full-width 9:16 frame, so
+                 the card already shows the whole container the clip will
+                 land in and the finished render swaps in with no layout
+                 shift. The notice keeps its words and its repair meaning —
+                 only its footprint changes. It deliberately does not take
+                 the playable clip's history-brand-frame testid: no clip
+                 is being claimed. Compact cards never reach this branch;
+                 their notices live in the record. */
+              <span className="history-preview-frame history-stage-frame relative block w-full max-w-full">
+                {notice}
+              </span>
             )}
           </div>}
 
@@ -695,7 +707,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
           className="history-detail min-w-0"
         >
           <div className="history-body">
-            <div className="min-w-0 space-y-5">
+            <div className="history-record min-w-0 space-y-5">
               {compactNotice && notice}
               {/* The video's state and the founder's one call lead the
                   record. The joined finished → posted line: export, post
@@ -1310,19 +1322,53 @@ export default function GenerationHistory() {
       )}
 
       {loading ? (
-        /* Mirrors the real tile rather than a centered spinner: a bare spinner on
-           a page whose cards are stacked means the layout jumps the moment data
-           lands, which is the same flash the studio loader was changed to
-           remove. The skeleton is the media column plus the record, because
-           that is all an attached card is. */
+        /* Mirrors the finished card exactly (ADR 0143), not a centered
+           spinner and not a lone phone-shaped box: the same flush card,
+           the same two columns, the frame at its full width and 9:16
+           height, and a placeholder row wherever the Download row, the
+           Work with this render row, the summary and the record will
+           sit — so when the rows land, nothing on the page moves. The
+           skeleton is the media column plus the record, because that is
+           all an attached card is. */
         <div className="space-y-4" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="surface surface-flush history-card min-w-0">
-              <div className="history-stage">
-                <Skeleton className="h-[240px] w-[135px] rounded-xl" />
-              </div>
-              <div className="row-pad border-t border-[color:var(--hairline)]">
-                <Skeleton className="h-3 w-28" />
+            <div key={i} className="surface surface-flush history-card min-w-0" aria-hidden="true">
+              <div className="history-row-grid">
+                <div className="history-media min-w-0">
+                  <div className="history-stage history-stage-flush">
+                    <span className="history-preview-frame relative block w-full max-w-full">
+                      <Skeleton className="aspect-[9/16] w-full" />
+                    </span>
+                  </div>
+                  <div className="flex gap-2 border-t border-[color:var(--hairline)] px-3 py-2">
+                    <Skeleton className="h-9 min-w-0 flex-1" />
+                    <Skeleton className="h-9 w-9 shrink-0" />
+                  </div>
+                  <div className="space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
+                    <Skeleton className="h-3 w-36" />
+                    <div className="flex flex-wrap gap-2">
+                      <Skeleton className="h-10 min-w-[150px] flex-1" />
+                      <Skeleton className="h-10 min-w-[150px] flex-1" />
+                    </div>
+                  </div>
+                  <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]">
+                    <Skeleton className="h-3 w-52" />
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-3 w-40" />
+                  </div>
+                </div>
+                <div className="history-detail min-w-0">
+                  <div className="history-body">
+                    <div className="history-record min-w-0 space-y-5">
+                      <Skeleton className="h-3 w-64" />
+                      <Skeleton className="h-[46px] w-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-2/3" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           ))}

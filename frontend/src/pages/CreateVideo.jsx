@@ -56,7 +56,7 @@ import { useDesktopWidth } from "../lib/desktopWidth";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -194,6 +194,64 @@ function qualityBandNote(report) {
   return QUALITY_BAND_NOTES[report?.band] || "Advisory craft score for the saved words.";
 }
 
+/** What each craft dimension means, in plain words, for the tile tooltip.
+ *  Two short parts per dimension: what it measures, and how the score is
+ *  earned. Written from the scorer's own rubric (backend/creative_quality.py)
+ *  so the words describe the same checks that produced the number — but in
+ *  the founder's language, not the rubric's. The clip-specific evidence and
+ *  next step still come from the server under their own labels; this map is
+ *  only the standing explanation of the dimension itself. */
+const DIMENSION_EXPLANATIONS = {
+  hook_stopping_power: {
+    measures:
+      "Whether the opening line makes a scrolling viewer stop: it has to name their problem in the first few seconds.",
+    earned:
+      "A clear problem, one concrete detail and something left unresolved earn points. Diary-style openings, app talk and a sales ask pull it down.",
+  },
+  audience_truth: {
+    measures:
+      "Whether the words sound like something your viewer would actually say about their own life.",
+    earned:
+      "Familiar routines, plain words and speaking to the viewer earn points. Generic mood language, marketer voice and app talk lose them.",
+  },
+  clarity: {
+    measures:
+      "Whether each line carries one thought a listener can follow in a single listen.",
+    earned:
+      "Short sentences earn points — nothing over 24 words, and a hook of 12 words or fewer. Vague pointers like “that surprise” lose them.",
+  },
+  concreteness: {
+    measures:
+      "Whether the viewer can picture the moment instead of just understanding it.",
+    earned:
+      "A named place, a physical action, a time or routine, and a body detail each earn points. Abstract words and a vague payoff lose them.",
+  },
+  story_arc: {
+    measures:
+      "Whether the hook and script work as one story: a problem opens, and the script answers it.",
+    earned:
+      "An answer in the script's first clause, a real insight and a specific payoff earn points. Repeating the hook, quoting, or a vague ending lose them.",
+  },
+  spoken_naturalness: {
+    measures:
+      "Whether the lines sound like talking, not writing, when read out loud.",
+    earned:
+      "Short sentences and contractions earn points. Long sentences, written-sounding phrases, quotes and self-narration lose them.",
+  },
+  demo_handoff: {
+    measures:
+      "Whether the script's last line leaves a question open for your demo to answer.",
+    earned:
+      "Ending on the open question earns the most. Wrapping the feeling up neatly, or talking about the app, loses points.",
+  },
+  trust_compliance: {
+    measures:
+      "Whether the lines stay an honest customer story — no selling, and no claims the video cannot back.",
+    earned:
+      "Clean lines keep the full score. A sales ask, naming the app in the spoken lines, or an invented personal claim loses points.",
+  },
+};
+
 /**
  * The craft check card: a score ring and the eight scored dimensions as
  * compact tiles side by side.
@@ -212,9 +270,16 @@ function qualityBandNote(report) {
  * indigo edge so the eye lands on what to fix first.
  *
  * Each tile explains itself on hover, focus or tap (audit 2026-11-14,
- * finding 4): the tooltip carries the rubric's OWN words for that
- * dimension — the evidence lines and next step the server scored this
- * pair with — so the explanation can never disagree with the scorer.
+ * finding 4): the tooltip leads with a plain-words explanation of the
+ * dimension (DIMENSION_EXPLANATIONS, written from the scorer's rubric),
+ * then carries the rubric's OWN words for this clip — the evidence lines
+ * and next step the server scored this pair with — under their own
+ * labels, so the standing explanation and the clip's verdict stay
+ * visibly separate and can never disagree with the scorer. The first
+ * pass dumped the evidence as bare paragraphs with no header, no
+ * explanation and no labels; the founder found that disorganized and
+ * hard to read, so the tooltip now follows the app's labeled-panel
+ * structure: header, explanation, labeled sections.
  * Nothing new prints on the card; the explanation is on demand only.
  */
 function CraftCheckCard({ report }) {
@@ -318,15 +383,41 @@ function CraftCheckCard({ report }) {
                   </TooltipTrigger>
                   <TooltipContent
                     data-testid={`quality-dimension-tip-${dimension.key}`}
-                    className="max-w-xs space-y-1"
+                    className="max-w-xs space-y-2.5"
                   >
-                    {evidence.map((line, index) => (
-                      <p key={index}>{line}</p>
-                    ))}
-                    {dimension.next_step && (
-                      <p>Next step: {dimension.next_step}</p>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm font-semibold">{dimension.label}</p>
+                      <p className="text-primary-foreground/70">
+                        {dimension.score}/{dimension.max}
+                      </p>
+                    </div>
+                    {DIMENSION_EXPLANATIONS[dimension.key] && (
+                      <div className="space-y-1">
+                        <p>{DIMENSION_EXPLANATIONS[dimension.key].measures}</p>
+                        <p>{DIMENSION_EXPLANATIONS[dimension.key].earned}</p>
+                      </div>
                     )}
-                    {!evidence.length && !dimension.next_step && (
+                    {evidence.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary-foreground/70">
+                          On this clip
+                        </p>
+                        <ul className="list-disc space-y-0.5 pl-4">
+                          {evidence.map((line, index) => (
+                            <li key={index}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {dimension.next_step && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary-foreground/70">
+                          To lift it
+                        </p>
+                        <p>{dimension.next_step}</p>
+                      </div>
+                    )}
+                    {!DIMENSION_EXPLANATIONS[dimension.key] && !evidence.length && !dimension.next_step && (
                       <p>{dimension.label} — scored out of {dimension.max}.</p>
                     )}
                   </TooltipContent>
@@ -532,6 +623,16 @@ export default function CreateVideo() {
   const [strategyBarAction, setStrategyBarAction] = useState(null);
   const registerStrategyBarAction = useCallback((action) => {
     setStrategyBarAction(action);
+  }, []);
+  // The render panel's ready-state action, registered while Review is
+  // the step in view (ADR 0144): when nothing holds the founder back,
+  // the bar carries the panel's own Generate — same words, play icon
+  // and invitation — and its click runs the render in the panel. The
+  // panel owns the handler, the model and the resolution; the bar only
+  // renders what it is given, exactly like the strategy action above.
+  const [renderBarAction, setRenderBarAction] = useState(null);
+  const registerRenderBarAction = useCallback((action) => {
+    setRenderBarAction(action);
   }, []);
   // Confirm-on-arrival: a ?project= link that lands with an intact plan
   // (script_version > 0) says so once, so the founder knows the Review step
@@ -1786,14 +1887,25 @@ export default function CreateVideo() {
     } else if (activeStepState?.state === "done") {
       // Not an unblocker: the step can already proceed, so this keeps its
       // old place beside the forward arrow rather than displacing it.
-      barAction = {
-        label: "Go to render", testId: "wizard-goto-render", icon: "render",
-        blocks: false,
-        onClick: () => {
-          setReviewTab("render");
-          scrollToSubmit();
-        },
-      };
+      // Ready (ADR 0144): the bar carries the render itself — the
+      // panel's registered Generate, same words, play icon and
+      // invitation as the panel's own button — in the place the old
+      // navigation-only shortcut held. The shortcut remains only as
+      // the fallback for a state where the panel cannot register (its
+      // gates refuse the render): it never generates, it only ever
+      // navigates, and the panel's gates still decide.
+      if (renderBarAction) {
+        barAction = renderBarAction;
+      } else {
+        barAction = {
+          label: "Go to render", testId: "wizard-goto-render", icon: "render",
+          blocks: false,
+          onClick: () => {
+            setReviewTab("render");
+            scrollToSubmit();
+          },
+        };
+      }
     }
   } else if (
     STEPS[step].key === "finish" &&
@@ -3068,9 +3180,10 @@ export default function CreateVideo() {
                         stopped teaching generation — the whole-video
                         verdict in History is the one feedback that
                         steers now. */}
-                    <div id="review-submit" className="scroll-mt-4">
+                    <div id="review-submit" className="scroll-mt-4 mt-4">
                       <GenerationPanel
                         project={project}
+                        onRenderActionChange={registerRenderBarAction}
                         onGenerationChange={(fresh) => {
                           // Adopt the row into project-level state so the
                           // result area never holds a stale pre-poll snapshot
@@ -3102,6 +3215,13 @@ export default function CreateVideo() {
                               ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
                           } else if (action === "goto-review") {
                             setReviewTab("plan");
+                            scrollToSubmit();
+                          } else if (action === "goto-render-section") {
+                            // The bar's Generate just started the render
+                            // in the panel (ADR 0144): bring the render
+                            // half into view so the founder watches the
+                            // progress where it happens.
+                            setReviewTab("render");
                             scrollToSubmit();
                           }
                         }}
@@ -3499,14 +3619,16 @@ export default function CreateVideo() {
               the section's own button, same handler and busy behavior —
               and no forward arrow shows beside it. When the step can
               proceed as-is there is no bar action, and the arrow below is
-              the way forward. A ready review's bar action is "Go to
-              render", opening the render half the plan was read for:
-              navigation only — the render stays GenerationPanel's. */}
+              the way forward. A ready review's bar action is the render
+              itself (ADR 0144): the panel's registered Generate, wearing
+              the same invitation as the panel's button, and its click
+              runs the render in the panel — the words and the click
+              finally promise the same thing. */}
           {barAction && (
             <Button
               variant="accent"
               size="sm"
-              className="gap-1.5"
+              className={`gap-1.5${barAction.invite ? " generate-invite" : ""}`}
               onClick={barAction.onClick}
               disabled={barAction.disabled}
               busy={barAction.busy}
@@ -3516,6 +3638,8 @@ export default function CreateVideo() {
             >
               {barAction.icon === "render" ? (
                 <Clapperboard className="h-3.5 w-3.5" />
+              ) : barAction.icon === "play" ? (
+                <Play className="h-3.5 w-3.5" />
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}

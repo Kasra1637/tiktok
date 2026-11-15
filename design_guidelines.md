@@ -305,7 +305,11 @@ field's own stack: the action is a CTA that navigates, not a control the label
 belongs to. Every step sits in its own `.surface-step` section card on the
 canvas, and every aside in it is `.inset-panel`, so the padding is identical on
 all three steps. `frontend/scripts/check-render-smoke.cjs` asserts the shared
-token.
+token. One aside is a deliberate exception: Review's render panel is a full
+`.surface` card of its own, standing below the strategy panel with the normal
+section gap between them (ADR 0144), because Review's two halves — read the
+strategy, then render — are two sections, not one attached block. Inside that
+card the divider-group discipline stands: no boxes in the box.
 
 ---
 
@@ -343,7 +347,18 @@ padding, no width cap, at most the card hairline (`--hairline`) for an
 edge; no surround, no corner marks (ADR 0137). The height follows the 9:16
 width. Compact without-copy cards shrink the frame to its fixed 135px clip
 (`width: max-content`) rather than drawing gutters beside it. Cards with no
-playable clip keep their notice and no frame. The finished clip's native
+playable clip keep their notice, and on a regular card the notice stands in
+the finished frame's geometry — flush stage, full-width 9:16 frame
+(ADR 0143) — so a generating card already occupies the exact footprint the
+clip will fill and nothing resizes when it lands; compact cards keep the
+notice in the record instead. The History loading skeleton mirrors the
+finished card the same way: two columns, full-size frame placeholder, and
+placeholder rows for the Download row, the work row, the summary and the
+record — never a lone phone-shaped box. At desktop widths the card's two
+columns stand equal: the row stretches to the height the media column's
+frame sets, and the record column fills that height, its blocks
+distributing the leftover space between them so no void sits under the
+record — the video is never shrunk or capped to meet it (ADR 0143). The finished clip's native
 controls carry `controlsList="nodownload noremoteplayback"` and
 `disablePictureInPicture`, so the browser's three-dots overflow menu has
 nothing in it and does not render.

@@ -2294,6 +2294,106 @@ async function main() {
     }
   });
 
+  await check("GenerationPanel shows only the rebuild while the direction has drifted", async (ctx) => {
+    // Direction drift owes the same rebuild as a plan or angle change
+    // (ADR 0142): Generate is not rendered at all, the note names the
+    // direction, and the remedy is the rebuild. Once the saved direction
+    // matches the snapshot again, Generate returns.
+    const drifted = {
+      ...PROJECT_WITH_STRATEGY,
+      strategy: {
+        ...STRATEGY,
+        direction_snapshot: {
+          location: "A bus stop bench",
+          visual_direction: "Close, 9:16, desk.",
+          voice_direction: "Calm.",
+          sound_direction: "Room tone.",
+        },
+      },
+    };
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: drifted })(ctx)
+    );
+    expectText(
+      ctx,
+      "The direction changed after this strategy was built. Rebuild it for the direction now saved, then render.",
+      "the direction drift note did not render"
+    );
+    expectText(ctx, "Rebuild strategy", "the rebuild remedy did not render");
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate is rendered while a direction rebuild is owed");
+    }
+    await act(async () =>
+      ctx.root.render(
+        React.createElement(GenerationPanel, { project: PROJECT_WITH_STRATEGY })
+      )
+    );
+    if (!ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("Generate did not return once the direction matched again");
+    }
+  });
+
+  await check("GenerationPanel invites the render only when nothing holds it back", async (ctx) => {
+    // The ready-state invitation (ADR 0144): strategy current, plan saved,
+    // models loaded — the panel's Generate wears the invitation, and the
+    // panel registers the SAME action for the wizard bar (same words,
+    // play icon, same invitation), whose click runs this panel's own
+    // generate with the model and resolution chosen here. A panel that
+    // still owes something registers nothing and invites nothing.
+    const seen = [];
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: PROJECT_WITH_STRATEGY,
+        onRenderActionChange: (action) => seen.push(action),
+      })(ctx)
+    );
+    const button = ctx.container.querySelector('[data-testid="render-generate-button"]');
+    if (!button) throw new Error("the ready panel renders no Generate button");
+    if (!button.classList.contains("generate-invite")) {
+      throw new Error("the ready Generate button carries no invitation");
+    }
+    const action = seen.filter(Boolean).pop();
+    if (!action) throw new Error("the ready panel registered no bar action");
+    if (action.label !== "Generate the video" || action.icon !== "play" || action.invite !== true) {
+      throw new Error(
+        `the bar action does not mirror the panel's Generate: ${JSON.stringify({ label: action.label, icon: action.icon, invite: action.invite })}`
+      );
+    }
+    apiCalls.length = 0;
+    await act(async () => { action.onClick(); });
+    if (!apiCalls.includes("generateVideo")) {
+      throw new Error("the bar action did not run the panel's render");
+    }
+    const owedSeen = [];
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, {
+        project: { ...PROJECT_WITH_STRATEGY, strategy: {} },
+        onRenderActionChange: (action) => owedSeen.push(action),
+      })(ctx)
+    );
+    if (owedSeen.some((a) => a && a.invite)) {
+      throw new Error("a panel that still owes a strategy invites the render");
+    }
+    if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
+      throw new Error("a panel with no strategy renders Generate");
+    }
+  });
+
+  await check("the render panel stands as its own card", async (ctx) => {
+    // Kasra's detachment rule (ADR 0144): the render section is a full
+    // card (.surface), not one more inset aside stacked flush on the
+    // strategy panel above it, so the two halves of Review read as two
+    // sections, not one attached block.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx)
+    );
+    const panel = ctx.container.querySelector('[data-testid="generation-panel"]');
+    if (!panel) throw new Error("the render panel did not render");
+    if (!panel.classList.contains("surface") || panel.classList.contains("inset-panel")) {
+      throw new Error("the render panel is not its own card");
+    }
+  });
+
   await check("GenerationPanel hides Generate until a strategy exists", async (ctx) => {
     // Kasra's one-action rule, extended to the no-strategy state: the
     // render follows the strategy, so before one exists "Generate the
@@ -3155,6 +3255,24 @@ async function main() {
     }
   });
 
+  // The rebuild button these checks click exists only while a rebuild is
+  // owed (ADR 0142), so this fixture's direction genuinely moved after the
+  // build: the strategy's snapshot holds the place it was built for, and
+  // the saved project no longer names it. That was always the premise of
+  // the ADR 0133 flow — the button is there because the direction changed.
+  const PROJECT_WITH_DIRECTION_DRIFT = {
+    ...PROJECT_WITH_STRATEGY,
+    strategy: {
+      ...STRATEGY,
+      direction_snapshot: {
+        location: "A bus stop bench",
+        visual_direction: "Close, 9:16, desk.",
+        voice_direction: "Calm.",
+        sound_direction: "Room tone.",
+      },
+    },
+  };
+
   // The direction-change suggestion (ADR 0133): a rebuild click on a
   // strategy whose saved direction has moved first shows the refreshed
   // words in a modal. Nothing is applied — and no rebuild runs — before
@@ -3177,7 +3295,7 @@ async function main() {
     await withApi(
       { suggestStrategyRefresh: async () => SUGGESTION_ANSWER },
       async () => {
-        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_DIRECTION_DRIFT })(ctx);
         // The suggestion modal rides the shared Dialog now (audit
         // 2026-11-14, finding 11), so it portals into the document body —
         // read it there, purging any stale portal first (the delete-dialog
@@ -3250,7 +3368,7 @@ async function main() {
         },
       },
       async () => {
-        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_DIRECTION_DRIFT })(ctx);
         const doc = ctx.container.ownerDocument;
         doc.querySelectorAll('[data-testid="strategy-suggestion-modal"]').forEach((n) => n.remove());
         const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
@@ -3287,7 +3405,7 @@ async function main() {
         },
       },
       async () => {
-        await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await mount(HookContinuityPanel, { project: PROJECT_WITH_DIRECTION_DRIFT })(ctx);
         const doc = ctx.container.ownerDocument;
         const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
         await act(async () => {
@@ -3313,9 +3431,9 @@ async function main() {
     );
   });
 
-  await check("no direction change rebuilds directly, with no modal", async (ctx) => {
+  await check("an owed rebuild with no suggestion rebuilds directly, with no modal", async (ctx) => {
     apiCalls.length = 0;
-    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_DIRECTION_DRIFT })(ctx);
     const doc = ctx.container.ownerDocument;
     const rebuild = ctx.container.querySelector('[data-testid="strategy-build-button"]');
     await act(async () => {
@@ -3346,6 +3464,77 @@ async function main() {
       "Audience angle changed since this strategy was built",
       "the angle drift has no warning"
     );
+  });
+
+  await check("a current strategy shows no rebuild button", async (ctx) => {
+    // Kasra's rule (ADR 0142): the rebuild control exists only while a
+    // rebuild is owed or no strategy exists. This project is current — the
+    // plan matches, the angle matches, and its strategy carries no
+    // direction_snapshot, which is missing history, not drift — so the
+    // panel renders no build button at all, and Generate is the step's
+    // one action.
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    if (ctx.container.querySelector('[data-testid="strategy-build-button"]')) {
+      throw new Error("a rebuild button renders for a strategy that is current");
+    }
+  });
+
+  await check("a snapshot matching the saved direction is not drift", async (ctx) => {
+    await mount(HookContinuityPanel, {
+      project: {
+        ...PROJECT_WITH_STRATEGY,
+        strategy: {
+          ...STRATEGY,
+          direction_snapshot: {
+            location: "",
+            visual_direction: "Close, 9:16, desk.",
+            voice_direction: "Calm.",
+            sound_direction: "Room tone.",
+          },
+        },
+      },
+    })(ctx);
+    if (ctx.container.querySelector('[data-testid="strategy-build-button"]')) {
+      throw new Error("a rebuild button renders when the direction matches its snapshot");
+    }
+  });
+
+  await check("a direction change after the build marks the strategy stale", async (ctx) => {
+    await mount(HookContinuityPanel, { project: PROJECT_WITH_DIRECTION_DRIFT })(ctx);
+    expectText(
+      ctx,
+      "Direction changed since this strategy was built",
+      "the direction drift has no warning"
+    );
+    if (!ctx.container.querySelector('[data-testid="strategy-build-button"]')) {
+      throw new Error("no rebuild button for a drifted direction");
+    }
+  });
+
+  await check("the wizard bar carries the rebuild only while one is owed", async (ctx) => {
+    // The sticky bar's per-state map (ADR 0133) under the owed rule (ADR
+    // 0142): the panel registers its rebuild with the page only while the
+    // rebuild is the step's unblocker. A current strategy registers
+    // nothing, so the bar keeps its way forward.
+    const seen = [];
+    await mount(HookContinuityPanel, {
+      project: PROJECT_WITH_STRATEGY,
+      onActionChange: (action) => seen.push(action),
+    })(ctx);
+    if (seen.some((a) => a && a.label === "Rebuild strategy")) {
+      throw new Error("the bar carries a rebuild for a current strategy");
+    }
+  });
+
+  await check("the wizard bar carries the rebuild while the direction has drifted", async (ctx) => {
+    const seen = [];
+    await mount(HookContinuityPanel, {
+      project: PROJECT_WITH_DIRECTION_DRIFT,
+      onActionChange: (action) => seen.push(action),
+    })(ctx);
+    if (!seen.some((a) => a && a.label === "Rebuild strategy")) {
+      throw new Error("the bar does not carry the rebuild while one is owed");
+    }
   });
 
   await check("the strategy review shows the hook boundary from the plan", async (ctx) => {
@@ -3437,11 +3626,15 @@ async function main() {
     if (ctx.container.querySelector('[role="progressbar"]')) {
       throw new Error("the review surface still renders a coverage progress bar");
     }
-    // Exactly one button: build the strategy. It is free, and the strategy is
-    // what makes the one render about this app.
+    // No buttons at all. This project's strategy is current, so even the
+    // free build control is absent (ADR 0142: it renders only while a
+    // rebuild is owed or no strategy exists). This check used to pin
+    // exactly one button here — the always-rendered build control — and
+    // the founder's rule superseded that pin; zero controls is the
+    // stronger form of this check's point.
     const onlyFree = labels.filter((l) => l);
-    if (onlyFree.length !== 1 || !/strategy/i.test(onlyFree[0])) {
-      throw new Error(`expected only the free strategy button, found: ${JSON.stringify(onlyFree)}`);
+    if (onlyFree.length !== 0) {
+      throw new Error(`expected no controls for a current strategy, found: ${JSON.stringify(onlyFree)}`);
     }
   });
 
@@ -4016,7 +4209,7 @@ async function main() {
   // The bar must name only the real blocker. A ready review (plan, photo,
   // no edits) used to fall through to the blocked copy and ask for a save and
   // a photo that were already done.
-  await check("the ready review names no blocker and offers the render", async (ctx) => {
+  await check("the ready review names no blocker and the bar offers the render itself", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -4027,15 +4220,53 @@ async function main() {
         throw new Error(`the ready review still names a blocker: ${JSON.stringify(hint())}`);
       }
       if (!/ready/i.test(hint())) throw new Error("the ready review bar does not say it is ready");
-      const go = ctx.container.querySelector('[data-testid="wizard-goto-render"]');
-      if (!go) throw new Error("the ready review offers no way to the render from the bar");
-      await clickEl(ctx, go, "Go to render");
+      // The ready-state invitation (ADR 0144): the bar carries the render
+      // itself — the panel's own Generate, same words and invitation as
+      // the panel's button — not the old navigation-only shortcut, which
+      // promised a render and delivered a scroll.
+      if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+        throw new Error("the navigation-only render shortcut survives on a ready review");
+      }
+      const go = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
+      if (!go) throw new Error("the ready review offers no Generate from the bar");
+      const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
+      if (!panelButton || (go.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
+        throw new Error(`the bar's action does not carry the panel's own Generate words: ${go.textContent} vs ${panelButton?.textContent}`);
+      }
+      if (!go.classList.contains("generate-invite")) {
+        throw new Error("the bar's Generate carries no invitation");
+      }
+      if (!panelButton || !panelButton.classList.contains("generate-invite")) {
+        throw new Error("the panel's Generate carries no invitation");
+      }
+      // The render section stands as its own card, detached from the
+      // strategy panel above it by the normal section gap (ADR 0144).
+      const submit = ctx.container.querySelector("#review-submit");
+      if (!submit || !submit.classList.contains("mt-4")) {
+        throw new Error("the render section has no section gap above it");
+      }
+      apiCalls.length = 0;
+      // The fixture carries a finished render, so the panel's Generate
+      // is a re-roll and asks first — its own deliberate-click guard.
+      // The founder this check stands in for confirms, stubbed the same
+      // way the panel's confirmed-render check stubs it.
+      const originalConfirm = dom.window.confirm;
+      dom.window.confirm = () => true;
+      try {
+        await clickEl(ctx, go, "the bar's Generate the video");
+      } finally {
+        dom.window.confirm = originalConfirm;
+      }
+      if (!apiCalls.includes("generateVideo")) {
+        throw new Error("the bar's Generate did not run the render");
+      }
       const renderTab = ctx.container.querySelector('[data-testid="review-tab-render"]');
       if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
-        throw new Error("Go to render did not switch to the render half");
+        throw new Error("the bar's Generate did not bring the render half into view");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
+      apiCalls.length = 0;
     }
   });
 
@@ -4651,11 +4882,13 @@ async function main() {
     }
   });
 
-  await check("rebuilding a current strategy does not interrupt", async (ctx) => {
-    // The other half of the same rule. A rebuild of a strategy that already
-    // matches the plan is harmless, and prompting every time would only teach
-    // the founder to dismiss the dialog without reading it - which is how a
-    // confirmation stops working at all.
+  await check("a current strategy offers no rebuild control to interrupt", async (ctx) => {
+    // The other half of the same rule, after ADR 0142. This check used to
+    // click the rebuild control on a current strategy and prove the click
+    // was not interrupted by a confirmation prompt. Kasra's rule removed
+    // the control itself for a current strategy — there is nothing to
+    // click, nothing prompts, and no rebuild runs — which is the stronger
+    // form of the same guarantee.
     const asked = [];
     const originalConfirm = dom.window.confirm;
     dom.window.confirm = (message) => {
@@ -4680,18 +4913,15 @@ async function main() {
           await openStep(ctx, "Review & submit");
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
-          if (!rebuild) throw new Error("no rebuild control on the last step");
-          await act(async () => {
-            rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
+          if (rebuild) throw new Error("a rebuild control renders for a current strategy");
           await act(async () => {});
         }
       );
       if (asked.length !== 0) {
-        throw new Error("a harmless rebuild was interrupted by a confirmation prompt");
+        throw new Error("a current strategy was interrupted by a confirmation prompt");
       }
-      if (!apiCalls.includes("generateStrategy")) {
-        throw new Error("an unprompted rebuild did not go through");
+      if (apiCalls.includes("generateStrategy")) {
+        throw new Error("a rebuild ran for a strategy that is current");
       }
     } finally {
       dom.window.confirm = originalConfirm;
@@ -4764,7 +4994,7 @@ async function main() {
     }
   });
 
-  await check("the bar offers the way forward once Review can proceed", async (ctx) => {
+  await check("the bar offers Generate and the way forward once Review can proceed", async (ctx) => {
     try {
       global.__SMOKE_PARAMS = "?project=p1";
       await withApi(
@@ -4783,8 +5013,15 @@ async function main() {
           if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
             throw new Error("the bar carries an action for a step that can proceed as-is");
           }
-          if (!ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
-            throw new Error("a ready Review lost its Go to render bar action");
+          // The ready bar's promise is the render itself (ADR 0144): the
+          // panel's Generate, beside the forward arrow it never displaces.
+          const generate = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
+          const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
+          if (!generate || !panelButton || (generate.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
+            throw new Error("a ready Review lost its Generate bar action");
+          }
+          if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+            throw new Error("the navigation-only render shortcut survives beside the bar's Generate");
           }
           if (!ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
             throw new Error("a ready Review lost its forward arrow");
@@ -15996,6 +16233,128 @@ async function runDemoCtaChecks() {
     } finally { global.__SMOKE_PARAMS = previous; }
   });
 
+  await check("a generating History card reserves the finished frame", async (ctx) => {
+    // ADR 0143: a regular card with no clip yet stands its notice inside
+    // the finished frame's geometry — flush stage, full-width 9:16
+    // frame — so the finished render swaps in with no layout shift. The
+    // frame is reserved geometry only: it never takes the playable
+    // clip's testid and never renders a video element.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previous = global.__SMOKE_PARAMS;
+    global.__SMOKE_PARAMS = "?copy=with";
+    try {
+      await withApi({ getGenerationHistory: async () => ({ generations: [
+        { ...COMPLETED, id: "frame-job", status: "generating", video_url: null, r2_url: null, playback_url: null, audience: "Night scrollers" },
+      ] }) }, async () => {
+        await mount(History)(ctx);
+        const card = ctx.container.querySelector("#generation-frame-job");
+        if (!card) throw new Error("the generating card did not render");
+        const stage = card.querySelector(".history-stage");
+        if (!stage || !stage.classList.contains("history-stage-flush")) {
+          throw new Error("the generating card's stage is not flush");
+        }
+        const frame = card.querySelector(".history-stage-frame");
+        if (!frame || !frame.classList.contains("history-preview-frame")) {
+          throw new Error("the notice does not stand in the finished frame's geometry");
+        }
+        if (frame.getAttribute("data-testid") === "history-brand-frame" || card.querySelector("video")) {
+          throw new Error("the reserved frame claims a clip that does not exist");
+        }
+      });
+    } finally { global.__SMOKE_PARAMS = previous; }
+  });
+
+  await check("the History loading skeleton mirrors the finished card", async (ctx) => {
+    // ADR 0143: while the list loads, the skeleton is the finished
+    // card's structure — the two-column row grid, a full-size frame
+    // placeholder, and rows where the Download row, the work row, the
+    // summary and the record will sit — never the old lone
+    // phone-shaped box that made the page jump when the rows landed.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const pending = [];
+    await withApi({
+      getGenerationHistory: () => new Promise((resolve) => pending.push(resolve)),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(History)(ctx);
+      const loading = ctx.container.querySelector('[data-testid="history-loading"]');
+      if (!loading) throw new Error("the loading skeleton did not render");
+      if (!loading.querySelector(".history-row-grid")) {
+        throw new Error("the skeleton has no finished-card row grid");
+      }
+      if (!loading.querySelector(".history-preview-frame")) {
+        throw new Error("the skeleton has no full-size frame placeholder");
+      }
+      if (loading.querySelector('[class*="h-[240px]"]')) {
+        throw new Error("the skeleton still shows the small phone-shaped box");
+      }
+      await act(async () => pending[0]({ generations: [] }));
+    });
+  });
+
+  await check("the finished History card's columns stand equal and the skeleton fills the same way", async (ctx) => {
+    // Equal columns (ADR 0143): at desktop widths the record column
+    // fills the height the media column's 9:16 frame sets, its blocks
+    // distributing the leftover space instead of ending over a void —
+    // the video is never shrunk to meet it (ADR 0137). jsdom runs no
+    // layout, so the pin is the structure the rules act on — the
+    // .history-record wrapper on the finished card and in the skeleton
+    // alike — plus the shipped stylesheet's own stretch/distribute
+    // rules, scoped to standard cards inside the desktop breakpoint.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "?copy=with";
+      await withApi({
+        getGenerationHistory: async () => ({
+          generations: [
+            { ...COMPLETED, id: "equal-card", audience: "Night scrollers" },
+          ],
+        }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const card = ctx.container.querySelector("#generation-equal-card");
+        if (!card) throw new Error("the finished card did not render");
+        if (!card.querySelector(".history-detail .history-record")) {
+          throw new Error("the finished card's record blocks ride in no equal-height wrapper");
+        }
+      });
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      const desktop = css.slice(css.indexOf("@media (min-width: 900px)"));
+      if (!/\.history-card:not\(\.history-card-compact\) \.history-row-grid \{\s*align-items: stretch;/.test(desktop)) {
+        throw new Error("the desktop history row does not stretch its columns equal");
+      }
+      if (!/\.history-card:not\(\.history-card-compact\) \.history-record \{[^}]*justify-content: space-between;/.test(desktop)) {
+        throw new Error("the record column does not distribute its blocks over the filled height");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      apiCalls.length = 0;
+    }
+  });
+
+  await check("the History loading skeleton's record fills the same equal height", async (ctx) => {
+    // The skeleton wears the finished card's classes (ADR 0143), so the
+    // equal-height record wrapper the desktop rules distribute is part
+    // of the loading structure too — the finished card lands in a
+    // column already filled the same way, with no shift.
+    const History = load("pages/GenerationHistory.jsx").default;
+    const pending = [];
+    await withApi({
+      getGenerationHistory: () => new Promise((resolve) => pending.push(resolve)),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(History)(ctx);
+      const loading = ctx.container.querySelector('[data-testid="history-loading"]');
+      if (!loading) throw new Error("the loading skeleton did not render");
+      if (!loading.querySelector(".history-detail .history-record")) {
+        throw new Error("the skeleton's record blocks ride in no equal-height wrapper");
+      }
+      await act(async () => pending[0]({ generations: [] }));
+    });
+  });
+
   await check("History ignores stale filter successes and failures", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const pending = [];
@@ -18566,11 +18925,14 @@ await check(
     }
   });
 
-  // Finding 4: a craft tile explains its score on focus — the rubric's own
-  // evidence and next step for that dimension, in the shared tooltip. The
-  // card itself still prints no advice (the top-fix callout stays gone);
-  // the explanation is on demand, and it is the scorer's words, so screen
-  // and scorer cannot disagree.
+  // Finding 4: a craft tile explains its score on focus, in the shared
+  // tooltip. The card itself still prints no advice (the top-fix callout
+  // stays gone); the explanation is on demand. The tooltip is structured
+  // like the app's labeled panels — a header with the score, a plain-words
+  // explanation of what the dimension measures and how its score is
+  // earned, then the rubric's own evidence for this clip and its next
+  // step under their own labels — never a bare dump of evidence lines,
+  // which the founder found disorganized and hard to read.
   await check("a craft tile explains its score from the rubric on focus", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const dimension = (key, label, score, max, evidence, next_step) => ({
@@ -18619,6 +18981,49 @@ await check(
         }
         if (!tip.textContent.includes("Open on the problem, not the diary.")) {
           throw new Error("the tooltip does not carry the rubric's next step for the dimension");
+        }
+        // The structure, not just the words: a header carrying the score,
+        // and the two labeled sections for this clip's own verdict.
+        if (!tip.textContent.includes("16/20")) {
+          throw new Error("the tooltip header does not carry the dimension's score");
+        }
+        if (!tip.textContent.includes("On this clip")) {
+          throw new Error("the tooltip does not label the clip's evidence");
+        }
+        if (!tip.textContent.includes("To lift it")) {
+          throw new Error("the tooltip does not label the next step");
+        }
+        // Every one of the eight dimensions explains itself in plain
+        // words, and labels its sections the same way: the evidence
+        // section appears only when the fixture scored evidence lines.
+        const explanations = {
+          hook_stopping_power: "makes a scrolling viewer stop",
+          audience_truth: "would actually say about their own life",
+          clarity: "in a single listen",
+          concreteness: "picture the moment",
+          story_arc: "work as one story",
+          spoken_naturalness: "sound like talking, not writing",
+          demo_handoff: "leaves a question open",
+          trust_compliance: "stay an honest customer story",
+        };
+        for (const [key, phrase] of Object.entries(explanations)) {
+          const entry = report.dimensions[key];
+          const tile = [...list.querySelectorAll("li")].find((li) => li.textContent.includes(entry.label));
+          if (!tile) throw new Error(`the ${key} tile did not render`);
+          await act(async () => { tile.focus(); });
+          await act(async () => { await new Promise((resolve) => setTimeout(resolve, 600)); });
+          const eachTip = dom.window.document.body.querySelector(`[data-testid="quality-dimension-tip-${key}"]`);
+          if (!eachTip) throw new Error(`focusing the ${key} tile opened no explanation tooltip`);
+          if (!eachTip.textContent.includes(phrase)) {
+            throw new Error(`the ${key} tooltip does not explain the dimension in plain words`);
+          }
+          if (!eachTip.textContent.includes("To lift it") || !eachTip.textContent.includes(entry.next_step)) {
+            throw new Error(`the ${key} tooltip does not carry its labeled next step`);
+          }
+          const hasEvidence = Array.isArray(entry.evidence) && entry.evidence.length > 0;
+          if (hasEvidence !== eachTip.textContent.includes("On this clip")) {
+            throw new Error(`the ${key} tooltip labels its evidence section wrongly`);
+          }
         }
       });
     } finally {
