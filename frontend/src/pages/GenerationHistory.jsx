@@ -225,12 +225,15 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // rendering. Distinct from `error`: this is a successful check that found the
   // render unfinished, not a failed action, so it must not read as one.
   const [strandedNote, setStrandedNote] = useState(null);
-  // Post copy and Plan context stack vertically in the record as solid
-  // sections (ADR 0151): no disclosure, no toggle, no collapsed state —
-  // both stand fully expanded from the first render, so their content
+  // Post copy and Plan context stand in the record as solid sections
+  // (ADR 0151): no disclosure, no toggle, no collapsed state — both
+  // stand fully expanded from the first render, so their content
   // fills the record column beside the clip instead of hiding behind
-  // two headers. The journey line's post-copy item only scrolls here;
-  // there is nothing left to open.
+  // two headers. When both are present on a standard card they pair
+  // side by side at wide widths (ADR 0153) rather than stacking, so a
+  // full record stops towering over the media column; a lone section
+  // keeps the full width. The journey line's post-copy item only
+  // scrolls here; there is nothing left to open.
 
   const detailId = `generation-detail-${row.id}`;
 
@@ -458,6 +461,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // not exist yet.
   const showJourney = (row.status === "completed" || row.status === "archived") && Boolean(downloadUrl);
   const resultsLine = describeSnapshot(row.performance_snapshot);
+  // The two record sections pair only when both render (ADR 0153):
+  // the kit beside the context, never the kit-less generate box,
+  // which stands in for a kit and keeps the full width.
+  const hasContext = Boolean(row.audience || row.demo_brief || row.location);
+  const sectionsPaired = !compact && Boolean(row.post_kit) && hasContext;
   // The journey line's post-copy item walks to the control that owns it:
   // the kit itself when one is written (scrolling to its solid section),
   // the generate prompt when none is. One click from the state to the
@@ -658,6 +666,19 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             </div>
           </div>
 
+          {/* The feedback block rides in the media column on a
+              standard card (ADR 0153): the posted link and the results
+              are actions on the render itself, so they join its action
+              stack under the Work row — and their real height goes to
+              the column that had room, instead of lengthening a record
+              that already runs tall on a full card. Compact cards keep
+              the block in the record's secondary area below. */}
+          {!compact && (
+            <div className="history-media-feedback">
+              <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
+            </div>
+          )}
+
         </div>
 
         <div
@@ -764,7 +785,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               )}
               {/* Identity lives once, in the summary at this record's head above — nothing below repeats it. */}
               {(row.post_kit || row.audience || row.demo_brief || row.location) && (
-                <div className="grid grid-cols-1 items-start gap-3">
+                <div className={`history-record-sections grid grid-cols-1 items-start gap-3${sectionsPaired ? " history-record-sections-paired" : ""}`}>
                   {row.post_kit && (
                     <section
                       className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5"
@@ -894,22 +915,27 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               {(retryRenderButton || recheckButton || retryStorageButton) && (
                 <div className="flex flex-wrap gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
               )}
-              {(
-                <button
-                  type="button"
-                  className="history-compact-toggle w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-sm font-semibold hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-expanded={secondaryOpen}
-                  aria-controls={`${detailId}-secondary`}
-                  onClick={() => setSecondaryOpen((open) => !open)}
-                >
-                  Results &amp; actions <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${secondaryOpen ? "rotate-180" : ""}`} />
-                </button>
+              {/* The Results & actions disclosure belongs to compact
+                  cards: their feedback block still lives here, behind
+                  the toggle on mobile. A standard card's feedback
+                  rides in its media column (ADR 0153), so the record
+                  carries no disclosure and no dead toggle. */}
+              {compact && (
+                <>
+                  <button
+                    type="button"
+                    className="history-compact-toggle w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-sm font-semibold hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-expanded={secondaryOpen}
+                    aria-controls={`${detailId}-secondary`}
+                    onClick={() => setSecondaryOpen((open) => !open)}
+                  >
+                    Results &amp; actions <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${secondaryOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  <div id={`${detailId}-secondary`} className="history-compact-secondary space-y-5" data-expanded={secondaryOpen}>
+                    <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
+                  </div>
+                </>
               )}
-              <div id={`${detailId}-secondary`} className="history-compact-secondary space-y-5" data-expanded={secondaryOpen}>
-              <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
-
-              {/* Work with this render moved under the Download row (ADR 0137). */}
-              </div>
             </div>
           </div>
         </div>
@@ -1328,11 +1354,12 @@ export default function GenerationHistory() {
            spinner and not a lone phone-shaped box: the same flush card,
            the same two columns, the frame at its full width and 9:16
            height, and a placeholder row wherever the Download row, the
-           Work with this render row and the record will sit, the
-           summary placeholder at the record's head (ADR 0150) — so when
-           the rows land, nothing on the page moves. The skeleton is the
-           media column plus the record, because that is all an attached
-           card is. */
+           Work with this render row, the feedback block and the record
+           will sit, the summary placeholder at the record's head
+           (ADR 0150) and its two section placeholders paired as the
+           finished sections pair (ADR 0153) — so when the rows land,
+           nothing on the page moves. The skeleton is the media column
+           plus the record, because that is all an attached card is. */
         <div className="space-y-4" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
             <div key={i} className="surface surface-flush history-card min-w-0" aria-hidden="true">
@@ -1354,6 +1381,13 @@ export default function GenerationHistory() {
                       <Skeleton className="h-10 min-w-[150px] flex-1" />
                     </div>
                   </div>
+                  {/* The feedback placeholder rides in the media
+                      column under the work row, where the finished
+                      card's feedback block sits (ADR 0153). */}
+                  <div className="space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
                 </div>
                 <div className="history-detail min-w-0">
                   <div className="history-body">
@@ -1365,9 +1399,19 @@ export default function GenerationHistory() {
                       </div>
                       <Skeleton className="h-3 w-64" />
                       <Skeleton className="h-[46px] w-full" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-3 w-full" />
-                        <Skeleton className="h-3 w-2/3" />
+                      {/* The two section placeholders pair side by
+                          side, as the finished sections do (ADR 0153). */}
+                      <div className="history-record-sections history-record-sections-paired grid grid-cols-1 items-start gap-3">
+                        <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] px-3 py-3">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-2/3" />
+                        </div>
+                        <div className="space-y-2 rounded-xl border border-[color:var(--hairline)] px-3 py-3">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-2/3" />
+                        </div>
                       </div>
                     </div>
                   </div>

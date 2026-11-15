@@ -10,7 +10,6 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video, Gauge,
-  Pause, Play,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -184,9 +183,11 @@ const FLOW_STEPS = [
  * Kasra replaced the recorded tour footage with this — the same STEP_ART
  * illustrations the How it works strip uses, one at a time, so the whole
  * flow plays in one place with no video bytes at all. The pace is set to
- * stay comfortable: four seconds a step with a slow crossfade, a pause
- * while the pointer rests on the frame, and a pause control at the edge
- * of the centered dot row (an autoplaying loop needs a way to stop it).
+ * stay comfortable: four seconds a step with a slow crossfade, and a
+ * pause while the pointer rests on the frame. The loop carries no pause
+ * control — Kasra removed the toggle that sat at the edge of the dot row
+ * (Nov 15, ADR 0154), so it always auto-plays and stillness comes only
+ * from the resting pointer or from reduced motion.
  * The slides carry the illustration and the badge + title only — Kasra
  * trimmed the step's descriptive line out of the hero (Nov 14); the line
  * itself still runs in the How it works section below. Under reduced motion
@@ -200,7 +201,9 @@ function HeroFlow() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
   const [active, setActive] = useState(0);
-  const [playing, setPlaying] = useState(!reduceMotion);
+  // No pause control exists (ADR 0154): the loop plays unless the motion
+  // setting stills it, so "playing" is derived, never toggled.
+  const playing = !reduceMotion;
   const [hovering, setHovering] = useState(false);
 
   useEffect(() => {
@@ -211,8 +214,6 @@ function HeroFlow() {
     }, HERO_FLOW_MS);
     return () => window.clearInterval(id);
   }, [playing, hovering]);
-
-  const toggleLabel = playing ? "Pause the step loop" : "Play the step loop";
 
   return (
     <div
@@ -250,22 +251,6 @@ function HeroFlow() {
             />
           ))}
         </div>
-        {!reduceMotion && (
-          <button
-            type="button"
-            className="hero-flow-toggle"
-            aria-label={toggleLabel}
-            title={toggleLabel}
-            data-testid="hero-flow-toggle"
-            onClick={() => setPlaying((p) => !p)}
-          >
-            {playing ? (
-              <Pause className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <Play className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
-        )}
       </div>
     </div>
   );

@@ -92,6 +92,11 @@ One render path, single-pass video generation via OpenRouter.
   the media column carries only the stage, Download and Work rows
   (ADR 0150). Post copy and Plan context stand in the record as solid
   sections — always rendered in full, never disclosures (ADR 0151).
+  On a full standard card the two sections pair side by side (the
+  pair template engages at a 1080px card-container breakpoint) and
+  the feedback block rides in the media column under the Work row,
+  so a standard card renders no Results & actions disclosure;
+  compact cards keep their feedback in the record (ADR 0153).
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
 - `backend/feedback.py` — the whole-video verdict bundles and their
@@ -196,7 +201,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and fifty-two decisions (0001–0152) now
+Read `docs/adr/README.md` first. One hundred and fifty-four decisions (0001–0154) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

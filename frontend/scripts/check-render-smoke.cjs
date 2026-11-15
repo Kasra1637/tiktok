@@ -9604,8 +9604,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // The hero is a loop of the five step illustrations, not a recording:
   // Kasra replaced the tour footage so the whole flow plays in the frame
   // with no video bytes. The pins below hold that shape — five slides, the
-  // first one up front, dots to step by hand, a control that stops the
-  // loop, and a still first step under reduced motion.
+  // first one up front, dots to step by hand, and a still first step under
+  // reduced motion. The loop carries no pause control: Kasra removed it
+  // (Nov 15, ADR 0154) — it always auto-plays, and stillness comes only
+  // from the pointer resting on the frame or from reduced motion.
   await check("the hero shows the five-step flow instead of a video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9620,8 +9622,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   await check("the hero flow stays on the first step under reduced motion", async (ctx) => {
     // Reduced motion means the loop never starts: the first step sits
-    // still, no play control is offered for a loop that never plays, and
-    // the dots remain the way through.
+    // still and the dots remain the way through. The toggle assertion
+    // stays as a guard even though the loop has no play control at any
+    // motion setting now (ADR 0154).
     const prevMatchMedia = dom.window.matchMedia;
     dom.window.matchMedia = () => ({ matches: true });
     try {
@@ -9638,27 +9641,38 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("the hero flow dots and pause control drive the loop", async (ctx) => {
+  await check("the hero flow has no pause control and advances on its own", async (ctx) => {
+    // Kasra removed the play/pause toggle entirely (ADR 0154): the loop
+    // always plays on its own, so no control renders — not beside the
+    // dots, not anywhere in the hero — and the step still advances by
+    // itself. The dots stay: position indicators that also step by hand.
     const prevMatchMedia = dom.window.matchMedia;
     dom.window.matchMedia = () => ({ matches: false });
     try {
       await mount(load("pages/Landing.jsx").default)(ctx);
       await act(async () => {});
       const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+      if (!shot) throw new Error("no hero frame rendered");
+      if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
+        throw new Error("the hero still renders a play/pause toggle");
+      }
+      const loopControl = [...shot.querySelectorAll("button")].find((b) =>
+        /step loop/i.test(b.getAttribute("aria-label") || ""));
+      if (loopControl) throw new Error("the hero still renders a play/pause control for the loop");
       const slides = () => [...shot.querySelectorAll(".hero-flow-slide")];
       const dots = () => [...shot.querySelectorAll(".hero-flow-dot")];
-      const toggle = () => shot.querySelector('[data-testid="hero-flow-toggle"]');
-      if (!toggle()) throw new Error("the looping hero has no pause control");
-      if (toggle().getAttribute("aria-label") !== "Pause the step loop") {
-        throw new Error(`the control does not offer to stop the loop: ${toggle().getAttribute("aria-label")}`);
-      }
       await act(async () => { dots()[2].click(); });
       await act(async () => {});
       if (!slides()[2].classList.contains("is-active")) throw new Error("the third dot did not show the third step");
-      await act(async () => { toggle().click(); });
-      await act(async () => {});
-      if (toggle().getAttribute("aria-label") !== "Play the step loop") {
-        throw new Error("after pausing, the control still offers Pause");
+      // On its own: one full step later the flow has moved off the step
+      // the dot chose, with no hand on any control — nothing pauses it.
+      await act(async () => { await new Promise((r) => setTimeout(r, 4300)); });
+      if (slides()[2].classList.contains("is-active")) {
+        throw new Error("the flow did not advance on its own — something still pauses it");
+      }
+      const landing = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
+      if (landing.includes("hero-flow-toggle")) {
+        throw new Error("Landing.jsx still carries the hero-flow-toggle control");
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
@@ -9668,8 +9682,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // Kasra trimmed the hero (Nov 14): the slides carry the illustration and
   // the badge + title only — the step's descriptive line lives in the How
   // it works section below, not repeated in the hero — and the browse dots
-  // sit centered under the frame with the pause control at the row's edge
-  // so it cannot pull them off-center.
+  // sit centered under the frame. The pause control that used to sit at
+  // the row's edge is gone entirely (ADR 0154), CSS rule and all.
   await check("the hero slides carry no subtitle and the dots sit centered", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9698,8 +9712,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!/\.hero-flow-nav\s*\{[^}]*justify-content:\s*center/.test(css)) {
       throw new Error("the hero dot row is not centered");
     }
-    if (!/\.hero-flow-toggle\s*\{[^}]*position:\s*absolute/.test(css)) {
-      throw new Error("the pause control is not taken out of the dot row's flow");
+    if (css.includes(".hero-flow-toggle")) {
+      throw new Error("the dead .hero-flow-toggle rule is still in index.css");
     }
   });
 
@@ -16428,32 +16442,34 @@ async function runDemoCtaChecks() {
     }, async () => {
       await mount(GenerationHistory)(ctx);
       const card = () => ctx.container.querySelector('#generation-sync-low');
-      const panel = () => card().querySelector('[data-testid="history-detail-panel"]');
       // Identity summary and working controls live together in the one
-      // attached card: no expand step between reading and acting.
+      // attached card: no expand step between reading and acting. The
+      // feedback controls ride in the media column on a standard card
+      // (ADR 0153); the queries stay card-wide, as they were when the
+      // block sat in the panel — the guarantees are the saves and the
+      // summary sync, not the column the form renders in.
       const onCard = (id) => card().querySelector(`[data-testid="${id}"]`);
-      const inPanel = (id) => panel().querySelector(`[data-testid="${id}"]`);
       await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
-      const input = inPanel("history-tiktok-views-input-sync-low");
+      const input = onCard("history-tiktok-views-input-sync-low");
       for (const invalid of ["1,2", "1.5", "true", "10000000001"]) {
         await typeInto(ctx, input, invalid);
-        await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
-        if (!panel().querySelector('[role="alert"]')) throw new Error(`bad views accepted: ${invalid}`);
+        await clickEl(ctx, onCard("history-tiktok-views-save-sync-low"));
+        if (!card().querySelector('[role="alert"]')) throw new Error(`bad views accepted: ${invalid}`);
         if (!onCard("history-summary").textContent.includes("10 views")) throw new Error("invalid save changed tile");
       }
       await typeInto(ctx, input, "1,200");
-      await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
+      await clickEl(ctx, onCard("history-tiktok-views-save-sync-low"));
       if (ctx.container.querySelector('article').id !== "generation-sync-low") throw new Error("saving views did not immediately re-sort");
       await typeInto(ctx, input, "1201");
-      await clickEl(ctx, inPanel("history-tiktok-views-save-sync-low"));
+      await clickEl(ctx, onCard("history-tiktok-views-save-sync-low"));
       expectText(ctx, "Views could not save");
       if (!onCard("history-summary").textContent.includes("1,200 views")) throw new Error("failed save changed confirmed list state");
       await clickEl(ctx, onCard("history-verdict-sync-low-up"));
       if (!onCard("history-summary").textContent.includes("Winner")) throw new Error("saved verdict did not update list");
-      await clickEl(ctx, inPanel("history-tiktok-clear-sync-low"));
+      await clickEl(ctx, onCard("history-tiktok-clear-sync-low"));
       if (!onCard("history-summary").textContent.includes("Not posted") || onCard("history-summary").textContent.includes("Winner")) throw new Error("clearing link left stale posted/winner state");
-      await typeInto(ctx, inPanel("history-tiktok-input-sync-low"), first.tiktok_url);
-      await clickEl(ctx, inPanel("history-tiktok-save-sync-low"));
+      await typeInto(ctx, onCard("history-tiktok-input-sync-low"), first.tiktok_url);
+      await clickEl(ctx, onCard("history-tiktok-save-sync-low"));
       if (!onCard("history-summary").textContent.includes("1,200 views") || !onCard("history-summary").textContent.includes("Winner")) throw new Error("attached summary lost saved result");
       if (fetches !== 1) throw new Error("result save reloaded the page instead of synchronizing rows");
     });
@@ -16538,18 +16554,25 @@ async function runDemoCtaChecks() {
       }
       // The mirror follows the rebalanced card (ADR 0150): the summary
       // placeholder leads the skeleton's record, and its media column
-      // carries only the frame, the Download row and the work row.
+      // carries the frame, the Download row, the work row and the
+      // feedback placeholder (ADR 0153) — nothing else.
       const skelMedia = loading.querySelector(".history-media");
       const skelRecord = loading.querySelector(".history-record");
       if (skelMedia?.querySelector(".row-pad")) {
         throw new Error("the skeleton still parks the summary placeholder under the clip");
       }
-      if (!skelMedia || skelMedia.children.length !== 3) {
-        throw new Error("the skeleton's media column carries more than the frame, Download and work rows");
+      if (!skelMedia || skelMedia.children.length !== 4) {
+        throw new Error("the skeleton's media column does not carry the frame, Download, work and feedback rows");
       }
       const skelLead = skelRecord?.firstElementChild;
       if (!skelLead || skelLead.children.length !== 3) {
         throw new Error("the skeleton's record does not open with the three-line summary placeholder");
+      }
+      // The record's section placeholders pair the same way the
+      // finished card's sections do (ADR 0153).
+      const skelPair = skelRecord?.querySelector(".history-record-sections-paired");
+      if (!skelPair || skelPair.children.length !== 2) {
+        throw new Error("the skeleton's record does not pair its section placeholders");
       }
       await act(async () => pending[0]({ generations: [] }));
     });
@@ -18447,12 +18470,12 @@ await check(
     }
   });
 
-  // The record stacks post copy above plan context in one column, and
-  // both stand as solid sections (ADR 0151): no disclosure, no toggle,
-  // no chevron — every fact on screen from the first render, so the two
-  // sections' full content fills the record column beside the clip.
+  // Post copy and plan context stand as solid sections (ADR 0151):
+  // no disclosure, no toggle, no chevron — every fact on screen from
+  // the first render. At wide widths the two pair side by side
+  // (ADR 0153); below that they stack. Either way post copy leads.
   await check(
-    "History stacks post copy above plan context as solid sections",
+    "History sets post copy and plan context as solid sections, copy first",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -18497,15 +18520,17 @@ await check(
           if (!context.textContent.includes("Film the dock.")) {
             throw new Error("plan context hides the demo brief on the first render");
           }
-          // The sections stack in one column, post copy first.
+          // Post copy leads: first in the pair at wide widths, on
+          // top in the stack below them.
           if (!(copy.compareDocumentPosition(context) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-            throw new Error("post copy is not stacked above plan context");
+            throw new Error("post copy does not lead plan context");
           }
           // Polish (ADR 0151 addendum): the two sections are related
-          // blocks, so their stack rides the 12px related-blocks gap,
-          // not the 8px list-item gap, and plan context separates its
-          // header from its content with the same hairline post copy
-          // carries — the two sections are structurally identical.
+          // blocks, so their wrapper rides the 12px related-blocks
+          // gap, not the 8px list-item gap, and plan context
+          // separates its header from its content with the same
+          // hairline post copy carries — the two sections are
+          // structurally identical.
           const stack = copy.parentElement;
           if (!stack?.className.includes("gap-3") || stack.className.includes("gap-2")) {
             throw new Error("the record sections do not ride the related-blocks gap");
@@ -18521,6 +18546,98 @@ await check(
       );
     }
   );
+
+  // Full-card rebalance (ADR 0153): ADR 0150 balanced sparse cards,
+  // but a full card — kit, context and feedback together — tipped the
+  // other way, its record towering over the media column. The fix
+  // rearranges real content: when both sections are present on a
+  // standard card they pair side by side at wide widths instead of
+  // stacking, and the feedback block rides in the media column under
+  // the work row. A row with only one section keeps the full record
+  // width, and a compact row keeps its feedback in the record.
+  await check("a full History card pairs its sections and carries feedback in the media column", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "pair-full", post_kit: POST_KIT, audience: "Night scrollers", demo_brief: "Film the dock." },
+          { ...COMPLETED, id: "pair-context", audience: "Night scrollers" },
+          { ...COMPLETED, id: "pair-kit", post_kit: POST_KIT },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const full = ctx.container.querySelector("#generation-pair-full");
+        if (!full || full.classList.contains("history-card-compact")) {
+          throw new Error("the full row is not a standard card");
+        }
+        const stack = full.querySelector('[data-testid="history-post-copy-pair-full"]')?.parentElement;
+        if (!stack?.classList.contains("history-record-sections")) {
+          throw new Error("the sections wrapper lost its named class");
+        }
+        if (!stack.classList.contains("history-record-sections-paired")) {
+          throw new Error("a row with both sections does not pair them");
+        }
+        const media = full.querySelector(".history-media");
+        const panel = full.querySelector('[data-testid="history-detail-panel"]');
+        const feedback = full.querySelector('[data-testid="history-feedback-pair-full"]');
+        if (!feedback || !media?.contains(feedback)) {
+          throw new Error("the full card's feedback block is not in the media column");
+        }
+        if (panel?.contains(feedback)) {
+          throw new Error("the full card's feedback block still sits in the detail panel");
+        }
+        for (const id of ["pair-context", "pair-kit"]) {
+          const wrap = ctx.container.querySelector(`#generation-${id}`)?.querySelector(".history-record-sections");
+          if (!wrap) throw new Error(`${id} lost its sections wrapper`);
+          if (wrap.classList.contains("history-record-sections-paired")) {
+            throw new Error(`${id} pairs with only one section present`);
+          }
+        }
+      });
+      // The pair template lives in the stylesheet at the card
+      // container breakpoint: the card is the container, so the
+      // sections pair only when the record is genuinely wide.
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      if (!/@container \(min-width: 1080px\)[\s\S]{0,300}?\.history-record-sections\.history-record-sections-paired\s*\{\s*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/.test(css)) {
+        throw new Error("the paired sections template is not defined at the card container breakpoint");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  await check("a compact History card keeps its feedback in the record", async (ctx) => {
+    // ADR 0153's media-column move is standard cards only: a compact
+    // card's feedback stays in the record's secondary area, behind
+    // its toggle on mobile, exactly where it has always lived.
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "pair-compact" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without";
+        await mount(GenerationHistory)(ctx);
+        const card = ctx.container.querySelector("#generation-pair-compact");
+        if (!card?.classList.contains("history-card-compact")) {
+          throw new Error("the bare row is not a compact card");
+        }
+        const feedback = card.querySelector('[data-testid="history-feedback-pair-compact"]');
+        if (!feedback || !feedback.closest(".history-compact-secondary")) {
+          throw new Error("the compact card's feedback left the record's secondary area");
+        }
+        if (card.querySelector(".history-media")?.contains(feedback)) {
+          throw new Error("the compact card's feedback moved into the media column");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
 
   // Renders carrying post copy or plan context stack under one heading and
   // renders carrying neither under another, and the two sides never share
@@ -18782,7 +18899,13 @@ await check(
     } finally { global.__SMOKE_PARAMS = previousParams; }
   });
 
-  await check("History keeps mobile results behind a disclosure while post copy stands solid", async (ctx) => {
+  await check("History puts a standard card's results in the media column while post copy stands solid", async (ctx) => {
+    // ADR 0153: on a standard card the feedback block rides in the
+    // media column as part of the render's action stack, so the
+    // record carries no Results & actions disclosure at all — there
+    // is nothing left for it to open. (Compact cards keep the
+    // disclosure; that is pinned by the compact mobile check above.)
+    // Post copy still stands solid, outside any disclosure.
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -18793,15 +18916,17 @@ await check(
       }, async () => {
         await mount(History)(ctx);
         const card = ctx.container.querySelector('#generation-mobile-copy');
-        const toggle = card.querySelector('button[aria-controls][aria-expanded="false"]');
         const post = card.querySelector('[data-testid="history-post-copy-mobile-copy"]');
-        if (!toggle || !toggle.textContent.includes('Results & actions') || !post || post.tagName === 'DETAILS' || post.closest('.history-compact-secondary')) {
-          throw new Error('post copy must stand solid outside the mobile results disclosure');
+        if (!post || post.tagName === 'DETAILS' || post.closest('.history-compact-secondary')) {
+          throw new Error('post copy must stand solid outside any disclosure');
         }
-        const content = card.querySelector(`#${toggle.getAttribute('aria-controls')}`);
-        if (!content?.querySelector('[data-testid="history-feedback-mobile-copy"]') || content.dataset.expanded !== 'false') throw new Error('secondary results must start collapsed on mobile');
-        await clickEl(ctx, toggle);
-        if (toggle.getAttribute('aria-expanded') !== 'true' || content.dataset.expanded !== 'true') throw new Error('secondary results do not expand');
+        if ([...card.querySelectorAll('button')].some((b) => b.textContent.includes('Results & actions'))) {
+          throw new Error('a standard card still carries the results disclosure its feedback no longer needs');
+        }
+        const feedback = card.querySelector('[data-testid="history-feedback-mobile-copy"]');
+        if (!feedback || !card.querySelector('.history-media')?.contains(feedback) || card.querySelector('[data-testid="history-detail-panel"]')?.contains(feedback)) {
+          throw new Error('a standard card\'s results must ride in the media column, not the record');
+        }
       });
     } finally { global.__SMOKE_PARAMS = previousParams; }
   });

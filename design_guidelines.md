@@ -201,8 +201,9 @@ context are not disclosures (ADR 0151): each is a solid section wearing the
 disclosure's old box — a `rounded-xl` hairline border on `bg-secondary/20`,
 a static `text-sm` semibold muted header naming its contents — with its
 content always rendered in full. There is no summary, no chevron and nothing
-to open; the two stack in one column and their content fills the record
-beside the clip.
+to open; the two pair side by side when the card is wide enough (ADR 0153)
+and stack in one column below that width, their content filling the record
+beside the clip either way.
 
 **A topic-page subtitle is optional, and 54-60 characters when it appears.**
 The line under the page title is read at a glance, so where it exists it is
@@ -349,7 +350,12 @@ The summary at the head of the record holds the app name, status, date, the
 provenance facts (model, attempt, template and script versions) as chips in
 the same header row, the hook and the results line. Under it the record
 continues with the joined finished → posted line and the whole-video
-verdict, then facts, audience, demo brief and every action. Deep links scroll to the named
+verdict, then the two solid sections: Post copy and Plan context, paired
+side by side when the card is wide enough for both (a 1080px
+card-container breakpoint, ADR 0153) and stacked below it. On a standard
+card the feedback block — the posted link and the results fields — is not
+in the record at all; it rides in the media column under the Work row.
+Deep links scroll to the named
 card and, when it still awaits its TikTok link, focus that input. The
 preview and the stage padding are custom properties on `.history-card`
 (`--history-preview-h`, `--history-stage-pad`).
@@ -369,8 +375,9 @@ the finished frame's geometry — flush stage, full-width 9:16 frame
 clip will fill and nothing resizes when it lands; compact cards keep the
 notice in the record instead. The History loading skeleton mirrors the
 finished card the same way: two columns, full-size frame placeholder, and
-placeholder rows for the Download row, the work row and the record, with the
-summary placeholder at the record's head — never a lone phone-shaped box.
+placeholder rows for the Download row, the work row and the feedback block
+in the media column, with the summary placeholder at the record's head and
+its two section placeholders paired — never a lone phone-shaped box.
 At desktop widths the card's two
 columns stand equal: the row stretches to its taller side and the record
 column fills that height — but its blocks keep their natural 20px rhythm
@@ -384,7 +391,9 @@ nothing in it and does not render.
 Actions sit under the clip in consequence order: the Download row (with
 the quieter icon-only Delete beside it — it never floats over the footage),
 then the Work with this render row, Demo + CTA and Remix this plan as a
-pair. Retry render joins the record's actions on a failed row.
+pair, then — on a standard card — the feedback block: the posted-link
+form and, once a link is saved, the views and results fields (ADR 0153).
+Retry render joins the record's actions on a failed row.
 Related-render links are capped at two per card.
 
 - **Shell:** `AppShell` — fixed collapsible left sidebar (264px / 76px collapsed,
