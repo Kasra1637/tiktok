@@ -29,9 +29,6 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 // landing page must never download. Both /demo-cta routes resolve through
 // this one component, so one lazy boundary covers them.
 const DemoCtaStudio = lazy(() => import("./pages/DemoCtaStudio"));
-// Video Upscaler is a separate lazy chunk for the same reason: it pulls in
-// mediabunny, which the landing page must never download.
-const VideoUpscaler = lazy(() => import("./pages/VideoUpscaler"));
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 import { initVitals } from "./lib/vitals";
 
@@ -156,12 +153,6 @@ function App() {
                         <Route path="/demo-cta" element={editorElement} />
                         <Route path="/demo-cta/:generationId" element={editorElement} />
                         <Route path="/brand" element={<LazyPage><BrandSetup /></LazyPage>} />
-                        {/* Standalone client-side upscaler: sub-4K video in, 4K MP4 out. */}
-                        <Route path="/upscale" element={(
-                          <Suspense fallback={<EditorLoading />}>
-                            <VideoUpscaler />
-                          </Suspense>
-                        )} />
                         {/* Generation History is the history view. */}
                         <Route path="/history" element={<LazyPage><GenerationHistory /></LazyPage>} />
                       </Routes>

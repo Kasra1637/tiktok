@@ -9583,21 +9583,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!/lazy\(\(\)\s*=>\s*import\(["']\.\/pages\/DemoCtaStudio["']\)/.test(src.replace(/\s+/g, ""))) {
       throw new Error("the editor route is not route-split out of the landing chunk");
     }
-    if (/import\s+VideoUpscaler\s+from/.test(src)) {
-      throw new Error("App still statically imports the upscaler, dragging mediabunny into the landing payload");
-    }
-    if (!/lazy\(\(\)\s*=>\s*import\(["']\.\/pages\/VideoUpscaler["']\)/.test(src.replace(/\s+/g, ""))) {
-      throw new Error("the upscaler route is not route-split out of the landing chunk");
-    }
     if (!src.includes("Suspense")) {
       throw new Error("the split editor route has no Suspense boundary");
     }
-    // mediabunny may only be reachable through route-split chunks: the editor
-    // (demoCta/) and the upscaler (upscale/, lazy-loaded on /upscale like the
-    // editor is on /demo-cta). Anything else importing it lands back in the
-    // landing payload. Comments are stripped first, so a comment naming the
-    // dependency (like this one) cannot trip the pin — only a real import can.
-    const chunkDirs = [`${path.sep}demoCta${path.sep}`, `${path.sep}upscale${path.sep}`];
+    // mediabunny may only be reachable through the route-split editor chunk
+    // (demoCta/, lazy-loaded on /demo-cta). Anything else importing it lands
+    // back in the landing payload. Comments are stripped first, so a comment
+    // naming the dependency (like this one) cannot trip the pin — only a real
+    // import can.
+    const chunkDirs = [`${path.sep}demoCta${path.sep}`];
     const leaking = sourceFiles()
       .filter((abs) => !chunkDirs.some((dir) => abs.includes(dir)) && !/\.test\.jsx?$/.test(abs))
       .filter((abs) => stripComments(fs.readFileSync(abs, "utf8")).includes("mediabunny"))
@@ -10960,9 +10954,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 7) {
+      if (items.length !== 6) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 6. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -10981,7 +10975,6 @@ async function runSidebarNavChecks() {
         "/create",
         "/demo-cta",
         "/history",
-        "/upscale",
         "/assets",
         "/analytics",
       ];
@@ -11094,7 +11087,7 @@ async function runIconChecks() {
     if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.wizard-section-enter\s*\{\s*animation:\s*wizard-section-enter 150ms/.test(css)) {
       throw new Error("canvas disclosure must be brief and run only when motion is allowed");
     }
-    for (const file of ["CreateVideo.jsx", "BrandSetup.jsx", "AppProfileDetail.jsx", "AssetLibrary.jsx", "Analytics.jsx", "GenerationHistory.jsx", "DemoCtaStudio.jsx", "VideoUpscaler.jsx"]) {
+    for (const file of ["CreateVideo.jsx", "BrandSetup.jsx", "AppProfileDetail.jsx", "AssetLibrary.jsx", "Analytics.jsx", "GenerationHistory.jsx", "DemoCtaStudio.jsx"]) {
       if (!fs.readFileSync(path.join(SRC, "pages", file), "utf8").includes("page-content-enter")) {
         throw new Error(`${file} does not use the shared primary content reveal`);
       }
@@ -12953,7 +12946,6 @@ async function runDemoCtaChecks() {
       ["AssetLibrary.jsx", "Asset Library", []],
       ["GenerationHistory.jsx", "Generation History", []],
       ["Analytics.jsx", "Analytics", ["Compare manually recorded views and your own ratings."]],
-      ["VideoUpscaler.jsx", "Video Upscaler", ["Upscale a clip to 1080p; its audio stays with the export."]],
     ];
     for (const [file, title, expected] of pages) {
       const text = fs.readFileSync(path.join(SRC, "pages", file), "utf8");
@@ -18929,19 +18921,20 @@ await check(
   );
 
   await check("export reads source audio samples independently of preview mute", async () => {
-    // The single-segment copy lives in the shared helper, not inline: what is
-    // pinned is that the export resolves its audio through that helper (never
-    // through preview playback), and that the helper itself reads source
-    // samples directly. Both files must stay off preview-playback APIs, so a
-    // muted preview can never produce a silent export from either pipeline.
+    // The single-segment copy lives in the export's own audio helper, not
+    // inline: what is pinned is that the export resolves its audio through
+    // that helper (never through preview playback), and that the helper
+    // itself reads source samples directly. Both files must stay off
+    // preview-playback APIs, so a muted preview can never produce a silent
+    // export.
     const src = fs.readFileSync(path.join(SRC, "demoCta", "exportTikTok.js"), "utf8");
-    const helper = fs.readFileSync(path.join(SRC, "upscale", "audio.js"), "utf8");
-    if (!src.includes('from "../upscale/audio"')) throw new Error("the export no longer resolves audio through the shared single-segment helper");
+    const helper = fs.readFileSync(path.join(SRC, "demoCta", "audio.js"), "utf8");
+    if (!src.includes('from "./audio"')) throw new Error("the export no longer resolves audio through its single-segment helper");
     for (const marker of ["new AudioSampleSink(audioTrack)", "sample.trim(start, end)", "trimmed.setTimestamp", "audioSource.add(trimmed)"]) {
-      if (!helper.includes(marker)) throw new Error(`missing direct-audio guarantee in the shared helper: ${marker}`);
+      if (!helper.includes(marker)) throw new Error(`missing direct-audio guarantee in the export audio helper: ${marker}`);
     }
     if (!src.includes("audio will not be silently removed")) throw new Error("missing direct-audio guarantee: audio will not be silently removed");
-    for (const [name, text] of [["export", src], ["shared audio helper", helper]]) {
+    for (const [name, text] of [["export", src], ["export audio helper", helper]]) {
       if (/createMediaElementSource|captureStream|createGain/.test(text)) throw new Error(`${name} audio depends on preview playback again`);
     }
   });

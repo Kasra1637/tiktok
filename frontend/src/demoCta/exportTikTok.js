@@ -3,7 +3,7 @@ import {
   CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, canEncodeAudio, canEncodeVideo,
 } from "mediabunny";
 import { clipWindow } from "./constants";
-import { passthroughSegmentAudio } from "../upscale/audio";
+import { passthroughSegmentAudio } from "./audio";
 
 export const TIKTOK_EXPORT = Object.freeze({
   width: 1080, height: 1920, fps: 30, videoBitrate: 8_000_000, audioBitrate: 192_000,

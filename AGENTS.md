@@ -103,8 +103,10 @@ One render path, single-pass video generation via OpenRouter.
   durability and signed playback — a provider URL is not a durable link, and a
   finished render can still carry `storage_error`.
 - Other surfaces: `backend/auth.py` (Clerk; authz stays at HTTP/DB entry
-  points), `frontend/src/upscale/` + `pages/VideoUpscaler.jsx`, and onboarding
-  tours in `components/onboarding/` + `lib/onboarding/tours.js`.
+  points), and onboarding tours in `components/onboarding/` +
+  `lib/onboarding/tours.js`. The Video Upscaler is removed (ADR 0152); the
+  single-segment audio passthrough it shared with the Demo + CTA export
+  lives at `frontend/src/demoCta/audio.js` under the export's ownership.
   Schemas: `backend/models.py` owns `STUDIO_EDITABLE_FIELDS` and row
   serialization; `backend/template_library.py` + `backend/recommendation_tags.py`
   own curated vocab / tag matching. Operator tooling — NOT a render path:
@@ -194,7 +196,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and fifty-one decisions (0001–0151) now
+Read `docs/adr/README.md` first. One hundred and fifty-two decisions (0001–0152) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

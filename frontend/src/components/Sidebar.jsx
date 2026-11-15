@@ -6,7 +6,6 @@ import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
   Clapperboard,
-  WandSparkles,
   Smartphone,
   Images,
   Briefcase,
@@ -26,8 +25,8 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * Ordering follows the working sequence: App Profile first, because everything
  * else is made from it and Create Video refuses to run without an approved one.
  * Create Video makes the hook, Demo + CTA turns the finished hook into an
- * export, History records those renders and exports, Video Upscaler polishes
- * footage, and Analytics reads the founder's own logged results. The retired
+ * export, History records those renders and exports, and Analytics reads the
+ * founder's own logged results. The retired
  * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
  * there is no Research group and no Insight link. Analytics is last, not an
  * Insight group.
@@ -59,7 +58,6 @@ const NAV_ITEMS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
-  { to: "/upscale", label: "Video Upscaler", icon: WandSparkles, testId: "upscale-nav-link", hint: "Sharpen, enlarge, download" },
   /* The library sits with the working pages, directly above Analytics: it holds
      the presenter photos the renders above are generated from. */
   { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },

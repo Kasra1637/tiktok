@@ -160,7 +160,6 @@ After generation:
   reviewed plan. Preview/export share time-based drawing logic.
 - `/analytics` summarizes recorded results; it does not retrieve TikTok stats
   automatically or report provider spend.
-- `/upscale` is a separate browser-side video tool.
 
 The public `/` is a landing page; sign-in/sign-up, features, terms and privacy
 also exist. Current route ownership is in [App.js](frontend/src/App.js).

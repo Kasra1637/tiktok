@@ -208,7 +208,7 @@ beside the clip.
 The line under the page title is read at a glance, so where it exists it is
 one sentence naming what the page is for, inside the 54-60 character budget so
 it never becomes a paragraph that pushes the page's own content below the fold.
-App Profile, Demo + CTA, Analytics and Video Upscaler carry one; Create Video,
+App Profile, Demo + CTA and Analytics carry one; Create Video,
 Asset Library and Generation History carry none, because a subtitle there would
 only repeat the controls the page opens with.
 `frontend/scripts/check-render-smoke.cjs` pins each page's intended subtitle and
