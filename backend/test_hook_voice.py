@@ -245,9 +245,12 @@ def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
         "Friday evening, and I feel off, and I cannot say why.",
         "One prompt helped me start writing, and I finished the entry.",
     )
+    # The corrected pair is calibrated to the shipped rubric (ADR 0145):
+    # first person, a named place, an open ending — it totals 80, at the
+    # craft-retry bar, so no fourth call fires and the count below holds.
     good = _plan(
-        "Friday evenings feel off, and the reason never has a name.",
-        "The reflection at the desk helped me name the feeling, and I left the entry calmer.",
+        "Friday evening on my porch step my mood drops and I freeze.",
+        "I sit with my notebook open and name the feeling out loud, one word at a time. What sets it off is still unclear.",
     )
     calls = []
 
@@ -275,8 +278,8 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
         "One prompt helped me start writing, and I finished the entry.",
     )
     good = _plan(
-        "Friday evenings feel off, and the reason never has a name.",
-        "The reflection at the desk helped me name the feeling, and I left the entry calmer.",
+        "Friday evening on my porch step my mood drops and I freeze.",
+        "I sit with my notebook open and name the feeling out loud, one word at a time. What sets it off is still unclear.",
     )
     calls = []
 

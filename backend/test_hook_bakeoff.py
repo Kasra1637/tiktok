@@ -94,23 +94,26 @@ def _patch_provider(monkeypatch, provider):
 
 
 # --- World 1: FocusApp, no certified outcome. Craft totals against this
-# script, measured on the shipped scorer: draft 79, low 78, gated star 83
-# (bare place), over-ceiling star 82, best clean 86. The gated lines
-# outscore every clean line but the draft — that is what makes the gate,
-# not the score, the decider in test (a).
+# script, measured on the shipped scorer: draft 85, low 79, gated star
+# 86 (bare place), over-ceiling star 76, best clean 89. The gated star
+# outscores the draft and every clean line in its set — that is what
+# makes the gate, not the score, the decider in test (a). Totals were
+# re-measured when the rubric began rewarding first person (ADR 0145):
+# the first-person draft and best clean both rose, and the fixture
+# lines were re-cut so each test's ordering still holds.
 SCRIPT_1 = (
     "The blank page just sits there until one small prompt gives my hands "
     "somewhere to start. I still do not know why the first line is always the hard one."
 )
 DRAFT_HOOK = "Starting is hard for me every single morning at my desk."
 LOW_CLEAN = "At 7 a.m. the first line never comes, whatever I try."
-BEST_CLEAN = "Every morning the blank page wins and work never starts."
-GATED_STAR = "At bus stop the blank page wins again, every morning."
+BEST_CLEAN = "Every morning at my desk my page wins, work never starts."
+GATED_STAR = "At bus stop every morning my page wins, work never starts."
 GATED_OFFICE = "At office the blank page wins again, every morning."
-# ADR 0135: otherwise clean and the strongest draw in its set (85,
-# measured on the shipped scorer, against the draft's 79) — but it
-# speaks the app's own feature noun, so the gate, not the score,
-# decides here too.
+# ADR 0135: otherwise clean and the strongest draw in its set (83,
+# measured on the shipped scorer, against its test's draft at 80) —
+# but it speaks the app's own feature noun, so the gate, not the
+# score, decides here too.
 FEATURE_STAR = "The reflections never sound like me on Monday mornings."
 OVER_LONG = (
     "Every morning the blank page wins, the work never starts, and the "
@@ -146,10 +149,11 @@ def _generate_1(monkeypatch, provider):
 
 class TestHookBakeOff:
     def test_a_gated_candidate_is_never_picked_even_when_it_would_score_highest(self, monkeypatch):
-        """The bare-place star (83) and the over-ceiling star (82) both
-        outscore the draft (79) and the one clean candidate (78). The
-        gates run first, so neither can ship — and with no clean
-        candidate above the draft, the draft itself stays."""
+        """The bare-place star (86) outscores the draft (85) and the
+        one clean candidate (79); the over-ceiling star is gated on
+        length whatever it scores. The gates run first, so neither can
+        ship — and with no clean candidate above the draft, the draft
+        itself stays."""
         provider = _ScriptedProvider(
             _plan(DRAFT_HOOK, SCRIPT_1),
             candidates=[GATED_STAR, LOW_CLEAN, OVER_LONG],
@@ -158,21 +162,23 @@ class TestHookBakeOff:
         assert result["hook_line"] == DRAFT_HOOK
 
     def test_a_feature_word_candidate_cannot_win_the_bakeoff(self, monkeypatch):
-        """The feature star (85) outscores the draft (79) and the one
-        clean candidate (78), and breaks no other gate — but a spoken
-        line never uses the app's feature nouns (ADR 0135), so the
-        hard filter removes it before scoring and the draft stays."""
+        """The feature star (83) outscores this test's draft (80, the
+        third-person line below) and the one clean candidate (79), and
+        breaks no other gate — but a spoken line never uses the app's
+        feature nouns (ADR 0135), so the hard filter removes it before
+        scoring and the draft stays."""
         provider = _ScriptedProvider(
-            _plan(DRAFT_HOOK, SCRIPT_1),
+            _plan("Every morning the blank page wins and work never starts.", SCRIPT_1),
             candidates=[FEATURE_STAR, LOW_CLEAN],
         )
         result = _generate_1(monkeypatch, provider)
-        assert result["hook_line"] == DRAFT_HOOK
+        assert result["hook_line"] == "Every morning the blank page wins and work never starts."
 
     def test_the_certified_outcome_is_a_hard_requirement_not_a_bonus(self, monkeypatch):
-        """In the certified world the highest-scoring candidate (81)
+        """In the certified world the highest-scoring candidate (75)
         promises something else and is filtered; the carrying candidate
-        only ties the draft (76), so the draft stays."""
+        only ties the draft (70), so the draft stays. (Totals
+        re-measured under the first-person rubric, ADR 0145.)"""
         import ai_service
         script = (
             "The list just sits there until the timer starts and the first task feels "

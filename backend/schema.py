@@ -1097,11 +1097,28 @@ async def _migration_0005_hashtag_volume_cache(conn):
     await conn.commit()
 
 
+async def _migration_0006_project_cover_text(conn):
+    """Project cover text (ADR 0145): the plan drafts the clip's cover
+    text with the hook and script, so Review can show it, the craft
+    score can read it, and the founder can regenerate it before any
+    render exists — it needs a home on the project row. One TEXT
+    column, added only when missing, so a database that already has it
+    (or gets it from a later baseline) passes through untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "cover_text" not in cols:
+        await conn.execute(
+            "ALTER TABLE studio_projects ADD COLUMN cover_text TEXT"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
     (4, "per-profile offered angle history", _migration_0004_offered_angle_history),
     (5, "hashtag volume research cache", _migration_0005_hashtag_volume_cache),
+    (6, "project cover text", _migration_0006_project_cover_text),
 )
 
 

@@ -1,6 +1,7 @@
 import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker, PresenterPhotoControl, MissingRequirements, TEMPLATE_PHOTO_ID } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
+import CoverTextEditor from "../components/studio/CoverTextEditor";
 import ScriptLineRewrites from "../components/studio/ScriptLineRewrites";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
@@ -204,15 +205,15 @@ function qualityBandNote(report) {
 const DIMENSION_EXPLANATIONS = {
   hook_stopping_power: {
     measures:
-      "Whether the opening line makes a scrolling viewer stop: it has to name their problem in the first few seconds.",
+      "Whether the opening makes a scrolling viewer stop: the spoken hook and the cover text are scored together, as the first two seconds are seen.",
     earned:
-      "A clear problem, one concrete detail and something left unresolved earn points. Diary-style openings, app talk and a sales ask pull it down.",
+      "Speaking in first person, a clear problem, one concrete detail and something left unresolved earn points. Journal-style framing, app talk and a sales ask pull it down.",
   },
   audience_truth: {
     measures:
       "Whether the words sound like something your viewer would actually say about their own life.",
     earned:
-      "Familiar routines, plain words and speaking to the viewer earn points. Generic mood language, marketer voice and app talk lose them.",
+      "First-person voice, familiar routines and plain words earn points. Reporting the viewer in the third person, generic mood language, marketer voice and app talk lose them.",
   },
   clarity: {
     measures:
@@ -228,9 +229,9 @@ const DIMENSION_EXPLANATIONS = {
   },
   story_arc: {
     measures:
-      "Whether the hook and script work as one story: a problem opens, and the script answers it.",
+      "Whether the hook and script work as one story: a problem opens, the middle deepens it, and the last line opens the discovery your demo answers.",
     earned:
-      "An answer in the script's first clause, a real insight and a specific payoff earn points. Repeating the hook, quoting, or a vague ending lose them.",
+      "A scene, a real insight and any resolution landing mid-story earn points, and so does ending open. Repeating the hook, quoting, or wrapping the ending up neatly lose them.",
   },
   spoken_naturalness: {
     measures:
@@ -2823,6 +2824,20 @@ export default function CreateVideo() {
                 disabled={busy}
               />
             </div>
+            {/* The cover text, beside the spoken pair it is scored with
+                (ADR 0145): previewed as it will sit on the opening
+                frame, with its Hook stopping power contribution named,
+                and regenerable from its own button as a suggestion the
+                founder accepts or leaves — never auto-saved. */}
+            <CoverTextEditor
+              projectId={project?.id}
+              value={editValue("cover_text", "")}
+              onChange={(next) => dispatchDraft({ type: "edit-field", field: "cover_text", value: next })}
+              hookLine={editValue("hook_line", "")}
+              script={editValue("script", "")}
+              hookScore={project?.quality_report?.dimensions?.hook_stopping_power || null}
+              disabled={busy}
+            />
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>
             {/* The craft score is advisory: it names the weakest part of the
                 saved pair and the next rewrite, but no band refuses a render.

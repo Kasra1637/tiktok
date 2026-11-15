@@ -605,6 +605,11 @@ PLAN_BEAT_JSON_SCHEMA = _strict_object({
 PLAN_JSON_SCHEMA = _strict_object({
     "hook_line": _str_prop(),
     "script": _str_prop(),
+    # The cover text rides the plan pass (ADR 0145) but is deliberately
+    # NOT in REQUIRED_PLAN_KEYS: it is post copy, and a plan whose reply
+    # omits it still lands — the project stores an empty cover and
+    # Review offers the cover's own generate button.
+    "cover_text": _str_prop(),
     "beat_timeline": {"type": "array", "items": PLAN_BEAT_JSON_SCHEMA},
     "location": _str_prop(),
     "visual_direction": _str_prop(),
@@ -2650,6 +2655,102 @@ def _post_kit_candidate_pool(raw) -> list:
     return pool
 
 
+COVER_TEXT_JSON_SCHEMA = _strict_object({"cover_text": _str_prop()})
+
+# The cover's shape, as data: a few words a viewer can read inside the
+# opening's first two seconds (the post kit's long-standing under-eight
+# ask, with a little headroom), and short enough to sit on one frame.
+COVER_TEXT_MAX_WORDS = 10
+COVER_TEXT_MAX_CHARS = 100
+
+
+async def generate_cover_text(
+    profile: dict,
+    angle: Optional[dict],
+    hook_line: str,
+    script: str,
+    current_cover: str = "",
+    objective: str = "",
+) -> str:
+    """One fresh cover text for the project's opening (ADR 0145).
+
+    A suggestion only: nothing is saved here. Written to the shared
+    COVER TEXT rules — a few words, first person, the moment and place
+    up front, one concrete felt detail, the resolution withheld, and
+    never a copy of the spoken hook. A reply that hands back the
+    current cover unchanged, copies the hook, or runs long gets one
+    bounded correction; a reply still failing after it raises
+    RewriteRefusal with the reason, so the founder never sees a fake
+    improvement — the clearer-line rewrites' honesty contract.
+    """
+    hook = str(hook_line or "").strip()
+    body = str(script or "").strip()
+    if not hook and not body:
+        raise RuntimeError("Write the hook and script first, then ask for a cover text.")
+    current = re.sub(r"\s+", " ", str(current_cover or "")).strip()
+    p = profile or {}
+    facts = "\n".join(
+        f"- {k}: {str(p.get(k)).strip()}"
+        for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
+        if str(p.get(k) or "").strip()
+    )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
+        f"{_angle_goal_block(angle, objective)}\n\n"
+        f"{_cover_text_rules_block()}\n\n"
+        f"SPOKEN HOOK: {hook}\n"
+        f"SPOKEN SCRIPT: {body}\n"
+        f"CURRENT COVER TEXT: {current or '(none yet)'}\n\n"
+        "Write ONE new cover text for this clip: a second angle on the "
+        "hook's moment in the person's own voice, grounded only in the "
+        "hook, the script and the facts above. Never name the app. "
+        'Return JSON: {"cover_text": "..."}'
+    )
+    refusal = "No usable cover text came back; try again, or write the cover yourself."
+    for _ in range(2):
+        raw = await _chat_json(
+            system_message="You write one TikTok cover text. Return one JSON object only.",
+            prompt=prompt,
+            context="Cover text",
+            temperature=0.6,
+            max_tokens=REWRITE_MAX_TOKENS,
+            attempts=2,
+            json_schema=COVER_TEXT_JSON_SCHEMA,
+        )
+        cover = re.sub(r"\s+", " ", str((raw or {}).get("cover_text") or "")).strip().strip('"\u201c\u201d')
+        cover = character_policy.neutralize(cover)
+        if not cover:
+            refusal = "The cover text came back empty; try again, or write the cover yourself."
+            prompt += "\n\nCORRECTION: that reply was empty. Write the cover text."
+            continue
+        if len(cover) > COVER_TEXT_MAX_CHARS or len(cover.split()) > COVER_TEXT_MAX_WORDS:
+            refusal = (
+                f"The cover text kept running long — past the {COVER_TEXT_MAX_WORDS} words "
+                "a viewer can read in the opening; try again, or write the cover yourself."
+            )
+            prompt += (
+                f"\n\nCORRECTION: that cover is {len(cover.split())} words. A cover is "
+                f"read in two seconds: {COVER_TEXT_MAX_WORDS} words at most, fewer is better."
+            )
+            continue
+        if current and cover.lower() == current.lower():
+            refusal = "The cover text came back unchanged; try again, or write the cover yourself."
+            prompt += (
+                "\n\nCORRECTION: that was the current cover handed back unchanged. "
+                "Write a genuinely different one — same moment, new angle."
+            )
+            continue
+        if hook and cover.lower() == hook.lower():
+            refusal = "The cover text just copied the spoken hook; try again, or write the cover yourself."
+            prompt += (
+                "\n\nCORRECTION: that cover copies the spoken hook word for word. The cover "
+                "is a second angle on the same moment, never a duplicate of the hook."
+            )
+            continue
+        return cover
+    raise RewriteRefusal(refusal)
+
+
 async def generate_post_kit(project: dict, profile: dict) -> dict:
     """
     Post kit for one render: 1 caption, exactly 5 hashtags, cover text.
@@ -2742,7 +2843,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '    "about (the low-competition classification anchor), one or two "\n'
         '    "from the niche\'s own community or interest vocabulary, and one "\n'
         '    "broad app-category tag; the app\'s own name may be one of them"],\n'
-        '  "cover_text": "under 8 words for the cover, from the hook line only"\n'
+        '  "cover_text": "the cover text, written to these rules: under 8 words, first person in the person\'s own voice (never a label or title), the moment and place up front with one concrete felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
         "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
@@ -2782,7 +2883,13 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         selected if selected is not None
         else pool[:hashtag_volume.HASHTAG_TARGET_COUNT]
     )
-    cover_text = str(parsed.get("cover_text") or "").strip()[:100]
+    # The founder's approved cover wins (ADR 0145): the plan drafted one
+    # with the hook and script, Review showed it scored, and the founder
+    # may have edited or regenerated it — the kit ships those exact
+    # words rather than a second, unseen draft of the same line. The
+    # model's cover is used only when the project carries none.
+    approved_cover = str((project or {}).get("cover_text") or "").strip()
+    cover_text = (approved_cover or str(parsed.get("cover_text") or "").strip())[:100]
     if not caption or not cover_text:
         raise RuntimeError("Post kit response was missing caption or cover text.")
     if not caption.endswith("?"):
@@ -3208,6 +3315,29 @@ PLAN_SECTION_LABELS = ("hook", "middle")
 # sentences" and the founder gets no plan at all. So only phrases that are
 # unarguably promotion, unarguably exaggerated, or unarguably machine-written
 # belong here; judgement calls stay in the prompt's own rules.
+
+
+def _cover_text_rules_block() -> str:
+    """
+    TikTok cover-text best practice, one block for every prompt that
+    writes a cover (the plan pass, the cover suggestion, the post kit).
+
+    The cover text is the words that sit on the video's opening frame —
+    post copy, never spoken, never composited by the render. Kasra's
+    rules (ADR 0145), from what stops his own scroll: it is half of the
+    first two seconds, so it is written with the same care as the hook
+    and scored with it, but it is a second angle on the moment, never a
+    copy of the spoken line.
+    """
+    return (
+        "COVER TEXT — the words that sit on the video's opening frame (post copy, never spoken):\n"
+        "- A few words only — under eight — readable inside the first two seconds.\n"
+        "- First person, the person's own voice; never a label, a title, or ad copy.\n"
+        "- The moment and the place up front, with one concrete felt detail.\n"
+        "- It works WITH the opening image: never repeat what the picture already shows.\n"
+        "- It withholds the resolution — the video still has something to answer.\n"
+        "- Never a copy of the spoken hook: a second angle on the same moment, not a duplicate."
+    )
 
 
 def _spoken_line_rules_block() -> str:
@@ -3959,6 +4089,7 @@ async def _hook_bake_off(
     rules_block: str,
     hook_form_block: str,
     promise_rule: str,
+    cover_text: str = "",
 ) -> tuple:
     """Three alternative hooks for an accepted story; the strongest ships.
 
@@ -3994,10 +4125,15 @@ async def _hook_bake_off(
         )
 
     def _score(candidate: str) -> dict:
+        # Every candidate opens the same clip, so every candidate is
+        # scored with the same cover text (ADR 0145): the opening is the
+        # spoken line plus the cover, and the bake-off compares hooks
+        # on the whole opening they would actually ship with.
         return creative_quality.assess_spoken_quality(
             candidate, script,
             hook_seconds=hook_seconds, total_seconds=duration_seconds,
             app_name=app_name, allows_question=allows_question,
+            cover_text=cover_text,
         )
 
     incumbent = _score(draft_hook)
@@ -4349,10 +4485,12 @@ async def generate_creative_plan(
         "imply the speaker built, owns or is promoting the app; no insider or first-person-plural "
         "product voice (we, our app), and no framing in which the speaker is selling it.\n"
         f"{_spoken_line_rules_block()}\n"
+        f"{_cover_text_rules_block()}\n"
         f"{_hook_form}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters and at most one \'I\'. It lands in the first second: name ONE specific, recognizable feeling or moment from this video\'s own story (physical where possible), with one lived detail or time marker, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
+        '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: a few words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
@@ -4626,6 +4764,7 @@ async def generate_creative_plan(
         rules_block=_spoken_line_rules_block(),
         hook_form_block=_hook_form,
         promise_rule=promise_rule,
+        cover_text=str(result.get("cover_text") or ""),
     )
     if hook != draft_hook:
         result["hook_line"] = hook
@@ -4684,6 +4823,7 @@ async def generate_creative_plan(
                         total_seconds=duration_seconds,
                         app_name=str(profile.get("brand_name") or ""),
                         allows_question=allows_question,
+                        cover_text=str(retry_result.get("cover_text") or ""),
                     )
                     if retry_craft["total"] > craft["total"]:
                         result, hook, script, craft = (
@@ -4724,6 +4864,16 @@ async def generate_creative_plan(
     # to the founder ("record your demo like this"), not a line about the person
     # on screen, so "the founder" is the right word there.
     result["demo_brief"] = (result.get("demo_brief") or "").strip()[:1200]
+    # The cover text is post copy drafted with the plan (ADR 0145): the
+    # words that sit on the opening frame, stored on the project so
+    # Review can show and score them before any render exists. It is
+    # normalized like a spoken line for identity (ADR 0089) but never
+    # budget-checked against the spoken seconds — it is read, not said.
+    # Optional by design: a reply that omitted it stores an empty cover
+    # and Review offers the cover's own generate button.
+    result["cover_text"] = character_policy.neutralize(
+        re.sub(r"\s+", " ", str(result.get("cover_text") or "")).strip().strip('"\u201c\u201d')
+    )[:100]
 
     result["beat_timeline"] = _normalize_beats(result.get("beat_timeline"), duration_seconds)
     result["beat_timeline"] = _enforce_two_sections(result["beat_timeline"], hook_seconds)

@@ -58,12 +58,13 @@ _CONCRETE_CUES = (
     "dinner", "breakfast", "door", "window", "street", "park", "store",
     "shop", "school", "work", "couch", "sofa", "porch", "yard", "table",
     "mirror", "teeth", "hair", "shoes", "bag", "keys", "email", "inbox",
-    "laundry",
+    "laundry", "bakery", "cafe", "paper bag",
 )
 _PLACE_CUES = (
     "garden", "desk", "kitchen", "office", "car", "bus", "train", "shower",
     "bed", "couch", "sofa", "porch", "yard", "street", "park", "store",
     "shop", "school", "gym", "bathroom", "bedroom", "balcony", "patio",
+    "bakery", "cafe",
 )
 _ACTION_CUES = (
     "stretch", "stretching", "walk", "walking", "talk", "talked", "talking",
@@ -81,7 +82,7 @@ _TIME_CUES = (
 _SENSORY_CUES = (
     "warm", "cold", "tight", "breath", "shoulders", "chest", "jaw", "light",
     "rain", "sun", "coffee", "tea", "blanket", "pillow", "water", "sweat",
-    "heartbeat", "quiet", "loud",
+    "heartbeat", "quiet", "loud", "paper bag",
 )
 _ABSTRACT_NOUNS = (
     "mood", "moods", "feeling", "feelings", "energy", "vibes", "mental",
@@ -133,10 +134,14 @@ _WRITTEN_CUES = (
     "narrative", "chapter", "season of life", "self care", "wellness",
 )
 _UNCLEAR_CUES = ("that surprise feels", "this feels", "that feels", "it feels")
-_DIARY_OPENERS = (
-    "every week i", "every morning i", "every night i", "last night i",
-    "last week i", "this morning i", "yesterday i", "today i", "i ve been",
-    "i have been", "i was", "i m just", "i keep",
+# Journal-entry framings: the line opens by reporting the speaker's own
+# diary ("I've been...", "I keep...") instead of stepping into a moment.
+# Time-led openers ("Friday morning...", "every morning I...") are NOT
+# here (ADR 0145): they anchor the moment, and the founder's strongest
+# hooks lead with the moment in first person. Only the self-reporting
+# frames remain — the diary is the framing, never the person.
+_JOURNAL_OPENERS = (
+    "i ve been", "i have been", "i was", "i m just", "i keep",
 )
 
 _FRONTED_MODIFIER = re.compile(
@@ -184,9 +189,9 @@ def _has_trigger(text):
     return False
 
 
-def _diary_opener(hook):
+def _journal_opener(hook):
     normalized = _norm(hook)
-    return any(normalized.startswith(prefix) for prefix in _DIARY_OPENERS)
+    return any(normalized.startswith(prefix) for prefix in _JOURNAL_OPENERS)
 
 
 def _app_behavior(text):
@@ -210,12 +215,18 @@ def _names_question(last):
     return bool(_hits(last, ("what sets", "why", "how", "what if", "what makes")))
 
 
-def _score_hook(hook):
+def _score_hook(hook, cover=""):
     if not hook.strip():
         return 0, ["No hook line to score."], "Write a hook that names the viewer's problem."
+    # The opening moment is scored whole (ADR 0145): the spoken hook and
+    # the cover text land in the same first two seconds, so the cues are
+    # read over both. The cover can carry the anchor the spoken line
+    # leaves out — and the evidence says when it did, so the founder sees
+    # the cover's contribution instead of a number that silently moved.
+    opening = f"{hook} {cover}".strip()
     score = 7
     evidence = []
-    problems = _hits(hook, _PROBLEM_CUES)
+    problems = _hits(opening, _PROBLEM_CUES)
     if problems:
         score += 3
         evidence.append(f"Names a cost or recurring problem ('{problems[0]}').")
@@ -225,43 +236,46 @@ def _score_hook(hook):
     if concrete:
         score += 2
         evidence.append(f"Has a concrete anchor ('{concrete[0]}').")
+    elif cover and (cover_concrete := _hits(cover, _CONCRETE_CUES)):
+        score += 2
+        evidence.append(f"The cover text carries the concrete anchor ('{cover_concrete[0]}').")
     else:
         evidence.append("No concrete time, place or object in the hook.")
-    if _hits(hook, _CURIOSITY_CUES):
+    if _hits(opening, _CURIOSITY_CUES):
         score += 2
         evidence.append("Creates a contrast or curiosity gap.")
     if len(hook.strip()) <= 60 and len(_words(hook)) <= 12:
         score += 2
         evidence.append("Compressed enough to land in the first three seconds.")
-    first = _first_person(hook)
-    if not first:
+    # First person is the voice, not a defect (ADR 0145): the founder's
+    # strongest hooks speak as the person living the moment ("words in
+    # the quiet garden aren't mine"), so an anchored first-person opening
+    # earns what a third-person report cannot.
+    first = _first_person(opening)
+    if first:
         score += 2
-        evidence.append("Zero first-person markers; the line is about the viewer.")
-    elif len(first) == 1:
-        score += 1
-        evidence.append("One first-person marker; allowed, but zero is the target.")
+        evidence.append("Speaks in first person — the voice of the person living the moment.")
     else:
-        score -= 2
-        evidence.append(f"{len(first)} first-person markers make it read as a diary.")
-    if _has_trigger(hook):
+        evidence.append("No first-person voice; the opening reports the moment instead of living it.")
+    if _has_trigger(opening):
         score += 1
         evidence.append("Names a trigger the viewer can recognise.")
-    if _diary_opener(hook):
+    if _journal_opener(hook):
         score -= 3
-        evidence.append("Opens as a diary entry, so the viewer is overhearing rather than being addressed.")
-    if _app_behavior(hook):
+        evidence.append("Opens as a journal entry, so the viewer is overhearing rather than being addressed.")
+    if _app_behavior(opening):
         score -= 2
         evidence.append("Narrates using the app ('look back' / a screen) that the generated clip never shows.")
-    if _hits(hook, _PROMOTION_CUES):
+    if _hits(opening, _PROMOTION_CUES):
         score -= 5
         evidence.append("Asks for a download, follow or sign-up instead of opening a problem.")
-    abstract = _hits(hook, _ABSTRACT_NOUNS)
+    abstract = _hits(opening, _ABSTRACT_NOUNS)
     if abstract:
         score -= min(3, len(abstract))
         evidence.append(f"Abstract mood words carry the idea ({', '.join(abstract[:3])}).")
     return _clamp(score, 0, 20), evidence, (
-        "Open on the viewer's problem with one concrete detail; cut the diary "
-        "frame and any app-behavior cue."
+        "Open on the moment in first person, one concrete detail, the "
+        "resolution withheld; cut any app-behavior cue."
     )
 
 
@@ -271,16 +285,17 @@ def _score_audience(hook, script):
     combined = f"{hook} {script}"
     score = 9
     evidence = []
+    # First person is how the viewer talks about their own life (ADR
+    # 0145): a hook spoken as the person living it sounds true; a hook
+    # that only reports the viewer in the third person sounds written
+    # about them.
     first = _first_person(hook)
-    if not first:
+    if first:
         score += 2
-        evidence.append("The hook has no first-person marker; it speaks about the viewer.")
-    elif len(first) == 1:
-        score += 1
-        evidence.append("The hook has one first-person marker; it anchors a real line but is still close to a diary.")
+        evidence.append("The hook speaks in first person, the way the viewer talks about their own life.")
     else:
         score -= 1
-        evidence.append(f"The hook uses {len(first)} first-person markers; it reads as the speaker's diary.")
+        evidence.append("The hook never speaks as the viewer; it reports them in the third person.")
     abstract = _hits(combined, _ABSTRACT_NOUNS)
     if abstract:
         score -= min(2, len(abstract))
@@ -379,9 +394,22 @@ def _score_story(hook, script, check):
     if _hits(script, _INSIGHT_CUES):
         score += 3
         evidence.append("The script answers with an insight, not a restatement.")
-    if _hits(script, _RESOLUTION_CUES):
+    # The arc completes in the demo, not in the last line (ADR 0145): a
+    # turn or a name earned mid-script is story craft and still earns,
+    # but the resolution cues are read before the last sentence only —
+    # a script that resolves in its final line closes the very question
+    # Demo handoff needs open, and the two dimensions must not pay for
+    # opposite endings. The open ending earns its own credit here, so a
+    # deliberately unresolved close is worth more to the arc, not less.
+    sentences = _sentences(script)
+    before_last = " ".join(sentences[:-1]) if len(sentences) > 1 else ""
+    if before_last and _hits(before_last, _RESOLUTION_CUES):
         score += 3
-        evidence.append("The script lands a shift or a name for what changed.")
+        evidence.append("The script lands a shift or a name for what changed before its last line.")
+    last = _last_sentence(script)
+    if _has_gap(last) and not _has_closure(last):
+        score += 2
+        evidence.append("The script ends open, on the line the demo answers — the arc completes there, by design.")
     story = check.get("story") or {}
     if story.get("echoes_hook"):
         score += 1
@@ -418,8 +446,9 @@ def _score_story(hook, script, check):
         evidence.append("The payoff names a vague stand-in ('a word', 'that vague sense').")
     return _clamp(score, 0, 15), evidence, (
         "Make the script answer the hook's problem in its first clause, live in "
-        "first person, with a specific payoff — never a quote, a narration, "
-        "a repeat of the hook, or a vague stand-in."
+        "first person, and end on the strongest concrete line that opens the "
+        "discovery for the demo — never a quote, a narration, a repeat of "
+        "the hook, a vague stand-in, or a wrapped-up ending."
     )
 
 
@@ -566,6 +595,7 @@ def assess_spoken_quality(
     app_name="",
     allows_question=True,
     spoken_check=None,
+    cover_text="",
 ):
     """Score the spoken pair on eight craft dimensions, advisory only.
 
@@ -573,11 +603,20 @@ def assess_spoken_quality(
     length/story measurement once. A missing or zero duration falls back to
     fifteen seconds: an old project with no duration should not be scored
     against a one-second middle.
+
+    `cover_text` is the clip's on-screen cover text: it lands in the same
+    first two seconds as the hook, so Hook stopping power scores the
+    opening moment whole — spoken line plus cover (ADR 0145). The report
+    echoes it under `cover_text` with whether it was scored, so Review
+    can show the founder exactly what the number read.
     """
     hook = str(hook_line or "").strip()
     body = str(script or "").strip()
+    cover = str(cover_text or "").strip()
     if not hook and not body:
-        return _empty_report()
+        report = _empty_report()
+        report["cover_text"] = {"text": cover, "scored_with_hook": bool(cover and hook)}
+        return report
     hook_seconds = int(hook_seconds or 3)
     total_seconds = int(total_seconds or 0) or 15
     check = spoken_check or ai_spoken.check_spoken_story(
@@ -587,7 +626,7 @@ def assess_spoken_quality(
     dimensions = {}
     for key, label, weight in _DIMENSIONS:
         if key == "hook_stopping_power":
-            score, evidence, next_step = _score_hook(hook)
+            score, evidence, next_step = _score_hook(hook, cover)
         elif key == "audience_truth":
             score, evidence, next_step = _score_audience(hook, body)
         elif key == "clarity":
@@ -624,6 +663,7 @@ def assess_spoken_quality(
     else:
         next_steps = ["No craft dimension needs a rewrite; keep this pair."]
     report = _report(dimensions, next_steps)
+    report["cover_text"] = {"text": cover, "scored_with_hook": bool(cover and hook)}
     # A promotional or personal-history line is off-brief however catchy its
     # other dimensions are. The numeric total still reports the craft points;
     # the letter and band answer the product question: can this pair ship as a

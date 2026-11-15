@@ -152,7 +152,7 @@ from routers.studio import (
     _assert_model_usable, _assert_resolution_offered, _assert_within_single_pass_cap,
     _require_renderable_project, _backfill_two_section_projects,
     list_studio_projects, create_studio_project, get_studio_project,
-    update_studio_project, suggest_hook_rewrite, suggest_line_rewrite, generate_plan,
+    update_studio_project, suggest_hook_rewrite, suggest_line_rewrite, suggest_cover_text, generate_plan,
     mark_project_ready, submit_project_generation, generate_project_strategy,
     generate_plan_and_strategy,
     list_studio_video_models,
@@ -1718,6 +1718,10 @@ async def _submit_generation(
             total_seconds=project.get("duration_seconds") or 0,
             app_name=(profile.get("brand_name") or "").strip(),
             allows_question=True,
+            # The frozen score is the score the founder saw in Review
+            # for these exact words (ADR 0117), and Review's read scores
+            # the opening whole — cover text included (ADR 0145).
+            cover_text=project.get("cover_text") or "",
         )
 
     try:

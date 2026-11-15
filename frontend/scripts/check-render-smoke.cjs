@@ -3011,6 +3011,93 @@ async function main() {
   // rendering: the two sections, named as the two sections, with the model's own
   // goal for each.
   // -------------------------------------------------------------------------
+  // The cover text in Review (ADR 0145): previewed as it will sit on the
+  // opening frame, scored with the hook, and regenerable from its own
+  // button as a suggestion that saves nothing by itself.
+  await check("the cover text shows in review as an opening preview with its score", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const report = {
+      version: 1, advisory: true, total: 79, max: 100, grade: "B", band: "strong",
+      dimensions: {
+        hook_stopping_power: { key: "hook_stopping_power", label: "Hook stopping power", score: 13, max: 20, evidence: [], next_step: "" },
+      },
+      next_steps: [],
+      cover_text: { text: "Bakery queue, words won't come", scored_with_hook: true },
+    };
+    const project = {
+      ...PROJECT_WITH_STRATEGY,
+      cover_text: "Bakery queue, words won't come",
+      quality_report: report,
+    };
+    try {
+      await withApi({ getStudioProject: async () => project }, async () => {
+        await mount(CreateVideo)(ctx);
+        const preview = ctx.container.querySelector('[data-testid="cover-text-preview"]');
+        if (!preview) throw new Error("the cover preview did not render in review");
+        const previewText = ctx.container.querySelector('[data-testid="cover-text-preview-text"]');
+        if (!previewText || !previewText.textContent.includes("Bakery queue, words won't come")) {
+          throw new Error("the preview does not carry the project's cover text");
+        }
+        const input = ctx.container.querySelector("#review-cover_text");
+        if (!input || input.value !== "Bakery queue, words won't come") {
+          throw new Error("the cover field does not carry the project's cover text");
+        }
+        const note = ctx.container.querySelector('[data-testid="cover-text-score-note"]');
+        if (!note || !note.textContent.includes("Scored with your hook") || !note.textContent.includes("13/20")) {
+          throw new Error("the cover's score contribution is not named beside it");
+        }
+      });
+    } finally {
+      delete global.__SMOKE_PARAMS;
+    }
+  });
+
+  await check("a suggested cover text shows its hook-score movement and saves nothing itself", async (ctx) => {
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    const project = { ...PROJECT_WITH_STRATEGY, cover_text: "Old cover words" };
+    try {
+      await withApi({
+        getStudioProject: async () => project,
+        suggestCoverText: async () => ({
+          cover_text: "Bakery queue, words won't come",
+          original: "Old cover words",
+          hook_score: { current: 11, suggested: 16, max: 20 },
+        }),
+      }, async () => {
+        await mount(CreateVideo)(ctx);
+        const button = ctx.container.querySelector('[data-testid="cover-text-suggest-button"]');
+        if (!button) throw new Error("the cover suggest button did not render");
+        const callsBefore = apiCalls.length;
+        await act(async () => { button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+        await act(async () => {});
+        const panel = ctx.container.querySelector('[data-testid="cover-text-suggestion"]');
+        if (!panel || !panel.textContent.includes("Bakery queue, words won't come")) {
+          throw new Error("the suggested cover did not render");
+        }
+        const move = ctx.container.querySelector('[data-testid="cover-text-score-move"]');
+        if (!move || !move.textContent.includes("11/20") || !move.textContent.includes("16/20")) {
+          throw new Error("the suggestion does not show its hook-score movement");
+        }
+        const newCalls = apiCalls.slice(callsBefore);
+        if (newCalls.includes("updateStudioProject")) {
+          throw new Error("the suggestion saved itself — accepting must go through the draft edit");
+        }
+        const accept = ctx.container.querySelector('[data-testid="cover-text-accept"]');
+        await act(async () => { accept.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+        await act(async () => {});
+        const input = ctx.container.querySelector("#review-cover_text");
+        if (!input || input.value !== "Bakery queue, words won't come") {
+          throw new Error("accepting the suggestion did not write it through the draft edit");
+        }
+        if (ctx.container.querySelector('[data-testid="cover-text-suggestion"]')) {
+          throw new Error("the suggestion panel stayed open after accepting");
+        }
+      });
+    } finally {
+      delete global.__SMOKE_PARAMS;
+    }
+  });
+
   await check("the strategy review presents the two sections and what they are", async (ctx) => {
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectText(ctx, "The two sections", "the section list did not render");

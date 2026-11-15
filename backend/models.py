@@ -303,6 +303,11 @@ STUDIO_TEXT_FIELDS = (
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
     "beat_timeline", "assets", "strategy", "hook_seconds", "camera_setup",
+    # `cover_text` is editable but deliberately NOT a studio text field:
+    # it is post copy drafted with the plan (ADR 0145), not plan content,
+    # so editing it writes the column without marking the plan changed
+    # or the strategy stale — the spoken words never moved.
+    "cover_text",
 )
 
 
@@ -353,6 +358,10 @@ class UpdateStudioProjectRequest(BaseModel):
     demo_brief: Optional[str] = None
     voice_direction: Optional[str] = None
     sound_direction: Optional[str] = None
+    # The cover text (ADR 0145): post copy drafted with the plan. It is
+    # editable like the plan's words, but it is not plan content — the
+    # update path writes it without a version bump or a stale strategy.
+    cover_text: Optional[str] = None
     assets: Optional[List[dict]] = None
     # The app-specific strategy is editable so a founder can correct the hook
     # line or tighten the locked persona without paying to regenerate. Edits
@@ -577,5 +586,18 @@ class RewriteLineRequest(BaseModel):
     """
     line: Optional[str] = None
     role: str = "middle"
+    hook_line: Optional[str] = None
+    script: Optional[str] = None
+
+
+class CoverTextRequest(BaseModel):
+    """A fresh cover text for the project's opening (ADR 0145).
+
+    Every field is the founder's current draft wording and falls back to
+    the project's saved words: `cover_text` is the cover as it stands
+    (the suggestion must differ from it), and `hook_line` / `script` are
+    the spoken pair the cover is a second angle on.
+    """
+    cover_text: Optional[str] = None
     hook_line: Optional[str] = None
     script: Optional[str] = None

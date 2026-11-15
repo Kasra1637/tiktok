@@ -56,6 +56,7 @@ from models import (
     GenerateStrategyRequest,
     RewriteHookRequest,
     RewriteLineRequest,
+    CoverTextRequest,
     StudioGenerationRequest,
     STUDIO_EDITABLE_FIELDS,
     STUDIO_TEXT_FIELDS,
@@ -392,6 +393,11 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
             total_seconds=out.get("duration_seconds") or 0,
             app_name=brand_name,
             spoken_check=out["spoken_check"],
+            # The opening is scored whole (ADR 0145): the cover text
+            # lands in the same first two seconds as the hook, so the
+            # report Review shows read the same words the founder sees
+            # in the cover preview beside the hook.
+            cover_text=out.get("cover_text") or "",
             # A question hook is a craft choice the plan's template can request;
             # the deterministic spoken check already knows the plan's policy.
             # The quality score should not call the form itself a trust defect.
@@ -1421,6 +1427,59 @@ def _rewrite_failure_http(exc: Exception, noun: str) -> HTTPException:
     return HTTPException(status_code=502, detail=detail)
 
 
+def _cover_failure_http(exc: Exception) -> HTTPException:
+    """The HTTP error for a failed cover-text suggestion, named by its
+    class — the rewrite mapper's honesty contract (see
+    _rewrite_failure_http) in the cover's own words: a refusal carries
+    its reason, and every other class names what actually happened
+    instead of flattening into one generic failure."""
+    if isinstance(exc, ai_service.RewriteRefusal):
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, ai_service.TruncatedResponse):
+        detail = (
+            "The cover text ran long and was cut off before it finished. "
+            "Try again, or write the cover yourself."
+        )
+    elif isinstance(exc, ai_service.ModelRefusal):
+        detail = (
+            "The model declined to write a cover text. "
+            "Try again, or write the cover yourself."
+        )
+    elif isinstance(exc, ai_service.UnusableResponse):
+        detail = (
+            "The cover text came back in a shape that couldn't be used. "
+            "Try again, or write the cover yourself."
+        )
+    elif isinstance(exc, ai_service.httpx.TimeoutException):
+        detail = (
+            "The cover text took too long to come back. "
+            "Try again, or write the cover yourself."
+        )
+    elif isinstance(exc, ai_service.httpx.HTTPStatusError):
+        status = exc.response.status_code if exc.response is not None else 0
+        if status == 429:
+            detail = (
+                "The writing service is busy right now. "
+                "Wait a moment and try again, or write the cover yourself."
+            )
+        else:
+            detail = (
+                f"The writing service answered with an error ({status}). "
+                "Try again, or write the cover yourself."
+            )
+    elif isinstance(exc, ai_service.httpx.TransportError):
+        detail = (
+            "The writing service couldn't be reached. "
+            "Try again, or write the cover yourself."
+        )
+    else:
+        detail = (
+            "Couldn't write a cover text just now. "
+            "Try again, or write the cover yourself."
+        )
+    return HTTPException(status_code=502, detail=detail)
+
+
 @router.post("/studio/projects/{project_id}/rewrite-hook")
 async def suggest_hook_rewrite(
     project_id: str, payload: RewriteHookRequest, user_id: str = Depends(get_current_user_id)
@@ -1557,6 +1616,81 @@ async def suggest_line_rewrite(
         logger.error(f"Line rewrite failed: {type(e).__name__}: {e}")
         raise _rewrite_failure_http(e, "line")
     return {"line": line, "original": original, "role": role}
+
+
+@router.post("/studio/projects/{project_id}/cover-text-suggestion")
+async def suggest_cover_text(
+    project_id: str, payload: CoverTextRequest, user_id: str = Depends(get_current_user_id)
+):
+    """A fresh cover text the founder may accept (ADR 0145).
+
+    Advisory like the clearer-line rewrites: writes nothing. The cover
+    is generated only from this button (ADR 0122 — navigation generates
+    nothing), and the answer carries the Hook stopping power the
+    suggestion would earn beside the current cover's, both scored by
+    the same rubric Review shows, so the founder sees how the new
+    words would score before deciding. Accepting goes through the
+    normal project edit, exactly like accepting a clearer line.
+    """
+    require_ai_configured()
+    row = await _fetch_one(
+        "SELECT * FROM studio_projects WHERE id = ? AND user_id = ?", (project_id, user_id)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Studio project not found")
+    hook_line = (payload.hook_line or row.get("hook_line") or "").strip()
+    script = (payload.script or row.get("script") or "").strip()
+    current_cover = (
+        payload.cover_text if payload.cover_text is not None else row.get("cover_text") or ""
+    ).strip()
+    if not hook_line and not script:
+        raise HTTPException(
+            status_code=400,
+            detail="Write the hook and script first, then ask for a cover text.",
+        )
+    profile = await _fetch_one(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+        (row.get("brand_profile_id"), user_id),
+    ) if row.get("brand_profile_id") else None
+    angle = await _fetch_one(
+        "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
+        (row["content_angle_id"], user_id),
+    ) if row.get("content_angle_id") else None
+    try:
+        cover = await _log_model_call(
+            "cover_text", "text", TEXT_MODEL,
+            lambda: ai_service.generate_cover_text(
+                profile or {}, angle, hook_line, script,
+                current_cover=current_cover,
+                objective=row.get("objective") or "",
+            ),
+            user_id, studio_project_id=project_id,
+        )
+    except Exception as e:
+        # Every failure class gets its own sentence (see
+        # _cover_failure_http); the cause is logged here either way.
+        logger.error(f"Cover text suggestion failed: {type(e).__name__}: {e}")
+        raise _cover_failure_http(e)
+
+    def _hook_score(cover_text: str) -> int:
+        report = creative_quality.assess_spoken_quality(
+            hook_line, script,
+            hook_seconds=row.get("hook_seconds") or 3,
+            total_seconds=row.get("duration_seconds") or 0,
+            app_name=(profile or {}).get("brand_name") or "",
+            cover_text=cover_text,
+        )
+        return report["dimensions"]["hook_stopping_power"]["score"]
+
+    return {
+        "cover_text": cover,
+        "original": current_cover,
+        "hook_score": {
+            "current": _hook_score(current_cover),
+            "suggested": _hook_score(cover),
+            "max": 20,
+        },
+    }
 
 @router.post("/studio/projects/{project_id}/plan")
 async def generate_plan(
@@ -1730,6 +1864,7 @@ async def generate_plan(
         """UPDATE studio_projects SET
              hook_line = ?, script = ?, beat_timeline = ?, location = ?, visual_direction = ?,
              demo_brief = ?, overlays = ?, voice_direction = ?, sound_direction = ?,
+             cover_text = ?,
              objective = ?,
              duration_seconds = ?, tone = ?, script_version = script_version + 1,
              plan_trimmed_chars = ?, angle_scene_note = ?,
@@ -1738,6 +1873,10 @@ async def generate_plan(
         (plan["hook_line"], plan["script"], json.dumps(plan["beat_timeline"]),
          plan.get("location") or "", plan["visual_direction"], plan["demo_brief"], json.dumps([]),
          plan["voice_direction"], plan["sound_direction"],
+         # The plan's drafted cover (ADR 0145). A pass that returned no
+         # cover keeps the founder's existing one rather than wiping
+         # words they may have already approved or edited.
+         plan.get("cover_text") or (row.get("cover_text") or ""),
          objective, duration, tone or None,
          trimmed_chars, look["note"] or None, now, project_id, user_id),
     )

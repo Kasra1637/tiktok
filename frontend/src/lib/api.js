@@ -322,6 +322,10 @@ export const api = {
   generatePlanAndStrategy: (id, payload = {}) => client.post(`/studio/projects/${id}/plan-and-strategy`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   rewriteHook: (id, hookLine) => client.post(`/studio/projects/${id}/rewrite-hook`, { hook_line: hookLine }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   rewriteLine: (id, payload) => client.post(`/studio/projects/${id}/rewrite-line`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  // A fresh cover text for the opening (ADR 0145): a suggestion only —
+  // the endpoint saves nothing, and accepting goes through the normal
+  // project edit, exactly like accepting a clearer line.
+  suggestCoverText: (id, payload) => client.post(`/studio/projects/${id}/cover-text-suggestion`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   markProjectReady: (id) => client.post(`/studio/projects/${id}/ready`).then((r) => r.data),
   // `duration_seconds` is not sent from here. The length is computed — a template
   // declares a `default_duration` and the project seeds from it — and the plan
