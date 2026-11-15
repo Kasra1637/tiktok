@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { api, getErrorMessage } from "../../lib/api";
 
 /**
  * The cover text in Review (ADR 0145): the words on screen for the
- * opening's first two seconds, shown as they will sit on the opening
- * frame — lower portion, centered — beside the field that edits them.
+ * opening's first two seconds, appearing ONCE as plain text in the
+ * section's flow, directly under its subtitle — no box of any kind.
+ * The 9:16 frame this used to preview in and the boxed field under it
+ * are both gone: the founder found the words cramped and clipped in
+ * the frame and repeated in the field. The words shown here are
+ * exactly the words that ship on the opening, so they read in place
+ * like the hook and script lines around them. With no field, the
+ * cover is not hand-typed here: a new cover comes only from the
+ * Suggest button below, and accepting it writes through the normal
+ * draft edit.
  *
  * The cover is scored WITH the spoken hook in Hook stopping power, and
  * the editor says so, with the current dimension score, so the founder
@@ -36,7 +43,7 @@ export default function CoverTextEditor({
         cover_text: value, hook_line: hookLine, script,
       });
       if (!out || typeof out.cover_text !== "string" || !out.cover_text.trim()) {
-        throw new Error("No cover text came back. Try again, or write the cover yourself.");
+        throw new Error("No cover text came back. Try again in a moment.");
       }
       setSuggestion({ text: out.cover_text, hookScore: out.hook_score || null, forCover: value });
     } catch (err) {
@@ -47,28 +54,14 @@ export default function CoverTextEditor({
   };
 
   return (
-    <div className="space-y-4">
-      <label htmlFor="review-cover_text" className="text-sm font-semibold">Cover text</label>
+    <div className="space-y-4" data-testid="cover-text-section">
+      <p className="text-sm font-semibold">Cover text</p>
       <p className="text-sm text-muted-foreground" data-subtitle="">The words on screen in the first two seconds of your clip.</p>
-      {/* The opening frame as the viewer meets it: a 9:16 still with the
-          cover sitting where the render lays it, lower-center. The text
-          is the live draft, so the preview and the field never disagree. */}
-      <div
-        className="relative aspect-[9/16] w-40 overflow-hidden rounded-xl border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)]"
-        data-testid="cover-text-preview"
-      >
-        <div className="absolute inset-x-3 bottom-[18%] text-center">
-          <p className="text-base font-semibold leading-snug" data-testid="cover-text-preview-text">
-            {value?.trim() ? value : "Your cover text appears here"}
-          </p>
-        </div>
-      </div>
-      <Input
-        id="review-cover_text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="A few words for the opening frame"
-      />
+      {/* The cover itself, as plain text in the flow: the words the
+          founder reads here are the words that ship on the opening. */}
+      <p className="text-base" data-testid="cover-text-value">
+        {value?.trim() ? value : <span className="text-muted-foreground">A few words for the opening frame</span>}
+      </p>
       <p className="text-sm text-muted-foreground" data-testid="cover-text-score-note">
         Scored with your hook in Hook stopping power
         {hookScore
@@ -87,7 +80,7 @@ export default function CoverTextEditor({
         )}
         {error && <p className="text-sm text-destructive-text" role="alert" data-testid="cover-text-suggest-error">{error}</p>}
         {live && (
-          <div className="inset-panel space-y-3" data-testid="cover-text-suggestion">
+          <div className="space-y-3" data-testid="cover-text-suggestion">
             <p className="text-base font-semibold">&ldquo;{live.text}&rdquo;</p>
             {live.hookScore && (
               <p className="text-sm text-muted-foreground" data-testid="cover-text-score-move">

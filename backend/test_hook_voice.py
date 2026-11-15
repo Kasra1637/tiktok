@@ -1,9 +1,11 @@
-"""The hook line speaks to the viewer, not as a diary: at most one 'I'.
+"""The hook speaks in the founder's own first-person voice (ADR 0145).
 
-The rule is the hook's alone — the middle is still the customer's own story —
-and it is both asked for (the shared craft block) and enforced (the plan's
-editorial loop and the rewrite's bounded correction), because a prompt-only
-rule drifts and a gate without the prompt spends billed calls on refusals.
+First person is the voice the craft score rewards, not a ration: no gate
+counts the hook's 'I's — not the plan's editorial loop, not the rewrite's
+acceptance check. What stays banned is diary framing, a log of what
+happened to me today, and that lives in the prompts and the scorer's
+journal-opener tax, not in a count. The deterministic checks that remain
+are form checks: an uninvited question, an echo, the set length.
 """
 import asyncio
 import sys
@@ -34,14 +36,16 @@ def issues_for(hook, script=SCRIPT):
     return ai_service._generated_spoken_issues(hook, script, 60, 300)
 
 
-def test_two_first_person_hooks_are_an_issue():
+def test_two_first_person_hooks_are_not_an_issue():
+    # ADR 0145 retired the count: a hook speaking as the person living
+    # the moment is the rewarded voice, however many 'I's it takes.
     issues = issues_for("Friday evening, and I feel off, and I cannot say why.")
-    assert any("first person" in issue for issue in issues)
+    assert not any("first person" in issue for issue in issues)
 
 
-def test_contractions_count_as_first_person():
+def test_contractions_are_first_person_and_allowed():
     issues = issues_for("I'm off on Fridays and I can't say why.")
-    assert any("first person" in issue for issue in issues)
+    assert not any("first person" in issue for issue in issues)
 
 
 def test_one_first_person_is_allowed():
@@ -49,7 +53,7 @@ def test_one_first_person_is_allowed():
     assert not any("first person" in issue for issue in issues)
 
 
-def test_zero_first_person_is_the_target():
+def test_zero_first_person_is_also_fine():
     issues = issues_for("Friday evenings feel off, and the reason never has a name.")
     assert not any("first person" in issue for issue in issues)
 
@@ -65,7 +69,9 @@ def test_the_body_may_stay_first_person():
 
 def test_the_craft_block_states_the_rule():
     block = ai_service._spoken_line_rules_block()
-    assert "at most ONCE" in block
+    assert "not a ration" in block
+    assert "at most ONCE" not in block
+    assert "zero is better" not in block
     assert "diary" in block
 
 
@@ -115,32 +121,44 @@ def test_question_format_request_is_detected_from_the_template():
     )
 
 
-def test_rewrite_retries_a_diary_open(monkeypatch):
-    replies = [
-        {"hook_line": "I feel off on Fridays and I cannot say why."},
-        {"hook_line": "Friday off-feelings never come with a reason."},
-    ]
+def test_rewrite_accepts_a_first_person_hook(monkeypatch):
+    # ADR 0145: first person is the voice, not a ration — a rewrite that
+    # speaks as the person living the moment is accepted on the first
+    # reply, with no correction spent on counting its 'I's.
     calls = []
 
     async def fake_chat(**kwargs):
         calls.append(kwargs)
-        return replies[len(calls) - 1]
+        return {"hook_line": "I feel off on Fridays and I cannot say why."}
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
     line = asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
-    assert line == "Friday off-feelings never come with a reason."
-    assert len(calls) == 2
-    assert "CORRECTION" in calls[1]["prompt"]
-    assert "first person" in calls[1]["prompt"]
+    assert line == "I feel off on Fridays and I cannot say why."
+    assert len(calls) == 1
 
 
-def test_rewrite_refuses_replies_that_keep_narrating(monkeypatch):
+def test_the_rewrite_prompt_speaks_first_person(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"hook_line": "Friday off-feelings never come with a reason."}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
+    prompt = calls[0]["prompt"]
+    assert "not a ration" in prompt
+    assert "at most once" not in prompt.lower()
+    assert "zero is better" not in prompt
+
+
+def test_rewrite_refuses_replies_that_keep_asking(monkeypatch):
     monkeypatch.setattr(
         ai_service,
         "_chat_json",
-        AsyncMock(return_value={"hook_line": "I feel off on Fridays and I cannot say why."}),
+        AsyncMock(return_value={"hook_line": "Why do Friday evenings always feel off?"}),
     )
-    with pytest.raises(RuntimeError, match="first person"):
+    with pytest.raises(RuntimeError, match="question"):
         asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
 
 
@@ -178,8 +196,8 @@ def test_rewrite_allows_question_when_founder_hook_asks_for_one(monkeypatch):
 def test_rewrite_corrects_an_unchanged_reply(monkeypatch):
     # A provider that hands the current hook back — here in quotes, which
     # the cleanup strips — has not refused the rewrite; it gets the same
-    # one bounded correction a question or a diary open gets, instead of
-    # failing the click on the spot.
+    # one bounded correction a question gets, instead of failing the
+    # click on the spot.
     replies = [
         {"hook_line": '"Fridays feel off."'},
         {"hook_line": "Friday off-feelings never come with a reason."},
@@ -240,14 +258,12 @@ def _plan(hook, script):
     }
 
 
-def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
-    bad = _plan(
-        "Friday evening, and I feel off, and I cannot say why.",
-        "One prompt helped me start writing, and I finished the entry.",
-    )
-    # The corrected pair is calibrated to the shipped rubric (ADR 0145):
-    # first person, a named place, an open ending — it totals 80, at the
-    # craft-retry bar, so no fourth call fires and the count below holds.
+def test_the_plan_loop_keeps_a_first_person_hook(monkeypatch):
+    # ADR 0145: the editorial loop no longer rewrites a hook for speaking
+    # in first person. This pair — first person, a named place, an open
+    # ending — is calibrated to the shipped rubric: it totals 80, at the
+    # craft-retry bar, so no craft retry fires either, and the draft
+    # lands as written with no EDITORIAL CORRECTION spent on it.
     good = _plan(
         "Friday evening on my porch step my mood drops and I freeze.",
         "I sit with my notebook open and name the feeling out loud, one word at a time. What sets it off is still unclear.",
@@ -256,7 +272,7 @@ def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
 
     async def fake_chat(**kwargs):
         calls.append(kwargs)
-        return bad if len(calls) == 1 else good
+        return good
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
     result = asyncio.run(
@@ -267,9 +283,8 @@ def test_the_plan_loop_rewrites_a_diary_hook(monkeypatch):
         )
     )
     assert result["hook_line"] == good["hook_line"]
-    assert len(calls) == 3  # +1 hook candidates call (ADR 0130)
-    # The correction names the defect, so the rewrite is targeted.
-    assert "first person" in calls[1]["prompt"]
+    assert len(calls) == 2  # draft + hook candidates call (ADR 0130)
+    assert all("EDITORIAL CORRECTION" not in c["prompt"] for c in calls)
 
 
 def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):

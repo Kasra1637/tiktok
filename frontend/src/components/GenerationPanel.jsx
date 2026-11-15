@@ -14,7 +14,7 @@ import {
 } from "../lib/videoLength";
 import {
   Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Smartphone, Check, Film,
+  Play, Info, Clock, Smartphone, Check, Film, Sparkles,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 
@@ -285,7 +285,11 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     // One label for the rebuild everywhere it is offered (the strategy
     // panel's button reads the same): the reason it is owed lives in the
     // alert above, and two phrasings of one action read as two actions.
-    remedies.push({ label: "Rebuild strategy", action: "rebuild-strategy" });
+    // It wears Sparkles, the same icon as the sticky bar's rebuild
+    // action — never Play, which is Generate's signature (ADR 0144): a
+    // Play on the rebuild made it read as Generate renamed (Kasra's
+    // screenshot, Nov 14).
+    remedies.push({ label: "Rebuild strategy", action: "rebuild-strategy", icon: "sparkles" });
   }
   if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
   if (planSaveRequired) {
@@ -892,7 +896,11 @@ const handleGenerate = async () => {
               className="gap-1.5"
               onClick={() => onNavigate?.(remedy.action)}
             >
-              <Play className="h-3.5 w-3.5" />
+              {remedy.icon === "sparkles" ? (
+                <Sparkles className="h-3.5 w-3.5" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
               {remedy.label}
             </Button>
           ))}

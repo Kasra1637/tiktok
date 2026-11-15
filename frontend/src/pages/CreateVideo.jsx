@@ -195,61 +195,71 @@ function qualityBandNote(report) {
   return QUALITY_BAND_NOTES[report?.band] || "Advisory craft score for the saved words.";
 }
 
+/** The one label treatment inside a craft tooltip: the metric's title
+ *  and the "On this clip" / "To lift it" headings all wear it, so a
+ *  tooltip reads as one labeled panel in the app's label format (Kasra's
+ *  ask, Nov 14) and the pieces can never drift into different styles. */
+const TOOLTIP_LABEL_CLASS =
+  "text-xs font-semibold uppercase tracking-[0.08em] text-primary-foreground/70";
+
 /** What each craft dimension means, in plain words, for the tile tooltip.
  *  Two short parts per dimension: what it measures, and how the score is
  *  earned. Written from the scorer's own rubric (backend/creative_quality.py)
  *  so the words describe the same checks that produced the number — but in
- *  the founder's language, not the rubric's. The clip-specific evidence and
- *  next step still come from the server under their own labels; this map is
- *  only the standing explanation of the dimension itself. */
+ *  the founder's language, not the rubric's. Kept terse on the founder's
+ *  word (Nov 14): the explanation is a glance, not a lecture — the
+ *  rubric's own evidence under "On this clip" carries the detail. The
+ *  clip-specific evidence and next step still come from the server under
+ *  their own labels; this map is only the standing explanation of the
+ *  dimension itself. */
 const DIMENSION_EXPLANATIONS = {
   hook_stopping_power: {
     measures:
-      "Whether the opening makes a scrolling viewer stop: the spoken hook and the cover text are scored together, as the first two seconds are seen.",
+      "Whether the opening makes a scrolling viewer stop. Hook and cover text score together.",
     earned:
-      "Speaking in first person, a clear problem, one concrete detail and something left unresolved earn points. Journal-style framing, app talk and a sales ask pull it down.",
+      "A problem, one concrete detail, first person and an open gap earn. Diary openings, app talk and sales asks lose.",
   },
   audience_truth: {
     measures:
-      "Whether the words sound like something your viewer would actually say about their own life.",
+      "Whether it sounds like something your viewer would actually say about their own life.",
     earned:
-      "First-person voice, familiar routines and plain words earn points. Reporting the viewer in the third person, generic mood language, marketer voice and app talk lose them.",
+      "First person and familiar routines earn. Third-person reporting, mood words, marketer voice and app talk lose.",
   },
   clarity: {
     measures:
-      "Whether each line carries one thought a listener can follow in a single listen.",
+      "Whether each line is one thought a listener can follow in a single listen.",
     earned:
-      "Short sentences earn points — nothing over 24 words, and a hook of 12 words or fewer. Vague pointers like “that surprise” lose them.",
+      "Nothing over 24 words; the hook earns at 12 words or fewer. Vague pointers lose.",
   },
   concreteness: {
     measures:
-      "Whether the viewer can picture the moment instead of just understanding it.",
+      "Whether the viewer can picture the moment, not just understand it.",
     earned:
-      "A named place, a physical action, a time or routine, and a body detail each earn points. Abstract words and a vague payoff lose them.",
+      "Place, action, time and a body detail earn. Abstract words and a vague payoff lose.",
   },
   story_arc: {
     measures:
-      "Whether the hook and script work as one story: a problem opens, the middle deepens it, and the last line opens the discovery your demo answers.",
+      "Whether hook and script work as one story — problem, deepening, an ending that opens the demo.",
     earned:
-      "A scene, a real insight and any resolution landing mid-story earn points, and so does ending open. Repeating the hook, quoting, or wrapping the ending up neatly lose them.",
+      "Insight, a mid-story shift and an open ending earn. Repeating the hook, quoting or wrapping up loses.",
   },
   spoken_naturalness: {
     measures:
-      "Whether the lines sound like talking, not writing, when read out loud.",
+      "Whether the lines sound like talking, not writing, when read aloud.",
     earned:
-      "Short sentences and contractions earn points. Long sentences, written-sounding phrases, quotes and self-narration lose them.",
+      "Contractions and short sentences earn. Written phrases, quotes and self-narration lose.",
   },
   demo_handoff: {
     measures:
-      "Whether the script's last line leaves a question open for your demo to answer.",
+      "Whether the script's last line leaves a question open for the demo.",
     earned:
-      "Ending on the open question earns the most. Wrapping the feeling up neatly, or talking about the app, loses points.",
+      "Ending open, in first person, earns most. A neat wrap-up or app talk loses.",
   },
   trust_compliance: {
     measures:
-      "Whether the lines stay an honest customer story — no selling, and no claims the video cannot back.",
+      "Whether the lines stay an honest customer story, with no claim the video can't back.",
     earned:
-      "Clean lines keep the full score. A sales ask, naming the app in the spoken lines, or an invented personal claim loses points.",
+      "Starts at full score. Sales asks, naming the app and invented claims lose points.",
   },
 };
 
@@ -387,7 +397,7 @@ function CraftCheckCard({ report }) {
                     className="max-w-xs space-y-2.5"
                   >
                     <div className="flex items-baseline justify-between gap-3">
-                      <p className="text-sm font-semibold">{dimension.label}</p>
+                      <p className={TOOLTIP_LABEL_CLASS}>{dimension.label}</p>
                       <p className="text-primary-foreground/70">
                         {dimension.score}/{dimension.max}
                       </p>
@@ -400,7 +410,7 @@ function CraftCheckCard({ report }) {
                     )}
                     {evidence.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary-foreground/70">
+                        <p className={TOOLTIP_LABEL_CLASS}>
                           On this clip
                         </p>
                         <ul className="list-disc space-y-0.5 pl-4">
@@ -412,7 +422,7 @@ function CraftCheckCard({ report }) {
                     )}
                     {dimension.next_step && (
                       <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary-foreground/70">
+                        <p className={TOOLTIP_LABEL_CLASS}>
                           To lift it
                         </p>
                         <p>{dimension.next_step}</p>

@@ -3374,8 +3374,8 @@ def _spoken_line_rules_block() -> str:
         "Otherwise a plain statement, a confession, or a blunt "
         "observation, in the speaker's own voice. Never default to a "
         "question, never reuse fixed wording, and do not use the same "
-        "form as the last few generations. Said TO or ABOUT them, never "
-        "a diary. 'I' at most ONCE in the hook line; zero is better. "
+        "form as the last few generations. First person is the voice: "
+        "'I' is the goal, not a ration. Never a diary log of the day. "
         "Plain power words are fine (never, still, every time). No "
         "clickbait, hype or exaggeration.\n"
         "- NAME THE ACTION: say the real task in the viewer's own words, never a "
@@ -3479,7 +3479,8 @@ _SELF_ASK_PATTERNS = (
 
 
 # A first-person 'I' in a hook line, contractions included ("I'm", "I've").
-# One can anchor a genuine line; two turn the opening into diary narration.
+# It classifies the confession form below only — never a ration on the
+# voice: first person is what the craft score rewards (ADR 0145).
 
 
 def hook_form_of(text: str) -> str:
@@ -3655,10 +3656,11 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     """A clearer version of the founder's hook that names the real action (ADR 0084).
 
     A suggestion only: nothing is saved here. A reply that fails a
-    repair-able check — the current hook handed back unchanged, a diary
-    open, a question the angle does not invite — gets one bounded
-    correction; a reply still failing after it raises RewriteRefusal with
-    the reason, so the founder never sees a fake improvement.
+    repair-able check — the current hook handed back unchanged, a line
+    past its set length, a question the angle does not invite — gets one
+    bounded correction; a reply still failing after it raises
+    RewriteRefusal with the reason, so the founder never sees a fake
+    improvement.
 
     `max_chars`, when given, is the hook's set length — the aim its
     seconds hold, the number Review prints ("aiming for about 60" on a
@@ -3693,8 +3695,9 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         f"{_hook_form_block(angle, [hook_form_of(original)], [original])}\n"
         f"CURRENT HOOK: {original}\n\n"
         "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
-        "words the viewer uses for that problem: name the problem first and use 'I' at most "
-        "once in the line \u2014 zero is better. The clearer hook names the exact moment "
+        "words the viewer uses for that problem: name the problem first, in the speaker's own "
+        "first-person voice \u2014 'I' is the voice of the hook, not a ration. The clearer hook "
+        "names the exact moment "
         "\u2014 a time or a place \u2014 wherever the current line leaves it vague. Keep its "
         "meaning, its feeling and roughly its "
         f"length (one short spoken sentence).{budget} Never name the app. No quotation marks. "
@@ -3748,23 +3751,18 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         # only fits a question: preserving a founder-approved question is
         # preserving their request, not defaulting to one.
         allows_question = original.strip().endswith("?") or _angle_invites_question(angle)
-        if len(_FIRST_PERSON_I.findall(line)) <= 1 and (allows_question or not line.rstrip().endswith("?")):
+        if allows_question or not line.rstrip().endswith("?"):
             return line
         # One bounded correction: the hook is the first thing a viewer hears,
-        # so a diary-open or question rewrite is not an improvement worth
-        # returning.
-        if len(_FIRST_PERSON_I.findall(line)) > 1:
-            refusal = "The rewrite kept narrating in first person; try again, or edit the line yourself."
-            prompt += (
-                "\n\nCORRECTION: that rewrite narrated in first person more than once. "
-                "Rewrite it as a problem statement the viewer recognises \u2014 'I' at most once."
-            )
-        else:
-            refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
-            prompt += (
-                "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
-                "names the viewer's feeling or situation directly, not a question."
-            )
+        # so a question rewrite the angle does not invite is not an improvement
+        # worth returning. First person is never the defect (ADR 0145): the
+        # rewrite speaks as the person living the moment, and no count of
+        # its 'I's is taken here.
+        refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
+        prompt += (
+            "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
+            "names the viewer's feeling or situation directly, not a question."
+        )
     raise RewriteRefusal(refusal)
 
 
@@ -3785,7 +3783,7 @@ async def rewrite_spoken_line(
     """A clearer version of any one spoken line — the per-line rewrite assist.
 
     The hook role delegates to `rewrite_hook_line`: its form rules (problem
-    first, "I" at most once, a question only when the founder's hook asks)
+    first, first-person voice, a question only when the founder's hook asks)
     are hook-only (ADR 0084), and `max_chars` forwards with it as the
     hook's set length. A middle line is one sentence of the script,
     rewritten inside its story: it keeps its meaning, its place and roughly
@@ -4719,8 +4717,9 @@ async def generate_creative_plan(
             "Use complete natural customer sentences, not feature labels or fragments. "
             "Write it the way a real person talks: no promotion, no hype, no AI-sounding "
             "openers, never the app's name, and no claimed history with the app. "
-            "The hook line names the viewer's problem and uses 'I' at most once \u2014 never a "
-            "diary open. Choose the HOOK FORM for this angle and problem: a question only "
+            "The hook line names the viewer's problem in the speaker's own first-person "
+            "voice \u2014 never a diary open. Choose the HOOK FORM for this angle and problem: "
+            "a question only "
             "when the problem is a silent self-question, otherwise a statement, confession, "
             "or blunt observation; never default to a question and do not reuse the same "
             "form as the last few generations. "

@@ -539,9 +539,11 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
     the app named) and machine-sounding filler openers. Both are matched as
     whole phrases on normalized text, so a genuine customer line never trips
     them — see _PROMOTION_MARKERS for why that constraint is the whole design.
-    The hook's first-person count is the same kind of arithmetic, not taste:
-    the prompt allows at most one 'I' in the whole hook line. So is the
-    statement default: a hook-line question is detectable (it ends in '?'),
+    The hook's first-person count is deliberately not one of them (ADR
+    0145): first person is the voice the craft score rewards, so no count
+    of 'I's is taken here — diary framing is the prompts' and the scorer's
+    business, not arithmetic. The statement default is the same kind of
+    arithmetic: a hook-line question is detectable (it ends in '?'),
     so a non-question plan that drafts one is rewritten through the editorial
     loop instead of shipped. So is the promise match: when the caller
     certifies an outcome, the hook either carries that outcome's key terms
@@ -654,15 +656,11 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 issues.append(f"{name} has an unfinished comparison")
         if text[0].islower():
             issues.append(f"{name} begins as a continuation rather than a standalone sentence")
-    # The hook leads with the viewer's problem, not the speaker's diary: one
-    # 'I' can anchor a real line, two make it narration ("Friday evening, and
-    # I feel off, and I cannot say why") and the draft is rewritten through
-    # the editorial loop instead.
-    if len(_FIRST_PERSON_I.findall(hook)) > 1:
-        issues.append(
-            "hook_line narrates in first person more than once; open on the "
-            "viewer's problem instead, with 'I' used at most once"
-        )
+    # No first-person count on the hook (ADR 0145): first person is the
+    # voice the craft score rewards, so a hook is never rewritten here for
+    # speaking as the person living the moment. Diary framing — a log of
+    # the day — is banned by the prompts and taxed by the scorer's
+    # journal-opener cues, not by counting 'I's.
     if ";" in hook:
         issues.append("hook_line joins clauses with a semicolon instead of one standalone opening")
     # A question hook is a defect unless the angle/problem itself is a

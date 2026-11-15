@@ -2275,6 +2275,19 @@ async function main() {
     if (ctx.container.querySelector('[data-testid="render-generate-button"]')) {
       throw new Error("Generate is rendered while a strategy rebuild is owed");
     }
+    // The rebuild remedy wears Sparkles, the sticky bar's rebuild icon —
+    // never Play, which is Generate's signature (ADR 0144): a Play on
+    // the rebuild made it read as Generate renamed (Kasra's screenshot).
+    const remediesRow = ctx.container.querySelector('[data-testid="render-remedies"]');
+    const rebuildButton = remediesRow && [...remediesRow.querySelectorAll("button")]
+      .find((b) => (b.textContent || "").includes("Rebuild strategy"));
+    if (!rebuildButton) throw new Error("the rebuild remedy button did not render");
+    if (rebuildButton.innerHTML.includes("lucide-play")) {
+      throw new Error("the rebuild remedy wears Generate's Play icon");
+    }
+    if (!rebuildButton.innerHTML.includes("lucide-sparkles")) {
+      throw new Error("the rebuild remedy does not wear the bar's Sparkles icon");
+    }
     const stray = [...ctx.container.querySelectorAll("button")].find((b) =>
       /Generate the video|Generate another/.test((b.textContent || "").trim())
     );
@@ -2351,6 +2364,9 @@ async function main() {
     if (!button) throw new Error("the ready panel renders no Generate button");
     if (!button.classList.contains("generate-invite")) {
       throw new Error("the ready Generate button carries no invitation");
+    }
+    if (!button.innerHTML.includes("lucide-play")) {
+      throw new Error("the ready Generate button lost its Play icon");
     }
     const action = seen.filter(Boolean).pop();
     if (!action) throw new Error("the ready panel registered no bar action");
@@ -3011,10 +3027,14 @@ async function main() {
   // rendering: the two sections, named as the two sections, with the model's own
   // goal for each.
   // -------------------------------------------------------------------------
-  // The cover text in Review (ADR 0145): previewed as it will sit on the
-  // opening frame, scored with the hook, and regenerable from its own
-  // button as a suggestion that saves nothing by itself.
-  await check("the cover text shows in review as an opening preview with its score", async (ctx) => {
+  // The cover text in Review (ADR 0145): scored with the hook, and
+  // regenerable from its own button as a suggestion that saves nothing
+  // by itself. It appears ONCE, as plain text in the section's flow,
+  // directly under its subtitle — no box of any kind. The 9:16 preview
+  // frame it used to sit in left the words cramped and clipped, and
+  // the boxed field under it repeated them; both are gone, and a new
+  // cover comes only through the suggestion's accept.
+  await check("the cover text shows in review as plain text under its subtitle with its score", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const report = {
       version: 1, advisory: true, total: 79, max: 100, grade: "B", band: "strong",
@@ -3032,15 +3052,30 @@ async function main() {
     try {
       await withApi({ getStudioProject: async () => project }, async () => {
         await mount(CreateVideo)(ctx);
-        const preview = ctx.container.querySelector('[data-testid="cover-text-preview"]');
-        if (!preview) throw new Error("the cover preview did not render in review");
-        const previewText = ctx.container.querySelector('[data-testid="cover-text-preview-text"]');
-        if (!previewText || !previewText.textContent.includes("Bakery queue, words won't come")) {
-          throw new Error("the preview does not carry the project's cover text");
+        if (ctx.container.querySelector('[data-testid="cover-text-preview"]')) {
+          throw new Error("the cover text still sits in a preview frame");
         }
-        const input = ctx.container.querySelector("#review-cover_text");
-        if (!input || input.value !== "Bakery queue, words won't come") {
-          throw new Error("the cover field does not carry the project's cover text");
+        if (ctx.container.querySelector('[data-testid="cover-text-preview-text"]')) {
+          throw new Error("the cover text still renders a separate preview line");
+        }
+        const section = ctx.container.querySelector('[data-testid="cover-text-section"]');
+        if (!section) throw new Error("the cover text section did not render in review");
+        const subtitle = section.querySelector("[data-subtitle]");
+        if (!subtitle || !subtitle.textContent.includes("first two seconds")) {
+          throw new Error("the cover subtitle did not render");
+        }
+        if (section.querySelector("#review-cover_text")) {
+          throw new Error("the cover text still renders in a field");
+        }
+        const display = section.querySelector('[data-testid="cover-text-value"]');
+        if (!display || display.tagName === "INPUT" || display.tagName === "TEXTAREA") {
+          throw new Error("the cover text does not render as plain text");
+        }
+        if (!display.textContent.includes("Bakery queue, words won't come")) {
+          throw new Error("the cover text does not carry the project's cover text");
+        }
+        if (subtitle.nextElementSibling !== display) {
+          throw new Error("the cover text does not sit directly under its subtitle");
         }
         const note = ctx.container.querySelector('[data-testid="cover-text-score-note"]');
         if (!note || !note.textContent.includes("Scored with your hook") || !note.textContent.includes("13/20")) {
@@ -3074,6 +3109,9 @@ async function main() {
         if (!panel || !panel.textContent.includes("Bakery queue, words won't come")) {
           throw new Error("the suggested cover did not render");
         }
+        if (panel.classList.contains("inset-panel")) {
+          throw new Error("the suggested cover still renders in a box");
+        }
         const move = ctx.container.querySelector('[data-testid="cover-text-score-move"]');
         if (!move || !move.textContent.includes("11/20") || !move.textContent.includes("16/20")) {
           throw new Error("the suggestion does not show its hook-score movement");
@@ -3085,8 +3123,8 @@ async function main() {
         const accept = ctx.container.querySelector('[data-testid="cover-text-accept"]');
         await act(async () => { accept.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
         await act(async () => {});
-        const input = ctx.container.querySelector("#review-cover_text");
-        if (!input || input.value !== "Bakery queue, words won't come") {
+        const display = ctx.container.querySelector('[data-testid="cover-text-value"]');
+        if (!display || !display.textContent.includes("Bakery queue, words won't come")) {
           throw new Error("accepting the suggestion did not write it through the draft edit");
         }
         if (ctx.container.querySelector('[data-testid="cover-text-suggestion"]')) {
@@ -19079,6 +19117,18 @@ await check(
         }
         if (!tip.textContent.includes("To lift it")) {
           throw new Error("the tooltip does not label the next step");
+        }
+        // The title wears the same label treatment as the tooltip's own
+        // "On this clip" heading (Kasra's ask): all caps, same format,
+        // same color — one shared class, pinned here so the two can
+        // never drift into different styles again.
+        const tipTitle = [...tip.querySelectorAll("p")].find((p) => p.textContent === "Hook stopping power");
+        const clipHeading = [...tip.querySelectorAll("p")].find((p) => p.textContent === "On this clip");
+        if (!tipTitle || !clipHeading) {
+          throw new Error("the tooltip title or its evidence heading is missing");
+        }
+        if (tipTitle.className !== clipHeading.className || !tipTitle.className.includes("uppercase")) {
+          throw new Error("the tooltip title does not wear the 'On this clip' heading's label style");
         }
         // Every one of the eight dimensions explains itself in plain
         // words, and labels its sections the same way: the evidence

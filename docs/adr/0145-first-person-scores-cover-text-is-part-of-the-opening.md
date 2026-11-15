@@ -95,3 +95,28 @@ it never blocks a render.
   its blindness to the cover; it does not calibrate the weights
   against posted outcomes, which remains the open gap the verdict
   record (ADR 0124) exists to close over time.
+
+## Addendum (Nov 14 2026): the generation side is aligned to this scorer
+
+This decision moved the scorer first, and the build flagged that the
+generation side still carried the doctrine the scorer had retired:
+`rewrite_hook_line`'s prompt told the model to use "'I' at most once —
+zero is better", and its acceptance check refused any rewrite speaking
+in first person more than once. The same ration sat in the shared
+spoken-line block's HOOK FORM bullet, in the plan editorial loop's
+correction prompt, and — hardest of all — as a deterministic issue in
+`ai_spoken._generated_spoken_issues`, which rewrote any plan hook with
+two or more 'I's and hard-filtered such bake-off candidates before
+scoring. Kasra approved aligning all of it the same evening.
+
+So, in the follow-up commit: first person is stated as the voice in
+every one of those places — "'I' is the goal, not a ration" — and the
+count gates are gone. What remains banned is what this ADR always
+banned: diary/journal framing (a log of what happened to me today)
+and label/meta talk, carried by the prompts and by the scorer's
+journal-opener tax, never by counting 'I's. The rewrite's remaining
+acceptance checks are unchanged: the echo, the set length (ADR 0130),
+and a question the angle does not invite. This addendum supersedes
+one line of the Consequences above: the bake-off's hard filters did
+change in exactly one respect — they no longer reject a candidate for
+speaking in first person.
