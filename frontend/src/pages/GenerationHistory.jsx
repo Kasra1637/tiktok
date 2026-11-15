@@ -225,17 +225,12 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // rendering. Distinct from `error`: this is a successful check that found the
   // render unfinished, not a failed action, so it must not read as one.
   const [strandedNote, setStrandedNote] = useState(null);
-  // Post copy and Plan context stack vertically and share one open slot:
-  // Post copy starts expanded, opening one closes the other, and the open
-  // one never collapses — exactly one panel is always expanded, so the row
-  // never shows two dead-end headers and never stacks both open long. A row
-  // with context but no kit yet starts on context instead: defaulting to a
-  // panel that is not rendered would leave both headers closed.
-  const [openPanel, setOpenPanel] = useState(row.post_kit ? "post" : "context");
-  const togglePanel = (name) => (e) => {
-    e.preventDefault();
-    setOpenPanel(name);
-  };
+  // Post copy and Plan context stack vertically in the record as solid
+  // sections (ADR 0151): no disclosure, no toggle, no collapsed state —
+  // both stand fully expanded from the first render, so their content
+  // fills the record column beside the clip instead of hiding behind
+  // two headers. The journey line's post-copy item only scrolls here;
+  // there is nothing left to open.
 
   const detailId = `generation-detail-${row.id}`;
 
@@ -381,7 +376,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // A finished render whose post copy never got written has no kit to show
   // and no regenerate control to reach — the section only renders around an
   // existing kit. This writes one on demand through the same regenerate
-  // endpoint, then opens the Post copy panel on the fresh kit. A refusal
+  // endpoint, and the fresh kit lands in the solid Post copy section. A refusal
   // names the next step instead of dying silently: without materials the
   // endpoint 404s and the founder learns the draft is gone rather than
   // staring at a button that does nothing.
@@ -395,7 +390,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
         throw new Error("The server answered without post copy.");
       }
       onUpdated(row.id, { post_kit: kit });
-      setOpenPanel("post");
       // The fresh kit moves the row to the with-copy side, which would
       // unmount it out from under the founder mid-click. Follow it there
       // instead, so the generated copy is what lands on screen.
@@ -465,11 +459,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   const showJourney = (row.status === "completed" || row.status === "archived") && Boolean(downloadUrl);
   const resultsLine = describeSnapshot(row.performance_snapshot);
   // The journey line's post-copy item walks to the control that owns it:
-  // the kit itself when one is written (opening its panel), the generate
-  // prompt when none is. One click from the state to the thing it names,
-  // the same contract openResults keeps for the link and results.
+  // the kit itself when one is written (scrolling to its solid section),
+  // the generate prompt when none is. One click from the state to the
+  // thing it names, the same contract openResults keeps for the link
+  // and results.
   const openPostCopy = () => {
-    if (row.post_kit) setOpenPanel("post");
     requestAnimationFrame(() => {
       const target = document.querySelector(
         row.post_kit
@@ -664,39 +658,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             </div>
           </div>
 
-          <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]" data-testid="history-summary">
-            {/* Read top to bottom in the order a founder actually scans: which
-                render this is (app, state, date), with its provenance facts
-                riding in the same header row as chips — model, attempt and
-                the template/script versions are how one take is told from
-                the next ("why does this take look different from the last
-                one?"), and as small labels in the header they answer that
-                without reading as a loose technical line under the clip —
-                then the hook that tells one row from another, then what
-                happened to it (posted, views, vote). The joined journey line
-                and the whole-video verdict lead the record beside the clip
-                now: the card's right side holds the video's state and the
-                founder's one call together. Length and goal stay on the
-                preview above, where the clip they describe plays. */}
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
-              <StatusBadge status={row.status} />
-              <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
-              <span className="flex flex-wrap items-center gap-1.5" data-testid="history-provenance">
-                {row.model && <FactChip>{row.model}</FactChip>}
-                {row.attempt > 1 && <FactChip>{`attempt ${row.attempt}`}</FactChip>}
-                {row.template_id && <FactChip>{`template v${row.template_version}`}</FactChip>}
-                <FactChip>{`script v${row.script_version}`}</FactChip>
-              </span>
-            </div>
-            <p className="break-words text-base font-semibold">
-              {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`}
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span data-testid="history-result-line">{describeResults(row)}</span>
-              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
-            </div>
-          </div>
         </div>
 
         <div
@@ -709,8 +670,47 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
           <div className="history-body">
             <div className="history-record min-w-0 space-y-5">
               {compactNotice && notice}
-              {/* The video's state and the founder's one call lead the
-                  record. The joined finished → posted line: export, post
+              {/* The render's identity opens the record (ADR 0150). Read
+                  top to bottom in the order a founder actually scans: which
+                  render this is (app, state, date), with its provenance
+                  facts riding in the same header row as chips — model,
+                  attempt and the template/script versions are how one take
+                  is told from the next ("why does this take look different
+                  from the last one?"), and as small labels in the header
+                  they answer that without reading as a loose technical
+                  line — then the hook that tells one row from another,
+                  then what happened to it (posted, views, vote). This
+                  stack is record content, not media: it used to ride under
+                  the clip, where it made the media column the tall side
+                  even after the video was capped (ADR 0149) and left the
+                  record ending high above it with dead space at its foot.
+                  The card balances by putting content in its right
+                  column, never by stretching spacing. Length and goal
+                  stay on the preview, where the clip they describe
+                  plays. */}
+              <div className="space-y-2" data-testid="history-summary">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-semibold">{row.brand_name || "Unassigned app"}</span>
+                  <StatusBadge status={row.status} />
+                  <span className="text-muted-foreground">{formatRenderDate(row.created_at)}</span>
+                  <span className="flex flex-wrap items-center gap-1.5" data-testid="history-provenance">
+                    {row.model && <FactChip>{row.model}</FactChip>}
+                    {row.attempt > 1 && <FactChip>{`attempt ${row.attempt}`}</FactChip>}
+                    {row.template_id && <FactChip>{`template v${row.template_version}`}</FactChip>}
+                    <FactChip>{`script v${row.script_version}`}</FactChip>
+                  </span>
+                </div>
+                <p className="break-words text-base font-semibold">
+                  {row.hook_line ? sentenceCase(row.hook_line) : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span data-testid="history-result-line">{describeResults(row)}</span>
+                  {isWinnerRow(row) && <FactChip>Winner</FactChip>}
+                </div>
+              </div>
+              {/* The video's state and the founder's one call follow the
+                  identity summary at the record's head. The joined
+                  finished → posted line: export, post
                   copy, posted link and recorded results as a single line,
                   each item naming its state and walking to the control that
                   owns it — the controls themselves stay where they were, so
@@ -720,8 +720,9 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                   the app now; the per-element thumbs are gone, and this
                   verdict — on the whole video, frozen as it went out — is
                   what new plans and strategies learn from. Both used to
-                  trail the summary under the clip; the card's right side
-                  is where they belong, beside the record they complete. */}
+                  trail the summary under the clip; they ride in the record
+                  now, under the summary that names the render they
+                  complete. */}
               {(showJourney || row.status === "completed" || row.status === "archived") && (
                 <div className="space-y-2">
                   {showJourney && (
@@ -761,37 +762,37 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                   )}
                 </div>
               )}
-              {/* Identity (app, status, date, hook line) lives once under the clip in history-summary above, so the record never repeats it. */}
+              {/* Identity lives once, in the summary at this record's head above — nothing below repeats it. */}
               {(row.post_kit || row.audience || row.demo_brief || row.location) && (
-                <div className="grid grid-cols-1 items-start gap-2">
+                <div className="grid grid-cols-1 items-start gap-3">
                   {row.post_kit && (
-                    <details
-                      open={openPanel === "post"}
-                      className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30"
+                    <section
+                      className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5"
                       data-testid={`history-post-copy-${row.id}`}
                     >
-                      <summary onClick={togglePanel("post")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <div className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
                         <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Post copy</span>
-                        <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
-                      </summary>
+                      </div>
                       <div className="border-t border-[color:var(--hairline)] py-3">
                         <PostKitSection postKit={row.post_kit} generationId={row.id} onUpdated={(kit) => onUpdated(row.id, { post_kit: kit })} />
                       </div>
-                    </details>
+                    </section>
                   )}
 
                   {(row.audience || row.demo_brief || row.location) && (
-                    <details
-                      open={openPanel === "context"}
-                      className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)] hover:bg-secondary/30"
+                    <section
+                      className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5"
                       data-testid="history-context"
                     >
-                      <summary onClick={togglePanel("context")} className="flex cursor-pointer select-none list-none items-center gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+                      <div className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
                         <Target aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                         <span>Plan context</span>
-                        <ChevronDown aria-hidden="true" className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
-                      </summary>
+                      </div>
+                      {/* The same header hairline Post copy carries, so the
+                          two solid sections are structurally identical:
+                          header, rule, content (ADR 0151 addendum). */}
+                      <div className="border-t border-[color:var(--hairline)]">
                       <div className="mt-2 flex items-center justify-end">
                         <ListenButton
                           id={`plan-context-${row.id}`}
@@ -824,17 +825,18 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                       </div>
                     )}
                       </dl>
-                    </details>
+                      </div>
+                    </section>
                   )}
                 </div>
               )}
 
               {!row.post_kit && (row.status === "completed" || row.status === "archived") && (
                 <div
-                  className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 py-3"
+                  className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"
                   data-testid={`history-generate-post-copy-${row.id}`}
                 >
-                  <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                  <p className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
                     <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                     <span>Post copy</span>
                   </p>
@@ -1326,10 +1328,11 @@ export default function GenerationHistory() {
            spinner and not a lone phone-shaped box: the same flush card,
            the same two columns, the frame at its full width and 9:16
            height, and a placeholder row wherever the Download row, the
-           Work with this render row, the summary and the record will
-           sit — so when the rows land, nothing on the page moves. The
-           skeleton is the media column plus the record, because that is
-           all an attached card is. */
+           Work with this render row and the record will sit, the
+           summary placeholder at the record's head (ADR 0150) — so when
+           the rows land, nothing on the page moves. The skeleton is the
+           media column plus the record, because that is all an attached
+           card is. */
         <div className="space-y-4" aria-label="Loading history" data-testid="history-loading">
           {[0, 1, 2].map((i) => (
             <div key={i} className="surface surface-flush history-card min-w-0" aria-hidden="true">
@@ -1351,15 +1354,15 @@ export default function GenerationHistory() {
                       <Skeleton className="h-10 min-w-[150px] flex-1" />
                     </div>
                   </div>
-                  <div className="row-pad space-y-2 border-t border-[color:var(--hairline)]">
-                    <Skeleton className="h-3 w-52" />
-                    <Skeleton className="h-5 w-3/4" />
-                    <Skeleton className="h-3 w-40" />
-                  </div>
                 </div>
                 <div className="history-detail min-w-0">
                   <div className="history-body">
                     <div className="history-record min-w-0 space-y-5">
+                      <div className="space-y-2">
+                        <Skeleton className="h-3 w-52" />
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-3 w-40" />
+                      </div>
                       <Skeleton className="h-3 w-64" />
                       <Skeleton className="h-[46px] w-full" />
                       <div className="space-y-2">

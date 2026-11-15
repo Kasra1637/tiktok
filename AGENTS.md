@@ -87,7 +87,11 @@ One render path, single-pass video generation via OpenRouter.
   media column is capped (288px) so the clip stands at about half its
   former height and the record takes the freed width; the columns stand
   equal, and the record fills by its natural spacing rhythm, never by
-  distributing filler between its blocks (ADR 0149, refining 0143).
+  distributing filler between its blocks (ADR 0149, refining 0143). The
+  identity summary rides at the head of the record, not under the clip —
+  the media column carries only the stage, Download and Work rows
+  (ADR 0150). Post copy and Plan context stand in the record as solid
+  sections — always rendered in full, never disclosures (ADR 0151).
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
 - `backend/feedback.py` — the whole-video verdict bundles and their
@@ -190,7 +194,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and forty-seven decisions (0001–0147) now
+Read `docs/adr/README.md` first. One hundred and fifty-one decisions (0001–0151) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

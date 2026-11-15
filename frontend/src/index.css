@@ -783,9 +783,10 @@ h1,
 /* History rows: the clip beside its record.
  *
  * The stage keeps the dark spotlight and contained video; the media column
- * owns the stage plus the identity summary beneath it. The detail column
- * owns the journey line, the whole-video verdict, facts, post copy and
- * actions. The card itself is `flush` (zero padding) and each band brings
+ * owns the stage, the Download row and the Work row — media only. The
+ * detail column opens with the identity summary, then owns the journey
+ * line, the whole-video verdict, facts, post copy and actions (ADR 0150).
+ * The card itself is `flush` (zero padding) and each band brings
  * its own gutter.
  *
  * Stacked (phones), the preview keeps a fixed height so a 9:16 clip stays

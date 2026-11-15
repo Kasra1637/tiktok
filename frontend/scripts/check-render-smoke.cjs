@@ -9709,20 +9709,31 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The hero sub-headline is Kasra's short approved line (Nov 14) — the
-  // longer "posted results steer the next one" version is retired.
-  await check("the hero sub-headline is the short approved line", async (ctx) => {
+  // The hero copy is Kasra's chosen pair (Nov 15): the headline sells
+  // the time saving and the outcome only his app gets, the sub-headline
+  // names what the founder skips and what the app makes from their
+  // facts. The "One photo in" hero and the "steer the next one" line
+  // are both retired.
+  await check("the hero headline and sub-headline are Kasra's chosen copy", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
+    const h1 = hero.querySelector("h1");
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Yours in minutes, and only yours.") {
+      throw new Error("the hero headline is not Kasra's chosen line");
+    }
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "One photo in, a posted TikTok out. Your app’s facts become a hook that holds " +
-          "and a story that lands — and every post makes the next video smarter."
+        "No filming, no editing, no blank page. Your app's facts become a hook, a script, " +
+          "and a finished video in minutes, tailored to your app alone, and learning from " +
+          "every video you judge."
       )
     ) {
-      throw new Error("the hero sub-headline is not the short approved line");
+      throw new Error("the hero sub-headline is not Kasra's chosen line");
+    }
+    if (text.includes("One photo in, a posted TikTok out")) {
+      throw new Error("the retired hero copy is still on the hero");
     }
     if (text.includes("steer the next one")) {
       throw new Error("the retired long sub-headline is still on the hero");
@@ -16197,15 +16208,16 @@ async function runDemoCtaChecks() {
             throw new Error(`an untouched render still prints ${JSON.stringify(gone)}`);
           }
         }
-        // Order is the priority. Under the clip the summary reads as three
-        // blocks: identity first — app, status, date, with the provenance
-        // facts (model, template and script versions) riding in the same
-        // header row as tidy chips instead of a loose technical line — then
-        // the hook headline, then the results line. The joined finished →
-        // posted journey line and the whole-video verdict used to trail the
-        // summary; they lead the record beside the clip now, journey first
-        // and the verdict under it, so the card's right side holds the
-        // video's state and the founder's one call together.
+        // Order is the priority. The summary reads as three blocks:
+        // identity first — app, status, date, with the provenance facts
+        // (model, template and script versions) riding in the same header
+        // row as tidy chips instead of a loose technical line — then the
+        // hook headline, then the results line. The summary is record
+        // content (ADR 0150): it opens the record beside the clip, and
+        // the joined finished → posted journey line and the whole-video
+        // verdict follow it, journey first and the verdict under it, so
+        // the card's right side opens with which render this is, then
+        // holds the video's state and the founder's one call together.
         const blocks = [...summary.children];
         if (blocks.length !== 3) {
           throw new Error(`the summary should read as three blocks, saw ${blocks.length}`);
@@ -16226,18 +16238,41 @@ async function runDemoCtaChecks() {
         const journey = panel.querySelector('[data-testid="history-journey-dense-1"]');
         const verdict = panel.querySelector('[data-testid="history-verdict-dense-1"]');
         if (!journey || !verdict) {
-          throw new Error("the journey line and the verdict do not lead the record beside the clip");
+          throw new Error("the journey line and the verdict are not in the record beside the clip");
         }
         const recordOrder = [...panel.querySelectorAll('[data-testid="history-journey-dense-1"], [data-testid="history-verdict-dense-1"]')];
         if (recordOrder[0] !== journey || recordOrder[1] !== verdict) {
           throw new Error("the verdict does not follow the journey line in the record");
         }
         if (summary.querySelector('[data-testid="history-journey-dense-1"], [data-testid="history-verdict-dense-1"]')) {
-          throw new Error("the journey line or the verdict still sits under the clip");
+          throw new Error("the journey line or the verdict is nested inside the summary");
         }
-        // Identity lives once under the clip: the record beside it must not repeat the headline.
-        const panelText = panel.textContent || "";
-        if (panelText.includes("Find your next thought.")) throw new Error("the record repeats the clip headline instead of keeping one copy under the video");
+        // The rebalance (ADR 0150): the summary stack renders inside the
+        // record column, at its head — the media column carries only the
+        // clip, the Download row and the work row, so the card's two
+        // sides balance by content instead of the record ending high
+        // above a summary parked under the video. Identity still lives
+        // exactly once in the card: in the record's summary, nowhere else.
+        if (panel.querySelector('[data-testid="history-summary"]') !== summary) {
+          throw new Error("the summary does not ride inside the record column");
+        }
+        const media = first.querySelector(".history-media");
+        if (media?.querySelector('[data-testid="history-summary"]')) {
+          throw new Error("the summary still sits under the clip in the media column");
+        }
+        if (!media?.querySelector(".history-stage") || !media?.querySelector('[data-testid="history-media-actions"]') || !media?.querySelector('[data-testid="history-actions"]')) {
+          throw new Error("the media column lost the clip, the Download row or the work row");
+        }
+        if (media?.querySelector('[data-testid="history-journey-dense-1"], [data-testid="history-post-copy-dense-1"], [data-testid="history-context"]')) {
+          throw new Error("record content leaked into the media column");
+        }
+        if (!(summary.compareDocumentPosition(journey) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the summary does not open the record ahead of the journey line");
+        }
+        const headlineCopies = (first.textContent || "").split("Find your next thought.").length - 1;
+        if (headlineCopies !== 1) {
+          throw new Error(`the hook headline lives ${headlineCopies} times in the card instead of once`);
+        }
         // The copy-less neighbor reads on the without-copy side, attached the same way.
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
@@ -16508,6 +16543,21 @@ async function runDemoCtaChecks() {
       }
       if (loading.querySelector('[class*="h-[240px]"]')) {
         throw new Error("the skeleton still shows the small phone-shaped box");
+      }
+      // The mirror follows the rebalanced card (ADR 0150): the summary
+      // placeholder leads the skeleton's record, and its media column
+      // carries only the frame, the Download row and the work row.
+      const skelMedia = loading.querySelector(".history-media");
+      const skelRecord = loading.querySelector(".history-record");
+      if (skelMedia?.querySelector(".row-pad")) {
+        throw new Error("the skeleton still parks the summary placeholder under the clip");
+      }
+      if (!skelMedia || skelMedia.children.length !== 3) {
+        throw new Error("the skeleton's media column carries more than the frame, Download and work rows");
+      }
+      const skelLead = skelRecord?.firstElementChild;
+      if (!skelLead || skelLead.children.length !== 3) {
+        throw new Error("the skeleton's record does not open with the three-line summary placeholder");
       }
       await act(async () => pending[0]({ generations: [] }));
     });
@@ -18319,6 +18369,12 @@ await check(
         await mount(GenerationHistory)(ctx);
         const box = ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]');
         if (!box) throw new Error("a kit-less finished render offers no post-copy generation");
+        // The kit-less box is the same Post copy slot with no kit yet:
+        // its header sits at the solid section's inset (ADR 0151
+        // addendum), so the slot reads identically in both states.
+        if (!box.className.includes("pt-1.5") || !box.querySelector("p")?.className.includes("py-1")) {
+          throw new Error("the kit-less post-copy header does not sit at the section's inset");
+        }
         await clickEl(
           ctx,
           ctx.container.querySelector('[data-testid="history-generate-post-copy-button-nokit-1"]'),
@@ -18343,10 +18399,10 @@ await check(
     }
   });
 
-  // A context-only row has no Post copy panel to start expanded, so Plan
-  // context starts expanded instead — one panel is always open, never two
-  // dead-end headers.
-  await check("a context-only row starts with plan context expanded", async (ctx) => {
+  // A context-only row has no Post copy section; its Plan context stands
+  // as a solid section (ADR 0151) — no disclosure, no toggle, its facts
+  // on screen from the first render.
+  await check("a context-only row shows plan context as a solid section", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -18359,11 +18415,14 @@ await check(
         global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const context = ctx.container.querySelector('[data-testid="history-context"]');
-        if (!context || context.tagName !== "DETAILS") {
-          throw new Error("plan context is not behind a disclosure");
+        if (!context) {
+          throw new Error("plan context is missing");
         }
-        if (!context.open) {
-          throw new Error("plan context starts collapsed on a context-only row");
+        if (context.tagName === "DETAILS" || context.querySelector("summary")) {
+          throw new Error("plan context is still behind a disclosure");
+        }
+        if (!context.textContent.includes("Night scrollers")) {
+          throw new Error("plan context facts are not on screen from the first render");
         }
       });
     } finally {
@@ -18396,11 +18455,12 @@ await check(
     }
   });
 
-  // The record stacks post copy above plan context in one column: post copy
-  // starts expanded, plan context starts collapsed, and opening one closes
-  // the other.
+  // The record stacks post copy above plan context in one column, and
+  // both stand as solid sections (ADR 0151): no disclosure, no toggle,
+  // no chevron — every fact on screen from the first render, so the two
+  // sections' full content fills the record column beside the clip.
   await check(
-    "History stacks post copy above plan context with one open at a time",
+    "History stacks post copy above plan context as solid sections",
     async (ctx) => {
       const GenerationHistory = load("pages/GenerationHistory.jsx").default;
       await withApi(
@@ -18422,43 +18482,45 @@ await check(
           try {
             await mount(GenerationHistory)(ctx);
             const copy = ctx.container.querySelector('[data-testid="history-post-copy-fold-1"]');
-          if (!copy || copy.tagName !== "DETAILS") {
-            throw new Error("post copy is not behind a disclosure");
+          if (!copy) {
+            throw new Error("post copy section is missing");
           }
-          if (!copy.open) {
-            throw new Error("post copy does not start expanded");
+          if (copy.tagName === "DETAILS" || copy.querySelector("summary")) {
+            throw new Error("post copy is still behind a disclosure");
           }
-          if (!/Post copy/.test(copy.querySelector("summary")?.textContent || "")) {
-            throw new Error("the post-copy disclosure does not name its contents");
+          if (!/Post copy/.test(copy.textContent || "")) {
+            throw new Error("the post-copy section does not name its contents");
           }
+          assertFrozenKit(copy.querySelector('[data-testid="post-kit"]'), "solid History");
           const context = ctx.container.querySelector('[data-testid="history-context"]');
-          if (!context || context.tagName !== "DETAILS") {
-            throw new Error("plan context is not behind a disclosure");
+          if (!context) {
+            throw new Error("plan context section is missing");
           }
-          if (context.open) {
-            throw new Error("plan context starts expanded alongside post copy");
+          if (context.tagName === "DETAILS" || context.querySelector("summary")) {
+            throw new Error("plan context is still behind a disclosure");
           }
-          if (!/Plan context/.test(context.querySelector("summary")?.textContent || "")) {
-            throw new Error("the plan-context disclosure does not name its contents");
+          if (!/Plan context/.test(context.textContent || "")) {
+            throw new Error("the plan-context section does not name its contents");
           }
-          assertFrozenKit(copy.querySelector('[data-testid="post-kit"]'), "disclosed History");
-          // The panels stack in one column, post copy first.
+          if (!context.textContent.includes("Film the dock.")) {
+            throw new Error("plan context hides the demo brief on the first render");
+          }
+          // The sections stack in one column, post copy first.
           if (!(copy.compareDocumentPosition(context) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
             throw new Error("post copy is not stacked above plan context");
           }
-          await clickEl(ctx, context.querySelector("summary"), "open the plan-context disclosure");
-          if (!context.open || !context.textContent.includes("Film the dock.")) {
-            throw new Error("the plan-context disclosure hides the demo brief");
+          // Polish (ADR 0151 addendum): the two sections are related
+          // blocks, so their stack rides the 12px related-blocks gap,
+          // not the 8px list-item gap, and plan context separates its
+          // header from its content with the same hairline post copy
+          // carries — the two sections are structurally identical.
+          const stack = copy.parentElement;
+          if (!stack?.className.includes("gap-3") || stack.className.includes("gap-2")) {
+            throw new Error("the record sections do not ride the related-blocks gap");
           }
-          if (copy.open) {
-            throw new Error("opening plan context left post copy expanded");
-          }
-          await clickEl(ctx, copy.querySelector("summary"), "open the post-copy disclosure");
-          if (!copy.open) {
-            throw new Error("the post-copy disclosure did not reopen");
-          }
-          if (context.open) {
-            throw new Error("reopening post copy left plan context expanded");
+          const contextRule = context.querySelector("dl")?.parentElement;
+          if (!contextRule?.className.includes("border-t")) {
+            throw new Error("plan context lacks the header hairline post copy carries");
           }
           } finally {
             global.__SMOKE_PARAMS = previousParams;
@@ -18728,7 +18790,7 @@ await check(
     } finally { global.__SMOKE_PARAMS = previousParams; }
   });
 
-  await check("History keeps with-copy mobile results behind a disclosure", async (ctx) => {
+  await check("History keeps mobile results behind a disclosure while post copy stands solid", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -18741,8 +18803,8 @@ await check(
         const card = ctx.container.querySelector('#generation-mobile-copy');
         const toggle = card.querySelector('button[aria-controls][aria-expanded="false"]');
         const post = card.querySelector('[data-testid="history-post-copy-mobile-copy"]');
-        if (!toggle || !toggle.textContent.includes('Results & actions') || !post?.open || post.closest('.history-compact-secondary')) {
-          throw new Error('post copy must stay open outside the mobile results disclosure');
+        if (!toggle || !toggle.textContent.includes('Results & actions') || !post || post.tagName === 'DETAILS' || post.closest('.history-compact-secondary')) {
+          throw new Error('post copy must stand solid outside the mobile results disclosure');
         }
         const content = card.querySelector(`#${toggle.getAttribute('aria-controls')}`);
         if (!content?.querySelector('[data-testid="history-feedback-mobile-copy"]') || content.dataset.expanded !== 'false') throw new Error('secondary results must start collapsed on mobile');

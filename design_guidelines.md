@@ -196,11 +196,13 @@ card is `.inset-panel`.
 | Pickable option | its own frame — `rounded-xl border bg-card/70`, bar is `px-4 py-3`, `space-y-2` between them | 16px, its own | `text-sm font-semibold`, sentence case (angle rows) |
 | Field / detail row | label + control | none | 14px semibold label |
 
-**Record disclosures share one shape.** A collapsed section inside a record
-(History post copy, plan context) is a native `<details>`: a `rounded-xl`
-hairline border and a `text-sm` semibold muted `summary` naming its contents —
-the same bar as a Disclosure row, boxed. The record keeps at most one open at a
-time: `open` is bound to record state and `togglePanel` runs on the summary.
+**Record sections stand solid.** Inside a History record, Post copy and Plan
+context are not disclosures (ADR 0151): each is a solid section wearing the
+disclosure's old box — a `rounded-xl` hairline border on `bg-secondary/20`,
+a static `text-sm` semibold muted header naming its contents — with its
+content always rendered in full. There is no summary, no chevron and nothing
+to open; the two stack in one column and their content fills the record
+beside the clip.
 
 **A topic-page subtitle is optional, and 54-60 characters when it appears.**
 The line under the page title is read at a glance, so where it exists it is
@@ -333,8 +335,8 @@ the right (stacked on phones, video beside content from 900px via
 `.history-row-grid`), with 16px gutters. No expand
 step — the video, identity, facts, votes and actions are all visible
 together, so a record can never read as a separate section. A card that has
-a clip to play leads with a full-bleed stage and
-its identity summary beneath the footage: stacked, the clip is a contained
+a clip to play leads with a full-bleed stage in the media column, and its
+record opens with the identity summary: stacked, the clip is a contained
 320px video; side by side the card splits into two columns that
 stand equal height — a capped media column and the record taking the wide
 share, per the proportion and equal-height rules below (ADRs 0143/0149) —
@@ -343,10 +345,10 @@ flush frame described below, never a letterboxed box. A card with
 nothing to play keeps a notice in place of the video, because a blank card
 explains nothing.
 
-The summary beneath the clip holds the app name, status, date, the
+The summary at the head of the record holds the app name, status, date, the
 provenance facts (model, attempt, template and script versions) as chips in
-the same header row, the hook and the results line. The record beside the
-clip leads with the joined finished → posted line and the whole-video
+the same header row, the hook and the results line. Under it the record
+continues with the joined finished → posted line and the whole-video
 verdict, then facts, audience, demo brief and every action. Deep links scroll to the named
 card and, when it still awaits its TikTok link, focus that input. The
 preview and the stage padding are custom properties on `.history-card`
@@ -367,8 +369,9 @@ the finished frame's geometry — flush stage, full-width 9:16 frame
 clip will fill and nothing resizes when it lands; compact cards keep the
 notice in the record instead. The History loading skeleton mirrors the
 finished card the same way: two columns, full-size frame placeholder, and
-placeholder rows for the Download row, the work row, the summary and the
-record — never a lone phone-shaped box. At desktop widths the card's two
+placeholder rows for the Download row, the work row and the record, with the
+summary placeholder at the record's head — never a lone phone-shaped box.
+At desktop widths the card's two
 columns stand equal: the row stretches to its taller side and the record
 column fills that height — but its blocks keep their natural 20px rhythm
 rather than distributing the leftover space between them, so no filler
