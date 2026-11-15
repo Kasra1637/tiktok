@@ -354,3 +354,80 @@ class TestSuggestions:
                 f"expected 502, got {resp.status_code}: {resp.text[:200]}")
         finally:
             state["plan_error"] = None
+
+
+# A plan-written Location can carry an object clause ("...with the phone
+# lying face-down beside the person"): the plan save stores it raw, the
+# strategy build stamps it raw, but _public_project strips the clause
+# from the displayed `location`. ADR 0146: the payload must also carry
+# the saved direction raw (`direction_saved`) so the client's drift gate
+# diffs raw against raw and can agree with the server's diff — diffing
+# the display text instead read as drift forever and the rebuild loop
+# could never clear.
+OBJECT_LOCATION = (
+    "A quiet garden bench, with the phone lying face-down beside the person"
+)
+OBJECT_LOCATION_DISPLAY = "A quiet garden bench"
+
+
+def _project_with_object_location(world, base):
+    """A project whose plan wrote an object-clause Location, strategy built."""
+    client, state = world["client"], world["state"]
+    state["plan"] = _plan(WEAK_HOOK, WEAK_SCRIPT, location=OBJECT_LOCATION)
+    state["plan_error"] = None
+    project = _ok(client.post("/api/studio/projects", json={
+        "brand_profile_id": base["profile_id"],
+        "template_id": base["template_id"],
+        "objective": "demonstrate_feature",
+    }), "POST /api/studio/projects")
+    prid = project["id"]
+    _ok(client.patch(f"/api/studio/projects/{prid}",
+                     json={"content_angle_id": base["angle_id"]}),
+        "PATCH project angle")
+    _ok(client.post(f"/api/studio/projects/{prid}/assets",
+                    json={"asset_id": base["asset_id"]}),
+        "POST attach asset")
+    _ok(client.post(f"/api/studio/projects/{prid}/plan", json={}),
+        "POST plan")
+    _ok(client.post(f"/api/studio/projects/{prid}/ready", json={}),
+        "POST ready")
+    built = _ok(client.post(f"/api/studio/projects/{prid}/strategy", json={}),
+                "POST strategy")
+    return prid, built
+
+
+class TestDirectionSavedPayload:
+    def test_payload_carries_the_raw_direction_the_gate_diffs(
+            self, world, base):
+        from routers.studio import _strategy_direction_changes
+
+        client, server = world["client"], world["server"]
+        prid, built = _project_with_object_location(world, base)
+        snapshot = built["strategy"]["direction_snapshot"]
+        assert snapshot["location"] == OBJECT_LOCATION
+
+        payload = _ok(client.get(f"/api/studio/projects/{prid}"),
+                      "GET project")
+        # The editor's display still strips the object clause (unchanged
+        # behavior) — which is exactly why the display text cannot be
+        # what the drift gate diffs.
+        assert payload["location"] == OBJECT_LOCATION_DISPLAY
+        # The payload also carries the saved direction raw, and it is
+        # exactly what the build stamped: raw against raw, no drift.
+        assert payload["direction_saved"] == snapshot
+
+        # The server's own diff over the raw row agrees: no changes.
+        row = asyncio.run(server._fetch_one(
+            "SELECT * FROM studio_projects WHERE id = ?", (prid,)))
+        strategy = row["strategy"]
+        if isinstance(strategy, str):
+            strategy = json.loads(strategy)
+        assert _strategy_direction_changes(row, strategy) == []
+
+        # And the suggestions endpoint — that same server diff over
+        # HTTP — agrees, so neither side asks for a rebuild.
+        body = _ok(client.post(
+            f"/api/studio/projects/{prid}/strategy-suggestions", json={}),
+            "POST strategy-suggestions")
+        assert body["direction_changed"] is False
+        assert body["changed_fields"] == []

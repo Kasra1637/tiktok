@@ -243,6 +243,15 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # the schema, but no project response carries the verdict fields anymore.
     out.pop("safety_report", None)
     out.pop("safety_summary", None)
+    # The saved direction, raw (ADR 0146). The studio's drift gate diffs the
+    # strategy's direction_snapshot against the direction the project was
+    # saved with — but the display transforms below rewrite `location`
+    # (object clauses stripped, fragments repaired), so the gate must never
+    # diff the display text: a plan-written Location carrying an object
+    # clause read as drift forever and the rebuild loop could never clear.
+    # Captured from the row before any rewrite, exactly as the server's own
+    # diff (_strategy_direction_changes) sees it.
+    out["direction_saved"] = _direction_snapshot(row)
     out["beat_timeline"] = out.get("beat_timeline") or []
     out["overlays"] = out.get("overlays") or []
     out["assets"] = out.get("assets") or []

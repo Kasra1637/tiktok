@@ -67,3 +67,58 @@ describe("directionDrifted", () => {
     ).toBe(true);
   });
 });
+
+describe("directionDrifted with direction_saved (ADR 0146)", () => {
+  // A plan-written Location can carry an object clause the editor's
+  // display strips: the saved value and the strategy's stamp both hold
+  // the raw text, the payload's top-level `location` holds the stripped
+  // display text. The gate answers to the saved value, never the display.
+  const RAW_LOCATION =
+    "A quiet garden bench, with the phone lying face-down beside the person";
+  const RAW = { ...SNAPSHOT, location: RAW_LOCATION };
+
+  test("a display-stripped location is not drift when the saved value matches the stamp", () => {
+    expect(
+      directionDrifted({
+        strategy: { direction_snapshot: { ...RAW } },
+        ...RAW,
+        location: "A quiet garden bench",
+        direction_saved: { ...RAW },
+      })
+    ).toBe(false);
+  });
+
+  test("a saved location that moved is drift even when the display text matches the stamp", () => {
+    expect(
+      directionDrifted({
+        strategy: { direction_snapshot: { ...SNAPSHOT } },
+        ...SNAPSHOT,
+        direction_saved: { ...SNAPSHOT, location: "A bus stop bench" },
+      })
+    ).toBe(true);
+  });
+
+  test("a saved field that moved is drift even when its display text matches the stamp", () => {
+    expect(
+      directionDrifted({
+        strategy: { direction_snapshot: { ...RAW } },
+        ...RAW,
+        direction_saved: { ...RAW, visual_direction: "Wide, 9:16, street." },
+      })
+    ).toBe(true);
+  });
+
+  test("an empty saved location is not drift just because the display filled it from the scene", () => {
+    expect(
+      directionDrifted({
+        strategy: {
+          direction_snapshot: { ...SNAPSHOT, location: "" },
+          scene: { location: "A quiet garden bench" },
+        },
+        ...SNAPSHOT,
+        location: "A quiet garden bench",
+        direction_saved: { ...SNAPSHOT, location: "" },
+      })
+    ).toBe(false);
+  });
+});
