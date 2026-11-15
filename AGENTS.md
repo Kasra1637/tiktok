@@ -119,6 +119,13 @@ One render path, single-pass video generation via OpenRouter.
   `backend/live_sample.py`, `backend/mp4_samples.py`, and the Media
   offload (`backend/pipeline.py`, `backend/posters.py`,
   `backend/modal_worker.py`). `_submit_generation` stays the sole submit.
+- `frontend/src/pages/Landing.jsx` — the public marketing page. The
+  "Everything between idea and posted" grid carries SIX feature cards
+  (ADR 0156) — facts, aim, plan, render, demo, results; the templates
+  and craft-grade beats fold into the plan card, whose description
+  carries all three. Card descriptions are uniformly 160 chars,
+  smoke-pinned with the six exact titles; titles are short and no
+  longer share one length.
 - Voice: `frontend/src/lib/listen.js` + `ListenDock` (mounted by `AppShell`) —
   browser `speechSynthesis` only (no text leaves the device), text built from
   the data model, never the DOM. See ADR 0088.
@@ -201,7 +208,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and fifty-five decisions (0001–0155) now
+Read `docs/adr/README.md` first. One hundred and fifty-six decisions (0001–0156) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

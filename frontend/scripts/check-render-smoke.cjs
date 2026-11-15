@@ -9444,18 +9444,31 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (questions.length !== 5 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
   });
 
-  // Kasra's rule for the What you get grid: every card matches the anchor
-  // card ("Claims checked before they cost you") — titles 35 chars,
-  // descriptions 160 — so no card ends with ragged empty space. The lengths
-  // are pinned here so a future copy edit cannot silently drift them apart.
-  await check("Landing feature cards share one title and description length", async (ctx) => {
+  // Kasra's rule for the What you get grid (ADR 0156): exactly six cards —
+  // facts, aim, plan, render, demo, results — with the six titles he picked,
+  // and every description still exactly 160 chars so no card ends with
+  // ragged empty space. The templates and craft-grade beats fold into the
+  // plan card; their old standalone titles must never come back. The titles
+  // and lengths are pinned here so a future copy edit cannot silently drift.
+  await check("Landing feature cards are the six Kasra picked, descriptions uniform", async (ctx) => {
     await mount(Landing)(ctx);
     const headings = [...ctx.container.querySelectorAll('[data-testid="landing-features"] h3')];
-    if (headings.length !== 8) throw new Error("expected eight feature cards");
+    if (headings.length !== 6) throw new Error("expected six feature cards");
+    const expectedTitles = [
+      "Facts you approve",
+      "One clear outcome",
+      "Your voice, one script",
+      "Never filmed",
+      "Demo, finished",
+      "Results that teach",
+    ];
+    const titles = headings.map((h) => h.textContent);
+    if (JSON.stringify(titles) !== JSON.stringify(expectedTitles)) {
+      throw new Error(`feature titles drifted: ${JSON.stringify(titles)}`);
+    }
     for (const h of headings) {
       const title = h.textContent;
       const description = h.parentElement.querySelector("p")?.textContent ?? "";
-      if (title.length !== 35) throw new Error(`feature title is ${title.length} chars, not 35: ${title}`);
       if (description.length !== 160) throw new Error(`feature description under "${title}" is ${description.length} chars, not 160`);
     }
   });

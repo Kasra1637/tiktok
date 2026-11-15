@@ -9,7 +9,7 @@ import {
 } from "../components/auth/AuthControls";
 import {
   Sparkles, Clapperboard, Film, Target,
-  FileText, X, Check, Briefcase, LayoutTemplate, ShieldCheck, Video, Gauge,
+  FileText, X, Check, Briefcase, ShieldCheck, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -17,49 +17,37 @@ import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../comp
 const FEATURES = [
   {
     icon: Briefcase,
-    title: "Your facts first, every single time",
+    title: "Facts you approve",
     description:
       "Your website and store listing become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product itself.",
   },
   {
     icon: Target,
-    title: "Every video has one clear job to do",
+    title: "One clear outcome",
     description:
       "A required audience angle and video goal you set steer the templates and the script, so each post aims at one viewer and one outcome — not everyone and nothing.",
   },
   {
-    icon: LayoutTemplate,
-    title: "The opening built to earn the watch",
-    description:
-      "Templates are ranked by fit to your angle and your goal, with reasons and caveats up front. Pick the opening built to hold your first three seconds, every time.",
-  },
-  {
     icon: FileText,
-    title: "A script that sounds just like you.",
+    title: "Your voice, one script",
     description:
-      "Review the free script plan: a hook and story in plain words — a real person talking to a phone, never ad copy. Edit and save every line before the paid render.",
+      "Your facts become a hook and script in your own voice, the opening ranked to earn the watch, graded on craft before you pay — no grade ever blocks your renders.",
   },
   {
     icon: Clapperboard,
-    title: "One photo, and zero shoot days ever",
+    title: "Never filmed",
     description:
       "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — edit and render again.",
   },
   {
-    icon: Gauge,
-    title: "A craft grade before you pay a cent",
-    description:
-      "Every plan is graded on craft before you pay: the score names the weakest line and the next rewrite to try. It advises only — no grade ever blocks your renders.",
-  },
-  {
     icon: Film,
-    title: "Your demo, finished like your posts",
+    title: "Demo, finished",
     description:
       "Bring your real footage to Demo + CTA: phone mockups, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one TikTok MP4.",
   },
   {
     icon: Video,
-    title: "Results that teach your next video.",
+    title: "Results that teach",
     description:
       "Post it, paste the link and the numbers — views, 3-second retention, average watch, saves, shares. After three posted clips, the lessons steer your next videos.",
   },
@@ -582,7 +570,7 @@ export default function Landing() {
           lede="Not a video generator with a text box. A working studio that remembers your app, your choices, and what your audience actually watched."
         />
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
             <div
               key={f.title}
