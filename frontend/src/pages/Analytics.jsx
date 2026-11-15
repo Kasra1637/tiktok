@@ -229,9 +229,12 @@ export default function Analytics() {
               (audit 2026-11-14, finding 6): these cards used to stack
               full-width in one long ledger. The per-clip ledger inside
               Clip results and the weekly chart below keep the full width —
-              they are the wide reads. */}
+              they are the wide reads. The pair stretches to one height
+              (ADR 0159), the rule the History cards follow: Renders no
+              longer ends early over dead space while Clip results runs
+              long beside it. */}
           {renders?.length > 0 && (
-            <div className="grid items-start gap-6 lg:grid-cols-2">
+            <div className="grid items-stretch gap-6 lg:grid-cols-2">
               <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} verdictSummary={verdictSummary} />
               {renders !== null && renders.length > 0 && (
                 <RenderFunnel generations={renders} profileId={selectedId} />
@@ -433,12 +436,26 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
           {clips.length === 0 ? (
             <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[color:var(--hairline)] bg-secondary/10">
-              <table className="w-full text-left text-sm">
+            <div className="overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/10">
+              {/* Fixed layout under a column template (ADR 0159): the
+                  table is exactly its card's width, every column visible,
+                  and cells wrap instead of pushing the card into sideways
+                  scrolling. The shares are the reading order's weight —
+                  the clip's name widest, then views, then the verdict. */}
+              <table className="w-full table-fixed text-left text-sm">
                 <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
+                <colgroup>
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "24%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "19%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "15%" }} />
+                  <col style={{ width: "13%" }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-secondary/20 text-xs text-muted-foreground">
-                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your verdict", "Next take"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}
+                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your verdict", "Next take"].map((label) => <th key={label} scope="col" className="px-2 py-2 font-semibold">{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -448,19 +465,19 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
                     const winner = isWinnerRow(row);
                     return (
                       <tr key={row.id} data-testid={`result-${row.id}`} className="border-t border-[color:var(--hairline)] align-top transition-colors first:border-t-0 hover:bg-secondary/20">
-                        <td data-testid={`result-rank-${row.id}`} className="px-3 py-3 text-xs text-muted-foreground">
+                        <td data-testid={`result-rank-${row.id}`} className="px-2 py-3 text-xs text-muted-foreground">
                           <span className="inline-flex items-center gap-1.5">
                             <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--hairline-strong)] bg-secondary/40 font-mono tabular-nums">{index + 1}</span>
                             {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />}
                           </span>
                         </td>
-                        <th scope="row" className="min-w-[180px] px-3 py-3 font-normal">
+                        <th scope="row" className="px-2 py-3 font-normal">
                           <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
                             {clipName(row)}
                           </Link>
                           <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
                         </th>
-                        <td className="whitespace-nowrap px-3 py-3 text-xs">
+                        <td className="px-2 py-3 text-xs">
                           {row.tiktok_url ? (
                             <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[color:var(--brand-indigo)] hover:underline">
                               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
@@ -473,15 +490,15 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-xs">
+                        <td className="px-2 py-3 text-xs">
                           {row.tiktok_views == null ? (
                             "Not recorded"
                           ) : (
-                            <span className="flex items-center gap-2">
-                              <span className="h-2 w-24 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
+                            <span className="flex flex-col items-start gap-1.5">
+                              <span className="h-2 w-16 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
                                 <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]" style={{ width: barWidth(row.tiktok_views) }} />
                               </span>
-                              <span className="whitespace-nowrap font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
+                              <span className="font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
                             </span>
                           )}
                           {snapshotFacts(row.performance_snapshot).length > 0 && (
@@ -490,15 +507,15 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
                             </span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-xs" data-testid={`result-craft-${row.id}`}>
+                        <td className="px-2 py-3 text-xs" data-testid={`result-craft-${row.id}`}>
                           {row.quality_report ? (
                             <span className="font-mono tabular-nums">{row.quality_report.grade} · {row.quality_report.total}</span>
                           ) : (
                             <span className="text-muted-foreground">Not scored</span>
                           )}
                         </td>
-                        <td data-testid={`result-vote-${row.id}`} className="whitespace-nowrap px-3 py-3 text-xs">
-                          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${vote > 0 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : "border-[color:var(--hairline)] bg-secondary/20 text-muted-foreground"}`}>
+                        <td data-testid={`result-vote-${row.id}`} className="px-2 py-3 text-xs">
+                          <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 ${vote > 0 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : "border-[color:var(--hairline)] bg-secondary/20 text-muted-foreground"}`}>
                             {vote > 0 ? (
                               <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
                             ) : vote < 0 ? (
@@ -509,8 +526,8 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
                             {vote > 0 ? "Worked" : vote < 0 ? "Didn't work" : "Not rated"}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs">
-                          <Link to={next.to} className="whitespace-nowrap text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
+                        <td className="px-2 py-3 text-xs">
+                          <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
                         </td>
                       </tr>
                     );
@@ -559,7 +576,10 @@ function StatusRenderRow({ row, historyHref }) {
 }
 
 // How many renders a status shows before pointing at History for the rest.
-const STATUS_LIST_LIMIT = 6;
+// Twenty since ADR 0159: the funnel card stands as tall as Clip results
+// beside it, and the honest fill for that height is the renders themselves,
+// not a six-row list and a pointer at the rest.
+const STATUS_LIST_LIMIT = 20;
 
 /**
  * The render funnel: every generation for this app, counted by status and
@@ -668,9 +688,13 @@ function RenderFunnel({ generations = [], profileId = "" }) {
  * Renders per week: clip counts in Monday-start buckets, newest first.
  *
  * Bars are scaled to the busiest week shown, so a quiet week reads quiet
- * without a single render ever disappearing into a zero axis. Each bar sits
- * in a hairline well, the same inset the app uses for a recessed surface: the
- * column height is the data, the well is the scale it is read against.
+ * without a single render ever disappearing into a zero axis. Each bar is
+ * one clean column in a borderless recessed track (ADR 0159): the bar used
+ * to sit in a hairline well whose outline doubled the bar's own edge, so
+ * the chart read as four near-identical boxes with a line near the bottom.
+ * Now the column height is the data — the count's honest share of the
+ * busiest week, no floor rounding a small week up — the track is only the
+ * scale it is read against, and a 3px minimum keeps a lone render visible.
  */
 function RenderActivity({ generations = [] }) {
   const buckets = weekBuckets(generations);
@@ -693,13 +717,13 @@ function RenderActivity({ generations = [] }) {
         >
           <FactChip className={b.count === max ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : undefined}>{b.count}</FactChip>
           <span
-            className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/25 transition-colors group-hover:border-[color:var(--hairline-strong)]"
+            className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl bg-secondary/25"
             aria-hidden="true"
           >
               <span
                 data-testid="activity-bar"
-                className="block w-full rounded-t-md bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
-                style={{ height: `${max ? Math.max(6, Math.round((b.count / max) * 100)) : 0}%` }}
+                className="block min-h-[3px] w-full rounded-t-md bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
+                style={{ height: `${max ? Math.round((b.count / max) * 100) : 0}%` }}
               />
             </span>
             <span className="w-full truncate text-center text-xs text-muted-foreground">{b.label}</span>

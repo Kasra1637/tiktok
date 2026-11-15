@@ -97,6 +97,13 @@ One render path, single-pass video generation via OpenRouter.
   the feedback block rides in the media column under the Work row,
   so a standard card renders no Results & actions disclosure;
   compact cards keep their feedback in the record (ADR 0153).
+  A view toggle switches the list between the full cards and
+  compact scan rows (ADR 0159): a scan row carries the hook,
+  status and the verdict in the row, mounts the full card when
+  opened, and the choice persists via `lib/historyView.js`. In
+  Post copy and Plan context the field labels stack above their
+  values (`.post-kit-row-stacked`); Plan context carries no listen
+  control, and the post kit carries no written-for line.
   `components/PostKitSection.jsx` + `backend/routers/post_kit.py` own post
   kits; routers receive DB functions from `server` and never import it back.
 - `backend/feedback.py` — the whole-video verdict bundles and their
@@ -175,8 +182,10 @@ One render path, single-pass video generation via OpenRouter.
   accepts — never auto-saved, never hand-edited in place — and the post kit
   ships the accepted cover verbatim.
 - Settled layout decisions are not open questions (ADR 0141): Review stays
-  one column at every width, Analytics stays a calm ledger, and the wizard
-  is paged at desktop widths, stacked below. Render progress is narrated in
+  one column at every width, Analytics stays a calm ledger (its Clip
+  results and Renders cards stand at one height, its results table fits
+  its card, and its week bars are clean proportional columns, ADR 0159),
+  and the wizard is paged at desktop widths, stacked below. Render progress is narrated in
   words with an elapsed clock — never a staged percentage (ADR 0140).
 - Feedback learning is one verdict on the whole video (ADR 0124): a single
   thumbs up or down per finished video on its History card, with the whole
@@ -208,7 +217,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and fifty-eight decisions (0001–0158) now
+Read `docs/adr/README.md` first. One hundred and fifty-nine decisions (0001–0159) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

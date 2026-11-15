@@ -98,9 +98,6 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
           />
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Written for this clip when it finished, from its approved hook.
-      </p>
       {regenError && (
         <p className="text-sm text-destructive-text" role="alert" data-testid="postkit-regenerate-error">
           {regenError}
@@ -109,14 +106,16 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
 
       {/* One panel, three labelled rows divided by hairlines: the copy reads as
           a single spec sheet instead of three stacked boxes that each carried
-          their own redundant Copy button. */}
+          their own redundant Copy button. Each label stands above its value
+          (ADR 0159), and the panel carries no explainer line — the copy
+          stands on its own. */}
       <dl
         className="inset-panel divide-y divide-[color:var(--hairline)]"
         data-testid="post-kit-fields"
       >
         {caption && (
-          <div className="post-kit-row">
-            <dt className="eyebrow sm:pt-1">Caption</dt>
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Caption</dt>
             <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
               {String(caption)}
             </dd>
@@ -124,8 +123,8 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         )}
 
         {hashtags.length > 0 && (
-          <div className="post-kit-row">
-            <dt className="eyebrow sm:pt-0.5">Hashtags</dt>
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Hashtags</dt>
             <dd className="min-w-0">
               <FactList>
                 {hashtags.map((tag, i) => (
@@ -137,8 +136,8 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
         )}
 
         {coverText && (
-          <div className="post-kit-row">
-            <dt className="eyebrow sm:pt-1.5">Cover text</dt>
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Cover text</dt>
             <dd className="min-w-0">
               <span className="post-kit-cover">&ldquo;{coverText}&rdquo;</span>
             </dd>

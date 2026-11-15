@@ -462,6 +462,14 @@ body {
     .post-kit-row:last-of-type {
         padding-bottom: 0;
     }
+    /* Stacked rows (ADR 0159): the label stands on its own line above
+       the value at every width, so the section scans top-down.
+       History's Post copy and Plan context rows carry this variant;
+       the shared two-column row above stays for the denser spec
+       sheets (the picked angle details). */
+    .post-kit-row-stacked {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 /* The per-line rewrite group in Review: each script sentence with its

@@ -10945,6 +10945,126 @@ async function runAnalyticsChecks() {
     }
   });
 
+  // Equal-height top pair (ADR 0159): Clip results and Renders
+  // stretch to one height in their shared grid — the rule the
+  // History cards already follow — instead of Renders ending early
+  // over dead space. The Renders card fills its height with real
+  // content: its open status shows its renders rather than stopping
+  // at six and pointing at History for the rest of a short list.
+  await check("Analytics stands Clip results and Renders at one height", async (ctx) => {
+    const generations = Array.from({ length: 17 }, (_, i) => ({
+      id: `pair-${i + 1}`,
+      status: "completed",
+      hook_line: `Clip ${i + 1}`,
+      created_at: dayAgo,
+    }));
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({ generations }),
+    });
+    const results = ctx.container.querySelector('[data-testid="analytics-results"]');
+    const funnel = ctx.container.querySelector('[data-testid="analytics-funnel"]');
+    if (!results || !funnel) throw new Error("the Analytics top pair is not on the page");
+    const pair = results.parentElement;
+    if (!pair || pair !== funnel.parentElement) {
+      throw new Error("the two cards do not share one grid");
+    }
+    if (pair.className.includes("items-start")) {
+      throw new Error("the pair still starts each card at its own height");
+    }
+    if (!pair.className.includes("items-stretch")) {
+      throw new Error("the pair does not stretch its cards to one height");
+    }
+    if (!funnel.textContent.includes("Clip 17")) {
+      throw new Error("the open Completed group stops before its last render");
+    }
+    if (funnel.textContent.includes("more in History")) {
+      throw new Error("a seventeen-render group still hides renders behind a History pointer");
+    }
+  });
+
+  // The Clip results table fits its card (ADR 0159): a fixed layout
+  // under a seven-column template, so every column is visible at
+  // desktop widths and the card never scrolls sideways.
+  await check("the Clip results table fits its card without sideways scrolling", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        {
+          id: "fit-1",
+          status: "completed",
+          hook_line: "A hook long enough to wrap inside its column rather than push the table wide",
+          tiktok_views: 42,
+          tiktok_url: "https://www.tiktok.com/@founder/video/1",
+          video_verdict: "up",
+        },
+      ] }),
+      getStudioProjects: async () => ({ projects: [] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    const scroller = [...card.querySelectorAll("div")].find((el) =>
+      (el.className || "").includes("overflow-x-auto")
+    );
+    if (scroller) throw new Error("the results table still scrolls sideways inside its card");
+    const table = card.querySelector("table");
+    if (!table) throw new Error("the results table is missing");
+    if (!table.className.includes("table-fixed")) {
+      throw new Error("the results table is not fixed-layout, so its columns size the card");
+    }
+    const cols = table.querySelectorAll("colgroup col");
+    if (cols.length !== 7) {
+      throw new Error(`the results table sizes ${cols.length} columns, not its seven`);
+    }
+    if (table.querySelectorAll("thead th").length !== 7) {
+      throw new Error("a results column is missing from the header");
+    }
+  });
+
+  // Renders per week, polished (ADR 0159): one clean bar per week —
+  // no bordered well doubling the bar's outline — with heights in
+  // honest proportion to the counts, and the same-set note kept.
+  await check("renders per week bars are clean and honestly proportional", async (ctx) => {
+    const thisMondayMidnight = new Date();
+    thisMondayMidnight.setDate(
+      thisMondayMidnight.getDate() - ((thisMondayMidnight.getDay() + 6) % 7)
+    );
+    thisMondayMidnight.setHours(0, 0, 0, 0);
+    const at = (days, n, tag) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `${tag}-${i}`,
+        status: "completed",
+        created_at: new Date(thisMondayMidnight.getTime() + days * 86400000 + 3600000).toISOString(),
+      }));
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({
+        generations: [...at(0, 7, "w0"), ...at(-6, 2, "w1"), ...at(-13, 5, "w2"), ...at(-20, 3, "w3")],
+      }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
+    if (!card) throw new Error("the weekly activity card is not on the page");
+    const bars = [...card.querySelectorAll('[data-testid="activity-bar"]')];
+    if (bars.length !== 4) throw new Error(`expected 4 weekly bars, found ${bars.length}`);
+    const expected = ["100%", "29%", "71%", "43%"];
+    bars.forEach((bar, i) => {
+      if (bar.style.height !== expected[i]) {
+        throw new Error(`week ${i + 1} bar height is ${bar.style.height}, not the honest ${expected[i]}`);
+      }
+      if ((bar.parentElement.className || "").includes("border")) {
+        throw new Error("the week bar still sits in a bordered well, doubling its outline");
+      }
+    });
+    if (!card.textContent.includes("Same 17 renders as above")) {
+      throw new Error("the weekly card lost its same-set note");
+    }
+  });
+
   await check("clip views carry their recorded date, never a bare count", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
@@ -18686,6 +18806,190 @@ await check(
     }
   });
 
+  // Labels above values (ADR 0159): in Post copy and Plan context
+  // the field label stands on its own line above its value, so both
+  // sections scan top-down instead of left-to-right. The stacked
+  // rows carry their own class, and index.css keeps that class
+  // single-column where the shared row goes two-column.
+  await check("History stacks the section labels above their values", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "stack-1",
+          post_kit: POST_KIT,
+          audience: "Night scrollers",
+          location: "A quiet pier",
+          demo_brief: "Film the dock.",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const sections = [
+          [ctx.container.querySelector('[data-testid="history-post-copy-stack-1"]'), "post copy"],
+          [ctx.container.querySelector('[data-testid="history-context"]'), "plan context"],
+        ];
+        for (const [section, name] of sections) {
+          if (!section) throw new Error(`the ${name} section is missing`);
+          const rows = [...section.querySelectorAll(".post-kit-row")];
+          if (!rows.length) throw new Error(`the ${name} section has no labelled rows`);
+          for (const row of rows) {
+            if (!row.classList.contains("post-kit-row-stacked")) {
+              throw new Error(`a ${name} row does not carry the stacked label layout`);
+            }
+            const label = row.querySelector("dt");
+            const value = row.querySelector("dd");
+            if (
+              !label || !value ||
+              !(label.compareDocumentPosition(value) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)
+            ) {
+              throw new Error(`a ${name} label does not stand above its value`);
+            }
+          }
+        }
+        const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+        if (!/\.post-kit-row\s*\{\s*grid-template-columns:\s*6\.5rem minmax\(0, 1fr\);[\s\S]{0,900}?\.post-kit-row-stacked\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/.test(css)) {
+          throw new Error("index.css does not keep the stacked rows single-column at desktop widths");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // The Plan context listen control is removed (ADR 0159): the
+  // speaker at the context box's top right is gone, while read-aloud
+  // itself stays where it belongs — the create page and the
+  // Analytics Clip results card keep theirs.
+  await check("History plan context carries no listen control", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "quiet-1",
+          audience: "Night scrollers",
+          location: "A quiet pier",
+          demo_brief: "Film the dock.",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const context = ctx.container.querySelector('[data-testid="history-context"]');
+        if (!context) throw new Error("plan context is missing");
+        if (context.querySelector('[data-testid^="listen-"]')) {
+          throw new Error("plan context still carries a listen control");
+        }
+        const src = fs.readFileSync(path.join(SRC, "pages/GenerationHistory.jsx"), "utf8");
+        if (src.includes("listen-plan-context")) {
+          throw new Error("the plan-context listen control is still wired in GenerationHistory");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // The written-for line is removed (ADR 0159): Post copy no longer
+  // explains itself with "Written for this clip when it finished,
+  // from its approved hook." — the kit stands on its own.
+  await check("History post copy drops the written-for line", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-2", post_kit: POST_KIT }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const copy = ctx.container.querySelector('[data-testid="history-post-copy-kit-2"]');
+        if (!copy) throw new Error("post copy section is missing");
+        if (copy.textContent.includes("Written for this clip")) {
+          throw new Error("post copy still carries the written-for line");
+        }
+        assertFrozenKit(copy.querySelector('[data-testid="post-kit"]'), "History without the line");
+        const src = fs.readFileSync(path.join(SRC, "components/PostKitSection.jsx"), "utf8");
+        if (src.includes("Written for this clip when it finished")) {
+          throw new Error("the written-for line is still in PostKitSection");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // Compact scan view (ADR 0159): History can trade the full cards
+  // for slim scan rows — hook, status and the verdict in the row,
+  // the video and the full record one tap away — and the choice is
+  // remembered across visits. Full cards stay the default.
+  await check("History offers a compact scan view beside the full cards", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      dom.window.localStorage.removeItem("vocolens.historyView");
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "scan-1",
+          hook_line: "A pier at dawn",
+          post_kit: POST_KIT,
+          audience: "Night scrollers",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const toggle = ctx.container.querySelector('[data-testid="history-view-toggle"]');
+        if (!toggle) throw new Error("History has no view toggle");
+        if (!ctx.container.querySelector('[data-testid="history-card"]')) {
+          throw new Error("History does not open on the full cards");
+        }
+        if (ctx.container.querySelector('[data-testid="history-scan-row-scan-1"]')) {
+          throw new Error("a scan row renders before the founder asks for the compact view");
+        }
+        await clickEl(ctx, toggle.querySelector('[data-testid="history-view-compact"]'), "switch to the compact view");
+        const row = ctx.container.querySelector('[data-testid="history-scan-row-scan-1"]');
+        if (!row) throw new Error("the compact view shows no scan row");
+        if (!row.textContent.includes("A pier at dawn")) {
+          throw new Error("the scan row lost the hook line");
+        }
+        if (!row.textContent.includes("Completed")) {
+          throw new Error("the scan row lost the render's status");
+        }
+        if (!row.querySelector('[data-testid="history-verdict-scan-1-up"]')) {
+          throw new Error("the scan row buries the verdict");
+        }
+        if (row.querySelector("video")) {
+          throw new Error("the scan row mounts the video before it is opened");
+        }
+        if (ctx.container.querySelector('[data-testid="history-card"]')) {
+          throw new Error("the full card still renders in the compact view");
+        }
+        if (dom.window.localStorage.getItem("vocolens.historyView") !== "compact") {
+          throw new Error("the compact choice is not remembered across visits");
+        }
+        await clickEl(ctx, row.querySelector('[data-testid="history-scan-toggle-scan-1"]'), "open the scan row");
+        const card = ctx.container.querySelector('[data-testid="history-card"]');
+        if (!card || !card.querySelector("video")) {
+          throw new Error("opening a scan row does not bring the full card with its video");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-view-full"]'), "switch back to full cards");
+        if (dom.window.localStorage.getItem("vocolens.historyView") !== "full") {
+          throw new Error("the full choice is not remembered across visits");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      dom.window.localStorage.removeItem("vocolens.historyView");
+    }
+  });
+
   // Renders carrying post copy or plan context stack under one heading and
   // renders carrying neither under another, and the two sides never share
   // the screen: the copy filter shows one side at a time, leading with the
@@ -19498,9 +19802,11 @@ await check(
   // Analytics' summary/verdict band sits two-across at lg (the clip ledger
   // and the weekly chart keep the full width), and Scene details' spec
   // rows form a two-column definition grid at lg while prose stays stacked.
+  // The band's grid stretches since ADR 0159 — the pair stands at one
+  // height — so the pattern below pins items-stretch, not items-start.
   await check("Analytics and Scene details use the desktop width", async () => {
     const analytics = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
-    if (!/grid items-start gap-6 lg:grid-cols-2[\s\S]{0,300}<ClipResults/.test(analytics)) {
+    if (!/grid items-stretch gap-6 lg:grid-cols-2[\s\S]{0,300}<ClipResults/.test(analytics)) {
       throw new Error("the Analytics summary/verdict band is not gridded two-across at lg");
     }
     const panel = fs.readFileSync(path.join(SRC, "components", "HookContinuityPanel.jsx"), "utf8");

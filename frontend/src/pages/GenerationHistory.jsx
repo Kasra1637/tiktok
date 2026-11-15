@@ -21,11 +21,11 @@ import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip } from "../components/FactChip";
 import { PostKitSection } from "../components/PostKitSection";
-import { ListenButton } from "../components/ListenButton";
 import { HistoryFeedback } from "../components/HistoryFeedback";
 import { VideoVerdict } from "../components/VideoVerdict";
 import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
+import { readHistoryView, rememberHistoryView } from "../lib/historyView";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
@@ -814,34 +814,28 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                           two solid sections are structurally identical:
                           header, rule, content (ADR 0151 addendum). */}
                       <div className="border-t border-[color:var(--hairline)]">
-                      <div className="mt-2 flex items-center justify-end">
-                        <ListenButton
-                          id={`plan-context-${row.id}`}
-                          label="Plan context"
-                          testId={`listen-plan-context-${row.id}`}
-                          getBlocks={() => [
-                            { label: "Audience", values: [row.audience] },
-                            { label: "Location", values: [row.location] },
-                            { label: "Your demo brief", values: [row.demo_brief] },
-                          ]}
-                        />
-                      </div>
+                      {/* No listen control in this box (ADR 0159): the
+                          speaker that sat at its top right is removed —
+                          read-aloud lives on the create page and the
+                          Analytics card, not inside Plan context. The
+                          fields stack, label above value, exactly as
+                          Post copy's do. */}
                       <dl className="inset-panel mb-3 mt-3 divide-y divide-[color:var(--hairline)]">
                     {row.audience && (
-                      <div className="post-kit-row">
-                        <dt className="eyebrow sm:pt-1">Audience</dt>
+                      <div className="post-kit-row post-kit-row-stacked">
+                        <dt className="eyebrow">Audience</dt>
                         <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.audience}</dd>
                       </div>
                     )}
                     {row.location && (
-                      <div className="post-kit-row" data-testid={`history-location-${row.id}`}>
-                        <dt className="eyebrow sm:pt-1">Location</dt>
+                      <div className="post-kit-row post-kit-row-stacked" data-testid={`history-location-${row.id}`}>
+                        <dt className="eyebrow">Location</dt>
                         <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.location}</dd>
                       </div>
                     )}
                     {row.demo_brief && (
-                      <div className="post-kit-row">
-                        <dt className="eyebrow sm:pt-1">Your demo brief</dt>
+                      <div className="post-kit-row post-kit-row-stacked">
+                        <dt className="eyebrow">Your demo brief</dt>
                         <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.demo_brief}</dd>
                       </div>
                     )}
@@ -1002,6 +996,71 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   );
 });
 
+/**
+ * One render as a scan row (ADR 0159): the compact view's unit.
+ *
+ * The full card is a reading surface; a page of fifty is not. The scan
+ * row carries what triage needs — the hook that names the render, its
+ * status and date, its results line, and the one verdict, which stays
+ * in the row because it is the app's steering signal and burying it
+ * behind the expansion would bury the loop with it. The video and the
+ * whole record are one tap away: opening the row mounts the full card
+ * under its face, with every control the card owns, and collapsing
+ * unmounts it again, so a page of scan rows stays light no matter how
+ * long History gets. The row carries the card's anchor while it is
+ * collapsed, so a deep link lands on the row it named either way.
+ */
+const HistoryScanRow = memo(function HistoryScanRow(props) {
+  const { row, deepLinked = false } = props;
+  const [expanded, setExpanded] = useState(Boolean(deepLinked));
+  useEffect(() => {
+    if (deepLinked) setExpanded(true);
+  }, [deepLinked]);
+  const title = row.hook_line
+    ? sentenceCase(row.hook_line)
+    : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`;
+  const judgeable = row.status === "completed" || row.status === "archived";
+  return (
+    <div
+      className="history-scan-row space-y-3"
+      data-testid={`history-scan-row-${row.id}`}
+      id={expanded ? undefined : `generation-${row.id}`}
+    >
+      <div className="surface-compact">
+        <button
+          type="button"
+          className="focus-ring flex w-full min-w-0 items-start gap-2.5 text-left"
+          aria-expanded={expanded}
+          data-testid={`history-scan-toggle-${row.id}`}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+          <span className="min-w-0 space-y-1">
+            <span className="block break-words text-base font-semibold">{title}</span>
+            <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <StatusBadge status={row.status} />
+              <span>{formatRenderDate(row.created_at)}</span>
+              <span>{describeResults(row)}</span>
+              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
+            </span>
+          </span>
+        </button>
+        {judgeable && !expanded && (
+          <VideoVerdict
+            generationId={row.id}
+            value={row.video_verdict ?? null}
+            onChanged={(video_verdict) => props.onUpdated?.(row.id, { video_verdict })}
+          />
+        )}
+      </div>
+      {expanded && <GenerationRow {...props} />}
+    </div>
+  );
+});
+
 export default function GenerationHistory() {
   const [rows, setRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -1056,6 +1115,15 @@ export default function GenerationHistory() {
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
   const [sort, setSort] = useState("newest");
+  // The card view (ADR 0159): the full cards, or the compact scan
+  // rows. A stored preference, like the app selection — the founder
+  // who scans a long History in compact rows finds it that way on
+  // the next visit instead of re-choosing it every time.
+  const [viewMode, setViewMode] = useState(readHistoryView);
+  const chooseView = (mode) => {
+    setViewMode(mode);
+    rememberHistoryView(mode);
+  };
   const updateRow = useCallback((id, patch) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
   }, []);
@@ -1179,6 +1247,22 @@ export default function GenerationHistory() {
       pollState={pollStates[row.id] || "active"}
     />
   );
+  // The same row in the compact view: the scan row forwards every
+  // prop to the full card when it opens, so the two views can never
+  // disagree about what a render offers.
+  const renderScanRow = (row) => (
+    <HistoryScanRow
+      key={row.id}
+      row={row}
+      compact={effectiveCopy === "without"}
+      onChanged={load}
+      onUpdated={updateRow}
+      onKitGenerated={() => setFilter("copy", "with")}
+      deepLinked={hashId !== "" && hashId === row.id}
+      draftIds={draftIds}
+      pollState={pollStates[row.id] || "active"}
+    />
+  );
   // Turning the page swaps the rows above the fold, so bring the list back
   // into view instead of stranding the founder at its bottom. The pager
   // buttons survive the turn, so the activating control keeps focus.
@@ -1262,6 +1346,29 @@ export default function GenerationHistory() {
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
             More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
           </button>
+          {/* The view toggle (ADR 0159): the full cards, or the
+              compact scan rows for a long History. Presentation
+              only — the same rows, filters and pager either way. */}
+          <div className="flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
+            <button
+              type="button"
+              data-testid="history-view-full"
+              aria-pressed={viewMode === "full"}
+              onClick={() => chooseView("full")}
+              className={`pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold ${viewMode === "full" ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
+            >
+              Full cards
+            </button>
+            <button
+              type="button"
+              data-testid="history-view-compact"
+              aria-pressed={viewMode === "compact"}
+              onClick={() => chooseView("compact")}
+              className={`pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold ${viewMode === "compact" ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
+            >
+              Compact
+            </button>
+          </div>
         </div>
         <div id="history-secondary-filters" className="history-secondary-filters flex-wrap items-center gap-2" data-expanded={moreFiltersOpen}>
             <AppPicker
@@ -1469,7 +1576,7 @@ export default function GenerationHistory() {
                   Clips with a saved caption, audience, Location, or demo brief attached.
                 </p>
               </div>
-              {pagedWith.map(renderRow)}
+              {pagedWith.map(viewMode === "compact" ? renderScanRow : renderRow)}
             </section>
           )}
           {effectiveCopy === "without" && pagedWithout.length > 0 && (
@@ -1486,9 +1593,15 @@ export default function GenerationHistory() {
                   Clips with no saved copy or context yet.
                 </p>
               </div>
-              <div className="history-compact-grid">
-                {pagedWithout.map(renderRow)}
-              </div>
+              {viewMode === "compact" ? (
+                <div className="space-y-3">
+                  {pagedWithout.map(renderScanRow)}
+                </div>
+              ) : (
+                <div className="history-compact-grid">
+                  {pagedWithout.map(renderRow)}
+                </div>
+              )}
             </section>
           )}
           {rows.length >= limit && limit < 200 && (
