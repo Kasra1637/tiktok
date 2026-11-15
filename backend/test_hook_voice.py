@@ -1070,3 +1070,167 @@ def test_the_plan_loop_rewrites_a_hook_that_speaks_a_feature_noun(monkeypatch):
     assert result["hook_line"] == STRONG_HOOK
     # The correction names the defect, so the rewrite is targeted.
     assert "feature name" in calls[1]["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# ADR 0145, addendum 2: the bake-off's own prompts complete the alignment
+#
+# The Nov 14 alignment swept the rewrite prompt and its gate, the HOOK
+# FORM bullet, the plan's editorial correction and the ai_spoken count —
+# and missed the two prompt strings _hook_bake_off builds itself. They
+# sat below the rules block in the very same prompt and contradicted it:
+# "'I' at most once". The candidates call and the correction now carry
+# the same doctrine as every sibling; the bake-off's mechanics (three
+# candidates, the hard filters, strictly-above-draft) are untouched.
+# The blocks around the bake-off's own text are passed empty below, so
+# what is pinned is the bake-off's wording alone.
+# ---------------------------------------------------------------------------
+
+def _bake_off_kwargs():
+    return dict(
+        system_message="You write hook lines. Return one JSON object only.",
+        draft_hook=STRONG_HOOK,
+        script=STRONG_SCRIPT,
+        hook_budget=60,
+        middle_budget=300,
+        hook_target=60,
+        hook_seconds=3,
+        duration_seconds=15,
+        app_name="Journal",
+        allows_question=False,
+        certified_outcome="",
+        story_context="",
+        rules_block="",
+        hook_form_block="",
+        promise_rule="",
+    )
+
+
+def test_the_bake_off_candidates_prompt_speaks_first_person(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"hooks": [
+            "Friday evenings feel off, and the reason never has a name.",
+            "I feel off on Fridays and I cannot say why.",
+            "Busy mornings, flat afternoons, and no name for either.",
+        ]}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(ai_service._hook_bake_off(**_bake_off_kwargs()))
+    assert calls[0]["context"] == "Creative plan hook candidates"
+    prompt = calls[0]["prompt"]
+    assert "HOOK BAKE-OFF" in prompt
+    assert "not a ration" in prompt
+    assert "'I' at most" not in prompt
+    assert "at most once" not in prompt
+
+
+def test_the_bake_off_correction_prompt_speaks_first_person(monkeypatch):
+    calls = []
+    replies = [
+        # Every candidate breaks a gate (an uninvited question), so the
+        # best of them earns the one bounded correction.
+        {"hooks": ["Why do Friday evenings always feel so off?"]},
+        {"hook_line": "Friday evenings feel off, and the reason never has a name."},
+    ]
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return replies[len(calls) - 1]
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(ai_service._hook_bake_off(**_bake_off_kwargs()))
+    assert len(calls) == 2
+    assert calls[1]["context"] == "Creative plan hook correction"
+    prompt = calls[1]["prompt"]
+    assert "BAKE-OFF CORRECTION" in prompt
+    assert "not a ration" in prompt
+    assert "'I' at most" not in prompt
+    assert "at most once" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# ADR 0145, addendum 3: the plan and strategy schema descriptions finish it
+#
+# Addendum 2 named the last two rationing spots as known leftovers: the
+# hook_line field descriptions in the plan prompt and the strategy
+# prompt — "at most one 'I'" sitting in the schema the model fills in,
+# in the same prompts as the rules block that retired the ration. Both
+# descriptions now carry the same doctrine as every sibling; the
+# character budget on the plan's field and the word budget on the
+# strategy's are untouched. The assertions below isolate each schema
+# description (the rules block elsewhere in the prompt already speaks
+# first person, so a whole-prompt check could not go red).
+# ---------------------------------------------------------------------------
+
+def _schema_description(prompt, anchor):
+    return prompt.split(anchor, 1)[1].split('"', 1)[0]
+
+
+def test_the_plan_schema_hook_line_speaks_first_person(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return _plan(STRONG_HOOK, STRONG_SCRIPT)
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(
+        ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15,
+        )
+    )
+    description = _schema_description(
+        calls[0]["prompt"],
+        '"hook_line": "one complete spoken opening sentence',
+    )
+    assert "characters" in description  # the set-length budget survives
+    assert "first-person voice" in description
+    assert "not a ration" in description
+    assert "at most one 'I'" not in description
+    assert "at most one 'I'" not in calls[0]["prompt"]
+
+
+def test_the_strategy_schema_hook_line_speaks_first_person(monkeypatch):
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "mechanism_beat": "mb",
+            "payoff_beat": "pb", "differentiation_beat": "b",
+            "scene": {"location": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 3,
+                 "goal": "g", "script": "s", "action": "a"},
+                {"index": 1, "role": "middle", "seconds": 12,
+                 "goal": "g", "script": "s", "action": "a"},
+            ],
+        }
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(
+        ai_service.generate_video_strategy(
+            profile={"brand_name": "Journal"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3, total_duration=15,
+        )
+    )
+    description = _schema_description(
+        calls[0]["prompt"],
+        '"hook_line": "the single spoken hook line',
+    )
+    assert "-12 words" in description  # the word budget survives
+    assert "first-person voice" in description
+    assert "not a ration" in description
+    assert "at most one 'I'" not in description
+    assert "at most one 'I'" not in calls[0]["prompt"]

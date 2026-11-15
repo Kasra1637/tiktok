@@ -4144,8 +4144,10 @@ async def _hook_bake_off(
         f"{promise_rule}"
         "HOOK BAKE-OFF: write THREE alternative hook lines for this one story, "
         "each a complete standalone spoken sentence of at most "
-        f"{hook_budget} characters (aim for about {hook_target}), 'I' at most "
-        "once, in the form the HOOK FORM rule picks. Three genuinely different "
+        f"{hook_budget} characters (aim for about {hook_target}), in the "
+        "speaker's own first-person voice \u2014 'I' is the voice of the hook, "
+        "not a ration \u2014 in the form the HOOK FORM rule picks. Three "
+        "genuinely different "
         "openings — for example a confession, a blunt observation, and a cold "
         "open inside the moment — never one hook reworded three ways, and none "
         "a copy of the CURRENT HOOK. Each names the story's one specific "
@@ -4213,8 +4215,9 @@ async def _hook_bake_off(
         f"BAKE-OFF CORRECTION: this candidate hook breaks the spoken-line rules: {candidate}\n"
         "Problems found: " + "; ".join(issues) + "\n"
         "Rewrite ONLY the hook so none of those problems remain: one complete "
-        f"standalone spoken sentence of at most {hook_budget} characters, 'I' at "
-        "most once, same story, same moment, same promise.\n"
+        f"standalone spoken sentence of at most {hook_budget} characters, in "
+        "the speaker's own first-person voice \u2014 'I' is the voice of the "
+        "hook, not a ration \u2014 same story, same moment, same promise.\n"
         'Return ONLY JSON: {"hook_line": "..."}'
     )
     try:
@@ -4487,7 +4490,7 @@ async def generate_creative_plan(
         f"{_hook_form}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters and at most one \'I\'. It lands in the first second: name ONE specific, recognizable feeling or moment from this video\'s own story (physical where possible), with one lived detail or time marker, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: name ONE specific, recognizable feeling or moment from this video\'s own story (physical where possible), with one lived detail or time marker, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
         '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: a few words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
@@ -5391,7 +5394,7 @@ async def generate_video_strategy(
         '  "audience_problem": "the concrete problem this viewer actually has, in their words",\n'
         '  "emotional_triggers": ["2-4 emotions this video should trigger, each tied to this app\'s use case"],\n'
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
-        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation), at most one \'I\', {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
+        f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation), in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
         '  "hook_action": "the opening physical performance: the FIRST beat lands inside the first 1-2 seconds as a clearly visible movement, gesture or position change (they step in or away, turn, stand up, sit down, reach, lift, place or grab something), then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
         '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'

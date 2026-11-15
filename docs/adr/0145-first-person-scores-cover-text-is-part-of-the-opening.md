@@ -120,3 +120,47 @@ and a question the angle does not invite. This addendum supersedes
 one line of the Consequences above: the bake-off's hard filters did
 change in exactly one respect — they no longer reject a candidate for
 speaking in first person.
+
+## Addendum 2 (Nov 15 2026): the bake-off's own prompts complete the alignment
+
+The addendum above swept the places the alignment was known to touch
+and missed two it did not: the prompt strings `_hook_bake_off` builds
+itself. The candidates call still told the model "'I' at most once",
+and the bake-off correction repeated it — both sitting in the same
+prompt as the rules block that had just retired the ration, so the
+contest ADR 0130 runs to pick the strongest hook was being briefed
+against the founder's best shape. A docs sweep in the ADR 0147–0149
+bundle found them; Kasra approved finishing the alignment.
+
+Both strings now carry the rewrite's own wording — the speaker's own
+first-person voice, "'I' is the voice of the hook, not a ration" —
+and nothing else about the bake-off changed: three candidates, the
+same hard filters, the same scoring, the same strictly-above-draft
+shipping rule (ADR 0130 stands untouched). Prompt-content tests pin
+both strings the way the rewrite's prompt is pinned. The same sweep
+also found the ration still standing in two schema descriptions —
+the plan prompt's `hook_line` field and the strategy prompt's
+`hook_line` field; those are recorded here as known leftovers,
+deliberately outside this fix, for a separate decision.
+
+## Addendum 3 (Nov 15 2026): the two schema descriptions finish the alignment
+
+Addendum 2 closed by recording the ration's last two hiding places —
+the `hook_line` field descriptions in the plan prompt's schema and
+the strategy prompt's schema — as known leftovers for a separate
+decision. Kasra's direction was to finish the alignment everywhere,
+and this is that decision: both descriptions now carry the same
+wording as every sibling — the speaker's own first-person voice,
+"'I' is the voice of the hook, not a ration" — in place of "at most
+one 'I'". Nothing else in either description moved: the plan field
+keeps its character budget and the strategy field keeps its word
+budget, word for word.
+
+A final sweep of the generation prompts (`ai_service.py`,
+`ai_spoken.py`, `hook_prompting.py`, `ai_strategy.py`, `ai_text.py`)
+finds no first-person rationing left anywhere; `ai_spoken` states
+the opposite as a deliberate rule. Prompt-content tests pin both
+schema descriptions the way the bake-off's strings are pinned. With
+this, the generation side is fully aligned to this ADR: no prompt,
+gate, or schema counts the hook's 'I's — what remains banned is
+diary framing and label talk, exactly as the decision above set out.
