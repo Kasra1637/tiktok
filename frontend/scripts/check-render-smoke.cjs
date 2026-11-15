@@ -9730,30 +9730,34 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The hero copy is Kasra's chosen pair (Nov 15, ADR 0155): the
-  // headline says exactly what the app does — an App Store link in, a
-  // tailored TikTok out, in minutes — and the sub-headline names what
-  // the founder skips and what the app makes from their facts, its
-  // own "in minutes" dropped because the headline now carries it.
-  // The "One photo in" hero, the "steer the next one" line and the
-  // held "One link, one photo" headline (never shipped) stay off.
+  // The hero copy is Kasra's dictated pair (Nov 15, ADR 0157,
+  // superseding ADR 0155's line): the word TikTok is out — "a
+  // tailored TikTok" does not parse; the product is videos — and
+  // the casing is his: every word lowercase except the T of Turn
+  // and the S of Store. The whole headline carries one treatment,
+  // the animated brand gradient, and the sub-headline is his
+  // earlier line tightened with every meaning beat kept. The "One
+  // photo in" hero, the "steer the next one" line and the held
+  // "One link, one photo" headline (never shipped) stay off.
   await check("the hero headline and sub-headline are Kasra's chosen copy", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your App Store link into a tailored TikTok, in minutes.") {
-      throw new Error("the hero headline is not Kasra's chosen line");
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app Store link into a tailored videos, in minutes.") {
+      throw new Error("the hero headline is not Kasra's dictated line");
+    }
+    if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
+      throw new Error("the hero headline does not carry the one animated gradient treatment");
     }
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page. Your app's facts become a hook, a script, " +
-          "and a finished video, tailored to your app alone, and learning from " +
-          "every video you judge."
+        "No filming, no editing, no blank page. Facts become a hook, script, and " +
+          "finished video for your app alone, learning from every video you judge."
       )
     ) {
-      throw new Error("the hero sub-headline is not Kasra's chosen line");
+      throw new Error("the hero sub-headline is not Kasra's tightened line");
     }
     if (text.includes("One photo in, a posted TikTok out")) {
       throw new Error("the retired hero copy is still on the hero");

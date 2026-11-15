@@ -84,7 +84,7 @@ Use these instead of hand-writing `rgba()`. Suffix = alpha percent.
 Permitted only as section backgrounds and decorative overlays — never on small
 UI elements or text-heavy reading areas, never over 20% of the viewport.
 The sanctioned ones are `.hero-wash`, `.spotlight-indigo`, `.spotlight-coral`,
-`.grid-overlay`, `.noise-overlay`, and the `.text-gradient-*` / `.text-shine`
+`.grid-overlay`, `.noise-overlay`, and the `.text-gradient-*`
 headline treatments.
 
 ---

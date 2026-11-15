@@ -685,13 +685,20 @@ body {
     color: transparent;
 }
 
-/* Soft top-to-bottom fade on very large headlines. */
-.text-shine {
-    background: linear-gradient(180deg, #FFFFFF 0%, hsl(220 20% 78%) 100%);
+/* The hero headline's one treatment (ADR 0157): the brand gradient
+   runs across the whole line — the same design and feel on every
+   word, over a soft indigo shadow that sits under all of it alike.
+   The stops end where they begin and the background is sized 200%,
+   so the position loop in the Animations section is seamless. The
+   motion itself applies only when the visitor allows motion. */
+.text-gradient-headline {
+    background: linear-gradient(100deg, #818CF8 0%, #A5B4FC 30%, #FE2C55 50%, #A5B4FC 70%, #818CF8 100%);
+    background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
+    filter: drop-shadow(0 10px 28px rgb(129 140 248 / 0.30));
 }
 
 /* 0.75rem (12px) is the project's minimum type size — uppercase tracked-out
@@ -1116,6 +1123,16 @@ h1,
 @keyframes shimmer-sweep {
     from { transform: translateX(-120%); }
     to { transform: translateX(220%); }
+}
+/* The hero headline's gradient loop (ADR 0157): one full tile per
+   cycle, so the last frame is the first frame. Reduced motion leaves
+   the gradient static. */
+@keyframes headline-gradient-loop {
+    from { background-position: 0% 0; }
+    to { background-position: 200% 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .text-gradient-headline { animation: headline-gradient-loop 9s linear infinite; }
 }
 /* The primary area enters when it actually mounts, including after a page's
    skeleton resolves. No timers, fabricated progress, or hidden content. */
