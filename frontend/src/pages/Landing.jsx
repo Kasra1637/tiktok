@@ -388,7 +388,7 @@ export default function Landing() {
             className="animate-fade-up font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-gradient-headline">Turn your app Store link into a tailored videos, in minutes.</span>
+            <span className="text-gradient-headline">Turn your app store link into a tailored videos, in minutes.</span>
           </h1>
 
           <p

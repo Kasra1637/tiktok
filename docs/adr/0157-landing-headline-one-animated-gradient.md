@@ -63,3 +63,13 @@ included), the single animated-gradient treatment on the H1 —
 neither retired span class may reappear inside it — and the
 tightened sub-headline. The retired two-span treatment and the
 ADR 0155 line stay off the hero.
+
+## Addendum (Nov 15 2026)
+
+Minutes after the headline shipped, Kasra reversed one casing
+call from the dictation: the S of "Store" drops to lowercase.
+The headline now reads "Turn your app store link into a tailored
+videos, in minutes." — the T of "Turn" is the only capital left
+in the line. The words, the single animated gradient, and the
+sub-headline are unchanged; the smoke hero check pins the new
+casing.

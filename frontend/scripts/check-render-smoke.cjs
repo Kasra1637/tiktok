@@ -9756,8 +9756,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // The hero copy is Kasra's dictated pair (Nov 15, ADR 0157,
   // superseding ADR 0155's line): the word TikTok is out — "a
   // tailored TikTok" does not parse; the product is videos — and
-  // the casing is his: every word lowercase except the T of Turn
-  // and the S of Store. The whole headline carries one treatment,
+  // the casing is his, revised the same day (ADR 0157 addendum):
+  // every word lowercase except the T of Turn; the S of Store was
+  // capital in the first dictation and dropped minutes later.
+  // The whole headline carries one treatment,
   // the animated brand gradient, and the sub-headline is his
   // earlier line tightened with every meaning beat kept. The "One
   // photo in" hero, the "steer the next one" line and the held
@@ -9767,7 +9769,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app Store link into a tailored videos, in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app store link into a tailored videos, in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
