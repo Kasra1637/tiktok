@@ -1341,6 +1341,21 @@ h1,
     font-size: 11px;
     font-weight: 600;
 }
+/* ---------- Landing: hero shot (the flow's figure) ----------
+   Hidden below the hero's own desktop breakpoint (ADR 0158): on
+   phones the stacked portrait frame cost a full screen of mostly
+   empty space. From lg up — where the pitch and the flow stand
+   side by side — the figure renders exactly as before. Same
+   mobile-first display flip as .history-secondary-filters. */
+.hero-shot {
+    display: none;
+}
+@media (min-width: 1024px) {
+    .hero-shot {
+        display: block;
+    }
+}
+
 /* ---------- Landing: hero flow loop ----------
    The five step illustrations cycling bare in the hero (no frame or
    backdrop), replacing the recorded tour footage — no video bytes, the

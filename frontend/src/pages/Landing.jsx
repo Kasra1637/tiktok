@@ -466,9 +466,11 @@ export default function Landing() {
               so the hero carries no video bytes at all. HeroFlow crossfades
               the steps at four seconds each, with dots and a pause control
               along the bottom. Under reduced motion the loop never starts and
-              the dots step through by hand. */}
+              the dots step through by hand. Below the lg breakpoint the
+              figure is hidden entirely (ADR 0158, .hero-shot in index.css):
+              the stacked mobile hero drops the frame. */}
           <figure
-            className="animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
+            className="hero-shot animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >

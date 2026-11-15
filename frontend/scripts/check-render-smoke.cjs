@@ -9730,6 +9730,29 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // Kasra removed the cycling picture section from mobile (Nov 15,
+  // ADR 0158): on his phone the stacked hero's portrait frame cost a
+  // full screen of mostly empty dark space and earned nothing there.
+  // The figure carries .hero-shot, which index.css hides until the
+  // hero's own desktop breakpoint — the lg width where the pitch and
+  // the flow stand side by side. Desktop markup and behavior are
+  // unchanged, so the flow's DOM pins above keep holding as written.
+  await check("the hero flow is hidden below the desktop breakpoint", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+    if (!shot) throw new Error("no hero frame rendered");
+    if (!shot.classList.contains("hero-shot")) {
+      throw new Error("the hero frame does not carry the .hero-shot hiding class");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.hero-shot\s*\{\s*display:\s*none/.test(css)) {
+      throw new Error("index.css does not hide .hero-shot by default");
+    }
+    if (!/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.hero-shot\s*\{\s*display:\s*block/.test(css)) {
+      throw new Error(".hero-shot is not restored at the desktop breakpoint");
+    }
+  });
+
   // The hero copy is Kasra's dictated pair (Nov 15, ADR 0157,
   // superseding ADR 0155's line): the word TikTok is out — "a
   // tailored TikTok" does not parse; the product is videos — and
