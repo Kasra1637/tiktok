@@ -34,3 +34,11 @@ visible control and Kasra's order named the button:
 The smoke suite pins the new shape: a check asserts no pause
 control renders anywhere in the hero and that the flow advances
 on its own, and a CSS assertion holds the dead rule absent.
+
+## Addendum (Nov 15 2026)
+
+At the founder's direction the same day, the dots row moved up:
+`.hero-flow-nav`'s gap above the dots tightened from 14px to 6px
+(the spacing scale's smallest step), so the dots sit closer under
+the hero frame; the row's centering and the dots themselves are
+unchanged.
