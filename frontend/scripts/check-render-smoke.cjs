@@ -10615,9 +10615,9 @@ async function runAnalyticsChecks() {
     if (!card.querySelector('[data-testid="result-solo"]')) throw new Error("the short list lost its row");
   });
 
-  // Renders per week reads as a bar chart: one scaled column per week,
-  // newest first, with the count on the column.
-  await check("renders per week renders scaled bars", async (ctx) => {
+  // Renders per week reads as a ledger (ADR 0160): one row per week,
+  // one dot for every render, the count written out as words.
+  await check("renders per week reads as one row per week with a dot for every render", async (ctx) => {
     const thisMondayMidnight = new Date();
     thisMondayMidnight.setDate(
       thisMondayMidnight.getDate() - ((thisMondayMidnight.getDay() + 6) % 7)
@@ -10640,10 +10640,24 @@ async function runAnalyticsChecks() {
     });
     const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
     if (!card) throw new Error("the weekly activity card is not on the page");
-    const bars = [...card.querySelectorAll('[data-testid="activity-bar"]')];
-    if (bars.length !== 2) throw new Error(`expected 2 weekly bars, found ${bars.length}`);
-    if (bars[0].style.height !== "100%") throw new Error(`the busiest week is not full height: ${bars[0].style.height}`);
-    if (bars[1].style.height !== "50%") throw new Error(`the quieter week does not scale: ${bars[1].style.height}`);
+    const rows = [...card.querySelectorAll('[data-testid^="activity-row-"]')];
+    if (rows.length !== 2) throw new Error(`expected 2 week rows, found ${rows.length}`);
+    const dotCounts = rows.map((row) => row.querySelectorAll('[data-testid="activity-dot"]').length);
+    if (dotCounts[0] !== 2 || dotCounts[1] !== 1) {
+      throw new Error(`week rows carry ${dotCounts.join("/")} dots, not one per render (2/1)`);
+    }
+    if (!rows[0].textContent.includes("This week") || !rows[0].textContent.includes("2 renders")) {
+      throw new Error("the first row does not read as this week with its count in words");
+    }
+    if (!rows[1].textContent.includes("Week of") || !rows[1].textContent.includes("1 render") || rows[1].textContent.includes("1 renders")) {
+      throw new Error("the second row does not read as last week with a singular count");
+    }
+    if (!card.textContent.includes("You made 2 renders this week — the busiest of the last two weeks.")) {
+      throw new Error("the card does not name this week as the busiest in plain words");
+    }
+    if (card.querySelector('[data-testid="activity-bar"]')) {
+      throw new Error("the retired week bar markup is still on the card");
+    }
   });
 
   // What happened reads as a timeline: one icon marker per signal, counts
@@ -10986,6 +11000,51 @@ async function runAnalyticsChecks() {
     }
   });
 
+  // Expanding the ledger must not grow the card (ADR 0160): the
+  // expanded table region scrolls inside a bound set from the
+  // collapsed region's own parts, so the pair keeps one height in
+  // both states and Show less never scrolls away with the rows.
+  await check("expanding Clip results bounds its table region instead of growing the card", async (ctx) => {
+    const generations = Array.from({ length: 17 }, (_, i) => ({
+      id: `bound-${i + 1}`,
+      status: "completed",
+      hook_line: `Clip ${i + 1}`,
+      created_at: dayAgo,
+    }));
+    await mountAnalytics(ctx, {
+      getFeedback: async () => ({
+        feedback: [],
+        summary: { total: 0, top_signals: [], top_reasons: [] },
+      }),
+      getGenerationHistory: async () => ({ generations }),
+    });
+    const results = ctx.container.querySelector('[data-testid="analytics-results"]');
+    const funnel = ctx.container.querySelector('[data-testid="analytics-funnel"]');
+    if (!results || !funnel) throw new Error("the Analytics top pair is not on the page");
+    const pair = results.parentElement;
+    if (!pair || pair !== funnel.parentElement || !pair.className.includes("items-stretch")) {
+      throw new Error("the pair does not stretch its cards to one height");
+    }
+    const region = results.querySelector('[data-testid="analytics-results-table"]');
+    if (!region) throw new Error("the clips table region is not marked");
+    if (region.className.includes("clips-table-scroll")) {
+      throw new Error("the collapsed ledger already carries the bounded-scroll treatment");
+    }
+    const more = results.querySelector('[data-testid="analytics-results-show-more"]');
+    if (!more) throw new Error("no show-all control on the collapsed ledger");
+    await clickEl(ctx, more, "expand the leaderboard");
+    const rows = results.querySelectorAll("tbody tr");
+    if (rows.length !== 17) throw new Error(`expected all 17 rows expanded, found ${rows.length}`);
+    if (!region.className.includes("clips-table-scroll")) {
+      throw new Error("the expanded table region carries no bounded-scroll treatment");
+    }
+    const less = results.querySelector('[data-testid="analytics-results-show-more"]');
+    if (!less || !/Show less/.test(less.textContent || "")) throw new Error("no show-less control after expanding");
+    if (region.contains(less)) {
+      throw new Error("Show less sits inside the scroll region and would scroll away");
+    }
+  });
+
   // The Clip results table fits its card (ADR 0159): a fixed layout
   // under a seven-column template, so every column is visible at
   // desktop widths and the card never scrolls sideways.
@@ -11026,7 +11085,7 @@ async function runAnalyticsChecks() {
   // Renders per week, polished (ADR 0159): one clean bar per week —
   // no bordered well doubling the bar's outline — with heights in
   // honest proportion to the counts, and the same-set note kept.
-  await check("renders per week bars are clean and honestly proportional", async (ctx) => {
+  await check("renders per week rows count out every render and name the busiest week", async (ctx) => {
     const thisMondayMidnight = new Date();
     thisMondayMidnight.setDate(
       thisMondayMidnight.getDate() - ((thisMondayMidnight.getDay() + 6) % 7)
@@ -11049,17 +11108,27 @@ async function runAnalyticsChecks() {
     });
     const card = ctx.container.querySelector('[data-testid="analytics-activity"]');
     if (!card) throw new Error("the weekly activity card is not on the page");
-    const bars = [...card.querySelectorAll('[data-testid="activity-bar"]')];
-    if (bars.length !== 4) throw new Error(`expected 4 weekly bars, found ${bars.length}`);
-    const expected = ["100%", "29%", "71%", "43%"];
-    bars.forEach((bar, i) => {
-      if (bar.style.height !== expected[i]) {
-        throw new Error(`week ${i + 1} bar height is ${bar.style.height}, not the honest ${expected[i]}`);
+    const rows = [...card.querySelectorAll('[data-testid^="activity-row-"]')];
+    if (rows.length !== 4) throw new Error(`expected 4 week rows, found ${rows.length}`);
+    const expected = [7, 2, 5, 3];
+    rows.forEach((row, i) => {
+      const dots = row.querySelectorAll('[data-testid="activity-dot"]').length;
+      if (dots !== expected[i]) {
+        throw new Error(`week ${i + 1} row carries ${dots} dots, not its ${expected[i]} renders`);
       }
-      if ((bar.parentElement.className || "").includes("border")) {
-        throw new Error("the week bar still sits in a bordered well, doubling its outline");
+      if (!row.textContent.includes(`${expected[i]} renders`)) {
+        throw new Error(`week ${i + 1} row does not write its count out as ${expected[i]} renders`);
       }
     });
+    if (!rows[0].textContent.includes("This week")) {
+      throw new Error("the newest row is not labelled as this week");
+    }
+    if (!card.textContent.includes("You made 7 renders this week — the busiest of the last four weeks.")) {
+      throw new Error("the card does not name the busiest week and its count in plain words");
+    }
+    if (card.querySelector('[data-testid="activity-bar"]')) {
+      throw new Error("the retired week bar markup is still on the card");
+    }
     if (!card.textContent.includes("Same 17 renders as above")) {
       throw new Error("the weekly card lost its same-set note");
     }

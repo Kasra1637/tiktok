@@ -184,7 +184,10 @@ One render path, single-pass video generation via OpenRouter.
 - Settled layout decisions are not open questions (ADR 0141): Review stays
   one column at every width, Analytics stays a calm ledger (its Clip
   results and Renders cards stand at one height, its results table fits
-  its card, and its week bars are clean proportional columns, ADR 0159),
+  its card, Renders per week reads as one row per week with a dot per
+  render under a plain busiest-week sentence, and the expanded Clip
+  results ledger scrolls inside its bound rather than growing the
+  pair, ADRs 0159/0160),
   and the wizard is paged at desktop widths, stacked below. Render progress is narrated in
   words with an elapsed clock — never a staged percentage (ADR 0140).
 - Feedback learning is one verdict on the whole video (ADR 0124): a single
@@ -217,7 +220,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and fifty-nine decisions (0001–0159) now
+Read `docs/adr/README.md` first. One hundred and sixty decisions (0001–0160) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

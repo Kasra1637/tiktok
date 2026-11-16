@@ -436,12 +436,18 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
           {clips.length === 0 ? (
             <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-secondary/10">
+            <div
+              data-testid="analytics-results-table"
+              className={`rounded-xl border border-[color:var(--hairline)] bg-secondary/10 ${expanded ? "clips-table-scroll" : "overflow-hidden"}`}
+            >
               {/* Fixed layout under a column template (ADR 0159): the
                   table is exactly its card's width, every column visible,
                   and cells wrap instead of pushing the card into sideways
                   scrolling. The shares are the reading order's weight —
-                  the clip's name widest, then views, then the verdict. */}
+                  the clip's name widest, then views, then the verdict.
+                  Expanded, the region scrolls inside the bound in
+                  index.css (ADR 0160) instead of growing the card past
+                  its pair; collapsed, it is exactly as it was. */}
               <table className="w-full table-fixed text-left text-sm">
                 <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
                 <colgroup>
@@ -684,49 +690,78 @@ function RenderFunnel({ generations = [], profileId = "" }) {
   );
 }
 
+/** Week counts as words, for the busiest-week sentence (ADR 0160). */
+const WEEK_COUNT_WORDS = ["", "", "two", "three", "four", "five", "six"];
+
+/**
+ * One plain sentence naming the busiest week shown (ADR 0160).
+ *
+ * Buckets arrive newest first, so the first bucket at the maximum is
+ * the most recent of any tie — the honest name to give. This week
+ * speaks in the second person, because it is the founder's own output,
+ * still warm; an older week is simply named. With nothing counted,
+ * the sentence stays neutral rather than crowning an empty week.
+ */
+function activitySummary(buckets) {
+  if (!buckets.length) return "No renders in the weeks shown yet.";
+  const max = Math.max(...buckets.map((b) => b.count));
+  if (max <= 0) return "No renders in the weeks shown yet.";
+  const top = buckets.find((b) => b.count === max);
+  const noun = top.count === 1 ? "render" : "renders";
+  if (top.label === "This week") {
+    const span =
+      buckets.length > 1
+        ? ` — the busiest of the last ${WEEK_COUNT_WORDS[buckets.length] || buckets.length} weeks.`
+        : ".";
+    return `You made ${top.count} ${noun} this week${span}`;
+  }
+  return `Busiest week: ${top.label.charAt(0).toLowerCase()}${top.label.slice(1)}, with ${top.count} ${noun}.`;
+}
+
 /**
  * Renders per week: clip counts in Monday-start buckets, newest first.
  *
- * Bars are scaled to the busiest week shown, so a quiet week reads quiet
- * without a single render ever disappearing into a zero axis. Each bar is
- * one clean column in a borderless recessed track (ADR 0159): the bar used
- * to sit in a hairline well whose outline doubled the bar's own edge, so
- * the chart read as four near-identical boxes with a line near the bottom.
- * Now the column height is the data — the count's honest share of the
- * busiest week, no floor rounding a small week up — the track is only the
- * scale it is read against, and a 3px minimum keeps a lone render visible.
+ * One row per week (ADR 0160), replacing the bar chart Kasra rejected
+ * — a digit floating over a scaled column was neither countable nor
+ * comparable at a glance. The week is now a ledger row: its label at a
+ * fixed width, one dot for every render in it, and the count written
+ * out as words, under one plain sentence naming the busiest week, so
+ * the section reads before it is studied. The dots are decoration for
+ * the eye; the label and the written count carry the fact, and they
+ * are what assistive tech reads.
  */
 function RenderActivity({ generations = [] }) {
   const buckets = weekBuckets(generations);
   if (!buckets.length) return null;
   const max = Math.max(...buckets.map((b) => b.count));
-  const shown = buckets.reduce((sum, b) => sum + b.count, 0);
   return (
     <SectionCard
       title="Renders per week"
       icon={CalendarDays}
-      description="Loaded render counts by week, newest first."
+      description={activitySummary(buckets)}
       data-testid="analytics-activity"
     >
-      <ul className="flex items-end gap-3 sm:gap-4">
-        {buckets.map((b) => (
-        <li
-          key={b.key}
-          title={`${b.label}: ${b.count} ${b.count === 1 ? "render" : "renders"}`}
-          className="group flex min-w-0 flex-1 flex-col items-center gap-2"
-        >
-          <FactChip className={b.count === max ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : undefined}>{b.count}</FactChip>
-          <span
-            className="flex h-24 w-full max-w-20 items-end justify-center overflow-hidden rounded-xl bg-secondary/25"
-            aria-hidden="true"
+      <ul className="divide-y divide-[color:var(--hairline)]">
+        {buckets.map((b, i) => (
+          <li
+            key={b.key}
+            data-testid={`activity-row-${i}`}
+            title={`${b.label}: ${b.count} ${b.count === 1 ? "render" : "renders"}`}
+            className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
           >
-              <span
-                data-testid="activity-bar"
-                className="block min-h-[3px] w-full rounded-t-md bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
-                style={{ height: `${max ? Math.round((b.count / max) * 100) : 0}%` }}
-              />
+            <span className="w-32 shrink-0 text-sm text-foreground/90">{b.label}</span>
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" aria-hidden="true">
+              {Array.from({ length: b.count }, (_, d) => (
+                <span
+                  key={d}
+                  data-testid="activity-dot"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-[color:var(--accent)]"
+                />
+              ))}
             </span>
-            <span className="w-full truncate text-center text-xs text-muted-foreground">{b.label}</span>
+            <span className={`shrink-0 text-sm tabular-nums ${b.count === max ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+              {b.count} {b.count === 1 ? "render" : "renders"}
+            </span>
           </li>
         ))}
       </ul>
