@@ -10342,8 +10342,8 @@ async function runAnalyticsChecks() {
       throw new Error("the analytics header is not on the page");
     }
     const copy = (header.querySelector("p")?.textContent || "").trim();
-    if (copy !== "Your recorded views vs. your verdicts.") {
-      throw new Error("the analytics header must say the page compares the recorded views with the founder's own verdicts");
+    if (copy !== "Your recent renders and how they performed.") {
+      throw new Error("the analytics header must say the page shows your recent renders and how they performed");
     }
   });
 
@@ -13195,7 +13195,7 @@ async function runDemoCtaChecks() {
       ["CreateVideo.jsx", "Create Video", []],
       ["AssetLibrary.jsx", "Asset Library", []],
       ["GenerationHistory.jsx", "Generation History", []],
-      ["Analytics.jsx", "Analytics", ["Your recorded views vs. your verdicts."]],
+      ["Analytics.jsx", "Analytics", ["Your recent renders and how they performed."]],
     ];
     for (const [file, title, expected] of pages) {
       const text = fs.readFileSync(path.join(SRC, "pages", file), "utf8");

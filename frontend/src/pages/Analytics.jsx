@@ -157,7 +157,7 @@ export default function Analytics() {
       <PageHeader
         icon={TrendingUp}
         title="Analytics"
-        description="Your recorded views vs. your verdicts."
+        description="Your recent renders and how they performed."
         data-testid="analytics-header"
         actions={
           profiles?.length > 0 ? (
