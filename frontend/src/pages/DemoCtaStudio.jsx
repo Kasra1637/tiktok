@@ -132,7 +132,7 @@ export function DemoCtaStudio() {
           flow, and each column caps below the header and scrolls inside its
           own slim bar when taller. No viewport lock — founders scroll up and
           down through every group (End Card, Story, Hook, Second clip,
-          Source & Look) instead of paging inside a fixed frame. */}
+          Base clip & look) instead of paging inside a fixed frame. */}
       <PageHeader
         icon={Smartphone}
         title="Demo + CTA"

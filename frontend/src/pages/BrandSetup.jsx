@@ -714,6 +714,7 @@ export default function BrandSetup() {
                 onChange={handleSelectProfile}
                 showStatus
                 testId="app-profile-picker"
+                align="end"
               />
             )}
             {profilesError && (

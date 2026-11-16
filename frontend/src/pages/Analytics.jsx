@@ -167,6 +167,7 @@ export default function Analytics() {
               onChange={selectProfile}
               allLabel="All apps"
               testId="analytics-profile-picker"
+              align="end"
             />
           ) : null
         }

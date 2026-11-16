@@ -140,7 +140,16 @@ One render path, single-pass video generation via OpenRouter.
   active states, an active filter (a non-default value, a pressed toggle)
   wears the selection indigo via `data-active` / `aria-pressed`, and the
   app picker marks active only in its filter form, never as a page's app
-  switcher. Form fields keep `CONTROL_CLASS`; they are not filters.
+  switcher. Every dropdown in the app is app-drawn
+  (`frontend/src/components/AppSelect.jsx`, ADRs 0162/0163): a native
+  select's open menu belongs to the browser and ignores the page, so
+  the History copy/status/sort dropdowns, the app picker and the
+  form-field dropdowns alike (the render panel's model and resolution,
+  the camera setup, the direction picks, the Demo + CTA video fit)
+  render a button plus the app's own listbox, whose chosen option wears
+  the same selection indigo. Form fields are not filters — they keep
+  `CONTROL_CLASS` as the button's skin instead of the pill — but they
+  draw their menus the same way; no native `<select>` remains.
 - Voice: `frontend/src/lib/listen.js` + `ListenDock` (mounted by `AppShell`) —
   browser `speechSynthesis` only (no text leaves the device), text built from
   the data model, never the DOM. See ADR 0088.
@@ -228,7 +237,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and sixty-one decisions (0001–0161) now
+Read `docs/adr/README.md` first. One hundred and sixty-four decisions (0001–0164) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

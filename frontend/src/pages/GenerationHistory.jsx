@@ -16,6 +16,7 @@ import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
+import { AppSelect } from "../components/AppSelect";
 import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
@@ -1338,11 +1339,12 @@ export default function GenerationHistory() {
             className={PILL_SELECT_CLASS}
           />
           <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
-          <select id="history-copy-filter" value={effectiveCopy} onChange={(e) => setFilter("copy", e.target.value)}
-            aria-label="Filter by post copy and plan context" data-testid="history-copy-filter" data-active={effectiveCopy === "without" ? "true" : undefined} className={PILL_SELECT_CLASS}>
-            <option value="with">With post copy & context</option>
-            <option value="without">Without post copy & context</option>
-          </select>
+          <AppSelect id="history-copy-filter" value={effectiveCopy} onChange={(value) => setFilter("copy", value)}
+            ariaLabel="Filter by post copy and plan context" testId="history-copy-filter" dataActive={effectiveCopy === "without"} className={PILL_SELECT_CLASS}
+            options={[
+              { value: "with", label: "With post copy & context" },
+              { value: "without", label: "Without post copy & context" },
+            ]} />
           <button type="button" className="history-more-filters pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
             data-active={(profileFilter || statusFilter || sort !== "newest") ? "true" : undefined}
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
@@ -1381,32 +1383,34 @@ export default function GenerationHistory() {
               ariaLabel="Filter by app"
             />
             <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
-            <select
+            <AppSelect
               id="history-status-filter"
               value={statusFilter}
-              onChange={(e) => setFilter("status", e.target.value)}
-              aria-label="Filter by status"
-              data-active={statusFilter ? "true" : undefined}
+              onChange={(value) => setFilter("status", value)}
+              ariaLabel="Filter by status"
+              dataActive={Boolean(statusFilter)}
               className={PILL_SELECT_CLASS}
-            >
-              <option value="">All statuses</option>
-              {["completed", "failed", "generating", "submitted", "archived"].map((s) => (
-                <option key={s} value={s}>{humanize(s)}</option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "All statuses" },
+                ...["completed", "failed", "generating", "submitted", "archived"].map((s) => (
+                  { value: s, label: humanize(s) }
+                )),
+              ]}
+            />
             <label className="sr-only" htmlFor="history-sort">Sort history</label>
-            <select
+            <AppSelect
               id="history-sort"
               value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              aria-label="Sort history"
-              data-testid="history-sort"
-              data-active={sort !== "newest" ? "true" : undefined}
+              onChange={setSort}
+              ariaLabel="Sort history"
+              testId="history-sort"
+              dataActive={sort !== "newest"}
               className={PILL_SELECT_CLASS}
-            >
-              <option value="newest">Newest first</option>
-              <option value="views">Most viewed</option>
-            </select>
+              options={[
+                { value: "newest", label: "Newest first" },
+                { value: "views", label: "Most viewed" },
+              ]}
+            />
         </div>
         {profilesError && (
           <span role="alert" className="flex items-center gap-1 text-sm text-destructive-text">

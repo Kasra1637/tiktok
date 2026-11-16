@@ -37,6 +37,7 @@ import TourStartLink from "../components/onboarding/TourStartLink";
 import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
+import { AppSelect } from "../components/AppSelect";
 import { Chip } from "../components/Chip";
 import { Disclosure } from "../components/Disclosure";
 import { recordSignal } from "../lib/feedback";
@@ -81,7 +82,7 @@ const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
 
 // Render order, which is also the order that decides which group wins when a
 // stored value somehow has more than one open (older versions allowed it).
-// "second" owns the appended clip so Source & Look stays about the base.
+// "second" owns the appended clip so Base clip & look stays about the base.
 const SECTION_ORDER = ["source", "second", "hook", "story", "cta"];
 
 /** The one-open shape: every key present, exactly one true (or none). */
@@ -596,7 +597,7 @@ function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, chil
   );
 }
 
-/**  * Accent swatch picker, shared by Hook Text and End Card. One global
+/**  * Accent swatch picker, shared by Opening text and End Card. One global
  * accent colors both the hook text line and the end-card handle chip, so
  * both sections offer the same control rather than one hiding it from the
  * other. `testPrefix` keeps the two instances' testids distinct.
@@ -654,7 +655,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // group also means one obvious next place to look.
   //
   // Which group is still remembered across visits: this is a workspace, not a
-  // form, and re-opening Source & Look over whatever someone was tuning is the
+  // form, and re-opening Base clip & look over whatever someone was tuning is the
   // same friction as before, just inverted.
   const [openSections, setOpenSections] = useState(() => {
     const raw = (() => {
@@ -837,8 +838,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const [appendMode, setAppendMode] = useState("realistic");
   // The added clip keeps its own look: background, motion and hand scene
   // start from the same defaults as the base but diverge independently.
-  // Zoom framing and phone size stay shared — one timeline, one mockup
-  // geometry — so locks and sliders keep working across the cut.
+  // The zoom locks and phone size stay shared — one timeline, one mockup
+  // geometry — so locks and sliders keep working across the cut. The
+  // video crop is NOT shared: each clip carries its own fit, zoom and
+  // offsets (ADR 0164), the added clip's block in its group below.
   const [appendBg, setAppendBg] = useState(DEFAULTS.bg);
   const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
   const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
@@ -853,6 +856,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // for a muted clip, so the join never shifts.
   const [baseMuted, setBaseMuted] = useState(false);
   const [appendMuted, setAppendMuted] = useState(false);
+  // The added clip's own Video crop (ADR 0164): fit, zoom and offsets with
+  // the same defaults as the base's block, held apart from it. The base's
+  // zoom rides its lock timeline; this is a fixed treatment for the added
+  // segment, and the painter resolves the two per segment.
+  const [appendVideoFit, setAppendVideoFit] = useState(DEFAULTS.videoFit);
+  const [appendVideoScale, setAppendVideoScale] = useState(DEFAULTS.videoScale);
+  const [appendVideoOffsetX, setAppendVideoOffsetX] = useState(DEFAULTS.videoOffsetX);
+  const [appendVideoOffsetY, setAppendVideoOffsetY] = useState(DEFAULTS.videoOffsetY);
   const [appendName, setAppendName] = useState("");
   const [appendError, setAppendError] = useState(null);
   const appendVideoRef = useRef(null);
@@ -879,6 +890,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     device, preset, mockupStretchY, scale, videoMeta, bg, anim,
     baseStart, appendStart, baseEnd, appendEnd,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
+    appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
@@ -1180,6 +1192,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     videoUrl, appendUrl, baseStart, appendStart, baseEnd, appendEnd,
     device, preset, viewMode, appendMode, bg, anim, envBg,
     appendBg, appendAnim, appendEnv, mockupStretchY, videoFit,
+    appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
     screenX, screenY, screenW, screenH, baseMuted, appendMuted,
     appendOverlays, transition, reduceMotion,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
@@ -1204,6 +1217,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, ctaTimingMode,
     overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle,
     appendMode, appendBg, appendAnim, appendEnv, appendOverlays, transition, baseMuted, appendMuted,
+    appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
     zoomKeyframes, framing: editFraming,
   };
   const restoreEdit = (edit) => {
@@ -1223,6 +1237,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       captionScale: setCaptionScale, ctaScale: setCtaScale, textStyle: setTextStyle,
       appendMode: setAppendMode, appendBg: setAppendBg, appendAnim: setAppendAnim, appendEnv: setAppendEnv,
       appendOverlays: setAppendOverlays, transition: setTransition, baseMuted: setBaseMuted, appendMuted: setAppendMuted,
+      appendVideoFit: setAppendVideoFit, appendVideoScale: setAppendVideoScale,
+      appendVideoOffsetX: setAppendVideoOffsetX, appendVideoOffsetY: setAppendVideoOffsetY,
       zoomKeyframes: setZoomKeyframes,
     };
     Object.entries(setters).forEach(([key, setter]) => { if (key in edit) setter(edit[key]); });
@@ -1331,6 +1347,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setAppendEnd(null);
     setAppendName("");
     setAppendError(null);
+    setAppendVideoFit(DEFAULTS.videoFit);
+    setAppendVideoScale(DEFAULTS.videoScale);
+    setAppendVideoOffsetX(DEFAULTS.videoOffsetX);
+    setAppendVideoOffsetY(DEFAULTS.videoOffsetY);
   };
 
   useEffect(() => () => {
@@ -1610,7 +1630,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // The plan's recording note, when there is a plan behind this clip. Sits at
   // the top of the settings column rather than inside a group: only one group
   // is open at a time, and the instruction has to stay readable while the
-  // founder works through Source & Look or Second clip.
+  // founder works through Base clip & look or Second clip.
   const recordBrief = (generation?.demo_brief || "").trim();
 
   return (
@@ -1680,7 +1700,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             standing instruction for finished work reads as an unanswered
             debt. Removing the clip brings it back. */}
         {recordBrief && !appendUrl && <RecordBriefNote brief={recordBrief} />}
-        <EditorSection title="Source & Look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
+        <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
               <p className="text-sm text-muted-foreground">
@@ -1765,7 +1785,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </div>
             </Disclosure>
           )}
-          {/* Fine-tuning discloses inside Source & Look rather than standing
+          {/* Fine-tuning discloses inside Base clip & look rather than standing
               as its own group: phone size, hand framing, mockup height,
               screen position and crop all modify the look chosen above, and
               the default path — shoot, trim, text, export — should not wade
@@ -1842,11 +1862,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
               <SubLabel>Video crop</SubLabel>
               <div className="flex items-center justify-between gap-2">
-                <select value={videoFit} onChange={(e) => setVideoFit(e.target.value)} className={CONTROL_CLASS} aria-label="Video fit">
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="fill">Fill</option>
-                </select>
+                <AppSelect value={videoFit} onChange={setVideoFit} className={CONTROL_CLASS} wrapClassName="min-w-0 flex-1" ariaLabel="Video fit"
+                  options={[
+                    { value: "cover", label: "Cover" },
+                    { value: "contain", label: "Contain" },
+                    { value: "fill", label: "Fill" },
+                  ]}
+                />
                 <ResetButton onClick={() => { setVideoFit("cover"); updateZoomDraft({ scale: 1, offX: 0, offY: 0 }); }}>Reset</ResetButton>
               </div>
               {/* What each mode actually does, and the source size it is doing it
@@ -1867,7 +1889,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           </details>
         </EditorSection>
 
-        {/* The appended clip lives in its own group so Source & Look stays
+        {/* The appended clip lives in its own group so Base clip & look stays
             about the base: one clip per group, one style picker per clip.
             Gated on a loaded base — offering an "after" before there is a
             "before" was the second upload button nobody could place. */}
@@ -1949,10 +1971,41 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </label>
             </div>
           )}
+          {/* The added clip's own Video crop (ADR 0164): the same block the
+              base carries in Fine-tune framing — fit, consequence hint,
+              zoom, offsets, reset — with its own state, so how this clip
+              fills the frame is its own choice and never the base's. It
+              stands with the controls that arrive once the clip has
+              loaded (appendMeta), below the audio and overlay toggles. */}
+          {appendMeta && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="append-video-crop">
+              <SubLabel>Video crop</SubLabel>
+              <div className="flex items-center justify-between gap-2">
+                <AppSelect value={appendVideoFit} onChange={setAppendVideoFit} className={CONTROL_CLASS} wrapClassName="min-w-0 flex-1" ariaLabel="Second clip video fit" testId="append-video-fit"
+                  options={[
+                    { value: "cover", label: "Cover" },
+                    { value: "contain", label: "Contain" },
+                    { value: "fill", label: "Fill" },
+                  ]}
+                />
+                <ResetButton testId="append-crop-reset" onClick={() => { setAppendVideoFit("cover"); setAppendVideoScale(1); setAppendVideoOffsetX(0); setAppendVideoOffsetY(0); }}>Reset</ResetButton>
+              </div>
+              {/* The base's hint discipline, against the added clip's own
+                  source size: the two clips rarely share an aspect, so
+                  each block names the clip it describes. */}
+              <p className="text-sm text-muted-foreground">
+                {VIDEO_FIT_HINTS[appendVideoFit] || VIDEO_FIT_HINTS.cover}
+                {appendMeta ? ` Source ${appendMeta.w}×${appendMeta.h}.` : ""}
+              </p>
+              <ControlSlider label="Zoom" value={appendVideoScale} min={RANGES.videoScale.min} max={RANGES.videoScale.max} step={RANGES.videoScale.step} onChange={setAppendVideoScale} testId="append-crop-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H offset" value={appendVideoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setAppendVideoOffsetX(Math.round(v))} testId="append-crop-hoffset-slider" format={(v) => `${Math.round(v)}%`} />
+              <ControlSlider label="V offset" value={appendVideoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => setAppendVideoOffsetY(Math.round(v))} testId="append-crop-voffset-slider" format={(v) => `${Math.round(v)}%`} />
+            </div>
+          )}
         </EditorSection>
         )}
 
-        <EditorSection title="Hook Text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
+        <EditorSection title="Opening text" icon={Type} open={openSections.hook} onToggle={() => toggleSection("hook")} testId="hook-controls">
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={(next) => { setHookEnabled(next); if (next) startScopedPreview("hook"); }} />
             Show hook text
@@ -2083,7 +2136,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               className={TEXTAREA_CLASS}
             />
           </label>
-          <p className="text-sm text-muted-foreground">Uses Hook Text style; spoken script unchanged.</p>
+          <p className="text-sm text-muted-foreground">Uses Opening text style; spoken script unchanged.</p>
           {storyAvailable ? (
             <>
               <p className="text-sm text-muted-foreground" data-testid="story-timing-hint">

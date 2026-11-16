@@ -80,7 +80,7 @@ export function useOverlayTaste({ overlayScope, videoUrl, clipDuration, recordin
   const [captionScale, setCaptionScale] = useState(() => prefScale(overlayScope, "captionScale", DEFAULTS.captionScale));
   const [ctaScale, setCtaScale] = useState(() => prefScale(overlayScope, "ctaScale", DEFAULTS.ctaScale));
   // One shared text treatment for hook, story and end card: a single state
-  // feeds all three painters, so the picker lives once (Hook Text) and the
+  // feeds all three painters, so the picker lives once (Opening text) and the
   // story inherits it through the hook painter it already reuses.
   const [textStyle, setTextStyle] = useState(() => prefTextStyle(overlayScope, "textStyle", DEFAULTS.textStyle));
   const [ctaVariants, setCtaVariants] = useState(() => prefVariants(overlayScope, "ctaVariants", CTA_COPY_VARIANTS));

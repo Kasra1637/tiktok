@@ -11,6 +11,7 @@ import { useWizardDirections } from "./useWizardDirections";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { CONTROL_CLASS } from "../components/formControls";
+import { AppSelect } from "../components/AppSelect";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
@@ -2961,20 +2962,21 @@ export default function CreateVideo() {
               </p>
               <div className="space-y-2">
                 <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
-                <select
+                <AppSelect
                   id="camera-setup"
-                  data-testid="camera-setup"
+                  testId="camera-setup"
+                  block
                   className={CONTROL_CLASS}
                   value={editValue("camera_setup", "handheld")}
                   disabled={busy}
-                  onChange={(e) => {
-                    const value = e.target.value;
+                  onChange={(value) => {
                     dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
                   }}
-                >
-                  <option value="handheld">Handheld selfie</option>
-                  <option value="fixed">Fixed camera</option>
-                </select>
+                  options={[
+                    { value: "handheld", label: "Handheld selfie" },
+                    { value: "fixed", label: "Fixed camera" },
+                  ]}
+                />
                 <p className="text-sm text-muted-foreground">
                   {editValue("camera_setup", "handheld") === "fixed"
                     ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."

@@ -29,6 +29,7 @@ export function usePreviewLoop(settings) {
     device, preset, mockupStretchY, scale, videoMeta, bg, anim,
     baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
+    appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
@@ -612,9 +613,20 @@ export function usePreviewLoop(settings) {
       const lookEnv = segment ? (appendEnv ?? envBg) : envBg;
       const palette = COLOR_PALETTES[lookBg] || COLOR_PALETTES.lavender;
 
+      // Per-clip crop (ADR 0164): the base paints with its lock-resolved
+      // framing (ez); the added clip paints with its own crop block — its
+      // fit, zoom and offsets from the Second clip group — in every view,
+      // so no mode quietly borrows the base's treatment or a hard-coded
+      // cover. Hand framing and phone size stay shared (ez): they are
+      // the one mockup geometry both segments stand in.
+      const segFit = segment ? appendVideoFit : videoFit;
+      const segScale = segment ? appendVideoScale : ez.vScale;
+      const segOffX = segment ? appendVideoOffsetX : ez.vOffX;
+      const segOffY = segment ? appendVideoOffsetY : ez.vOffY;
+
       if (mode === "hand" && video) {
         const t = vt;
-        drawHandView(ctx, cw, ch, frame, lookEnv, t, videoFit, ez.vScale, ez.vOffX, ez.vOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
+        drawHandView(ctx, cw, ch, frame, lookEnv, t, segFit, segScale, segOffX, segOffY, { x: screenX, y: screenY, w: screenW, h: screenH }, ez.hZoom, ez.hPanX, ez.hPanY, palette?.bg2);
         drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
         paintJointTransition(target, vt);
         return;
@@ -631,11 +643,11 @@ export function usePreviewLoop(settings) {
         if (mediaReady(frame)) {
           const vw = frame.videoWidth || frame.width;
           const vh = frame.videoHeight || frame.height;
-          const box = fitVideoToScreen({ fit: segment ? "cover" : videoFit, videoW: vw, videoH: vh, screenW: cw, screenH: ch, scale: segment ? 1 : ez.vScale });
+          const box = fitVideoToScreen({ fit: segFit, videoW: vw, videoH: vh, screenW: cw, screenH: ch, scale: segScale });
           if (box) {
             const maxOffX = Math.max(0, (box.dw - cw) / 2);
             const maxOffY = Math.max(0, (box.dh - ch) / 2);
-            ctx.drawImage(frame, (cw - box.dw) / 2 + (segment ? 0 : ez.vOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segment ? 0 : ez.vOffY / 100) * maxOffY, box.dw, box.dh);
+            ctx.drawImage(frame, (cw - box.dw) / 2 + (segOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segOffY / 100) * maxOffY, box.dw, box.dh);
           }
         }
         drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
@@ -942,7 +954,7 @@ export function usePreviewLoop(settings) {
         ctx.transform(1, tiltX * 0.8, tiltY * 0.6, 1, 0, 0);
 
         ctx.translate(-drawW / 2, -drawH / 2);
-        drawPhone(ctx, 0, 0, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
+        drawPhone(ctx, 0, 0, drawW, drawH, dev, frame, segFit, segScale, segOffX, segOffY, palette?.bg2);
         ctx.restore();
 
         ctx.save();
@@ -964,7 +976,7 @@ export function usePreviewLoop(settings) {
         const drawH = phoneH * fit;
         const x = (cw - drawW) / 2;
         const y = (ch - drawH) / 2;
-        drawPhone(ctx, x, y, drawW, drawH, dev, frame, videoFit, ez.vScale, ez.vOffX, ez.vOffY, palette?.bg2);
+        drawPhone(ctx, x, y, drawW, drawH, dev, frame, segFit, segScale, segOffX, segOffY, palette?.bg2);
       }
       drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
       paintJointTransition(target, vt);
@@ -1055,7 +1067,7 @@ export function usePreviewLoop(settings) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseEnd, appendEnd, baseDuration, appendDuration, timelineTime, transition, reduceMotion]);
+  }, [device, preset, scale, mockupStretchY, videoMeta, bg, anim, videoFit, videoScale, videoOffsetX, videoOffsetY, appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY, viewMode, appendMode, appendBg, appendAnim, appendEnv, envBg, screenX, screenY, screenW, screenH, handZoom, handPanX, handPanY, appendUrl, appendMeta, appendOverlays, hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY, storyEnabled, storyAvailable, storyText, storyStart, storyEnd, storyOffsetY, ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaTimingMode, ctaOffsetX, ctaOffsetY, overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle, zoomKeyframes, baseStart, appendStart, baseEnd, appendEnd, baseDuration, appendDuration, timelineTime, transition, reduceMotion]);
 
   return {
     videoRef, activeVideoRef, previewCanvasRef,

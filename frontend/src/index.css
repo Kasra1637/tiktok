@@ -137,53 +137,6 @@ code, .font-mono {
     font-family: "IBM Plex Mono", source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
-/* ---- Native form controls: keep the OS-owned dropdown list readable on the
-   dark theme. `select` inherits the dark surface, `color-scheme: dark` tells
-   the browser to paint scrollbars, the button affordance, and any part of the
-   popup it insists on drawing itself in dark colors. `option` gets an
-   explicit opaque background because browsers paint the closed <select>
-   with the page theme but the OPEN popup list with their own (white)
-   defaults — that mismatch is why the list used to flash white. Plain
-   `background` (not background-color) plus !important survive the UA
-   stylesheet; text stays white everywhere including selected rows.
-
-   Every interactive state is spelled out because the popup belongs to the
-   OS, not the page: without an explicit hover/focus/active background the
-   browser keeps its own light-mode highlight, which on this theme is a
-   white row under white text. `option:checked` is deliberately the strongest
-   of the three — indigo fill plus weight — so the current choice reads at a
-   glance in a long list.
-
-   `optgroup` is included in the same rules, and that is not cosmetic. An
-   optgroup label is painted by the OS with system colors that author
-   `option` styling does not reach, so grouped options render as bright
-   unreadable rows. They are dark here so that if one is ever added again it
-   degrades to merely plain instead of invisible. */
-select {
-    color-scheme: dark;
-    background: hsl(228 14% 10%);
-    color: #fff;
-}
-
-select option,
-select optgroup {
-    background: hsl(228 14% 10%) !important;
-    color: #fff;
-}
-
-select option:hover,
-select option:focus,
-select option:active {
-    background: hsl(228 12% 22%) !important;
-    color: #fff;
-}
-
-select option:checked {
-    background: hsl(244 60% 32%) !important;
-    color: #fff;
-    font-weight: 600;
-}
-
 @layer base {
     :root {
         --background: 228 14% 7%;
@@ -1646,13 +1599,14 @@ h1,
 }
 
 /* ---------- Filter controls: one treatment (ADR 0161) ----------
-   Every filter control in the app — the pill selects and search inputs
+   Every filter control in the app — the pill dropdowns and search inputs
    wearing PILL_SELECT_CLASS, the app picker in its filter form, the
    History view toggle and the More-filters disclosure — reads in the
    same states, so a filter's condition is visible before it is touched:
    rest is the shared pill (hairline border, recessed tint, bevel rim,
-   hover lift, the focus halo above); a disclosure standing open wears
-   the indigo border; and an ACTIVE filter — a select or search holding
+   hover lift, the focus halo above); a control standing open — the
+   disclosure, or a dropdown whose own menu is open (ADR 0162) — wears
+   the indigo border; and an ACTIVE filter — a dropdown or search holding
    a non-default value, a pressed toggle — wears the selection
    treatment: indigo border, indigo tint, the lit top rim. Indigo means
    "selected" everywhere in this app, so an active filter reads as ON
@@ -1668,18 +1622,86 @@ h1,
 .filter-control[aria-expanded="true"] {
     border-color: var(--indigo-35);
 }
-/* The native menu keeps the platform's behaviour and options; where a
-   platform lets the page dress it (Chromium's list on Windows, Firefox),
-   the options wear the app's dark card instead of the OS white, and the
-   chosen option the brand fill. Everywhere else this is ignored and the
-   menu stays exactly as native as it was. */
-.filter-control option {
-    background-color: hsl(var(--card));
-    color: hsl(var(--foreground));
+/* Every dropdown in the app draws its own menu (ADRs 0162/0163):
+   a native select's open list belongs to the browser and ignores
+   the page, so the open and selected states above never reached
+   the founder's screen. The one shared control (AppSelect) renders
+   a button wearing the caller's skin — the filter pill here, the
+   form-field CONTROL_CLASS in forms — and a menu panel in the card
+   surface language: popover surface, hairline, the nested 12px
+   radius, the large shadow. Its chosen option wears the selection
+   indigo with a check, the same statement an active filter makes
+   on the bar. The keyboard or pointer highlight is a plain step up
+   from the panel, so a chosen row (indigo) reads stronger than a
+   highlighted one. In a form the wrapper stands block so the field
+   fills its row like the native select did. */
+.app-select {
+    position: relative;
+    display: inline-block;
 }
-.filter-control option:checked {
-    background-color: var(--brand-indigo-dark);
-    color: #ffffff;
+.app-select-block {
+    display: block;
+}
+.app-select-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    text-align: left;
+}
+.app-select-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.app-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 50;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(20rem, 90vw);
+    max-height: 16rem;
+    overflow-y: auto;
+    background-color: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    border: 1px solid var(--hairline);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-lg), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    padding: 4px;
+}
+.app-select-menu-end {
+    left: auto;
+    right: 0;
+}
+.app-select-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 6px 8px;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    cursor: pointer;
+    user-select: none;
+}
+.app-select-option[data-highlighted="true"] {
+    background-color: hsl(228 14% 16%);
+}
+.app-select-option[aria-selected="true"] {
+    background-color: var(--indigo-15);
+}
+.app-select-option[aria-disabled="true"] {
+    color: hsl(var(--muted-foreground));
+    cursor: default;
+}
+.app-select-check {
+    display: inline-flex;
+    width: 1rem;
+    flex: none;
+    color: var(--brand-indigo);
 }
 
 /* ---------- History verdict focus, distinct from selection ----------

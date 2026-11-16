@@ -1,4 +1,5 @@
 import { CONTROL_CLASS } from "../formControls";
+import { AppSelect } from "../AppSelect";
 
 /**
  * One profile-aware dropdown for a Review-step direction field.
@@ -39,19 +40,21 @@ export function DirectionSelect({
           </button>
         )}
       </div>
-      <select
+      {/* The prompt row stays a row of the menu (value ""), as the native
+          prompt option was: it can be re-picked to clear the field. */}
+      <AppSelect
         id={id}
-        data-testid={testId}
+        testId={testId}
+        block
         className={CONTROL_CLASS}
         value={value}
         disabled={disabled || !options}
-        onChange={(e) => onPick(e.target.value)}
-      >
-        <option value="">{options ? placeholder : "Loading options…"}</option>
-        {(options || []).map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
+        onChange={onPick}
+        options={[
+          { value: "", label: options ? placeholder : "Loading options…" },
+          ...(options || []).map((option) => ({ value: option, label: option })),
+        ]}
+      />
     </div>
   );
 }

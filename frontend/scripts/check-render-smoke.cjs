@@ -2576,13 +2576,14 @@ async function main() {
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
     const res = ctx.container.querySelector("#gen-resolution");
     if (!res) throw new Error("no resolution toggle for a model that offers 480p and 768p");
-    if (res.value !== "") {
-      throw new Error(`the toggle does not default to 768p (value ${JSON.stringify(res.value)})`);
+    if (res.dataset.value !== "") {
+      throw new Error(`the toggle does not default to 768p (value ${JSON.stringify(res.dataset.value)})`);
     }
-    const options = [...res.querySelectorAll("option")].map((o) => o.value);
+    const options = await offeredOptionValues(ctx, res);
     if (!options.includes("480p")) {
       throw new Error(`480p is not offered: ${JSON.stringify(options)}`);
     }
+    await clickEl(ctx, res, "close the resolution menu");
   });
 
   await check("no resolution toggle renders for a model with no choice", async (ctx) => {
@@ -2612,7 +2613,7 @@ async function main() {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
       const res = ctx.container.querySelector("#gen-resolution");
       if (!res) throw new Error("no resolution toggle to choose from");
-      await selectOption(ctx, res, "480p");
+      await chooseOption(ctx, res, "480p");
       const btn = renderButton(ctx);
       if (btn.disabled) throw new Error("Generate is not live on a ready heygen project");
       await act(async () => {
@@ -2640,23 +2641,72 @@ async function main() {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
       const res = ctx.container.querySelector("#gen-resolution");
       if (!res) throw new Error("no resolution toggle to choose from");
-      await selectOption(ctx, res, "480p");
-      if (res.value !== "480p") throw new Error("the 480p pick did not stick");
+      await chooseOption(ctx, res, "480p");
+      if (res.dataset.value !== "480p") throw new Error("the 480p pick did not stick");
       const model = ctx.container.querySelector("#gen-model");
       if (!model) throw new Error("no model picker to switch with");
       // A 480p pick for heygen must not ride along onto minimax-h3: the server
       // refuses values the new model does not offer.
-      await selectOption(ctx, model, "minimax-h3");
+      await chooseOption(ctx, model, "minimax-h3");
       if (ctx.container.querySelector("#gen-resolution")) {
         throw new Error("the resolution toggle survives a switch to a model with no choice");
       }
-      await selectOption(ctx, model, "heygen-video-1");
+      await chooseOption(ctx, model, "heygen-video-1");
       const resAgain = ctx.container.querySelector("#gen-resolution");
       if (!resAgain) throw new Error("the toggle did not return with heygen");
-      if (resAgain.value !== "") {
-        throw new Error(`switching back kept the stale 480p pick: ${JSON.stringify(resAgain.value)}`);
+      if (resAgain.dataset.value !== "") {
+        throw new Error(`switching back kept the stale 480p pick: ${JSON.stringify(resAgain.dataset.value)}`);
       }
     });
+  });
+
+  await check("no native select remains: the render panel and Review dropdowns are the app's own listbox", async (ctx) => {
+    // ADR 0163: ADR 0162 drew the filter dropdowns' menus itself because a
+    // native select's open menu belongs to the browser and ignores the
+    // page; the founder widened the order to every dropdown in the app.
+    // The form-field dropdowns — the render panel's model and resolution,
+    // the Review camera setup and direction picks — are the same app-drawn
+    // listbox now, so neither surface renders a native <select> at all.
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [HEYGEN_CAPABILITY] }),
+    }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
+    if (ctx.container.querySelector("select")) {
+      throw new Error("the render panel still renders a native select");
+    }
+    for (const id of ["gen-model", "gen-resolution"]) {
+      const control = ctx.container.querySelector(`#${id}`);
+      if (!control || control.getAttribute("aria-haspopup") !== "listbox") {
+        throw new Error(`#${id} is not the app-drawn dropdown`);
+      }
+    }
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        if (ctx.container.querySelector("select")) {
+          throw new Error("the wizard still renders a native select");
+        }
+        for (const id of ["camera-setup", "review-location-direction", "review-wardrobe"]) {
+          const control = ctx.container.querySelector(`#${id}`);
+          if (!control || control.getAttribute("aria-haspopup") !== "listbox") {
+            throw new Error(`#${id} is not the app-drawn dropdown`);
+          }
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
   });
 
   await check("GenerationPanel explains an un-ready project that already rendered", async (ctx) => {
@@ -5395,9 +5445,7 @@ async function main() {
         "Total video length",
         "written to this length. To change it, change the length",
       ], "Review still offers an editable total-length control");
-      const durationSelect = [...ctx.container.querySelectorAll("select")]
-        .find((s) => s.id === "review-duration");
-      if (durationSelect) {
+      if (ctx.container.querySelector("#review-duration")) {
         throw new Error("Review still renders an editable total-length control");
       }
     } finally {
@@ -5906,6 +5954,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // objectives, so this cannot fire on the wrong control.
         for (const select of ctx.container.querySelectorAll("select")) {
           const values = [...select.options].map((o) => o.value);
+          if (values.some((v) => SUPPORTED_DURATIONS.includes(Number(v)))) {
+            throw new Error(`step ${JSON.stringify(label)} offers a length option: ${values.join()}`);
+          }
+        }
+        // The same question for the app-drawn dropdowns (ADR 0163): their
+        // options live in the open menu, so open each one and read them.
+        for (const control of ctx.container.querySelectorAll('[aria-haspopup="listbox"]')) {
+          const values = await offeredOptionValues(ctx, control);
+          await clickEl(ctx, control, "close the dropdown menu");
           if (values.some((v) => SUPPORTED_DURATIONS.includes(Number(v)))) {
             throw new Error(`step ${JSON.stringify(label)} offers a length option: ${values.join()}`);
           }
@@ -6438,21 +6495,23 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const select = ctx.container.querySelector('#camera-setup');
-        if (!select || select.value !== "handheld") throw new Error("handheld camera is not the default");
+        if (!select || select.dataset.value !== "handheld") throw new Error("handheld camera is not the default");
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
           const dropdown = ctx.container.querySelector(`#${id}`);
           if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
-          if (dropdown.tagName !== "SELECT") throw new Error(`${id} is not a dropdown`);
-          if (dropdown.options.length !== list.length + 1) {
+          if (dropdown.getAttribute("aria-haspopup") !== "listbox") throw new Error(`${id} is not a dropdown`);
+          const offered = await offeredOptionValues(ctx, dropdown);
+          if (offered.length !== list.length + 1) {
             throw new Error(`${id} does not offer exactly four profile-matched options`);
           }
-          if (dropdown.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
+          await clickEl(ctx, dropdown, `close the ${id} menu`);
+          if (dropdown.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
         expectText(ctx, "Location & wardrobe");
         expectText(ctx, "Plan default:");
-        await selectOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
-        await selectOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
-        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
+        await chooseOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
+        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
         await clickEl(ctx, buttonByText(ctx, /Save edits/));
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
         expectText(ctx, "Camera setup controls framing");
@@ -6465,9 +6524,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        if (ctx.container.querySelector('#camera-setup')?.value !== "fixed") throw new Error("saved setup lost on reload");
+        if (ctx.container.querySelector('#camera-setup')?.dataset.value !== "fixed") throw new Error("saved setup lost on reload");
         for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-wardrobe": "Wardrobe one" })) {
-          if (ctx.container.querySelector(`#${id}`)?.value !== want) {
+          if (ctx.container.querySelector(`#${id}`)?.dataset.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }
         }
@@ -6503,7 +6562,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe two");
+        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe two");
         if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
@@ -6513,7 +6572,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error("no saved confirmation after the autosave");
         }
         // A second change must schedule a second save, not reuse the first.
-        await selectOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
         if (saved.visual_direction !== "Wardrobe one") throw new Error("the second autosave did not carry the newer pick");
@@ -10685,9 +10744,9 @@ async function runAnalyticsChecks() {
     }), async () => {
       await mount(Analytics)(ctx);
       const picker = ctx.container.querySelector('[data-testid="analytics-profile-picker"]');
-      await selectOption(ctx, picker, "");
+      await chooseOption(ctx, picker, "");
       if (!ctx.container.querySelector('[data-testid="result-unassigned"]')) throw new Error("All apps dropped standalone results");
-      await selectOption(ctx, picker, "p1");
+      await chooseOption(ctx, picker, "p1");
       expectText(ctx, "Results could not load");
       if (ctx.text().includes("Nothing captured yet") || ctx.container.querySelector('[data-testid="result-unassigned"]')) throw new Error("failed scope displayed empty or stale results");
       if (!calls.some(p => p.brand_profile_id === "p1" && p.limit === 200)) throw new Error("app scope not sent");
@@ -12460,7 +12519,7 @@ async function runBrandSetupChecks() {
         fail = false;
         await clickEl(ctx, retry, "no retry control on the app list error");
         await act(async () => {});
-        const options = [...ctx.container.querySelectorAll("option")].map((o) => o.value);
+        const options = await offeredOptionValues(ctx, ctx.container.querySelector('[data-testid="app-profile-picker"]'));
         if (!options.includes("p1") || !options.includes("p2")) {
           throw new Error("retrying the app list did not restore the app options");
         }
@@ -13156,7 +13215,7 @@ async function runDemoCtaChecks() {
       );
       if (labels.some((t) => t === "Choose a video" || t === "Replace")) {
         throw new Error(
-          "the Source & Look picker button is back. The frame's upload button " +
+          "the Base clip & look picker button is back. The frame's upload button " +
             "is the one picker control; this one only duplicated it."
         );
       }
@@ -13369,28 +13428,28 @@ async function runDemoCtaChecks() {
         });
       };
       try {
-        // First visit: exactly one group, Source & Look — it is the input, and
+        // First visit: exactly one group, Base clip & look — it is the input, and
         // eleven open groups made the panel taller than the video it describes.
         const first = await mountEditor();
         const firstOpen = openGroups(first.container);
-        if (firstOpen.length !== 1 || firstOpen[0] !== "Source & Look") {
+        if (firstOpen.length !== 1 || firstOpen[0] !== "Base clip & look") {
           throw new Error(
-            `a first visit should open only Source & Look (open: ${JSON.stringify(firstOpen)})`
+            `a first visit should open only Base clip & look (open: ${JSON.stringify(firstOpen)})`
           );
         }
         // Opening another closes the first. This is the whole point of the
         // change: two expanded groups is the layout that pushed the video small.
-        await clickGroup(first.container, "Hook Text");
+        await clickGroup(first.container, "Opening text");
         const afterSwitch = openGroups(first.container);
-        if (afterSwitch.length !== 1 || afterSwitch[0] !== "Hook Text") {
+        if (afterSwitch.length !== 1 || afterSwitch[0] !== "Opening text") {
           throw new Error(
-            `opening Hook Text must leave exactly it open (open: ${JSON.stringify(afterSwitch)})`
+            `opening Opening text must leave exactly it open (open: ${JSON.stringify(afterSwitch)})`
           );
         }
         // And the content assertion: the duration reads once, right-aligned.
         const firstText = first.container.textContent;
         if (!firstText.includes("Visible for") || !firstText.includes("1.8s")) {
-          throw new Error("Hook Text did not open on click");
+          throw new Error("Opening text did not open on click");
         }
         const saved = JSON.parse(dom.window.localStorage.getItem(key) || "{}");
         const savedOpen = Object.keys(saved).filter((k) => saved[k]);
@@ -13402,7 +13461,7 @@ async function runDemoCtaChecks() {
         // Second visit must honour it, not reset to the default.
         const second = await mountEditor();
         const secondOpen = openGroups(second.container);
-        if (secondOpen.length !== 1 || secondOpen[0] !== "Hook Text") {
+        if (secondOpen.length !== 1 || secondOpen[0] !== "Opening text") {
           throw new Error(
             "the open group was not remembered. The panel is a workspace, not a " +
               "form; re-opening a different group than the one someone left on " +
@@ -13410,7 +13469,7 @@ async function runDemoCtaChecks() {
           );
         }
         // Clicking the open group closes it; none open is valid.
-        await clickGroup(second.container, "Hook Text");
+        await clickGroup(second.container, "Opening text");
         const closed = openGroups(second.container);
         if (closed.length !== 0) {
           throw new Error(
@@ -13656,12 +13715,12 @@ async function runDemoCtaChecks() {
   );
 
   // The frame's Upload a clip button drives the file input by ref from OUTSIDE
-  // the collapsible Source & Look group, so the input must survive that group
+  // the collapsible Base clip & look group, so the input must survive that group
   // closing. The regression: the input lived inside the collapsible content,
   // so opening any other group unmounted it and the button clicked into a
   // null ref — silently doing nothing, with no dialog and no error.
   await check(
-    "the frame upload still reaches its file input with Source & Look closed",
+    "the frame upload still reaches its file input with Base clip & look closed",
     async (ctx) => {
       const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
       dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
@@ -13670,16 +13729,16 @@ async function runDemoCtaChecks() {
         async () => {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
           const header = [...ctx.container.querySelectorAll("button[aria-expanded]")].find(
-            (b) => (b.textContent || "").trim() === "Hook Text"
+            (b) => (b.textContent || "").trim() === "Opening text"
           );
-          if (!header) throw new Error("no Hook Text group header");
+          if (!header) throw new Error("no Opening text group header");
           await act(async () => {
             header.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
           if (!ctx.container.querySelector('[data-testid="demo-cta-file-input"]')) {
             throw new Error(
-              "closing Source & Look unmounted the file input, so the frame's " +
+              "closing Base clip & look unmounted the file input, so the frame's " +
                 "Upload a clip button clicks into a null ref and silently does nothing."
             );
           }
@@ -13689,7 +13748,7 @@ async function runDemoCtaChecks() {
   );
 
   // Public Sans and Sora are off the overlay font catalog. Public Sans shipped
-  // in both lists (Hook Text and End Card) and was the least distinct of
+  // in both lists (Opening text and End Card) and was the least distinct of
   // the text faces, so a founder could pick it and get something that read as
   // the browser default; Sora followed as a second trim of the same list.
   await check("Public Sans and Sora are gone from both overlay font lists", async (ctx) => {
@@ -13710,7 +13769,7 @@ async function runDemoCtaChecks() {
       { getGenerations: async () => ({ generations: [COMPLETED] }) },
       async () => {
         await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
-        for (const [group, prefix] of [["Hook Text", "caption-font"], ["End Card", "cta-font"]]) {
+        for (const [group, prefix] of [["Opening text", "caption-font"], ["End Card", "cta-font"]]) {
           await openGroup(ctx.container, group);
           const tiles = [...ctx.container.querySelectorAll(`[data-testid^="${prefix}-"]`)];
           if (tiles.length !== 9) {
@@ -13761,8 +13820,8 @@ async function runDemoCtaChecks() {
         const video = ctx.container.querySelector("video");
         if (!video) throw new Error("the preview media element is missing");
         const group = [...ctx.container.querySelectorAll("button[aria-expanded]")]
-          .find((b) => (b.textContent || "").trim() === "Hook Text");
-        if (!group) throw new Error("no Hook Text group header");
+          .find((b) => (b.textContent || "").trim() === "Opening text");
+        if (!group) throw new Error("no Opening text group header");
         await act(async () => {
           group.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
@@ -13985,6 +14044,183 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("no native select remains: the Demo + CTA video fit is the app's own listbox", async (ctx) => {
+    // ADR 0163: the last native select in the editor was the base clip's
+    // Video fit (Cover / Contain / Fill) inside Fine-tune framing — its
+    // open menu was the browser's, like every native select's. The control
+    // is the app-drawn dropdown now and the editor renders no native
+    // select at all; what the fits do is unchanged.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const sourceToggle = ctx.container.querySelector('[data-testid="demo-cta-source"] > button');
+      if (sourceToggle && sourceToggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, sourceToggle, "open Base clip & look");
+      }
+      if (ctx.container.querySelector("select")) {
+        throw new Error("the Demo + CTA editor still renders a native select");
+      }
+      const fit = ctx.container.querySelector('[aria-label="Video fit"]');
+      if (!fit || fit.getAttribute("aria-haspopup") !== "listbox") {
+        throw new Error("the Video fit control is not the app-drawn dropdown");
+      }
+      const offered = await offeredOptionValues(ctx, fit);
+      if (JSON.stringify(offered) !== JSON.stringify(["cover", "contain", "fill"])) {
+        throw new Error(`the Video fit menu offers ${JSON.stringify(offered)}, expected the three fits`);
+      }
+      await clickEl(ctx, fit, "close the Video fit menu");
+    } finally {
+      clip.restore();
+    }
+  });
+
+  await check("the second clip carries its own video crop, independent of the base", async (ctx) => {
+    // ADR 0164: video fit is individual per clip. The base always had a
+    // Video crop block (fit, zoom, offsets) inside Fine-tune framing; the
+    // added clip painted with the shared path — a hard-coded cover at 1x
+    // in Real Video, the base's own crop in the phone views. The Second
+    // clip group now carries the same block for the added clip, with its
+    // own state, and the one painter both preview and export call
+    // resolves the crop per segment. This check paints real frames
+    // through the stubbed canvas and reads the drawn boxes back: the
+    // base is 1920×1080 landscape, the added clip 720×720 square, the
+    // canvas 1080×1920, so each fit lands on a different box and a
+    // shared or decorative control cannot fake the numbers.
+    const draws = [];
+    const clip = installLoadedClipStubs({ width: 1920, height: 1080, onDraw: (...args) => draws.push(args) });
+    const encoder = load("demoCta/exportTikTok.js");
+    const originalEncode = encoder.exportTikTok;
+    const originalFetch = global.fetch;
+    const near = (a, b) => Math.abs(a - b) <= 2;
+    const expectBox = (box, want, label) => {
+      if (!box) throw new Error(`${label}: the segment never painted`);
+      const got = { dx: box[1], dy: box[2], dw: box[3], dh: box[4] };
+      for (const key of ["dx", "dy", "dw", "dh"]) {
+        if (!near(got[key], want[key])) {
+          throw new Error(`${label}: painted ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+        }
+      }
+    };
+    // Section children unmount while their group is closed, so every
+    // control below is re-queried at the moment it is driven.
+    const cropBlock = () => ctx.container.querySelector('[data-testid="append-video-crop"]');
+    const appendFit = () => ctx.container.querySelector('[aria-label="Second clip video fit"]');
+    const zoomThumb = () => cropBlock()?.querySelector('[data-testid="append-crop-zoom-slider"] [role="slider"]');
+    try {
+      await clip.loadClip(ctx);
+      const base = ctx.container.querySelector("video");
+      Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-realistic"]'), "select Real Video view");
+      // The added clip: a square 720×720 upload, so its fits land on
+      // different boxes from the landscape base's.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-second"] button'), "open the second clip group");
+      const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      const overlay = ctx.container.querySelector('[data-testid="append-video"]');
+      if (!overlay) throw new Error("the added clip never mounted its preview element");
+      Object.defineProperty(overlay, "videoWidth", { configurable: true, value: 720 });
+      Object.defineProperty(overlay, "videoHeight", { configurable: true, value: 720 });
+      Object.defineProperty(overlay, "readyState", { configurable: true, value: 4 });
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("loadeddata")));
+      await clip.flush();
+
+      // The block itself: an app-drawn fit menu offering the three fits,
+      // a hint naming the ADDED clip's source size, and its own sliders.
+      if (!cropBlock()) throw new Error("the Second clip group has no Video crop block of its own");
+      if (!appendFit() || appendFit().getAttribute("aria-haspopup") !== "listbox") {
+        throw new Error("the second clip's Video fit control is not the app-drawn dropdown");
+      }
+      const offered = await offeredOptionValues(ctx, appendFit());
+      if (JSON.stringify(offered) !== JSON.stringify(["cover", "contain", "fill"])) {
+        throw new Error(`the second clip's fit menu offers ${JSON.stringify(offered)}, expected the three fits`);
+      }
+      await clickEl(ctx, appendFit(), "close the second clip fit menu");
+      if (!cropBlock().textContent.includes("Source 720×720.")) {
+        throw new Error("the second clip's crop hint does not name the added clip's own source size");
+      }
+      if (!zoomThumb()) throw new Error("the second clip's crop block has no Zoom slider");
+
+      const seek = ctx.container.querySelector('[aria-label="Seek"]');
+      const paintBase = async () => {
+        await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+        await act(async () => base.dispatchEvent(new dom.window.Event("seeked")));
+        draws.length = 0;
+        await clip.flush();
+        const hits = draws.filter((a) => a[0] === base);
+        return hits[hits.length - 1];
+      };
+      const paintAppend = async () => {
+        await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+        await act(async () => overlay.dispatchEvent(new dom.window.Event("seeked")));
+        draws.length = 0;
+        await clip.flush();
+        const hits = draws.filter((a) => a[0] === overlay);
+        return hits[hits.length - 1];
+      };
+
+      // Defaults: each clip covers, on its own geometry.
+      expectBox(await paintBase(), { dx: -1166.7, dy: 0, dw: 3413.3, dh: 1920 }, "base at its default cover");
+      expectBox(await paintAppend(), { dx: -420, dy: 0, dw: 1920, dh: 1920 }, "second clip at its default cover");
+
+      // The added clip takes Contain: its box changes, the base's does not.
+      await chooseOption(ctx, appendFit(), "contain");
+      if (appendFit().getAttribute("data-value") !== "contain") throw new Error("the second clip's fit did not take the Contain pick");
+      expectBox(await paintAppend(), { dx: 0, dy: 420, dw: 1080, dh: 1080 }, "second clip at its own contain");
+      expectBox(await paintBase(), { dx: -1166.7, dy: 0, dw: 3413.3, dh: 1920 }, "base unmoved by the second clip's fit");
+
+      // Its Zoom is its own too: End runs the slider to 3x and the
+      // painted box follows — the base's sliders never moved.
+      await act(async () => zoomThumb().dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+      await clip.flush();
+      if (zoomThumb().getAttribute("aria-valuenow") !== "3") throw new Error("the second clip's Zoom slider did not take the End press");
+      expectBox(await paintAppend(), { dx: -1080, dy: -660, dw: 3240, dh: 3240 }, "second clip at its own 3x zoom");
+
+      // Export paints through the same paintFrame with the segment
+      // named, so the added segment must carry its own crop into the
+      // file too — not just into the preview.
+      global.fetch = async () => ({ ok: true, blob: async () => new Blob(["clip"], { type: "video/mp4" }) });
+      let exportBox = null;
+      encoder.exportTikTok = async ({ drawFrame }) => {
+        const addedFrame = document.createElement("canvas");
+        // A decoded added-clip frame carries the segment's own size; a
+        // default 300×150 canvas would paint a 2:1 picture instead.
+        addedFrame.width = 720;
+        addedFrame.height = 720;
+        draws.length = 0;
+        drawFrame(9, addedFrame, 1);
+        const hits = draws.filter((a) => a[0] === addedFrame);
+        exportBox = hits[hits.length - 1];
+        throw new Error("Per-clip crop export verified");
+      };
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-export"]'), "export with per-clip crop");
+      if (!ctx.container.textContent.includes("Per-clip crop export verified")) throw new Error("the joined export was not exercised");
+      expectBox(exportBox, { dx: -1080, dy: -660, dw: 3240, dh: 3240 }, "exported second clip at its own crop");
+
+      // And the base changing its fit never reaches the added clip.
+      const sourceToggle = ctx.container.querySelector('[data-testid="demo-cta-source"] > button');
+      if (sourceToggle && sourceToggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, sourceToggle, "reopen the base group");
+      }
+      await chooseOption(ctx, ctx.container.querySelector('[aria-label="Video fit"]'), "fill");
+      expectBox(await paintBase(), { dx: 0, dy: 0, dw: 1080, dh: 1920 }, "base at its own fill");
+      expectBox(await paintAppend(), { dx: -1080, dy: -660, dw: 3240, dh: 3240 }, "second clip unmoved by the base's fit");
+
+      // Reset returns the added clip's block to Cover at 1x, offsets zero.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-second"] button'), "reopen the second clip group");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-crop-reset"]'), "reset the second clip's crop");
+      await clip.flush();
+      if (appendFit().getAttribute("data-value") !== "cover") throw new Error("reset did not return the second clip's fit to Cover");
+      if (zoomThumb().getAttribute("aria-valuenow") !== "1") throw new Error("reset did not return the second clip's Zoom to 1x");
+      expectBox(await paintAppend(), { dx: -420, dy: 0, dw: 1920, dh: 1920 }, "second clip back at cover after reset");
+    } finally {
+      encoder.exportTikTok = originalEncode;
+      global.fetch = originalFetch;
+      clip.restore();
+    }
+  });
+
   await check("the loaded Demo + CTA preview carries one branded play button", async (ctx) => {
     // The transport sits under the frame in a column that scrolls, so starting
     // the clip meant leaving the video. One accent play button belongs on the
@@ -14082,7 +14318,7 @@ async function runDemoCtaChecks() {
         }
       };
       for (const [group, testId] of [
-        ["Hook Text", "hook-toggle"],
+        ["Opening text", "hook-toggle"],
         ["Story Text", "story-toggle"],
         ["End Card", "cta-toggle"],
       ]) {
@@ -14094,7 +14330,7 @@ async function runDemoCtaChecks() {
         }
       }
       // Off is a default, not a removal: the founder can still turn the hook on.
-      await openGroup("Hook Text");
+      await openGroup("Opening text");
       const hook = ctx.container.querySelector('[data-testid="hook-toggle"]');
       await clickEl(ctx, hook, "turn hook text on");
       if (hook.getAttribute("data-state") !== "checked") {
@@ -14140,7 +14376,7 @@ async function runDemoCtaChecks() {
         }
       };
       for (const [group, testId] of [
-        ["Hook Text", "hook-toggle"],
+        ["Opening text", "hook-toggle"],
         ["Story Text", "story-toggle"],
         ["End Card", "cta-toggle"],
       ]) {
@@ -14486,8 +14722,8 @@ async function runDemoCtaChecks() {
       // One settings change paints exactly one frame and replays its window.
       video.currentTime = 4;
       const hookGroup = [...ctx.container.querySelectorAll("button[aria-expanded]")]
-        .find((b) => (b.textContent || "").trim() === "Hook Text");
-      if (!hookGroup) throw new Error("no Hook Text group header");
+        .find((b) => (b.textContent || "").trim() === "Opening text");
+      if (!hookGroup) throw new Error("no Opening text group header");
       await act(async () => {
         hookGroup.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
       });
@@ -14565,7 +14801,7 @@ async function runDemoCtaChecks() {
           await act(async () => {});
         }
       };
-      await openGroup("Hook Text");
+      await openGroup("Opening text");
       // Hook text starts off, so enabling it is the founder's first move and
       // everything this check replays happens after that.
       const hookToggle = ctx.container.querySelector('[data-testid="hook-toggle"]');
@@ -15117,7 +15353,7 @@ async function runDemoCtaChecks() {
   // only scrolls a column sooner, while underestimating grows a page
   // scrollbar beside a studio that fits. A viewport lock back on the page
   // would trap founders inside fixed frames instead of scrolling through
-  // End Card, Story, Hook, Second clip and Source & Look.
+  // End Card, Story, Hook, Second clip and Base clip & look.
   await check(
     "the demo-cta page scrolls while both columns cap below the header",
     async () => {
@@ -15419,17 +15655,17 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // Mockup height, screen position and crop modify the Source & Look choice
+  // Mockup height, screen position and crop modify the Base clip & look choice
   // above, so they live at the bottom of that group — not in a sixth
   // Advanced drawer. One group per concern: the text groups stay text, and
   // the stored one-open shape has exactly the five living groups.
-  await check("no Advanced group: fine-tuning lives in Source & Look", async () => {
+  await check("no Advanced group: fine-tuning lives in Base clip & look", async () => {
     const src = fs.readFileSync(
       path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
       "utf8"
     );
     if (/title="Advanced"/.test(src)) {
-      throw new Error("the Advanced group is back — fine-tuning belongs in Source & Look");
+      throw new Error("the Advanced group is back — fine-tuning belongs in Base clip & look");
     }
     const order = (src.match(/const SECTION_ORDER = \[([^\]]*)\]/) || [])[1] || "";
     const keys = order.split(",").map((k) => k.trim().replace(/["']/g, "")).filter(Boolean);
@@ -15447,14 +15683,14 @@ async function runDemoCtaChecks() {
     const sourceBlock = src.split('testId="demo-cta-second"')[0];
     for (const marker of ["Mockup height", "Video crop"]) {
       if (!sourceBlock.includes(marker)) {
-        throw new Error(`${marker} is not inside Source & Look (before the Second clip group)`);
+        throw new Error(`${marker} is not inside Base clip & look (before the Second clip group)`);
       }
     }
   });
 
   // The five groups stay, but the fast path does not wade through twelve
   // framing sliders: fine-tuning lives inside one collapsed disclosure in
-  // Source & Look, so shoot → trim → text → export reads clean and the
+  // Base clip & look, so shoot → trim → text → export reads clean and the
   // framing is one click away instead of a wall.
   await check("fine-tuning hides behind Fine-tune framing until opened", async () => {
     const src = fs.readFileSync(
@@ -15463,7 +15699,7 @@ async function runDemoCtaChecks() {
     );
     const tag = src.match(/<details[^>]*data-testid="fine-tune-framing"[^>]*>/);
     if (!tag) {
-      throw new Error("no Fine-tune framing disclosure in Source & Look");
+      throw new Error("no Fine-tune framing disclosure in Base clip & look");
     }
     if (/\bopen\b/.test(tag[0])) {
       throw new Error("the disclosure opens by default — the fast path stays buried");
@@ -15471,7 +15707,7 @@ async function runDemoCtaChecks() {
     const at = src.indexOf('data-testid="fine-tune-framing"');
     const beforeSecond = src.indexOf('testId="demo-cta-second"');
     if (at === -1 || beforeSecond === -1 || at > beforeSecond) {
-      throw new Error("the disclosure is not inside Source & Look (before the Second clip group)");
+      throw new Error("the disclosure is not inside Base clip & look (before the Second clip group)");
     }
   });
 
@@ -15678,7 +15914,7 @@ async function runDemoCtaChecks() {
   });
 
   await check("the History source toggle lives in the preview column, not the Source settings", async (ctx) => {
-    // The History render block used to sit in the Source & Look settings
+    // The History render block used to sit in the Base clip & look settings
     // group while the empty preview offered only a link to the /history
     // page — two doors to footage in two places, neither beside the Upload
     // button. The toggle now lives where the clip lands: inside the empty
@@ -15854,11 +16090,11 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("Font & Animation close each other in Hook Text and End Card", async (ctx) => {
+  await check("Font & Animation close each other in Opening text and End Card", async (ctx) => {
     const DemoCtaEditor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
     dom.window.localStorage.removeItem("hookforge.demoCta.openSections.v4");
     await mount(DemoCtaEditor)(ctx);
-    for (const [label, prefix] of [["Hook Text", "caption"], ["End Card", "cta"]]) {
+    for (const [label, prefix] of [["Opening text", "caption"], ["End Card", "cta"]]) {
       const header = [...ctx.container.querySelectorAll("button[aria-expanded]")]
         .find((button) => button.textContent.trim() === label);
       await clickEl(ctx, header, `open ${label}`);
@@ -15892,12 +16128,12 @@ async function runDemoCtaChecks() {
             throw new Error("the end-card group is mislabeled or missing");
           }
           // Group headers always render, but the hook duration only exists once
-          // Hook Text is expanded — and only one group is open at a time, so
+          // Opening text is expanded — and only one group is open at a time, so
           // this check has to open it rather than assume it.
           const hook = [...ctx.container.querySelectorAll("button[aria-expanded]")].find(
-            (b) => (b.textContent || "").trim() === "Hook Text"
+            (b) => (b.textContent || "").trim() === "Opening text"
           );
-          if (!hook) throw new Error("no Hook Text group header to click");
+          if (!hook) throw new Error("no Opening text group header to click");
           await act(async () => {
             hook.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
@@ -15925,8 +16161,8 @@ async function runDemoCtaChecks() {
     const get = (id) => ctx.container.querySelector(`[data-testid="${id}"]`);
     try {
       await clip.loadClip(ctx);
-      if (get("look-preset-save-btn")) throw new Error("Save look must not be in Source & Look");
-      await openGroup("Hook Text");
+      if (get("look-preset-save-btn")) throw new Error("Save look must not be in Base clip & look");
+      await openGroup("Opening text");
       await clickEl(ctx, get("caption-font-nunito"), "pick hook font");
       await clickEl(ctx, get("caption-anim-fade"), "pick hook entrance");
       await clickEl(ctx, get("caption-size-preset-l"), "pick hook size");
@@ -15992,12 +16228,12 @@ async function runDemoCtaChecks() {
           await mount(DemoCtaEditor, { generation: COMPLETED })(ctx);
           // Hook text starts off, so turn it on first: the size presets, the
           // safe-area guard and the copy flipper below all describe it.
-          await openGroup("Hook Text");
+          await openGroup("Opening text");
           await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
-          // #5 Named look presets live with saving in End Card, not Source & Look
+          // #5 Named look presets live with saving in End Card, not Base clip & look
           await openGroup("End Card");
           if (ctx.container.querySelector('[data-testid="demo-cta-source"] [data-testid="look-preset-ugc"]')) {
-            throw new Error("look presets are still offered prematurely in Source & Look");
+            throw new Error("look presets are still offered prematurely in Base clip & look");
           }
           const ugcPreset = ctx.container.querySelector('[data-testid="look-preset-ugc"]');
           if (!ugcPreset) throw new Error("missing built-in UGC style look preset");
@@ -16009,17 +16245,17 @@ async function runDemoCtaChecks() {
           if (!review || !review.contains(ctx.container.querySelector('[data-testid="look-preset-save-btn"]')) || !review.contains(ugcPreset)) {             throw new Error("saving and applying a look are not together in End Card");
           }
 
-          // #1 & #2 & #3 on Hook Text
-          await openGroup("Hook Text");
+          // #1 & #2 & #3 on Opening text
+          await openGroup("Opening text");
           const hookSizeS = ctx.container.querySelector('[data-testid="caption-size-preset-s"]');
           const hookSizeM = ctx.container.querySelector('[data-testid="caption-size-preset-m"]');
           const hookSizeL = ctx.container.querySelector('[data-testid="caption-size-preset-l"]');
           if (!hookSizeS || !hookSizeM || !hookSizeL) {
-            throw new Error("Hook Text is missing S/M/L size preset buttons");
+            throw new Error("Opening text is missing S/M/L size preset buttons");
           }
-          await clickEl(ctx, hookSizeL, "select L size on Hook Text");
+          await clickEl(ctx, hookSizeL, "select L size on Opening text");
           if (hookSizeL.getAttribute("aria-pressed") !== "true" || !ctx.text().includes("115%")) {
-            throw new Error("clicking L size preset did not update Hook Text scale to 115%");
+            throw new Error("clicking L size preset did not update Opening text scale to 115%");
           }
 
           // One button requests 20 fresh app-specific openings, then selects
@@ -16052,12 +16288,12 @@ async function runDemoCtaChecks() {
           }
           const hookWarn = ctx.container.querySelector('[data-testid="hook-safety-warning"]');
           if (!hookWarn) {
-            throw new Error("Safe-area guard did not warn when Hook Text size dropped below 80%");
+            throw new Error("Safe-area guard did not warn when Opening text size dropped below 80%");
           }
           const hookFix = ctx.container.querySelector('[data-testid="hook-safety-fix"]');
-          await clickEl(ctx, hookFix, "click Fit safe area on Hook Text");
+          await clickEl(ctx, hookFix, "click Fit safe area on Opening text");
           if (ctx.container.querySelector('[data-testid="hook-safety-warning"]')) {
-            throw new Error("Fit safe area did not clear the Hook Text safety warning");
+            throw new Error("Fit safe area did not clear the Opening text safety warning");
           }           // #1, #3, #4 on End Card
           await openGroup("End Card");
           const ctaSizeS = ctx.container.querySelector('[data-testid="cta-size-preset-s"]');
@@ -16147,15 +16383,15 @@ async function runDemoCtaChecks() {
       // The export below must carry overlays, and hook text starts off, so
       // turning it on is the founder's first move.
       await clickEl(ctx,
-        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Hook Text"),
-        "open Hook Text");
+        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Opening text"),
+        "open Opening text");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
       await clip.flush();
-      // Turning the hook on swapped the open group; Source & Look owns the
+      // Turning the hook on swapped the open group; Base clip & look owns the
       // view-mode picker this check drives next.
       await clickEl(ctx,
-        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Source & Look"),
-        "reopen Source & Look");
+        [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Base clip & look"),
+        "reopen Base clip & look");
       await clip.flush();
       const click = async (selector) => {
         await clickEl(ctx, ctx.container.querySelector(selector), selector);
@@ -16264,10 +16500,10 @@ async function runDemoCtaChecks() {
       if (!handCalls.some((args) => args[4] === "bedroom")) throw new Error("added clip did not paint its own scene");
       // The base keeps its own presentation too: a hand base plus a hand
       // upload still exports both segments instead of dropping the second.
-      // Source & Look closed when Second clip opened (single-open
+      // Base clip & look closed when Second clip opened (single-open
       // accordion), so reopen it for the base style picker.
       await click('[data-testid="demo-cta-source"] button');
-      if (!ctx.container.querySelector('[data-testid="base-audio-mute"]')) throw new Error("base mute toggle missing from Source & Look");
+      if (!ctx.container.querySelector('[data-testid="base-audio-mute"]')) throw new Error("base mute toggle missing from Base clip & look");
       if (ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute must default off");
       await click('[data-testid="base-audio-mute"]');
       if (!ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute did not take");
@@ -16652,7 +16888,7 @@ async function runDemoCtaChecks() {
       if (newest.join() !== "generation-v-old,generation-v-top,generation-v-none") {
         throw new Error(`newest-first did not preserve server order: ${newest.join()}`);
       }
-      await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
+      await chooseOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
       const ranked = order();
       if (ranked.join() !== "generation-v-top,generation-v-old,generation-v-none") {
         throw new Error(`most-viewed did not rank counted rows first: ${ranked.join()}`);
@@ -16685,7 +16921,7 @@ async function runDemoCtaChecks() {
       // block sat in the panel — the guarantees are the saves and the
       // summary sync, not the column the form renders in.
       const onCard = (id) => card().querySelector(`[data-testid="${id}"]`);
-      await selectOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
+      await chooseOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
       const input = onCard("history-tiktok-views-input-sync-low");
       for (const invalid of ["1,2", "1.5", "true", "10000000001"]) {
         await typeInto(ctx, input, invalid);
@@ -16891,12 +17127,12 @@ async function runDemoCtaChecks() {
       global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(History)); };
       try {
       await mount(History)(ctx);
-      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "failed");
+      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "failed");
       await act(async () => pending[1].resolve({ generations: [{ ...COMPLETED, id: "latest", status: "failed", audience: "Night scrollers" }] }));
       await act(async () => pending[0].resolve({ generations: [{ ...COMPLETED, id: "stale", audience: "Night scrollers" }] }));
       if (!ctx.container.querySelector('#generation-latest') || ctx.container.querySelector('#generation-stale')) throw new Error("older request overwrote current filter");
-      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "completed");
-      await selectOption(ctx, ctx.container.querySelector('#history-status-filter'), "archived");
+      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "completed");
+      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "archived");
       await act(async () => pending[3].resolve({ generations: [{ ...COMPLETED, id: "archived", status: "archived", audience: "Night scrollers" }] }));
       await act(async () => pending[2].reject(new Error("stale request failed")));
       expectAbsent(ctx, "stale request failed");
@@ -17048,7 +17284,8 @@ async function runDemoCtaChecks() {
       await act(async () => {});
       const picker = ctx.container.querySelector('[data-testid="history-search"]');
       if (!picker) throw new Error("retrying the app list did not restore the header");
-      if (![...ctx.container.querySelectorAll("option")].some((o) => o.value === PROFILE.id)) {
+      const offered = await offeredOptionValues(ctx, ctx.container.querySelector('[aria-label="Filter by app"]'));
+      if (!offered.includes(PROFILE.id)) {
         throw new Error("retrying the app list did not restore the app options");
       }
     });
@@ -17084,7 +17321,7 @@ async function runDemoCtaChecks() {
         global.__SMOKE_HASH = "#generation-anchor-two";
         await mount(History)(ctx);
         if (ctx.container.querySelector('[data-testid="history-search"]').value !== "") throw new Error("old search hid linked clip");
-        if (ctx.container.querySelector('#history-status-filter').value !== "completed") throw new Error("URL status ignored");
+        if (ctx.container.querySelector('#history-status-filter').dataset.value !== "completed") throw new Error("URL status ignored");
         if (!ctx.container.querySelector('#generation-anchor-two [data-testid="history-detail-panel"]')) throw new Error("same-page clip anchor has no attached record");
         if (ctx.container.querySelector('[data-testid="history-expand"]')) throw new Error("an expand control survived the attached layout");
         global.__SMOKE_HASH = "#generation-anchor-one";
@@ -17605,7 +17842,7 @@ async function runDemoCtaChecks() {
         fail = false;
         await clickEl(ctx, retry, "no retry control on the app list error");
         await act(async () => {});
-        const options = [...ctx.container.querySelectorAll("option")].map((o) => o.value);
+        const options = await offeredOptionValues(ctx, ctx.container.querySelector('[data-testid="asset-profile-picker"]'));
         if (!options.includes(PROFILE.id) || !options.includes("p2")) {
           throw new Error("retrying the app list did not restore the app options");
         }
@@ -19137,6 +19374,88 @@ await check(
     }
   });
 
+  // The filter dropdowns are drawn by the app, not the OS (ADR 0162):
+  // opening one shows the app's own listbox, the current value reads
+  // selected inside it, and choosing another value applies the filter
+  // and closes the menu. A native select's open menu belongs to the
+  // browser, which is exactly what the founder could not see dressed.
+  await check("filter dropdowns open an app-drawn menu and choosing applies the filter", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    global.__SMOKE_NAVIGATIONS = [];
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "menu-1",
+          hook_line: "A pier at dawn",
+          audience: "Night scrollers",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?status=failed";
+        await mount(GenerationHistory)(ctx);
+        const status = ctx.container.querySelector("#history-status-filter");
+        if (!status) throw new Error("History lost the status filter");
+        if (status.tagName !== "BUTTON" || status.getAttribute("aria-haspopup") !== "listbox") {
+          throw new Error("the status filter is not the app-drawn dropdown button");
+        }
+        if (status.getAttribute("aria-expanded") !== "false") {
+          throw new Error("the status menu starts open");
+        }
+        await clickEl(ctx, status);
+        if (status.getAttribute("aria-expanded") !== "true") {
+          throw new Error("clicking the status filter did not open its menu");
+        }
+        const menu = status.closest(".app-select")?.querySelector('[role="listbox"]');
+        if (!menu) throw new Error("the open status menu is not an app-drawn listbox");
+        const options = [...menu.querySelectorAll('[role="option"]')];
+        if (options.length !== 6) {
+          throw new Error(`the status menu lists ${options.length} options, not the six statuses`);
+        }
+        const chosen = options.find((o) => o.dataset.value === "failed");
+        if (!chosen || chosen.getAttribute("aria-selected") !== "true") {
+          throw new Error("the current status does not read selected in its own menu");
+        }
+        if (options.some((o) => o !== chosen && o.getAttribute("aria-selected") === "true")) {
+          throw new Error("more than the current status reads selected");
+        }
+        // Choosing a different status applies the filter — the URL param
+        // moves — and the menu closes behind the choice.
+        const completed = options.find((o) => o.dataset.value === "completed");
+        await clickEl(ctx, completed);
+        const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
+        if (!went.some((search) => new URLSearchParams(search).get("status") === "completed")) {
+          throw new Error(`choosing a status did not navigate the status param: ${JSON.stringify(went)}`);
+        }
+        if (status.getAttribute("aria-expanded") !== "false" || ctx.container.querySelector('[role="listbox"]')) {
+          throw new Error("the status menu stayed open after a choice");
+        }
+        // The keyboard opens and closes a menu too: ArrowDown opens the
+        // sort menu, Escape closes it without changing anything.
+        const sort = ctx.container.querySelector('[data-testid="history-sort"]');
+        await act(async () => {
+          sort.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+        });
+        await act(async () => {});
+        if (sort.getAttribute("aria-expanded") !== "true" || !sort.closest(".app-select")?.querySelector('[role="listbox"]')) {
+          throw new Error("ArrowDown did not open the sort menu");
+        }
+        await act(async () => {
+          sort.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        });
+        await act(async () => {});
+        if (sort.getAttribute("aria-expanded") !== "false" || ctx.container.querySelector('[role="listbox"]')) {
+          throw new Error("Escape did not close the sort menu");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_NAVIGATIONS = previousNavigations;
+    }
+  });
+
   // Renders carrying post copy or plan context stack under one heading and
   // renders carrying neither under another, and the two sides never share
   // the screen: the copy filter shows one side at a time, leading with the
@@ -19185,7 +19504,7 @@ await check(
         // copy param, so back/forward agree with the section on screen.
         const filter = ctx.container.querySelector('#history-copy-filter');
         if (!filter) throw new Error("History lost the copy/context filter");
-        await selectOption(ctx, filter, "with");
+        await chooseOption(ctx, filter, "with");
         const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
         if (!went.some((search) => new URLSearchParams(search).get("copy") === "with")) {
           throw new Error(`the copy filter did not navigate the copy param: ${JSON.stringify(went)}`);
@@ -20188,15 +20507,32 @@ async function withApi(overrides, fn) {
   }
 }
 
-/** Set a <select> the way a person would, so React's onChange fires. */
-async function selectOption(ctx, select, value) {
-  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set;
-  await act(async () => {
-    setter.call(select, value);
-    select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-  });
-  await act(async () => {});
+/** Choose a value from an app-drawn dropdown (ADRs 0162/0163): open its
+ * menu with a click, then click the option carrying the value. */
+async function chooseOption(ctx, control, value) {
+  if (!control) throw new Error("no dropdown to choose from");
+  await clickEl(ctx, control);
+  const scope = control.closest(".app-select") || control.parentElement;
+  const option = [...scope.querySelectorAll('[role="option"]')].find(
+    (o) => o.dataset.value === String(value)
+  );
+  if (!option) throw new Error(`the open menu has no option for "${value}"`);
+  await clickEl(ctx, option);
 }
+
+/** Read the values an app-drawn dropdown offers (ADRs 0162/0163): the
+ * listbox exists only while its menu is open, so open the menu and read
+ * its option rows. This is the custom control's form of the question a
+ * native <option> query used to answer off the closed DOM — the same
+ * user-visible truth: the values a person can pick from this control. */
+async function offeredOptionValues(ctx, control) {
+  if (!control) throw new Error("no dropdown to open");
+  await clickEl(ctx, control);
+  const scope = control.closest(".app-select") || control.parentElement;
+  return [...scope.querySelectorAll('[role="option"]')].map((o) => o.dataset.value);
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Result

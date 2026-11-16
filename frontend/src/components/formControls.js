@@ -8,12 +8,10 @@
  * one job, and the doc says inputs are rounded-xl.
  *
  * The canonical skin is `ui/input.jsx`, which every text field already uses.
- * This is that same skin for the raw `<select>` elements the app still writes
- * by hand.
- *
- * No `appearance-none`: it was on the Demo + CTA selects only, and with no
- * chevron drawn in its place it removed the one affordance a dropdown has.
- * Every raw select keeps its native arrow now.
+ * This is that same skin for a form dropdown: since ADR 0163 the dropdown
+ * is the app-drawn `AppSelect` everywhere in the app, and this class skins
+ * its button in form fields — the chevron and the open menu are the
+ * component's own, so there is no native arrow left to keep or remove.
  *
  * Filter pills are a different control and keep `PILL_SELECT_CLASS`
  * (AppPicker): h-8, rounded-full, a chip beside a heading, not a field.

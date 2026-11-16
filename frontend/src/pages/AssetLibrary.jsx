@@ -820,6 +820,7 @@ export default function AssetLibrary({
                   showStatus
                   ariaLabel="Choose which app these assets belong to"
                   testId="asset-profile-picker"
+                  align="end"
                 />
               )}
               {profilesError && (

@@ -9,6 +9,7 @@ import { recordSignal } from "../lib/feedback";
 import { directionDrifted } from "../lib/strategyStaleness";
 import { PostKitSection } from "./PostKitSection";
 import { CONTROL_CLASS } from "./formControls";
+import { AppSelect } from "./AppSelect";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
@@ -818,15 +819,15 @@ const handleGenerate = async () => {
       {models && (
         <div className="space-y-2">
           <label htmlFor="gen-model" className="text-sm font-semibold">Model</label>
-          <select
+          <AppSelect
             id="gen-model"
+            block
             value={selectedModel}
-            onChange={(e) => {
-              const next = e.target.value;
+            onChange={(next) => {
               setSelectedModel(next);
               // A resolution picked for another model must not ride along: the
               // server refuses values the new model does not offer, so the
-              // select falls back to that model's default.
+              // dropdown falls back to that model's default.
               setSelectedResolution("");
               try {
                 if (projectId) {
@@ -839,13 +840,11 @@ const handleGenerate = async () => {
             }}
             disabled={inFlight}
             className={CONTROL_CLASS}
-          >
-            {models.models.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.name} — one render, up to {m.max_duration}s{m.key === models.default ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
+            options={models.models.map((m) => ({
+              value: m.key,
+              label: `${m.name} — one render, up to ${m.max_duration}s${m.key === models.default ? " (default)" : ""}`,
+            }))}
+          />
           {cameraIncompatible && (
             <p className="text-sm text-destructive-text" role="alert" data-testid="fixed-camera-model-warning">
               This model uses your face photo as its literal first frame. For Fixed camera,
@@ -856,11 +855,11 @@ const handleGenerate = async () => {
           {(capability?.supported_resolutions || []).length > 0 && (
             <div className="space-y-2 pt-1">
               <label htmlFor="gen-resolution" className="text-sm font-semibold">Resolution</label>
-              <select
+              <AppSelect
                 id="gen-resolution"
+                block
                 value={selectedResolution}
-                onChange={(e) => {
-                  const next = e.target.value;
+                onChange={(next) => {
                   setSelectedResolution(next);
                   try {
                     if (projectId) {
@@ -873,14 +872,13 @@ const handleGenerate = async () => {
                 }}
                 disabled={inFlight}
                 className={CONTROL_CLASS}
-              >
-                <option value="">{capability?.resolution || ""} (default)</option>
-                {(capability.supported_resolutions || [])
-                  .filter((r) => r !== capability?.resolution)
-                  .map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-              </select>
+                options={[
+                  { value: "", label: `${capability?.resolution || ""} (default)` },
+                  ...(capability.supported_resolutions || [])
+                    .filter((r) => r !== capability?.resolution)
+                    .map((r) => ({ value: r, label: r })),
+                ]}
+              />
             </div>
           )}
         </div>
