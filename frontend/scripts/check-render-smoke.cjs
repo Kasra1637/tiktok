@@ -9675,11 +9675,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   // The hero is one continuous story animation, not a recording and
   // not the retired five-step flow (ADR 0165, superseding the HeroFlow
-  // loop of ADRs 0154/0158): a store link drops into a phone frame and
-  // a finished video assembles inside it — hook line, demo, end card —
-  // then holds and loops. It is pure CSS on one 12s clock, so there is
-  // no JS timer, no control, no dots and no step captions; the base
-  // styles are the finished frame, which is what reduced motion sees.
+  // loop of ADRs 0154/0158): inside the phone it illustrates the
+  // process in four acts — the store link lands in an input field,
+  // the app profile sets up, one click generates, and the finished
+  // video plays — then holds and loops. It is pure CSS on one 12s
+  // clock, so there is no JS timer, no control, no dots and no step
+  // captions; the base styles are the finished video frame, which
+  // is what reduced motion sees.
   await check("the hero shows the link-to-video story instead of a video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9687,13 +9689,101 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (shot.querySelector("video")) throw new Error("the hero still carries a video");
     const story = shot.querySelector(".hero-story");
     if (!story) throw new Error("the hero does not render the story animation");
-    for (const stage of [".hero-story-link", ".hero-story-phone", ".hero-story-hook", ".hero-story-demo", ".hero-story-endcard", ".hero-story-play"]) {
+    for (const stage of [".hero-story-link", ".hero-story-phone", ".hero-story-field", ".hero-story-profile", ".hero-story-generate", ".hero-story-video", ".hero-story-hook", ".hero-story-play", ".hero-story-endcard"]) {
       if (!story.querySelector(stage)) throw new Error(`the story is missing its ${stage} stage`);
     }
     if (shot.querySelector(".hero-flow-slide") || shot.querySelector(".hero-flow-dot")) {
       throw new Error("the retired step flow still renders in the hero");
     }
     if (shot.querySelector("button")) throw new Error("the story animation carries a control");
+  });
+
+  // The story is the process, in four acts (Kasra's final brief,
+  // Nov 15 2026, ADR 0165 addendum): the mockup illustrates what a
+  // visitor does, stylized — not the exact app UI, and not just a
+  // finished video's content. The store link lands in an input
+  // field at the top of the phone, the visitor's unique app
+  // profile sets up with its facts checked off, one click on
+  // Generate the video, and the finished video plays — presenter,
+  // hook words, play badge, progress bar — closing on its end
+  // card. Every stage carries real readable content: the shipped
+  // hero's stages were empty bars (two hook spans, a demo head
+  // bar and rows, an end-card line and an empty pill) that read
+  // as a loading skeleton, in motion and in the still frame
+  // alike, and the whole retired demo stage is gone from the
+  // DOM, the page source and the stylesheet — not supplemented.
+  // The hook words are the app-maker framing Kasra picked; the
+  // journaling-flavored alternative he rejected stays out.
+  await check("the hero story shows the process: link in, profile, one click, video", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
+    if (!shot) throw new Error("no hero frame rendered");
+    const story = shot.querySelector(".hero-story");
+    if (!story) throw new Error("the hero does not render the story animation");
+    // Act 1: the store link lands in an input field in the phone.
+    const field = story.querySelector(".hero-story-field");
+    if (!field) throw new Error("the link never lands in an input field in the phone");
+    if (!field.textContent.includes("yourapp.com/store")) {
+      throw new Error("the input field does not carry the store link from the chip");
+    }
+    // Act 2: the unique app profile sets up, its facts checked off.
+    const profile = story.querySelector(".hero-story-profile");
+    if (!profile) throw new Error("the app profile never sets up");
+    if (!profile.querySelector(".hero-story-profile-icon")) {
+      throw new Error("the profile carries no app icon");
+    }
+    if (!profile.textContent.includes("yourapp")) {
+      throw new Error("the profile does not name the app from the link");
+    }
+    const rows = [...profile.querySelectorAll(".hero-story-profile-row")];
+    if (rows.length < 3) throw new Error("the profile sets up with fewer than three facts");
+    for (const label of ["Store page", "Screenshots", "Facts"]) {
+      if (!rows.some((row) => row.textContent.includes(label))) {
+        throw new Error(`the profile is missing its "${label}" row`);
+      }
+    }
+    for (const row of rows) {
+      if (!row.querySelector("svg")) throw new Error("a profile row carries no check mark");
+    }
+    // Act 3: one click on Generate the video, visibly clicked.
+    const generate = story.querySelector(".hero-story-generate");
+    if (!generate) throw new Error("the story never offers the generate click");
+    if (!generate.textContent.includes("Generate the video")) {
+      throw new Error("the generate control carries no label");
+    }
+    if (!generate.querySelector(".hero-story-ripple")) {
+      throw new Error("the click has no tap ripple — it must read as a click");
+    }
+    // Act 4: the finished video — presenter, hook words, play badge.
+    const video = story.querySelector(".hero-story-video");
+    if (!video) throw new Error("the story never reaches the video");
+    if (!video.querySelector("svg.hero-story-presenter")) {
+      throw new Error("the video carries no presenter illustration");
+    }
+    const hookLines = [...video.querySelectorAll(".hero-story-hook-line")].map((el) => el.textContent.trim());
+    if (JSON.stringify(hookLines) !== JSON.stringify(["A year building this app.", "Nobody knew why it mattered."])) {
+      throw new Error(`the video's hook carries no real hook words: ${JSON.stringify(hookLines)}`);
+    }
+    if (!video.querySelector(".hero-story-play")) throw new Error("the video carries no play badge");
+    if (!video.querySelector(".hero-story-progress")) throw new Error("the video carries no progress bar");
+    const endcard = video.querySelector(".hero-story-endcard");
+    const endText = endcard ? endcard.textContent.replace(/\s+/g, " ") : "";
+    if (!endText.includes("Your app. Your story.")) {
+      throw new Error("the end card carries no closing line");
+    }
+    if (!endText.includes("Get the app")) {
+      throw new Error("the end card's pill carries no words");
+    }
+    // The retired demo stage is gone everywhere, not supplemented.
+    if (story.querySelector(".hero-story-demo")) throw new Error("the retired demo stage still renders");
+    const landing = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
+    if (landing.includes("hero-story-demo")) {
+      throw new Error("Landing.jsx still builds the retired demo stage");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (css.includes(".hero-story-demo")) {
+      throw new Error("the dead demo stage rules are still in index.css");
+    }
   });
 
   await check("the hero story rests on the finished frame under reduced motion", async (ctx) => {
@@ -9711,7 +9801,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!shot) throw new Error("no hero frame rendered");
       const story = shot.querySelector(".hero-story");
       if (!story) throw new Error("the hero does not render the story animation");
-      for (const stage of [".hero-story-link", ".hero-story-hook", ".hero-story-demo", ".hero-story-endcard", ".hero-story-play"]) {
+      for (const stage of [".hero-story-link", ".hero-story-field", ".hero-story-profile", ".hero-story-generate", ".hero-story-video", ".hero-story-endcard", ".hero-story-play"]) {
         if (!story.querySelector(stage)) throw new Error(`reduced motion lost the finished frame's ${stage} stage`);
       }
       if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
@@ -9724,6 +9814,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
       if (!/@keyframes hs-link/.test(css) || !/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.hero-story-link\s*\{\s*animation:\s*hs-link 12s/.test(css)) {
         throw new Error("the story's stage animations are not gated on motion being allowed");
+      }
+      if (!/@keyframes hs-video/.test(css) || !/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.hero-story-video\s*\{\s*animation:\s*hs-video 12s/.test(css)) {
+        throw new Error("the video stage's animation is not gated on motion being allowed");
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
@@ -9745,7 +9838,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (css.includes(".hero-flow")) {
       throw new Error("the dead .hero-flow rules are still in index.css");
     }
-    for (const kf of ["hs-link", "hs-hook-long", "hs-hook-short", "hs-demo", "hs-endcard", "hs-play", "hs-progress"]) {
+    for (const kf of ["hs-link", "hs-field", "hs-profile", "hs-row-1", "hs-row-2", "hs-row-3", "hs-generate", "hs-ripple", "hs-video", "hs-hook-long", "hs-hook-short", "hs-presenter", "hs-endcard", "hs-play", "hs-progress"]) {
       if (!css.includes(`@keyframes ${kf}`)) {
         throw new Error(`the story is missing its ${kf} keyframes`);
       }
@@ -10593,7 +10686,7 @@ async function runAnalyticsChecks() {
 
   // A long leaderboard buries the cards below it: the card opens on its top
   // three rows and the rest sit behind a show-all control. Short lists stay
-  // fully open, and the whole card collapses to its header.
+  // fully open.
   await check("a long clip leaderboard opens on three rows behind show all", async (ctx) => {
     const many = Array.from({ length: 12 }, (_, i) => ({
       id: `clip-${i}`,
@@ -10620,10 +10713,12 @@ async function runAnalyticsChecks() {
     if (rows().length !== 3) throw new Error("collapsing did not return to the top 3");
   });
 
-  // The section itself collapses: the header and the one-line counts stay,
-  // the ledger goes. The toggle names its panel only while it is open, so a
-  // collapsed button never points at an element that is not there.
-  await check("clip results collapse to their header and reopen", async (ctx) => {
+  // The card itself never collapses (ADR 0166, the ADR 0151 rule
+  // History's sections already follow): there is no header toggle,
+  // and the whole body — counts, summary, why-details, table —
+  // renders from the first paint. The show-all control above is the
+  // only disclosure the card carries.
+  await check("clip results stand open with no collapse control", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
         { id: "one", status: "completed", hook_line: "One", tiktok_views: 40 },
@@ -10633,25 +10728,23 @@ async function runAnalyticsChecks() {
     });
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
-    const toggle = card.querySelector('[data-testid="analytics-results-toggle"]');
-    if (!toggle) throw new Error("clip results has no collapse control");
-    if (toggle.getAttribute("aria-expanded") !== "true") {
-      throw new Error("clip results does not start expanded, so the top rows are hidden");
+    if (card.querySelector('[data-testid="analytics-results-toggle"]')) {
+      throw new Error("clip results still carries a collapse control");
     }
-    await clickEl(ctx, toggle, "collapse clip results");
-    if (card.querySelectorAll("tbody tr").length) {
-      throw new Error("collapsing clip results left its rows on the page");
+    if (card.querySelectorAll("tbody tr").length !== 2) {
+      throw new Error("clip results did not render its rows on the first paint");
+    }
+    if (!card.querySelector('[data-testid="analytics-results-table"]')) {
+      throw new Error("clip results did not render its table on the first paint");
     }
     if (!card.textContent.includes("0 posted")) {
-      throw new Error("collapsing clip results hid its own count line");
+      throw new Error("clip results lost its own count line");
     }
-    const collapsed = card.querySelector('[data-testid="analytics-results-toggle"]');
-    if (collapsed.getAttribute("aria-expanded") !== "false" || collapsed.getAttribute("aria-controls")) {
-      throw new Error("the collapsed control still claims an expanded panel");
-    }
-    await clickEl(ctx, collapsed, "reopen clip results");
-    if (card.querySelectorAll("tbody tr").length !== 2) {
-      throw new Error("reopening clip results did not bring its rows back");
+    // Source-level: the control is gone from the page, not hidden —
+    // a hidden toggle would be a collapse waiting to come back.
+    const page = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
+    if (page.includes("analytics-results-toggle") || page.includes("setOpen(")) {
+      throw new Error("the collapse control's code is still in Analytics.jsx");
     }
   });
 
@@ -11422,6 +11515,22 @@ async function runIconChecks() {
     const assetLibrary = fs.readFileSync(path.join(SRC, "pages", "AssetLibrary.jsx"), "utf8");
     if (!/!loading && assets\.length > 0 \? "page-content-enter"/.test(assetLibrary)) {
       throw new Error("AssetLibrary's resolved list does not arrive with the shared reveal");
+    }
+    // The resolve also fades the placeholder itself out (ADR 0166):
+    // on Analytics the leaving skeleton runs skeleton-fade — opacity
+    // to zero over 250ms on the same signature ease — gated on
+    // no-preference like every entrance, and the page never enters
+    // the leaving state under reduced motion (the shared hook is the
+    // JS belt), so the swap stays instant there.
+    if (!/@keyframes skeleton-fade\s*\{\s*from\s*\{\s*opacity:\s*1;?\s*\}\s*to\s*\{\s*opacity:\s*0;?\s*\}/.test(css)) {
+      throw new Error("the skeleton-fade keyframe (opacity 1 to 0) is not defined");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.skeleton-leaving\s*\{\s*animation:\s*skeleton-fade 250ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both/.test(css)) {
+      throw new Error(".skeleton-leaving does not resolve to the skeleton fade (250ms, one easing, motion-allowed only)");
+    }
+    const analyticsPage = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
+    if (!analyticsPage.includes("skeleton-stack") || !analyticsPage.includes("skeleton-leaving") || !analyticsPage.includes("useReducedMotionPreference")) {
+      throw new Error("Analytics' skeleton does not leave through the fade (shared-cell stack, leaving class, reduced-motion belt)");
     }
   });
 

@@ -167,25 +167,30 @@ const FLOW_STEPS = [
 ];
 
 /**
- * The hero story: the product in one continuous motion (ADR 0165,
- * replacing the retired five-step cycling loop). A store link drops
- * into a phone frame as if pasted, and inside the phone a finished
- * video assembles itself — the hook line types on, the demo fills
- * in, the end card lands — then the play badge and the story
- * progress bar complete it, the finished frame holds, and the loop
- * restarts. It is pure CSS on one 12s clock (the hs-* keyframes in
- * index.css), so there is no JS timer and no control of any kind.
- * The base styles are the finished assembled frame: under reduced
- * motion no stage animation is applied and that finished frame
- * simply stands. The five steps themselves still run, in full, in
- * the How it works section below.
+ * The hero story: the process in one continuous motion (ADR 0165,
+ * replacing the retired five-step cycling loop; the four-act
+ * process cut is the founder's final direction in the ADR 0165
+ * addendum). Inside a phone frame the mockup illustrates what a
+ * visitor does, stylized — not the exact app UI: the store link
+ * drops in as if pasted and lands in an input field at the top
+ * of the screen, the visitor's unique app profile sets up with
+ * its facts checked off, one click on Generate the video lands,
+ * and the finished video plays — presenter, hook words, play
+ * badge, progress bar — closing on its end card. Then the frame
+ * holds and the loop restarts. It is pure CSS on one 12s clock
+ * (the hs-* keyframes in index.css), so there is no JS timer
+ * and no control of any kind. The base styles are the finished
+ * video frame: under reduced motion no stage animation is
+ * applied and that frame simply stands. The five steps
+ * themselves still run, in full, in the How it works section
+ * below.
  */
 function HeroStory() {
   return (
     <div
       className="hero-story"
       role="img"
-      aria-label="A store link becomes a finished video: the hook appears, the demo fills in, and the end card lands."
+      aria-label="How it works in one motion: paste your store link, your app profile sets up, one click generates the video, and the finished video plays."
     >
       <div className="hero-story-link" aria-hidden="true">
         <Link2 className="h-3.5 w-3.5" />
@@ -193,22 +198,67 @@ function HeroStory() {
       </div>
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
-          <div className="hero-story-progress"><span /></div>
-          <div className="hero-story-hook">
-            <span className="hero-story-hook-line is-long" />
-            <span className="hero-story-hook-line is-short" />
+          <div className="hero-story-field">
+            <Link2 className="h-3.5 w-3.5" />
+            <span>yourapp.com/store</span>
           </div>
-          <div className="hero-story-demo">
-            <div className="hero-story-demo-head" />
-            <span className="hero-story-demo-row is-a" />
-            <span className="hero-story-demo-row is-b" />
+          <div className="hero-story-profile">
+            <div className="hero-story-profile-head">
+              <span className="hero-story-profile-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+                  <rect x="5" y="11" width="3.5" height="8" rx="1.2" />
+                  <rect x="10.25" y="7" width="3.5" height="12" rx="1.2" />
+                  <rect x="15.5" y="4" width="3.5" height="15" rx="1.2" />
+                </svg>
+              </span>
+              <span className="hero-story-profile-name">yourapp</span>
+            </div>
+            <div className="hero-story-profile-row is-1">
+              <Check className="hero-story-profile-check h-3 w-3" />
+              <span>Store page</span>
+            </div>
+            <div className="hero-story-profile-row is-2">
+              <Check className="hero-story-profile-check h-3 w-3" />
+              <span>Screenshots</span>
+            </div>
+            <div className="hero-story-profile-row is-3">
+              <Check className="hero-story-profile-check h-3 w-3" />
+              <span>Facts</span>
+            </div>
           </div>
-          <div className="hero-story-play">
-            <Play className="h-[18px] w-[18px]" fill="currentColor" />
+          <div className="hero-story-generate">
+            <Sparkles className="h-4 w-4" />
+            <span>Generate the video</span>
+            <span className="hero-story-ripple" />
           </div>
-          <div className="hero-story-endcard">
-            <span className="hero-story-endcard-line" />
-            <span className="hero-story-endcard-cta" />
+          <div className="hero-story-video">
+            <div className="hero-story-progress"><span /></div>
+            <div className="hero-story-hook">
+              <span className="hero-story-hook-line is-long">A year building this app.</span>
+              <span className="hero-story-hook-line is-short">Nobody knew why it mattered.</span>
+            </div>
+            <svg
+              className="hero-story-presenter"
+              viewBox="0 0 120 120"
+              fill="none"
+              stroke="var(--brand-indigo)"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="50" cy="28" r="15" />
+              <path d="M14 112 a36 32 0 0 1 72 0" />
+              <rect x="70" y="52" width="28" height="44" rx="6" fill="var(--indigo-10)" />
+              <path d="M80 66 l11 7 l-11 7 Z" fill="var(--brand-indigo)" stroke="none" />
+            </svg>
+            <div className="hero-story-play">
+              <Play className="h-[18px] w-[18px]" fill="currentColor" />
+            </div>
+            <div className="hero-story-endcard">
+              <span className="hero-story-endcard-line">Your app. Your story.</span>
+              <span className="hero-story-endcard-cta">Get the app</span>
+            </div>
           </div>
         </div>
       </div>

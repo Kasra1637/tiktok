@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -11,6 +11,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { FactChip, FactList } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
+import { useReducedMotionPreference } from "../lib/reducedMotion";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { ListenButton } from "../components/ListenButton";
@@ -64,6 +65,11 @@ function weekBuckets(rows) {
     }));
 }
 
+// The skeleton fade's length, shared with the .skeleton-leaving
+// animation in index.css (ADR 0166): the leaving state must lift
+// exactly when the fade completes.
+const SKELETON_FADE_MS = 250;
+
 export default function Analytics() {
   const [profiles, setProfiles] = useState(null);
   const [selectedId, setSelectedId] = useState("");
@@ -73,6 +79,32 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
+
+  // Skeleton resolve (ADR 0166): when loading ends, the skeleton stays
+  // mounted for one fade while the content mounts in the same grid
+  // cell beneath it, so the handoff is a crossfade rather than the old
+  // hard cut. Reduced motion never enters the leaving state — the
+  // swap stays instant, the JS belt to the CSS no-preference gate on
+  // .skeleton-leaving.
+  const reduceMotion = useReducedMotionPreference();
+  const [skeletonLeaving, setSkeletonLeaving] = useState(false);
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (loading) {
+      wasLoading.current = true;
+      setSkeletonLeaving(false);
+      return undefined;
+    }
+    if (!wasLoading.current || reduceMotion) {
+      wasLoading.current = false;
+      setSkeletonLeaving(false);
+      return undefined;
+    }
+    wasLoading.current = false;
+    setSkeletonLeaving(true);
+    const timer = setTimeout(() => setSkeletonLeaving(false), SKELETON_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [loading, reduceMotion]);
 
   // First-run help (ADR 0118): the tour may auto-open only once the page
   // has loaded cleanly and no verdict has been cast yet. The summary's
@@ -190,13 +222,25 @@ export default function Analytics() {
         </Alert>
       )}
 
-      {loading ? (
-        <div className="surface space-y-4" aria-label="Loading analytics" data-testid="analytics-loading">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-4/5" />
-        </div>
-      ) : error ? null : !profiles?.length && !hasAnything ? (
+      {/* The skeleton and the content it gives way to share one grid
+          cell (.skeleton-stack, ADR 0166): for the length of the fade
+          both are mounted in the same cell, so the resolve cannot
+          shift the layout, and the skeleton lifts exactly when its
+          fade completes. */}
+      <div className="skeleton-stack">
+        {(loading || skeletonLeaving) && (
+          <div
+            className={`surface space-y-4${skeletonLeaving ? " skeleton-leaving" : ""}`}
+            aria-label="Loading analytics"
+            aria-hidden={skeletonLeaving || undefined}
+            data-testid="analytics-loading"
+          >
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+          </div>
+        )}
+        {loading ? null : error ? null : !profiles?.length && !hasAnything ? (
           <EmptyState
             icon={TrendingUp}
             title="No app yet"
@@ -265,7 +309,8 @@ export default function Analytics() {
             </div>
           )}
         </div>
-      )}
+        )}
+      </div>
     </PageFrame>
   );
 }
@@ -337,8 +382,9 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
   const [expanded, setExpanded] = useState(false);
   // The card opens on its first three rows: enough to show the ranking and
   // the scale between them, with the full ledger a deliberate second step.
-  const [open, setOpen] = useState(true);
-  const panelId = useId();
+  // The card itself never collapses (ADR 0166): like History's sections
+  // (ADR 0151) it stands open, and this show-all control is the only
+  // disclosure it carries.
   const visible = expanded ? clips : clips.slice(0, LEADERBOARD_PAGE_SIZE);
   const posted = clips.filter((row) => row.tiktok_url).length;
   const counted = clips.filter((row) => row.tiktok_views != null).length;
@@ -379,20 +425,6 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
               },
             ]}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={open}
-            aria-controls={open ? panelId : undefined}
-            onClick={() => setOpen((current) => !current)}
-            data-testid="analytics-results-toggle"
-          >
-            <ChevronDown
-              aria-hidden="true"
-              className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-            />
-            <span>{open ? "Collapse" : "Expand"}</span>
-          </Button>
         </div>
       }
     >
@@ -404,163 +436,161 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
       <p className="text-sm text-muted-foreground" data-testid="analytics-performance-summary">
         {verdictSummaryLine(verdictSummary)}
       </p>
-      {open && (
-        <div id={panelId} className="space-y-5">
-          <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)]">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
-              <span>Why these numbers</span>
-              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
-            </summary>
-            <div className="space-y-2 pb-2 text-sm text-muted-foreground">
-              <p>
-                Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
-                Your verdict is your judgment. Winner still means a worked verdict plus a posted link, never a view threshold.
-              </p>
-              <p>Compare a high-reach clip you said worked with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+      <div className="space-y-5">
+        <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5 transition-colors hover:border-[color:var(--hairline-strong)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <span>Why these numbers</span>
+            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" />
+          </summary>
+          <div className="space-y-2 pb-2 text-sm text-muted-foreground">
+            <p>
+              Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Counts may come from different posting dates; this is not a controlled comparison.
+              Your verdict is your judgment. Winner still means a worked verdict plus a posted link, never a view threshold.
+            </p>
+            <p>Compare a high-reach clip you said worked with the others, then reuse its draft to test another take. <Link to={historyHref} className="text-[color:var(--brand-indigo)] hover:underline">Record or update results in History</Link>.</p>
+          </div>
+        </details>
+        {pick && pickNext && (
+          <div data-testid="analytics-next-take" className="flex items-start gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-4 py-3">
+            <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)]">
+              <ThumbsUp aria-hidden="true" className="h-3 w-3 text-[color:var(--brand-indigo)]" />
+            </span>
+            <div className="min-w-0 space-y-1">
+            <p className="text-sm font-semibold text-foreground">Suggested next take: {clipName(pick)}</p>
+            <p className="text-sm text-muted-foreground">
+              Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated worked — the highest reach among clips you said worked.
+              Past reach does not promise the next take repeats it.{" "}
+              <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
+            </p>
             </div>
-          </details>
-          {pick && pickNext && (
-            <div data-testid="analytics-next-take" className="flex items-start gap-3 rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] px-4 py-3">
-              <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)]">
-                <ThumbsUp aria-hidden="true" className="h-3 w-3 text-[color:var(--brand-indigo)]" />
-              </span>
-              <div className="min-w-0 space-y-1">
-              <p className="text-sm font-semibold text-foreground">Suggested next take: {clipName(pick)}</p>
-              <p className="text-sm text-muted-foreground">
-                Posted, {pick.tiktok_views.toLocaleString("en-US")} recorded views, rated worked — the highest reach among clips you said worked.
-                Past reach does not promise the next take repeats it.{" "}
-                <Link to={pickNext.to} className="text-[color:var(--brand-indigo)] hover:underline">{pickNext.label}</Link> to test another take.
-              </p>
-              </div>
-            </div>
-          )}
-          {clips.length === 0 ? (
-            <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
-          ) : (
-            <div
-              data-testid="analytics-results-table"
-              className={`rounded-xl border border-[color:var(--hairline)] bg-secondary/10 ${expanded ? "clips-table-scroll" : "overflow-hidden"}`}
+          </div>
+        )}
+        {clips.length === 0 ? (
+          <p className="text-base text-muted-foreground">No finished clips to compare yet.</p>
+        ) : (
+          <div
+            data-testid="analytics-results-table"
+            className={`rounded-xl border border-[color:var(--hairline)] bg-secondary/10 ${expanded ? "clips-table-scroll" : "overflow-hidden"}`}
+          >
+            {/* Fixed layout under a column template (ADR 0159): the
+                table is exactly its card's width, every column visible,
+                and cells wrap instead of pushing the card into sideways
+                scrolling. The shares are the reading order's weight —
+                the clip's name widest, then views, then the verdict.
+                Expanded, the region scrolls inside the bound in
+                index.css (ADR 0160) instead of growing the card past
+                its pair; collapsed, it is exactly as it was. */}
+            <table className="w-full table-fixed text-left text-sm">
+              <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
+              <colgroup>
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "24%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "19%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "13%" }} />
+              </colgroup>
+              <thead>
+                <tr className="bg-secondary/20 text-xs text-muted-foreground">
+                  {["Rank", "Clip", "Posted", "Views", "Craft score", "Your verdict", "Next take"].map((label) => <th key={label} scope="col" className="px-2 py-2 font-semibold">{label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((row, index) => {
+                  const vote = row.video_verdict === "up" ? 1 : row.video_verdict === "down" ? -1 : 0;
+                  const next = nextTakeFor(row, historyHref, draftIds);
+                  const winner = isWinnerRow(row);
+                  return (
+                    <tr key={row.id} data-testid={`result-${row.id}`} className="border-t border-[color:var(--hairline)] align-top transition-colors first:border-t-0 hover:bg-secondary/20">
+                      <td data-testid={`result-rank-${row.id}`} className="px-2 py-3 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--hairline-strong)] bg-secondary/40 font-mono tabular-nums">{index + 1}</span>
+                          {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />}
+                        </span>
+                      </td>
+                      <th scope="row" className="px-2 py-3 font-normal">
+                        <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
+                          {clipName(row)}
+                        </Link>
+                        <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
+                      </th>
+                      <td className="px-2 py-3 text-xs">
+                        {row.tiktok_url ? (
+                          <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[color:var(--brand-indigo)] hover:underline">
+                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
+                            Posted ↗
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                            Not posted
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 text-xs">
+                        {row.tiktok_views == null ? (
+                          "Not recorded"
+                        ) : (
+                          <span className="flex flex-col items-start gap-1.5">
+                            <span className="h-2 w-16 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
+                              <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]" style={{ width: barWidth(row.tiktok_views) }} />
+                            </span>
+                            <span className="font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
+                          </span>
+                        )}
+                        {snapshotFacts(row.performance_snapshot).length > 0 && (
+                          <span className="mt-1 block whitespace-normal text-muted-foreground" data-testid={`result-results-${row.id}`}>
+                            {snapshotFacts(row.performance_snapshot).join(" · ")}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 text-xs" data-testid={`result-craft-${row.id}`}>
+                        {row.quality_report ? (
+                          <span className="font-mono tabular-nums">{row.quality_report.grade} · {row.quality_report.total}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Not scored</span>
+                        )}
+                      </td>
+                      <td data-testid={`result-vote-${row.id}`} className="px-2 py-3 text-xs">
+                        <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 ${vote > 0 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : "border-[color:var(--hairline)] bg-secondary/20 text-muted-foreground"}`}>
+                          {vote > 0 ? (
+                            <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
+                          ) : vote < 0 ? (
+                            <ThumbsDown aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                          {vote > 0 ? "Worked" : vote < 0 ? "Didn't work" : "Not rated"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-xs">
+                        <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {clips.length > LEADERBOARD_PAGE_SIZE && (
+          <div className="flex justify-center pt-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setExpanded((current) => !current)}
+              aria-expanded={expanded}
+              data-testid="analytics-results-show-more"
             >
-              {/* Fixed layout under a column template (ADR 0159): the
-                  table is exactly its card's width, every column visible,
-                  and cells wrap instead of pushing the card into sideways
-                  scrolling. The shares are the reading order's weight —
-                  the clip's name widest, then views, then the verdict.
-                  Expanded, the region scrolls inside the bound in
-                  index.css (ADR 0160) instead of growing the card past
-                  its pair; collapsed, it is exactly as it was. */}
-              <table className="w-full table-fixed text-left text-sm">
-                <caption className="sr-only">Saved clips, highest recorded views first; missing counts last.</caption>
-                <colgroup>
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "24%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "19%" }} />
-                  <col style={{ width: "10%" }} />
-                  <col style={{ width: "15%" }} />
-                  <col style={{ width: "13%" }} />
-                </colgroup>
-                <thead>
-                  <tr className="bg-secondary/20 text-xs text-muted-foreground">
-                    {["Rank", "Clip", "Posted", "Views", "Craft score", "Your verdict", "Next take"].map((label) => <th key={label} scope="col" className="px-2 py-2 font-semibold">{label}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((row, index) => {
-                    const vote = row.video_verdict === "up" ? 1 : row.video_verdict === "down" ? -1 : 0;
-                    const next = nextTakeFor(row, historyHref, draftIds);
-                    const winner = isWinnerRow(row);
-                    return (
-                      <tr key={row.id} data-testid={`result-${row.id}`} className="border-t border-[color:var(--hairline)] align-top transition-colors first:border-t-0 hover:bg-secondary/20">
-                        <td data-testid={`result-rank-${row.id}`} className="px-2 py-3 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--hairline-strong)] bg-secondary/40 font-mono tabular-nums">{index + 1}</span>
-                            {winner && <Crown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />}
-                          </span>
-                        </td>
-                        <th scope="row" className="px-2 py-3 font-normal">
-                          <Link to={`${historyHref}#generation-${row.id}`} className="font-semibold text-[color:var(--brand-indigo)] hover:underline">
-                            {clipName(row)}
-                          </Link>
-                          <span className="mt-1 block text-xs text-muted-foreground">{row.brand_name || "Unassigned app"}{row.objective ? ` · ${humanize(row.objective)}` : ""}</span>
-                        </th>
-                        <td className="px-2 py-3 text-xs">
-                          {row.tiktok_url ? (
-                            <a href={row.tiktok_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[color:var(--brand-indigo)] hover:underline">
-                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand-indigo)]" />
-                              Posted ↗
-                            </a>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
-                              Not posted
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-2 py-3 text-xs">
-                          {row.tiktok_views == null ? (
-                            "Not recorded"
-                          ) : (
-                            <span className="flex flex-col items-start gap-1.5">
-                              <span className="h-2 w-16 shrink-0 overflow-hidden rounded-full bg-secondary/50" aria-hidden="true">
-                                <span data-testid={`result-views-bar-${row.id}`} className="block h-full rounded-full bg-[color:var(--accent)] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]" style={{ width: barWidth(row.tiktok_views) }} />
-                              </span>
-                              <span className="font-mono tabular-nums">{row.tiktok_views.toLocaleString("en-US")}{row.tiktok_views_at && shortDate(row.tiktok_views_at) ? ` · Recorded ${shortDate(row.tiktok_views_at)}` : ""}</span>
-                            </span>
-                          )}
-                          {snapshotFacts(row.performance_snapshot).length > 0 && (
-                            <span className="mt-1 block whitespace-normal text-muted-foreground" data-testid={`result-results-${row.id}`}>
-                              {snapshotFacts(row.performance_snapshot).join(" · ")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-2 py-3 text-xs" data-testid={`result-craft-${row.id}`}>
-                          {row.quality_report ? (
-                            <span className="font-mono tabular-nums">{row.quality_report.grade} · {row.quality_report.total}</span>
-                          ) : (
-                            <span className="text-muted-foreground">Not scored</span>
-                          )}
-                        </td>
-                        <td data-testid={`result-vote-${row.id}`} className="px-2 py-3 text-xs">
-                          <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 ${vote > 0 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-10)] text-foreground" : "border-[color:var(--hairline)] bg-secondary/20 text-muted-foreground"}`}>
-                            {vote > 0 ? (
-                              <ThumbsUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--brand-indigo)]" />
-                            ) : vote < 0 ? (
-                              <ThumbsDown aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
-                            ) : (
-                              <Minus aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
-                            )}
-                            {vote > 0 ? "Worked" : vote < 0 ? "Didn't work" : "Not rated"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-3 text-xs">
-                          <Link to={next.to} className="text-[color:var(--brand-indigo)] hover:underline">{next.label}</Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {clips.length > LEADERBOARD_PAGE_SIZE && (
-            <div className="flex justify-center pt-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setExpanded((current) => !current)}
-                aria-expanded={expanded}
-                data-testid="analytics-results-show-more"
-              >
-                {expanded ? "Show less" : `Show all ${clips.length}`}
-              </Button>
-            </div>
-          )}
-          <p className="border-t border-[color:var(--hairline)] pt-3 text-sm text-muted-foreground">
-            Ranked by recorded views; missing counts sort last.
-          </p>
-        </div>
-      )}
+              {expanded ? "Show less" : `Show all ${clips.length}`}
+            </Button>
+          </div>
+        )}
+        <p className="border-t border-[color:var(--hairline)] pt-3 text-sm text-muted-foreground">
+          Ranked by recorded views; missing counts sort last.
+        </p>
+      </div>
     </SectionCard>
   );
 }

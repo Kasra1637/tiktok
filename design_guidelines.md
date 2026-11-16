@@ -551,8 +551,8 @@ or an error needs naming. See ADR 0088.
 ## 7. Motion
 
 Library: none — every UI motion is a CSS keyframe in `index.css`
-(`rise-settle`, `shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`,
-`tour-fade`), so
+(`rise-settle`, `skeleton-fade`, `shimmer-sweep`, `marquee-x`,
+`float-slow`/`float-slower`, `tour-fade`), so
 the bundle carries no animation library. The reduced-motion preference is the
 browser hook `useReducedMotionPreference` (`lib/reducedMotion.jsx`).
 
@@ -564,7 +564,10 @@ it mounts, including real content arriving where a skeleton stood),
 `route-entry`, `card-enter`, `wizard-section-enter` and
 `animate-fade-up`. Skeletons shimmer while real work is pending, never
 for an artificial minimum; reduced motion leaves both the skeleton and page
-content static.
+content static. On Analytics the resolve crossfades (ADR 0166): the
+skeleton fades out over 250ms on the same ease (`skeleton-fade`) while
+the content rises, the two sharing one grid cell so nothing shifts;
+reduced motion swaps instantly.
 
 **Hard rules:**
 
