@@ -1334,15 +1334,17 @@ export default function GenerationHistory() {
             placeholder="Search hooks…"
             aria-label="Search by hook text"
             data-testid="history-search"
+            data-active={query ? "true" : undefined}
             className={PILL_SELECT_CLASS}
           />
           <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
           <select id="history-copy-filter" value={effectiveCopy} onChange={(e) => setFilter("copy", e.target.value)}
-            aria-label="Filter by post copy and plan context" data-testid="history-copy-filter" className={PILL_SELECT_CLASS}>
+            aria-label="Filter by post copy and plan context" data-testid="history-copy-filter" data-active={effectiveCopy === "without" ? "true" : undefined} className={PILL_SELECT_CLASS}>
             <option value="with">With post copy & context</option>
             <option value="without">Without post copy & context</option>
           </select>
-          <button type="button" className="history-more-filters pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
+          <button type="button" className="history-more-filters pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
+            data-active={(profileFilter || statusFilter || sort !== "newest") ? "true" : undefined}
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
             More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
           </button>
@@ -1355,7 +1357,7 @@ export default function GenerationHistory() {
               data-testid="history-view-full"
               aria-pressed={viewMode === "full"}
               onClick={() => chooseView("full")}
-              className={`pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold ${viewMode === "full" ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
+              className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
             >
               Full cards
             </button>
@@ -1364,7 +1366,7 @@ export default function GenerationHistory() {
               data-testid="history-view-compact"
               aria-pressed={viewMode === "compact"}
               onClick={() => chooseView("compact")}
-              className={`pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold ${viewMode === "compact" ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
+              className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
             >
               Compact
             </button>
@@ -1384,6 +1386,7 @@ export default function GenerationHistory() {
               value={statusFilter}
               onChange={(e) => setFilter("status", e.target.value)}
               aria-label="Filter by status"
+              data-active={statusFilter ? "true" : undefined}
               className={PILL_SELECT_CLASS}
             >
               <option value="">All statuses</option>
@@ -1398,6 +1401,7 @@ export default function GenerationHistory() {
               onChange={(e) => setSort(e.target.value)}
               aria-label="Sort history"
               data-testid="history-sort"
+              data-active={sort !== "newest" ? "true" : undefined}
               className={PILL_SELECT_CLASS}
             >
               <option value="newest">Newest first</option>

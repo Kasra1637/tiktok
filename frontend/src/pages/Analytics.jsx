@@ -157,7 +157,7 @@ export default function Analytics() {
       <PageHeader
         icon={TrendingUp}
         title="Analytics"
-        description="Compare manually recorded views and your own ratings."
+        description="Your recorded views vs. your verdicts."
         data-testid="analytics-header"
         actions={
           profiles?.length > 0 ? (
@@ -223,7 +223,7 @@ export default function Analytics() {
       ) : (
         <div className="page-content-enter space-y-6">
           <p data-testid="analytics-scope" className="text-sm text-muted-foreground">
-            Showing {renders?.length ?? 0} most recent renders{selectedId ? " for this app" : " across all apps, including unassigned exports"} (up to 200) and up to 500 saved events. Activity and feedback below use this same set.
+            Your {renders?.length ?? 0} newest renders{selectedId ? " for this app" : " across all apps, unassigned exports included"}. Everything below uses this same set.
           </p>
           {/* The summary/verdict band shares the desktop width two-across
               (audit 2026-11-14, finding 6): these cards used to stack

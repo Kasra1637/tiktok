@@ -133,6 +133,14 @@ One render path, single-pass video generation via OpenRouter.
   carries all three. Card descriptions are uniformly 160 chars,
   smoke-pinned with the six exact titles; titles are short and no
   longer share one length.
+- `frontend/src/components/AppPicker.jsx` (`PILL_SELECT_CLASS`) +
+  `formControls.js` (`CONTROL_CLASS`) — the shared control skins. Every
+  filter control in the app wears the one filter treatment (ADR 0161):
+  `.filter-control` in index.css states the rest, hover, focus, open and
+  active states, an active filter (a non-default value, a pressed toggle)
+  wears the selection indigo via `data-active` / `aria-pressed`, and the
+  app picker marks active only in its filter form, never as a page's app
+  switcher. Form fields keep `CONTROL_CLASS`; they are not filters.
 - Voice: `frontend/src/lib/listen.js` + `ListenDock` (mounted by `AppShell`) —
   browser `speechSynthesis` only (no text leaves the device), text built from
   the data model, never the DOM. See ADR 0088.
@@ -220,7 +228,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and sixty decisions (0001–0160) now
+Read `docs/adr/README.md` first. One hundred and sixty-one decisions (0001–0161) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

@@ -366,6 +366,7 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
             placeholder="Search photos…"
             aria-label="Search assets by name or kind"
             data-testid="asset-search"
+            data-active={query ? "true" : undefined}
             className={PILL_SELECT_CLASS}
           />
           {q && (

@@ -3,9 +3,13 @@ import { cn } from "../lib/utils";
 
 /** The pill dropdown used in page headers and filter bars. */
 /** Shared by every filter bar, so the 44px coarse-pointer rule lands on all
-    of them at once: a 32px pill is a comfortable click and a miss with a thumb. */
+    of them at once: a 32px pill is a comfortable click and a miss with a thumb.
+    It also carries the one filter treatment (ADR 0161): `filter-control`
+    states a filter's condition in index.css — an active filter wears the
+    selection indigo — and `focus-ring` gives keyboard users the same halo
+    the chips get, on every filter bar at once. */
 export const PILL_SELECT_CLASS =
-  "pill-studio tap-chip h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
+  "pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
 
 /**
  * Which app a page is showing. One picker for every sidebar page, so the
@@ -26,6 +30,11 @@ export function AppPicker({
   id,
   className,
 }) {
+  // In its filter form (an "every app" option exists) a chosen app is an
+  // active filter and says so on its face (ADR 0161). As a page's app
+  // switcher the picker names the current context instead — always
+  // chosen, never "filtering" — so it never wears the active state.
+  const filterActive = Boolean(allLabel) && Boolean(value);
   return (
     <select
       id={id}
@@ -33,6 +42,7 @@ export function AppPicker({
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
       data-testid={testId}
+      data-active={filterActive ? "true" : undefined}
       className={cn(PILL_SELECT_CLASS, className)}
     >
       {allLabel && <option value="">{allLabel}</option>}

@@ -10342,8 +10342,8 @@ async function runAnalyticsChecks() {
       throw new Error("the analytics header is not on the page");
     }
     const copy = (header.querySelector("p")?.textContent || "").trim();
-    if (copy !== "Compare manually recorded views and your own ratings.") {
-      throw new Error("the analytics header must explain that views are manually recorded");
+    if (copy !== "Your recorded views vs. your verdicts.") {
+      throw new Error("the analytics header must say the page compares the recorded views with the founder's own verdicts");
     }
   });
 
@@ -13195,7 +13195,7 @@ async function runDemoCtaChecks() {
       ["CreateVideo.jsx", "Create Video", []],
       ["AssetLibrary.jsx", "Asset Library", []],
       ["GenerationHistory.jsx", "Generation History", []],
-      ["Analytics.jsx", "Analytics", ["Compare manually recorded views and your own ratings."]],
+      ["Analytics.jsx", "Analytics", ["Your recorded views vs. your verdicts."]],
     ];
     for (const [file, title, expected] of pages) {
       const text = fs.readFileSync(path.join(SRC, "pages", file), "utf8");
@@ -19056,6 +19056,84 @@ await check(
     } finally {
       global.__SMOKE_PARAMS = previousParams;
       dom.window.localStorage.removeItem("vocolens.historyView");
+    }
+  });
+
+  // One treatment for every filter control (ADR 0161): the shared pill
+  // skin carries the filter class and the shared focus ring, the
+  // stylesheet states the active look in the selection indigo, and a
+  // filter holding a non-default value says so on its face — which
+  // filters are on is visible without opening any of them.
+  await check("every filter control wears the one treatment and an active filter reads active", async (ctx) => {
+    const pickerSource = fs.readFileSync(path.join(SRC, "components", "AppPicker.jsx"), "utf8");
+    if (!/PILL_SELECT_CLASS\s*=\s*"[^"]*filter-control/.test(pickerSource)) {
+      throw new Error("the shared filter skin lost the filter-control class");
+    }
+    if (!/PILL_SELECT_CLASS\s*=\s*"[^"]*focus-ring/.test(pickerSource)) {
+      throw new Error("the shared filter skin lost the shared focus ring");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.filter-control\[data-active="true"\][\s\S]{0,300}?--indigo-45/.test(css)) {
+      throw new Error("index.css does not define the active filter state in the selection indigo");
+    }
+    if (!/\.filter-control\[aria-pressed="true"\]/.test(css)) {
+      throw new Error("index.css does not carry the pressed state for filter toggles");
+    }
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "filter-1",
+          hook_line: "A pier at dawn",
+          post_kit: POST_KIT,
+          audience: "Night scrollers",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=without&status=failed&q=pier";
+        await mount(GenerationHistory)(ctx);
+        const search = ctx.container.querySelector('[data-testid="history-search"]');
+        if (!search.className.includes("filter-control")) {
+          throw new Error("the History search does not wear the filter treatment");
+        }
+        if (search.getAttribute("data-active") !== "true") {
+          throw new Error("a search holding text does not read as an active filter");
+        }
+        const copy = ctx.container.querySelector('[data-testid="history-copy-filter"]');
+        if (copy.getAttribute("data-active") !== "true") {
+          throw new Error("the copy filter on its non-default side does not read as active");
+        }
+        const status = ctx.container.querySelector("#history-status-filter");
+        if (!status.className.includes("filter-control") || status.getAttribute("data-active") !== "true") {
+          throw new Error("a chosen status does not read as an active filter");
+        }
+        const sort = ctx.container.querySelector('[data-testid="history-sort"]');
+        if (!sort.className.includes("filter-control")) {
+          throw new Error("the sort select does not wear the filter treatment");
+        }
+        if (sort.getAttribute("data-active")) {
+          throw new Error("the sort on its default reads as an active filter");
+        }
+        const picker = ctx.container.querySelector('[aria-label="Filter by app"]');
+        if (!picker.className.includes("filter-control")) {
+          throw new Error("the app picker does not wear the filter treatment");
+        }
+        if (picker.getAttribute("data-active")) {
+          throw new Error("the app picker on All apps reads as an active filter");
+        }
+        const more = [...ctx.container.querySelectorAll("button")].find((b) => b.textContent.includes("More filters"));
+        if (!more || more.getAttribute("data-active") !== "true") {
+          throw new Error("More filters does not read as active while a filter behind it is on");
+        }
+        const pressed = ctx.container.querySelector('[data-testid="history-view-full"]');
+        if (!pressed.className.includes("filter-control") || pressed.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the view toggle does not wear the filter treatment");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
     }
   });
 

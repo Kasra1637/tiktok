@@ -1645,6 +1645,43 @@ h1,
     box-shadow: 0 0 0 3px var(--indigo-15);
 }
 
+/* ---------- Filter controls: one treatment (ADR 0161) ----------
+   Every filter control in the app — the pill selects and search inputs
+   wearing PILL_SELECT_CLASS, the app picker in its filter form, the
+   History view toggle and the More-filters disclosure — reads in the
+   same states, so a filter's condition is visible before it is touched:
+   rest is the shared pill (hairline border, recessed tint, bevel rim,
+   hover lift, the focus halo above); a disclosure standing open wears
+   the indigo border; and an ACTIVE filter — a select or search holding
+   a non-default value, a pressed toggle — wears the selection
+   treatment: indigo border, indigo tint, the lit top rim. Indigo means
+   "selected" everywhere in this app, so an active filter reads as ON
+   at a glance, without opening it. Un-layered, like .thumb-selected,
+   so the rules beat the utility classes the controls also carry. */
+.filter-control[data-active="true"],
+.filter-control[aria-pressed="true"] {
+    border-color: var(--indigo-45);
+    background-color: var(--indigo-15);
+    color: hsl(var(--foreground));
+    box-shadow: inset 0 1px 0 0 rgba(129, 140, 248, 0.28), var(--shadow-sm);
+}
+.filter-control[aria-expanded="true"] {
+    border-color: var(--indigo-35);
+}
+/* The native menu keeps the platform's behaviour and options; where a
+   platform lets the page dress it (Chromium's list on Windows, Firefox),
+   the options wear the app's dark card instead of the OS white, and the
+   chosen option the brand fill. Everywhere else this is ignored and the
+   menu stays exactly as native as it was. */
+.filter-control option {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+}
+.filter-control option:checked {
+    background-color: var(--brand-indigo-dark);
+    color: #ffffff;
+}
+
 /* ---------- History verdict focus, distinct from selection ----------
    History-only: the generic thumb halo above is identical to the selected
    halo, so a focused-but-already-chosen verdict button read as merely
