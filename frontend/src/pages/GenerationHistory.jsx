@@ -328,7 +328,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
         // Genuinely still rendering at the provider. Say so plainly rather than
         // claiming a fix, and keep the row visible so it can be checked again.
         setStrandedNote(
-          "Checked just now — the provider is still rendering this. Try again shortly."
+          "Checked just now — the provider is still rendering this. History keeps checking on its own too, and the clip will appear here when it lands."
         );
         onChanged?.();
         return;
@@ -417,12 +417,12 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   } else if (row.status === "submitted" && !row.video_url) {
     stageNotice = {
       title: "Queued — waiting on the provider",
-      body: "This render is still queued — nothing has reported back since it was submitted. Press Check again to ask the provider.",
+      body: "This render is still queued — nothing has reported back since it was submitted. History keeps checking on its own, and the finished video will appear here when it lands.",
     };
   } else if (awaitingProvider) {
     stageNotice = {
-      title: "Still marked as generating",
-      body: "The last saved state is still generating. Check again to ask the provider for an update.",
+      title: "Still generating",
+      body: "The provider is still rendering this. History keeps checking on its own, and the finished video will appear here when it lands.",
     };
   } else if (!downloadUrl) {
     stageNotice = {
@@ -882,24 +882,16 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 <p className="text-sm text-muted-foreground" role="status">{strandedNote}</p>
               )}
 
-              {awaitingProvider && pollState === "paused" ? (
-                /* The paused state gets the repair banner, not the muted
-                   status line (audit 2026-11-14, finding 10): it used to
-                   read exactly like the active state, so a slow-but-healthy
-                   render and a stuck one were indistinguishable on the row. */
-                <Alert variant="warning" data-testid={`history-poll-state-${row.id}`}>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Still rendering — check again. Automatic checks paused after
-                    20 attempts; the provider may still be finishing this clip.
-                    Use Check again, or return later.
-                  </AlertDescription>
-                </Alert>
-              ) : awaitingProvider && (
+              {awaitingProvider && (
+                /* The row's live state (ADR 0174): the poll never
+                   retires an awaiting row, so there is no paused or
+                   stopped state to announce — only whether checks are
+                   running at the base cadence or have been slowed by
+                   failures, in the render panel's words (ADR 0171). */
                 <p role="status" className="text-sm text-muted-foreground" data-testid={`history-poll-state-${row.id}`}>
-                  {pollState === "error"
-                    ? "Automatic checks stopped after a request failed. This does not mean the render failed. Use Check again to retry."
-                    : "Automatic checks are active, up to 20 attempts. You can also use Check again or return later."}
+                  {pollState === "slowed"
+                    ? "Still rendering — status checks are being slowed down right now, so History is checking less often. It has not stopped: the finished video will appear here."
+                    : "Automatic checks are active — this render is still with the provider, and the finished video will appear here on its own when it lands."}
                 </p>
               )}
               {compact && hasClip && (

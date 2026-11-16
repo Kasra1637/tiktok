@@ -9,7 +9,7 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, ShieldCheck, Video,
-  Link2, Play, Search,
+  Play,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -168,45 +168,46 @@ const FLOW_STEPS = [
 
 /**
  * The hero story: the process in one continuous motion (ADR 0165,
- * restructured by ADR 0168). Inside a phone frame the mockup
- * illustrates what a visitor does, stylized — not the exact app
- * UI — across two pages in the phone. Page one: the visitor types
- * their store link into an input field, character by character
- * behind a blinking caret (the link is the general placeholder
- * "yourapp.com/store", a hypothetical example, not a real app),
- * then clicks "Research app for video" to get their profile
- * info. Page two: the app's video creation steps — App Profile,
- * Audience & template, Review & submit, Demo + CTA, their exact
- * names in CreateVideo — check off in turn, and "Generate the
- * video" appears only there and is clicked there. Then the
- * finished video plays — presenter, hook words, play badge,
- * progress bar — closing on its end card. Then the frame holds
- * and the loop restarts. It is pure CSS on one 12s clock (the
- * hs-* keyframes in index.css), so there is no JS timer and no
- * control of any kind. The base styles are the finished video
- * frame: under reduced motion no stage animation is applied and
- * that frame simply stands. The five steps themselves still
- * run, in full, in the How it works section below.
+ * restructured by ADR 0168, refined by ADR 0172). Inside a phone
+ * frame the mockup illustrates what a visitor does, stylized —
+ * not the exact app UI — across two pages in the phone. Page one
+ * opens cleanly on "Research app for video", clicked to get the
+ * profile info: the typed store-link field ADR 0168 carried is
+ * removed at Kasra's order (ADR 0172) — no field, no link text,
+ * no caret anywhere in the figure. Page two: the app's video
+ * creation steps — App Profile, Audience & template, Review &
+ * submit, Demo + CTA, their exact names in CreateVideo — check
+ * off in turn, and "Generate the video" appears only there and
+ * is clicked there. Both buttons display about half a second
+ * longer before their clicks, on a 13s clock lengthened for
+ * exactly that (ADR 0172). Then the finished video plays —
+ * presenter, hook words, play badge, progress bar — and the
+ * play badge yields to the enhanced end card: an app icon tile,
+ * the closing line and the CTA resolving as the loop's closing
+ * moment. Then the frame holds and the loop restarts. It is
+ * pure CSS on one 13s clock (the hs-* keyframes in index.css),
+ * so there is no JS timer and no control of any kind. The base
+ * styles are the finished video frame: under reduced motion no
+ * stage animation is applied and that frame simply stands. The
+ * five steps themselves still run, in full, in the How it
+ * works section below. The phone's controls mirror the app's
+ * real UI (ADR 0173): Research wears BrandSetup's secondary
+ * button, Generate wears the render panel's accent button, and
+ * a done step wears the wizard rail's filled check badge — when
+ * the real treatments change, this mockup follows.
  */
 function HeroStory() {
   return (
     <div
       className="hero-story"
       role="img"
-      aria-label="How it works in one motion: type your store link, click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video plays."
+      aria-label="How it works in one motion: click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video plays, closing on its end card."
     >
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
           <div className="hero-story-page1">
-            <div className="hero-story-field">
-              <Link2 className="h-3.5 w-3.5" />
-              <span className="hero-story-typed">
-                <span className="hero-story-typed-text">yourapp.com/store</span>
-                <span className="hero-story-caret" />
-              </span>
-            </div>
             <div className="hero-story-research">
-              <Search className="h-4 w-4" />
+              <Sparkles className="h-4 w-4" />
               <span>Research app for video</span>
               <span className="hero-story-research-ripple" />
             </div>
@@ -214,24 +215,24 @@ function HeroStory() {
           <div className="hero-story-page2">
             <div className="hero-story-steps">
               <div className="hero-story-step is-1">
-                <Check className="hero-story-step-check h-3 w-3" />
+                <span className="hero-story-step-badge"><Check className="h-3 w-3" /></span>
                 <span>App Profile</span>
               </div>
               <div className="hero-story-step is-2">
-                <Check className="hero-story-step-check h-3 w-3" />
+                <span className="hero-story-step-badge"><Check className="h-3 w-3" /></span>
                 <span>Audience &amp; template</span>
               </div>
               <div className="hero-story-step is-3">
-                <Check className="hero-story-step-check h-3 w-3" />
+                <span className="hero-story-step-badge"><Check className="h-3 w-3" /></span>
                 <span>Review &amp; submit</span>
               </div>
               <div className="hero-story-step is-4">
-                <Check className="hero-story-step-check h-3 w-3" />
+                <span className="hero-story-step-badge"><Check className="h-3 w-3" /></span>
                 <span>Demo + CTA</span>
               </div>
             </div>
             <div className="hero-story-generate">
-              <Sparkles className="h-4 w-4" />
+              <Play className="h-4 w-4" />
               <span>Generate the video</span>
               <span className="hero-story-ripple" />
             </div>
@@ -261,6 +262,9 @@ function HeroStory() {
               <Play className="h-[18px] w-[18px]" fill="currentColor" />
             </div>
             <div className="hero-story-endcard">
+              <span className="hero-story-endcard-icon">
+                <Sparkles className="h-4 w-4" />
+              </span>
               <span className="hero-story-endcard-line">Your app. Your story.</span>
               <span className="hero-story-endcard-cta">Get the app</span>
             </div>

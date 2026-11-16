@@ -84,8 +84,8 @@ export function describeHistoryAttention(attention) {
       : "Open its card for the provider reason — then re-render from Create Video.";
   } else if (isAwaitingProvider(first)) {
     guidance = many
-      ? "Open each card and press Check again — finished renders are fetched when found."
-      : "Open its card and press Check again — the finished render is fetched when found.";
+      ? "Open each card to watch it — History keeps checking on its own, and finished renders are fetched when found."
+      : "Open its card to watch it — History keeps checking on its own, and the finished render is fetched when found.";
   } else {
     guidance = many
       ? "Open each card and press Retry durable save — fresh copies are re-fetched and filed."
@@ -127,8 +127,9 @@ export function hasCopyContext(row) {
 /**
  * Whether a queued render is still awaiting the provider: submitted or
  * generating with no bytes yet. A submitted row is not finished work gone
- * missing; it is work that has not reported back, so it gets Check again
- * rather than a finished-clip repair.
+ * missing; it is work that has not reported back, so History keeps
+ * watching it until it settles (ADR 0174) rather than offering it a
+ * finished-clip repair.
  */
 export function isAwaitingProvider(row) {
   if (!row) return false;

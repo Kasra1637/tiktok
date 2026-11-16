@@ -175,7 +175,7 @@ describe("history attention contract", () => {
     ["two kit-less", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "k2", status: "completed", post_kit: null, r2_url: FILED_COPY }], "2 finished renders have no post copy yet.", "Generate post copy", "Review without copy"],
     ["failed", [{ id: "f1", status: "failed" }], "1 clip needs attention.", "provider reason", "Review repair"],
     ["two failed", [{ id: "f1", status: "failed" }, { id: "f2", status: "failed" }], "2 clips need attention.", "Open each card", "Review repair"],
-    ["awaiting", [{ id: "g1", status: "generating" }], "1 clip needs attention.", "Check again", "Review repair"],
+    ["awaiting", [{ id: "g1", status: "generating" }], "1 clip needs attention.", "keeps checking on its own", "Review repair"],
     ["missing durable copy", [{ id: "c1", status: "completed" }], "1 clip needs attention.", "Retry durable save", "Review repair"],
   ])("words: %s", (_label, rows, summary, guidance, cta) => {
     const words = describeHistoryAttention(getHistoryAttention(rows));
