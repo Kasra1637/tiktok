@@ -517,14 +517,15 @@ export default function Landing() {
             </span>
           </div>
           </div>
-          {/* The story itself, beside the pitch: one continuous CSS
-              animation — a store link drops into the phone frame and a
-              finished video assembles inside it (ADR 0165). The hero
-              carries no video bytes, no JS timer and no controls. Under
-              reduced motion the loop never runs and the finished frame
-              stands. Below the lg breakpoint the figure is hidden
-              entirely (ADR 0158, .hero-shot in index.css): the stacked
-              mobile hero drops the frame. */}
+          {/* The story itself: one continuous CSS animation — a store
+              link drops into the phone frame and a finished video
+              assembles inside it (ADR 0165). The hero carries no video
+              bytes, no JS timer and no controls. Under reduced motion
+              the loop never runs and the finished frame stands. At lg
+              the grid stands the figure beside the pitch; below lg it
+              stacks after the whole pitch, centered at its stacked
+              measure (ADR 0177, superseding ADR 0158's hide rule;
+              .hero-shot in index.css). */}
           <figure
             className="hero-shot animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}

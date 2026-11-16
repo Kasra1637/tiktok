@@ -1,6 +1,6 @@
 # ADR 0158: The hero flow is hidden on mobile
 
-Status: accepted
+Status: superseded by 0177
 
 Follows ADR 0154 (the flow has no pause control) and ADR 0157
 (the hero headline's treatment); neither changes — this record

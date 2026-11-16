@@ -1340,19 +1340,19 @@ h1,
     font-weight: 600;
 }
 /* ---------- Landing: hero shot (the story's figure) ----------
-   Hidden below the hero's own desktop breakpoint (ADR 0158, carried
-   over to the story by ADR 0165): on phones the stacked portrait
-   frame cost a full screen of mostly empty space. From lg up —
-   where the pitch and the story stand side by side — the figure
-   renders exactly as before. Same mobile-first display flip as
-   .history-secondary-filters. */
+   Shown at every width (ADR 0177, superseding ADR 0158's hide
+   rule): ADR 0158 hid the figure below the hero's desktop
+   breakpoint, when it was a decorative cycling picture that cost
+   a stacked screen of mostly empty space. The figure carries
+   the product story now, so it renders on phones too — stacked
+   below the pitch in the hero's single-column flow, its own
+   utilities (mx-auto, mt-12, max-w-[360px] in Landing.jsx)
+   centering it under the pitch — and from lg up the hero grid
+   stands it beside the pitch, exactly as before. No breakpoint
+   flip: the class states plain visibility, and the placement at
+   each width lives in the figure's utilities and the grid. */
 .hero-shot {
-    display: none;
-}
-@media (min-width: 1024px) {
-    .hero-shot {
-        display: block;
-    }
+    display: block;
 }
 
 /* The hero story (ADR 0165, restructured by ADR 0168, refined

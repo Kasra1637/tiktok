@@ -10346,26 +10346,60 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // Kasra removed the cycling picture section from mobile (Nov 15,
-  // ADR 0158): on his phone the stacked hero's portrait frame cost a
-  // full screen of mostly empty dark space and earned nothing there.
-  // The figure carries .hero-shot, which index.css hides until the
-  // hero's own desktop breakpoint — the lg width where the pitch and
-  // the picture stand side by side. The rule carries over unchanged
-  // to the story animation that replaced the flow (ADR 0165).
-  await check("the hero story is hidden below the desktop breakpoint", async (ctx) => {
+  // ADR 0158 hid the hero figure on mobile (Nov 15 2026): the
+  // cycling picture section then cost a full stacked screen of
+  // mostly empty dark space and earned nothing there. Kasra
+  // reversed the hide (Nov 16 2026, ADR 0177 supersedes 0158):
+  // the figure is the story now — typing, steps, the video born
+  // in the center — and the first users are mobile, so the phone
+  // SHOWS below the desktop breakpoint, stacked after the whole
+  // pitch in the hero's single-column flow. The old rule's spirit
+  // stands: the pitch lands complete first; the phone follows it.
+  // At lg the grid stands the figure beside the pitch, unchanged.
+  await check("the hero story stands below the pitch on mobile and beside it on desktop", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
     if (!shot) throw new Error("no hero frame rendered");
     if (!shot.classList.contains("hero-shot")) {
-      throw new Error("the hero frame does not carry the .hero-shot hiding class");
+      throw new Error("the hero frame does not carry the .hero-shot placement class");
     }
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!/\.hero-shot\s*\{\s*display:\s*none/.test(css)) {
-      throw new Error("index.css does not hide .hero-shot by default");
+    if (!/\.hero-shot\s*\{\s*display:\s*block/.test(css)) {
+      throw new Error("index.css does not show .hero-shot by default");
     }
-    if (!/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.hero-shot\s*\{\s*display:\s*block/.test(css)) {
-      throw new Error(".hero-shot is not restored at the desktop breakpoint");
+    if (/\.hero-shot\s*\{\s*display:\s*none/.test(css)) {
+      throw new Error("index.css still hides .hero-shot (ADR 0158's retired rule)");
+    }
+    if (/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.hero-shot/.test(css)) {
+      throw new Error(".hero-shot still flips at the desktop breakpoint (ADR 0158's retired rule)");
+    }
+    // Stacked order: the figure follows the whole pitch block —
+    // headline through the checkmark lines — in the hero's flow.
+    const pitch = shot.previousElementSibling;
+    if (!pitch || !pitch.querySelector("h1")) {
+      throw new Error("the hero figure does not follow the pitch block");
+    }
+    if (!pitch.textContent.includes("Publish on your terms")) {
+      throw new Error("the hero figure does not follow the complete pitch (checkmark lines included)");
+    }
+    // Mobile sizing: centered under the pitch, spaced below it,
+    // capped at the phone's stacked measure inside the column.
+    const shotClass = shot.getAttribute("class") || "";
+    for (const cls of ["mx-auto", "mt-12", "w-full", "max-w-[360px]"]) {
+      if (!shotClass.includes(cls)) {
+        throw new Error(`the hero figure lost its mobile sizing class ${cls}`);
+      }
+    }
+    // Desktop unchanged: the hero grid still turns two-column at
+    // lg and the figure's lg placement utilities still engage.
+    const heroClass = (shot.parentElement && shot.parentElement.getAttribute("class")) || "";
+    if (!heroClass.includes("lg:grid") || !heroClass.includes("lg:grid-cols-[1.02fr_1fr]")) {
+      throw new Error("the hero grid lost its desktop two-column rule");
+    }
+    for (const cls of ["lg:mx-0", "lg:mt-0", "lg:max-w-[400px]"]) {
+      if (!shotClass.includes(cls)) {
+        throw new Error(`the hero figure lost its desktop placement class ${cls}`);
+      }
     }
   });
 
