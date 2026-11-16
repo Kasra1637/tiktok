@@ -9,7 +9,7 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, ShieldCheck, Video,
-  Link2, Play,
+  Link2, Play, Search,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -168,68 +168,73 @@ const FLOW_STEPS = [
 
 /**
  * The hero story: the process in one continuous motion (ADR 0165,
- * replacing the retired five-step cycling loop; the four-act
- * process cut is the founder's final direction in the ADR 0165
- * addendum). Inside a phone frame the mockup illustrates what a
- * visitor does, stylized — not the exact app UI: the store link
- * drops in as if pasted and lands in an input field at the top
- * of the screen, the visitor's unique app profile sets up with
- * its facts checked off, one click on Generate the video lands,
- * and the finished video plays — presenter, hook words, play
- * badge, progress bar — closing on its end card. Then the frame
- * holds and the loop restarts. It is pure CSS on one 12s clock
- * (the hs-* keyframes in index.css), so there is no JS timer
- * and no control of any kind. The base styles are the finished
- * video frame: under reduced motion no stage animation is
- * applied and that frame simply stands. The five steps
- * themselves still run, in full, in the How it works section
- * below.
+ * restructured by ADR 0168). Inside a phone frame the mockup
+ * illustrates what a visitor does, stylized — not the exact app
+ * UI — across two pages in the phone. Page one: the visitor types
+ * their store link into an input field, character by character
+ * behind a blinking caret (the link is the general placeholder
+ * "yourapp.com/store", a hypothetical example, not a real app),
+ * then clicks "Research app for video" to get their profile
+ * info. Page two: the app's video creation steps — App Profile,
+ * Audience & template, Review & submit, Demo + CTA, their exact
+ * names in CreateVideo — check off in turn, and "Generate the
+ * video" appears only there and is clicked there. Then the
+ * finished video plays — presenter, hook words, play badge,
+ * progress bar — closing on its end card. Then the frame holds
+ * and the loop restarts. It is pure CSS on one 12s clock (the
+ * hs-* keyframes in index.css), so there is no JS timer and no
+ * control of any kind. The base styles are the finished video
+ * frame: under reduced motion no stage animation is applied and
+ * that frame simply stands. The five steps themselves still
+ * run, in full, in the How it works section below.
  */
 function HeroStory() {
   return (
     <div
       className="hero-story"
       role="img"
-      aria-label="How it works in one motion: paste your store link, your app profile sets up, one click generates the video, and the finished video plays."
+      aria-label="How it works in one motion: type your store link, click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video plays."
     >
-      <div className="hero-story-link" aria-hidden="true">
-        <Link2 className="h-3.5 w-3.5" />
-        <span>yourapp.com/store</span>
-      </div>
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
-          <div className="hero-story-field">
-            <Link2 className="h-3.5 w-3.5" />
-            <span>yourapp.com/store</span>
-          </div>
-          <div className="hero-story-profile">
-            <div className="hero-story-profile-head">
-              <span className="hero-story-profile-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-                  <rect x="5" y="11" width="3.5" height="8" rx="1.2" />
-                  <rect x="10.25" y="7" width="3.5" height="12" rx="1.2" />
-                  <rect x="15.5" y="4" width="3.5" height="15" rx="1.2" />
-                </svg>
+          <div className="hero-story-page1">
+            <div className="hero-story-field">
+              <Link2 className="h-3.5 w-3.5" />
+              <span className="hero-story-typed">
+                <span className="hero-story-typed-text">yourapp.com/store</span>
+                <span className="hero-story-caret" />
               </span>
-              <span className="hero-story-profile-name">yourapp</span>
             </div>
-            <div className="hero-story-profile-row is-1">
-              <Check className="hero-story-profile-check h-3 w-3" />
-              <span>Store page</span>
-            </div>
-            <div className="hero-story-profile-row is-2">
-              <Check className="hero-story-profile-check h-3 w-3" />
-              <span>Screenshots</span>
-            </div>
-            <div className="hero-story-profile-row is-3">
-              <Check className="hero-story-profile-check h-3 w-3" />
-              <span>Facts</span>
+            <div className="hero-story-research">
+              <Search className="h-4 w-4" />
+              <span>Research app for video</span>
+              <span className="hero-story-research-ripple" />
             </div>
           </div>
-          <div className="hero-story-generate">
-            <Sparkles className="h-4 w-4" />
-            <span>Generate the video</span>
-            <span className="hero-story-ripple" />
+          <div className="hero-story-page2">
+            <div className="hero-story-steps">
+              <div className="hero-story-step is-1">
+                <Check className="hero-story-step-check h-3 w-3" />
+                <span>App Profile</span>
+              </div>
+              <div className="hero-story-step is-2">
+                <Check className="hero-story-step-check h-3 w-3" />
+                <span>Audience &amp; template</span>
+              </div>
+              <div className="hero-story-step is-3">
+                <Check className="hero-story-step-check h-3 w-3" />
+                <span>Review &amp; submit</span>
+              </div>
+              <div className="hero-story-step is-4">
+                <Check className="hero-story-step-check h-3 w-3" />
+                <span>Demo + CTA</span>
+              </div>
+            </div>
+            <div className="hero-story-generate">
+              <Sparkles className="h-4 w-4" />
+              <span>Generate the video</span>
+              <span className="hero-story-ripple" />
+            </div>
           </div>
           <div className="hero-story-video">
             <div className="hero-story-progress"><span /></div>

@@ -133,9 +133,12 @@ One render path, single-pass video generation via OpenRouter.
   carries all three. Card descriptions are uniformly 160 chars,
   smoke-pinned with the six exact titles; titles are short and no
   longer share one length. The hero figure carries the story
-  animation (ADR 0165) — a store link drops into a phone frame and
-  the process plays inside it in four acts (link in, app profile,
-  one click, the finished video), pure CSS on one 12s clock —
+  animation (ADRs 0165/0168) — inside a phone frame the process
+  plays across two pages (page one types the store link in and
+  clicks Research app for video; page two checks off the four
+  video creation steps and carries the only Generate the video
+  click; then the finished video plays), pure CSS on one 12s
+  clock —
   under ADR 0158's placement rule (`.hero-shot`, hidden below
   1024px); the How it works strip below keeps the five steps. Every
   entrance in the app is the one rise-and-settle (ADR 0165).
@@ -245,7 +248,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and sixty-seven decisions (0001–0167) now
+Read `docs/adr/README.md` first. One hundred and sixty-eight decisions (0001–0168) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

@@ -1355,19 +1355,22 @@ h1,
     }
 }
 
-/* ---------- Landing: hero story (ADR 0165) ----------
+/* ---------- Landing: hero story (ADRs 0165, 0168) ----------
    One continuous animation in the hero's portrait figure that
-   illustrates the process in four acts, stylized — not the exact
-   app UI: the store link drops in as if pasted and lands in an
-   input field at the top of the phone, the app profile sets up
-   with its facts checked off, one click on Generate the video
-   lands, and the finished video plays — presenter, hook words,
-   play badge, progress — closing on its end card. Every stage
-   is a keyframe track on one 12s clock, applied only when motion
-   is allowed; the base styles are the finished video frame,
-   which is what reduced motion stands on. No JS, no controls,
-   no captions — the steps live below, in the How it works
-   strip. */
+   illustrates the process across two pages in a phone, stylized
+   — not the exact app UI. Page one: the store link is typed
+   into an input field character by character behind a blinking
+   caret (the link is a general placeholder, not a real app),
+   then "Research app for video" is clicked to get the profile
+   info. Page two: the app's video creation steps check off in
+   turn under their exact names, "Generate the video" appears
+   only there and is clicked there, and the finished video
+   plays — presenter, hook words, play badge, progress —
+   closing on its end card. Every stage is a keyframe track on
+   one 12s clock, applied only when motion is allowed; the base
+   styles are the finished video frame, which is what reduced
+   motion stands on. No JS, no controls, no captions — the
+   steps live below, in the How it works strip. */
 .hero-story {
     position: absolute;
     inset: 0;
@@ -1377,18 +1380,20 @@ h1,
     padding: 22px 18px 18px;
     gap: 14px;
 }
-.hero-story-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 7px 12px;
-    border: 1px solid var(--indigo-25);
-    border-radius: 999px;
-    background: var(--indigo-8);
-    color: var(--brand-indigo);
-    font-size: 12.5px;
-    font-weight: 600;
-    white-space: nowrap;
+/* The two process pages fill the phone screen in turn. Their
+   base state is hidden: the figure's base state is the finished
+   video, and the gated keyframes walk the pages in and out on
+   the one clock. */
+.hero-story-page1,
+.hero-story-page2 {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 14px 14px;
+    border-radius: 24px;
+    opacity: 0;
 }
 .hero-story-phone {
     position: relative;
@@ -1429,10 +1434,10 @@ h1,
     background: var(--brand-indigo);
     transform-origin: left center;
 }
-/* Acts 1–3 are the process UI — the link field, the profile card,
-   the generate control. Their base state is hidden: the figure's
-   base state is the finished video, and the gated keyframes walk
-   the process in and out on the one clock. */
+/* Page one's process UI — the link field and the research
+   control. Their base state is hidden, like page two's: the
+   figure's base state is the finished video, and the gated
+   keyframes walk the process in and out on the one clock. */
 .hero-story-field {
     display: flex;
     align-items: center;
@@ -1447,7 +1452,62 @@ h1,
     white-space: nowrap;
     opacity: 0;
 }
-.hero-story-profile {
+/* The typed link: the full text is always in the DOM, clipped
+   by a width that steps open one character at a time, with the
+   caret riding at its right edge and blinking while page one
+   stands. */
+.hero-story-typed {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+}
+.hero-story-typed-text {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+.hero-story-caret {
+    flex: none;
+    width: 2px;
+    height: 15px;
+    margin-left: 1px;
+    border-radius: 1px;
+    background: var(--brand-indigo);
+    opacity: 0;
+}
+.hero-story-research {
+    position: relative;
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border: 1px solid var(--indigo-25);
+    border-radius: 999px;
+    background: var(--indigo-8);
+    color: hsl(var(--foreground));
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+}
+.hero-story-research-ripple {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    border: 2px solid var(--brand-indigo);
+    border-radius: 999px;
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+    pointer-events: none;
+}
+/* Page two's process UI — the video creation steps under their
+   exact app names, checking off in turn, and the generate
+   control, which exists only on this page. */
+.hero-story-steps {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1457,28 +1517,7 @@ h1,
     background: var(--indigo-8);
     opacity: 0;
 }
-.hero-story-profile-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.hero-story-profile-icon {
-    flex: none;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    display: grid;
-    place-items: center;
-    background: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
-    color: #fff;
-}
-.hero-story-profile-name {
-    font-family: "Space Grotesk", "Figtree", sans-serif;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-}
-.hero-story-profile-row {
+.hero-story-step {
     display: flex;
     align-items: center;
     gap: 7px;
@@ -1487,7 +1526,7 @@ h1,
     color: hsl(var(--foreground) / 0.85);
     opacity: 0;
 }
-.hero-story-profile-check {
+.hero-story-step-check {
     flex: none;
     color: var(--brand-indigo);
 }
@@ -1518,9 +1557,10 @@ h1,
     opacity: 0;
     pointer-events: none;
 }
-/* Act 4: the finished video fills the screen. Its base state is
-   fully assembled — presenter, hook words, play badge, end card —
-   and that assembled frame is what reduced motion stands on. */
+/* The finished video fills the screen after page two. Its base
+   state is fully assembled — presenter, hook words, play badge,
+   end card — and that assembled frame is what reduced motion
+   stands on. */
 .hero-story-video {
     position: absolute;
     inset: 0;
@@ -1601,100 +1641,148 @@ h1,
     font-size: 11.5px;
     font-weight: 600;
 }
-@keyframes hs-link {
-    0% { opacity: 0; transform: translateY(-14px); }
-    6%, 88% { opacity: 1; transform: translateY(0); }
-    95%, 100% { opacity: 0; transform: translateY(-6px); }
+@keyframes hs-page1 {
+    0% { opacity: 0; transform: translateY(6px); }
+    3%, 30% { opacity: 1; transform: translateY(0); }
+    34%, 100% { opacity: 0; transform: translateY(0); }
+}
+@keyframes hs-page2 {
+    0%, 33% { opacity: 0; transform: translateY(6px); }
+    38%, 67% { opacity: 1; transform: translateY(0); }
+    71%, 100% { opacity: 0; transform: translateY(0); }
 }
 @keyframes hs-field {
-    0%, 5% { opacity: 0; transform: translateY(6px); }
-    12%, 56% { opacity: 1; transform: translateY(0); }
-    63%, 100% { opacity: 0; transform: translateY(0); }
+    0%, 2% { opacity: 0; transform: translateY(6px); }
+    6%, 100% { opacity: 1; transform: translateY(0); }
 }
-@keyframes hs-profile {
-    0%, 11% { opacity: 0; transform: translateY(8px); }
-    19%, 56% { opacity: 1; transform: translateY(0); }
-    63%, 100% { opacity: 0; transform: translateY(0); }
+@keyframes hs-typing {
+    0%, 5% { width: 0; animation-timing-function: steps(17, end); }
+    22%, 100% { width: 100%; }
 }
-@keyframes hs-row-1 {
-    0%, 21% { opacity: 0; transform: translateX(-4px); }
-    26%, 100% { opacity: 1; transform: translateX(0); }
+@keyframes hs-caret {
+    0%, 4% { opacity: 0; }
+    5%, 11% { opacity: 1; }
+    12%, 14% { opacity: 0; }
+    15%, 21% { opacity: 1; }
+    22%, 24% { opacity: 0; }
+    25%, 31% { opacity: 1; }
+    32%, 100% { opacity: 0; }
 }
-@keyframes hs-row-2 {
-    0%, 28% { opacity: 0; transform: translateX(-4px); }
-    33%, 100% { opacity: 1; transform: translateX(0); }
+@keyframes hs-research {
+    0%, 22% { opacity: 0; transform: translateY(6px) scale(1); }
+    26% { opacity: 1; transform: translateY(0) scale(1); }
+    29% { opacity: 1; transform: translateY(0) scale(0.94); }
+    32%, 100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-@keyframes hs-row-3 {
-    0%, 35% { opacity: 0; transform: translateX(-4px); }
-    40%, 100% { opacity: 1; transform: translateX(0); }
+@keyframes hs-research-ripple {
+    0%, 29% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+    32% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
+    40%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+}
+@keyframes hs-steps {
+    0%, 36% { opacity: 0; transform: translateY(8px); }
+    41%, 100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes hs-step-1 {
+    0%, 42% { opacity: 0; transform: translateX(-4px); }
+    46%, 100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes hs-step-2 {
+    0%, 47% { opacity: 0; transform: translateX(-4px); }
+    51%, 100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes hs-step-3 {
+    0%, 52% { opacity: 0; transform: translateX(-4px); }
+    56%, 100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes hs-step-4 {
+    0%, 57% { opacity: 0; transform: translateX(-4px); }
+    61%, 100% { opacity: 1; transform: translateX(0); }
 }
 @keyframes hs-generate {
-    0%, 43% { opacity: 0; transform: translateY(6px) scale(1); }
-    49% { opacity: 1; transform: translateY(0) scale(1); }
-    53% { opacity: 1; transform: translateY(0) scale(0.94); }
-    57%, 59% { opacity: 1; transform: translateY(0) scale(1); }
-    65%, 100% { opacity: 0; transform: translateY(0) scale(1); }
+    0%, 59% { opacity: 0; transform: translateY(6px) scale(1); }
+    63% { opacity: 1; transform: translateY(0) scale(1); }
+    66% { opacity: 1; transform: translateY(0) scale(0.94); }
+    69%, 100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes hs-ripple {
-    0%, 53% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
-    57% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
-    68%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+    0%, 66% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+    69% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
+    76%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
 }
 @keyframes hs-video {
-    0%, 59% { opacity: 0; }
-    67%, 93% { opacity: 1; }
+    0%, 69% { opacity: 0; }
+    76%, 96% { opacity: 1; }
     99%, 100% { opacity: 0; }
 }
 @keyframes hs-hook-long {
-    0%, 65% { transform: scaleX(0); opacity: 0; }
-    66% { transform: scaleX(0); opacity: 1; }
-    74%, 93% { transform: scaleX(1); opacity: 1; }
+    0%, 74% { transform: scaleX(0); opacity: 0; }
+    75% { transform: scaleX(0); opacity: 1; }
+    82%, 96% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @keyframes hs-hook-short {
-    0%, 71% { transform: scaleX(0); opacity: 0; }
-    72% { transform: scaleX(0); opacity: 1; }
-    80%, 93% { transform: scaleX(1); opacity: 1; }
+    0%, 80% { transform: scaleX(0); opacity: 0; }
+    81% { transform: scaleX(0); opacity: 1; }
+    88%, 96% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @keyframes hs-presenter {
-    0%, 63% { opacity: 0; transform: translateY(10px); }
-    71%, 93% { opacity: 1; transform: translateY(0); }
+    0%, 72% { opacity: 0; transform: translateY(10px); }
+    79%, 96% { opacity: 1; transform: translateY(0); }
     99%, 100% { opacity: 0; transform: translateY(0); }
 }
 @keyframes hs-endcard {
-    0%, 82% { transform: translateY(110%); opacity: 1; }
-    89%, 93% { transform: translateY(0); opacity: 1; }
+    0%, 88% { transform: translateY(110%); opacity: 1; }
+    94%, 96% { transform: translateY(0); opacity: 1; }
     99%, 100% { transform: translateY(0); opacity: 0; }
 }
 @keyframes hs-play {
-    0%, 76% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    82% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
-    86%, 93% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    0%, 83% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    88% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+    91%, 96% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     99%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
 @keyframes hs-progress {
-    0%, 78% { transform: scaleX(0); opacity: 1; }
-    92% { transform: scaleX(1); opacity: 1; }
+    0%, 84% { transform: scaleX(0); opacity: 1; }
+    95% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-link { animation: hs-link 12s linear infinite; }
+    .hero-story-page1 { animation: hs-page1 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-page2 { animation: hs-page2 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-field { animation: hs-field 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-profile { animation: hs-profile 12s linear infinite; }
+    .hero-story-typed-text { animation: hs-typing 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-profile-row.is-1 { animation: hs-row-1 12s linear infinite; }
+    .hero-story-caret { animation: hs-caret 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-profile-row.is-2 { animation: hs-row-2 12s linear infinite; }
+    .hero-story-research { animation: hs-research 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-profile-row.is-3 { animation: hs-row-3 12s linear infinite; }
+    .hero-story-research-ripple { animation: hs-research-ripple 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-steps { animation: hs-steps 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-1 { animation: hs-step-1 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-2 { animation: hs-step-2 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-3 { animation: hs-step-3 12s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-4 { animation: hs-step-4 12s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-generate { animation: hs-generate 12s linear infinite; }
