@@ -23,7 +23,6 @@ import {
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import PageHeader from "../components/PageHeader";
-import { ListenButton } from "../components/ListenButton";
 import PageFrame from "../components/PageFrame";
 import { sentenceCase } from "../lib/copyCase";
 import { ProfileCard, ProfileField, InfoChipList, CardGrid, StatementCard, SectionGroup } from "../components/profileUi";
@@ -535,14 +534,6 @@ export default function AppProfileDetail() {
     ...listenStatements(),
   ];
   const listenContext = () => [...listenMoments(), ...listenObjections()];
-  const listenProfile = () => [
-    `${profile?.brand_name?.trim() || "This app"}, profile overview.`,
-    ...(hasEssentials ? listenEssentials() : []),
-    ...(hasProblems ? listenProblems() : []),
-    ...(hasMessaging ? listenMessaging() : []),
-    ...(hasContext ? listenContext() : []),
-  ];
-
 return (
     <PageFrame className="page-content-enter space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
@@ -576,12 +567,6 @@ return (
             ) : (
               <Badge variant="secondary" className="px-3 py-1 transition-none">Draft — blocked for video</Badge>
             )}
-            <ListenButton
-              id="profile"
-              label="this app profile"
-              testId="listen-profile"
-              getBlocks={listenProfile}
-            />
             <Button variant="secondary" size="sm" asChild>
               <Link to="/brand">Edit</Link>
             </Button>

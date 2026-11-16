@@ -486,6 +486,61 @@ def test_the_craft_block_keeps_the_last_line_on_the_subject():
     assert "new topic" in block
 
 
+def test_the_craft_block_demands_a_complete_hook_sentence():
+    # ADR 0167: the school-gate hook ('Losing thoughts in my head, moment
+    # instead of blank page') scored 18/20 stopping power and still was
+    # not a sentence a listener can parse on the first read — a participle
+    # fragment with its thought arriving out of order. Kasra's ruling:
+    # the scorer does not change; the generator learns the shape. One
+    # complete sentence, subject and verb in their natural spoken order.
+    block = ai_service._spoken_line_rules_block()
+    assert "HOOK SENTENCE" in block
+    assert "parses on the first read" in block
+    assert "natural spoken order" in block
+    assert "scrambled middle" in block
+    assert "fragment" in block
+
+
+def test_the_craft_block_puts_the_scripts_own_moment_first():
+    # ADR 0167 tightens NAME THE MOMENT (Kasra's moment rule, ADR 0123):
+    # not any time or place — the moment the project's own script stands
+    # in, and that moment opens the hook. The school-gate script stood at
+    # the school gate on Monday; its hook stood nowhere.
+    block = ai_service._spoken_line_rules_block()
+    assert "SCRIPT'S OWN MOMENT" in block
+    assert "the same time or place the script stands in" in block
+    assert "first words" in block
+
+
+def test_the_craft_block_bans_meta_talk_about_pages_and_naming():
+    # ADR 0167: 'moment instead of blank page' is the canonical failure —
+    # the hook discussing words and pages instead of living the feeling.
+    # The HOOK POWER bullet's meta ban now names pages and the act of
+    # naming alongside labels and wording.
+    block = ai_service._spoken_line_rules_block()
+    assert "pages or the act of naming" in block
+    assert "never discusses the words for it" in block
+
+
+def test_rewrite_prompt_puts_the_storys_moment_first(monkeypatch):
+    # ADR 0167: the clearer-hook rewrite inherits the tightened moment
+    # rule — the moment the story stands in, opening the rewrite — and
+    # the shared block's sentence rule rides in the same prompt.
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"hook_line": "Monday morning at the school gate, I can't write in my journal."}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    asyncio.run(ai_service.rewrite_hook_line(
+        {}, None, "Losing thoughts in my head, moment instead of blank page."))
+    prompt = calls[0]["prompt"]
+    assert "the time or place the story stands in" in prompt
+    assert "the moment opens the rewrite" in prompt
+    assert "HOOK SENTENCE" in prompt
+
+
 def test_the_plan_loop_rewrites_a_question_ending_script(monkeypatch):
     bad = _plan(KASRA_HOOK, KASRA_SCRIPT_QUESTION_END)
     good = _plan(STRONG_HOOK, STRONG_SCRIPT)

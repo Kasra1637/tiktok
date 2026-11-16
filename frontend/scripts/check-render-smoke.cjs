@@ -10287,8 +10287,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (essentials.getAttribute("aria-pressed") !== "false") {
         throw new Error("a listen toggle starts pressed before anything plays");
       }
-      if (!ctx.container.querySelector('[data-testid="listen-profile"]')) {
-        throw new Error("the header lost the read-the-profile control");
+      // The header carries no listen control (founder's clarified rule,
+      // Nov 15 2026): the speaker lives in the sections only — the main
+      // App Profile header button is removed, the sections' buttons stay.
+      const header = ctx.container.querySelector('[data-testid="app-profile-header"]');
+      if (!header) throw new Error("the App Profile header did not render");
+      if (header.querySelector('[data-testid^="listen-"]')) {
+        throw new Error("the profile header still carries a listen control");
+      }
+      const profileSrc = fs.readFileSync(path.join(SRC, "pages", "AppProfileDetail.jsx"), "utf8");
+      if (profileSrc.includes("listen-profile") || profileSrc.includes("ListenButton")) {
+        throw new Error("the header listen control's wiring is still in AppProfileDetail.jsx");
       }
       for (const id of ["listen-facts", "listen-never-show", "listen-statements", "listen-objections"]) {
         if (!ctx.container.querySelector(`[data-testid="${id}"]`)) {
@@ -10745,6 +10754,32 @@ async function runAnalyticsChecks() {
     const page = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
     if (page.includes("analytics-results-toggle") || page.includes("setOpen(")) {
       throw new Error("the collapse control's code is still in Analytics.jsx");
+    }
+  });
+
+  // The Clip results listen control is removed (founder's order,
+  // Nov 15 2026): the speaker in the card's header and the read-aloud
+  // wiring behind it are gone. Read-aloud itself stays where it
+  // belongs — the create page keeps its shared ListenButton (pinned
+  // above); this removal is scoped to Analytics' Clip results only.
+  await check("clip results carry no listen control", async (ctx) => {
+    await mountAnalytics(ctx, {
+      getGenerationHistory: async () => ({ generations: [
+        { id: "one", status: "completed", hook_line: "One", tiktok_views: 40 },
+      ] }),
+      getStudioProjects: async () => ({ projects: [] }),
+    });
+    const card = ctx.container.querySelector('[data-testid="analytics-results"]');
+    if (!card) throw new Error("no clip comparison");
+    if (card.querySelector('[data-testid^="listen-"]')) {
+      throw new Error("clip results still carries a listen control");
+    }
+    // Source-level: the control is gone from the page, not unwired
+    // quietly — jsdom cannot speak, so the button never renders here
+    // even while wired; the wiring is the pin.
+    const page = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
+    if (page.includes("listen-analytics-results") || page.includes("ListenButton")) {
+      throw new Error("the listen control's wiring is still in Analytics.jsx");
     }
   });
 
@@ -19299,8 +19334,9 @@ await check(
 
   // The Plan context listen control is removed (ADR 0159): the
   // speaker at the context box's top right is gone, while read-aloud
-  // itself stays where it belongs — the create page and the
-  // Analytics Clip results card keep theirs.
+  // itself stays where it belongs — the create page keeps its own
+  // (the Analytics Clip results speaker was removed later, at the
+  // founder's order; it is pinned with the Analytics checks).
   await check("History plan context carries no listen control", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;

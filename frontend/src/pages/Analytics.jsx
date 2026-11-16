@@ -14,7 +14,6 @@ import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { useReducedMotionPreference } from "../lib/reducedMotion";
 import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
-import { ListenButton } from "../components/ListenButton";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import TourStartLink from "../components/onboarding/TourStartLink";
 import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown, ChevronRight } from "lucide-react";
@@ -402,31 +401,6 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
       icon={TrendingUp}
       description="Compare reach & your judgment before choosing another take."
       data-testid="analytics-results"
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <ListenButton
-            id="analytics-results"
-            label="Clip results"
-            testId="listen-analytics-results"
-            getBlocks={() => [
-              {
-                label: "Clip results",
-                values: [
-                  `${posted} posted. ${counted} with recorded views. ${rated} rated.`,
-                  verdictSummaryLine(verdictSummary),
-                  "Views are manually recorded snapshots of reach, not installs, revenue, or conversions. Your verdict is your judgment. Winner still means a worked verdict plus a posted link.",
-                  pick && pickNext
-                    ? `Suggested next take: ${clipName(pick)}. Posted, ${pick.tiktok_views.toLocaleString("en-US")} recorded views, rated worked.`
-                    : null,
-                  ...visible.slice(0, 8).map((row) =>
-                    `${clipName(row)}: ${row.tiktok_views != null ? `${row.tiktok_views.toLocaleString("en-US")} recorded views` : "no recorded views yet"}.`
-                  ),
-                ],
-              },
-            ]}
-          />
-        </div>
-      }
     >
       <FactList aria-label="Clip totals">
         <FactChip>{posted} posted</FactChip>

@@ -2218,7 +2218,19 @@ class TestStrategyBudget:
         # included, because a strategy with no approved plan writes its
         # own hook line. The ceiling moves by a measured 1,300 to
         # 42,800, keeping ~650 of headroom.
-        CEILING = 42_800
+        #
+        # ADR 0167 raises it again, measured: 42,221 -> 43,102 (+881,
+        # exactly the shared block's growth 6,062 -> 6,943) for the
+        # sharpened hook rules — NAME THE MOMENT tightened to the
+        # script's own moment in the hook's first words, the new HOOK
+        # SENTENCE bullet (one complete sentence that parses on the
+        # first read), and HOOK POWER's meta ban extended to pages and
+        # the act of naming. The scorer does not change (Kasra's
+        # explicit order); the generator carries the fix, so the block
+        # grows in every prompt that writes a hook, strategy included.
+        # The ceiling moves by a measured 950 to 43,750, keeping ~650
+        # of headroom.
+        CEILING = 43_750
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
