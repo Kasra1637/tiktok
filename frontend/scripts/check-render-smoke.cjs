@@ -9846,15 +9846,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   // The hero is one continuous story animation, not a recording and
   // not the retired five-step flow (ADR 0165, superseding the HeroFlow
-  // loop of ADRs 0154/0158; restructured by ADR 0168, refined by ADR
-  // 0172): inside the phone it illustrates the process across two
-  // pages — page one opens on the Research app for video click,
-  // page two runs the video creation steps and the one Generate the
-  // video click, and the finished video plays, closing on its
-  // enhanced end card — then holds and loops. It is pure CSS on one
-  // 13s clock, so there is no JS timer, no control, no dots and no
-  // step captions; the base styles are the finished video frame,
-  // which is what reduced motion sees.
+  // loop of ADRs 0154/0158; restructured by ADR 0168, refined by ADRs
+  // 0172/0173, the typing restored and the video stage recomposed by
+  // ADR 0175): inside the phone it illustrates the process across two
+  // pages — page one types the store link, then the Research app for
+  // video click; page two runs the video creation steps and the one
+  // Generate the video click; and the finished video plays as a
+  // composed frame, closing on its enhanced end card — then holds
+  // and loops. It is pure CSS on one 13s clock, so there is no JS
+  // timer, no control, no dots and no step captions; the base styles
+  // are the finished video frame, which is what reduced motion sees.
   await check("the hero shows the link-to-video story instead of a video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9862,7 +9863,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (shot.querySelector("video")) throw new Error("the hero still carries a video");
     const story = shot.querySelector(".hero-story");
     if (!story) throw new Error("the hero does not render the story animation");
-    for (const stage of [".hero-story-phone", ".hero-story-page1", ".hero-story-research", ".hero-story-page2", ".hero-story-steps", ".hero-story-generate", ".hero-story-video", ".hero-story-hook", ".hero-story-play", ".hero-story-endcard"]) {
+    for (const stage of [".hero-story-phone", ".hero-story-page1", ".hero-story-field", ".hero-story-research", ".hero-story-page2", ".hero-story-steps", ".hero-story-generate", ".hero-story-video", ".hero-story-stage", ".hero-story-hook", ".hero-story-play", ".hero-story-endcard"]) {
       if (!story.querySelector(stage)) throw new Error(`the story is missing its ${stage} stage`);
     }
     if (shot.querySelector(".hero-flow-slide") || shot.querySelector(".hero-flow-dot")) {
@@ -9872,24 +9873,28 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // The story is the process, in two pages in the phone (Kasra's
-  // restructure, Nov 16 2026, ADR 0168; refined the same day, ADR
-  // 0172): the mockup illustrates what a visitor does — and its
+  // restructure, Nov 16 2026, ADR 0168; refined the same day, ADRs
+  // 0172/0173): the mockup illustrates what a visitor does — and its
   // controls mirror the app's real UI (ADR 0173, pinned by the
   // mirror check below), not just a finished video's content.
-  // Page one opens cleanly on "Research app for video", clicked to
-  // get the profile info: the typed store-link field ADR 0168
-  // carried is REMOVED at Kasra's order — the link text, the field,
-  // the typing track and the caret are gone from the DOM, the page
-  // source and the stylesheet. Page two: the app's video creation
+  // Page one types the store link first, then offers "Research app
+  // for video", clicked to get the profile info. ADR 0172 removed
+  // the typed field; Kasra saw that page live, ruled it empty, and
+  // ordered the typing restored (ADR 0175) — his "above the phone"
+  // removal order had targeted the floating drop-in label, and the
+  // in-phone typing is his own designed step from ADR 0168. The
+  // drop-in chip stays gone. Page two: the app's video creation
   // steps check off under their exact CreateVideo names, "Generate
   // the video" appears only there and is clicked there, and the
-  // finished video plays — presenter, hook words, play badge,
-  // progress bar — closing on its enhanced end card (app icon,
-  // closing line, CTA). The profile card the cb1ed13 cut carried
-  // (its "Store page / Screenshots / Facts" rows) stays gone
-  // everywhere, and the whole retired demo stage stays gone. The
-  // hook words are the app-maker framing Kasra picked; the
-  // journaling-flavored alternative he rejected stays out.
+  // finished video plays as a composed frame (ADR 0175) — the
+  // presenter is the stage's subject, the hook its caption block,
+  // the play badge seated on the presenter — closing on its
+  // enhanced end card (app icon, closing line, CTA). The profile
+  // card the cb1ed13 cut carried (its "Store page / Screenshots /
+  // Facts" rows) stays gone everywhere, and the whole retired demo
+  // stage stays gone. The hook words are the app-maker framing
+  // Kasra picked; the journaling-flavored alternative he rejected
+  // stays out.
   await check("the hero story shows the process: research, steps, generate, video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9897,29 +9902,61 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const story = shot.querySelector(".hero-story");
     if (!story) throw new Error("the hero does not render the story animation");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    // Page 1 opens on the research click (ADR 0172): the typed
-    // store-link field is gone — no field, no typed text, no caret,
-    // and the link string itself renders nowhere in the hero, the
-    // page source or the stylesheet. The older drop-in chip stays
-    // gone too.
+    // Page 1 types the store link, then offers the research click
+    // (ADR 0168, restored by ADR 0175 after ADR 0172's removal):
+    // the field, the typed text and the blinking caret render in
+    // the phone, the typing track steps the link in character by
+    // character, and typing completes before the research button
+    // arrives on the one clock. The older drop-in chip — the
+    // floating label above the phone that Kasra's removal order
+    // actually targeted — stays gone.
     const page1 = story.querySelector(".hero-story-page1");
     if (!page1) throw new Error("the story never shows its first page");
     if (story.querySelector(".hero-story-link")) throw new Error("the drop-in link chip still renders");
     if (css.includes(".hero-story-link") || css.includes("@keyframes hs-link")) {
       throw new Error("the retired drop-in chip rules are still in index.css");
     }
-    if (story.querySelector(".hero-story-field") || story.querySelector(".hero-story-typed-text") || story.querySelector(".hero-story-caret")) {
-      throw new Error("the removed link field still renders in the phone");
+    const field = page1.querySelector(".hero-story-field");
+    if (!field) throw new Error("page one never shows the store-link field");
+    const typedText = field.querySelector(".hero-story-typed-text");
+    if (!typedText || typedText.textContent.trim() !== "yourapp.com/store") {
+      throw new Error("the field does not carry the typed store link");
     }
-    if ((story.textContent || "").includes("yourapp.com/store")) {
-      throw new Error("the removed store-link text still renders in the hero");
+    if (!field.querySelector(".hero-story-caret")) {
+      throw new Error("the field carries no caret — the typing must read as typing");
     }
-    const landingSrcEarly = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
-    if (landingSrcEarly.includes("yourapp.com/store") || landingSrcEarly.includes("hero-story-field")) {
-      throw new Error("Landing.jsx still builds the removed link field");
+    if (!field.querySelector("svg.lucide-link-2")) {
+      throw new Error("the field carries no link icon");
     }
-    if (css.includes(".hero-story-field") || css.includes(".hero-story-typed") || css.includes(".hero-story-caret") || css.includes("@keyframes hs-typing") || css.includes("@keyframes hs-caret") || css.includes("@keyframes hs-field")) {
-      throw new Error("the removed link field's rules are still in index.css");
+    if (!css.includes(".hero-story-field") || !css.includes(".hero-story-typed-text") || !css.includes(".hero-story-caret")) {
+      throw new Error("the restored field's rules are missing from index.css");
+    }
+    if (!/@keyframes hs-typing[\s\S]*?steps\(17/.test(css)) {
+      throw new Error("the typing track does not step the link in character by character");
+    }
+    const typingDone = Number((css.match(/@keyframes hs-typing\s*\{\s*0%,\s*\d+(?:\.\d+)?%\s*\{\s*width:\s*0[^}]*\}\s*(\d+(?:\.\d+)?)%,\s*100%\s*\{\s*width:\s*100%/) || [])[1]);
+    // While the link types, the research button is already visible
+    // in a quiet, dimmed resting state (Kasra's sooner/longer rule,
+    // ADR 0175); it wakes to full presence only once typing
+    // completes, right before its click.
+    const researchBlock = (css.match(/@keyframes hs-research\s*\{([\s\S]*?)\n\}/) || [])[1] || "";
+    if (!researchBlock.includes("opacity: 0.45")) {
+      throw new Error("the research button has no dimmed resting state while the link types");
+    }
+    const wakeAt = Number((researchBlock.match(/(\d+(?:\.\d+)?)%\s*\{\s*opacity:\s*1[;}]/) || [])[1]);
+    if (!Number.isFinite(typingDone) || !Number.isFinite(wakeAt) || typingDone > wakeAt) {
+      throw new Error("the research button wakes before the typing completes — typing must come first");
+    }
+    if (!(story.getAttribute("aria-label") || "").includes("type your store link")) {
+      throw new Error("the figure's label no longer describes the typing");
+    }
+    // The field wears the app's real focus treatment while the
+    // link types (ADR 0175): the input-well focus border and ring.
+    const fieldRuleStart = css.indexOf(".hero-story-field {");
+    if (fieldRuleStart === -1) throw new Error("index.css carries no .hero-story-field rule");
+    const fieldRule = css.slice(fieldRuleStart, css.indexOf("}", fieldRuleStart));
+    if (!fieldRule.includes("border-color: var(--indigo-35)") || !fieldRule.includes("0 0 0 3px var(--indigo-15)")) {
+      throw new Error("the field does not light up with the app's focus treatment while typing");
     }
     if (page1.textContent.includes("Generate the video")) {
       throw new Error("page one offers Generate the video — it belongs on page two only");
@@ -9984,6 +10021,58 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (!video.querySelector(".hero-story-play")) throw new Error("the video carries no play badge");
     if (!video.querySelector(".hero-story-progress")) throw new Error("the video carries no progress bar");
+    // The video stage is a composed frame, not parts scattered in
+    // dead space (ADR 0175): one stage surface wraps the presenter
+    // and the hook caption block, the presenter is the frame's
+    // subject at subject size, and the play badge rides inside the
+    // stage, seated on the presenter.
+    const stage = video.querySelector(".hero-story-stage");
+    if (!stage) throw new Error("the video carries no composed stage");
+    if (!stage.querySelector("svg.hero-story-presenter")) {
+      throw new Error("the presenter does not stand inside the video stage");
+    }
+    if (!stage.querySelector(".hero-story-hook")) {
+      throw new Error("the hook caption block does not sit inside the video stage");
+    }
+    if (!stage.querySelector(".hero-story-play")) {
+      throw new Error("the play badge does not ride on the video stage");
+    }
+    const stageRuleStart = css.indexOf(".hero-story-stage {");
+    if (stageRuleStart === -1) throw new Error("index.css carries no .hero-story-stage rule");
+    const stageRule = css.slice(stageRuleStart, css.indexOf("}", stageRuleStart));
+    if (!stageRule.includes("radial-gradient")) {
+      throw new Error("the video stage carries no inner wash — it must read as a frame, not dead space");
+    }
+    const presenterRuleStart = css.indexOf(".hero-story-presenter {");
+    if (presenterRuleStart === -1) throw new Error("index.css carries no .hero-story-presenter rule");
+    const presenterRule = css.slice(presenterRuleStart, css.indexOf("}", presenterRuleStart));
+    if (!/width:\s*1[3-9]\dpx/.test(presenterRule)) {
+      throw new Error("the presenter is still a corner glyph — it must be the stage's subject");
+    }
+    // She is a person in a scene, not a line glyph (ADR 0175): a
+    // filled, shaded figure — face, hair, top, the phone she
+    // holds — drawn with filled shapes, no root stroke outline.
+    const presenterSvg = stage.querySelector("svg.hero-story-presenter");
+    const filledShapes = [...presenterSvg.querySelectorAll("[fill]")].filter((el) => el.getAttribute("fill") !== "none");
+    if (filledShapes.length < 5) {
+      throw new Error("the presenter is not a filled, shaded figure in a scene");
+    }
+    // The phone carries depth (ADR 0175): an indigo glow spilling
+    // onto the page in its shadow, and a glass sheen on the screen.
+    const phoneRuleStart = css.indexOf(".hero-story-phone {");
+    if (phoneRuleStart === -1) throw new Error("index.css carries no .hero-story-phone rule");
+    const phoneRule = css.slice(phoneRuleStart, css.indexOf("}", phoneRuleStart));
+    if (!phoneRule.includes("rgba(99, 102, 241")) {
+      throw new Error("the phone casts no indigo glow onto the page behind it");
+    }
+    if (!css.includes(".hero-story-screen::after")) {
+      throw new Error("the screen carries no glass reflection");
+    }
+    // The step checks draw themselves in (ADR 0175): each badge's
+    // check rides a dash track on the one clock.
+    if (!css.includes("stroke-dasharray") || !css.includes("@keyframes hs-check-1")) {
+      throw new Error("the step checks do not draw themselves in");
+    }
     const endcard = video.querySelector(".hero-story-endcard");
     if (!endcard) throw new Error("the video carries no end card");
     if (!endcard.querySelector(".hero-story-endcard-icon")) {
@@ -10087,7 +10176,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!shot) throw new Error("no hero frame rendered");
       const story = shot.querySelector(".hero-story");
       if (!story) throw new Error("the hero does not render the story animation");
-      for (const stage of [".hero-story-research", ".hero-story-steps", ".hero-story-generate", ".hero-story-video", ".hero-story-endcard", ".hero-story-play"]) {
+      for (const stage of [".hero-story-field", ".hero-story-research", ".hero-story-steps", ".hero-story-generate", ".hero-story-video", ".hero-story-stage", ".hero-story-endcard", ".hero-story-play"]) {
         if (!story.querySelector(stage)) throw new Error(`reduced motion lost the finished frame's ${stage} stage`);
       }
       if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
@@ -10126,7 +10215,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (css.includes(".hero-flow")) {
       throw new Error("the dead .hero-flow rules are still in index.css");
     }
-    for (const kf of ["hs-page1", "hs-page2", "hs-research", "hs-research-ripple", "hs-steps", "hs-step-1", "hs-step-2", "hs-step-3", "hs-step-4", "hs-generate", "hs-ripple", "hs-video", "hs-hook-long", "hs-hook-short", "hs-presenter", "hs-endcard", "hs-play", "hs-progress"]) {
+    for (const kf of ["hs-page1", "hs-page2", "hs-field", "hs-typing", "hs-caret", "hs-research", "hs-research-ripple", "hs-steps", "hs-step-1", "hs-step-2", "hs-step-3", "hs-step-4", "hs-check-1", "hs-check-2", "hs-check-3", "hs-check-4", "hs-generate", "hs-ripple", "hs-video", "hs-hook-long", "hs-hook-short", "hs-presenter", "hs-endcard", "hs-play", "hs-progress"]) {
       if (!css.includes(`@keyframes ${kf}`)) {
         throw new Error(`the story is missing its ${kf} keyframes`);
       }

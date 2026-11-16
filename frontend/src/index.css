@@ -1356,15 +1356,18 @@ h1,
 }
 
 /* The hero story (ADR 0165, restructured by ADR 0168, refined
-   by ADR 0172): inside the phone frame the process plays in two
-   pages — page one opens on the "Research app for video" click
-   (the typed store-link field is removed, ADR 0172), page two
-   checks off the video creation steps under their exact names
-   and "Generate the video" is clicked there — and the finished
-   video plays: presenter, hook words, play badge, progress,
-   closing on its enhanced end card. Every stage is a keyframe
-   track on one 13s clock, applied only when motion is allowed;
-   the base styles are the finished video frame, which is what
+   by ADR 0172, the typing restored and the finish polished by
+   ADR 0175): inside the phone frame the process plays in two
+   pages — page one types the store link into its field, then
+   the "Research app for video" click; page two checks off the
+   video creation steps under their exact names and "Generate
+   the video" is clicked there — and the finished video plays
+   as a composed frame: the presenter in her scene, her hook
+   caption, the play badge seated on her, progress, closing on
+   its enhanced end card. The beats slide and scale between
+   stages rather than cutting. Every stage is a keyframe track
+   on one 13s clock, applied only when motion is allowed; the
+   base styles are the finished video frame, which is what
    reduced motion stands on. No JS, no controls, no captions —
    the steps live below, in the How it works strip. */
 .hero-story {
@@ -1400,7 +1403,9 @@ h1,
     border: 1px solid var(--indigo-25);
     border-radius: 32px;
     background: hsl(228 14% 10%);
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    /* Depth (ADR 0175): a weighted shadow under the phone and a
+       faint indigo glow spilling onto the page behind it. */
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 10px 22px rgba(0, 0, 0, 0.4), 0 0 90px rgba(99, 102, 241, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .hero-story-screen {
     position: relative;
@@ -1412,6 +1417,18 @@ h1,
     border-radius: 24px;
     overflow: hidden;
     background: linear-gradient(180deg, var(--indigo-8), transparent 55%), hsl(228 14% 12%);
+}
+/* A glass reflection lies over the screen (ADR 0175): a faint
+   diagonal sheen, strongest at the top corner and gone by the
+   middle — depth for the phone, never a layout change. */
+.hero-story-screen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border-radius: inherit;
+    background: linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 30%, transparent 48%);
+    pointer-events: none;
 }
 .hero-story-progress {
     position: absolute;
@@ -1430,16 +1447,62 @@ h1,
     background: var(--brand-indigo);
     transform-origin: left center;
 }
-/* Page one's only process UI is the research control: the
-   typed store-link field ADR 0168 carried is removed (ADR
-   0172) — page one opens cleanly on the research beat. Its
-   base state is hidden, like page two's: the figure's base
-   state is the finished video, and the gated keyframes walk
-   the process in and out on the one clock. The control mirrors
-   the app's real UI (ADR 0173): BrandSetup's Research button
-   is the secondary Button — Sparkles icon, slate surface at
-   70%, hairline border, the neutral bevel's top rim,
-   rounded-xl — carried here at the phone's scale. */
+/* Page one's process UI — the link field and the research
+   control. Their base state is hidden, like page two's: the
+   figure's base state is the finished video, and the gated
+   keyframes walk the process in and out on the one clock. The
+   field (ADR 0168, restored by ADR 0175 after ADR 0172 removed
+   it) wears the app's real input styling: the Input skin's
+   rounded-xl and hairline border over the input-well's inset
+   surface, lit with the well's focus treatment — the indigo
+   border and ring — because the field is focused while she
+   types. The typed link: the full text is always in the DOM,
+   clipped by a width that steps open one character at a time,
+   with the caret riding at its right edge and blinking while
+   page one stands. */
+.hero-story-field {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 12px;
+    border: 1px solid var(--hairline);
+    border-color: var(--indigo-35);
+    border-radius: 12px;
+    background: hsl(228 14% 9% / 0.85);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--indigo-15);
+    color: var(--brand-indigo);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+}
+.hero-story-typed {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+}
+.hero-story-typed-text {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+.hero-story-caret {
+    flex: none;
+    width: 2px;
+    height: 15px;
+    margin-left: 1px;
+    border-radius: 1px;
+    background: var(--brand-indigo);
+    opacity: 0;
+}
+/* The research control mirrors the app's real UI (ADR 0173):
+   BrandSetup's Research button is the secondary Button —
+   Sparkles icon, slate surface at 70%, hairline border, the
+   neutral bevel's top rim, rounded-xl — carried here at the
+   phone's scale. While the link types it rests dimmed on its
+   track and wakes to this full treatment for its click (ADR
+   0175); the treatment itself never changes, only its light. */
 .hero-story-research {
     position: relative;
     margin-top: auto;
@@ -1539,10 +1602,11 @@ h1,
     opacity: 0;
     pointer-events: none;
 }
-/* The finished video fills the screen after page two. Its base
-   state is fully assembled — presenter, hook words, play badge,
-   end card — and that assembled frame is what reduced motion
-   stands on. */
+/* The finished video fills the screen after page two, scaling
+   up slightly as it takes the screen (ADR 0175). Its base
+   state is fully assembled — the stage with presenter, hook
+   words and play badge, the end card below it — and that
+   assembled frame is what reduced motion stands on. */
 .hero-story-video {
     position: absolute;
     inset: 0;
@@ -1551,13 +1615,30 @@ h1,
     gap: 12px;
     padding: 18px 14px 14px;
     border-radius: 24px;
-    background: linear-gradient(180deg, var(--indigo-8), transparent 55%), hsl(228 14% 12%);
+    transform-origin: center;
+}
+/* The video stage is the finished video's frame (ADR 0175):
+   one surface the presenter and her caption block are composed
+   in — an indigo wash pooled behind the presenter over a
+   deeper card surface, a hairline rim — so the stage reads as
+   a video frame, not parts scattered in dead space. */
+.hero-story-stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 12px 12px;
+    border: 1px solid var(--indigo-15);
+    border-radius: 18px;
+    background: radial-gradient(120% 90% at 50% 30%, var(--indigo-15), transparent 62%), linear-gradient(180deg, var(--indigo-8), transparent 60%), hsl(228 14% 11%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    overflow: hidden;
 }
 .hero-story-hook {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    margin-top: 6px;
 }
 .hero-story-hook-line {
     display: block;
@@ -1574,18 +1655,24 @@ h1,
 .hero-story-hook-line.is-short {
     color: #A5B4FC;
 }
+/* The presenter is the stage's subject (ADR 0175): a filled
+   figure in her scene — face, hair, top, the phone she holds —
+   centered under her caption block at subject size, no longer
+   a line glyph in the corner. */
 .hero-story-presenter {
-    position: absolute;
-    right: 8px;
-    bottom: 132px;
-    width: 96px;
+    align-self: center;
+    width: 150px;
     height: auto;
+    margin-top: 4px;
     pointer-events: none;
 }
+/* The play badge seats on the presenter inside the stage
+   (ADR 0175), over her like a real video's badge, not floating
+   in empty space. */
 .hero-story-play {
     position: absolute;
     left: 50%;
-    top: 45%;
+    top: 46%;
     transform: translate(-50%, -50%);
     width: 46px;
     height: 46px;
@@ -1646,19 +1733,46 @@ h1,
     font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
+/* The beats slide between stages (ADR 0175): page one exits
+   left, page two enters from the right and exits left, and the
+   video scales up as it takes the screen — movement on the one
+   clock, never a hard cut. */
 @keyframes hs-page1 {
     0% { opacity: 0; transform: translateY(6px); }
-    3%, 30% { opacity: 1; transform: translateY(0); }
-    33%, 100% { opacity: 0; transform: translateY(0); }
+    3%, 33% { opacity: 1; transform: translateY(0); }
+    36%, 100% { opacity: 0; transform: translateX(-12px); }
 }
 @keyframes hs-page2 {
-    0%, 33% { opacity: 0; transform: translateY(6px); }
-    37%, 66% { opacity: 1; transform: translateY(0); }
-    70%, 100% { opacity: 0; transform: translateY(0); }
+    0%, 36% { opacity: 0; transform: translateX(16px); }
+    40%, 69% { opacity: 1; transform: translateX(0); }
+    73%, 100% { opacity: 0; transform: translateX(-12px); }
 }
+@keyframes hs-field {
+    0%, 2% { opacity: 0; transform: translateY(6px); }
+    5%, 100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes hs-typing {
+    0%, 4% { width: 0; animation-timing-function: steps(17, end); }
+    18%, 100% { width: 100%; }
+}
+@keyframes hs-caret {
+    0%, 3% { opacity: 0; }
+    4%, 9% { opacity: 1; }
+    10%, 12% { opacity: 0; }
+    13%, 18% { opacity: 1; }
+    19%, 21% { opacity: 0; }
+    22%, 27% { opacity: 1; }
+    28%, 30% { opacity: 0; }
+    31%, 33% { opacity: 1; }
+    34%, 100% { opacity: 0; }
+}
+/* The research button is visible from early on page one, but
+   rests dimmed while the link types (ADR 0175); it wakes to
+   full presence once the typing completes, then is clicked. */
 @keyframes hs-research {
-    0%, 20% { opacity: 0; transform: translateY(6px) scale(1); }
-    23% { opacity: 1; transform: translateY(0) scale(1); }
+    0%, 5% { opacity: 0; transform: translateY(6px) scale(1); }
+    8%, 20% { opacity: 0.45; transform: translateY(0) scale(1); }
+    24% { opacity: 1; transform: translateY(0) scale(1); }
     27% { opacity: 1; transform: translateY(0) scale(0.94); }
     30%, 100% { opacity: 1; transform: translateY(0) scale(1); }
 }
@@ -1668,73 +1782,93 @@ h1,
     38%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
 }
 @keyframes hs-steps {
-    0%, 39% { opacity: 0; transform: translateY(8px); }
-    43%, 100% { opacity: 1; transform: translateY(0); }
+    0%, 42% { opacity: 0; transform: translateY(8px); }
+    46%, 100% { opacity: 1; transform: translateY(0); }
 }
 @keyframes hs-step-1 {
-    0%, 44% { opacity: 0; transform: translateX(-4px); }
-    47%, 100% { opacity: 1; transform: translateX(0); }
+    0%, 47% { opacity: 0; transform: translateX(-4px); }
+    50%, 100% { opacity: 1; transform: translateX(0); }
 }
 @keyframes hs-step-2 {
-    0%, 48% { opacity: 0; transform: translateX(-4px); }
-    51%, 100% { opacity: 1; transform: translateX(0); }
+    0%, 51% { opacity: 0; transform: translateX(-4px); }
+    54%, 100% { opacity: 1; transform: translateX(0); }
 }
 @keyframes hs-step-3 {
-    0%, 52% { opacity: 0; transform: translateX(-4px); }
-    55%, 100% { opacity: 1; transform: translateX(0); }
+    0%, 55% { opacity: 0; transform: translateX(-4px); }
+    58%, 100% { opacity: 1; transform: translateX(0); }
 }
 @keyframes hs-step-4 {
-    0%, 56% { opacity: 0; transform: translateX(-4px); }
-    59%, 100% { opacity: 1; transform: translateX(0); }
+    0%, 59% { opacity: 0; transform: translateX(-4px); }
+    62%, 100% { opacity: 1; transform: translateX(0); }
+}
+/* Each step's check draws itself in just after its row lands
+   (ADR 0175): the badge's check rides a dash track from drawn-
+   off to drawn. The base style carries no dash, so reduced
+   motion's standing frame shows every check fully drawn. */
+@keyframes hs-check-1 {
+    0%, 47% { stroke-dasharray: 24; stroke-dashoffset: 24; }
+    53%, 100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
+}
+@keyframes hs-check-2 {
+    0%, 51% { stroke-dasharray: 24; stroke-dashoffset: 24; }
+    57%, 100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
+}
+@keyframes hs-check-3 {
+    0%, 55% { stroke-dasharray: 24; stroke-dashoffset: 24; }
+    61%, 100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
+}
+@keyframes hs-check-4 {
+    0%, 59% { stroke-dasharray: 24; stroke-dashoffset: 24; }
+    65%, 100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
 }
 @keyframes hs-generate {
-    0%, 60% { opacity: 0; transform: translateY(6px) scale(1); }
-    63% { opacity: 1; transform: translateY(0) scale(1); }
-    66% { opacity: 1; transform: translateY(0) scale(0.94); }
-    69%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+    0%, 63% { opacity: 0; transform: translateY(6px) scale(1); }
+    66% { opacity: 1; transform: translateY(0) scale(1); }
+    69% { opacity: 1; transform: translateY(0) scale(0.94); }
+    72%, 100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes hs-ripple {
-    0%, 66% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
-    69% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
-    76%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+    0%, 69% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+    72% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
+    79%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
 }
 @keyframes hs-video {
-    0%, 70% { opacity: 0; }
-    77%, 96% { opacity: 1; }
-    99%, 100% { opacity: 0; }
+    0%, 73% { opacity: 0; transform: scale(0.97); }
+    80%, 97% { opacity: 1; transform: scale(1); }
+    99%, 100% { opacity: 0; transform: scale(1); }
 }
 @keyframes hs-hook-long {
-    0%, 76% { transform: scaleX(0); opacity: 0; }
-    77% { transform: scaleX(0); opacity: 1; }
-    83%, 96% { transform: scaleX(1); opacity: 1; }
+    0%, 79% { transform: scaleX(0); opacity: 0; }
+    80% { transform: scaleX(0); opacity: 1; }
+    86%, 97% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @keyframes hs-hook-short {
-    0%, 82% { transform: scaleX(0); opacity: 0; }
-    83% { transform: scaleX(0); opacity: 1; }
-    88%, 96% { transform: scaleX(1); opacity: 1; }
+    0%, 85% { transform: scaleX(0); opacity: 0; }
+    86% { transform: scaleX(0); opacity: 1; }
+    91%, 97% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @keyframes hs-presenter {
-    0%, 75% { opacity: 0; transform: translateY(10px); }
-    81%, 96% { opacity: 1; transform: translateY(0); }
+    0%, 77% { opacity: 0; transform: translateY(12px); }
+    84%, 97% { opacity: 1; transform: translateY(0); }
     99%, 100% { opacity: 0; transform: translateY(0); }
 }
 @keyframes hs-endcard {
-    0%, 90% { transform: translateY(16px) scale(0.97); opacity: 0; }
-    95%, 96% { transform: translateY(0) scale(1); opacity: 1; }
+    0%, 91% { transform: translateY(16px) scale(0.97); opacity: 0; }
+    96%, 97% { transform: translateY(0) scale(1); opacity: 1; }
     99%, 100% { transform: translateY(0) scale(1); opacity: 0; }
 }
 @keyframes hs-play {
-    0%, 84% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    87% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
-    90%, 92% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    95%, 96% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    0%, 85% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    88% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+    91%, 93% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    96%, 97% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
     99%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
 @keyframes hs-progress {
-    0%, 80% { transform: scaleX(0); opacity: 1; }
-    94% { transform: scaleX(1); opacity: 1; }
+    0%, 81% { transform: scaleX(0); opacity: 1; }
+    95% { transform: scaleX(1); opacity: 1; }
     99%, 100% { transform: scaleX(1); opacity: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1742,6 +1876,15 @@ h1,
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-page2 { animation: hs-page2 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-field { animation: hs-field 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-typed-text { animation: hs-typing 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-caret { animation: hs-caret 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-research { animation: hs-research 13s linear infinite; }
@@ -1763,6 +1906,18 @@ h1,
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-step.is-4 { animation: hs-step-4 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-1 .hero-story-step-badge svg path { animation: hs-check-1 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-2 .hero-story-step-badge svg path { animation: hs-check-2 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-3 .hero-story-step-badge svg path { animation: hs-check-3 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-step.is-4 .hero-story-step-badge svg path { animation: hs-check-4 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-generate { animation: hs-generate 13s linear infinite; }

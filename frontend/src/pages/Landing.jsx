@@ -9,7 +9,7 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, ShieldCheck, Video,
-  Play,
+  Play, Link2,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -168,44 +168,55 @@ const FLOW_STEPS = [
 
 /**
  * The hero story: the process in one continuous motion (ADR 0165,
- * restructured by ADR 0168, refined by ADR 0172). Inside a phone
- * frame the mockup illustrates what a visitor does, stylized —
- * not the exact app UI — across two pages in the phone. Page one
- * opens cleanly on "Research app for video", clicked to get the
- * profile info: the typed store-link field ADR 0168 carried is
- * removed at Kasra's order (ADR 0172) — no field, no link text,
- * no caret anywhere in the figure. Page two: the app's video
+ * restructured by ADR 0168, refined by ADR 0172, the typing
+ * restored and the finish polished by ADR 0175). Inside a phone
+ * frame the mockup illustrates what a visitor does across two
+ * pages in the phone. Page one types the store link into a field
+ * lit with the app's focus treatment, character by character
+ * behind a blinking caret, while "Research app for video" rests
+ * dimmed below; once the typing completes the button wakes and
+ * is clicked, to get the profile info. Page two: the app's video
  * creation steps — App Profile, Audience & template, Review &
  * submit, Demo + CTA, their exact names in CreateVideo — check
- * off in turn, and "Generate the video" appears only there and
- * is clicked there. Both buttons display about half a second
- * longer before their clicks, on a 13s clock lengthened for
- * exactly that (ADR 0172). Then the finished video plays —
- * presenter, hook words, play badge, progress bar — and the
- * play badge yields to the enhanced end card: an app icon tile,
- * the closing line and the CTA resolving as the loop's closing
- * moment. Then the frame holds and the loop restarts. It is
- * pure CSS on one 13s clock (the hs-* keyframes in index.css),
- * so there is no JS timer and no control of any kind. The base
- * styles are the finished video frame: under reduced motion no
- * stage animation is applied and that frame simply stands. The
- * five steps themselves still run, in full, in the How it
- * works section below. The phone's controls mirror the app's
- * real UI (ADR 0173): Research wears BrandSetup's secondary
- * button, Generate wears the render panel's accent button, and
- * a done step wears the wizard rail's filled check badge — when
- * the real treatments change, this mockup follows.
+ * off in turn, each check drawing itself in, and "Generate the
+ * video" appears only there and is clicked there. The pages
+ * slide between beats on the same clock. Then the finished
+ * video takes the screen: inside its stage the presenter — a
+ * filled figure in a small scene, the phone she holds in hand —
+ * is the frame's subject, the hook words her caption block, the
+ * play badge seated on her, the progress bar filling across the
+ * stage's run; and the play badge yields to the enhanced end
+ * card: an app icon tile, the closing line and the CTA resolving
+ * as the loop's closing moment. Then the frame holds and the
+ * loop restarts. It is pure CSS on one 13s clock (the hs-*
+ * keyframes in index.css), so there is no JS timer and no
+ * control of any kind. The base styles are the finished video
+ * frame: under reduced motion no stage animation is applied and
+ * that frame simply stands. The five steps themselves still
+ * run, in full, in the How it works section below. The phone's
+ * controls mirror the app's real UI (ADR 0173): Research wears
+ * BrandSetup's secondary button, Generate wears the render
+ * panel's accent button, and a done step wears the wizard rail's
+ * filled check badge — when the real treatments change, this
+ * mockup follows.
  */
 function HeroStory() {
   return (
     <div
       className="hero-story"
       role="img"
-      aria-label="How it works in one motion: click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video plays, closing on its end card."
+      aria-label="How it works in one motion: type your store link, click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video plays, closing on its end card."
     >
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
           <div className="hero-story-page1">
+            <div className="hero-story-field">
+              <Link2 className="h-3.5 w-3.5" />
+              <span className="hero-story-typed">
+                <span className="hero-story-typed-text">yourapp.com/store</span>
+                <span className="hero-story-caret" />
+              </span>
+            </div>
             <div className="hero-story-research">
               <Sparkles className="h-4 w-4" />
               <span>Research app for video</span>
@@ -239,27 +250,43 @@ function HeroStory() {
           </div>
           <div className="hero-story-video">
             <div className="hero-story-progress"><span /></div>
-            <div className="hero-story-hook">
-              <span className="hero-story-hook-line is-long">A year building this app.</span>
-              <span className="hero-story-hook-line is-short">Nobody knew why it mattered.</span>
-            </div>
-            <svg
-              className="hero-story-presenter"
-              viewBox="0 0 120 120"
-              fill="none"
-              stroke="var(--brand-indigo)"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="50" cy="28" r="15" />
-              <path d="M14 112 a36 32 0 0 1 72 0" />
-              <rect x="70" y="52" width="28" height="44" rx="6" fill="var(--indigo-10)" />
-              <path d="M80 66 l11 7 l-11 7 Z" fill="var(--brand-indigo)" stroke="none" />
-            </svg>
-            <div className="hero-story-play">
-              <Play className="h-[18px] w-[18px]" fill="currentColor" />
+            <div className="hero-story-stage">
+              <div className="hero-story-hook">
+                <span className="hero-story-hook-line is-long">A year building this app.</span>
+                <span className="hero-story-hook-line is-short">Nobody knew why it mattered.</span>
+              </div>
+              <svg
+                className="hero-story-presenter"
+                viewBox="0 0 200 160"
+                aria-hidden="true"
+              >
+                {/* The scene behind her: a window with a soft
+                    moon, drifting shapes, a desk edge. */}
+                <rect x="120" y="12" width="68" height="86" rx="10" fill="var(--indigo-10)" />
+                <circle cx="154" cy="38" r="11" fill="var(--indigo-15)" />
+                <rect x="120" y="60" width="68" height="3" fill="var(--indigo-15)" />
+                <circle cx="24" cy="30" r="13" fill="var(--indigo-8)" />
+                <circle cx="36" cy="118" r="7" fill="var(--indigo-10)" />
+                <rect x="0" y="134" width="200" height="26" fill="var(--indigo-8)" />
+                {/* Her top and neck. */}
+                <path d="M36 160 a56 52 0 0 1 112 0 Z" fill="var(--brand-indigo)" />
+                <rect x="86" y="82" width="12" height="30" rx="5" fill="#A5B4FC" />
+                {/* Her hair, then her face over it, then the
+                    fringe that frames it. */}
+                <ellipse cx="92" cy="58" rx="30" ry="34" fill="var(--brand-indigo-dark)" />
+                <ellipse cx="92" cy="62" rx="20" ry="24" fill="#C7D2FE" />
+                <path d="M72 56 a20 24 0 0 1 40 0 a25 10 0 0 1 -40 0 Z" fill="var(--brand-indigo-dark)" />
+                <circle cx="85" cy="70" r="2.1" fill="#312E81" />
+                <circle cx="99" cy="70" r="2.1" fill="#312E81" />
+                <path d="M87 78 q5 4 10 0" fill="none" stroke="#312E81" strokeWidth="2" strokeLinecap="round" />
+                {/* The phone she holds, her hand at its edge. */}
+                <circle cx="131" cy="120" r="7.5" fill="#C7D2FE" />
+                <rect x="130" y="94" width="31" height="50" rx="7" fill="hsl(228 14% 10%)" stroke="var(--indigo-35)" strokeWidth="1.5" />
+                <path d="M142 112 l12 7 l-12 7 Z" fill="var(--brand-indigo)" />
+              </svg>
+              <div className="hero-story-play">
+                <Play className="h-[18px] w-[18px]" fill="currentColor" />
+              </div>
             </div>
             <div className="hero-story-endcard">
               <span className="hero-story-endcard-icon">
