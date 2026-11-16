@@ -1379,10 +1379,13 @@ h1,
     padding: 22px 18px 18px;
     gap: 14px;
 }
-/* The two process pages fill the phone screen in turn. Their
-   base state is hidden: the figure's base state is the finished
-   video, and the gated keyframes walk the pages in and out on
-   the one clock. */
+/* The two process pages fill the phone screen in turn. Page
+   one's base state is hidden; page two's base state is the
+   assembled final page — steps checked, the video composed in
+   its center slot, the Generate button in place (ADR 0176) —
+   and that assembled page is what reduced motion stands on.
+   The gated keyframes walk the pages in and out on the one
+   clock. */
 .hero-story-page1,
 .hero-story-page2 {
     position: absolute;
@@ -1392,7 +1395,12 @@ h1,
     gap: 12px;
     padding: 18px 14px 14px;
     border-radius: 24px;
+}
+.hero-story-page1 {
     opacity: 0;
+}
+.hero-story-page2 {
+    opacity: 1;
 }
 .hero-story-phone {
     position: relative;
@@ -1430,11 +1438,14 @@ h1,
     background: linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 30%, transparent 48%);
     pointer-events: none;
 }
+/* The video's progress rides the top edge of its stage (ADR
+   0176): the bar belongs to the video in page two's center
+   slot, filling across the stage's run while the video plays. */
 .hero-story-progress {
     position: absolute;
     top: 8px;
-    left: 14px;
-    right: 14px;
+    left: 12px;
+    right: 12px;
     height: 4px;
     border-radius: 999px;
     background: var(--indigo-15);
@@ -1534,7 +1545,11 @@ h1,
 }
 /* Page two's process UI — the video creation steps under their
    exact app names, checking off in turn, and the generate
-   control, which exists only on this page. */
+   control, which exists only on this page. Page two is the
+   loop's final page (ADR 0176), so its pieces carry no hidden
+   base state: the assembled page — steps standing checked,
+   the button in place — is the base the gated keyframes walk
+   in from, and the frame reduced motion rests on. */
 .hero-story-steps {
     display: flex;
     flex-direction: column;
@@ -1543,7 +1558,6 @@ h1,
     border: 1px solid var(--indigo-15);
     border-radius: 14px;
     background: var(--indigo-8);
-    opacity: 0;
 }
 .hero-story-step {
     display: flex;
@@ -1552,7 +1566,6 @@ h1,
     font-size: 12px;
     font-weight: 600;
     color: hsl(var(--foreground) / 0.85);
-    opacity: 0;
 }
 /* A done step's marker mirrors the wizard progress rail's
    (ADR 0173): a filled brand-indigo badge carrying a white
@@ -1588,7 +1601,6 @@ h1,
     font-size: 13px;
     font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), var(--glow-indigo);
-    opacity: 0;
 }
 .hero-story-ripple {
     position: absolute;
@@ -1602,26 +1614,17 @@ h1,
     opacity: 0;
     pointer-events: none;
 }
-/* The finished video fills the screen after page two, scaling
-   up slightly as it takes the screen (ADR 0175). Its base
-   state is fully assembled — the stage with presenter, hook
-   words and play badge, the end card below it — and that
-   assembled frame is what reduced motion stands on. */
-.hero-story-video {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 18px 14px 14px;
-    border-radius: 24px;
-    transform-origin: center;
-}
-/* The video stage is the finished video's frame (ADR 0175):
-   one surface the presenter and her caption block are composed
-   in — an indigo wash pooled behind the presenter over a
-   deeper card surface, a hairline rim — so the stage reads as
-   a video frame, not parts scattered in dead space. */
+/* The video stage is the finished video's frame (ADR 0175),
+   seated since ADR 0176 in page two's center slot — the empty
+   space between the steps card and the Generate button — where
+   the video is generated after the button's click. One surface
+   the presenter and her caption block are composed in — an
+   indigo wash pooled behind the presenter over a deeper card
+   surface, a hairline rim — so the stage reads as a video
+   frame, not parts scattered in dead space. It flexes to fill
+   the slot honestly, and its base state is fully composed:
+   the assembled slot is page two's resting image, the one
+   reduced motion stands on. */
 .hero-story-stage {
     position: relative;
     flex: 1;
@@ -1634,6 +1637,7 @@ h1,
     background: radial-gradient(120% 90% at 50% 30%, var(--indigo-15), transparent 62%), linear-gradient(180deg, var(--indigo-8), transparent 60%), hsl(228 14% 11%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     overflow: hidden;
+    transform-origin: center;
 }
 .hero-story-hook {
     display: flex;
@@ -1668,11 +1672,12 @@ h1,
 }
 /* The play badge seats on the presenter inside the stage
    (ADR 0175), over her like a real video's badge, not floating
-   in empty space. */
+   in empty space. In the center slot the presenter stands
+   lower in her shorter frame, so the badge rides at 58%. */
 .hero-story-play {
     position: absolute;
     left: 50%;
-    top: 46%;
+    top: 58%;
     transform: translate(-50%, -50%);
     width: 46px;
     height: 46px;
@@ -1683,45 +1688,43 @@ h1,
     place-items: center;
     box-shadow: 0 10px 26px rgba(99, 102, 241, 0.45);
 }
-/* The end card is the loop's closing moment (ADR 0172): a
-   centered closing card — app icon tile, the line at display
-   size, the CTA as a full pill — that rises and settles as the
-   finished video's last image. */
-.hero-story-endcard {
-    margin-top: auto;
+/* The video's own closing beat (ADR 0176 addendum): as the
+   run completes, "Your app. Your story." resolves inside the
+   stage as a closing layer over the presenter scene — the way
+   a real video ends on its end card — with a small "Get the
+   app" beneath it. It is the video's last beat, not a stage
+   after it: nothing follows the video, and page two still
+   ends the loop. The layer's base state is resolved, so the
+   resting page under reduced motion carries the finished
+   video's close standing in the slot; the gated hs-closing
+   track holds it back until the closing window. The retired
+   end card's icon tile stays retired — at slot scale it read
+   as card furniture, not a video's close. */
+.hero-story-closing {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    text-align: center;
+    justify-content: center;
     gap: 9px;
-    padding: 16px 14px;
-    border: 1px solid var(--indigo-25);
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--indigo-15), var(--indigo-8));
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    text-align: center;
+    padding: 14px;
+    background: radial-gradient(120% 90% at 50% 30%, var(--indigo-15), transparent 62%), linear-gradient(180deg, hsl(228 14% 11% / 0.92), hsl(228 14% 10% / 0.97));
+    opacity: 1;
 }
-.hero-story-endcard-icon {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
-    background: linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%);
-    color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 8px 20px rgba(99, 102, 241, 0.45);
-}
-.hero-story-endcard-line {
+.hero-story-closing-line {
     font-family: "Space Grotesk", "Figtree", sans-serif;
     font-size: 15.5px;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: hsl(var(--foreground));
 }
-/* The end card's CTA wears the small accent Button's
+/* The closing beat's CTA wears the small accent Button's
    treatment (ADR 0173): the bevel's vertical gradient, rim
    and white/15 border at size sm's geometry — rounded-lg,
    text-xs, px-4 py-1.5. */
-.hero-story-endcard-cta {
+.hero-story-closing-cta {
     display: inline-flex;
     align-items: center;
     padding: 6px 16px;
@@ -1733,10 +1736,13 @@ h1,
     font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
-/* The beats slide between stages (ADR 0175): page one exits
-   left, page two enters from the right and exits left, and the
-   video scales up as it takes the screen — movement on the one
-   clock, never a hard cut. */
+/* The beats slide between pages (ADR 0175): page one exits
+   left, page two enters from the right — and since ADR 0176
+   page two never leaves: it is the loop's final page, holding
+   its assembled image (steps, the video in its slot, the
+   button) until the loop's last beat, where it fades for the
+   restart. The video stage scales up as it materializes in
+   the slot — movement on the one clock, never a hard cut. */
 @keyframes hs-page1 {
     0% { opacity: 0; transform: translateY(6px); }
     3%, 33% { opacity: 1; transform: translateY(0); }
@@ -1744,8 +1750,8 @@ h1,
 }
 @keyframes hs-page2 {
     0%, 36% { opacity: 0; transform: translateX(16px); }
-    40%, 69% { opacity: 1; transform: translateX(0); }
-    73%, 100% { opacity: 0; transform: translateX(-12px); }
+    40%, 97% { opacity: 1; transform: translateX(0); }
+    99%, 100% { opacity: 0; transform: translateX(0); }
 }
 @keyframes hs-field {
     0%, 2% { opacity: 0; transform: translateY(6px); }
@@ -1821,55 +1827,63 @@ h1,
     0%, 59% { stroke-dasharray: 24; stroke-dashoffset: 24; }
     65%, 100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
 }
+/* After its click the generate button settles to a quieter
+   presence while the video it made plays above it (ADR 0176):
+   still visible, still wearing the accent treatment — the
+   light drops, the treatment never changes. */
 @keyframes hs-generate {
     0%, 63% { opacity: 0; transform: translateY(6px) scale(1); }
     66% { opacity: 1; transform: translateY(0) scale(1); }
     69% { opacity: 1; transform: translateY(0) scale(0.94); }
-    72%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+    72%, 78% { opacity: 1; transform: translateY(0) scale(1); }
+    84%, 100% { opacity: 0.8; transform: translateY(0) scale(1); }
 }
 @keyframes hs-ripple {
     0%, 69% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
     72% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.55); }
     79%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
 }
-@keyframes hs-video {
-    0%, 73% { opacity: 0; transform: scale(0.97); }
-    80%, 97% { opacity: 1; transform: scale(1); }
-    99%, 100% { opacity: 0; transform: scale(1); }
+/* The video materializes in page two's center slot right
+   after the Generate click (ADR 0176): it fades and scales in
+   as if generated there, then stands composed while it plays
+   — the loop's last image, with nothing after it. */
+@keyframes hs-stage {
+    0%, 71% { opacity: 0; transform: scale(0.96) translateY(8px); }
+    79%, 100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 @keyframes hs-hook-long {
-    0%, 79% { transform: scaleX(0); opacity: 0; }
-    80% { transform: scaleX(0); opacity: 1; }
-    86%, 97% { transform: scaleX(1); opacity: 1; }
-    99%, 100% { transform: scaleX(1); opacity: 0; }
+    0%, 77% { transform: scaleX(0); opacity: 0; }
+    78% { transform: scaleX(0); opacity: 1; }
+    84%, 100% { transform: scaleX(1); opacity: 1; }
 }
 @keyframes hs-hook-short {
-    0%, 85% { transform: scaleX(0); opacity: 0; }
-    86% { transform: scaleX(0); opacity: 1; }
-    91%, 97% { transform: scaleX(1); opacity: 1; }
-    99%, 100% { transform: scaleX(1); opacity: 0; }
+    0%, 83% { transform: scaleX(0); opacity: 0; }
+    84% { transform: scaleX(0); opacity: 1; }
+    89%, 100% { transform: scaleX(1); opacity: 1; }
 }
 @keyframes hs-presenter {
-    0%, 77% { opacity: 0; transform: translateY(12px); }
-    84%, 97% { opacity: 1; transform: translateY(0); }
-    99%, 100% { opacity: 0; transform: translateY(0); }
-}
-@keyframes hs-endcard {
-    0%, 91% { transform: translateY(16px) scale(0.97); opacity: 0; }
-    96%, 97% { transform: translateY(0) scale(1); opacity: 1; }
-    99%, 100% { transform: translateY(0) scale(1); opacity: 0; }
+    0%, 75% { opacity: 0; transform: translateY(12px); }
+    82%, 100% { opacity: 1; transform: translateY(0); }
 }
 @keyframes hs-play {
-    0%, 85% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    88% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
-    91%, 93% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    96%, 97% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
-    99%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    0%, 80% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    84% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+    87%, 90% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    94%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
 @keyframes hs-progress {
-    0%, 81% { transform: scaleX(0); opacity: 1; }
-    95% { transform: scaleX(1); opacity: 1; }
-    99%, 100% { transform: scaleX(1); opacity: 0; }
+    0%, 80% { transform: scaleX(0); opacity: 1; }
+    97%, 100% { transform: scaleX(1); opacity: 1; }
+}
+/* The closing beat resolves only as the video's run completes
+   (ADR 0176 addendum): held back while the video plays, the
+   closing layer fades and rises in over the presenter scene
+   across the progress bar's last stretch, stands resolved at
+   95% as the bar fills, and holds through the loop's restart
+   fade — the video's own end card, inside its stage. */
+@keyframes hs-closing {
+    0%, 89% { opacity: 0; transform: translateY(8px); }
+    95%, 100% { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-page1 { animation: hs-page1 13s linear infinite; }
@@ -1926,7 +1940,7 @@ h1,
     .hero-story-ripple { animation: hs-ripple 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-video { animation: hs-video 13s linear infinite; }
+    .hero-story-stage { animation: hs-stage 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-hook-line.is-long { animation: hs-hook-long 13s linear infinite; }
@@ -1938,13 +1952,13 @@ h1,
     .hero-story-presenter { animation: hs-presenter 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
-    .hero-story-endcard { animation: hs-endcard 13s linear infinite; }
-}
-@media (prefers-reduced-motion: no-preference) {
     .hero-story-play { animation: hs-play 13s linear infinite; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-progress > span { animation: hs-progress 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-closing { animation: hs-closing 13s linear infinite; }
 }
 
 /* ---------- Studio Button System (Specular Bevel + Soft Light Sweep) ----------

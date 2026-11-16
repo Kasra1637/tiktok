@@ -137,7 +137,7 @@ One render path, single-pass video generation via OpenRouter.
   carries all three. Card descriptions are uniformly 160 chars,
   smoke-pinned with the six exact titles; titles are short and no
   longer share one length. The hero figure carries the story
-  animation (ADRs 0165/0168, refined by 0172/0175) — inside a
+  animation (ADRs 0165/0168, refined by 0172/0175/0176) — inside a
   phone frame the process plays across two pages (page one
   types the store link into its field — ADR 0175 restored the
   typing after Kasra saw page one live without it; the field
@@ -145,13 +145,19 @@ One render path, single-pass video generation via OpenRouter.
   types and Research rests dimmed until it wakes for its
   click; page two checks off the four video creation steps,
   each check drawing itself in, and carries the only Generate
-  the video click; then the finished video plays as one framed
-  stage — the filled presenter in her scene as its subject,
-  the hook its caption, the play badge seated on her —
-  closing on its enhanced end card), pure CSS on one 13s
+  the video click; then the finished video is generated in
+  page two's own center, between the steps and the button, as
+  one framed stage — the filled presenter in her scene as its
+  subject, the hook its caption, the play badge seated on
+  her — closing on its own end beat inside the stage, "Your
+  app. Your story." over a small Get the app (ADR 0176
+  addendum) — and nothing follows it: page two is the last
+  page, the loop holds on it assembled, and reduced motion
+  rests on it (ADR 0176, which retired the full-screen video
+  stage and its separate end card)), pure CSS on one 13s
   clock, the phone carrying depth (weighted shadow, indigo
   glow, glass sheen) and the beats sliding and scaling
-  between stages — and the phone's controls mirror the
+  between pages — and the phone's controls mirror the
   app's real UI (ADR 0173): Research wears BrandSetup's
   secondary button, Generate the render panel's accent button,
   a done step the wizard rail's filled check badge, smoke-pinned
@@ -275,7 +281,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and seventy-five decisions (0001–0175) now
+Read `docs/adr/README.md` first. One hundred and seventy-six decisions (0001–0176) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
