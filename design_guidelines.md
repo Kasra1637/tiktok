@@ -551,19 +551,18 @@ or an error needs naming. See ADR 0088.
 ## 7. Motion
 
 Library: none — every UI motion is a CSS keyframe in `index.css`
-(`route-entry`, `card-enter`, `page-content-enter`, `wizard-section-enter`,
-`fade-up`, `shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`,
+(`rise-settle`, `shimmer-sweep`, `marquee-x`, `float-slow`/`float-slower`,
 `tour-fade`), so
 the bundle carries no animation library. The reduced-motion preference is the
 browser hook `useReducedMotionPreference` (`lib/reducedMotion.jsx`).
 
-Durations: fast `150ms`, base `220ms`, slow `320ms`. Workspace route
-entrances are `120ms` (`route-entry`, 4px rise); a card or empty state
-enters at `150ms` (`card-enter`, 8px rise); the primary page content uses the
-shared `150ms` `page-content-enter` fade and 4px rise when it mounts,
-including after loading; an opened canvas section rises `150ms`
-(`wizard-section-enter`, 4px). Skeletons shimmer while real work is pending,
-never
+Durations: fast `150ms`, base `220ms`, slow `320ms` for transitions.
+Entrances are ONE motion (ADR 0165): `rise-settle` — a 7px rise and a
+fade over `300ms` on `cubic-bezier(0.16, 1, 0.3, 1)`. Every entrance
+class resolves to it — `page-content-enter` (the primary content when
+it mounts, including real content arriving where a skeleton stood),
+`route-entry`, `card-enter`, `wizard-section-enter` and
+`animate-fade-up`. Skeletons shimmer while real work is pending, never
 for an artificial minimum; reduced motion leaves both the skeleton and page
 content static.
 
@@ -575,8 +574,10 @@ content static.
    the `no-preference` gate around every entrance utility, and in JS via
    `useReducedMotionPreference()` (see `PageTransition`, `EmptyState`,
    `TourOverlay`).
-3. Hover = 1–2px lift plus shadow tighten. Entrance = fade + 6–12px `y`.
-4. Stagger list entrance with a capped delay (`Math.min(index * 0.04, 0.32)`).
+3. Hover = 1–2px lift plus shadow tighten. Entrance = the one
+   rise-and-settle (fade + 7px `y`, 300ms).
+4. Stagger list entrance with a capped delay on the same keyframe
+   (≤70ms steps, capped at 8 items).
 
 ---
 

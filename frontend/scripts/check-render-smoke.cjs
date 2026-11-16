@@ -9673,101 +9673,100 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The hero is a loop of the five step illustrations, not a recording:
-  // Kasra replaced the tour footage so the whole flow plays in the frame
-  // with no video bytes. The pins below hold that shape — five slides, the
-  // first one up front, dots to step by hand, and a still first step under
-  // reduced motion. The loop carries no pause control: Kasra removed it
-  // (Nov 15, ADR 0154) — it always auto-plays, and stillness comes only
-  // from the pointer resting on the frame or from reduced motion.
-  await check("the hero shows the five-step flow instead of a video", async (ctx) => {
+  // The hero is one continuous story animation, not a recording and
+  // not the retired five-step flow (ADR 0165, superseding the HeroFlow
+  // loop of ADRs 0154/0158): a store link drops into a phone frame and
+  // a finished video assembles inside it — hook line, demo, end card —
+  // then holds and loops. It is pure CSS on one 12s clock, so there is
+  // no JS timer, no control, no dots and no step captions; the base
+  // styles are the finished frame, which is what reduced motion sees.
+  await check("the hero shows the link-to-video story instead of a video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
     if (!shot) throw new Error("no hero frame rendered");
     if (shot.querySelector("video")) throw new Error("the hero still carries a video");
-    const slides = [...shot.querySelectorAll(".hero-flow-slide")];
-    if (slides.length !== 5) throw new Error(`expected five hero flow slides, got ${slides.length}`);
-    if (!slides[0].classList.contains("is-active")) throw new Error("the flow does not open on the first step");
-    const dots = [...shot.querySelectorAll(".hero-flow-dot")];
-    if (dots.length !== 5) throw new Error("the flow is missing its five step dots");
+    const story = shot.querySelector(".hero-story");
+    if (!story) throw new Error("the hero does not render the story animation");
+    for (const stage of [".hero-story-link", ".hero-story-phone", ".hero-story-hook", ".hero-story-demo", ".hero-story-endcard", ".hero-story-play"]) {
+      if (!story.querySelector(stage)) throw new Error(`the story is missing its ${stage} stage`);
+    }
+    if (shot.querySelector(".hero-flow-slide") || shot.querySelector(".hero-flow-dot")) {
+      throw new Error("the retired step flow still renders in the hero");
+    }
+    if (shot.querySelector("button")) throw new Error("the story animation carries a control");
   });
 
-  await check("the hero flow stays on the first step under reduced motion", async (ctx) => {
-    // Reduced motion means the loop never starts: the first step sits
-    // still and the dots remain the way through. The toggle assertion
-    // stays as a guard even though the loop has no play control at any
-    // motion setting now (ADR 0154).
+  await check("the hero story rests on the finished frame under reduced motion", async (ctx) => {
+    // Reduced motion means the loop never runs: the stage animations
+    // exist only inside the no-preference gate, so the base styles —
+    // the finished, assembled video — are what stands. No JS drives
+    // the loop at any motion setting, and no play control exists
+    // (the ADR 0154 guard carries over).
     const prevMatchMedia = dom.window.matchMedia;
     dom.window.matchMedia = () => ({ matches: true });
     try {
       await mount(load("pages/Landing.jsx").default)(ctx);
       await act(async () => {});
       const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
-      const slides = [...shot.querySelectorAll(".hero-flow-slide")];
-      if (!slides[0].classList.contains("is-active")) throw new Error("reduced motion moved the flow off the first step");
+      if (!shot) throw new Error("no hero frame rendered");
+      const story = shot.querySelector(".hero-story");
+      if (!story) throw new Error("the hero does not render the story animation");
+      for (const stage of [".hero-story-link", ".hero-story-hook", ".hero-story-demo", ".hero-story-endcard", ".hero-story-play"]) {
+        if (!story.querySelector(stage)) throw new Error(`reduced motion lost the finished frame's ${stage} stage`);
+      }
       if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
         throw new Error("reduced motion still offers a play control for a loop that never plays");
       }
-    } finally {
-      dom.window.matchMedia = prevMatchMedia;
-    }
-  });
-
-  await check("the hero flow has no pause control and advances on its own", async (ctx) => {
-    // Kasra removed the play/pause toggle entirely (ADR 0154): the loop
-    // always plays on its own, so no control renders — not beside the
-    // dots, not anywhere in the hero — and the step still advances by
-    // itself. The dots stay: position indicators that also step by hand.
-    const prevMatchMedia = dom.window.matchMedia;
-    dom.window.matchMedia = () => ({ matches: false });
-    try {
-      await mount(load("pages/Landing.jsx").default)(ctx);
-      await act(async () => {});
-      const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
-      if (!shot) throw new Error("no hero frame rendered");
-      if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
-        throw new Error("the hero still renders a play/pause toggle");
-      }
-      const loopControl = [...shot.querySelectorAll("button")].find((b) =>
-        /step loop/i.test(b.getAttribute("aria-label") || ""));
-      if (loopControl) throw new Error("the hero still renders a play/pause control for the loop");
-      const slides = () => [...shot.querySelectorAll(".hero-flow-slide")];
-      const dots = () => [...shot.querySelectorAll(".hero-flow-dot")];
-      await act(async () => { dots()[2].click(); });
-      await act(async () => {});
-      if (!slides()[2].classList.contains("is-active")) throw new Error("the third dot did not show the third step");
-      // On its own: one full step later the flow has moved off the step
-      // the dot chose, with no hand on any control — nothing pauses it.
-      await act(async () => { await new Promise((r) => setTimeout(r, 4300)); });
-      if (slides()[2].classList.contains("is-active")) {
-        throw new Error("the flow did not advance on its own — something still pauses it");
-      }
       const landing = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
-      if (landing.includes("hero-flow-toggle")) {
-        throw new Error("Landing.jsx still carries the hero-flow-toggle control");
+      if (landing.includes("setInterval")) {
+        throw new Error("Landing.jsx still drives the hero with a JS timer — the story must be CSS alone");
+      }
+      const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+      if (!/@keyframes hs-link/.test(css) || !/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.hero-story-link\s*\{\s*animation:\s*hs-link 12s/.test(css)) {
+        throw new Error("the story's stage animations are not gated on motion being allowed");
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
     }
   });
 
-  // Kasra trimmed the hero (Nov 14): the slides carry the illustration and
-  // the badge + title only — the step's descriptive line lives in the How
-  // it works section below, not repeated in the hero — and the browse dots
-  // sit centered under the frame. The pause control that used to sit at
-  // the row's edge is gone entirely (ADR 0154), CSS rule and all.
-  await check("the hero slides carry no subtitle and the dots sit centered", async (ctx) => {
+  await check("the hero story is one CSS loop with no JS timer and no step machinery", async (ctx) => {
+    // The whole sequence is keyframes on one clock (ADR 0165): no
+    // interval in the page, no HeroFlow left in source or stylesheet,
+    // and every stage animation on the same 12s loop.
+    const landing = fs.readFileSync(path.join(SRC, "pages/Landing.jsx"), "utf8");
+    if (landing.includes("HeroFlow") || landing.includes("hero-flow")) {
+      throw new Error("Landing.jsx still carries the retired HeroFlow");
+    }
+    if (landing.includes("setInterval")) {
+      throw new Error("Landing.jsx still carries a JS timer");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (css.includes(".hero-flow")) {
+      throw new Error("the dead .hero-flow rules are still in index.css");
+    }
+    for (const kf of ["hs-link", "hs-hook-long", "hs-hook-short", "hs-demo", "hs-endcard", "hs-play", "hs-progress"]) {
+      if (!css.includes(`@keyframes ${kf}`)) {
+        throw new Error(`the story is missing its ${kf} keyframes`);
+      }
+      if (!new RegExp(`animation:\\s*${kf} 12s`).test(css)) {
+        throw new Error(`the ${kf} stage is not on the story's one 12s clock`);
+      }
+    }
+  });
+
+  // The step captions live in the How it works section, never in the
+  // hero: the story is visual only, so no badge + title slides, no
+  // descriptive line, and no dots row survives in the frame.
+  await check("the hero carries no step captions, dots or flow classes", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
     if (!shot) throw new Error("no hero frame rendered");
     if (shot.querySelector(".hero-flow-line")) {
-      throw new Error("a hero slide still renders its descriptive line");
+      throw new Error("the hero still renders a step's descriptive line");
     }
-    const slides = [...shot.querySelectorAll(".hero-flow-slide")];
-    for (const slide of slides) {
-      if (!slide.querySelector(".how-badge") || !slide.querySelector(".hero-flow-title")) {
-        throw new Error("a hero slide lost its badge + title caption");
-      }
+    if (shot.querySelector(".how-badge") || shot.querySelector(".hero-flow-title")) {
+      throw new Error("the hero still renders step badge + title captions");
     }
     // The descriptive lines still exist — in the How it works section.
     if (!ctx.container.textContent.includes("approve the facts")) {
@@ -9781,9 +9780,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (css.includes(".hero-flow-line")) {
       throw new Error("the dead .hero-flow-line rule is still in index.css");
     }
-    if (!/\.hero-flow-nav\s*\{[^}]*justify-content:\s*center/.test(css)) {
-      throw new Error("the hero dot row is not centered");
-    }
     if (css.includes(".hero-flow-toggle")) {
       throw new Error("the dead .hero-flow-toggle rule is still in index.css");
     }
@@ -9794,9 +9790,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // full screen of mostly empty dark space and earned nothing there.
   // The figure carries .hero-shot, which index.css hides until the
   // hero's own desktop breakpoint — the lg width where the pitch and
-  // the flow stand side by side. Desktop markup and behavior are
-  // unchanged, so the flow's DOM pins above keep holding as written.
-  await check("the hero flow is hidden below the desktop breakpoint", async (ctx) => {
+  // the picture stand side by side. The rule carries over unchanged
+  // to the story animation that replaced the flow (ADR 0165).
+  await check("the hero story is hidden below the desktop breakpoint", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
     if (!shot) throw new Error("no hero frame rendered");
@@ -11370,7 +11366,7 @@ async function runIconChecks() {
   };
   walk(SRC);
 
-  await check("workspace page loading and content reveals share short reduced-motion-safe timing", async (ctx) => {
+  await check("page, route, card and reveal entrances share the one rise-and-settle, and the skeleton resolve rides it", async (ctx) => {
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const transition = fs.readFileSync(path.join(SRC, "components", "PageTransition.jsx"), "utf8");
     const { Skeleton } = load("components/ui/skeleton.jsx");
@@ -11379,27 +11375,53 @@ async function runIconChecks() {
     if (!skeleton?.className.includes("motion-safe:after:animate-[shimmer-sweep_1.1s_ease-in-out_infinite]") || skeleton.className.includes("motion-reduce:animate-pulse")) {
       throw new Error("loading skeletons must use the shared shimmer and stay still under reduced motion");
     }
-    // The route entrance moved from framer-motion to CSS keyframes (it was
-    // the dependency's last two uses, which is why framer-motion left the
-    // bundle). The motion contract it must still keep: a SHORT keyframe -
-    // not the 0.5s entrance the landing cards share - and the JS belt that
-    // shows the page instantly when the preference is on.
+    // ONE entrance motion app-wide (Kasra, Nov 15 2026, ADR 0165):
+    // rise-settle — a 7px rise and a fade over 300ms on the app's
+    // signature ease. Every entrance class resolves to it: the page
+    // reveal, the route entrance, the card entrance, the wizard canvas
+    // disclosure, and the landing's fade-up. The five legacy keyframes
+    // (120/150/150/150ms and the 0.5s fade-up) are retired — entrances
+    // are never the thing the founder waits for, and they are never
+    // four different motions again.
+    if (!/@keyframes rise-settle\s*\{\s*from\s*\{\s*opacity:\s*0;\s*transform:\s*translate3d\(0,\s*7px,\s*0\)/.test(css)) {
+      throw new Error("the unified rise-settle keyframe (7px rise, fading in) is not defined");
+    }
+    for (const legacy of ["fade-up", "page-content-enter", "route-entry", "card-enter", "wizard-section-enter"]) {
+      if (css.includes(`@keyframes ${legacy}`)) {
+        throw new Error(`the legacy ${legacy} entrance keyframe still exists — entrances must share rise-settle`);
+      }
+    }
+    for (const cls of ["page-content-enter", "route-entry", "card-enter", "wizard-section-enter"]) {
+      const re = new RegExp(`@media\\s*\\(prefers-reduced-motion:\\s*no-preference\\)\\s*\\{\\s*\\.${cls}\\s*\\{\\s*animation:\\s*rise-settle 300ms cubic-bezier\\(0\\.16,\\s*1,\\s*0\\.3,\\s*1\\) both`);
+      if (!re.test(css)) {
+        throw new Error(`.${cls} does not resolve to the unified rise-settle (300ms, one easing, motion-allowed only)`);
+      }
+    }
+    if (!/\.animate-fade-up\s*\{\s*animation:\s*rise-settle 300ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both/.test(css)) {
+      throw new Error(".animate-fade-up does not resolve to the unified rise-settle");
+    }
+    // The route entrance keeps its JS belt: the page shows instantly
+    // when the preference is on (the CSS no-preference gate is the
+    // other half of the same contract).
     if (!/className="route-entry"/.test(transition) || !/style=\{reduceMotion \? \{ animation: "none" \} : undefined\}/.test(transition)) {
-      throw new Error("route entry must be brief and instant under reduced motion");
-    }
-    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.route-entry\s*\{\s*animation:\s*route-entry 120ms/.test(css)) {
-      throw new Error("route entry must stay at the documented 120ms and run only when motion is allowed");
-    }
-    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.page-content-enter\s*\{\s*animation:\s*page-content-enter 150ms/.test(css)) {
-      throw new Error("primary content reveal must be brief and run only when motion is allowed");
-    }
-    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.wizard-section-enter\s*\{\s*animation:\s*wizard-section-enter 150ms/.test(css)) {
-      throw new Error("canvas disclosure must be brief and run only when motion is allowed");
+      throw new Error("route entry must be instant under reduced motion");
     }
     for (const file of ["CreateVideo.jsx", "BrandSetup.jsx", "AppProfileDetail.jsx", "AssetLibrary.jsx", "Analytics.jsx", "GenerationHistory.jsx", "DemoCtaStudio.jsx"]) {
       if (!fs.readFileSync(path.join(SRC, "pages", file), "utf8").includes("page-content-enter")) {
         throw new Error(`${file} does not use the shared primary content reveal`);
       }
+    }
+    // The skeleton resolve rides the same class: when a page's loading
+    // state ends, the real content mounts under page-content-enter, so
+    // it arrives with the rise-and-settle instead of popping. The
+    // skeleton's own structure and shimmer are untouched by ADR 0165.
+    const brandSetup = fs.readFileSync(path.join(SRC, "pages", "BrandSetup.jsx"), "utf8");
+    if (!/loadingActive \? "" : " page-content-enter"/.test(brandSetup)) {
+      throw new Error("BrandSetup's resolved content does not arrive with the shared reveal");
+    }
+    const assetLibrary = fs.readFileSync(path.join(SRC, "pages", "AssetLibrary.jsx"), "utf8");
+    if (!/!loading && assets\.length > 0 \? "page-content-enter"/.test(assetLibrary)) {
+      throw new Error("AssetLibrary's resolved list does not arrive with the shared reveal");
     }
   });
 

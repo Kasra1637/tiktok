@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AuthedOnly,
@@ -10,6 +9,7 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, ShieldCheck, Video,
+  Link2, Play,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
@@ -167,77 +167,49 @@ const FLOW_STEPS = [
 ];
 
 /**
- * The hero loop: the five steps, cycling in the frame beside the headline.
- * Kasra replaced the recorded tour footage with this — the same STEP_ART
- * illustrations the How it works strip uses, one at a time, so the whole
- * flow plays in one place with no video bytes at all. The pace is set to
- * stay comfortable: four seconds a step with a slow crossfade, and a
- * pause while the pointer rests on the frame. The loop carries no pause
- * control — Kasra removed the toggle that sat at the edge of the dot row
- * (Nov 15, ADR 0154), so it always auto-plays and stillness comes only
- * from the resting pointer or from reduced motion.
- * The slides carry the illustration and the badge + title only — Kasra
- * trimmed the step's descriptive line out of the hero (Nov 14); the line
- * itself still runs in the How it works section below. Under reduced motion
- * the loop never starts — the first step sits still and the dots step
- * through by hand.
+ * The hero story: the product in one continuous motion (ADR 0165,
+ * replacing the retired five-step cycling loop). A store link drops
+ * into a phone frame as if pasted, and inside the phone a finished
+ * video assembles itself — the hook line types on, the demo fills
+ * in, the end card lands — then the play badge and the story
+ * progress bar complete it, the finished frame holds, and the loop
+ * restarts. It is pure CSS on one 12s clock (the hs-* keyframes in
+ * index.css), so there is no JS timer and no control of any kind.
+ * The base styles are the finished assembled frame: under reduced
+ * motion no stage animation is applied and that finished frame
+ * simply stands. The five steps themselves still run, in full, in
+ * the How it works section below.
  */
-const HERO_FLOW_MS = 4000;
-
-function HeroFlow() {
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
-  const [active, setActive] = useState(0);
-  // No pause control exists (ADR 0154): the loop plays unless the motion
-  // setting stills it, so "playing" is derived, never toggled.
-  const playing = !reduceMotion;
-  const [hovering, setHovering] = useState(false);
-
-  useEffect(() => {
-    if (!playing || hovering) return undefined;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      setActive((i) => (i + 1) % FLOW_STEPS.length);
-    }, HERO_FLOW_MS);
-    return () => window.clearInterval(id);
-  }, [playing, hovering]);
-
+function HeroStory() {
   return (
     <div
-      className="hero-flow"
-      role="group"
-      aria-label="How HookForge works, in five steps"
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      className="hero-story"
+      role="img"
+      aria-label="A store link becomes a finished video: the hook appears, the demo fills in, and the end card lands."
     >
-      <div className="hero-flow-slides">
-        {FLOW_STEPS.map((s, i) => (
-          <div
-            key={s.step}
-            className={`hero-flow-slide${i === active ? " is-active" : ""}`}
-            aria-hidden={i !== active}
-          >
-            <div className="hero-flow-art">{STEP_ART[s.step]}</div>
-            <div className="hero-flow-caption">
-              <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
-              <span className="hero-flow-title font-display">{s.label}</span>
-            </div>
-          </div>
-        ))}
+      <div className="hero-story-link" aria-hidden="true">
+        <Link2 className="h-3.5 w-3.5" />
+        <span>yourapp.com/store</span>
       </div>
-      <div className="hero-flow-nav">
-        <div className="hero-flow-dots">
-          {FLOW_STEPS.map((s, i) => (
-            <button
-              key={s.step}
-              type="button"
-              className={`hero-flow-dot${i === active ? " is-active" : ""}`}
-              aria-label={`Show step ${s.step}: ${s.label}`}
-              aria-current={i === active ? "true" : undefined}
-              onClick={() => setActive(i)}
-            />
-          ))}
+      <div className="hero-story-phone" aria-hidden="true">
+        <div className="hero-story-screen">
+          <div className="hero-story-progress"><span /></div>
+          <div className="hero-story-hook">
+            <span className="hero-story-hook-line is-long" />
+            <span className="hero-story-hook-line is-short" />
+          </div>
+          <div className="hero-story-demo">
+            <div className="hero-story-demo-head" />
+            <span className="hero-story-demo-row is-a" />
+            <span className="hero-story-demo-row is-b" />
+          </div>
+          <div className="hero-story-play">
+            <Play className="h-[18px] w-[18px]" fill="currentColor" />
+          </div>
+          <div className="hero-story-endcard">
+            <span className="hero-story-endcard-line" />
+            <span className="hero-story-endcard-cta" />
+          </div>
         </div>
       </div>
     </div>
@@ -459,23 +431,21 @@ export default function Landing() {
             </span>
           </div>
           </div>
-          {/* The flow itself, beside the pitch: the five step illustrations
-              from the How it works strip, cycling bare — no card, frame, or
-              backdrop, only the illustration, title, line, dots, and pause
-              control. Kasra replaced the recorded tour footage with this loop,
-              so the hero carries no video bytes at all. HeroFlow crossfades
-              the steps at four seconds each, with dots and a pause control
-              along the bottom. Under reduced motion the loop never starts and
-              the dots step through by hand. Below the lg breakpoint the
-              figure is hidden entirely (ADR 0158, .hero-shot in index.css):
-              the stacked mobile hero drops the frame. */}
+          {/* The story itself, beside the pitch: one continuous CSS
+              animation — a store link drops into the phone frame and a
+              finished video assembles inside it (ADR 0165). The hero
+              carries no video bytes, no JS timer and no controls. Under
+              reduced motion the loop never runs and the finished frame
+              stands. Below the lg breakpoint the figure is hidden
+              entirely (ADR 0158, .hero-shot in index.css): the stacked
+              mobile hero drops the frame. */}
           <figure
             className="hero-shot animate-fade-up mx-auto mt-12 w-full max-w-[360px] lg:mx-0 lg:mt-0 lg:max-w-[400px]"
             style={{ animationDelay: "280ms" }}
             data-testid="landing-hero-shot"
           >
             <div className="relative aspect-[471/710] w-full">
-              <HeroFlow />
+              <HeroStory />
             </div>
           </figure>
         </div>

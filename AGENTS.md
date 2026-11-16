@@ -132,7 +132,12 @@ One render path, single-pass video generation via OpenRouter.
   and craft-grade beats fold into the plan card, whose description
   carries all three. Card descriptions are uniformly 160 chars,
   smoke-pinned with the six exact titles; titles are short and no
-  longer share one length.
+  longer share one length. The hero figure carries the story
+  animation (ADR 0165) — a store link drops into a phone frame and a
+  finished video assembles inside it, pure CSS on one 12s clock —
+  under ADR 0158's placement rule (`.hero-shot`, hidden below
+  1024px); the How it works strip below keeps the five steps. Every
+  entrance in the app is the one rise-and-settle (ADR 0165).
 - `frontend/src/components/AppPicker.jsx` (`PILL_SELECT_CLASS`) +
   `formControls.js` (`CONTROL_CLASS`) — the shared control skins. Every
   filter control in the app wears the one filter treatment (ADR 0161):
@@ -237,7 +242,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and sixty-four decisions (0001–0164) now
+Read `docs/adr/README.md` first. One hundred and sixty-five decisions (0001–0165) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
