@@ -9848,13 +9848,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // not the retired five-step flow (ADR 0165, superseding the HeroFlow
   // loop of ADRs 0154/0158; restructured by ADR 0168, refined by ADRs
   // 0172/0173, the typing restored and the video stage recomposed by
-  // ADR 0175; the video moved onto the steps page by ADR 0176):
+  // ADR 0175; the video moved onto the steps page by ADR 0176; the
+  // video's words removed and page one's button unified by ADR 0178):
   // inside the phone it illustrates the process across two pages —
-  // page one types the store link, then the Research app for video
+  // page one types the store link, then the Research my app
   // click; page two runs the video creation steps and the one
   // Generate the video click, and the finished video is generated
   // right there, in the page's center between the steps and the
-  // button — nothing follows it; the loop holds on that assembled
+  // button — presenter, play badge and progress only, no words —
+  // and nothing follows it; the loop holds on that assembled
   // page and restarts. It is pure CSS on one 13s clock, so there is
   // no JS timer, no control, no dots and no step captions; the base
   // styles are the assembled second page, which is what reduced
@@ -9866,7 +9868,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (shot.querySelector("video")) throw new Error("the hero still carries a video");
     const story = shot.querySelector(".hero-story");
     if (!story) throw new Error("the hero does not render the story animation");
-    for (const stage of [".hero-story-phone", ".hero-story-page1", ".hero-story-field", ".hero-story-research", ".hero-story-page2", ".hero-story-steps", ".hero-story-stage", ".hero-story-hook", ".hero-story-play", ".hero-story-progress", ".hero-story-closing", ".hero-story-generate"]) {
+    for (const stage of [".hero-story-phone", ".hero-story-page1", ".hero-story-field", ".hero-story-research", ".hero-story-page2", ".hero-story-steps", ".hero-story-stage", ".hero-story-play", ".hero-story-progress", ".hero-story-generate"]) {
       if (!story.querySelector(stage)) throw new Error(`the story is missing its ${stage} stage`);
     }
     if (shot.querySelector(".hero-flow-slide") || shot.querySelector(".hero-flow-dot")) {
@@ -9878,10 +9880,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // The story is the process, in two pages in the phone (Kasra's
   // restructure, Nov 16 2026, ADR 0168; refined the same day, ADRs
   // 0172/0173): the mockup illustrates what a visitor does — and its
-  // controls mirror the app's real UI (ADR 0173, pinned by the
+  // controls mostly mirror the app's real UI (ADR 0173, pinned by the
   // mirror check below), not just a finished video's content.
-  // Page one types the store link first, then offers "Research app
-  // for video", clicked to get the profile info. ADR 0172 removed
+  // Page one types the store link first, then offers "Research my
+  // app", clicked to get the profile info — the mockup's own punchy
+  // label since ADR 0178, which also moved its button onto
+  // Generate's accent treatment; the real app's "Research app for
+  // video" label and button are untouched. ADR 0172 removed
   // the typed field; Kasra saw that page live, ruled it empty, and
   // ordered the typing restored (ADR 0175) — his "above the phone"
   // removal order had targeted the floating drop-in label, and the
@@ -9893,15 +9898,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // the steps and the button (ADR 0176 — Kasra, from his screenshot
   // of page two: "make this last step. Don't show anything after
   // this."): the stage keeps its composed-frame craft (ADR 0175) —
-  // the presenter is the stage's subject, the hook its caption
-  // block, the play badge seated on the presenter — and nothing
-  // follows it; the full-screen video stage and its end card are
-  // gone everywhere. The profile
+  // the presenter is the stage's only subject, the play badge
+  // seated on the presenter — and nothing follows it; the
+  // full-screen video stage and its end card are gone everywhere.
+  // The profile
   // card the cb1ed13 cut carried (its "Store page / Screenshots /
   // Facts" rows) stays gone everywhere, and the whole retired demo
-  // stage stays gone. The hook words are the app-maker framing
-  // Kasra picked; the journaling-flavored alternative he rejected
-  // stays out.
+  // stage stays gone. The video carries no words at all (ADR 0178):
+  // the hook lines and the closing line Kasra once picked are
+  // deleted completely — he saw the slot live and ruled them not
+  // relevant — and the slot is presenter-only.
   await check("the hero story shows the process: research, steps, generate, video", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -9968,12 +9974,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (page1.textContent.includes("Generate the video")) {
       throw new Error("page one offers Generate the video — it belongs on page two only");
     }
-    // Page 1's click: Research app for video, the app's exact
-    // label for getting the profile info, visibly clicked.
+    // Page 1's click: "Research my app", the mockup's own punchy
+    // label since ADR 0178 — short, strong, same meaning as the
+    // real button's words, but the mockup no longer borrows them:
+    // the real app's "Research app for video" (BrandSetup) is
+    // untouched, and the figure's aria-label names the mockup's
+    // label too. Visibly clicked.
     const research = page1.querySelector(".hero-story-research");
     if (!research) throw new Error("page one never offers the research click");
-    if (!research.textContent.includes("Research app for video")) {
-      throw new Error("the research control does not carry the app's exact label");
+    if (!research.textContent.includes("Research my app")) {
+      throw new Error("the research control does not carry the mockup's 'Research my app' label");
+    }
+    if (research.textContent.includes("Research app for video")) {
+      throw new Error("the mockup's research control still borrows the real app's label — ADR 0178 gave it its own");
+    }
+    if (!(story.getAttribute("aria-label") || "").includes("Research my app")) {
+      throw new Error("the figure's label does not name the mockup's research label");
     }
     if (!research.querySelector(".hero-story-research-ripple")) {
       throw new Error("the research click has no tap ripple — it must read as a click");
@@ -10022,9 +10038,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // nothing follows it. The full-screen third stage and its
     // end card are gone everywhere: no .hero-story-video wrapper
     // rendering, no end-card stage after the video. The closing
-    // line itself returns only inside the stage, as the video's
-    // own end beat (ADR 0176 addendum, asserted with the stage
-    // below).
+    // beat ADR 0176's addendum folded into the stage is gone too
+    // (ADR 0178): no closing layer, no line, no Get the app
+    // anywhere in the mockup — asserted with the stage below.
     if (story.querySelector(".hero-story-video")) {
       throw new Error("the retired full-screen video stage still renders");
     }
@@ -10053,20 +10069,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!stage.querySelector("svg.hero-story-presenter")) {
       throw new Error("the video carries no presenter illustration");
     }
-    const hookLines = [...stage.querySelectorAll(".hero-story-hook-line")].map((el) => el.textContent.trim());
-    if (JSON.stringify(hookLines) !== JSON.stringify(["A year building this app.", "Nobody knew why it mattered."])) {
-      throw new Error(`the video's hook carries no real hook words: ${JSON.stringify(hookLines)}`);
-    }
     if (!stage.querySelector(".hero-story-play")) throw new Error("the video carries no play badge");
     if (!stage.querySelector(".hero-story-progress")) throw new Error("the video carries no progress bar");
     // The video stage keeps its composed-frame craft (ADR 0175),
     // now seated in page two's center slot: one stage surface
-    // wraps the presenter and the hook caption block, the
-    // presenter is the frame's subject at subject size, and the
-    // play badge rides inside the stage, seated on the presenter.
-    if (!stage.querySelector(".hero-story-hook")) {
-      throw new Error("the hook caption block does not sit inside the video stage");
-    }
+    // wraps the presenter, the presenter is the frame's subject
+    // at subject size, and the play badge rides inside the stage,
+    // seated on the presenter.
     if (!stage.querySelector(".hero-story-play")) {
       throw new Error("the play badge does not ride on the video stage");
     }
@@ -10082,41 +10091,30 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!/width:\s*1[3-9]\dpx/.test(presenterRule)) {
       throw new Error("the presenter is still a corner glyph — it must be the stage's subject");
     }
-    // The video closes on its own end beat inside the stage
-    // (ADR 0176 addendum): as the run completes, "Your app.
-    // Your story." resolves within the stage as a closing layer
-    // over the presenter scene — the video's own end card, not a
-    // stage after the video. The line stands only there, the
-    // layer is held back until the closing window of the clock,
-    // and its base state is resolved, so the resting page under
-    // reduced motion carries the finished video's close.
-    const closing = stage.querySelector(".hero-story-closing");
-    if (!closing) throw new Error("the video carries no closing beat inside its stage");
-    const closingLine = closing.querySelector(".hero-story-closing-line");
-    if (!closingLine || closingLine.textContent.trim() !== "Your app. Your story.") {
-      throw new Error("the closing beat does not carry the line 'Your app. Your story.'");
+    // The slot is presenter-only (ADR 0178): Kasra saw the video
+    // live and ruled its words not relevant — the hook lines, the
+    // closing line and its Get the app are deleted completely,
+    // not replaced. No hook block and no closing layer render, none
+    // of the three texts stands anywhere in the page source or the
+    // stylesheet, and none of their rules or tracks is left behind.
+    // The video completes its progress and holds on the presenter
+    // frame; nothing resolves at the end.
+    if (stage.querySelector(".hero-story-hook") || story.querySelector(".hero-story-hook")) {
+      throw new Error("the retired hook caption block still renders in the video stage");
     }
-    if (story.querySelectorAll(".hero-story-closing").length !== 1) {
-      throw new Error("the closing beat renders more than once in the story");
+    if (stage.querySelector(".hero-story-closing") || story.querySelector(".hero-story-closing")) {
+      throw new Error("the retired closing beat still renders in the video stage");
     }
-    const closingCta = closing.querySelector(".hero-story-closing-cta");
-    if (!closingCta || closingCta.textContent.trim() !== "Get the app") {
-      throw new Error("the closing beat carries no 'Get the app' of its own");
+    for (const gone of ["A year building this app.", "Nobody knew why it mattered.", "Your app. Your story.", "Get the app"]) {
+      if (landingSrc.includes(gone) || css.includes(gone)) {
+        throw new Error(`the retired video text "${gone}" is still in the page or the stylesheet`);
+      }
     }
-    const closingBlock = (css.match(/@keyframes hs-closing\s*\{([\s\S]*?)\n\}/) || [])[1] || "";
-    const closingHiddenUntil = Number((closingBlock.match(/0%,\s*(\d+(?:\.\d+)?)%\s*\{\s*opacity:\s*0/) || [])[1]);
-    const closingResolvedAt = Number((closingBlock.match(/(\d+(?:\.\d+)?)%,\s*100%\s*\{\s*opacity:\s*1/) || [])[1]);
-    if (!Number.isFinite(closingHiddenUntil) || closingHiddenUntil < 85) {
-      throw new Error("the closing line is not held back for the video's closing window");
+    if (landingSrc.includes("hero-story-hook") || landingSrc.includes("hero-story-closing") || css.includes(".hero-story-hook") || css.includes(".hero-story-closing")) {
+      throw new Error("the retired hook or closing pieces are still built or styled somewhere");
     }
-    if (!Number.isFinite(closingResolvedAt) || closingResolvedAt < 90 || closingResolvedAt > 98) {
-      throw new Error("the closing line does not resolve as the video's run completes");
-    }
-    const closingRuleStart = css.indexOf(".hero-story-closing {");
-    if (closingRuleStart === -1) throw new Error("index.css carries no .hero-story-closing rule");
-    const closingRule = css.slice(closingRuleStart, css.indexOf("}", closingRuleStart));
-    if (!closingRule.includes("position: absolute") || !closingRule.includes("opacity: 1")) {
-      throw new Error("the closing layer is not the stage's resolved resting layer — reduced motion must rest on the video's close");
+    if (css.includes("@keyframes hs-hook-long") || css.includes("@keyframes hs-hook-short") || css.includes("@keyframes hs-closing")) {
+      throw new Error("the retired hook or closing tracks are still in index.css");
     }
     // She is a person in a scene, not a line glyph (ADR 0175): a
     // filled, shaded figure — face, hair, top, the phone she
@@ -10153,20 +10151,20 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // The phone's UI mirrors the app's real UI (Kasra's order, Nov 16
-  // 2026, ADR 0173): the mockup is a scale model of the studio, not
-  // an invention — its controls wear the treatments the app itself
-  // ships. Research wears BrandSetup's secondary Button (Sparkles
-  // icon, slate surface, hairline border, rounded-xl), Generate
-  // wears the render panel's accent Button (Play icon — Play is
-  // Generate's signature, ADR 0144 — over the bevel-accent vertical
-  // gradient with its white/15 border and top rim), and a done step
-  // wears the wizard rail's filled indigo badge with a white check.
-  // (The end card's CTA wore the small accent treatment too until
-  // ADR 0176 retired the end card; ADR 0176's addendum returns the
-  // closing line inside the video's stage, and its Get the app
-  // wears the same treatment — pinned below.) This
-  // check pins the shared tokens so the mockup cannot quietly drift
-  // back to pills and horizontal gradients.
+  // 2026, ADR 0173) — with one deliberate departure (ADR 0178). The
+  // mockup is a scale model of the studio, not an invention:
+  // Generate wears the render panel's accent Button (Play icon —
+  // Play is Generate's signature, ADR 0144 — over the bevel-accent
+  // vertical gradient with its white/15 border and top rim), and a
+  // done step wears the wizard rail's filled indigo badge with a
+  // white check. Research no longer mirrors BrandSetup's secondary
+  // Button: Kasra saw it live, ruled the light surface wrong, and
+  // ordered the mockup's Research onto Generate's accent treatment
+  // itself — the two animation buttons unified — under its own
+  // punchy label, "Research my app"; its Sparkles icon stays (Play
+  // belongs to Generate). The real app's button and label are
+  // untouched. This check pins the shared tokens so neither control
+  // can quietly drift back to pills and horizontal gradients.
   await check("the hero mockup mirrors the app's real controls", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const shot = ctx.container.querySelector('[data-testid="landing-hero-shot"]');
@@ -10204,28 +10202,37 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!generateRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)")) {
       throw new Error("the mockup's generate control lacks the bevel's top rim");
     }
+    // Research wears Generate's accent treatment (ADR 0178): the
+    // same bevel-accent vertical gradient, white/15 border, top
+    // rim over the indigo glow, rounded-xl and white text — the
+    // two animation buttons unified. The secondary surface it
+    // mirrored under ADR 0173 is retired for this one control.
     const researchRule = rule(".hero-story-research");
-    if (!researchRule.includes("hsl(var(--secondary) / 0.7)")) {
-      throw new Error("the mockup's research control does not wear the secondary button's slate surface");
+    if (!researchRule.includes("linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%)")) {
+      throw new Error("the mockup's research control does not wear the accent bevel's vertical gradient (ADR 0178)");
     }
-    if (!researchRule.includes("border-radius: 12px") || researchRule.includes("999px")) {
-      throw new Error("the mockup's research control is not the real button's rounded-xl shape");
+    if (!researchRule.includes("rgba(255, 255, 255, 0.15)") || !researchRule.includes("color: #fff")) {
+      throw new Error("the mockup's research control is not the accent button's white text on its white/15 border");
+    }
+    if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)") || !researchRule.includes("var(--glow-indigo)")) {
+      throw new Error("the mockup's research control lacks the bevel's top rim over the indigo glow");
+    }
+    if (!researchRule.includes("border-radius: 12px") || researchRule.includes("999px") || researchRule.includes("90deg")) {
+      throw new Error("the mockup's research control is not the accent button's rounded-xl shape");
+    }
+    if (researchRule.includes("hsl(var(--secondary)")) {
+      throw new Error("the mockup's research control still wears the secondary surface ADR 0178 retired");
+    }
+    if (!research.textContent.includes("Research my app")) {
+      throw new Error("the mockup's research control does not carry its 'Research my app' label");
     }
     const badgeRule = rule(".hero-story-step-badge");
     if (!badgeRule.includes("background: var(--brand-indigo)") || !badgeRule.includes("color: #fff")) {
       throw new Error("the step badge is not the rail's filled indigo badge with a white check");
     }
-    // The closing beat's Get the app (ADR 0176 addendum) wears
-    // the small accent Button's treatment, exactly as the
-    // retired end card's CTA did: the bevel's vertical gradient,
-    // its white/15 border and top rim at rounded-lg.
-    const closingCtaRule = rule(".hero-story-closing-cta");
-    if (!closingCtaRule.includes("linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%)")) {
-      throw new Error("the closing beat's Get the app does not wear the bevel-accent vertical gradient");
-    }
-    if (!closingCtaRule.includes("border-radius: 8px") || !closingCtaRule.includes("rgba(255, 255, 255, 0.15)") || !closingCtaRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)")) {
-      throw new Error("the closing beat's Get the app is not the small accent button's shape, border and rim");
-    }
+    // The closing beat's Get the app is gone with the closing
+    // beat itself (ADR 0178): its absence — element, rule and
+    // text — is pinned in the process check above.
   });
 
   await check("the hero story rests on the assembled steps page under reduced motion", async (ctx) => {
@@ -10244,11 +10251,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!shot) throw new Error("no hero frame rendered");
       const story = shot.querySelector(".hero-story");
       if (!story) throw new Error("the hero does not render the story animation");
-      for (const stage of [".hero-story-field", ".hero-story-research", ".hero-story-steps", ".hero-story-stage", ".hero-story-play", ".hero-story-progress", ".hero-story-closing", ".hero-story-generate"]) {
+      for (const stage of [".hero-story-field", ".hero-story-research", ".hero-story-steps", ".hero-story-stage", ".hero-story-play", ".hero-story-progress", ".hero-story-generate"]) {
         if (!story.querySelector(stage)) throw new Error(`reduced motion lost the assembled page's ${stage} stage`);
       }
       if (story.querySelector(".hero-story-video") || story.querySelector(".hero-story-endcard")) {
         throw new Error("reduced motion still carries a stage after the video");
+      }
+      if (story.querySelector(".hero-story-hook") || story.querySelector(".hero-story-closing")) {
+        throw new Error("reduced motion still carries the video's retired words (ADR 0178)");
       }
       if (shot.querySelector('[data-testid="hero-flow-toggle"]')) {
         throw new Error("reduced motion still offers a play control for a loop that never plays");
@@ -10296,7 +10306,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (css.includes(".hero-flow")) {
       throw new Error("the dead .hero-flow rules are still in index.css");
     }
-    for (const kf of ["hs-page1", "hs-page2", "hs-field", "hs-typing", "hs-caret", "hs-research", "hs-research-ripple", "hs-steps", "hs-step-1", "hs-step-2", "hs-step-3", "hs-step-4", "hs-check-1", "hs-check-2", "hs-check-3", "hs-check-4", "hs-generate", "hs-ripple", "hs-stage", "hs-hook-long", "hs-hook-short", "hs-presenter", "hs-play", "hs-progress", "hs-closing"]) {
+    for (const kf of ["hs-page1", "hs-page2", "hs-field", "hs-typing", "hs-caret", "hs-research", "hs-research-ripple", "hs-steps", "hs-step-1", "hs-step-2", "hs-step-3", "hs-step-4", "hs-check-1", "hs-check-2", "hs-check-3", "hs-check-4", "hs-generate", "hs-ripple", "hs-stage", "hs-presenter", "hs-play", "hs-progress"]) {
       if (!css.includes(`@keyframes ${kf}`)) {
         throw new Error(`the story is missing its ${kf} keyframes`);
       }
@@ -10304,9 +10314,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         throw new Error(`the ${kf} stage is not on the story's one 13s clock`);
       }
     }
-    // The retired third stage's tracks are gone (ADR 0176): the
-    // video lives on page two now, so nothing animates after it.
-    for (const retired of ["hs-video", "hs-endcard"]) {
+    // The retired tracks are gone: the third stage's (ADR 0176 —
+    // the video lives on page two now, so nothing animates after
+    // it) and the video's own word tracks (ADR 0178 — the hook
+    // reveals and the closing beat; the slot is presenter-only
+    // now, so no track animates words inside the video).
+    for (const retired of ["hs-video", "hs-endcard", "hs-hook-long", "hs-hook-short", "hs-closing"]) {
       if (css.includes(`@keyframes ${retired}`)) {
         throw new Error(`the retired ${retired} track is still in index.css — nothing follows the video on page two`);
       }

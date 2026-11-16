@@ -170,47 +170,48 @@ const FLOW_STEPS = [
  * The hero story: the process in one continuous motion (ADR 0165,
  * restructured by ADR 0168, refined by ADR 0172, the typing
  * restored and the finish polished by ADR 0175; the video moved
- * onto the steps page by ADR 0176). Inside a phone frame the
- * mockup illustrates what a visitor does across two pages in the
- * phone. Page one types the store link into a field lit with the
- * app's focus treatment, character by character behind a blinking
- * caret, while "Research app for video" rests dimmed below; once
- * the typing completes the button wakes and is clicked, to get
- * the profile info. Page two: the app's video creation steps —
- * App Profile, Audience & template, Review & submit, Demo + CTA,
- * their exact names in CreateVideo — check off in turn, each
- * check drawing itself in, and "Generate the video" appears only
- * there and is clicked there. The pages slide between beats on
- * the same clock. Then the finished video is generated in page
- * two's own center, in the empty space between the steps and the
- * button: inside its stage the presenter — a filled figure in a
- * small scene, the phone she holds in hand — is the frame's
- * subject, the hook words her caption block, the play badge
- * seated on her, the progress bar filling across the stage's
- * run. As the run completes the video closes on its own end
- * beat inside the stage — "Your app. Your story." resolving
- * over the scene, the way a real video ends (ADR 0176
- * addendum). Nothing follows the video: page two is the last
- * page, the loop holds on the assembled page — steps checked,
- * video composed in its slot, the button in place — and
- * restarts. It is pure
- * CSS on one 13s clock (the hs-* keyframes in index.css), so
- * there is no JS timer and no control of any kind. The base
- * styles are that assembled page two: under reduced motion no
- * stage animation is applied and the page simply stands. The
- * five steps themselves still run, in full, in the How it works
- * section below. The phone's controls mirror the app's real UI
- * (ADR 0173): Research wears BrandSetup's secondary button,
- * Generate wears the render panel's accent button, and a done
- * step wears the wizard rail's filled check badge — when the
- * real treatments change, this mockup follows.
+ * onto the steps page by ADR 0176; the video's words removed and
+ * page one's button unified by ADR 0178). Inside a phone frame
+ * the mockup illustrates what a visitor does across two pages in
+ * the phone. Page one types the store link into a field lit with
+ * the app's focus treatment, character by character behind a
+ * blinking caret, while "Research my app" rests dimmed below;
+ * once the typing completes the button wakes and is clicked, to
+ * get the profile info. Page two: the app's video creation
+ * steps — App Profile, Audience & template, Review & submit,
+ * Demo + CTA, their exact names in CreateVideo — check off in
+ * turn, each check drawing itself in, and "Generate the video"
+ * appears only there and is clicked there. The pages slide
+ * between beats on the same clock. Then the finished video is
+ * generated in page two's own center, in the empty space between
+ * the steps and the button: inside its stage the presenter — a
+ * filled figure in a small scene, the phone she holds in hand —
+ * is the frame's only subject, the play badge seated on her, the
+ * progress bar filling across the stage's run; the video carries
+ * no words at all (ADR 0178 removed its hook lines and its
+ * closing line as not relevant). Nothing follows the video:
+ * page two is the last page, the loop holds on the assembled
+ * page — steps checked, video composed in its slot, the button
+ * in place — and restarts. It is pure CSS on one 13s clock (the
+ * hs-* keyframes in index.css), so there is no JS timer and no
+ * control of any kind. The base styles are that assembled page
+ * two: under reduced motion no stage animation is applied and
+ * the page simply stands. The five steps themselves still run,
+ * in full, in the How it works section below. The phone's
+ * controls mostly mirror the app's real UI (ADR 0173): Generate
+ * wears the render panel's accent button, and a done step wears
+ * the wizard rail's filled check badge. Research is the one
+ * deliberate departure (ADR 0178): the mockup's button wears
+ * Generate's accent treatment under its own shorter label,
+ * because the mirrored secondary surface read wrong live; the
+ * real app's button and label are untouched.
  */
 function HeroStory() {
   return (
     <div
       className="hero-story"
       role="img"
-      aria-label="How it works in one motion: type your store link, click Research app for video to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video appears right there on the steps page, plays, and closes on Your app. Your story."
+      aria-label="How it works in one motion: type your store link, click Research my app to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video appears right there on the steps page and plays."
     >
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
@@ -224,7 +225,7 @@ function HeroStory() {
             </div>
             <div className="hero-story-research">
               <Sparkles className="h-4 w-4" />
-              <span>Research app for video</span>
+              <span>Research my app</span>
               <span className="hero-story-research-ripple" />
             </div>
           </div>
@@ -249,10 +250,6 @@ function HeroStory() {
             </div>
             <div className="hero-story-stage">
               <div className="hero-story-progress"><span /></div>
-              <div className="hero-story-hook">
-                <span className="hero-story-hook-line is-long">A year building this app.</span>
-                <span className="hero-story-hook-line is-short">Nobody knew why it mattered.</span>
-              </div>
               <svg
                 className="hero-story-presenter"
                 viewBox="0 0 200 160"
@@ -284,10 +281,6 @@ function HeroStory() {
               </svg>
               <div className="hero-story-play">
                 <Play className="h-[18px] w-[18px]" fill="currentColor" />
-              </div>
-              <div className="hero-story-closing">
-                <span className="hero-story-closing-line">Your app. Your story.</span>
-                <span className="hero-story-closing-cta">Get the app</span>
               </div>
             </div>
             <div className="hero-story-generate">
