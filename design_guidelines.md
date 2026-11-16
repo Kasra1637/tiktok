@@ -167,9 +167,11 @@ is for the acting button on a screen and active states **only**; `--glow-coral`
 is left with the brand tokens and no button surface uses it (ADR 0010). The
 ready Generate's invitation is its own treatment on top of that rule:
 `.generate-invite`, a soft breathing indigo glow worn by the render panel's
-Generate and — on the Render & result half only — the wizard bar's, exactly
-while the click will work; `prefers-reduced-motion` turns it off (ADRs
-0144/0147).
+Generate and — on the Render & result half only — the wizard bar's
+Generate-faced button: on the panel it marks the one click that renders,
+on the bar the way to it, the bar's click being a scroll since ADR 0169;
+`prefers-reduced-motion` turns it off (ADRs
+0144/0147/0169).
 
 Radii: cards `rounded-2xl` (16px), asides and rows `rounded-xl` (12px), pills
 `rounded-full`. **`.surface` owns its own radius and padding** — do not re-type

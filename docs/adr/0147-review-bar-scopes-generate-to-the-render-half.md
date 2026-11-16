@@ -4,6 +4,12 @@ Status: accepted
 
 Refines ADR 0144.
 
+Superseded in part by ADR 0169: the ready-state bar action on the
+render half no longer runs the render — the bar keeps Generate's
+face, but its click only scrolls to the render section, and the
+panel's own button is the only one that submits. The scoping, the
+flight presentation and the arrow rule recorded here stand.
+
 ## Context
 
 Two sticky-bar defects Kasra named on Nov 14 2026, the second from his

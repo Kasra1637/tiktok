@@ -637,14 +637,16 @@ export default function CreateVideo() {
     setStrategyBarAction(action);
   }, []);
   // The render panel's bar registrations, while Review is the step in
-  // view (ADR 0144, scoped by ADR 0147): in the ready state the panel
-  // registers its own Generate — same words, play icon and invitation —
-  // whose click runs the render in the panel; during a render it
-  // registers its busy presentation instead, marked `flight`, so the
-  // bar narrates the wait. The panel owns the handler, the model and
-  // the resolution; the bar only renders what it is given, and decides
-  // by the half in view and the render's state which registration — if
-  // any — it carries, exactly like the strategy action above.
+  // view (ADR 0144, scoped by ADR 0147, the ready click re-scoped by
+  // ADR 0169): in the ready state the panel registers its own Generate
+  // — same words, play icon and invitation — and the bar wears that
+  // face while its click only scrolls to the panel (ADR 0169); during
+  // a render the panel registers its busy presentation instead,
+  // marked `flight`, so the bar narrates the wait. The panel owns the
+  // handler, the model and the resolution; the bar only renders what
+  // it is given, and decides by the half in view and the render's
+  // state which registration — if any — it carries, exactly like the
+  // strategy action above.
   const [renderBarAction, setRenderBarAction] = useState(null);
   const registerRenderBarAction = useCallback((action) => {
     setRenderBarAction(action);
@@ -1919,10 +1921,15 @@ export default function CreateVideo() {
         // for a founder who wants another render.
         barAction = null;
       } else if (renderBarAction && effectiveReviewTab === "render") {
-        // Ready on the render half (ADR 0144): the bar carries the
-        // render itself — the panel's registered Generate, same words,
-        // play icon and invitation as the panel's own button.
-        barAction = renderBarAction;
+        // Ready on the render half (ADR 0169, reversing 0144/0147):
+        // the bar wears the registered Generate's face — same words,
+        // play icon and invitation — but its click is navigation
+        // only: it scrolls to the render section, where the model
+        // and the resolution stand beside the one button that
+        // submits. A render never fires from the bar; the panel's
+        // registered handler stays the panel's alone (ADR 0122,
+        // strengthened).
+        barAction = { ...renderBarAction, onClick: () => scrollToSubmit() };
       } else {
         // Ready on the plan half — and the fallback for a render half
         // whose panel cannot register (its gates refuse the render):
@@ -3681,13 +3688,15 @@ export default function CreateVideo() {
               proceed as-is there is no bar action, and the arrow below is
               the way forward. A ready review's bar action is scoped by
               the half in view and the render's state (ADR 0147, refining
-              0144): on the render half it is the render itself — the
-              panel's registered Generate, wearing the same invitation as
-              the panel's button, its click running the render in the
-              panel; on the plan half it is the navigation-only shortcut;
-              during a flight it is the panel's busy presentation; and
-              once a render has finished it retires entirely, leaving
-              the arrow as the only way onward. */}
+              0144; the render-half click re-scoped by ADR 0169): on the
+              render half it wears the panel's registered Generate face —
+              the same words and invitation as the panel's button — while
+              its click only scrolls to the render section, the panel's
+              own button being the only one that submits; on the plan
+              half it is the navigation-only shortcut; during a flight
+              it is the panel's busy presentation; and once a render has
+              finished it retires entirely, leaving the arrow as the only
+              way onward. */}
           {barAction && (
             <Button
               variant="accent"

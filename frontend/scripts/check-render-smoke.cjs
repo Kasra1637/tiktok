@@ -2113,7 +2113,27 @@ async function main() {
       getGenerations: async () => ({ generations: [generating] }),
       pollGeneration: async () => generating,
     }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
-    expectText(ctx, "Stitching one clip", "the paid in-flight stages did not render");
+    // The stages name what the backend is actually doing (ADR 0170):
+    // a 'generating' row with no persist in flight is the provider
+    // rendering — the stage the old labels could never highlight, while
+    // "Stitching one clip" displayed for the whole wait.
+    expectText(ctx, "Rendering your hook + story", "the paid in-flight stages did not render");
+    expectText(ctx, "Sending your approved script", "the first stage did not render");
+    expectText(ctx, "Saving your finished video", "the third stage did not render");
+    expectAbsent(ctx, "Stitching one clip", "the retired stage label still renders");
+    expectAbsent(ctx, "Locking your approved script", "the retired stage label still renders");
+    expectAbsent(ctx, "Render in progress — paid render", "the retired progress header still renders");
+    const blockText = (ctx.container.querySelector('[data-testid="paid-render-progress"]')?.textContent || "");
+    // The current stage's name appears exactly once (ADR 0170): the
+    // checklist carries the stages; there is no headline stage line.
+    if (blockText.split("Rendering your hook + story").length - 1 !== 1) {
+      throw new Error("the current stage's name does not appear exactly once in the progress block");
+    }
+    const litRow = [...ctx.container.querySelectorAll('[data-testid="paid-render-progress"] li')]
+      .find((li) => li.className.includes("font-semibold"));
+    if (!litRow || !(litRow.textContent || "").includes("Rendering your hook + story")) {
+      throw new Error("the rendering stage is not the highlighted checklist row");
+    }
     const bar = ctx.container.querySelector('[data-testid="paid-render-progress"] [role="progressbar"]');
     if (!bar) throw new Error("the paid render progress bar did not render");
     // The wait is narrated in words plus elapsed time, never a percentage:
@@ -2132,6 +2152,47 @@ async function main() {
     }
     expectAbsent(ctx, "Hypothetical", "the removed mock preview still renders beside the paid render");
     expectAbsent(ctx, "Show hypothetical processing", "the mock preview trigger still renders");
+  });
+
+  await check("a submitted row highlights the sending stage", async (ctx) => {
+    // Stage 1 is the row's own 'submitted' state — our backend sending
+    // the approved script (ADR 0170). The stage's name appears exactly
+    // once: the checklist carries it, there is no headline stage line.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const submitted = { ...SEGMENT, id: "gen-stage-1", status: "submitted", playback_url: null, r2_url: null, video_url: null };
+    await withApi({
+      getGenerations: async () => ({ generations: [submitted] }),
+      pollGeneration: async () => submitted,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    const block = ctx.container.querySelector('[data-testid="paid-render-progress"]');
+    if (!block) throw new Error("the submitted progress block did not render");
+    const lit = [...block.querySelectorAll("li")].find((li) => li.className.includes("font-semibold"));
+    if (!lit || !(lit.textContent || "").includes("Sending your approved script")) {
+      throw new Error("a submitted row does not highlight the sending stage");
+    }
+    if ((block.textContent || "").split("Sending your approved script").length - 1 !== 1) {
+      throw new Error("the sending stage's name does not appear exactly once");
+    }
+  });
+
+  await check("a saving row highlights the saving stage", async (ctx) => {
+    // Stage 3 is 'generating' WITH the persist in flight (ADR 0170):
+    // the provider is done and the durable save is the phase running.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const saving = { ...SEGMENT, id: "gen-stage-3", status: "generating", persist_in_flight: true, playback_url: null, r2_url: null, video_url: null };
+    await withApi({
+      getGenerations: async () => ({ generations: [saving] }),
+      pollGeneration: async () => saving,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    const block = ctx.container.querySelector('[data-testid="paid-render-progress"]');
+    if (!block) throw new Error("the saving progress block did not render");
+    const lit = [...block.querySelectorAll("li")].find((li) => li.className.includes("font-semibold"));
+    if (!lit || !(lit.textContent || "").includes("Saving your finished video")) {
+      throw new Error("a generating row with a persist in flight does not highlight the saving stage");
+    }
+    if ((block.textContent || "").split("Saving your finished video").length - 1 !== 1) {
+      throw new Error("the saving stage's name does not appear exactly once");
+    }
   });
 
   await check("GenerationPanel blocks generation before the project is ready", async (ctx) => {
@@ -2368,17 +2429,26 @@ async function main() {
     if (!button.innerHTML.includes("lucide-play")) {
       throw new Error("the ready Generate button lost its Play icon");
     }
+    // The section's title is the founder's plain name for the job
+    // (Kasra, Nov 16 2026): "Generate your video" — the panel's job,
+    // not the clip format's name.
+    const title = [...ctx.container.querySelectorAll(".eyebrow")].find(
+      (el) => (el.textContent || "").trim() === "Generate your video"
+    );
+    if (!title) {
+      throw new Error("the render section is not titled 'Generate your video'");
+    }
     const action = seen.filter(Boolean).pop();
     if (!action) throw new Error("the ready panel registered no bar action");
     if (action.label !== "Generate the video" || action.icon !== "play" || action.invite !== true) {
       throw new Error(
-        `the bar action does not mirror the panel's Generate: ${JSON.stringify({ label: action.label, icon: action.icon, invite: action.invite })}`
+        `the registered action does not mirror the panel's Generate: ${JSON.stringify({ label: action.label, icon: action.icon, invite: action.invite })}`
       );
     }
     apiCalls.length = 0;
     await act(async () => { action.onClick(); });
     if (!apiCalls.includes("generateVideo")) {
-      throw new Error("the bar action did not run the panel's render");
+      throw new Error("the registered action did not run the panel's render");
     }
     const owedSeen = [];
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
@@ -2829,6 +2899,96 @@ async function main() {
         }
         expectAbsent(ctx, "throttled poll", "a rate-limited poll raised the banner");
         expectAbsent(ctx, "Could not check", "a rate-limited poll raised the banner");
+      }
+    );
+  });
+
+  await check("the panel never permanently stops watching a live render", async (ctx) => {
+    // ADR 0171: the old budgets retired the panel mid-render — 20
+    // consecutive rate-limited polls (~2 minutes of sustained 429s) or
+    // 5 consecutive failures stopped polling for good and left the
+    // founder on a frozen in-flight stage while the backend finished
+    // the render into History. The permanent-stop machinery is gone
+    // from the source: no caps, no timed-out flag, no terminal copy.
+    const src = fs.readFileSync(path.join(SRC, "components", "GenerationPanel.jsx"), "utf8");
+    for (const retired of ["MAX_POLL_429s", "MAX_POLL_FAILURES", "pollTimedOut", "will not loop forever"]) {
+      if (src.includes(retired)) {
+        throw new Error(`the panel still carries the permanent-stop machinery: ${retired}`);
+      }
+    }
+    // Behaviorally: six consecutive failed checks — past the old
+    // five-failure budget — do not retire the view. A stall notice
+    // appears while the checks are failing, the loop keeps firing,
+    // and the first success clears the notice and the counters.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    let polls = 0;
+    const generating = { ...SEGMENT, id: "gen-poll-stall", status: "generating" };
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [generating] }),
+        pollGeneration: async () => {
+          polls += 1;
+          if (polls <= 6) throw new Error("edge 502");
+          return generating;
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 25000));
+        });
+        if (!ctx.container.querySelector('[data-testid="render-poll-stalled"]')) {
+          throw new Error("a sustained run of failed checks raised no stall notice");
+        }
+        expectAbsent(ctx, "couldn't check the render status", "the retired terminal poll error still raises");
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 50000));
+        });
+        if (polls < 7) {
+          throw new Error(
+            `failed checks retired the panel: only ${polls} polls fired, the seventh never came`
+          );
+        }
+        if (ctx.container.querySelector('[data-testid="render-poll-stalled"]')) {
+          throw new Error("a successful check did not clear the stall notice");
+        }
+      }
+    );
+  });
+
+  await check("a throttled stretch restores the normal cadence on success", async (ctx) => {
+    // ADR 0171: 429s stretch the interval (6s → 12s → 18s …), and the
+    // first success resets the counters, so the next check lands one
+    // normal interval later — not one stretched interval later.
+    // Timeline: polls at ~6s and ~18s are throttled, the ~36s poll
+    // succeeds, and a fourth poll must fire by ~45s.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    let polls = 0;
+    const generating = { ...SEGMENT, id: "gen-poll-cadence", status: "generating" };
+    const throttled = () => {
+      const err = new Error("throttled poll");
+      err.response = { status: 429 };
+      return err;
+    };
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [generating] }),
+        pollGeneration: async () => {
+          polls += 1;
+          if (polls <= 2) throw throttled();
+          return generating;
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 45000));
+        });
+        if (polls < 4) {
+          throw new Error(
+            `the cadence did not restore after a success: only ${polls} polls in 45s`
+          );
+        }
       }
     );
   });
@@ -4384,7 +4544,7 @@ async function main() {
   // The bar must name only the real blocker. A ready review (plan, photo,
   // no edits) used to fall through to the blocked copy and ask for a save and
   // a photo that were already done.
-  await check("the ready review names no blocker and the bar offers the render itself only on the render half", async (ctx) => {
+  await check("the ready review names no blocker and the bar offers Generate's face only on the render half, its click only a scroll", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       // No finished render exists for this project, so the ready state
@@ -4441,9 +4601,11 @@ async function main() {
         if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
           throw new Error("the bar's shortcut did not bring the render half into view");
         }
-        // On the render half the bar carries the render itself (ADR
-        // 0144): the panel's own Generate, same words and invitation as
-        // the panel's button — and still no forward arrow beside it.
+        // On the render half the bar wears Generate's face (ADR 0169,
+        // reversing 0144/0147): the panel's own words and invitation —
+        // and still no forward arrow beside it. But the face is all it
+        // carries: its click is navigation, a scroll to the panel, and
+        // the panel's own button is the only one that submits.
         if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
           throw new Error("the navigation-only render shortcut survives on the render half");
         }
@@ -4464,12 +4626,21 @@ async function main() {
         }
         apiCalls.length = 0;
         await clickEl(ctx, go, "the bar's Generate the video");
-        if (!apiCalls.includes("generateVideo")) {
-          throw new Error("the bar's Generate did not run the render");
+        if (apiCalls.includes("generateVideo")) {
+          throw new Error("the bar's Generate submitted a render");
         }
         const renderTabAfter = ctx.container.querySelector('[data-testid="review-tab-render"]');
         if (!renderTabAfter || renderTabAfter.getAttribute("aria-selected") !== "true") {
-          throw new Error("the bar's Generate did not bring the render half into view");
+          throw new Error("the bar's Generate did not leave the render half in view");
+        }
+        // The panel's own Generate is the only button that submits
+        // (ADR 0169): the same click there runs the render.
+        const panelGo = ctx.container.querySelector('[data-testid="render-generate-button"]');
+        if (!panelGo) throw new Error("the render half lost the panel's own Generate");
+        apiCalls.length = 0;
+        await clickEl(ctx, panelGo, "the panel's Generate the video");
+        if (!apiCalls.includes("generateVideo")) {
+          throw new Error("the panel's Generate did not run the render");
         }
       });
     } finally {

@@ -101,6 +101,14 @@ def _persist_via_queue(*a, **k):
     return _cfg("_persist_via_queue")(*a, **k)
 
 
+def _persist_in_flight(*a, **k):
+    return _cfg("_persist_in_flight")(*a, **k)
+
+
+def _live_persist_generation_ids(*a, **k):
+    return _cfg("_live_persist_generation_ids")(*a, **k)
+
+
 def _apply_persist_outcome(*a, **k):
     return _cfg("_apply_persist_outcome")(*a, **k)
 
@@ -178,6 +186,12 @@ async def list_generations(
             ORDER BY created_at DESC LIMIT ?""",
         tuple(params) + (max(1, min(int(limit or 50), 200)),),
     )
+    # One set query marks every row whose durable save is live, so the
+    # panel's list read can show the saving stage without a query per
+    # row (ADR 0170).
+    live_persists = await _live_persist_generation_ids()
+    for r in rows:
+        r["persist_in_flight"] = r.get("id") in live_persists
     out = [_public_generation(r) for r in rows]
     await _with_verdicts(out, user_id)
     return {"generations": out}
@@ -333,6 +347,7 @@ async def poll_generation(
                 # save finishes; answer with the row's current state
                 # (still generating) and let the panel keep polling, the
                 # same contract as a throttled status check.
+                row["persist_in_flight"] = await _persist_in_flight(generation_id)
                 return await _with_verdicts(_public_generation_detail(row), user_id)
     elif status in ("failed", "error", "cancelled", "canceled", "expired"):
         # "expired" is terminal but arrived here as infinite "generating":
@@ -363,9 +378,14 @@ async def poll_generation(
             (now, generation_id),
         )
 
-    return await _with_verdicts(_public_generation_detail(
-        await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
-    ), user_id)
+    final_row = await _fetch_one(
+        "SELECT * FROM generations WHERE id = ?", (generation_id,)
+    )
+    if final_row is not None:
+        # The provider may still be rendering, or the detached save may
+        # now be the phase in flight; the jobs table knows (ADR 0170).
+        final_row["persist_in_flight"] = await _persist_in_flight(generation_id)
+    return await _with_verdicts(_public_generation_detail(final_row), user_id)
 
 
 @router.post("/generations/{generation_id}/storage/retry")

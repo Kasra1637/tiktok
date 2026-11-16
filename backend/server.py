@@ -1142,6 +1142,13 @@ def _public_generation(row: dict) -> dict:
     out["adjustments"] = out.get("adjustments") or []
     out["continuity"] = out.get("continuity") or {}
     out["retryable"] = bool(out.get("retryable"))
+    # True exactly while this row's durable save is recorded or claimed
+    # in the jobs table and the row has not completed (ADR 0170): the
+    # panel's third progress stage reads it, because the row's status
+    # stays 'generating' through both the provider render and the save.
+    # Callers that know the answer (poll, list) stamp the row first; a
+    # row carrying no stamp serializes as not saving.
+    out["persist_in_flight"] = bool(row.get("persist_in_flight"))
     out["approved"] = bool(out.get("approved"))
     out["segment_index"] = int(out.get("segment_index") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
@@ -2840,6 +2847,35 @@ _JOB_WORKER = f"proc-{os.getpid()}"
 # The bound exists for the step that hangs anyway.
 _PERSIST_HEARTBEAT_SECONDS = 60
 _PERSIST_EXECUTION_LIMIT_SECONDS = 1800
+
+
+async def _persist_in_flight(generation_id: str) -> bool:
+    """Is this generation's durable save recorded or claimed right now?
+
+    The jobs table is the only honest witness (ADR 0170): a persist job
+    is live while its status is pending or claimed — the same live set
+    the queue's dedupe reads — and it settles the moment the save lands,
+    which is also when the row completes.
+    """
+    job = await _fetch_one(
+        "SELECT id FROM jobs WHERE kind = ? AND dedupe_key = ? "
+        "AND status IN ('pending', 'claimed')",
+        (_PERSIST_JOB_KIND, f"persist:{generation_id}"),
+    )
+    return bool(job)
+
+
+async def _live_persist_generation_ids() -> set:
+    """Generation ids whose durable save is live right now (ADR 0170)."""
+    rows = await _fetch_all(
+        "SELECT dedupe_key FROM jobs WHERE kind = ? "
+        "AND status IN ('pending', 'claimed')",
+        (_PERSIST_JOB_KIND,),
+    )
+    return {
+        (r.get("dedupe_key") or "").removeprefix("persist:")
+        for r in rows
+    }
 
 
 async def _enqueue_persist_job(generation_id: str, user_id: str, video_url: str = "") -> str:

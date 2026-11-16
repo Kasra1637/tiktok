@@ -60,7 +60,8 @@ One render path, single-pass video generation via OpenRouter.
 - `frontend/src/components/GenerationPanel.jsx` — the render panel; errors via
   `lib/errorMessage.js`. It registers the wizard bar's render states with the
   page — the ready Generate, and the in-flight busy presentation while a
-  render runs (ADRs 0144/0147); the model, resolution and render handler live
+  render runs (ADRs 0144/0147; the bar wears the ready face but only
+  scrolls to this panel, ADR 0169); the model, resolution and render handler live
   here and nowhere else. Card padding/spacing tokens live in `index.css`.
 - `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
   pure function of video time (export matches preview), faces come from
@@ -192,13 +193,17 @@ One render path, single-pass video generation via OpenRouter.
   `generating`. The detached heartbeat extends the lease only inside the
   bound; it protects a slow save, it cannot keep a hung one alive.
 - The Review sticky bar follows the half in view and the render's state
-  (ADR 0147, refining 0144): in the ready state the bar carries the real
-  Generate only on the Render & result half — Read the plan gets the
-  navigation-only "Go to render" shortcut, which switches the half and
-  submits nothing (ADR 0122). During a render the bar carries the panel's
-  busy presentation instead — no Generate, no shortcut. The round forward
-  arrow renders on Review only once a finished render exists and none is
-  in flight; then it is the bar's only way forward.
+  (ADR 0147, refining 0144; the ready click re-scoped by ADR 0169): in
+  the ready state the bar wears Generate's face — the panel's words,
+  Play icon and invitation — only on the Render & result half, but its
+  click only scrolls to the render section; the panel's own Generate,
+  beside the model and resolution, is the only button that submits.
+  Read the plan gets the navigation-only "Go to render" shortcut,
+  which switches the half and submits nothing (ADR 0122). During a
+  render the bar carries the panel's busy presentation instead — no
+  Generate, no shortcut. The round forward arrow renders on Review
+  only once a finished render exists and none is in flight; then it is
+  the bar's only way forward.
 - The craft scorer (`backend/creative_quality.py`) rewards first person and
   penalizes only diary framing; the story arc ends open, the demo completes
   it, and the cover text is scored with the hook (ADR 0145). Generation
@@ -217,7 +222,13 @@ One render path, single-pass video generation via OpenRouter.
   and the Analytics skeleton fades into the content it gives way to,
   ADR 0166),
   and the wizard is paged at desktop widths, stacked below. Render progress is narrated in
-  words with an elapsed clock — never a staged percentage (ADR 0140).
+  words with an elapsed clock — never a staged percentage (ADR 0140) —
+  and its three stages name the real backend phase (ADR 0170):
+  'submitted' is "Sending your approved script", 'generating' is
+  "Rendering your hook + story", and 'generating' with the row's
+  persist_in_flight flag set is "Saving your finished video"; the
+  checklist alone carries them (no header line, no headline stage
+  line, the timer beside the bar).
 - Feedback learning is one verdict on the whole video (ADR 0124): a single
   thumbs up or down per finished video on its History card, with the whole
   bundle (spoken words, post kit, opening visual, audio identity) frozen
@@ -248,7 +259,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and sixty-eight decisions (0001–0168) now
+Read `docs/adr/README.md` first. One hundred and seventy-one decisions (0001–0171) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

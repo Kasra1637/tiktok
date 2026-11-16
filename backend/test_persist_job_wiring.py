@@ -223,3 +223,94 @@ class TestSweepDrainsStrandedPersistJobs:
             assert job["attempts"] == 2  # the dead worker's claim + the drain's
 
         _run(main())
+
+
+class TestPollReportsPersistInFlight:
+    """The panel's third stage is the durable save (ADR 0170).
+
+    'generating' covers two real phases — the provider rendering and,
+    after it finishes, our save. The only honest signal for the save is
+    the persist job itself, so the poll and list payloads carry
+    persist_in_flight, true exactly while a persist job for the row is
+    recorded or claimed and the row has not completed.
+    """
+
+    def test_poll_without_a_persist_job_reports_not_saving(self, api, monkeypatch):
+        async def main():
+            await _insert_generation(api, "gen-signal-1")
+
+            async def fake_poll(job_id):
+                return {"status": "in_progress"}
+
+            monkeypatch.setattr("server.poll_video_job", fake_poll)
+
+            out = await api.poll_generation("gen-signal-1", user_id=ANON)
+            assert out["status"] == "generating"
+            assert out["persist_in_flight"] is False
+
+        _run(main())
+
+    def test_poll_and_list_report_saving_while_the_persist_runs(self, api, monkeypatch):
+        async def main():
+            await _insert_generation(api, "gen-signal-2")
+
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def slow_persist(row, user_id, video_url=""):
+                started.set()
+                await release.wait()
+                return ("https://storage.example/gen-signal-2.mp4", None, 10)
+
+            async def fake_poll(job_id):
+                return {"status": "completed",
+                        "unsigned_urls": ["https://provider.example/v.mp4"]}
+
+            monkeypatch.setattr("server._persist_generation_clip", slow_persist)
+            monkeypatch.setattr("server.poll_video_job", fake_poll)
+
+            async def no_kit(background_tasks, generation_id, user_id):
+                return None
+
+            monkeypatch.setattr("server._schedule_post_kit", no_kit)
+
+            from starlette.background import BackgroundTasks
+
+            tasks = BackgroundTasks()
+            out = await asyncio.wait_for(
+                api.poll_generation(
+                    "gen-signal-2", user_id=ANON, background_tasks=tasks
+                ),
+                timeout=5,
+            )
+            assert out["status"] == "generating"
+
+            running = asyncio.create_task(tasks())
+            await asyncio.wait_for(started.wait(), timeout=5)
+
+            # The provider is done; the save is the phase in flight, and
+            # both payloads the panel reads must say so.
+            out = await asyncio.wait_for(
+                api.poll_generation("gen-signal-2", user_id=ANON), timeout=5
+            )
+            assert out["status"] == "generating"
+            assert out["persist_in_flight"] is True
+
+            listed = await api.list_generations(
+                studio_project_id="", user_id=ANON
+            )
+            row = next(
+                g for g in listed["generations"] if g["id"] == "gen-signal-2"
+            )
+            assert row["persist_in_flight"] is True
+
+            release.set()
+            await asyncio.wait_for(running, timeout=5)
+            row = await _wait_for_row_status(api, "gen-signal-2", "completed")
+            assert row["status"] == "completed"
+
+            out = await api.poll_generation("gen-signal-2", user_id=ANON)
+            assert out["status"] == "completed"
+            assert out["persist_in_flight"] is False
+
+        _run(main())
