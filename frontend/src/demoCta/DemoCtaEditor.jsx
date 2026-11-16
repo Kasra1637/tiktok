@@ -2816,12 +2816,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           </div>
         )}
 
-        {/* A single quiet line of transport shortcuts, under the row. Text
-            only — nothing here is a control, and the row above stays buttons. */}
-        <p className="text-xs text-muted-foreground">
-          Space play · −/→ 0.1s · Shift 1s · I / O set trim · L loop
-        </p>
-
         {/* Export moved into the player row. What is left here is the progress
             and status that outlive the click — the button itself is gone, so
             this block is empty unless a recording is running or a save is in
