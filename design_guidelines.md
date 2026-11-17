@@ -161,6 +161,14 @@ script lines — no 9:16 frame, no box, no in-place editing. A regenerated
 cover arrives as a plain-text suggestion the founder accepts or dismisses;
 the words shown are the words that ship (ADR 0145).
 
+**Review's spoken lines wear the cover frame.** The hook and script fields
+stand inside `.post-kit-cover` worn as `.spoken-line-frame` (ADR 0186) —
+the same sunken, quoted box the History cover line sits in — with the
+fields' own chrome stripped and their focus aura on the frame, so the
+spoken words read as finished lines. The fields, their ids, their live
+counts and their typing are untouched; only Review's cover text stands
+plain, per the rule above.
+
 Elevation ramp: `--shadow-xs` → `--shadow-sm` → `--shadow-md` → `--shadow-lg` →
 `--shadow-xl` (layered, not a single flat blur). The indigo glow (`--glow-indigo`)
 is for the acting button on a screen and active states **only**; `--glow-coral`

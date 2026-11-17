@@ -242,7 +242,11 @@ One render path, single-pass video generation via OpenRouter.
   plan drafts `cover_text` to the shared cover best-practice rules; Review
   shows it as plain text and regenerates it only as a suggestion the founder
   accepts — never auto-saved, never hand-edited in place — and the post kit
-  ships the accepted cover verbatim.
+  ships the accepted cover verbatim. The hook and script fields beside it
+  stand in the cover frame (ADR 0186): the History cover box
+  (`.post-kit-cover`, worn as `.spoken-line-frame`) wrapped around the
+  unchanged fields, so the spoken words read as finished lines; History's
+  own hook and Plan context stay plain text, wearing no frame.
 - Settled layout decisions are not open questions (ADR 0141): Review stays
   one column at every width, Analytics stays a calm ledger (its Clip
   results and Renders cards stand at one height, its results table fits
@@ -290,7 +294,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and eighty-five decisions (0001–0185) now
+Read `docs/adr/README.md` first. One hundred and eighty-six decisions (0001–0186) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

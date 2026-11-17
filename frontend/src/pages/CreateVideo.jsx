@@ -2848,12 +2848,19 @@ export default function CreateVideo() {
             <div className="space-y-4">
               <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
               <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
-              <Textarea
-                id="review-script"
-                value={editValue("script", "")}
-                onChange={(e) => dispatchDraft({ type: "edit-field", field: "script", value: e.target.value })}
-                className="min-h-[160px]"
-              />
+              {/* The script stands in the cover frame too (ADR 0186), the
+                  hook's treatment: the same textarea inside, still growing
+                  with its words, still counted live below. */}
+              <div className="post-kit-cover spoken-line-frame">
+                <span aria-hidden="true">&ldquo;</span>
+                <Textarea
+                  id="review-script"
+                  value={editValue("script", "")}
+                  onChange={(e) => dispatchDraft({ type: "edit-field", field: "script", value: e.target.value })}
+                  className="min-h-[160px]"
+                />
+                <span aria-hidden="true" className="spoken-line-quote-end">&rdquo;</span>
+              </div>
               <p className="text-sm text-muted-foreground" data-testid="script-live-count">
                 {spokenCountNote(editValue("script", ""), project?.spoken_check?.script)}
               </p>

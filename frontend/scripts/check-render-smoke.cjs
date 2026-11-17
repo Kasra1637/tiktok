@@ -5949,6 +5949,45 @@ async function main() {
     );
   });
 
+  // The spoken lines wear the cover frame (ADR 0186): the same sunken,
+  // quoted box the History cover line sits in (.post-kit-cover), wrapped
+  // around the hook and script fields, so the words read as the finished
+  // line instead of a form to fill. The fields themselves are untouched —
+  // same elements, same ids — and Review's own cover text stays OUT of
+  // the frame: it stands as plain text by the founder's standing rule
+  // (ADR 0145), so the frame's presence here must not leak onto it.
+  await check("Review spoken lines stand in the cover frame", async (ctx) => {
+    await withApi(
+      { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }) },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          const hookField = ctx.container.querySelector("#review-hook_line");
+          const scriptField = ctx.container.querySelector("#review-script");
+          if (!hookField || !scriptField) throw new Error("a spoken line field is missing");
+          const hookFrame = hookField.closest(".post-kit-cover");
+          const scriptFrame = scriptField.closest(".post-kit-cover");
+          if (!hookFrame) throw new Error("the hook line does not stand in the cover frame");
+          if (!scriptFrame) throw new Error("the script does not stand in the cover frame");
+          if (!hookFrame.textContent.includes("“") || !hookFrame.textContent.includes("”")) {
+            throw new Error("the hook frame carries no quote marks");
+          }
+          if (!scriptFrame.textContent.includes("“") || !scriptFrame.textContent.includes("”")) {
+            throw new Error("the script frame carries no quote marks");
+          }
+          const coverValue = ctx.container.querySelector('[data-testid="cover-text-value"]');
+          if (coverValue && coverValue.closest(".post-kit-cover")) {
+            throw new Error("Review's cover text took the frame — it stands plain by rule");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
   // The arrival clamp, reported. The founder's script is shorter than the model
   // wrote it, and silence about that reads as the studio losing words — so the
   // size of the cut is stated, and the note says what was removed is not
