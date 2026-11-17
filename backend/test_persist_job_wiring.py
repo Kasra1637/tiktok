@@ -225,6 +225,77 @@ class TestSweepDrainsStrandedPersistJobs:
         _run(main())
 
 
+class TestPollReconcilesACompletedPersistOutcome:
+    """A persist whose job completed — the outcome recorded on the job —
+    but whose outcome never reached the row must not be re-run by the
+    next poll (ADR 0179).
+
+    The detached runner settles in two steps: _execute_claimed_persist_job
+    completes the job WITH the outcome in its result, then the runner
+    applies the outcome to the generation row. If the runner dies between
+    the two, or the apply's write is refused at exactly that moment (ADR
+    0083's outage), the finished save exists only in the job's result and
+    nothing reconciled it: the row sat at `generating` while later polls
+    re-ran the whole save from scratch — or, behind a live-looking claim,
+    appeared to be saving long after the save had landed.
+    """
+
+    def test_poll_applies_the_recorded_outcome_instead_of_rerunning(self, api, monkeypatch):
+        async def main():
+            await _insert_generation(api, "gen-reconcile-1")
+
+            calls = []
+
+            async def fake_persist(row, user_id, video_url=""):
+                calls.append(row["id"])
+                return ("https://storage.example/gen-reconcile-1.mp4", None, 10)
+
+            monkeypatch.setattr("server._persist_generation_clip", fake_persist)
+
+            async def no_kit(background_tasks, generation_id, user_id):
+                return None
+
+            monkeypatch.setattr("server._schedule_post_kit", no_kit)
+
+            # The dead runner's leavings, staged exactly as it left them:
+            # this process's worker claimed the job and ran the save to
+            # completion — the job recorded the outcome — and the outcome
+            # never reached the row.
+            job_id = await api._enqueue_persist_job(
+                "gen-reconcile-1", ANON, "https://provider.example/v.mp4"
+            )
+            job = await api._claim_job_by_id(job_id, api._JOB_WORKER)
+            assert job is not None
+            outcome = await api._execute_claimed_persist_job(job)
+            assert outcome[0] == "https://storage.example/gen-reconcile-1.mp4"
+            assert calls == ["gen-reconcile-1"]
+            job_row = await api._fetch_job(job_id)
+            assert job_row["status"] == "completed"
+            row = await api._fetch_one(
+                "SELECT status FROM generations WHERE id = 'gen-reconcile-1'"
+            )
+            assert row["status"] == "generating"
+
+            async def fake_poll(job_id):
+                return {"status": "completed",
+                        "unsigned_urls": ["https://provider.example/v.mp4"]}
+
+            monkeypatch.setattr("server.poll_video_job", fake_poll)
+
+            out = await api.poll_generation("gen-reconcile-1", user_id=ANON)
+            assert out["status"] == "completed"
+            # The finished save was applied from the job's record — the
+            # pipeline did NOT run a second time for the same render.
+            assert calls == ["gen-reconcile-1"]
+            row = await api._fetch_one(
+                "SELECT status, r2_url FROM generations WHERE id = 'gen-reconcile-1'"
+            )
+            assert row["status"] == "completed"
+            assert row["r2_url"] == "https://storage.example/gen-reconcile-1.mp4"
+
+        _run(main())
+
+
 class TestPollReportsPersistInFlight:
     """The panel's third stage is the durable save (ADR 0170).
 

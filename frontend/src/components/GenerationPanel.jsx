@@ -166,6 +166,27 @@ function PaidRenderProgress({ status, modelName, videoUrl, startedAt, persistInF
  */
 const POLL_INTERVAL_MS = 6000;
 
+// The arrival celebration's dot burst (ADR 0180): twelve small indigo
+// dots placed around the finished frame, each with its own drift and
+// delay, drawn by the gated .render-celebrate-dots rules in index.css.
+// CSS-only — no library, no image — and purely decorative: the layer
+// is aria-hidden and pointer-events-none, and it never stands between
+// the founder and the video it marks.
+const CELEBRATE_DOTS = [
+  { left: "6%", top: "10%", dx: "-16px", dy: "-20px", delay: "0ms" },
+  { left: "22%", top: "2%", dx: "-8px", dy: "-26px", delay: "60ms" },
+  { left: "42%", top: "6%", dx: "2px", dy: "-24px", delay: "120ms" },
+  { left: "63%", top: "2%", dx: "10px", dy: "-26px", delay: "40ms" },
+  { left: "84%", top: "8%", dx: "18px", dy: "-20px", delay: "100ms" },
+  { left: "95%", top: "30%", dx: "24px", dy: "-8px", delay: "160ms" },
+  { left: "3%", top: "38%", dx: "-24px", dy: "-6px", delay: "140ms" },
+  { left: "90%", top: "62%", dx: "22px", dy: "10px", delay: "200ms" },
+  { left: "8%", top: "68%", dx: "-20px", dy: "12px", delay: "220ms" },
+  { left: "30%", top: "94%", dx: "-6px", dy: "22px", delay: "180ms" },
+  { left: "55%", top: "96%", dx: "6px", dy: "24px", delay: "80ms" },
+  { left: "78%", top: "92%", dx: "16px", dy: "20px", delay: "240ms" },
+];
+
 /** localStorage key holding one project's chosen video model. */
 function modelStorageKey(projectId) {
   return `studio-video-model:${projectId}`;
@@ -393,6 +414,33 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const poll429s = useRef(0);
   const pollingId = useRef(null);
   const [pollStalled, setPollStalled] = useState(false);
+
+  // The arrival celebration (ADR 0180): a one-shot marking of the
+  // moment THIS panel watches its own render finish — the row it has
+  // been polling flips from submitted/generating to completed. It
+  // fires on that observed transition alone: never when the panel
+  // mounts already showing a finished video, never on a re-render or
+  // a later poll, and never when the storage retry completes a row
+  // that was already completed. The state clears itself after 2.8s;
+  // the motion itself lives in index.css under the reduced-motion
+  // gate, so under reduced motion nothing plays and the video simply
+  // appears.
+  const [celebrating, setCelebrating] = useState(false);
+  const prevGenerationRef = useRef(null);
+  useEffect(() => {
+    const prev = prevGenerationRef.current;
+    prevGenerationRef.current = generation;
+    if (!prev || !generation) return;
+    const wasInFlight = prev.status === "submitted" || prev.status === "generating";
+    if (wasInFlight && generation.status === "completed" && prev.id === generation.id) {
+      setCelebrating(true);
+    }
+  }, [generation]);
+  useEffect(() => {
+    if (!celebrating) return undefined;
+    const t = setTimeout(() => setCelebrating(false), 2800);
+    return () => clearTimeout(t);
+  }, [celebrating]);
 
   const onPollSettled = useCallback((updated) => {
     setGeneration(updated);
@@ -672,6 +720,23 @@ const handleGenerate = async () => {
   const capability = models?.models?.find((m) => m.key === selectedModel);
   const cameraIncompatible = project?.camera_setup === "fixed" && capability?.identity_via_first_frame;
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
+  // The saving phase's own honesty (ADR 0179, extending 0171): a
+  // failing poll speaks through the stall notice below, but a save
+  // that simply runs LONG said nothing — the founder watched "Saving
+  // your finished video…" for minutes with no way to tell a healthy
+  // multi-minute encode (the durable save downloads the clip, then
+  // re-encodes it onto TikTok's canvas and bakes the camera move, all
+  // on a small box) from a dead one. The phase's anchor is the row's
+  // updated_at: the backend polls that notice the finish and watch
+  // the save never bump it, so it stands at the moment the save began
+  // (a mid-save poll error can only push it later, never earlier).
+  // Past two minutes of watched saving, the panel names the wait.
+  const saveAnchorMs = Date.parse(generation?.updated_at || "");
+  const saveLong =
+    Boolean(inFlight) &&
+    Boolean(generation?.persist_in_flight) &&
+    Number.isFinite(saveAnchorMs) &&
+    Date.now() - saveAnchorMs > 120_000;
   // The playable URL follows the same rule History uses (durableMediaUrl):
   // the signed playback route first, then the durable copy. Never the
   // provider's temporary link in video_url — the browser cannot fetch it
@@ -1010,6 +1075,21 @@ const handleGenerate = async () => {
         </div>
       )}
 
+      {saveLong && !pollStalled && (
+        <div
+          role="status"
+          data-testid="render-save-long"
+          className="text-base text-muted-foreground"
+        >
+          <p>
+            Your render is finished — saving its durable copy is taking longer than usual. That step
+            downloads the clip and re-encodes it for TikTok's canvas, and it can run a few minutes on
+            a busy box. It has not stopped: the video will appear here the moment the save lands, and
+            it will be in History too.
+          </p>
+        </div>
+      )}
+
       {(busy || inFlight || (generation && (generation.playback_url || generation.r2_url || generation.video_url))) && (
         <PaidRenderProgress
           status={generation?.status || "submitted"}
@@ -1076,6 +1156,10 @@ const handleGenerate = async () => {
                   sits beside the video; votes and Demo + CTA stay full-width below. */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                 <div className="w-full max-w-[280px] shrink-0 space-y-2">
+                  <div
+                    className={`relative rounded-xl ${celebrating ? "render-celebrate" : ""}`}
+                    data-testid={celebrating ? "render-celebrate" : undefined}
+                  >
                   {previewBroken ? (
                     <div className="w-full space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
                       <p className="text-sm text-muted-foreground">
@@ -1108,6 +1192,23 @@ const handleGenerate = async () => {
                       className="w-full rounded-xl border border-[color:var(--hairline)]"
                     />
                   )}
+                  {celebrating && (
+                    <div aria-hidden="true" className="render-celebrate-dots">
+                      {CELEBRATE_DOTS.map((dot, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            left: dot.left,
+                            top: dot.top,
+                            "--celebrate-dx": dot.dx,
+                            "--celebrate-dy": dot.dy,
+                            animationDelay: dot.delay,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" size="sm" asChild>
                       <a

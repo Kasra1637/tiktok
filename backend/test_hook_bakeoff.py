@@ -236,19 +236,20 @@ class TestHookBakeOff:
         assert bakeoff_payloads[0]["max_tokens"] == ai_service.HOOK_CANDIDATES_MAX_TOKENS
 
     def test_the_prompts_carry_the_sharpened_hook_rules(self, monkeypatch):
-        """ADR 0167: every surface that writes a hook carries the
-        sharpened rules. The plan's hook field opens with the moment the
-        script stands in; the bake-off prompt rides the shared block
-        (the complete-sentence rule, the script's-own-moment rule) and
-        mirrors the moment rule in its own instruction — each candidate
-        opens with the story's own moment."""
+        """ADR 0167's sharpened rules, as ADR 0182 amends them: every
+        surface that writes a hook carries the shared block. The plan's
+        hook field opens with what she is trying to do; the bake-off
+        prompt rides the shared block (the complete-sentence rule, the
+        goal-opening rule) and mirrors the goal rule in its own
+        instruction — each candidate opens with what she is trying to
+        do, and the video's goal itself rides in the story context."""
         provider = _ScriptedProvider(
             _plan(DRAFT_HOOK, SCRIPT_1),
             candidates=[LOW_CLEAN, BEST_CLEAN],
         )
         _generate_1(monkeypatch, provider)
         plan_prompt = provider.payloads[0]["messages"][1]["content"]
-        assert "open with the moment the script stands in" in plan_prompt
+        assert "open with what she is trying to do" in plan_prompt
         bakeoff_prompts = [
             p["messages"][1]["content"] for p in provider.payloads
             if "HOOK BAKE-OFF" in p["messages"][1]["content"]
@@ -257,8 +258,10 @@ class TestHookBakeOff:
         assert len(bakeoff_prompts) == 1
         prompt = bakeoff_prompts[0]
         assert "HOOK SENTENCE" in prompt
-        assert "SCRIPT'S OWN MOMENT" in prompt
-        assert "opens with the story's own moment" in prompt
+        assert "OPEN WITH THE GOAL" in prompt
+        assert "Each opens with what she is trying to do" in prompt
+        assert "THE GOAL FOR THIS VIDEO" in prompt
+        assert "SCRIPT'S OWN MOMENT" not in prompt
 
     def test_c_all_broken_candidates_fall_back_to_one_correction(self, monkeypatch):
         provider = _ScriptedProvider(
@@ -273,6 +276,11 @@ class TestHookBakeOff:
             if "BAKE-OFF CORRECTION" in p["messages"][1]["content"]
         ]
         assert len(corrections) == 1, "exactly one bounded correction may fire"
+        # ADR 0182: the correction keeps the goal opening, not the
+        # story's moment — the place rule it used to restate is gone.
+        correction_prompt = corrections[0]["messages"][1]["content"]
+        assert "the goal opening kept" in correction_prompt
+        assert "the story's own moment still" not in correction_prompt
 
     def test_c_a_failed_correction_keeps_the_draft_hook(self, monkeypatch):
         provider = _ScriptedProvider(

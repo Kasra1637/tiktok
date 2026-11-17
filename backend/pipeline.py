@@ -647,6 +647,115 @@ async def trim_video_exact(video_path: Path, seconds: float, out_path: Path) -> 
     return out_path
 
 
+async def trim_head_exact(video_path: Path, offset: float, out_path: Path) -> Optional[Path]:
+    """
+    Cut the first `offset` seconds off a clip, for delivery.
+
+    The mirror of trim_video_exact: that one keeps the head and cuts
+    the tail to an exact length; this one drops the head and keeps the
+    rest. It exists for the HeyGen Video model, whose renders open
+    with a blurry dissolve of about 0.2s — the model's own conversion
+    artifact — which the founder otherwise hand-edits out of every
+    video (ADR 0181).
+
+    The seek is an OUTPUT seek (`-ss` after `-i`) with a re-encode, on
+    purpose: the decoder discards up to the exact offset, so the cut
+    is frame-exact rather than keyframe-bound, and audio is cut at
+    the same offset in the same pass, so picture and sound start
+    together on the first clean frame. A stream copy could do
+    neither. Encoding parameters match trim_video_exact so a
+    head-cut clip and a length-trimmed one carry identical settings.
+
+    Returns None (rather than raising) when the cut is not possible,
+    so the caller can keep the untrimmed render rather than lose it.
+    """
+    source = Path(video_path)
+    out_path = Path(out_path)
+    if not source.is_file():
+        logger.warning(f"trim_head_exact: source {source.name} does not exist.")
+        return None
+    try:
+        cut = float(offset)
+    except (TypeError, ValueError):
+        logger.warning(f"trim_head_exact: bad offset {offset!r}.")
+        return None
+    if cut <= 0:
+        logger.warning(f"trim_head_exact: refusing non-positive offset {cut}.")
+        return None
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg", "-y",
+        # One thread, for the same reason as trim_video_exact: this
+        # runs inside the web process on a 512MB host, and libx264's
+        # frame-level threading is the largest single allocator here.
+        "-threads", "1",
+        "-i", str(source),
+        "-ss", f"{cut:g}",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        "-r", "30",
+        "-video_track_timescale", "30000",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "48000",
+        "-ac", "2",
+        "-movflags", "+faststart",
+        str(out_path),
+    ]
+    try:
+        rc, _stdout, err = await run_cmd(cmd, timeout=180)
+    except FileNotFoundError:
+        logger.warning("trim_head_exact: ffmpeg is not available on PATH.")
+        return None
+    except RuntimeError as e:
+        logger.warning(f"trim_head_exact timed out: {e}")
+        return None
+
+    if rc != 0 or not out_path.exists() or out_path.stat().st_size == 0:
+        logger.warning(
+            f"trim_head_exact failed for {source.name} at {cut:g}s: "
+            f"{err.strip()[-300:] or 'unknown error'}"
+        )
+        out_path.unlink(missing_ok=True)
+        return None
+
+    logger.info(f"Cut the first {cut:g}s off {source.name}: {out_path.name}")
+    return out_path
+
+
+async def replace_with_head_trimmed(video_path: Path, offset: float) -> Optional[Path]:
+    """
+    Cut a clip's head off in place, atomically.
+
+    The head-cut file must REPLACE the render at the canonical path,
+    for the same reason as replace_with_trimmed: the canonical path
+    is what gets uploaded, previewed and bridged from, so a sidecar
+    would leave the blur in everything the founder actually sees.
+
+    Cuts to a sibling temp file and then swaps, because ffmpeg
+    cannot read and write the same path in one pass.
+
+    Returns the canonical path on success, or None if the cut failed
+    (in which case the original is untouched and still usable).
+    """
+    source = Path(video_path)
+    if not source.is_file():
+        return None
+    temp = source.with_name(f".{source.stem}_headcut_{uuid.uuid4().hex}{source.suffix}")
+    try:
+        cut = await trim_head_exact(source, offset, temp)
+        if not cut:
+            temp.unlink(missing_ok=True)
+            return None
+        temp.replace(source)
+        return source
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 async def replace_with_trimmed(video_path: Path, seconds: float) -> Optional[Path]:
     """
     Trim a clip in place, atomically.

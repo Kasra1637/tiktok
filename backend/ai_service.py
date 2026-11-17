@@ -3383,13 +3383,23 @@ def _spoken_line_rules_block() -> str:
         "journal today\", not \"I don't want to type anything\" or \"typing is the "
         "last thing I want to do\". No \"it\", \"this\", \"that\", \"anything\" or "
         "\"stuff\" where the activity belongs.\n"
-        "- NAME THE MOMENT: the hook stands in the SCRIPT'S OWN MOMENT and "
-        "opens with it — the same time or place the script stands in, in the "
-        "hook's first words. Never a different scene invented for the hook, "
-        "and never the moment saved for halfway through the line. A hook "
-        "written without its script keeps the moment its story gives it, "
-        "still first. Never a vague stand-in for the moment. Bad: 'halfway "
-        "down this path'; say the time of day or the place instead.\n"
+        "- OPEN WITH THE GOAL, NOT THE PLACE: the hook opens with what the "
+        "speaker is TRYING TO DO in the story's moment — the intention the "
+        "GOAL in the ANGLE + GOAL RULE names for this video, turned into "
+        "her own plain first-person trying-line ('I'm trying to keep "
+        "count', 'I'm trying to get one honest line down'). The lived "
+        "attempt in her words, never the goal's label and never the app's "
+        "words for it. Never a vague stand-in for the attempt. Bad: 'I'm "
+        "trying to feel better'; say the concrete thing she is trying to "
+        "do instead. And never the place: Never name or announce the "
+        "place in the hook — no 'at the mural', no 'in the car', not as "
+        "the opening and not anywhere in the line — because the viewer "
+        "can already see the place; naming it spends the hook's strongest "
+        "words on what the picture already says. A time grounding may "
+        "ride along ('Saturday afternoon'), and the hook still belongs "
+        "to the script's own moment — she is in it, living it, not "
+        "describing it from outside. Never a different scene invented "
+        "for the hook.\n"
         "- HOOK SENTENCE (the hook line only): one complete sentence that "
         "parses on the first read — its subject and verb in their natural "
         "spoken order, the thought arriving in the order it is understood. "
@@ -3410,7 +3420,8 @@ def _spoken_line_rules_block() -> str:
         "STATEMENT: one thought only, never two statements jammed into one "
         "line. FELT DETAIL, NOT VERDICTS: a concrete thing the moment or the "
         "body does, never an abstract verdict word like 'borrowed'. The "
-        "moment rule above doubles here: a time or a place, exact. Scored "
+        "goal rule above doubles here: the trying-line names the concrete "
+        "attempt, exact — the thing she is doing, in her words. Scored "
         "proof, from real hooks rated by the app's own craft check: 'Label "
         "isn't me after masking, I talk it out in quiet garden' scored 7/20 — "
         "label-voice, and 'talk it out' hands over the resolution. 'Generic "
@@ -3418,8 +3429,11 @@ def _spoken_line_rules_block() -> str:
         "— label-voice, third person, resolution given away. 'after masking "
         "all day quiet garden words feel borrowed' scored 13/20 — 'borrowed' "
         "is a verdict word, not a felt detail. The shape that stops the "
-        "scroll: 'After masking all day words in the quiet garden aren't "
-        "mine' — moment and place named, first person, resolution withheld.\n"
+        "scroll: 'I'm trying to keep count, Saturday afternoon and I keep "
+        "losing count' — the goal opens it as a trying-line, first person, "
+        "a time grounding riding along, the resolution withheld, and the "
+        "place nowhere in it: the viewer can see the mural; what stops "
+        "the scroll is what she is trying to do there.\n"
         "- EXTENSION: the script continues the hook — it answers its question "
         "in the first clause, then finishes or develops it. One person, one "
         "story, one thought: no new problem, no second hook, no hook said "
@@ -3711,9 +3725,11 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         "Rewrite the CURRENT HOOK so it names the real action the viewer is avoiding, in the "
         "words the viewer uses for that problem: name the problem first, in the speaker's own "
         "first-person voice \u2014 'I' is the voice of the hook, not a ration. The clearer hook "
-        "names the exact moment "
-        "\u2014 the time or place the story stands in \u2014 wherever the current line "
-        "leaves it vague or buries it, and the moment opens the rewrite. Keep its "
+        "opens with the goal: "
+        "what she is trying to do, as a plain first-person trying-line drawn "
+        "from the GOAL above \u2014 and it never names or announces the place, "
+        "so a place the current line announces comes out, because the viewer "
+        "can already see where she is. Keep its "
         "meaning, its feeling and roughly its "
         f"length (one short spoken sentence).{budget} Never name the app. No quotation marks. "
         'Return JSON: {"hook_line": "..."}'
@@ -3951,9 +3967,11 @@ def _angle_goal_block(angle: Optional[dict], objective: str, audience: str = "",
         lines.append(f"- PROMISE: the hook opens on this promise: {_text('hook_promise')}.")
         lines.append(
             f"- PLACE + TIME: the whole video happens in this opening moment: {_angle_scene_moment(angle)}. "
-            "The hook, the script and every visual line stay there; no template example, usage "
+            "The script and every visual line stay there; no template example, usage "
             "moment or look direction moves it to another place or time of day (no bed, night or "
-            "living room unless the moment says so)."
+            "living room unless the moment says so). The hook happens there too, but it "
+            "does not announce the place \u2014 the viewer can already see it; the hook opens "
+            "with the goal (SPOKEN LINE CRAFT below)."
         )
         if _angle_scene_policy.scene_is_unclear(angle):
             lines.append(_ANGLE_PLACE_RULE)
@@ -4164,10 +4182,13 @@ async def _hook_bake_off(
         "not a ration \u2014 in the form the HOOK FORM rule picks. Three "
         "genuinely different "
         "openings — for example a confession, a blunt observation, and a cold "
-        "open inside the moment — never one hook reworded three ways, and none "
-        "a copy of the CURRENT HOOK. Each opens with the story's own moment "
-        "— the time or place THE STORY stands in — and names the feeling "
-        "that lives there, opening the question the script answers right "
+        "open inside what she's trying to do — never one hook reworded three ways, and none "
+        "a copy of the CURRENT HOOK. Each opens with what she is trying to do "
+        "— the intention THE GOAL FOR THIS VIDEO in the story above names, "
+        "as a plain first-person trying-line — never naming or announcing "
+        "the place THE STORY stands in (the viewer can see it), and names "
+        "the feeling that lives there, opening the question the script "
+        "answers right "
         "away. The character limit is a hard limit, not an aim: the words are "
         "laid over the video when rendered, so a line past its set length "
         "overlaps and breaks the visual.\n"
@@ -4233,8 +4254,8 @@ async def _hook_bake_off(
         "Rewrite ONLY the hook so none of those problems remain: one complete "
         f"standalone spoken sentence of at most {hook_budget} characters, in "
         "the speaker's own first-person voice \u2014 'I' is the voice of the "
-        "hook, not a ration \u2014 same story, the story's own moment still "
-        "first, same promise.\n"
+        "hook, not a ration \u2014 same story, the goal opening kept \u2014 what "
+        "she's trying to do, first \u2014 same promise.\n"
         'Return ONLY JSON: {"hook_line": "..."}'
     )
     try:
@@ -4507,7 +4528,7 @@ async def generate_creative_plan(
         f"{_hook_form}\n"
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
-        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: open with the moment the script stands in — its time or place, as the first words — and name ONE specific, recognizable feeling from this video\'s own story (physical where possible), with one lived detail, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
+        f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: open with what she is trying to do — the goal for this video as a plain first-person trying-line, never naming or announcing the place (the viewer can already see it) — and name ONE specific, recognizable feeling from this video\'s own story (physical where possible), with one lived detail, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
         '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: a few words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said"}}],\n'
@@ -4557,8 +4578,9 @@ async def generate_creative_plan(
         "the second line answering the first. Never restate the hook in the script, never open a "
         "second problem, and never leave the hook's problem unanswered.\n"
         "- HOOK PUNCH: the hook line must stop a mid-scroll thumb, not merely introduce the "
-        "topic. It lands in the first second: it opens inside the moment the "
-        "script stands in — that moment is the first thing said — and names ONE "
+        "topic. It lands in the first second: it opens with what she is trying to do — the "
+        "goal as a plain first-person trying-line, the first thing said, never naming the "
+        "place the viewer can already see — and names ONE "
         "specific, recognizable feeling taken from this video's own story, "
         "physical where possible, with "
         "one lived detail or time marker. It feels lived, not written, speaks to one "
@@ -4761,12 +4783,19 @@ async def generate_creative_plan(
     # worse than the single-hook flow: any failure inside it returns the
     # draft hook and its craft score untouched, and the craft correction
     # below then runs exactly as before on whichever hook won.
+    # The goal rides in the bake-off's context in its outcome words —
+    # the same OBJECTIVE_OUTCOMES line the ANGLE + GOAL RULE prints —
+    # because ADR 0182's rule tells candidates to open with it, and a
+    # rule pointing at a goal the prompt never states would be a wish.
+    _bakeoff_goal_job = OBJECTIVE_OUTCOMES.get(normalize_objective(brief["objective"]), "")
     bakeoff_context = (
         f"VIEWER: {brief['audience']}\n"
         f"THE VIEWER'S PROBLEM: {brief['angle_user_problem'] or brief['objective']}\n"
         f"THE ANGLE'S PROMISE: {brief['angle_hook_promise']}\n"
         f"THE FEATURE IN THE STORY: {brief['angle_feature']}\n"
         f"THE FEELING TO LEAVE: {brief['angle_emotion']}\n"
+        f"THE GOAL FOR THIS VIDEO: {brief['objective']}"
+        f"{' — ' + _bakeoff_goal_job if _bakeoff_goal_job else ''}\n"
     )
     draft_hook = hook
     hook, craft = await _hook_bake_off(

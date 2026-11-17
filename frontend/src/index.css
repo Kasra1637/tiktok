@@ -1159,6 +1159,43 @@ h1,
     .skeleton-leaving { animation: skeleton-fade 250ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
 
+/* ---------- The finished render's arrival: one celebration (ADR 0180) ----------
+   When the render panel itself watches its render finish, the video's
+   frame marks the moment once: it rises and settles on the one
+   entrance motion (ADR 0165), a soft indigo glow pulses around it,
+   and twelve small indigo dots burst and fade. The whole treatment
+   lasts under three seconds, is CSS-only, and never delays or covers
+   the video — the dots layer is pointer-events-none and the frame is
+   playable from its first paint. Both animations are applied only
+   inside the no-preference gate: under reduced motion the classes
+   carry no animation at all and the video simply appears. */
+@keyframes render-celebrate-glow {
+    0% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+    25% { box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.55), 0 10px 34px rgba(99, 102, 241, 0.45); }
+    100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0); }
+}
+@keyframes render-celebrate-dot {
+    0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.6); }
+    18% { opacity: 1; }
+    100% { opacity: 0; transform: translate3d(var(--celebrate-dx, 0px), var(--celebrate-dy, -14px), 0) scale(1); }
+}
+.render-celebrate-dots { position: absolute; inset: 0; pointer-events: none; }
+.render-celebrate-dots span {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--brand-indigo);
+    opacity: 0;
+}
+.render-celebrate-dots span:nth-child(even) { background: var(--brand-indigo-dark); }
+@media (prefers-reduced-motion: no-preference) {
+    .render-celebrate { animation: rise-settle 300ms cubic-bezier(0.16, 1, 0.3, 1) both, render-celebrate-glow 2600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .render-celebrate-dots span { animation: render-celebrate-dot 1500ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+
 /* The open tour fades its backdrop; name runs as an inline animation in
    TourOverlay.jsx under the same reduced-motion guard. */
 @keyframes tour-fade {

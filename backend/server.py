@@ -2590,6 +2590,17 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
     return None, last_detail
 
 
+# Models whose renders open with a head artifact the save cuts off
+# before anything else touches the clip (ADR 0181). HeyGen Video's
+# renders begin with a blurry dissolve of about 0.2s — the model's own
+# conversion artifact, confirmed frame by frame on a live render —
+# and the founder's ruling is that exactly that head comes off, for
+# this model only, so he never hand-edits it out again. The offset is
+# the dissolve's measured length, no more: the cut must not shave the
+# first syllable of the opening line.
+_MODEL_HEAD_TRIM_SECONDS = {"heygen-video-1": 0.2}
+
+
 async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "") -> tuple:
     """
     Turn a finished provider render into a playable, durable clip.
@@ -2602,10 +2613,11 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
       - delivered_seconds is the length they will actually get, which is the
         trimmed length when a trim applied and the requested one otherwise.
 
-    The whole post-download pipeline lives here — download, hook trim, canvas
-    rescale, R2 upload, local-served fallback — because two callers need it to
-    agree exactly. poll_generation runs it on the way to 'completed', and
-    retry_generation_storage runs it to repair a row that already failed.
+    The whole post-download pipeline lives here — download, the model's
+    head cut, hook trim, canvas rescale, R2 upload, local-served fallback —
+    because two callers need it to agree exactly. poll_generation runs it
+    on the way to 'completed', and retry_generation_storage runs it to
+    repair a row that already failed.
 
     That duplication is what caused the bug this exists to prevent: the studio
     path grew its own downloader without the bearer token the legacy one always
@@ -2709,8 +2721,33 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     # camera cut are sequential here, but a concurrent poster encode from another
     # request would stack on top of them. R2 upload below stays outside the
     # gate — network, not encode.
+    head_trim_applied = False
     if fresh and not restored:
         async with _FFMPEG_SLOT:
+            # Cut the model's blurry head FIRST, before the hook trim and
+            # the rescale, so every later step works on the clip the
+            # founder will actually get (ADR 0181). In place, like the
+            # hook trim: the canonical path is what gets uploaded,
+            # previewed and bridged from. Soft like the rescale and the
+            # camera move — a failed cut is logged and the render is
+            # delivered as rendered, because losing the video over
+            # 0.2s of blur would be the worse failure by far.
+            head_trim = _MODEL_HEAD_TRIM_SECONDS.get(row.get("model") or "", 0)
+            if head_trim > 0:
+                head_cut = await pipeline.replace_with_head_trimmed(local_path, head_trim)
+                if head_cut:
+                    local_path = head_cut
+                    head_trim_applied = True
+                    logger.info(
+                        f"Generation {generation_id}: cut the first "
+                        f"{head_trim:g}s (the model's blurry head) off the render"
+                    )
+                else:
+                    logger.warning(
+                        f"Generation {generation_id}: head cut of "
+                        f"{head_trim:g}s failed; delivering the render as rendered."
+                    )
+
             # Apply the hook trim IN PLACE, before storage and before the row
             # records a length. The canonical path is also what an extension
             # bridges from (the previous clip's FINAL FRAME), so a trimmed
@@ -2800,8 +2837,18 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             )
 
     # The row records the length the founder will actually get, not the
-    # length that was asked of the model.
-    delivered_seconds = int(row.get("duration") or 0) if restored else (trim_to or int(row.get("duration") or 0))
+    # length that was asked of the model. A hook trim sets the length
+    # outright; a head cut (ADR 0181) shortens it by the cut, in the
+    # accounting's whole seconds and never more than the file holds.
+    base_seconds = int(row.get("duration") or 0)
+    if restored:
+        delivered_seconds = base_seconds
+    elif trim_to:
+        delivered_seconds = trim_to
+    elif head_trim_applied:
+        delivered_seconds = int(base_seconds - _MODEL_HEAD_TRIM_SECONDS[row["model"]])
+    else:
+        delivered_seconds = base_seconds
     return stored_url, storage_error or trim_note, delivered_seconds
 
 
@@ -2973,6 +3020,62 @@ async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: st
         await _schedule_poster(background_tasks, generation_id, user_id)
 
 
+async def _completed_persist_outcome(generation_id: str):
+    """The recorded outcome of this generation's last completed persist job.
+
+    _execute_claimed_persist_job records the outcome on the job when the
+    save lands, BEFORE the outcome is applied to the generation row. If
+    the apply is lost — the detached runner dies between the two steps,
+    or the apply's write is refused at exactly that moment (ADR 0083) —
+    the job's result is the only place the finished save still exists,
+    and before ADR 0179 nothing ever read it back: the row sat at
+    `generating` while later polls re-ran the whole save from scratch.
+    Returns the parsed result dict, or None when no completed job
+    recorded one.
+    """
+    job = await _fetch_one(
+        "SELECT result FROM jobs WHERE kind = ? AND dedupe_key = ? "
+        "AND status = 'completed' ORDER BY updated_at DESC LIMIT 1",
+        (_PERSIST_JOB_KIND, f"persist:{generation_id}"),
+    )
+    if not job or not job.get("result"):
+        return None
+    try:
+        result = json.loads(job["result"])
+    except (TypeError, ValueError):
+        return None
+    return result if isinstance(result, dict) else None
+
+
+async def _apply_persist_outcome_guarded(generation_id: str, user_id: str,
+                                         video_url: str, stored_url,
+                                         storage_error, delivered_seconds,
+                                         background_tasks) -> bool:
+    """Apply a persist outcome from the detached runner, loudly on failure.
+
+    The detached runner is a background task: an exception escaping it is
+    only a log line in the server framework, and the founder's panel
+    would sit at 'generating' with no named cause anywhere. The outcome
+    itself is already recorded on the job, so a failed apply is not a
+    lost save — the next poll reconciles it (see _persist_via_queue) —
+    but it must be findable, so it is logged as the error it is.
+    """
+    try:
+        await _apply_persist_outcome(
+            generation_id, user_id, video_url,
+            stored_url, storage_error, delivered_seconds, background_tasks,
+        )
+        return True
+    except Exception as e:
+        logger.error(
+            "Generation %s: the finished save's outcome could not be "
+            "applied (%s: %s); it stays recorded on the persist job and "
+            "the next poll reconciles it.",
+            generation_id, type(e).__name__, str(e)[:300],
+        )
+        return False
+
+
 async def _run_detached_persist(job: dict, generation_id: str, user_id: str,
                                 video_url: str, delivered_seconds: int) -> None:
     """
@@ -3011,12 +3114,12 @@ async def _run_detached_persist(job: dict, generation_id: str, user_id: str,
     except Exception as e:
         storage_error = str(e)[:500]
         logger.warning(f"Generation {generation_id}: storage step failed: {e}")
-        await _apply_persist_outcome(
+        await _apply_persist_outcome_guarded(
             generation_id, user_id, video_url,
             None, storage_error, delivered_seconds, None,
         )
     else:
-        await _apply_persist_outcome(
+        await _apply_persist_outcome_guarded(
             generation_id, user_id, video_url,
             outcome[0], outcome[1], outcome[2], None,
         )
@@ -3043,6 +3146,38 @@ async def _persist_via_queue(generation_id: str, user_id: str, video_url: str,
     without one (the sweep's inline calls, direct test calls) the save
     runs inline — the same convention the post-kit scheduling follows.
     """
+    # A previous persist for this row may already have LANDED (ADR
+    # 0179): its job completed and recorded the outcome, but the outcome
+    # never reached the row — the runner died between completing the job
+    # and applying, or the apply's write was refused. The row only ever
+    # reaches this call while it is still in flight (poll returns
+    # completed rows before asking the provider again), so a recorded
+    # outcome beside an in-flight row is unapplied by construction.
+    # Apply it — the same write the original runner owed — instead of
+    # re-running a finished save while the founder watches the row sit
+    # at 'generating'.
+    recorded = await _completed_persist_outcome(generation_id)
+    if recorded is not None:
+        row = await _fetch_one(
+            "SELECT status FROM generations WHERE id = ?", (generation_id,)
+        )
+        if row and row.get("status") not in ("completed", "archived"):
+            recorded_outcome = (
+                recorded.get("stored_url"),
+                recorded.get("storage_error"),
+                int(recorded.get("delivered_seconds") or 0),
+            )
+            await _apply_persist_outcome(
+                generation_id, user_id, video_url,
+                recorded_outcome[0], recorded_outcome[1], recorded_outcome[2],
+                background_tasks,
+            )
+            logger.info(
+                "Persist queue: applied the recorded outcome for %s "
+                "instead of re-running its finished save",
+                generation_id,
+            )
+            return recorded_outcome
     job_id = await _enqueue_persist_job(generation_id, user_id, video_url)
     job = await _claim_job_by_id(job_id, _JOB_WORKER)
     if job is None:

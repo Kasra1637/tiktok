@@ -2195,6 +2195,162 @@ async function main() {
     }
   });
 
+  await check("a long durable save is named honestly while the panel waits", async (ctx) => {
+    // ADR 0179: ADR 0171 made a failing poll speak, but a save that
+    // simply runs long said nothing — the founder watched "Saving your
+    // finished video…" for minutes with no way to tell a healthy
+    // multi-minute encode (the canvas rescale and camera move are full
+    // re-encodes on a small box) from a dead one. The phase's anchor is
+    // the row's updated_at: the polls that notice the finish and watch
+    // the save never bump it, so it stands at the moment the save
+    // began. Past two minutes of watched saving the panel names it —
+    // the render is finished, the save has not stopped, and the video
+    // will appear here (and in History) when it lands.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const longAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const savingLong = {
+      ...SEGMENT, id: "gen-save-long", status: "generating", persist_in_flight: true,
+      playback_url: null, r2_url: null, video_url: null, updated_at: longAgo,
+    };
+    await withApi({
+      getGenerations: async () => ({ generations: [savingLong] }),
+      pollGeneration: async () => savingLong,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    if (!ctx.container.querySelector('[data-testid="render-save-long"]')) {
+      throw new Error("a save watched past two minutes raised no long-save notice");
+    }
+    expectText(ctx, "taking longer than usual", "the long-save notice does not name the wait honestly");
+  });
+
+  await check("a fresh save and a rendering row raise no long-save notice", async (ctx) => {
+    // The notice belongs to the saving phase alone, past its
+    // threshold: a save that just began is a normal wait, and a row
+    // still rendering at the provider — however old its timestamp —
+    // is the second stage's story, not the save's.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const fresh = {
+      ...SEGMENT, id: "gen-save-fresh", status: "generating", persist_in_flight: true,
+      playback_url: null, r2_url: null, video_url: null, updated_at: new Date().toISOString(),
+    };
+    await withApi({
+      getGenerations: async () => ({ generations: [fresh] }),
+      pollGeneration: async () => fresh,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    if (ctx.container.querySelector('[data-testid="render-save-long"]')) {
+      throw new Error("a save that just began already claims to be taking longer than usual");
+    }
+    const longAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const rendering = {
+      ...SEGMENT, id: "gen-save-rendering", status: "generating", persist_in_flight: false,
+      playback_url: null, r2_url: null, video_url: null, updated_at: longAgo,
+    };
+    await withApi({
+      getGenerations: async () => ({ generations: [rendering] }),
+      pollGeneration: async () => rendering,
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    if (ctx.container.querySelector('[data-testid="render-save-long"]')) {
+      throw new Error("a row still rendering at the provider raised the long-save notice");
+    }
+  });
+
+  await check("the finished video's arrival is celebrated once, on the live transition alone", async (ctx) => {
+    // ADR 0180: when the panel itself watches its render finish — a
+    // generating row whose poll comes back completed — the video's
+    // arrival is marked once: the frame rises and settles, glows, and
+    // throws a brief burst of indigo dots, for under three seconds.
+    // The video is visible and playable throughout; the celebration
+    // is a layer over its arrival, never a gate in front of it.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const generating = {
+      ...SEGMENT, id: "gen-celebrate", status: "generating",
+      playback_url: null, r2_url: null, video_url: null,
+    };
+    const completed = { ...SEGMENT, id: "gen-celebrate", status: "completed" };
+    let polls = 0;
+    await withApi(
+      {
+        getGenerations: async () => ({ generations: [generating] }),
+        pollGeneration: async () => {
+          polls += 1;
+          return polls === 1 ? generating : completed;
+        },
+      },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        // The second poll lands at ~6s and flips the row; the
+        // celebration runs 2.8s from the flip. Watch for it rather
+        // than betting on one fixed instant inside that window.
+        let frame = null;
+        for (let i = 0; i < 30 && !frame; i += 1) {
+          await act(async () => {
+            await new Promise((r) => setTimeout(r, 400));
+          });
+          frame = ctx.container.querySelector('[data-testid="render-celebrate"]');
+        }
+        if (!frame) {
+          throw new Error("the live generating→completed transition raised no celebration");
+        }
+        const dots = frame.querySelectorAll(".render-celebrate-dots span");
+        if (dots.length < 8) {
+          throw new Error(`the celebration's dot burst is missing or thin (${dots.length} dots)`);
+        }
+        if (!frame.querySelector("video")) {
+          throw new Error("the finished video is not inside the celebrating frame — the celebration must never delay or cover its arrival");
+        }
+        expectText(ctx, "Download MP4", "the finished video's download did not render during the celebration");
+        let cleared = false;
+        for (let i = 0; i < 15 && !cleared; i += 1) {
+          await act(async () => {
+            await new Promise((r) => setTimeout(r, 400));
+          });
+          cleared = !ctx.container.querySelector('[data-testid="render-celebrate"]');
+        }
+        if (!cleared) {
+          throw new Error("the celebration did not clear — it must be a one-shot of a few seconds");
+        }
+        expectText(ctx, "Download MP4", "the finished video vanished with the celebration");
+      }
+    );
+  });
+
+  await check("a panel opened on a finished video does not celebrate", async (ctx) => {
+    // The celebration belongs to the transition the panel observes,
+    // not to the state: mounting with the render already complete —
+    // the return visit, the reload — shows the video plainly.
+    const GenerationPanel = load("components/GenerationPanel.jsx").default;
+    const completed = { ...SEGMENT, id: "gen-celebrate-mounted", status: "completed" };
+    await withApi(
+      { getGenerations: async () => ({ generations: [completed] }) },
+      async () => {
+        await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 600));
+        });
+        if (ctx.container.querySelector('[data-testid="render-celebrate"]')) {
+          throw new Error("a panel that mounted on a finished video celebrated a transition it never saw");
+        }
+        expectText(ctx, "Download MP4", "the finished video did not render on mount");
+      }
+    );
+  });
+
+  await check("the celebration's motion lives inside the reduced-motion gate", async (ctx) => {
+    // ADR 0180 with ADR 0165: every animation the celebration runs —
+    // the frame's rise-and-glow and the dots' burst — is applied only
+    // inside the no-preference gate, so under reduced motion nothing
+    // moves at all and the video simply appears.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/@keyframes render-celebrate-glow/.test(css) || !/@keyframes render-celebrate-dot/.test(css)) {
+      throw new Error("the celebration keyframes are not defined");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.render-celebrate\s*\{\s*animation:\s*rise-settle 300ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both, render-celebrate-glow/.test(css)) {
+      throw new Error(".render-celebrate does not resolve to the gated rise-settle + glow pulse");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.render-celebrate-dots span\s*\{\s*animation:\s*render-celebrate-dot/.test(css)) {
+      throw new Error("the celebration dots do not resolve to the gated burst animation");
+    }
+  });
+
   await check("GenerationPanel blocks generation before the project is ready", async (ctx) => {
     // No generations yet: the ready gate only shows when nothing has been
     // produced, so a fixture that still returns a segment proves nothing.

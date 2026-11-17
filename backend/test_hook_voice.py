@@ -226,7 +226,12 @@ def test_rewrite_refuses_a_persistent_echo(monkeypatch):
         asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
 
 
-def test_rewrite_prompt_names_the_exact_moment(monkeypatch):
+def test_rewrite_prompt_opens_with_the_goal_not_the_place(monkeypatch):
+    # ADR 0182 supersedes the place half of ADR 0167's NAME THE MOMENT
+    # (Kasra's goal rule): the rewrite opens with what she is trying to
+    # do — the goal as a plain first-person trying-line — and a place
+    # the current line announces comes out, because the viewer can
+    # already see where she is.
     calls = []
 
     async def fake_chat(**kwargs):
@@ -237,9 +242,9 @@ def test_rewrite_prompt_names_the_exact_moment(monkeypatch):
     asyncio.run(ai_service.rewrite_hook_line(
         {}, None, "Mood flipped again halfway down this path today."))
     prompt = calls[0]["prompt"]
-    assert "NAME THE MOMENT" in prompt
-    assert "halfway down this path" in prompt
-    assert "names the exact moment" in prompt
+    assert "OPEN WITH THE GOAL" in prompt
+    assert "opens with the goal" in prompt
+    assert "names the exact moment" not in prompt
 
 
 def _plan(hook, script):
@@ -501,15 +506,20 @@ def test_the_craft_block_demands_a_complete_hook_sentence():
     assert "fragment" in block
 
 
-def test_the_craft_block_puts_the_scripts_own_moment_first():
-    # ADR 0167 tightens NAME THE MOMENT (Kasra's moment rule, ADR 0123):
-    # not any time or place — the moment the project's own script stands
-    # in, and that moment opens the hook. The school-gate script stood at
-    # the school gate on Monday; its hook stood nowhere.
+def test_the_craft_block_opens_with_the_goal_not_the_place():
+    # ADR 0182 supersedes the place half of ADR 0167 (Kasra's goal
+    # rule): the hook opens with what she is trying to do — the
+    # intention the video's selected goal names, as a plain
+    # first-person trying-line — and never names or announces the
+    # place, which the viewer can already see. The mural hook stood
+    # at the mural; its replacement opens "I'm trying to keep count".
     block = ai_service._spoken_line_rules_block()
-    assert "SCRIPT'S OWN MOMENT" in block
-    assert "the same time or place the script stands in" in block
-    assert "first words" in block
+    assert "OPEN WITH THE GOAL, NOT THE PLACE" in block
+    assert "trying-line" in block
+    assert "Never name or announce the place" in block
+    assert "can already see" in block
+    assert "NAME THE MOMENT" not in block
+    assert "SCRIPT'S OWN MOMENT" not in block
 
 
 def test_the_craft_block_bans_meta_talk_about_pages_and_naming():
@@ -522,22 +532,23 @@ def test_the_craft_block_bans_meta_talk_about_pages_and_naming():
     assert "never discusses the words for it" in block
 
 
-def test_rewrite_prompt_puts_the_storys_moment_first(monkeypatch):
-    # ADR 0167: the clearer-hook rewrite inherits the tightened moment
-    # rule — the moment the story stands in, opening the rewrite — and
-    # the shared block's sentence rule rides in the same prompt.
+def test_rewrite_prompt_puts_the_goal_opening_first(monkeypatch):
+    # ADR 0182: the clearer-hook rewrite inherits the goal rule — the
+    # goal opens the rewrite as a trying-line, a place the current
+    # line announces comes out — and the shared block's sentence rule
+    # rides in the same prompt.
     calls = []
 
     async def fake_chat(**kwargs):
         calls.append(kwargs)
-        return {"hook_line": "Monday morning at the school gate, I can't write in my journal."}
+        return {"hook_line": "I'm trying to get one honest line in my journal."}
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
     asyncio.run(ai_service.rewrite_hook_line(
         {}, None, "Losing thoughts in my head, moment instead of blank page."))
     prompt = calls[0]["prompt"]
-    assert "the time or place the story stands in" in prompt
-    assert "the moment opens the rewrite" in prompt
+    assert "opens with the goal" in prompt
+    assert "the moment opens the rewrite" not in prompt
     assert "HOOK SENTENCE" in prompt
 
 
@@ -1019,7 +1030,12 @@ def test_the_craft_block_teaches_hook_power_from_the_scored_pairs():
     assert "12/20" in block
     assert "after masking all day quiet garden words feel borrowed" in block
     assert "13/20" in block
-    assert "After masking all day words in the quiet garden aren't mine" in block
+    # The shape that stops the scroll is ADR 0182's now: the scored
+    # pairs above stand as evidence for their named flaws, but the
+    # model shape opens with the goal as a trying-line — Kasra's
+    # mural line — not with the garden.
+    assert "I'm trying to keep count, Saturday afternoon and I keep losing count" in block
+    assert "After masking all day words in the quiet garden aren't mine" not in block
 
 
 def test_the_plan_prompt_carries_the_hook_power_rules(monkeypatch):

@@ -2230,7 +2230,19 @@ class TestStrategyBudget:
         # grows in every prompt that writes a hook, strategy included.
         # The ceiling moves by a measured 950 to 43,750, keeping ~650
         # of headroom.
-        CEILING = 43_750
+        #
+        # ADR 0182 raises it again, measured: 43,102 -> 44,040 (+938 —
+        # the shared block's growth 6,943 -> 7,739, plus the ANGLE +
+        # GOAL block's place line) for the goal-opening doctrine: NAME
+        # THE MOMENT's place half is superseded, so the hook opens with
+        # what she is trying to do — the video's selected goal as a
+        # plain first-person trying-line — and never names or announces
+        # the place, which the viewer can already see. The scorer does
+        # not change (Kasra's standing order); the generator carries
+        # the doctrine, so the block grows in every prompt that writes
+        # a hook, strategy included. The ceiling moves by a measured
+        # 1,000 to 44,750, keeping ~710 of headroom.
+        CEILING = 44_750
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "
@@ -3151,21 +3163,24 @@ class TestHookScriptContinuity:
         assert "script never asks one" in prompt
         assert "strongest concrete line" in prompt
 
-    def test_the_prompt_names_the_moment_cuts_softeners_and_opens_the_discovery(self, monkeypatch):
-        """Kasra's three line rules, in the shared spoken block.
+    def test_the_prompt_opens_with_the_goal_cuts_softeners_and_opens_the_discovery(self, monkeypatch):
+        """Kasra's line rules, in the shared spoken block.
 
-        The hook names the exact moment — a time or a place — instead of
-        something vague like the screenshot's 'halfway down this path'.
-        The script keeps one idea per sentence and cuts softeners like
-        'I keep thinking', hedges that pad a line without adding meaning.
+        The hook opens with the goal, not the place (ADR 0182): what
+        she is trying to do, as a plain first-person trying-line —
+        never a vague attempt like 'I'm trying to feel better', and
+        never the place the viewer can already see. The script keeps
+        one idea per sentence and cuts softeners like 'I keep
+        thinking', hedges that pad a line without adding meaning.
         And the ending stays ONE instruction, not two that fight: the
         script ends on its strongest concrete line, and that line opens
         the discovery, so the demo feels like the answer.
         """
         import ai_service
         block = ai_service._spoken_line_rules_block()
-        assert "NAME THE MOMENT" in block
-        assert "halfway down this path" in block
+        assert "OPEN WITH THE GOAL, NOT THE PLACE" in block
+        assert "I'm trying to feel better" in block
+        assert "NAME THE MOMENT" not in block
         assert "One idea per sentence" in block
         assert "softeners" in block
         assert "I keep thinking" in block
@@ -3190,11 +3205,85 @@ class TestHookScriptContinuity:
             duration_seconds=15,
         ))
         prompt = captured["prompt"]
-        assert "NAME THE MOMENT" in prompt
-        assert "halfway down this path" in prompt
+        assert "OPEN WITH THE GOAL, NOT THE PLACE" in prompt
         assert "One idea per sentence" in prompt
         assert "I keep thinking" in prompt
         assert "opens the discovery" in prompt
+
+    def test_the_goal_itself_reaches_every_hook_surface(self, monkeypatch):
+        """ADR 0182: the goal-opening rule is only as real as the goal
+        text in the prompt. The selected goal — its outcome meaning,
+        from the same OBJECTIVE_OUTCOMES the goal block prints — must
+        ride in the plan prompt, the strategy prompt and the hook
+        rewrite, beside the rule that tells the model to open with it.
+        """
+        import ai_service
+        goal_line = "- GOAL: 'address_user_problem' means: Gets them naming the problem out loud"
+        angle = {
+            "user_problem": "I keep losing count of my good days",
+            "hook_promise": "counting on her fingers at the mural",
+            "target_audience": "people with ADHD",
+        }
+        prompts = {"plan": [], "strategy": [], "rewrite": []}
+
+        async def capture_plan(system_message, prompt, context, **kwargs):
+            prompts["plan"].append(prompt)
+            return {
+                "hook_line": "I'm trying to keep count of my good days.",
+                "script": "Saying the days out loud shows me the pattern.",
+                "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+                "visual_direction": "v", "demo_brief": "d",
+                "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture_plan)
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            angle=angle, objective="address_user_problem", duration_seconds=15,
+        ))
+        assert any(goal_line in p for p in prompts["plan"])
+        assert any("OPEN WITH THE GOAL, NOT THE PLACE" in p for p in prompts["plan"])
+
+        async def capture_strategy(system_message, prompt, context, **kwargs):
+            prompts["strategy"].append(prompt)
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "I'm trying to keep count of my good days.",
+                "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"location": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 3,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 17,
+                     "goal": "g", "script": "s", "action": "a"},
+                ],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture_strategy)
+        _run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+            angle=angle, objective="address_user_problem", hook_seconds=3,
+        ))
+        assert any(goal_line in p for p in prompts["strategy"])
+        assert any("OPEN WITH THE GOAL, NOT THE PLACE" in p for p in prompts["strategy"])
+
+        async def capture_rewrite(**kwargs):
+            prompts["rewrite"].append(kwargs["prompt"])
+            return {"hook_line": "I'm trying to keep count of my good days."}
+
+        monkeypatch.setattr(ai_service, "_chat_json", capture_rewrite)
+        _run(ai_service.rewrite_hook_line(
+            {"brand_name": "Journal"}, angle,
+            "Saturday afternoon at the mural, I keep losing count.",
+            objective="address_user_problem",
+        ))
+        assert any(goal_line in p for p in prompts["rewrite"])
+        assert any("opens with the goal" in p for p in prompts["rewrite"])
 
     def test_the_prompt_grounds_object_nouns_in_product_facts(self, monkeypatch):
         """The ownership rule must work for any product, not just journaling.
