@@ -1850,7 +1850,7 @@ export default function CreateVideo() {
     ) {
       barAction = tailoring
         ? {
-            label: "Tailoring templates", busy: true, disabled: true,
+            label: "Tailoring your template", busy: true, disabled: true,
             etaSeconds: BUSY_ETA_SECONDS.templates,
           }
         : {
@@ -2259,7 +2259,7 @@ export default function CreateVideo() {
                   no ranked read: every template request waits for this click
                   (ADR 0098). One reflexive tap on a neighbouring goal must
                   cost exactly nothing. The button carries the work: idle it
-                  says Generate, processing it says Tailoring templates with
+                  says Generate, processing it says Tailoring your template with
                   a looping sweep — no helper line below while it runs. */}
               {angle && objective && profileId && !(recommendationsVisible && visibleRecommendations.length > 0) && (
                 <div className="space-y-2">
@@ -2272,7 +2272,7 @@ export default function CreateVideo() {
                     etaSeconds={BUSY_ETA_SECONDS.templates}
                     data-testid="templates-generate"
                   >
-                    <Sparkles className="h-3.5 w-3.5" /> {tailoring ? "Tailoring templates" : "Generate tailored templates"}
+                    <Sparkles className="h-3.5 w-3.5" /> {tailoring ? "Tailoring your template" : "Generate tailored templates"}
                   </Button>
                   {!tailoring && (
                     <p className="text-sm text-muted-foreground">
@@ -2672,7 +2672,7 @@ export default function CreateVideo() {
               Generate your plan
             </Button>
             <p className="text-base text-muted-foreground">
-              Your choices are set — generate the free plan and your hook, script, shots, and demo note land here, ready to edit.
+              The free plan brings your hook, script, shots, and demo note here, ready to edit.
             </p>
           </div>
         ) : !project?.script_version ? (

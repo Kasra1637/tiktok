@@ -1425,6 +1425,77 @@ async function main() {
     }
   });
 
+  await check("the presenter photo section shows the library photo the draft has not attached", async (ctx) => {
+    // The founder uploaded a presenter photo to the app's library earlier;
+    // this draft has not attached it yet. The section used to collapse that
+    // photo behind an "N other photos" count, so the face the section
+    // exists for showed as blank space until the count was clicked. The
+    // photo itself must stand in the section, image and all.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          updateStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          createStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+          getAssets: async () => ({
+            assets: [
+              {
+                id: "a9", kind: "character_reference", status: "active",
+                rights_confirmed: true, label: "Founder photo",
+                media_url: "https://cdn.example/founder.jpg",
+                created_at: new Date().toISOString(), used_in: [],
+              },
+            ],
+          }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await openTemplateStep(ctx);
+          await act(async () => {});
+          const section = ctx.container.querySelector('[data-testid="template-photo"]');
+          if (!section) throw new Error("the presenter photo section never rendered");
+          const img = [...section.querySelectorAll("img")]
+            .find((i) => (i.getAttribute("src") || "").includes("founder.jpg"));
+          if (!img) {
+            throw new Error("the library's presenter photo is not shown as an image in the section");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("Review's plan helper names what the plan brings, not the button again", async (ctx) => {
+    // The button already says "Generate your plan"; the helper under it
+    // used to spend its first half repeating that ("Your choices are set —
+    // generate the free plan and…"). What a first-time founder cannot
+    // guess is what the plan contains, so that is all the helper says now.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+        await openStep(ctx, "Review & submit");
+        await act(async () => {});
+        const text = ctx.text();
+        if (!text.includes("The free plan brings your hook, script, shots, and demo note here, ready to edit.")) {
+          throw new Error("the plan helper does not say what the plan brings");
+        }
+        if (text.includes("Your choices are set")) {
+          throw new Error("the plan helper still repeats the button");
+        }
+      }
+    );
+  });
+
   // -------------------------------------------------------------------------
   // Part 5: the journey is one flow. The profile is approved where the flow
   // starts, the plan and the strategy arrive in one pass, the wizard ends in
@@ -9461,7 +9532,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openTemplateStep(ctx);
         await passTemplatesGate(ctx);
         const waiting = ctx.text();
-        if (!waiting.includes("Tailoring templates")) {
+        if (!waiting.includes("Tailoring your template")) {
           throw new Error("the step does not say it is tailoring before showing templates");
         }
         if (waiting.includes("Premade Pick") || waiting.includes("Custom Pick")) {
@@ -9570,13 +9641,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openTemplateStep(ctx);
         await passTemplatesGate(ctx);
         const waiting = ctx.text();
-        if (!waiting.includes("Tailoring templates")) {
+        if (!waiting.includes("Tailoring your template")) {
           throw new Error("the step does not say it is tailoring before showing templates");
         }
         const btn = ctx.container.querySelector('[data-testid="templates-generate"]');
         if (!btn) throw new Error("no templates button while templates tailor");
         if (btn.getAttribute("data-busy") !== "true") throw new Error("the templates button wears no busy sweep while templates tailor");
-        if (!/Tailoring templates/.test(btn.textContent || "")) {
+        if (!/Tailoring your template/.test(btn.textContent || "")) {
           throw new Error(`the button label does not name the work: ${JSON.stringify(btn.textContent)}`);
         }
         if (ctx.container.querySelector('[data-testid="templates-progress"]')) {

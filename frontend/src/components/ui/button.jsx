@@ -56,7 +56,7 @@ const buttonVariants = cva(
 )
 
 /* Unified busy state: a looping sheen sweep on the button itself (`.btn-studio[data-busy]`).
-   The label names the work concisely ("Tailoring templates", never dotted, never
+   The label names the work concisely ("Tailoring your template", never dotted, never
    a "Reading X of Y…" line beside it) and the sweep carries the wait. Text
    and icons never animate; only the fill layer moves. Callers keep owning
    `disabled`: busy describes the work, not whether the control accepts input.

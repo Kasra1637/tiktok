@@ -505,6 +505,21 @@ export default function AssetLibrary({
       ? (projectAssets || []).find((a) => a && a.kind === "character_reference") || null
       : null;
 
+  // When the draft holds no photo at all, an unattached character photo in
+  // the library is not a footnote — it is the presenter this section asks
+  // for, and the founder may already have uploaded it (on the library page,
+  // or for an earlier draft) without it ever being attached here.
+  // Collapsing it behind the count left the section blank beside a number,
+  // so those photos stand as rows until one is attached; only once a
+  // presenter is in place do the rest return to the footnote below.
+  const presenterCandidates =
+    embedded && !attachedAsset && !attachedReference
+      ? otherAssets.filter((a) => a.kind === "character_reference")
+      : [];
+  const collapsedAssets = presenterCandidates.length
+    ? otherAssets.filter((a) => a.kind !== "character_reference")
+    : otherAssets;
+
   const load = useCallback(async () => {
     if (!activeProfileId) return;
     setLoading(true);
@@ -937,11 +952,36 @@ export default function AssetLibrary({
             />
           </div>
         )}
+        {presenterCandidates.length > 0 && (
+          <div className="border-t border-[color:var(--hairline)] pt-4">
+            <div className="space-y-4">
+              {presenterCandidates.map((a) => (
+                <AssetRow
+                  key={a.id}
+                  asset={a}
+                  onDelete={handleDelete}
+                  onArchive={handleArchive}
+                  onAttach={handleAttach}
+                  onDetach={handleDetach}
+                  onRefresh={load}
+                  embedded
+                  projectId={projectId}
+                  attached={false}
+                  attachDisabled={busy || characterSlotTaken}
+                  attachBusy={attachBusyId === a.id}
+                  busy={busy}
+                  highlight={a.id === lastUploadedId}
+                  uploadWarning={uploadWarnings[a.id] || ""}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Everything else stays out of the way until it is asked for: the
             studio needs one face, and a wall of unused photographs read as
             more to do. */}
-        {embedded && otherAssets.length > 0 && (
+        {embedded && collapsedAssets.length > 0 && (
           <div className="border-t border-[color:var(--hairline)] pt-4">
             {!showAllPhotos ? (
               <Button
@@ -949,11 +989,11 @@ export default function AssetLibrary({
                 size="sm"
                 onClick={() => setShowAllPhotos(true)}
               >
-                {otherAssets.length} other photo{otherAssets.length === 1 ? "" : "s"}
+                {collapsedAssets.length} other photo{collapsedAssets.length === 1 ? "" : "s"}
               </Button>
             ) : (
               <div className="space-y-4">
-                {otherAssets.map((a) => (
+                {collapsedAssets.map((a) => (
                   <AssetRow
                     key={a.id}
                     asset={a}
