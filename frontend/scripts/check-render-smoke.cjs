@@ -19873,6 +19873,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [
           { ...COMPLETED, id: "pair-full", post_kit: POST_KIT, audience: "Night scrollers", demo_brief: "Film the dock." },
           { ...COMPLETED, id: "pair-context", audience: "Night scrollers" },
+          { ...COMPLETED, id: "pair-failed", status: "failed", audience: "Night scrollers" },
           { ...COMPLETED, id: "pair-kit", post_kit: POST_KIT },
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
@@ -19899,7 +19900,20 @@ await check(
         if (panel?.contains(feedback)) {
           throw new Error("the full card's feedback block still sits in the detail panel");
         }
-        for (const id of ["pair-context", "pair-kit"]) {
+        // ADR 0184 flipped pair-context: a completed kit-less row
+        // with context pairs now — its empty post-copy panel stands
+        // in the Post copy column (pinned in full by the next check).
+        const emptyWrap = ctx.container.querySelector("#generation-pair-context")?.querySelector(".history-record-sections");
+        if (!emptyWrap?.classList.contains("history-record-sections-paired")) {
+          throw new Error("pair-context does not pair its empty post-copy panel");
+        }
+        if (!emptyWrap.querySelector('[data-testid="history-generate-post-copy-pair-context"]')) {
+          throw new Error("pair-context's pair does not hold the empty post-copy panel");
+        }
+        // Rows with genuinely one section keep the full record
+        // width: a kit with no context, and a context whose render
+        // never finished (no post-copy panel is offered for it).
+        for (const id of ["pair-failed", "pair-kit"]) {
           const wrap = ctx.container.querySelector(`#generation-${id}`)?.querySelector(".history-record-sections");
           if (!wrap) throw new Error(`${id} lost its sections wrapper`);
           if (wrap.classList.contains("history-record-sections-paired")) {
@@ -19914,6 +19928,48 @@ await check(
       if (!/@container \(min-width: 1080px\)[\s\S]{0,300}?\.history-record-sections\.history-record-sections-paired\s*\{\s*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/.test(css)) {
         throw new Error("the paired sections template is not defined at the card container breakpoint");
       }
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // The empty state pairs too (ADR 0184): a finished render whose
+  // kit was never written carries its generate panel in the Post
+  // copy column, beside Plan context — the pair is a property of
+  // the record's two slots, not of the kit's presence. Before
+  // this, sectionsPaired demanded a kit and the panel rendered
+  // below the sections wrapper at full width, so a kit-less card
+  // stacked where a kitted neighbour paired (the mural card,
+  // 2026-11-16: Post copy under Plan context, top to bottom).
+  await check("a finished render without post copy pairs its empty panel with plan context", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [
+          { ...COMPLETED, id: "pair-empty", audience: "Night scrollers", demo_brief: "Film the dock." },
+        ] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const card = ctx.container.querySelector("#generation-pair-empty");
+        const stack = card?.querySelector(".history-record-sections");
+        if (!stack) throw new Error("the kit-less card lost its sections wrapper");
+        if (!stack.classList.contains("history-record-sections-paired")) {
+          throw new Error("a kit-less card with plan context does not pair its sections");
+        }
+        const box = card.querySelector('[data-testid="history-generate-post-copy-pair-empty"]');
+        if (!box) throw new Error("the empty post-copy panel is missing");
+        if (box.parentElement !== stack) {
+          throw new Error("the empty post-copy panel stands outside the sections pair");
+        }
+        const context = card.querySelector('[data-testid="history-context"]');
+        if (!context) throw new Error("plan context is missing");
+        if (!(box.compareDocumentPosition(context) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the empty post-copy panel does not lead plan context");
+        }
+      });
     } finally {
       global.__SMOKE_PARAMS = previousParams;
     }

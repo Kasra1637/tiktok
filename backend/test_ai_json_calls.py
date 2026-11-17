@@ -1544,6 +1544,114 @@ class TestCreativePlanBudget:
         assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
 
 
+class _PostKitBudgetGate(_BudgetGate):
+    """The budget gate at the post kit's reasoning demand.
+
+    The threshold sits between the two budgets observed failing live
+    and the fixed start, the way ADR 0129's pins are set: the kit's
+    old 1500 start and its doubled 3000 retry both came back as
+    length finishes on the mural render's History card (2026-11-16),
+    so anything under 4000 truncates here and the fixed first attempt
+    must already clear it.
+    """
+
+    THRESHOLD = 4000
+
+
+def _patch_post_kit_gate(monkeypatch, body):
+    import ai_service
+    rec = _PostKitBudgetGate(body)
+    monkeypatch.setattr(ai_service.httpx, "AsyncClient", lambda *a, **k: rec)
+    monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+    return rec
+
+
+class TestPostKitBudget:
+    """
+    Production failure, 2026-11-16 (ADR 0183): regenerating the mural
+    render's post copy failed twice on its History card — "Post kit
+    was cut off after 3000 tokens (finish_reason=length) before the
+    JSON closed", then "Post kit: model returned no content
+    (finish_reason=length)". The kit's visible answer is tiny
+    (measured: ~94 tokens realistic, ~297 worst case under the
+    validators), but the call still started at the inline 1500
+    ADR 0129 named as a watch item, and the shipped model reasons at
+    Max against the same budget — so the thinking spent the 1500
+    start AND its doubled 3000 retry before the JSON could close.
+    ADR 0129's own rule for a fired watch item: double the largest
+    budget observed to fail into a named constant with a gate pin.
+    Largest observed failing: 3000. The start is 6000.
+    """
+
+    PROJECT = {
+        "hook_line": "You do not have a focus problem.",
+        "script": "You have too many lists, and every one of them asks for you.",
+        "cta": "Clear one list by hand today.",
+        "objective": "address_user_problem",
+        "audience": "people with too many lists",
+    }
+    PROFILE = {
+        "id": "app-1",
+        "brand_name": "FocusTimer",
+        "status": "approved",
+        "brand_description": "One list, not eleven.",
+        "app_category": "productivity",
+        "target_audience": ["people with too many lists"],
+        "claims_banned": ["cures ADHD"],
+    }
+    KIT = {
+        "caption": "I stopped fighting my phone and cleared one list instead \u2014 you?",
+        "hashtags": [
+            "#doomscrolling", "#productivitytok", "#productivity",
+            "#FocusTimer", "#deepwork", "#phonehabits",
+        ],
+        "cover_text": "One list, not eleven",
+    }
+
+    def test_post_kit_uses_a_budget_that_fits_its_reasoning(self):
+        """Guard the number itself, scoped to this caller."""
+        import ai_service
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        assert ai_service.POST_KIT_MAX_TOKENS >= 6000, (
+            f"POST_KIT_MAX_TOKENS is {ai_service.POST_KIT_MAX_TOKENS}; the "
+            f"3000 doubled retry already returned length finishes in "
+            f"production, so the start must clear it at twice the size, "
+            f"not match it (ADR 0129)"
+        )
+        assert src.count("max_tokens=POST_KIT_MAX_TOKENS") == 1, (
+            "the post kit call must route through POST_KIT_MAX_TOKENS"
+        )
+
+    def test_post_kit_survives_a_reasoning_sized_budget(self, monkeypatch):
+        """The user-visible failure becomes a result on the first attempt.
+
+        The gate truncates any call whose budget is under the kit's
+        reasoning demand. The pre-fix 1500 start and its doubled 3000
+        retry both sit under it, so the old code raises
+        TruncatedResponse here — the founder's exact History error.
+        """
+        import ai_service
+        import hashtag_volume
+
+        async def no_counts(tags):
+            return {}
+
+        monkeypatch.setattr(hashtag_volume, "lookup_hashtag_counts", no_counts)
+        rec = _patch_post_kit_gate(monkeypatch, json.dumps(self.KIT))
+        result = asyncio.run(
+            ai_service.generate_post_kit(self.PROJECT, self.PROFILE)
+        )
+        assert result["caption"] == self.KIT["caption"]
+        assert len(result["hashtags"]) == 5
+        assert result["cover_text"] == self.KIT["cover_text"]
+        assert len(rec.payloads) == 1, "a good reply must not cost a retry"
+        # The first attempt's budget already clears the truncation gate:
+        # the pre-fix 1500 (and its doubled 3000 retry) both came back
+        # as length finishes with no closed JSON.
+        assert rec.payloads[0]["max_tokens"] >= _PostKitBudgetGate.THRESHOLD
+        assert rec.payloads[0]["max_tokens"] == ai_service.POST_KIT_MAX_TOKENS
+
+
 def _worst_verdict_bundle(i):
     """A verdict bundle with every field past the prompt builder's caps.
 

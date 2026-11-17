@@ -462,11 +462,16 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // not exist yet.
   const showJourney = (row.status === "completed" || row.status === "archived") && Boolean(downloadUrl);
   const resultsLine = describeSnapshot(row.performance_snapshot);
-  // The two record sections pair only when both render (ADR 0153):
-  // the kit beside the context, never the kit-less generate box,
-  // which stands in for a kit and keeps the full width.
+  // The two record sections pair when both slots render (ADR 0153):
+  // the Post copy slot beside Plan context. The slot holds the kit
+  // when one is written and the generate panel when a finished
+  // render has none (ADR 0184) — the pair is a property of the two
+  // slots, not of the kit's presence, so a kit-less card pairs its
+  // empty panel instead of stacking it under the context at full
+  // width the way the mural card did.
   const hasContext = Boolean(row.audience || row.demo_brief || row.location);
-  const sectionsPaired = !compact && Boolean(row.post_kit) && hasContext;
+  const showEmptyKit = !row.post_kit && (row.status === "completed" || row.status === "archived");
+  const sectionsPaired = !compact && (Boolean(row.post_kit) || showEmptyKit) && hasContext;
   // The journey line's post-copy item walks to the control that owns it:
   // the kit itself when one is written (scrolling to its solid section),
   // the generate prompt when none is. One click from the state to the
@@ -785,8 +790,35 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </div>
               )}
               {/* Identity lives once, in the summary at this record's head above — nothing below repeats it. */}
-              {(row.post_kit || row.audience || row.demo_brief || row.location) && (
+              {(row.post_kit || showEmptyKit || row.audience || row.demo_brief || row.location) && (
                 <div className={`history-record-sections grid grid-cols-1 items-start gap-3${sectionsPaired ? " history-record-sections-paired" : ""}`}>
+                  {showEmptyKit && (
+                    <div
+                      className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"
+                      data-testid={`history-generate-post-copy-${row.id}`}
+                    >
+                      <p className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
+                        <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                        <span>Post copy</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        This render finished before its caption was written, so there is no post copy yet.
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleGeneratePostKit}
+                        disabled={busy}
+                        busy={busy}
+                        data-testid={`history-generate-post-copy-button-${row.id}`}
+                        className="gap-1.5"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                        {busy ? "Writing post copy" : "Generate post copy"}
+                      </Button>
+                    </div>
+                  )}
+
                   {row.post_kit && (
                     <section
                       className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5"
@@ -844,33 +876,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                       </div>
                     </section>
                   )}
-                </div>
-              )}
-
-              {!row.post_kit && (row.status === "completed" || row.status === "archived") && (
-                <div
-                  className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"
-                  data-testid={`history-generate-post-copy-${row.id}`}
-                >
-                  <p className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
-                    <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                    <span>Post copy</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    This render finished before its caption was written, so there is no post copy yet.
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleGeneratePostKit}
-                    disabled={busy}
-                    busy={busy}
-                    data-testid={`history-generate-post-copy-button-${row.id}`}
-                    className="gap-1.5"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                    {busy ? "Writing post copy" : "Generate post copy"}
-                  </Button>
                 </div>
               )}
 

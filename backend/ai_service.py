@@ -2751,6 +2751,25 @@ async def generate_cover_text(
     raise RewriteRefusal(refusal)
 
 
+# The budget for the post kit call (ADR 0183). The visible answer is
+# the smallest in the codebase — a caption of 50 to 80 characters, a
+# pool of 12 to 15 short tags and a cover line: ~94 tokens for a real
+# kit, ~297 at the validators' worst case, against a ~900-token
+# prompt. But the shipped text model reasons at Max and bills that
+# reasoning against max_tokens (ADR 0129), and ADR 0129 named this
+# call's inline 1500 a watch item: a family with no observed failure
+# yet, to be fixed by doubling into a named constant at its first
+# failure rather than by a local bump. The failure arrived on
+# 2026-11-16, on the mural render's History card: regenerating its
+# post copy failed with the 1500 start AND its doubled 3000 retry
+# both returning length finishes — once as a JSON cut mid-object,
+# once as empty content — so the card sat in its no-post-copy state.
+# 6000 starts at twice the largest budget observed to fail, the same
+# number and history as REWRITE_MAX_TOKENS; _chat_json's retry
+# doubles it to 12000 from there.
+POST_KIT_MAX_TOKENS = 6000
+
+
 async def generate_post_kit(project: dict, profile: dict) -> dict:
     """
     Post kit for one render: 1 caption, exactly 5 hashtags, cover text.
@@ -2860,7 +2879,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         system_message=system_message,
         prompt=prompt,
         context="Post kit",
-        max_tokens=1500,
+        max_tokens=POST_KIT_MAX_TOKENS,
         timeout=90,
         json_schema=POST_KIT_JSON_SCHEMA,
     )

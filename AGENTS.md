@@ -100,7 +100,10 @@ One render path, single-pass video generation via OpenRouter.
   pair template engages at a 1080px card-container breakpoint) and
   the feedback block rides in the media column under the Work row,
   so a standard card renders no Results & actions disclosure;
-  compact cards keep their feedback in the record (ADR 0153).
+  compact cards keep their feedback in the record (ADR 0153). The
+  pair is a property of the two slots, not of the kit's presence:
+  a finished kit-less render's empty post-copy panel stands in
+  the Post copy column beside Plan context (ADR 0184).
   A view toggle switches the list between the full cards and
   compact scan rows (ADR 0159): a scan row carries the hook,
   status and the verdict in the row, mounts the full card when
@@ -287,7 +290,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and eighty-two decisions (0001–0182) now
+Read `docs/adr/README.md` first. One hundred and eighty-four decisions (0001–0184) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
