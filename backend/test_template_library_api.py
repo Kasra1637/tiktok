@@ -427,6 +427,66 @@ class TestContentAngles:
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert made["id"] in [a["id"] for a in listed["angles"]]
 
+    def test_angles_carry_a_content_fit_scored_from_the_profile(self, api):
+        # ADR 0193: the serialized angle carries the server-side content
+        # fit the picker displays. This angle's feature is the profile's
+        # own "Task timer" (exact link, +4), a certified outcome exists
+        # for it (+1), its problem is stated thinly (+1) and it has no
+        # promise (+0): 6, with the basis naming the feature.
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON)
+        made = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="feature_demonstration", label="Show the timer",
+                target_audience="People who lose track of time",
+                user_problem="Cannot remember what to do next",
+                app_feature="Task timer",
+            ),
+            user_id=ANON,
+        ))
+        assert made["content_fit"]["score"] == 6
+        assert "Task timer" in made["content_fit"]["basis"]
+        listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
+        row = next(a for a in listed["angles"] if a["id"] == made["id"])
+        assert row["content_fit"] == made["content_fit"]
+
+    def test_regen_impact_counts_drafts_on_generated_angles_only(self, api):
+        # The pre-click count behind the regenerate confirm (ADR 0198):
+        # the same count the regen endpoint reports afterwards, readable
+        # BEFORE anything is deleted. A draft on a hand-written angle is
+        # not counted — regeneration keeps manual rows, so that draft
+        # loses nothing.
+        from models import CreateContentAngleRequest, CreateStudioProjectRequest
+        profile = _make_profile(api, ANON, approve=True)
+        made = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                kind="feature_demonstration", label="Show the timer",
+                target_audience="People who lose track of time",
+                user_problem="Cannot remember what to do next",
+                app_feature="Task timer",
+            ),
+            user_id=ANON,
+        ))
+        _run(api.create_studio_project(
+            payload=CreateStudioProjectRequest(
+                brand_profile_id=profile["id"], content_angle_id=made["id"]),
+            user_id=ANON,
+        ))
+        impact = _run(api.content_angle_regen_impact(
+            profile_id=profile["id"], user_id=ANON))
+        assert impact["projects_affected"] == 0
+        # The same draft, once its angle is a generated row, is exactly
+        # what a regen would cost its story.
+        _run(api._execute(
+            "UPDATE content_angles SET origin = 'generated' WHERE id = ?",
+            (made["id"],),
+        ))
+        impact = _run(api.content_angle_regen_impact(
+            profile_id=profile["id"], user_id=ANON))
+        assert impact["projects_affected"] == 1
+
     def test_unknown_angle_kind_falls_back(self, api):
         from models import CreateContentAngleRequest
         profile = _make_profile(api, ANON)

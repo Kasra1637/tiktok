@@ -490,7 +490,10 @@ class TestRecommendationScorer:
         result = _score_template_for_angle(
             self._template(), self._profile(), angle, "demonstrate_feature"
         )
-        assert result["score"] >= 7.0
+        # The floor is the rebalanced scale's arithmetic (ADR 0195):
+        # objective 2.5 + category 1.5 + affinity 1.5 + feature 1.0 = 6.5
+        # for this fixture, where the pre-rebalance weights summed past 9.
+        assert result["score"] >= 6.0
         assert any("demonstrate feature" in r for r in result["reasons"])
 
     def test_a_reason_never_splices_a_capitalized_outcome_after_a_dash(self):

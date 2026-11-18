@@ -131,7 +131,7 @@ from routers.brands import (
     list_content_angles,
     approve_app_profile, regenerate_everything, refresh_app_profile,
     delete_app_profile, generate_profile_content_angles,
-    create_manual_content_angle, update_content_angle,
+    create_manual_content_angle, update_content_angle, content_angle_regen_impact,
     regenerate_content_angles, regenerate_angle_goal_suggestions,
     live_angle_goals, angle_goal_suggestions, profile_direction_options,
     refresh_profile_direction_options, delete_content_angle,

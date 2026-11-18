@@ -311,9 +311,15 @@ def _headers():
     }
 
 
-# The sampling temperature sent to the chat models. 0.4 is low enough that
-# structured output stays stable and high enough that the copy does not read as
-# templated. Flows that want a different value still pass one explicitly.
+# The sampling temperature sent to the chat models — the ONE temperature
+# for every text generation in the app (founder's ruling, Nov 17 2026,
+# ADR 0199). 0.4 is low enough that structured output stays stable and
+# high enough that the copy does not read as templated. No flow passes
+# its own value: the per-flow overrides that used to scatter 0.5-0.7
+# across cover text, templates, rewrites, the hook bake-off and the
+# strategy are gone, so every text flow rides this constant through
+# the _chat_json default. The one deliberate exception is not a text
+# flow: analyze_hook's vision call sends 0.3 (frame analysis).
 CHAT_TEMPERATURE = 0.4
 
 # Whether an endpoint accepts a `temperature` field is a MEASURED fact, not a
@@ -2712,7 +2718,6 @@ async def generate_cover_text(
             system_message="You write one TikTok cover text. Return one JSON object only.",
             prompt=prompt,
             context="Cover text",
-            temperature=0.6,
             max_tokens=REWRITE_MAX_TOKENS,
             attempts=2,
             json_schema=COVER_TEXT_JSON_SCHEMA,
@@ -3262,7 +3267,6 @@ async def generate_brand_templates(
             system_message=system_message,
             prompt=prompt,
             context="Brand templates",
-            temperature=0.5,
             max_tokens=16384,
             attempts=2,
             json_schema=TEMPLATES_JSON_SCHEMA,
@@ -3810,7 +3814,6 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
             system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
             prompt=prompt,
             context="Hook rewrite",
-            temperature=0.6,
             max_tokens=REWRITE_MAX_TOKENS,
             attempts=2,
             json_schema=HOOK_REWRITE_JSON_SCHEMA,
@@ -3948,7 +3951,6 @@ async def rewrite_spoken_line(
             system_message="You sharpen one spoken line from a TikTok script. Return one JSON object only.",
             prompt=prompt,
             context="Line rewrite",
-            temperature=0.6,
             max_tokens=REWRITE_MAX_TOKENS,
             attempts=2,
             json_schema=LINE_REWRITE_JSON_SCHEMA,
@@ -4268,7 +4270,6 @@ async def _hook_bake_off(
             system_message=system_message,
             prompt=prompt,
             context="Creative plan hook candidates",
-            temperature=0.7,
             max_tokens=HOOK_CANDIDATES_MAX_TOKENS,
             timeout=120,
             json_schema=HOOK_CANDIDATES_JSON_SCHEMA,
@@ -4332,7 +4333,6 @@ async def _hook_bake_off(
             system_message=system_message,
             prompt=correction_prompt,
             context="Creative plan hook correction",
-            temperature=0.6,
             max_tokens=REWRITE_MAX_TOKENS,
             timeout=120,
             json_schema=HOOK_REWRITE_JSON_SCHEMA,
@@ -5832,7 +5832,6 @@ async def generate_video_strategy(
         system_message=system_message,
         prompt=prompt,
         context="Video strategy",
-        temperature=0.5,
         max_tokens=STRATEGY_MAX_TOKENS,
         attempts=3,
         json_schema=STRATEGY_JSON_SCHEMA,

@@ -729,6 +729,43 @@ async def _video_verdicts(generation_ids, user_id):
     return verdicts
 
 
+async def _verdict_rows_for_summary(user_id, brand_profile_id=""):
+    """Every current verdict row in the summary's scope, newest first.
+
+    The verdict summary is a claim about the founder's verdicts — the
+    Analytics headline reads it as "verdicts so far" — so it aggregates
+    the verdict table itself (joined to generations for the profile
+    scope), never the rows one history fetch happened to return: a
+    verdict on an older render used to vanish from the count whenever
+    newer renders pushed its generation off the fetched page (ADR 0197).
+    """
+    clauses = ["vv.user_id = ?"]
+    params: list = [user_id]
+    if (brand_profile_id or "").strip():
+        clauses.append("g.brand_profile_id = ?")
+        params.append(brand_profile_id.strip())
+    rows = await _fetch_all(
+        "SELECT vv.verdict AS verdict, vv.bundle AS bundle "
+        "FROM video_verdicts vv "
+        "JOIN generations g ON g.id = vv.generation_id "
+        f"WHERE {' AND '.join(clauses)} ORDER BY vv.updated_at DESC",
+        tuple(params),
+    )
+    out = []
+    for row in rows:
+        bundle = row.get("bundle")
+        if isinstance(bundle, str):
+            try:
+                bundle = json.loads(bundle)
+            except (TypeError, ValueError):
+                bundle = None
+        out.append({
+            "verdict": row.get("verdict"),
+            "bundle": bundle if isinstance(bundle, dict) else {},
+        })
+    return out
+
+
 async def _generation_detail(generation_id, user_id):
     """The detail payload with its latest performance snapshot attached."""
     row = await _fetch_one("SELECT * FROM generations WHERE id = ?", (generation_id,))
@@ -989,12 +1026,14 @@ async def generation_history(
     for entry in out:
         entry["video_verdict"] = (verdicts.get(entry["id"]) or {}).get("verdict")
     # The headline signal Analytics renders (ADR 0124): the founder's
-    # whole-video verdicts over this page — counts, and what the worked
+    # whole-video verdicts in this scope — counts, and what the worked
     # bundles share once there are verdicts enough to share anything.
-    # Posted metrics stay on each row as the founder's record; they no
-    # longer summarize into a steering claim of their own.
+    # The summary aggregates the verdict table, not this page of rows
+    # (ADR 0197): a verdict whose generation fell off the fetched page
+    # still counts. Posted metrics stay on each row as the founder's
+    # record; they no longer summarize into a steering claim of their own.
     verdict_full = feedback_mod.summarize_video_verdicts(
-        [verdicts[entry["id"]] for entry in out if entry["id"] in verdicts])
+        await _verdict_rows_for_summary(user_id, brand_profile_id))
     verdict_summary = {key: verdict_full[key]
                        for key in ("total", "up", "down", "ready", "shared")}
     return {"generations": out, "verdict_summary": verdict_summary}

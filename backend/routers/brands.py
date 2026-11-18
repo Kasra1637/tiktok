@@ -27,6 +27,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import ai_service
+import angle_policy
 import angle_scene
 import final_beat
 import template_library
@@ -537,6 +538,14 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
         _stripped = final_beat.strip_phone_phrases(_promise)
         if _stripped:
             _promise = _stripped
+    # Fit is scored on content against the profile (ADR 0193), from the
+    # same row the picker displays — the stripped promise above, not the
+    # stored one. Without a profile there is nothing to ground against,
+    # and the field stays null rather than inventing a number.
+    _content_fit = (
+        angle_policy.angle_content_fit(profile, dict(row, hook_promise=_promise))
+        if profile else None
+    )
     return {
         "id": row.get("id"),
         "brand_profile_id": row.get("brand_profile_id"),
@@ -559,6 +568,7 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
             row.get("kind"), profile, int(row.get("goal_variant") or 0)
         ),
         "created_at": row.get("created_at"),
+        "content_fit": _content_fit,
         "evidence": evidence or {"wins": 0, "flops": 0, "adoptions": 0,
                                    "posted": 0, "views": 0},
     }
@@ -1824,7 +1834,7 @@ async def create_manual_content_angle(
     by a regeneration pass (regeneration only replaces AI-generated rows)."""
     _require_configured()
     profile = await _cfg("_fetch_one")(
-        "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
     )
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
@@ -1859,7 +1869,7 @@ async def create_manual_content_angle(
          json.dumps(claims), rank, now, user_id),
     )
     row = await _cfg("_fetch_one")("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
-    return _serialize_angle_row(row)
+    return _serialize_angle_row(row, profile=profile)
 
 
 @router.patch("/app-profiles/{profile_id}/content-angles/{angle_id}")
@@ -1886,8 +1896,11 @@ async def update_content_angle(
     if "claims_to_respect" in updates:
         set_clauses.append("claims_to_respect = ?")
         values.append(json.dumps(_normalize_str_list(updates["claims_to_respect"])))
+    profile = await _cfg("_fetch_one")(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
     if not set_clauses:
-        return _serialize_angle_row(row)
+        return _serialize_angle_row(row, profile=profile)
 
     values.extend([angle_id, profile_id, user_id])
     await _cfg("_execute")(
@@ -1895,8 +1908,42 @@ async def update_content_angle(
         tuple(values),
     )
     return _serialize_angle_row(
-        await _cfg("_fetch_one")("SELECT * FROM content_angles WHERE id = ?", (angle_id,))
+        await _cfg("_fetch_one")("SELECT * FROM content_angles WHERE id = ?", (angle_id,)),
+        profile=profile,
     )
+
+
+async def _regen_projects_affected(profile_id: str, user_id: str) -> int:
+    """Drafts on this profile planned around a generated angle.
+
+    A regen replaces the generated angles; those drafts keep their row
+    but lose the story they were built around. One count, two readers:
+    the regen endpoint reports it after the fact, and the regen-impact
+    preflight reads it BEFORE the click so the confirm can name the
+    cost while there is still a choice (ADR 0198). Drafts on
+    hand-written angles are never counted — regeneration keeps those
+    rows, so those drafts lose nothing.
+    """
+    affected = await _cfg("_fetch_one")(
+        "SELECT COUNT(*) AS n FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
+        "AND content_angle_id IN (SELECT id FROM content_angles WHERE brand_profile_id = ? "
+        "AND (origin IS NULL OR origin != 'manual'))",
+        (profile_id, user_id, profile_id),
+    )
+    return int((affected or {}).get("n") or 0)
+
+
+@router.get("/app-profiles/{profile_id}/content-angles/regen-impact")
+async def content_angle_regen_impact(profile_id: str, user_id: str = Depends(get_current_user_id)):
+    """The pre-click half of the regenerate count (ADR 0198).
+
+    Read-only: nothing is generated or deleted. The wizard asks this
+    before offering the regenerate confirm, so the confirm can name
+    how many drafts — on ANY generated angle of this profile, not
+    only the selected one — would lose their stories.
+    """
+    _require_configured()
+    return {"projects_affected": await _regen_projects_affected(profile_id, user_id)}
 
 
 @router.post("/app-profiles/{profile_id}/content-angles/regenerate")
@@ -1952,13 +1999,7 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
     # row (LEFT JOIN degrades to a null angle later) but lose the story they
     # were built around. Counting them BEFORE the delete turns that quiet
     # break into a number the founder can be told about.
-    affected = await _cfg("_fetch_one")(
-        "SELECT COUNT(*) AS n FROM studio_projects WHERE brand_profile_id = ? AND user_id = ? "
-        "AND content_angle_id IN (SELECT id FROM content_angles WHERE brand_profile_id = ? "
-        "AND (origin IS NULL OR origin != 'manual'))",
-        (profile_id, user_id, profile_id),
-    )
-    projects_affected = int((affected or {}).get("n") or 0)
+    projects_affected = await _regen_projects_affected(profile_id, user_id)
 
     # The guarded delete: only derived rows are replaced. A manual row can
     # still be removed through the ordinary DELETE endpoint, by its founder.
@@ -2375,7 +2416,7 @@ async def recommend_templates(
         (user_id,),
     )
     if not templates:
-        return {"recommendations": [], "angle": _serialize_angle_row(angle) if angle else None}
+        return {"recommendations": [], "angle": _serialize_angle_row(angle, profile=profile) if angle else None}
 
     # The one learning input ranking reads (ADR 0127): the founder's
     # whole-video verdicts for this profile, each verdict attributed by
@@ -2436,7 +2477,7 @@ async def recommend_templates(
         "recommendations": visible,
         "shared_reasons": shared["shared_reasons"],
         "shared_limitations": shared["shared_limitations"],
-        "angle": _serialize_angle_row(angle) if angle else None,
+        "angle": _serialize_angle_row(angle, profile=profile) if angle else None,
         "objective": norm_objective,
     }
 
@@ -2483,7 +2524,7 @@ async def ensure_objective_templates(
         )
         if not angle:
             raise HTTPException(status_code=404, detail="Content angle not found for this App Profile")
-        angle = _serialize_angle_row(angle)
+        angle = _serialize_angle_row(angle, profile=profile)
     cached = await _cfg("_fetch_all")(
         """SELECT * FROM hook_templates
            WHERE brand_profile_id = ? AND objective = ? AND user_id = ?

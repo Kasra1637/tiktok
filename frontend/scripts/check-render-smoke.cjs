@@ -445,6 +445,10 @@ const apiStub = {
   // rows), so the default answers with rows: gate-passing checks land on a
   // list, and checks asserting the spend override this with their own set.
   regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
+  // No drafts at stake by default: the regen confirm stays out of the way
+  // of checks that are not about it (ADR 0198). Checks about the confirm
+  // override this with the count they exercise.
+  getAngleRegenImpact: async () => ({ projects_affected: 0 }),
   getTemplateRecommendations: async () => ({
     recommendations: [{
       template: { ...TEMPLATE, brand_profile_id: "b1" },
@@ -8894,6 +8898,125 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
       }
     );
+  });
+
+  // ADR 0198: the receipt's Dismiss actually clears it. It did not: the
+  // hook never exported its setter, so both Dismiss handlers in the page
+  // called a name that does not exist there — the click threw and the
+  // banner stayed, which is exactly what the founder reported. And once
+  // cleared by any route the receipt stays cleared across step
+  // navigation: nothing re-derives it for the same regen.
+  await check("the regen notice dismisses and stays dismissed across steps", async (ctx) => {
+    const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
+      id: `n${i}`,
+      kind: "problem_solution",
+      label: `Fresh angle ${i}`,
+      target_audience: "busy professionals",
+      user_problem: "Nothing gets finished.",
+      goal_variant: 0,
+      origin: "generated",
+      goal_suggestions: [...ANGLE_GOALS.problem_solution],
+      evidence: { wins: 0, flops: 0 },
+    }));
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        regenerateContentAngles: async () => ({ angles: FRESH, objective_evidence: {}, projects_affected: 1 }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+          await new Promise((r) => setTimeout(r, 150));
+          const notice = ctx.container.querySelector('[data-testid="angle-regen-notice"]');
+          if (!notice) throw new Error("regen with an affected draft shows no notice");
+          const dismiss = notice.querySelector('[data-testid="angle-regen-notice-dismiss"]');
+          if (!dismiss) throw new Error("the regen notice carries no Dismiss");
+          await clickEl(ctx, dismiss, "the regen notice Dismiss does nothing");
+          if (ctx.container.querySelector('[data-testid="angle-regen-notice"]')) {
+            throw new Error("the regen notice survives its own Dismiss");
+          }
+          await openStep(ctx, "Review & submit");
+          await openStep(ctx, "Audience & template");
+          if (ctx.container.querySelector('[data-testid="angle-regen-notice"]')) {
+            throw new Error("the dismissed regen notice reappears after step navigation");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // ADR 0198: a regen that costs no draft is not news — the receipt is
+  // set from the endpoint's count, and a count of 0 shows nothing.
+  await check("a regen that costs no draft shows no notice", async (ctx) => {
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {}, projects_affected: 0 }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+          await new Promise((r) => setTimeout(r, 150));
+          if (ctx.container.querySelector('[data-testid="angle-regen-notice"]')) {
+            throw new Error("a regen with projects_affected=0 still shows the notice");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  // ADR 0198: the pre-click confirm names the cross-draft cost — the
+  // regen-impact preflight counts drafts on ANY generated angle of the
+  // profile, not only the draft on the selected angle (the old confirm
+  // fired only for the selected one and named only it) — and declining
+  // it spends nothing.
+  await check("the regen confirm names drafts beyond the selected angle and gates the spend", async (ctx) => {
+    const seen = [];
+    const originalConfirm = dom.window.confirm;
+    dom.window.confirm = (message) => {
+      seen.push(message);
+      return false;
+    };
+    try {
+      await withApi(
+        {
+          getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+          getAngleRegenImpact: async () => ({ projects_affected: 2 }),
+          regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {}, projects_affected: 2 }),
+        },
+        async () => {
+          global.__SMOKE_PARAMS = "";
+          const before = apiCalls.length;
+          try {
+            await mount(CreateVideo, {})(ctx);
+            await openStep(ctx, "Audience & template");
+            await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+            await new Promise((r) => setTimeout(r, 150));
+            if (seen.length !== 1) throw new Error(`expected one regen confirm, saw ${seen.length}`);
+            if (!/2 drafts were planned around generated angles/.test(seen[0]) || !/hand-written/.test(seen[0])) {
+              throw new Error(`the confirm does not name the cross-draft cost: ${seen[0]}`);
+            }
+            if (apiCalls.slice(before).includes("regenerateContentAngles")) {
+              throw new Error("declining the confirm still spent the regenerate call");
+            }
+          } finally {
+            global.__SMOKE_PARAMS = "";
+          }
+        }
+      );
+    } finally {
+      dom.window.confirm = originalConfirm;
+    }
   });
 
   // The vertical scrollbar's gutter stays reserved, so switching between

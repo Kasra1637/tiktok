@@ -252,6 +252,44 @@ class TestVerdictStore:
         assert summary["shared"]["templates"] == ["tmpl-stop-doing-this"]
         assert summary["shared"]["objectives"] == ["demonstrate_feature"]
 
+    def test_history_verdict_summary_counts_a_verdict_beyond_the_page(self, api):
+        # The summary Analytics renders is a claim about the founder's
+        # verdicts, not about the rows one history fetch happened to
+        # return: a verdict on an older render still counts when newer
+        # unrated renders push it off the fetched page (ADR 0197).
+        profile_id = str(uuid.uuid4())
+        rated_id, _p = _rated_render(api, brand_profile_id=profile_id)
+        _set_verdict(api, rated_id, "down")
+        _run(api._execute(
+            "UPDATE generations SET created_at = ? WHERE id = ?",
+            ("2024-01-01T00:00:00+00:00", rated_id)))
+        _rated_render(api, brand_profile_id=profile_id)  # newer, unrated
+        history = _run(api.generation_history(
+            brand_profile_id=profile_id, limit=1, user_id=ANON))
+        assert [g["id"] for g in history["generations"]] != [rated_id]
+        summary = history["verdict_summary"]
+        assert summary["total"] == 1
+        assert summary["down"] == 1
+
+    def test_history_verdict_summary_keeps_the_profile_scope(self, api):
+        # Scoped to another app, the first app's verdicts are not claimed;
+        # scoped to the app itself, they count even off the fetched page.
+        profile_a = str(uuid.uuid4())
+        profile_b = str(uuid.uuid4())
+        rated_id, _p = _rated_render(api, brand_profile_id=profile_a)
+        _set_verdict(api, rated_id, "up")
+        _run(api._execute(
+            "UPDATE generations SET created_at = ? WHERE id = ?",
+            ("2024-01-01T00:00:00+00:00", rated_id)))
+        _rated_render(api, brand_profile_id=profile_a)  # newer, unrated
+        scoped_b = _run(api.generation_history(
+            brand_profile_id=profile_b, user_id=ANON))
+        assert scoped_b["verdict_summary"]["total"] == 0
+        scoped_a = _run(api.generation_history(
+            brand_profile_id=profile_a, limit=1, user_id=ANON))
+        assert scoped_a["verdict_summary"]["total"] == 1
+        assert scoped_a["verdict_summary"]["up"] == 1
+
 
 def _bundle(hook, template_id="tmpl-a"):
     return {

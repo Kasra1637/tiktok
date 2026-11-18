@@ -98,6 +98,75 @@ def angle_grounding(profile: dict, angle: dict) -> dict:
     return result
 
 
+def angle_content_fit(profile: dict, angle: dict) -> dict:
+    """Fit /10 for one angle, scored on its content against the profile.
+
+    The angle picker's Fit pill used to be computed in the frontend
+    from the angle's suggestion rank alone — a pure rank transform
+    floored at 3 — so six untested angles scored {4,3,3,3,3,3}
+    whatever they said, and the number could not help the founder
+    choose (ADR 0193). This score reads what the angle is actually
+    built from, using the same grounding the plan and strategy
+    briefs already trust:
+
+    - the angle's feature links to a recorded profile feature:
+      +4 for the exact wording (tier 1), +3 for the unique near
+      match (tier 2), nothing when the feature text grounds to no
+      profile feature — the prose remains, uncertified;
+    - the angle's stated outcome is the certified outcome for that
+      feature: +2; a certified outcome exists but the angle states
+      a different one: +1;
+    - the problem is stated in full (a real moment, not a stub):
+      +2, stated thinly: +1; the promise likewise: +2 / +1.
+
+    Rank plays no part: two angles with identical content score
+    identically, and a lower-ranked angle that grounds better
+    outscores the suggested-first one that does not. The basis
+    names the strongest fact so the founder can see WHY, in the
+    same plain style as the template reasons.
+    """
+    profile = profile or {}
+    angle = angle or {}
+    features = profile.get("core_features") or []
+    if isinstance(features, str):
+        features = [features]
+    features = [str(f).strip() for f in features if str(f).strip()]
+    feature_text = str(angle.get("app_feature") or "").strip()
+    selected = _select_feature(features, feature_text) if feature_text else ""
+
+    score = 0
+    basis_parts = []
+    if selected:
+        exact = any(_fact_key(f) == _fact_key(feature_text) for f in features)
+        score += 4 if exact else 3
+        basis_parts.append(
+            f"Built on your feature '{selected}'" if exact
+            else f"Closely matches your feature '{selected}'"
+        )
+    elif feature_text:
+        basis_parts.append("Its feature is not tied to a feature on your profile")
+
+    grounding = angle_grounding(profile, angle)
+    certified_outcome = str(grounding.get("outcome") or "").strip()
+    stated_outcome = str(angle.get("viewer_outcome") or "").strip()
+    if certified_outcome and stated_outcome and _fact_key(certified_outcome) == _fact_key(stated_outcome):
+        score += 2
+        basis_parts.append("its outcome is the one that feature is recorded to deliver")
+    elif certified_outcome:
+        score += 1
+
+    for field in ("user_problem", "hook_promise"):
+        text = str(angle.get(field) or "").strip()
+        if len(text) >= 40:
+            score += 2
+        elif text:
+            score += 1
+
+    if not basis_parts:
+        basis_parts.append("Written for this profile, with no feature link recorded")
+    return {"score": max(0, min(10, score)), "basis": "; ".join(basis_parts) + "."}
+
+
 def duplicate_angle_pairs(angles: list) -> list:
     """Conservative lexical overlap, not a claim of semantic similarity.
 

@@ -719,6 +719,7 @@ export default function CreateVideo() {
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,
     goalsRevealed, setGoalsRevealed, revealGoals, angleRegenNotice,
+    clearAngleRegenNotice,
     handleGenerateAngles, handleRegenerateAngles,
     handleGenerateGoals, handleRegenerateGoals,
   } = useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft });
@@ -734,6 +735,19 @@ export default function CreateVideo() {
     hookLine: project?.hook_line || "",
     middle: project?.script || project?.spoken_middle || "",
   });
+  // The regen receipt lives on the angle step alone (ADR 0198): leaving
+  // that step consumes it. Only the transition AWAY counts — a receipt
+  // set by a regen run from Review's gate must survive until the founder
+  // next visits the angle step and leaves it again.
+  const angleStepIndex = STEPS.findIndex((s) => s.key === "angle");
+  const prevStepRef = useRef(step);
+  useEffect(() => {
+    const prev = prevStepRef.current;
+    prevStepRef.current = step;
+    if (prev === angleStepIndex && step !== angleStepIndex) {
+      clearAngleRegenNotice();
+    }
+  }, [step, angleStepIndex, clearAngleRegenNotice]);
   // The shared limits the templates header may read: every shared limit
   // except the character-reference need. That one line repeats what the
   // step already handles — each card states the character's look comes
@@ -1007,6 +1021,13 @@ export default function CreateVideo() {
     studio_project_id: project?.id || "",
   });
   const handleAnglePick = (id) => {
+    // Picking a NEW angle answers the regen receipt (ADR 0198): its news
+    // was that a new angle needed picking and the strategy rebuilding,
+    // and the pick is the founder acting on it — the receipt does not
+    // linger. Re-clicking the already-picked angle is not a new pick
+    // (a regen parks the pick on the fresh set's first row itself), so
+    // the receipt survives that click and is read first.
+    if (id && id !== angleId) clearAngleRegenNotice();
     if (id && id !== angleId && Array.isArray(angles)) {
       const refs = behaviorRefs();
       angles.forEach((a) => {
@@ -2225,7 +2246,7 @@ export default function CreateVideo() {
                     }
                   : null
               }
-              onDismissNotice={angleRegenNotice ? () => setAngleRegenNotice(null) : null}
+              onDismissNotice={angleRegenNotice ? clearAngleRegenNotice : null}
             />
             </div>
 
@@ -3204,8 +3225,6 @@ export default function CreateVideo() {
                 hookLine={project?.hook_line || ""}
                 onRegenerate={handleRegenerateAngles}
                 objective={effectiveObjective}
-                notice={angleRegenNotice}
-                onDismissNotice={angleRegenNotice ? () => setAngleRegenNotice(null) : null}
               />
             ) : !canGenerate && project?.script_version ? (
               <div className="inset-panel space-y-4">
@@ -3267,6 +3286,7 @@ export default function CreateVideo() {
                       project={project}
                       onProjectChange={receiveProject}
                       onActionChange={registerStrategyBarAction}
+                      onStrategyBuilt={clearAngleRegenNotice}
                     />
                     {/* No script rating (ADR 0124): per-element thumbs
                         stopped teaching generation — the whole-video

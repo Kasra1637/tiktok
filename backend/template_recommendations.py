@@ -28,6 +28,46 @@ def _outcome_as_sentence(outcome: str) -> str:
     return text if text[-1] in ".!?" else text + "."
 
 
+# Function words a feature phrase is glued together with. They can prove
+# nothing about a template — every English title contains one — so they
+# are never feature-match tokens and never the word a "Why it fits" line
+# cites as the centre of a piece (ADR 0194: "Reducing Stress with AI"
+# cited 'with', the glue in its own title, as the feature at the centre).
+_FEATURE_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with",
+    "from", "into", "your", "yours", "you", "it", "its", "this", "that",
+    "what", "when", "then", "than", "over", "under", "through", "by",
+    "at", "as", "is", "are", "be", "do", "does", "how", "why", "not",
+    "no", "so", "if", "but", "per", "via", "out", "about", "before",
+    "after", "during", "without", "within", "between", "their", "them",
+    "they", "we", "our", "my", "me", "he", "she", "his", "her",
+})
+
+
+def _feature_content_tokens(main_feature: str) -> list:
+    """The feature phrase's citable content words, most specific first.
+
+    Phrase order breaks ties, so the same inputs always cite the same
+    word — the previous set iteration let the citation depend on hash
+    order, which is how a stop word could win the citation at all.
+    """
+    tokens = []
+    for raw in main_feature.replace(",", " ").split():
+        token = raw.strip(" \t\"'.,;:!?()[]").lower()
+        if len(token) > 3 and token not in _FEATURE_STOP_WORDS and token not in tokens:
+            tokens.append(token)
+    return sorted(tokens, key=lambda t: -len(t))
+
+
+def _feature_phrase_present(main_feature: str, *blobs: str) -> bool:
+    """The whole feature phrase, named verbatim in one of the blobs."""
+    phrase = " ".join(main_feature.lower().split())
+    if not phrase:
+        return False
+    pattern = r"\b" + re.escape(phrase) + r"\b"
+    return any(re.search(pattern, blob) for blob in blobs)
+
+
 # ---------------------------------------------------------------------------
 # Relevance to the selected angle (ADR 0089)
 # ---------------------------------------------------------------------------
@@ -252,12 +292,26 @@ def score_template_for_angle(
         weighted.append((weight, reason))
 
     # Brand-tailored templates were generated from this exact profile, so
-    # they start with a head start. The bonus is silent now: the tailored
+    # they start with a head start. The bonus is silent: the tailored
     # set is already labelled "Tailored for this app" on the template step,
-    # so a per-card bullet repeating it was noise, not evidence. Ranking is
-    # unchanged — the +2.0 still applies, it just no longer narrates itself.
+    # so a per-card bullet repeating it was noise, not evidence.
+    #
+    # Weight composition (ADR 0195): the factors a tailored template
+    # earns merely by being generated for this profile — this bonus,
+    # the objective match, the category match, the structure affinity —
+    # are the GIVENS, and they now sum to at most 6.5 of the 10. The
+    # top of the scale belongs to the SPECIFIC matches that differ
+    # between templates: audience overlap depth, problem overlap
+    # depth, the feature hit, and the penalties. Before the rebalance
+    # the givens summed to 9.5, so every tailored card clamped at
+    # Fit 9-10 and the specific matches could not move the number.
+    # The no-match fallbacks stopped paying in the same change: the
+    # affinity else-branch paid 0.5 silently, and the audience /
+    # no-category fallbacks paid 0.5 each for the absence of a match,
+    # compressing the scale from below; their sentences remain as
+    # zero-weight notes.
     if (template.get("brand_profile_id") or "") and template.get("brand_profile_id") == (profile.get("id") or ""):
-        score += 2.0
+        score += 1.0
 
     angle = angle or {}
     tpl_objective = (template.get("objective") or "").strip()
@@ -273,7 +327,7 @@ def score_template_for_angle(
 
     if objective and tpl_objective:
         if tpl_objective == objective:
-            score += 3.0
+            score += 2.5
             # The objective name stays in the sentence: it is the goal the
             # founder picked, and what follows is what the footage does about
             # that goal. See OBJECTIVE_OUTCOMES.
@@ -282,7 +336,7 @@ def score_template_for_angle(
             # capitalized sentences in their own right (they are shown that way
             # on the goal picker), so splicing one in after a dash produced
             # "Built for 'create curiosity' — Leaves them wanting the answer."
-            add(3.0, f"Built for '{objective.replace('_', ' ')}'. "
+            add(2.5, f"Built for '{objective.replace('_', ' ')}'. "
                      f"{_outcome_as_sentence(template_library.OBJECTIVE_OUTCOMES.get(objective)) or 'Serves the goal you picked.'}")
         else:
             score += 0.5
@@ -298,8 +352,8 @@ def score_template_for_angle(
         key = recommendation_tags.category_key(profile_category)
         hit = next((c for c in tpl_categories if c in key or key in c), None)
         if hit:
-            score += 2.5
-            add(2.5, f"Lands with {profile_category} viewers before the app is even named — "
+            score += 1.5
+            add(1.5, f"Lands with {profile_category} viewers before the app is even named — "
                      f"framed for how they talk about the problem.")
             matched["category"] = hit
         else:
@@ -308,8 +362,9 @@ def score_template_for_angle(
                 f"the opening will need rewording."
             )
     if profile_category and not tpl_categories:
-        score += 1.0
-        add(1.0, "Carries no category assumptions, so it fits this app without reframing.")
+        # No category assumptions is neutral, not a match: the sentence
+        # stays, the 0.5 it used to pay is gone (ADR 0195).
+        add(0.0, "Carries no category assumptions, so it fits this app without reframing.")
 
     # ---- Audience: people from the profile/angle, plus the funnel stage
     # the angle kind implies. Curated templates tag funnel stage; profiles
@@ -321,14 +376,16 @@ def score_template_for_angle(
     if app_audience_tags and tpl_audience_tags:
         overlap = sorted(app_audience_tags & tpl_audience_tags)
         if overlap:
-            score += 1.0
-            add(1.0, f"Aimed at {', '.join(overlap)} — they're already in the situation this opens on.")
+            score += 1.5
+            add(1.5, f"Aimed at {', '.join(overlap)} — they're already in the situation this opens on.")
             matched["audience_tags"] = overlap
             if len(overlap) >= 2:
-                score += 0.5
+                score += 1.0
     elif app_audience_tags and not tpl_audience_tags:
-        score += 0.5
-        add(0.5, "Open to anyone, so it reaches viewers outside your usual audience too.")
+        # Reach beyond the usual audience is a fact worth printing, but
+        # it is not a match: it earns no points (ADR 0195 — the fallback
+        # used to pay 0.5 for the absence of an audience match).
+        add(0.0, "Open to anyone, so it reaches viewers outside your usual audience too.")
 
     # ---- Problem: the core problem from the angle or the profile research.
     problem_text = (angle.get("user_problem") or "").strip()
@@ -352,12 +409,12 @@ def score_template_for_angle(
             "pain-point-question", "contrarian", "before-after",
         ) or tpl_objective == "address_user_problem"
         if overlap:
-            score += 1.0
-            add(1.0, f"Names {', '.join(overlap)} in the first seconds, so the viewer "
+            score += 1.5
+            add(1.5, f"Names {', '.join(overlap)} in the first seconds, so the viewer "
                      f"recognises themselves before your app appears.")
             matched["problem_tags"] = overlap
             if len(overlap) >= 2:
-                score += 0.5
+                score += 1.0
         elif foreground:
             score += 0.5
             add(0.5, "Opens on the viewer's problem, which is what this angle leads with.")
@@ -370,26 +427,29 @@ def score_template_for_angle(
         demo_categories = {"demo", "tutorial", "reveal"}
         story_categories = {"story", "pov", "before-after"}
         if angle_kind in ("feature_demonstration", "fast_tutorial") and template.get("category") in demo_categories:
-            score += 2.0
-            add(2.0, "Opens where your feature lives, so the demo you attach answers a question the viewer is already holding.")
+            score += 1.5
+            add(1.5, "Opens where your feature lives, so the demo you attach answers a question the viewer is already holding.")
         elif angle_kind in ("founder_story", "daily_life_use_case") and template.get("category") in story_categories:
-            score += 2.0
-            add(2.0, "Someone on camera lives it rather than describing it — a story-led angle needs a person, not a pitch.")
+            score += 1.5
+            add(1.5, "Someone on camera lives it rather than describing it — a story-led angle needs a person, not a pitch.")
         elif angle_kind in ("problem_solution", "common_mistake") and template.get("category") in (
             "pain-point-question", "contrarian", "listicle", "pattern-interrupt"
         ):
-            score += 2.0
-            add(2.0, "Your angle leads with the problem, and so does the first line of this.")
+            score += 1.5
+            add(1.5, "Your angle leads with the problem, and so does the first line of this.")
         elif angle_kind in ("competitor_alternative", "product_comparison") and template.get("category") == "social-proof":
-            score += 2.0
-            add(2.0, "Leaves the two options side by side on screen, which is what a side-by-side angle needs.")
+            score += 1.5
+            add(1.5, "Leaves the two options side by side on screen, which is what a side-by-side angle needs.")
         elif angle_kind in ("objection_handling", "privacy_pricing_differentiation") and template.get("category") in (
             "contrarian", "social-proof", "curiosity-gap"
         ):
-            score += 1.5
-            add(1.5, "Asks the doubt out loud and leaves it standing — your demo is what answers it.")
+            score += 1.0
+            add(1.0, "Asks the doubt out loud and leaves it standing — your demo is what answers it.")
         else:
-            score += 0.5
+            # No affinity: no points. This branch used to pay 0.5 for the
+            # ABSENCE of a structure match, silently — one of the ways
+            # weak templates drifted up toward strong ones (ADR 0195).
+            pass
 
     # ---- Main feature: the angle's feature, or the top core feature from
     # the URL analysis when no angle is selected.
@@ -398,11 +458,11 @@ def score_template_for_angle(
         feats = recommendation_tags.text_list(profile.get("core_features"))
         main_feature = feats[0] if feats else ""
     if main_feature:
-        feature_tokens = {t for t in main_feature.replace(",", " ").split() if len(t) > 3}
+        feature_tokens = _feature_content_tokens(main_feature)
         slot_blob = " ".join(str(v) for v in (template.get("content_slots") or {}).values()).lower()
         name_blob = f"{template.get('name') or ''} {template.get('category') or ''}".lower()
         hit = next(
-            (tok for tok in feature_tokens if tok.lower() in slot_blob or tok.lower() in name_blob),
+            (tok for tok in feature_tokens if tok in slot_blob or tok in name_blob),
             None,
         )
         if hit:
@@ -410,10 +470,20 @@ def score_template_for_angle(
             # The match is still a token hit on the slot values — that is the
             # honest signal. What changed is the sentence: it names what the
             # viewer gets (the feature as the reason they stayed) instead of
-            # naming the field that matched (the content slot).
+            # naming the field that matched (the content slot). The cited
+            # word is a content word from the feature phrase, never a stop
+            # word the template's own title happens to contain (ADR 0194).
             add(1.0, f"Puts '{hit}' at the centre of the piece — your main feature "
                      f"arrives as the reason they stayed, not as a bullet.")
             matched["feature_keyword"] = hit
+        elif _feature_phrase_present(main_feature, slot_blob, name_blob):
+            # The piece names the feature whole, but the feature phrase
+            # holds no citable content word (a feature named "AI"): the
+            # rationale runs without a centre rather than quoting glue.
+            score += 1.0
+            add(1.0, "Your main feature runs through the piece — it arrives "
+                     "as the reason they stayed, not as a bullet.")
+            matched["feature_keyword"] = ""
 
     # The angle's "claims to respect" are NOT repeated as a template limit.
     # They bound the ANGLE, not this template, and the picked angle's own panel

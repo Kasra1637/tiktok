@@ -139,4 +139,38 @@ describe("angleFitScore", () => {
   test("evidence still decides a tested angle's score", () => {
     expect(angleFitScore({ index: 5, total: 6, evidence: { wins: 0, flops: 4 } }).score).toBe(0);
   });
+
+  test("an untested angle's fit is its content fit, not its rank (ADR 0193)", () => {
+    // The same suggestion rank, two different groundings: the pill must
+    // separate them, which the old rank transform ({4,3,3,3,3,3} for any
+    // six) could never do.
+    const grounded = angleFitScore({
+      index: 3,
+      total: 6,
+      contentFit: { score: 10, basis: "Built on your feature 'Voice-first journaling'." },
+    });
+    const ungrounded = angleFitScore({
+      index: 0,
+      total: 6,
+      contentFit: { score: 4, basis: "Its feature is not tied to a feature on your profile." },
+    });
+    expect(grounded.score).toBe(10);
+    expect(ungrounded.score).toBe(4);
+    expect(grounded.basis).toContain("Built on your feature");
+    expect(grounded.basis).toContain("no results yet");
+  });
+
+  test("evidence outranks content fit once an angle is tested", () => {
+    const fit = angleFitScore({
+      index: 5,
+      total: 6,
+      evidence: { wins: 0, flops: 4 },
+      contentFit: { score: 10, basis: "Built on your feature 'X'." },
+    });
+    expect(fit.score).toBe(0);
+  });
+
+  test("without a content fit the rank fallback stands", () => {
+    expect(angleFitScore({ index: 0, total: 6, contentFit: null }).score).toBe(4);
+  });
 });

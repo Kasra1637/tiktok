@@ -222,10 +222,25 @@ export function goalFitScore({ index = 0, total = 6, evidence = null, hasFitReas
 // before any result exists; evidence can still pull a tested angle lower.
 const UNTESTED_ANGLE_FLOOR = 3;
 
-export function angleFitScore({ index = 0, total = 6, evidence = null } = {}) {
+export function angleFitScore({ index = 0, total = 6, evidence = null, contentFit = null } = {}) {
   const tested =
     (Number(evidence?.wins) || 0) + (Number(evidence?.flops) || 0) + (Number(evidence?.posted) || 0) > 0;
   if (tested) return goalFitScore({ index, total, evidence, hasFitReason: false });
+  // ADR 0193: an untested angle's fit is its CONTENT fit, scored on the
+  // server from the angle's grounding against the profile (feature link,
+  // certified outcome, stated problem and promise) — not its suggestion
+  // rank. The rank transform this replaces returned {4,3,3,3,3,3} for
+  // any six untested angles, so the pill could not help anyone choose.
+  // The basis names the grounding fact; "no results yet" stays, because
+  // content is not evidence. Rows serialized before content fit existed
+  // (or without a profile to ground against) fall back to the rank path.
+  if (contentFit && Number.isFinite(Number(contentFit.score))) {
+    return {
+      score: Math.min(10, Math.max(0, Math.round(Number(contentFit.score)))),
+      basis: `${contentFit.basis} · no results yet`,
+      thin: true,
+    };
+  }
   const fit = goalFitScore({ index, total, evidence, hasFitReason: true });
   return { ...fit, score: Math.max(fit.score, UNTESTED_ANGLE_FLOOR) };
 }

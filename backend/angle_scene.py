@@ -208,6 +208,38 @@ def _first_sentence(text: str) -> str:
     return (match.group(1) if match else blob).strip()
 
 
+def _as_sentence(beat: str, *, rewrite_meta_subject: bool = True) -> str:
+    """`beat` printed as the complete sentence it is (ADR 0196).
+
+    The card's "Develops as" value used to be assembled as a clause:
+    first letter lowercased, terminal period stripped, and a leading
+    subject ("The video", "The middle") regex-stripped so the label
+    could carry the sentence — which left founders reading fragments
+    that start mid-thought ("develops the interruption by
+    contrasting..."). The value is a sentence now: the subject stays,
+    the first letter is a capital, and the sentence ends with its
+    period. A subject that names the writing rather than the video
+    ("The middle names the cost") is given the video as its subject
+    instead of being stripped — except on the plan path, where the
+    words are the founder's approved script and are never rewritten.
+    """
+    beat = beat.strip().rstrip(" ,;:")
+    if not beat:
+        return ""
+    if rewrite_meta_subject:
+        beat = re.sub(
+            r"^(?:the|this) (?:middle|piece|rest)\b",
+            "The video",
+            beat,
+            flags=re.IGNORECASE,
+        )
+    if beat[:1].islower():
+        beat = beat[:1].upper() + beat[1:]
+    if beat[-1] not in ".!?":
+        beat += "."
+    return beat
+
+
 def _development_beat(template: dict, scene: dict) -> str:
     """The template's first middle beat, ready to follow the opening, or "".
 
@@ -244,28 +276,20 @@ def _development_beat(template: dict, scene: dict) -> str:
     middle = final_beat.strip_phone_phrases(middle)
     if not middle or conflict_reason(middle, scene):
         return ""
-    beat = character_policy.neutralize(middle).rstrip(".")
-    if not beat:
-        return ""
-    if beat[:1].isupper() and not beat.startswith(("I ", "I'")):
-        beat = beat[:1].lower() + beat[1:]
-    # The card labels the line itself ("Develops as"), and a middle that opens
-    # with "Then" would read as a second opening. A middle written in the
-    # prompt's own meta voice ("The middle names the cost") keeps the label
-    # rather than the noun, so the line describes the video and not the writing.
-    beat = re.sub(r"^then\s+", "", beat, flags=re.IGNORECASE)
-    beat = re.sub(r"^(?:the |this )?(?:middle|video|piece|rest)\s+", "", beat, flags=re.IGNORECASE)
+    beat = character_policy.neutralize(middle).strip()
     if not beat:
         return ""
     # A middle that was nothing but the handoff echo ("Then it stops at the
     # reach for the phone") leaves a pronoun stub behind. That is not a beat,
-    # so the card keeps the opening alone rather than printing "it".
+    # so the card keeps the opening alone rather than printing "Then it."
+    stub = re.sub(r"^then\s+", "", beat, flags=re.IGNORECASE)
     if re.fullmatch(
         r"(?:it|they|this|that|these|those|he|she|the person|the character)",
-        beat, flags=re.IGNORECASE,
+        stub.rstrip("."),
+        flags=re.IGNORECASE,
     ):
         return ""
-    return beat
+    return _as_sentence(beat)
 
 
 def opening_shape(angle: Optional[dict], template: Optional[dict] = None, hook_line=None, middle=None) -> str:
@@ -315,8 +339,8 @@ def opening_development(angle: Optional[dict], template: Optional[dict] = None, 
     """How THIS template develops that one opening, or "" when it cannot.
 
     A middle that relocates the video, or that has nothing to say, leaves the
-    card with the opening alone rather than inventing a beat. Returned without
-    a leading capital because the card prints it as a clause, not a sentence.
+    card with the opening alone rather than inventing a beat. Returned as a
+    complete sentence — subject, capital start, terminal period (ADR 0196).
 
     Once the founder has approved a plan, the development is the approved
     middle's first sentence (ADR 0108): the card then describes what THIS
@@ -329,12 +353,7 @@ def opening_development(angle: Optional[dict], template: Optional[dict] = None, 
         first = _first_sentence(middle_text)
         if not first:
             return ""
-        beat = first.rstrip(".")
-        if beat[:1].isupper() and not beat.startswith(("I ", "I'")):
-            beat = beat[:1].lower() + beat[1:]
-        if not beat:
-            return ""
-        return beat
+        return _as_sentence(first, rewrite_meta_subject=False)
     if not angle_moment(angle):
         return ""
     return _development_beat(template or {}, video_scene(angle))

@@ -137,15 +137,16 @@ class TestOpeningShape:
         development = angle_scene.opening_development(
             ANGLE, _template("Name it", "ignored", "Then the person names the gap out loud.")
         )
-        assert development == "the person names the gap out loud"
+        assert development == "Then the person names the gap out loud."
 
     def test_a_middle_written_in_the_prompt_voice_keeps_its_action(self):
-        # Model middles read like "The middle names the cost"; the card already
-        # says "Develops as", so the label is dropped and the action stays.
+        # Model middles read like "The middle names the cost"; the sentence
+        # keeps its action and gains the video as its subject rather than
+        # losing the subject entirely (ADR 0196).
         development = angle_scene.opening_development(
             ANGLE, _template("Name it", "ignored", "The middle names the cost of guessing.")
         )
-        assert development == "names the cost of guessing"
+        assert development == "The video names the cost of guessing."
 
     def test_a_middle_that_moves_the_video_is_not_used(self):
         # A middle that relocates the story is a second opening in disguise:
@@ -188,7 +189,7 @@ class TestOpeningShape:
                     "messy and out of order. Afterward, the reflection helped me see "
                     "what had happened inside me."),
         )
-        assert development == "on the porch step, I stopped waiting and just talked, messy and out of order"
+        assert development == "On the porch step, I stopped waiting and just talked, messy and out of order."
         assert "pick up the phone" not in development
 
     def test_a_long_development_beat_is_never_cut_mid_thought(self):
@@ -209,10 +210,10 @@ class TestOpeningShape:
         assert len(development) > 150
         assert "\u2026" not in development
         assert development == (
-            "the person keeps typing and deleting the same first word, "
+            "The person keeps typing and deleting the same first word, "
             "noticing that a tight jaw, a shallow breath and a restless "
             "hand all arrive together again, and that saying the feeling "
-            "out loud is what finally settles it"
+            "out loud is what finally settles it."
         )
 
     def test_a_long_approved_middle_is_never_cut_mid_thought(self):
@@ -230,7 +231,7 @@ class TestOpeningShape:
         )
         assert len(development) > 150
         assert "\u2026" not in development
-        assert development.endswith("what finally settles both of them")
+        assert development.endswith("what finally settles both of them.")
 
     def test_a_long_shape_is_never_cut_mid_thought(self):
         # The shape clipped at 220 characters the same way. An approved hook
@@ -254,7 +255,7 @@ class TestOpeningShape:
             hook_line=hook, middle="I talked and the day went unsaid.",
         )
         assert result["angle_scene"]["shape"] == hook
-        assert result["angle_scene"]["development"] == "I talked and the day went unsaid"
+        assert result["angle_scene"]["development"] == "I talked and the day went unsaid."
 
     def test_a_chart_promise_is_repaired_to_its_place(self):
         angle = {"hook_promise": "The character scrolls a weekly chart on a phone while leaning on a park railing."}

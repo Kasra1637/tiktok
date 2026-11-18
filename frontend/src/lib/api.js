@@ -251,6 +251,11 @@ export const api = {
     client.post(`/app-profiles/${profileId}/content-angles/regenerate`, {
       ...(objective ? { objective } : {}),
     }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  // The pre-click half of the regen count (ADR 0198): how many of this
+  // profile's drafts a regenerate would cost their stories, readable
+  // before anything is deleted so the confirm can name the cost.
+  getAngleRegenImpact: (profileId) =>
+    client.get(`/app-profiles/${profileId}/content-angles/regen-impact`).then((r) => r.data),
   // Cycle this angle's six goal suggestions to the next deterministic variant
   // order. Free: no model call. Persisted server-side, so reloads keep it.
   regenerateContentAngleGoals: (profileId, angleId) =>

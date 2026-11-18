@@ -91,10 +91,16 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
   }, []);
   const [angleRegenNotice, setAngleRegenNotice] = useState(null);
   // What a completed angle regen cost: how many of the profile's drafts were
-  // built on angles it replaced. Shown as a one-line notice after the fact —
-  // the pre-click confirm only covers the selected angle, so this is how a
-  // draft on a DIFFERENT angle learns it lost its story. Count of 0 shows
+  // built on angles it replaced. Shown as a one-time receipt on the angle
+  // step only (ADR 0198) — Review carries its own live signal (the rebuild
+  // button), so the receipt no longer duplicates there. It clears when the
+  // founder dismisses it, leaves the angle step, picks another angle, or
+  // completes the owed rebuild, and once cleared by any route it never
+  // reappears for that regen: nothing re-derives it. Count of 0 sets
   // nothing: a clean regen is not news.
+  const clearAngleRegenNotice = useCallback(() => {
+    setAngleRegenNotice(null);
+  }, []);
   useEffect(() => {
     setAnglesRevealed(false);
     setGoalsRevealed(false);
@@ -115,21 +121,43 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
   //
   // But generated angles that have a project built on them are deleted and
   // rewritten fresh: the draft survives, the story it was planned around does
-  // not. A confirm at the click — the same pattern as plan regen — names that
-  // before it happens instead of two screens later.
+  // not. The cost is knowable BEFORE the click — the regen-impact preflight
+  // runs the same count the endpoint reports afterwards — so the confirm
+  // fires exactly when that count is non-zero (any draft on this profile
+  // planned around a generated angle, not only the draft on the selected
+  // angle) and names the cost before it happens instead of two screens
+  // later. A failed preflight falls back to the selected-angle check
+  // rather than dropping the warning silently or blocking the click.
   //
   // Reports success so the gated copy can open the list only on a real
   // fresh set: a failed spend leaves the gate (and its error) in place.
   const handleRegenerateAngles = useCallback(async () => {
     if (!profileId) return false;
     const selectedHasProject = Boolean(project && project.content_angle_id && project.content_angle_id === angleId);
-    if (selectedHasProject) {
+    let affected = null;
+    try {
+      const impact = await api.getAngleRegenImpact(profileId);
+      affected = Number(impact?.projects_affected) || 0;
+    } catch {
+      affected = null;
+    }
+    const mustConfirm = affected === null ? selectedHasProject : affected > 0;
+    if (mustConfirm) {
+      const cost =
+        affected && affected > 0
+          ? `${affected} draft${affected === 1 ? " was" : "s were"} planned around generated angles on this profile — ` +
+            `each keeps its draft but loses its story, and its strategy must be rebuilt at Review. `
+          : "A draft on this step is built around the angle you picked — it keeps its draft but loses " +
+            "its story, and its strategy must be rebuilt at Review. Other drafts on this profile " +
+            "planned around generated angles lose their stories the same way. ";
       const ok =
         typeof window === "undefined" || typeof window.confirm !== "function"
           ? false
           : window.confirm(
-              "A draft on this step is built around the angle you picked. Regenerating replaces that " +
-                "angle's text with new material and the draft loses its story. Continue?"
+              "Regenerating replaces this profile's generated angles with fresh ones " +
+                "(your hand-written angles are kept). " +
+                cost +
+                "Continue?"
             );
       if (!ok) return false;
     }
@@ -277,6 +305,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,
     goalsRevealed, setGoalsRevealed, revealGoals, angleRegenNotice,
+    clearAngleRegenNotice,
     handleGenerateAngles, handleRegenerateAngles,
     handleGenerateGoals, handleRegenerateGoals,
   };

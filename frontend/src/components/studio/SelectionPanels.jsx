@@ -522,6 +522,7 @@ export function AngleSelector({
           index: i,
           total: angles.length,
           evidence: a.evidence,
+          contentFit: a.content_fit,
         });
         const angleFitBasis = angleVerdicts
           ? `${angleFit.basis} · at this angle kind`

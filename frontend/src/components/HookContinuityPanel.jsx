@@ -283,7 +283,7 @@ function SectionRow({ section, cameraSetup }) {
   );
 }
 
-export function HookContinuityPanel({ project, onProjectChange, onActionChange }) {
+export function HookContinuityPanel({ project, onProjectChange, onActionChange, onStrategyBuilt }) {
   const [busy, setBusy] = useState(false);
   const [busyStartedAt, setBusyStartedAt] = useState(null);
   const [error, setError] = useState(null);
@@ -359,6 +359,10 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange }
       // override the template the founder actually picked.
       const updated = await api.generateStrategy(projectId, {});
       onProjectChange?.(updated);
+      // A completed build is the regen receipt's last exit (ADR 0198):
+      // the strategy the receipt said to rebuild now exists, so the
+      // receipt has nothing left to report.
+      onStrategyBuilt?.();
       setNotice(
         `Strategy v${updated.strategy_version} built from this app's profile. Read it and the ` +
         `locked scene below, then render the piece.`
