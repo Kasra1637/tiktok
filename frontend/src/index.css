@@ -404,21 +404,22 @@ body {
 }
 
 /* The Review spoken lines wear the cover frame (ADR 0186): the hook and
- * script fields stand inside the same sunken, quoted box, so the words
- * read as the finished line rather than as a form waiting to be filled.
- * The frame is the shape; the field inside keeps no chrome of its own —
- * no border, no well, no padding of its own — and its focus aura moves
- * to the frame, mirroring .input-well's, so keyboard users still see
- * where they are. The fields themselves are untouched: same elements,
- * same ids, same live counts, same typing. */
+ * script fields stand inside the same sunken box, so the words read as
+ * the finished line rather than as a form waiting to be filled. The
+ * frame is the shape; the field inside keeps no chrome of its own — no
+ * border, no well, no padding of its own. The fields themselves are
+ * untouched: same elements, same ids, same live counts, same typing.
+ * ADR 0191: no quotation marks anywhere in this family, and nothing
+ * about the box changes on click — the frame's border and shadow are
+ * identical at rest, hover and focus, with no transition to animate a
+ * change; the caret is the only sign of editing. The founder's ruling
+ * is scoped to these framed fields: ordinary form fields keep their
+ * .input-well hover and focus treatment below. */
 .post-kit-cover.spoken-line-frame {
     display: flex;
     width: 100%;
     align-items: flex-start;
     gap: 0.125rem;
-}
-.spoken-line-frame .spoken-line-quote-end {
-    align-self: flex-end;
 }
 .spoken-line-frame .input-well {
     flex: 1 1 auto;
@@ -431,10 +432,17 @@ body {
     padding: 0;
     font: inherit;
     color: inherit;
+    transition: none;
 }
-.spoken-line-frame:focus-within {
-    border-color: var(--indigo-35);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 3px var(--indigo-15);
+/* Restated at higher specificity than .input-well's hover and
+ * focus-visible rules, so inside the frame those states change nothing. */
+.spoken-line-frame .input-well:hover,
+.spoken-line-frame .input-well:focus,
+.spoken-line-frame .input-well:focus-visible {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
 }
 
 @media (min-width: 640px) {

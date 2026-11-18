@@ -246,7 +246,9 @@ One render path, single-pass video generation via OpenRouter.
   stand in the cover frame (ADR 0186): the History cover box
   (`.post-kit-cover`, worn as `.spoken-line-frame`) wrapped around the
   unchanged fields, so the spoken words read as finished lines; History's
-  own hook and Plan context stay plain text, wearing no frame.
+  own hook and Plan context stay plain text, wearing no frame. The frame
+  family carries no quotation marks and shows nothing on click, and the
+  demo brief stands in the same frame (ADR 0191).
 - Settled layout decisions are not open questions (ADR 0141): Review stays
   one column at every width, Analytics stays a calm ledger (its Clip
   results and Renders cards stand at one height, its results table fits
@@ -294,13 +296,16 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. One hundred and eighty-six decisions (0001–0186) now
+Read `docs/adr/README.md` first. One hundred and ninety-two decisions (0001–0192) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation
 orbit), 0061 (429 is throttling), 0063–0064 (camera setups, conflicts refused
 pre-render), 0083 (database durability), 0090 (Location is the single source
-of truth; the hook opens on a visible move), 0092 (Render & result scene
+of truth; the hook opens on a visible move), 0187 (the opening movement
+enacts the story, rapid and mid-motion, on this video's own channel —
+hand, face, mouth, body or camera — and the close carries the opening's
+energy), 0092 (Render & result scene
 fields agree — fix or block) and 0097 (a selfie never shows a phone, a reach
 toward the lens, or a second free hand); 0099 stacks the wizard as one canvas.
 Post kits follow 0100 as amended by 0139: the model proposes a 12–15

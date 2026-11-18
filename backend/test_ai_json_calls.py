@@ -2350,7 +2350,20 @@ class TestStrategyBudget:
         # the doctrine, so the block grows in every prompt that writes
         # a hook, strategy included. The ceiling moves by a measured
         # 1,000 to 44,750, keeping ~710 of headroom.
-        CEILING = 44_750
+        #
+        # ADR 0187 raises it again, measured: 44,040 -> 46,244 (+2,204)
+        # for the behavior-direction block (1,728 chars, shared with the
+        # plan prompt) plus the strengthened hook_action and section-action
+        # schema lines: the opening movement is rapid, already underway in
+        # the first frame, physically performs the script's central action
+        # through the channel this story calls for — never a resting pose,
+        # a hand sitting on the chest, or a slow settle — and the piece
+        # closes on a sharp beat with the opening's energy. The scorer
+        # does not change (Kasra's standing order); the generator carries
+        # the rule, so the block grows in every prompt that writes
+        # behavior direction. The ceiling moves by a measured 2,250 to
+        # 47,000, keeping ~750 of headroom.
+        CEILING = 47_000
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

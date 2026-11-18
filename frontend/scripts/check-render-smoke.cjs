@@ -1467,11 +1467,13 @@ async function main() {
     }
   });
 
-  await check("Review's plan helper names what the plan brings, not the button again", async (ctx) => {
-    // The button already says "Generate your plan"; the helper under it
-    // used to spend its first half repeating that ("Your choices are set —
-    // generate the free plan and…"). What a first-time founder cannot
-    // guess is what the plan contains, so that is all the helper says now.
+  await check("The plan helper says what the Generate button does", async (ctx) => {
+    // The line under "Generate your plan" used to name what lands in the
+    // panel ("The free plan brings your hook, script, shots, and demo note
+    // here, ready to edit.") — the founder's correction (ADR 0190): a
+    // helper under a button must say what the button DOES. The line is a
+    // single literal in the plan-generate panel (which lives inside the
+    // merged Review & submit step); there is no second copy to protect.
     global.__SMOKE_PARAMS = "";
     await withApi(
       {
@@ -1485,11 +1487,20 @@ async function main() {
         await passTemplatesGate(ctx);
         await openStep(ctx, "Review & submit");
         await act(async () => {});
-        const text = ctx.text();
-        if (!text.includes("The free plan brings your hook, script, shots, and demo note here, ready to edit.")) {
-          throw new Error("the plan helper does not say what the plan brings");
+        const button = ctx.container.querySelector('[data-testid="plan-generate-button"]');
+        if (!button) throw new Error("the ready-state plan panel does not render its Generate button");
+        const panel = button.closest(".inset-panel");
+        const panelText = panel ? (panel.textContent || "") : "";
+        if (!panelText.includes("Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.")) {
+          throw new Error("the plan helper does not say what the button does");
         }
-        if (text.includes("Your choices are set")) {
+        if (panelText.includes("The free plan brings your hook")) {
+          throw new Error("the plan panel still carries the old landing-place line");
+        }
+        if ((ctx.text() || "").includes("The free plan brings your hook, script, shots, and demo note here, ready to edit.")) {
+          throw new Error("the old plan helper line survives somewhere on the page");
+        }
+        if (ctx.text().includes("Your choices are set")) {
           throw new Error("the plan helper still repeats the button");
         }
       }
@@ -5949,14 +5960,17 @@ async function main() {
     );
   });
 
-  // The spoken lines wear the cover frame (ADR 0186): the same sunken,
-  // quoted box the History cover line sits in (.post-kit-cover), wrapped
-  // around the hook and script fields, so the words read as the finished
-  // line instead of a form to fill. The fields themselves are untouched —
-  // same elements, same ids — and Review's own cover text stays OUT of
-  // the frame: it stands as plain text by the founder's standing rule
+  // The spoken lines wear the cover frame (ADR 0186), and the frame
+  // family follows ADR 0191: the founder never wants quotation marks on
+  // the spoken lines, so the glyphs ADR 0186 flanked them with are gone
+  // entirely; the script frame fits its content instead of holding a
+  // fixed tall box; clicking into a framed field shows nothing (no
+  // :focus-within border or ring in the CSS); and the demo brief joins
+  // the same family. The fields themselves are untouched — same
+  // elements, same ids — and Review's own cover text stays OUT of the
+  // frame: it stands as plain text by the founder's standing rule
   // (ADR 0145), so the frame's presence here must not leak onto it.
-  await check("Review spoken lines stand in the cover frame", async (ctx) => {
+  await check("Review spoken lines stand in the cover frame with no quote marks and no click border", async (ctx) => {
     await withApi(
       { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }) },
       async () => {
@@ -5971,11 +5985,25 @@ async function main() {
           const scriptFrame = scriptField.closest(".post-kit-cover");
           if (!hookFrame) throw new Error("the hook line does not stand in the cover frame");
           if (!scriptFrame) throw new Error("the script does not stand in the cover frame");
-          if (!hookFrame.textContent.includes("“") || !hookFrame.textContent.includes("”")) {
-            throw new Error("the hook frame carries no quote marks");
+          if (hookFrame.textContent.includes("“") || hookFrame.textContent.includes("”")) {
+            throw new Error("the hook frame still carries quote marks");
           }
-          if (!scriptFrame.textContent.includes("“") || !scriptFrame.textContent.includes("”")) {
-            throw new Error("the script frame carries no quote marks");
+          if (scriptFrame.textContent.includes("“") || scriptFrame.textContent.includes("”")) {
+            throw new Error("the script frame still carries quote marks");
+          }
+          if ((scriptField.className || "").includes("min-h-[160px]")) {
+            throw new Error("the script field still holds a fixed tall height instead of fitting its content");
+          }
+          const briefField = ctx.container.querySelector("#review-demo-brief");
+          if (!briefField) throw new Error("the demo brief field is missing");
+          const briefFrame = briefField.closest(".post-kit-cover");
+          if (!briefFrame) throw new Error("the demo brief does not stand in the cover frame family");
+          if (briefFrame.textContent.includes("“") || briefFrame.textContent.includes("”")) {
+            throw new Error("the demo brief frame carries quote marks");
+          }
+          const css = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
+          if (/\.spoken-line-frame:focus-within/.test(css)) {
+            throw new Error("the spoken-line frame still changes its border on click (a :focus-within rule survives)");
           }
           const coverValue = ctx.container.querySelector('[data-testid="cover-text-value"]');
           if (coverValue && coverValue.closest(".post-kit-cover")) {
@@ -18144,6 +18172,86 @@ async function runDemoCtaChecks() {
     }
   });
 
+  // ADR 0189: the founder's original idea (the whole filter bar moved up
+  // beside the group label) was refused as a mis-scope; the approved split
+  // keeps the search and every dropdown grouped on the left under the title
+  // and moves only the Full cards / Compact toggle to the far right of the
+  // toolbar row. The same ruling regroups the attention banner: its action
+  // sits with its sentence as one composed row, never floating alone at
+  // the banner's edge.
+  await check("History toolbar splits filters left and view toggle right, and the attention action sits with its sentence", async (ctx) => {
+    const History = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kb-2" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        const bar = ctx.container.querySelector('.history-filters');
+        if (!bar) throw new Error("History has no filter toolbar");
+        const toggle = bar.querySelector('[data-testid="history-view-toggle"]');
+        if (!toggle) throw new Error("the toolbar lost the view toggle");
+        if (!/(^|\s)ml-auto(\s|$)/.test(toggle.className || "")) {
+          throw new Error("the view toggle does not sit in the toolbar's right-aligned group");
+        }
+        const copyFilter = bar.querySelector('#history-copy-filter');
+        if (!copyFilter || !(copyFilter.compareDocumentPosition(toggle) & 4)) {
+          throw new Error("the view toggle must come after the left filter group in the toolbar");
+        }
+        const banner = ctx.container.querySelector('[data-testid="history-attention"]');
+        if (!banner) throw new Error("the kit-less banner does not render");
+        const group = banner.querySelector('[data-testid="history-attention-text"]');
+        const link = banner.querySelector('[data-testid="history-attention-review"]');
+        if (!group || !link || !group.contains(link)) {
+          throw new Error("the attention action is not grouped with the notice's sentence");
+        }
+        if (!/no post copy yet/.test(group.textContent || "") || !/Open its card and press Generate post copy/.test(group.textContent || "")) {
+          throw new Error("the attention group lost the notice's words");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_HASH = '';
+    }
+  });
+
+  // ADR 0191: the History Post copy cover box belongs to the same frame
+  // family as the Review spoken lines, and the founder's no-quotation
+  // rule covers the family — its quote glyphs come off too, so the box
+  // the design is referenced on matches the design.
+  await check("History post copy cover stands in the frame without quote marks", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      global.__SMOKE_PARAMS = "?copy=with";
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{
+          ...COMPLETED,
+          id: "cover-1",
+          hook_line: "A pier at dawn",
+          post_kit: POST_KIT,
+          audience: "Night scrollers",
+        }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(GenerationHistory)(ctx);
+        const cover = ctx.container.querySelector('.post-kit-cover');
+        if (!cover) throw new Error("the History card shows no cover text frame");
+        if (!(cover.textContent || "").includes("Stop writing empty pages")) {
+          throw new Error("the cover frame lost the cover text itself");
+        }
+        if (cover.textContent.includes("“") || cover.textContent.includes("”")) {
+          throw new Error("the History cover frame still carries quote marks");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+      global.__SMOKE_HASH = '';
+    }
+  });
+
   await check("History polls a still-awaiting render on its own", async (ctx) => {
     // A render that finishes while History is open must arrive without
     // opening the card and pressing Check again: the page polls the few
@@ -21206,6 +21314,19 @@ await check(
         }
         if (!tip.textContent.includes("Open on the problem, not the diary.")) {
           throw new Error("the tooltip does not carry the rubric's next step for the dimension");
+        }
+        // The findings and the advice exist exactly ONCE in the
+        // tooltip's text (ADR 0188): Radix renders a hidden accessible
+        // copy of the children beside the visible one, and without the
+        // content's aria-label that copy repeats the whole block word
+        // for word — the founder's pasted tooltip read everything
+        // twice. Count occurrences, not presence.
+        const occurrences = (needle) => tip.textContent.split(needle).length - 1;
+        if (occurrences("Names the problem in the first line.") !== 1) {
+          throw new Error("the tooltip's evidence renders more than once");
+        }
+        if (occurrences("Open on the problem, not the diary.") !== 1) {
+          throw new Error("the tooltip's next step renders more than once");
         }
         // The structure, not just the words: a header carrying the score,
         // and the two labeled sections for this clip's own verdict.

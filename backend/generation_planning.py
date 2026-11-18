@@ -196,8 +196,21 @@ CONDENSE_BELOW = 5000
 # above instead of repeating the metre-away setup, per the fixed-text trade
 # in ADR 0053 — which is why the full floor fell while the condensed floor
 # (whose hold was already terse) rose by the framing alone.
-FULL_PROMPT_FLOOR = 4019
-CONDENSED_PROMPT_FLOOR = 2244
+# ADR 0187's behavior rule lands here too: the opening-interrupt directive
+# now states that the first beat physically performs the story's central
+# action through this video's own channel (hand, face, mouth, body or a
+# camera move), with no resting pose standing in for it, and the final-beat
+# templates — the selfie ending and the fixed phone handoff, in both
+# forms — close sharp with the opening's energy rather than fading or
+# holding a passive smile. Measured: the full floor FELL 6 (4019 -> 4013)
+# because the enacting sentence replaced the old gesture examples and a
+# paragraph-2 clause it made redundant, while the condensed floor rose
+# 232 (2244 -> 2476): the condensed wording is compressed harder than the
+# full because at HeyGen's 4,090 ceiling with the script held sacred, the
+# uncompressed sentence landed the saturated prompt 44 over, and fixed
+# text is the only text the squeeze cannot take back.
+FULL_PROMPT_FLOOR = 4013
+CONDENSED_PROMPT_FLOOR = 2476
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -211,7 +224,10 @@ CONDENSED_PROMPT_FLOOR = 2244
 # before it builds a prompt, so this path is not the one that failed — but it is
 # the same ceiling one path had no answer for, and it now scales like its
 # sibling rather than relying on the guard.
-SINGLE_PASS_PROMPT_FLOOR = 2302
+# The single-pass floor rose by 533 for the same ADR 0187 rule stated
+# once in that builder: open mid-motion on the story's own channel, close
+# with the opening's energy.
+SINGLE_PASS_PROMPT_FLOOR = 2835
 
 # The app's own name, in the prompt, clipped.
 #
@@ -526,7 +542,7 @@ _PHONE_HANDOFF_FRAMING = (
     "Final 1-2s: she raises the phone into view as she finishes saying she found it, "
     "back to camera, screen facing her; whole phone visible, uncropped, at chest height, "
     "clear margins, never behind hand/arm/face, eyes on the phone, excited to open it, "
-    "never glancing away, through the last frame. No screen/app use; head/chin/phone "
+    "never glancing away, through the last frame. Sharp, with the opening's energy. No screen/app use; head/chin/phone "
     "in central 88%."
 )
 
@@ -535,7 +551,7 @@ _PHONE_HANDOFF_FRAMING = (
 _CONDENSED_PHONE_HANDOFF_FRAMING = (
     "Final 1-2s: she raises the phone into view, back to camera, screen to her; whole "
     "phone visible, uncropped, clear margins, never behind hand/arm/face, eyes on it, "
-    "excited, never glancing away, through the last frame; central 88%."
+    "excited, never glancing away, through the last frame; sharp, with the opening's energy; central 88%."
 )
 
 # The selfie ending: one short physical beat in the same final moment the
@@ -548,14 +564,14 @@ _CONDENSED_PHONE_HANDOFF_FRAMING = (
 _SELFIE_FINAL_BEAT = (
     "Final 1-2s (selfie: the camera is the phone in their hand, so never reach toward, "
     "hold, raise or show a phone or camera, and never need a second free hand): "
-    "{ending} Physical only \u2014 no new words and no "
-    "extra time \u2014 and hold the last pose for a split second before the cut, face in "
-    "the central 88% through the final frame."
+    "{ending} Physical only \u2014 no new words, no "
+    "extra time \u2014 sharp, no soft fade, no passive smile hold — hold the last pose a split second, face in "
+    "the central 88% to the final frame."
 )
 
 _CONDENSED_SELFIE_FINAL_BEAT = (
     "Final 1-2s (selfie, never reach toward or show a phone/camera; one hand holds it): "
-    "{ending} No words; split-second hold before the cut; face central."
+    "{ending} No words; sharp, opening energy; no fade, no passive smile hold; split-second hold before the cut; face central."
 )
 
 
@@ -612,17 +628,19 @@ _OPENING_INTERRUPT = (
     "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion, "
     "and the first 1-2 seconds show a clearly visible movement, gesture or position "
     "change \u2014"
-    " no neutral pose, no fade, drift or slow push-in standing in for action, no "
-    "greeting to camera. Inside the first half-second, ONE unmistakable thing a "
-    "scrolling thumb must pause for: a sharp look into the lens, brows lifting and "
-    "eyes widening, a hand snapping up into frame, an object grabbed or put down, a "
-    "posture break. Two or three beats, each bigger than the one before, so the "
+    " no neutral pose, no fade, drift or slow push-in as action, no "
+    "greeting to camera. Inside the first half-second, ONE thing a "
+    "scrolling thumb must pause for: the beat that physically performs this "
+    "story's central action, through this video's channel (hand or "
+    "fingers, a face, the mouth, the body, or a camera move "
+    "toward the presenter) — snap done in the first second, no resting "
+    "pose, no hand sitting on the chest, no slow settle. Two or three beats, "
+    "each bigger than the last, so the "
     "opening escalates, never settles. The face, gaze, hands and posture carry it; "
-    "words come second. Read the beats below as the physical score and play them in "
+    "words come second. Read the beats below as the physical score, in "
     "order.\n"
     "Every beat comes out of THIS video\u2019s own situation \u2014 its props, its place, its "
-    "problem, what the middle goes on to do \u2014 so the interrupt reads as the first "
-    "move of this story, not a random gesture, and leaves a question the rest of the "
+    "problem \u2014 and leaves a question the rest of the "
     "video answers."
 )
 
@@ -632,7 +650,7 @@ _CONDENSED_OPENING = (
     "Pattern interrupt: first frame is already moving; 1-2s: clearly visible "
     "movement, gesture or position change \u2014 no neutral pose, fade, greeting. "
     "One clear beat in the first half-second, then escalate via face, gaze, hands, "
-    "posture, not words. Follow the score. Ground beats in this video\u2019s own "
+    "posture, not words. It enacts this story's central action via this video's channel (hand, face, mouth, body, camera) — snap in the first second; no resting pose, hand on the chest, or slow settle. Follow the score. Ground beats in this video\u2019s own "
     "situation; leave a question the rest answers."
 )
 
@@ -854,6 +872,16 @@ def _assemble_single_pass_prompt(
         sections.append(
             f"The first {hook_seconds} seconds are the hook and must land immediately: "
             f"{hook or 'open on the strongest visual beat'}."
+        )
+        sections.append(
+            "Open mid-motion: the first frame catches a rapid movement already underway "
+            "that physically performs the story's central action, through this video's "
+            "own channel — a hand or fingers, a face or expression shift, the mouth, "
+            "the body, or a camera move toward the presenter — its snap complete inside "
+            "roughly the first second. Never a resting pose, a hand sitting on the "
+            "chest, or a slow settle. Close with energy: the last second or two "
+            "carries a sharp closing beat with the opening's energy, never a soft "
+            "fade or a passive smile hold."
         )
         sections.append(
             f"The rest of the {duration} seconds are the middle: they develop the hook through "

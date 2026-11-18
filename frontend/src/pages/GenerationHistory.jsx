@@ -1349,8 +1349,11 @@ export default function GenerationHistory() {
           </button>
           {/* The view toggle (ADR 0159): the full cards, or the
               compact scan rows for a long History. Presentation
-              only — the same rows, filters and pager either way. */}
-          <div className="flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
+              only — the same rows, filters and pager either way.
+              ADR 0189: the toggle sits at the far right of the filter
+              row (ml-auto), apart from the filters it does not belong
+              to; the search and dropdowns stay grouped on the left. */}
+          <div className="ml-auto flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
             <button
               type="button"
               data-testid="history-view-full"
@@ -1447,16 +1450,20 @@ export default function GenerationHistory() {
       {attention && (
         <Alert variant="warning" data-testid="history-attention">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            <span>
+          {/* One composed row (ADR 0189): the action sits with the
+              sentence it belongs to, inline after the guidance, instead
+              of floating detached at the banner's edge. Same words, same
+              link, same destination — only the placement changed. */}
+          <AlertDescription>
+            <span data-testid="history-attention-text">
               {attentionWords.summary}
-              {attentionWords.guidance}
+              {attentionWords.guidance}{" "}
+              <Button variant="secondary" size="sm" asChild className="ml-1 align-middle">
+                <Link to={{ search: attentionLink.search, hash: attentionLink.hash }} data-testid="history-attention-review">
+                  {attentionWords.cta} <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
             </span>
-            <Button variant="secondary" size="sm" asChild>
-              <Link to={{ search: attentionLink.search, hash: attentionLink.hash }} data-testid="history-attention-review">
-                {attentionWords.cta} <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
           </AlertDescription>
         </Alert>
       )}

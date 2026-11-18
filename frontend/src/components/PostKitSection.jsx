@@ -139,7 +139,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Cover text</dt>
             <dd className="min-w-0">
-              <span className="post-kit-cover">&ldquo;{coverText}&rdquo;</span>
+              <span className="post-kit-cover">{coverText}</span>
             </dd>
           </div>
         )}

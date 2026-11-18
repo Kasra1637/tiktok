@@ -284,9 +284,12 @@ class TestStrategyPromptRequiresTheVisibleFirstMove:
         ))
         assert "THE OPENING'S FIRST BEAT IS A VISIBLE MOVE" in captured["prompt"]
         assert "first 1-2 seconds" in captured["prompt"]
-        # The schema the model writes into says the same thing.
-        assert "first 1-2 seconds" in captured["prompt"].split('"hook_action"')[1]
-        assert "first 1-2 seconds" in captured["prompt"].split('"action": "what they do')[1]
+        # The schema the model writes into says the same thing — since
+        # ADR 0187 in the stronger form: the movement is already underway
+        # in the first frame, its snap complete inside roughly the first
+        # second.
+        assert "ALREADY UNDERWAY in the first frame" in captured["prompt"].split('"hook_action"')[1]
+        assert "already underway in the first frame" in captured["prompt"].split('"action": "what they do')[1]
 
 
 # ---------------------------------------------------------------------------
