@@ -1345,34 +1345,13 @@ export default function GenerationHistory() {
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
             More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
           </button>
-          {/* The view toggle (ADR 0159): the full cards, or the
-              compact scan rows for a long History. Presentation
-              only — the same rows, filters and pager either way.
-              ADR 0189: the toggle sits at the far right of the filter
-              row (ml-auto), apart from the filters it does not belong
-              to; the search and dropdowns stay grouped on the left. */}
-          <div className="ml-auto flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
-            <button
-              type="button"
-              data-testid="history-view-full"
-              aria-pressed={viewMode === "full"}
-              onClick={() => chooseView("full")}
-              className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
-            >
-              Full cards
-            </button>
-            <button
-              type="button"
-              data-testid="history-view-compact"
-              aria-pressed={viewMode === "compact"}
-              onClick={() => chooseView("compact")}
-              className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
-            >
-              Compact
-            </button>
-          </div>
-        </div>
-        <div id="history-secondary-filters" className="history-secondary-filters flex-wrap items-center gap-2" data-expanded={moreFiltersOpen}>
+          {/* The secondary filters (All apps, All statuses, sort) are
+              items of this same row (ADR 0204): at desktop widths the
+              wrapper renders as contents in index.css, so the five
+              filter controls stand in one row instead of stacking into
+              two; below that width the wrapper keeps its disclosure
+              behaviour, opening as a full-width row of its own. */}
+          <div id="history-secondary-filters" className="history-secondary-filters flex-wrap items-center gap-2" data-expanded={moreFiltersOpen}>
             <AppPicker
               profiles={profiles}
               value={profileFilter}
@@ -1409,6 +1388,47 @@ export default function GenerationHistory() {
                 { value: "views", label: "Most viewed" },
               ]}
             />
+          </div>
+          {/* The toolbar's right cluster (ADR 0204): the attention
+              banner's action renders here, immediately before the view
+              toggle, whenever the banner shows — the banner itself
+              keeps its sentence only. Same button, same label, same
+              link the banner carried under ADR 0189; only the seat
+              changed. The cluster carries the far-right seat (ml-auto)
+              ADR 0189 gave the toggle, apart from the filters it does
+              not belong to. */}
+          <div className="ml-auto flex items-center gap-2">
+            {attention && (
+              <Button variant="secondary" size="sm" asChild>
+                <Link to={{ search: attentionLink.search, hash: attentionLink.hash }} data-testid="history-attention-review">
+                  {attentionWords.cta} <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            )}
+            {/* The view toggle (ADR 0159): the full cards, or the
+                compact scan rows for a long History. Presentation
+                only — the same rows, filters and pager either way. */}
+            <div className="flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
+              <button
+                type="button"
+                data-testid="history-view-full"
+                aria-pressed={viewMode === "full"}
+                onClick={() => chooseView("full")}
+                className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
+              >
+                Full cards
+              </button>
+              <button
+                type="button"
+                data-testid="history-view-compact"
+                aria-pressed={viewMode === "compact"}
+                onClick={() => chooseView("compact")}
+                className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
+              >
+                Compact
+              </button>
+            </div>
+          </div>
         </div>
         {profilesError && (
           <span role="alert" className="flex items-center gap-1 text-sm text-destructive-text">
@@ -1448,19 +1468,14 @@ export default function GenerationHistory() {
       {attention && (
         <Alert variant="warning" data-testid="history-attention">
           <AlertTriangle className="h-4 w-4" />
-          {/* One composed row (ADR 0189): the action sits with the
-              sentence it belongs to, inline after the guidance, instead
-              of floating detached at the banner's edge. Same words, same
-              link, same destination — only the placement changed. */}
+          {/* The banner is its sentence only (ADR 0204): the action
+              ADR 0189 set inline after the guidance now renders in the
+              toolbar's right cluster, beside the view toggle. The
+              words here are unchanged — only the action's seat moved. */}
           <AlertDescription>
             <span data-testid="history-attention-text">
               {attentionWords.summary}
-              {attentionWords.guidance}{" "}
-              <Button variant="secondary" size="sm" asChild className="ml-1 align-middle">
-                <Link to={{ search: attentionLink.search, hash: attentionLink.hash }} data-testid="history-attention-review">
-                  {attentionWords.cta} <ChevronRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
+              {attentionWords.guidance}
             </span>
           </AlertDescription>
         </Alert>

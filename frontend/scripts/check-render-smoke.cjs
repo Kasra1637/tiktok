@@ -18307,10 +18307,13 @@ async function runDemoCtaChecks() {
   // beside the group label) was refused as a mis-scope; the approved split
   // keeps the search and every dropdown grouped on the left under the title
   // and moves only the Full cards / Compact toggle to the far right of the
-  // toolbar row. The same ruling regroups the attention banner: its action
-  // sits with its sentence as one composed row, never floating alone at
-  // the banner's edge.
-  await check("History toolbar splits filters left and view toggle right, and the attention action sits with its sentence", async (ctx) => {
+  // toolbar row. ADR 0204 amends that split: the five filter controls share
+  // ONE row at desktop widths (the secondary wrapper renders as contents,
+  // so its three controls are items of the same row instead of a stacked
+  // second row), and the attention banner's action leaves the banner for
+  // the toolbar's right cluster, beside the toggle — the banner keeps its
+  // sentence only.
+  await check("History filters share one row, and the attention action sits beside the view toggle", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -18322,24 +18325,77 @@ async function runDemoCtaChecks() {
         await mount(History)(ctx);
         const bar = ctx.container.querySelector('.history-filters');
         if (!bar) throw new Error("History has no filter toolbar");
-        const toggle = bar.querySelector('[data-testid="history-view-toggle"]');
-        if (!toggle) throw new Error("the toolbar lost the view toggle");
-        if (!/(^|\s)ml-auto(\s|$)/.test(toggle.className || "")) {
-          throw new Error("the view toggle does not sit in the toolbar's right-aligned group");
-        }
+        const search = bar.querySelector('#history-search');
         const copyFilter = bar.querySelector('#history-copy-filter');
-        if (!copyFilter || !(copyFilter.compareDocumentPosition(toggle) & 4)) {
-          throw new Error("the view toggle must come after the left filter group in the toolbar");
+        const secondary = bar.querySelector('#history-secondary-filters');
+        const toggle = bar.querySelector('[data-testid="history-view-toggle"]');
+        if (!search || !copyFilter || !secondary || !toggle) {
+          throw new Error("the toolbar lost one of its controls");
         }
+        // One row: the search, the copy filter and the secondary wrapper
+        // live in the same flex row, in the founder's order, and the
+        // toggle's cluster closes that row. (The dropdowns render inside
+        // their app-select span, so they are pinned by containment; the
+        // wrapper and the cluster are the row's own children.)
+        const row = search.parentElement;
+        if (!row.contains(copyFilter) || secondary.parentElement !== row) {
+          throw new Error("the five filter controls do not share one row");
+        }
+        const cluster = toggle.parentElement;
+        if (!cluster || cluster.parentElement !== row) {
+          throw new Error("the view toggle does not sit in the toolbar row");
+        }
+        if (!/(^|\s)ml-auto(\s|$)/.test(cluster.className || "")) {
+          throw new Error("the toolbar's right cluster is not right-aligned");
+        }
+        const sort = bar.querySelector('#history-sort');
+        if (!(copyFilter.compareDocumentPosition(secondary) & 4) || !(sort.compareDocumentPosition(cluster) & 4)) {
+          throw new Error("the filter order changed: the secondary filters must sit between the copy filter and the right cluster");
+        }
+        // The desktop rule itself: at 768px the secondary wrapper renders
+        // as contents, so All apps, All statuses and the sort are items of
+        // the one row rather than a second stacked row.
+        const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.css'), 'utf8');
+        const mediaAt = css.indexOf('@media (min-width: 768px)', css.indexOf('/* Keep the main search and copy filter visible'));
+        const block = mediaAt === -1 ? "" : css.slice(mediaAt, mediaAt + 600);
+        if (!/\.history-secondary-filters[^{]*\{[^}]*display:\s*contents/.test(block)) {
+          throw new Error("index.css lost the desktop one-row rule for the secondary filters");
+        }
+        // The attention action lives in the right cluster, before the
+        // toggle, with its exact label — and the banner keeps its
+        // sentence only, with no link inside it.
         const banner = ctx.container.querySelector('[data-testid="history-attention"]');
         if (!banner) throw new Error("the kit-less banner does not render");
         const group = banner.querySelector('[data-testid="history-attention-text"]');
-        const link = banner.querySelector('[data-testid="history-attention-review"]');
-        if (!group || !link || !group.contains(link)) {
-          throw new Error("the attention action is not grouped with the notice's sentence");
+        if (!group || !/no post copy yet/.test(group.textContent || "") || !/Open its card and press Generate post copy/.test(group.textContent || "")) {
+          throw new Error("the attention banner lost the notice's words");
         }
-        if (!/no post copy yet/.test(group.textContent || "") || !/Open its card and press Generate post copy/.test(group.textContent || "")) {
-          throw new Error("the attention group lost the notice's words");
+        if (banner.querySelector('[data-testid="history-attention-review"]')) {
+          throw new Error("the attention action still sits inside the banner");
+        }
+        const action = cluster.querySelector('[data-testid="history-attention-review"]');
+        if (!action || !/Review without copy/.test(action.textContent || "")) {
+          throw new Error("the attention action does not sit beside the view toggle with its label");
+        }
+        if (!(action.compareDocumentPosition(toggle) & 4)) {
+          throw new Error("the attention action must come before the view toggle in the right cluster");
+        }
+      });
+      // No banner, no action: a render with its post copy filed shows
+      // neither the notice nor its toolbar action. (A plain remount keeps
+      // the first fetch's rows, so the tree is cleared first and the page
+      // mounts fresh under the new stub.)
+      await act(async () => ctx.root.render(null));
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "done-1", post_kit: POST_KIT }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        await mount(History)(ctx);
+        if (ctx.container.querySelector('[data-testid="history-attention"]')) {
+          throw new Error("a render with post copy still raises the attention banner");
+        }
+        if (ctx.container.querySelector('[data-testid="history-attention-review"]')) {
+          throw new Error("the attention action shows without its banner");
         }
       });
     } finally {

@@ -772,7 +772,8 @@ h1,
 }
 
 /* Keep the main search and copy filter visible on phones; the remaining
- * filters stay available in a disclosure and are always visible on desktop. */
+ * filters stay available in a disclosure on phones and join the one
+ * filter row on desktop (ADR 0204). */
 .history-more-filters {
     display: inline-block;
 }
@@ -781,13 +782,19 @@ h1,
 }
 .history-secondary-filters[data-expanded="true"] {
     display: flex;
+    flex-basis: 100%;
+    order: 5;
 }
 @media (min-width: 768px) {
     .history-more-filters {
         display: none;
     }
-    .history-secondary-filters {
-        display: flex;
+    /* The wrapper generates no box of its own, so All apps, All
+     * statuses and the sort render as items of the filter row itself:
+     * one row of five controls, never a stacked second row. */
+    .history-secondary-filters,
+    .history-secondary-filters[data-expanded="true"] {
+        display: contents;
     }
 }
 
