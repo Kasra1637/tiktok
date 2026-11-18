@@ -3486,7 +3486,7 @@ async function main() {
   // frame it used to sit in left the words cramped and clipped, and
   // the boxed field under it repeated them; both are gone, and a new
   // cover comes only through the suggestion's accept.
-  await check("the cover text shows in review as plain text under its subtitle with its score", async (ctx) => {
+  await check("the cover text shows in review as plain text under its subtitle with no score beside it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const report = {
       version: 1, advisory: true, total: 79, max: 100, grade: "B", band: "strong",
@@ -3529,9 +3529,15 @@ async function main() {
         if (subtitle.nextElementSibling !== display) {
           throw new Error("the cover text does not sit directly under its subtitle");
         }
-        const note = ctx.container.querySelector('[data-testid="cover-text-score-note"]');
-        if (!note || !note.textContent.includes("Scored with your hook") || !note.textContent.includes("13/20")) {
-          throw new Error("the cover's score contribution is not named beside it");
+        if (section.querySelector('[data-testid="cover-text-score-note"]')) {
+          throw new Error("the cover text area still carries a score note");
+        }
+        if (section.textContent.includes("Scored with your hook") || section.textContent.includes("13/20")) {
+          throw new Error("the cover text area still states a score");
+        }
+        const craft = ctx.container.querySelector('[data-testid="quality-report"]');
+        if (!craft || !craft.textContent.includes("13/20")) {
+          throw new Error("the craft check below no longer shows the hook dimension score");
         }
       });
     } finally {
@@ -3539,7 +3545,7 @@ async function main() {
     }
   });
 
-  await check("a suggested cover text shows its hook-score movement and saves nothing itself", async (ctx) => {
+  await check("a suggested cover text shows no score and saves nothing itself", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const project = { ...PROJECT_WITH_STRATEGY, cover_text: "Old cover words" };
     try {
@@ -3564,9 +3570,11 @@ async function main() {
         if (panel.classList.contains("inset-panel")) {
           throw new Error("the suggested cover still renders in a box");
         }
-        const move = ctx.container.querySelector('[data-testid="cover-text-score-move"]');
-        if (!move || !move.textContent.includes("11/20") || !move.textContent.includes("16/20")) {
-          throw new Error("the suggestion does not show its hook-score movement");
+        if (panel.querySelector('[data-testid="cover-text-score-move"]')) {
+          throw new Error("the suggested cover still carries a score-move line");
+        }
+        if (panel.textContent.includes("11/20") || panel.textContent.includes("16/20") || panel.textContent.includes("would move")) {
+          throw new Error("the suggested cover still states a score");
         }
         const newCalls = apiCalls.slice(callsBefore);
         if (newCalls.includes("updateStudioProject")) {

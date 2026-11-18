@@ -2917,16 +2917,16 @@ export default function CreateVideo() {
             </div>
             {/* The cover text, beside the spoken pair it is scored with
                 (ADR 0145): previewed as it will sit on the opening
-                frame, with its Hook stopping power contribution named,
-                and regenerable from its own button as a suggestion the
-                founder accepts or leaves — never auto-saved. */}
+                frame, and regenerable from its own button as a
+                suggestion the founder accepts or leaves — never
+                auto-saved. The area states no score (ADR 0200); the
+                Craft check below carries them. */}
             <CoverTextEditor
               projectId={project?.id}
               value={editValue("cover_text", "")}
               onChange={(next) => dispatchDraft({ type: "edit-field", field: "cover_text", value: next })}
               hookLine={editValue("hook_line", "")}
               script={editValue("script", "")}
-              hookScore={project?.quality_report?.dimensions?.hook_stopping_power || null}
               disabled={busy}
             />
             <GroupLabel icon={ShieldCheck}>Checks</GroupLabel>

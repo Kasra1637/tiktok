@@ -16,19 +16,20 @@ import { api, getErrorMessage } from "../../lib/api";
  * Suggest button below, and accepting it writes through the normal
  * draft edit.
  *
- * The cover is scored WITH the spoken hook in Hook stopping power, and
- * the editor says so, with the current dimension score, so the founder
- * sees how the words they are reading are the words being graded. A
- * fresh cover comes only from its own button (ADR 0122) and, like the
+ * The cover is still scored WITH the spoken hook in the Craft check
+ * below (ADR 0145), but this area says nothing about scores
+ * (ADR 0200): the founder reads the words here, plain, and anyone who
+ * wants the score finds it in the Checks card right below. A fresh
+ * cover comes only from its own button (ADR 0122) and, like the
  * clearer-line suggestions, is never saved by the server: accepting
- * goes through the normal draft edit. The suggestion carries the hook
- * score it would earn beside the current cover's, both from the
- * endpoint, so the movement is visible before the founder decides. A
- * suggestion made for a cover the founder has since edited is stale
- * and hides rather than overwriting their newer words.
+ * goes through the normal draft edit. The suggest endpoint still
+ * returns the hook score the cover would earn; the editor simply
+ * does not read it. A suggestion made for a cover the founder has
+ * since edited is stale and hides rather than overwriting their
+ * newer words.
  */
 export default function CoverTextEditor({
-  projectId, value, onChange, hookLine = "", script = "", hookScore = null, disabled,
+  projectId, value, onChange, hookLine = "", script = "", disabled,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -45,7 +46,7 @@ export default function CoverTextEditor({
       if (!out || typeof out.cover_text !== "string" || !out.cover_text.trim()) {
         throw new Error("No cover text came back. Try again in a moment.");
       }
-      setSuggestion({ text: out.cover_text, hookScore: out.hook_score || null, forCover: value });
+      setSuggestion({ text: out.cover_text, forCover: value });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -62,12 +63,6 @@ export default function CoverTextEditor({
       <p className="text-base" data-testid="cover-text-value">
         {value?.trim() ? value : <span className="text-muted-foreground">A few words for the opening frame</span>}
       </p>
-      <p className="text-sm text-muted-foreground" data-testid="cover-text-score-note">
-        Scored with your hook in Hook stopping power
-        {hookScore
-          ? <> — currently <span className="font-semibold">{hookScore.score}/{hookScore.max}</span>.</>
-          : "."}
-      </p>
       <div className="space-y-3">
         {!live && (
           <Button type="button" variant="outline" size="sm" onClick={suggest}
@@ -82,12 +77,6 @@ export default function CoverTextEditor({
         {live && (
           <div className="space-y-3" data-testid="cover-text-suggestion">
             <p className="text-base font-semibold">&ldquo;{live.text}&rdquo;</p>
-            {live.hookScore && (
-              <p className="text-sm text-muted-foreground" data-testid="cover-text-score-move">
-                Hook stopping power would move from {live.hookScore.current}/{live.hookScore.max} to{" "}
-                {live.hookScore.suggested}/{live.hookScore.max} with this cover.
-              </p>
-            )}
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" disabled={disabled} data-testid="cover-text-accept"
                 onClick={() => { onChange(live.text); setSuggestion(null); }}>
