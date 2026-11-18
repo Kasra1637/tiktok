@@ -1453,7 +1453,7 @@ export default function CreateVideo() {
   const confirmRegeneratePlan = () => {
     const message = hasEdits
       ? "You have unsaved edits. Generating a new plan replaces this one and your edits are lost. Generate anyway?"
-      : `Replace plan v${project?.script_version || 0} with a new one? The current plan is discarded.`;
+      : `Discard plan v${project?.script_version || 0} and generate a new one?`;
     if (typeof window.confirm !== "function" || !window.confirm(message)) return;
     handleGeneratePlan();
   };

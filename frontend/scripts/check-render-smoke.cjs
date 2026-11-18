@@ -19577,8 +19577,8 @@ async function runDemoCtaChecks() {
           for (const phrase of [
             "Delete this render?",
             "cannot be undone",
-            "removes this render from History",
-            "post copy is removed",
+            "removes the render from History",
+            "deletes its video file and post copy",
             "project plan stays untouched",
             "Download it first",
             "Delete permanently",

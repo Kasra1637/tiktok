@@ -945,13 +945,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
           <DialogHeader>
             <DialogTitle>Delete this render?</DialogTitle>
             <DialogDescription>
-              This cannot be undone. It removes this render from History and deletes its video file and post copy.
+              This cannot be undone. It removes the render from History and deletes its video file and post copy, so it cannot be played or downloaded here anymore.
             </DialogDescription>
           </DialogHeader>
 
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground" data-testid={`delete-render-consequences-${row.id}`}>
-            <li>The clip leaves History and cannot be played or downloaded here anymore.</li>
-            <li>Its post copy is removed with it.</li>
             <li>Your project plan stays untouched.</li>
           </ul>
 

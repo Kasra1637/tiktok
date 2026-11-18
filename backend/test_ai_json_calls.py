@@ -2363,7 +2363,19 @@ class TestStrategyBudget:
         # the rule, so the block grows in every prompt that writes
         # behavior direction. The ceiling moves by a measured 2,250 to
         # 47,000, keeping ~750 of headroom.
-        CEILING = 47_000
+        #
+        # ADR 0201 raises it again, measured: 46,244 -> 47,813 (+1,569,
+        # exactly the shared block's growth 7,739 -> 9,308) for the
+        # craft-gap rules the founder ordered on Nov 18 2026: the hook
+        # names its cost in the same sentence, both lines are finished
+        # sentences, the script opens inside its scene and answers in
+        # its first sentence, no sentence runs past 18 words, and the
+        # payoff is never a vague stand-in. The scorer does not change
+        # (Kasra's standing order); the generator carries the lessons,
+        # so the block grows in every prompt that writes spoken lines,
+        # strategy included. The ceiling moves by a measured 1,600 to
+        # 48,600, keeping ~790 of headroom.
+        CEILING = 48_600
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

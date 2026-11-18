@@ -65,10 +65,40 @@ def test_promotion_and_personal_history_reduce_trust():
     )
 
     assert _dims(report)["trust_compliance"]["score"] <= 4
-    assert report["grade"] == "F"
-    assert report["band"] == "off_brief"
     evidence = " ".join(_dims(report)["trust_compliance"]["evidence"]).lower()
     assert "promotion" in evidence or "personal history" in evidence
+    # ADR 0202: Trust still scores and still counts toward the total,
+    # but it no longer caps the grade. This pair's F comes from its
+    # total (36) alone — the same letter the total would earn with a
+    # clean Trust score — and no cap marker is attached.
+    assert report["total"] < 40
+    assert report["grade"] == "F"
+    assert report["band"] == "off_brief"
+    assert "capped_by" not in report
+
+
+def test_a_low_trust_score_no_longer_caps_the_grade():
+    # The founder's own panel, Nov 18 2026 (ADR 0202): eight category
+    # scores of 16/12/10/7/6/7/10/4 — a 72 total — displayed as F
+    # because Trust sat at 4, its two charges being unfinished
+    # sentences. Kasra's ruling: "The whole grade should be
+    # independent" — the grade is calculated from the eight
+    # categories' total alone. The cover below carries the problem
+    # cue and concrete anchor the panel's 16/20 hook score implies
+    # (the opening is scored whole, ADR 0145).
+    report = creative_quality.assess_spoken_quality(
+        "I'm trying to say what's repeating instead of writing today",
+        "Lately I felt low after lunch again and again, every day, and "
+        "I still don't know how my count adds up over time",
+        app_name="Vocolens",
+        cover_text="Losing count again at lunch",
+    )
+
+    assert _dims(report)["trust_compliance"]["score"] == 4
+    assert report["total"] == 72
+    assert report["grade"] == "B"
+    assert report["band"] == "strong"
+    assert "capped_by" not in report
 
 
 def test_empty_lines_and_over_ceiling_are_reported():

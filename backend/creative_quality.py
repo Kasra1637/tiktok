@@ -680,12 +680,11 @@ def assess_spoken_quality(
         next_steps = ["No craft dimension needs a rewrite; keep this pair."]
     report = _report(dimensions, next_steps)
     report["cover_text"] = {"text": cover, "scored_with_hook": bool(cover and hook)}
-    # A promotional or personal-history line is off-brief however catchy its
-    # other dimensions are. The numeric total still reports the craft points;
-    # the letter and band answer the product question: can this pair ship as a
-    # customer story? No.
-    if dimensions["trust_compliance"]["score"] < 5:
-        report["grade"] = "F"
-        report["band"] = "off_brief"
-        report["capped_by"] = "trust_compliance"
+    # The grade is the total's alone (ADR 0202, Kasra's ruling of
+    # Nov 18 2026): Trust & compliance scores and counts toward the
+    # total like the other seven categories, but no category caps
+    # the letter. Until this ADR a Trust score under 5 forced grade
+    # F / band off_brief however high the total ran — a 72 displayed
+    # as F, its two charges being unfinished sentences — and the
+    # report carried a capped_by marker no surface read.
     return report
