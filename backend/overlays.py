@@ -103,7 +103,13 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
         "-i", str(source),
         "-filter_complex", graph,
         "-map", "[outv]", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        # veryfast, not medium (ADR 0192): the scale resamples and adds
+        # no detail (see canvas_fit_chain), so the slower preset's
+        # extra analysis buys nothing a viewer can see on an upscale —
+        # and it measured 39.7s against veryfast's 18.0s on the
+        # reference 15s 480p clip. CRF is unchanged at 20, and the
+        # trims already encode at veryfast for the same reason.
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
         "-pix_fmt", "yuv420p", "-c:a", "aac",
         # +faststart moves the moov atom to the front of the file. Without it
         # the index sits at the end, so a player must fetch the whole clip
@@ -270,13 +276,16 @@ def apply_camera_move_sync(
     duration = probe_duration(source)
     if duration <= 0:
         return None, ["Could not read the base clip's duration; the camera move was skipped."]
-    # The crop window is the canvas size throughout the ramp, so the frame
-    # being moved must already be at least that big -- in the finalize path the
-    # canvas resize runs first for exactly this reason. Moving a smaller
-    # frame would crop outside it and fail the render.
-    width, height = probe_video_dims(source)
-    if width and height and (width < CANVAS_WIDTH or height < CANVAS_HEIGHT):
-        return None, ["Clip is smaller than the canvas; the camera move was skipped."]
+    # The move runs at whatever size the clip already is (ADR 0192). The
+    # geq maps every destination pixel back into a centered window of the
+    # SAME frame — its coordinates are built from the plane's own W/H and
+    # the magnification is >= 1, so a sampled point can never fall
+    # outside the frame, at any resolution. An earlier guard refused
+    # sub-canvas clips on the belief that the crop window was the canvas;
+    # there is no crop in this graph. Refusing them mattered once the
+    # finalize path began moving the clip BEFORE the canvas rescale:
+    # every sub-canvas render (480p HeyGen, 720p Grok) would have lost
+    # its zoom entirely.
     try:
         cut_at = float(at_seconds or 0)
     except (TypeError, ValueError):

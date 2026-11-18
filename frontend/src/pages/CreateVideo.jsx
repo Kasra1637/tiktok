@@ -218,7 +218,7 @@ const DIMENSION_EXPLANATIONS = {
     measures:
       "Whether the opening makes a scrolling viewer stop. Hook and cover text score together.",
     earned:
-      "A problem, one concrete detail, first person and an open gap earn. Diary openings, app talk and sales asks lose.",
+      "A problem, one concrete detail and an open gap earn. Diary openings, app talk and sales asks lose.",
   },
   audience_truth: {
     measures:
@@ -242,7 +242,7 @@ const DIMENSION_EXPLANATIONS = {
     measures:
       "Whether hook and script work as one story — problem, deepening, an ending that opens the demo.",
     earned:
-      "Insight, a mid-story shift and an open ending earn. Repeating the hook, quoting or wrapping up loses.",
+      "Insight, a mid-story shift and answering the hook early earn. The open ending is paid in Demo handoff. Repeating the hook, quoting or wrapping up loses.",
   },
   spoken_naturalness: {
     measures:
@@ -254,7 +254,7 @@ const DIMENSION_EXPLANATIONS = {
     measures:
       "Whether the script's last line leaves a question open for the demo.",
     earned:
-      "Ending open, in first person, earns most. A neat wrap-up or app talk loses.",
+      "Ending open, on the question the demo answers, earns most. A neat wrap-up or app talk loses.",
   },
   trust_compliance: {
     measures:
@@ -393,9 +393,21 @@ function CraftCheckCard({ report }) {
                       </div>
                     </li>
                   </TooltipTrigger>
+                  {/* The aria-label is load-bearing, not decoration
+                      (ADR 0188): Radix renders a tooltip's children
+                      TWICE — once visible, and once in a visually
+                      hidden accessible copy the trigger's
+                      aria-describedby points at. With no aria-label
+                      the hidden copy repeats the whole findings-and-
+                      advice block word for word, so any read of the
+                      tooltip's text (a paste, a screen reader's text
+                      pass) heard everything twice. The label replaces
+                      the hidden copy with the one-line summary; the
+                      findings and advice now exist exactly once. */}
                   <TooltipContent
                     data-testid={`quality-dimension-tip-${dimension.key}`}
                     className="max-w-xs space-y-2.5"
+                    aria-label={`${dimension.label}: ${dimension.score} of ${dimension.max}`}
                   >
                     <div className="flex items-baseline justify-between gap-3">
                       <p className={TOOLTIP_LABEL_CLASS}>{dimension.label}</p>
@@ -2672,7 +2684,7 @@ export default function CreateVideo() {
               Generate your plan
             </Button>
             <p className="text-base text-muted-foreground">
-              The free plan brings your hook, script, shots, and demo note here, ready to edit.
+              Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.
             </p>
           </div>
         ) : !project?.script_version ? (
@@ -2850,16 +2862,16 @@ export default function CreateVideo() {
               <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
               {/* The script stands in the cover frame too (ADR 0186), the
                   hook's treatment: the same textarea inside, still growing
-                  with its words, still counted live below. */}
+                  with its words, still counted live below. No quotation
+                  marks (ADR 0191), and no fixed tall height: the
+                  textarea's own auto-grow fits the frame to the words,
+                  so a short script holds no empty space beneath it. */}
               <div className="post-kit-cover spoken-line-frame">
-                <span aria-hidden="true">&ldquo;</span>
                 <Textarea
                   id="review-script"
                   value={editValue("script", "")}
                   onChange={(e) => dispatchDraft({ type: "edit-field", field: "script", value: e.target.value })}
-                  className="min-h-[160px]"
                 />
-                <span aria-hidden="true" className="spoken-line-quote-end">&rdquo;</span>
               </div>
               <p className="text-sm text-muted-foreground" data-testid="script-live-count">
                 {spokenCountNote(editValue("script", ""), project?.spoken_check?.script)}
@@ -2936,13 +2948,19 @@ export default function CreateVideo() {
               <label htmlFor="review-demo-brief" className="text-sm font-semibold">
                 What the demo should show
               </label>
-              <Textarea
-                id="review-demo-brief"
-                value={editValue("demo_brief", "")}
-                onChange={(e) => dispatchDraft({ type: "edit-field", field: "demo_brief", value: e.target.value })}
-                className="min-h-[70px]"
-                placeholder="For example: A spoken recap of one call, then the weekly mood reports screen"
-              />
+              {/* The demo brief joins the spoken lines' frame family
+                  (ADR 0191): the same sunken frame, fitted to its
+                  content by the textarea's auto-grow, no quotation
+                  marks, nothing shown on click. It is a note about the
+                  founder's own recording, never a spoken line. */}
+              <div className="post-kit-cover spoken-line-frame">
+                <Textarea
+                  id="review-demo-brief"
+                  value={editValue("demo_brief", "")}
+                  onChange={(e) => dispatchDraft({ type: "edit-field", field: "demo_brief", value: e.target.value })}
+                  placeholder="For example: A spoken recap of one call, then the weekly mood reports screen"
+                />
+              </div>
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 A note about your own recording — never reaches the render.
               </p>

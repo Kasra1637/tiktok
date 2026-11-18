@@ -2614,7 +2614,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
         trimmed length when a trim applied and the requested one otherwise.
 
     The whole post-download pipeline lives here — download, the model's
-    head cut, hook trim, canvas rescale, R2 upload, local-served fallback —
+    head cut, hook trim, camera move, canvas rescale, R2 upload, local-served fallback —
     because two callers need it to agree exactly. poll_generation runs it
     on the way to 'completed', and retry_generation_storage runs it to
     repair a row that already failed.
@@ -2717,8 +2717,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     + "; ".join(attempts) + ")."
                 ), 0
 
-    # One encode at a time box-wide (see _FFMPEG_SLOT): trim, rescale and the
-    # camera cut are sequential here, but a concurrent poster encode from another
+    # One encode at a time box-wide (see _FFMPEG_SLOT): the trims, the
+    # camera move and the rescale are sequential here, but a concurrent poster encode from another
     # request would stack on top of them. R2 upload below stays outside the
     # gate — network, not encode.
     head_trim_applied = False
@@ -2774,12 +2774,73 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                         f"delivering the untrimmed render."
                     )
 
-            # Deliver on the platform's canvas. The cheaper providers render
-            # below it -- Grok Imagine Video at 720p -- and a founder posting to
-            # TikTok wants 1080x1920 rather than whatever the model emitted.
-            # Applied after the trim so the scaled clip is the canonical file:
-            # it is what an extension would bridge from, and what the preview
-            # and the plain download then serve.
+            # Apply the single centered 1.10x zoom at the clip's NATIVE
+            # size, before the canvas rescale (ADR 0192). The move's geq
+            # remap is per-pixel: run after the rescale, it processed the
+            # full 1080x1920 canvas — five times the pixels a 480p render
+            # delivered — and that one step was most of the save's
+            # minutes. The geq's coordinates are relative to the frame
+            # it runs on, so the zoom's geometry is identical at native
+            # size; the rescale that follows carries the moved pixels
+            # onto the canvas in the pipeline's single canvas encode.
+            # Fresh downloads only: canonical clips must never zoom twice.
+            # Start at 70% of hook_seconds, ease for 0.6s, then hold to the end.
+            # The model alone generates the orbit; there is no lateral crop.
+            # Existing soft-failure behavior still preserves a watchable clip.
+            #
+            # The one exception is a render that arrives ABOVE the
+            # canvas: there the rescale runs first, as it used to, so
+            # the geq never runs on more pixels than the canvas either
+            # way. An unreadable size reads as (0, 0) and takes the
+            # native path.
+            try:
+                project_row = await _fetch_one(
+                    "SELECT hook_seconds FROM studio_projects WHERE id = ?",
+                    (row.get("studio_project_id") or "",),
+                )
+                # Only hook duration sets the processing timestamp. Legacy
+                # strategy.camera_beat.at must not override the 70% ratio.
+                move_at = overlays.camera_beat_seconds(
+                    (project_row or {}).get("hook_seconds"),
+                )
+            except (TypeError, ValueError):
+                move_at = 0.0
+            want_move = (
+                move_at > 0
+                and (row.get("camera_setup") or "handheld") != "fixed"
+            )
+
+            async def _apply_move(path):
+                moved, move_warnings = await overlays.apply_camera_move(path, move_at)
+                if moved:
+                    return moved
+                if move_warnings:
+                    logger.warning(
+                        f"Generation {generation_id}: camera move skipped "
+                        f"({move_warnings[0]}); delivering without it."
+                    )
+                return path
+
+            move_first = False
+            if want_move:
+                native_w, native_h = await asyncio.to_thread(
+                    overlays.probe_video_dims, local_path)
+                move_first = not (
+                    native_w > overlays.CANVAS_WIDTH
+                    or native_h > overlays.CANVAS_HEIGHT
+                )
+            if want_move and move_first:
+                local_path = await _apply_move(local_path)
+
+            # Deliver on the platform's canvas (ADR 0192). The cheaper
+            # providers render below it -- Grok Imagine Video at 720p --
+            # and a founder posting to TikTok wants 1080x1920 rather
+            # than whatever the model emitted. Applied after the trims
+            # (and, for a sub-canvas render, after the camera move) so
+            # the scaled clip is the canonical file: it is what an
+            # extension would bridge from, and what the preview and the
+            # plain download then serve. It is the pipeline's only
+            # encode at canvas size.
             #
             # Soft by design. The scale resamples and adds no detail, so failing
             # here costs resolution and nothing else, and the un-rescaled clip
@@ -2794,32 +2855,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                     f"rendered size."
                 )
 
-            # Apply the single centered 1.10x zoom after canvas resize, before
-            # upload. Fresh downloads only: canonical clips must never zoom twice.
-            # Start at 70% of hook_seconds, ease for 0.6s, then hold to the end.
-            # The model alone generates the orbit; there is no lateral crop.
-            # Existing soft-failure behavior still preserves a watchable clip.
-            try:
-                project_row = await _fetch_one(
-                    "SELECT hook_seconds FROM studio_projects WHERE id = ?",
-                    (row.get("studio_project_id") or "",),
-                )
-                # Only hook duration sets the processing timestamp. Legacy
-                # strategy.camera_beat.at must not override the 70% ratio.
-                move_at = overlays.camera_beat_seconds(
-                    (project_row or {}).get("hook_seconds"),
-                )
-            except (TypeError, ValueError):
-                move_at = 0.0
-            if move_at > 0 and (row.get("camera_setup") or "handheld") != "fixed":
-                moved, move_warnings = await overlays.apply_camera_move(local_path, move_at)
-                if moved:
-                    local_path = moved
-                elif move_warnings:
-                    logger.warning(
-                        f"Generation {generation_id}: camera move skipped "
-                        f"({move_warnings[0]}); delivering without it."
-                    )
+            if want_move and not move_first:
+                local_path = await _apply_move(local_path)
 
     stored_url = await asyncio.to_thread(
         storage_service.upload_video, user_id, generation_id, Path(local_path))

@@ -285,6 +285,48 @@ class TestCameraMoveRunsInFinalize:
         assert calls[0][1] == pytest.approx(2.8)
         assert len(calls[0]) == 2
 
+    def test_the_move_runs_before_the_canvas_rescale(self, api, monkeypatch, tmp_path):
+        # ADR 0192: the camera move's geq remap is per-pixel, so it runs
+        # at the clip's native size BEFORE the rescale puts the frame on
+        # the 1080x1920 canvas — run after, it processed ~5x the pixels
+        # a 480p render delivered and cost minutes on its own. The order
+        # is the fix; this pins it.
+        from pathlib import Path as _Path
+
+        row = provider_row(studio_project_id="proj-order")
+        downloaded = tmp_path / "dl.mp4"
+        order = []
+
+        async def fake_download(url, generation_id):
+            downloaded.write_bytes(b"x")
+            return str(downloaded), None
+
+        async def fake_move(path, at):
+            order.append("move")
+            return _Path(path), []
+
+        async def fake_rescale(path):
+            order.append("rescale")
+            return _Path(path), []
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(api.overlays, "apply_camera_move", fake_move)
+        monkeypatch.setattr(api.overlays, "rescale_to_canvas", fake_rescale)
+        monkeypatch.setattr(api.storage_service, "is_configured", lambda: False)
+        monkeypatch.setattr(api.storage_service, "is_usable_video", lambda path: False)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda *args, **kwargs: "https://cdn.example/saved.mp4",
+        )
+        asyncio.run(api._execute(
+            "INSERT INTO studio_projects (id, hook_seconds) VALUES (?, ?)",
+            ("proj-order", 3),
+        ))
+        stored, error, _ = asyncio.run(api._persist_generation_clip(row, "anonymous"))
+        assert not error
+        assert stored == "https://cdn.example/saved.mp4"
+        assert order == ["move", "rescale"]
+
     def test_fixed_render_stays_unzoomed_after_project_switches_to_handheld(self, api, monkeypatch, tmp_path):
         row = provider_row(studio_project_id="fixed-snapshot", camera_setup="fixed")
         stored, error, calls = self._persist_with_stubs(

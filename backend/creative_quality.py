@@ -59,12 +59,23 @@ _CONCRETE_CUES = (
     "shop", "school", "work", "couch", "sofa", "porch", "yard", "table",
     "mirror", "teeth", "hair", "shoes", "bag", "keys", "email", "inbox",
     "laundry", "bakery", "cafe", "paper bag",
+    # The lived environment between the landmarks (ADR 0188): the steps,
+    # platforms and queues a moment actually happens on. Real scripts
+    # named these and scored as if the scene were abstract, because the
+    # lists stopped at rooms and furniture.
+    "steps", "stairs", "hallway", "platform", "station", "counter",
+    "queue", "doorway", "parking lot", "sidewalk", "bench", "bus stop",
+    "waiting room", "driveway", "elevator", "announcement",
 )
 _PLACE_CUES = (
     "garden", "desk", "kitchen", "office", "car", "bus", "train", "shower",
     "bed", "couch", "sofa", "porch", "yard", "street", "park", "store",
     "shop", "school", "gym", "bathroom", "bedroom", "balcony", "patio",
     "bakery", "cafe",
+    # ADR 0188: the in-between places a scene is actually set in.
+    "steps", "stairs", "hallway", "platform", "station", "counter",
+    "queue", "doorway", "parking lot", "sidewalk", "bench", "bus stop",
+    "waiting room", "driveway", "elevator",
 )
 _ACTION_CUES = (
     "stretch", "stretching", "walk", "walking", "talk", "talked", "talking",
@@ -72,17 +83,25 @@ _ACTION_CUES = (
     "cook", "cooking", "clean", "cleaning", "drive", "driving", "sit",
     "sitting", "stand", "standing", "breathe", "breathing", "shower",
     "journal", "note", "coffee", "tea",
+    # ADR 0188: the small physical verbs of waiting and getting there.
+    "climb", "climbing", "climbed", "wait", "waiting", "carry",
+    "carrying", "hold", "holding",
 )
 _TIME_CUES = (
     "morning", "mornings", "afternoon", "afternoons", "evening", "evenings",
     "night", "nights", "week", "weeks", "weekend", "monday", "tuesday",
     "wednesday", "thursday", "friday", "saturday", "sunday", "lunch",
     "dinner", "breakfast",
+    # ADR 0188: the day's named appointments anchor a moment like a
+    # mealtime does.
+    "commute", "school run", "workout", "break time",
 )
 _SENSORY_CUES = (
     "warm", "cold", "tight", "breath", "shoulders", "chest", "jaw", "light",
     "rain", "sun", "coffee", "tea", "blanket", "pillow", "water", "sweat",
     "heartbeat", "quiet", "loud", "paper bag",
+    # ADR 0188: what a place sounds like grounds the scene too.
+    "announcement", "announcements", "noise", "noisy", "buzzing", "ringing",
 )
 _ABSTRACT_NOUNS = (
     "mood", "moods", "feeling", "feelings", "energy", "vibes", "mental",
@@ -247,16 +266,11 @@ def _score_hook(hook, cover=""):
     if len(hook.strip()) <= 60 and len(_words(hook)) <= 12:
         score += 2
         evidence.append("Compressed enough to land in the first three seconds.")
-    # First person is the voice, not a defect (ADR 0145): the founder's
-    # strongest hooks speak as the person living the moment ("words in
-    # the quiet garden aren't mine"), so an anchored first-person opening
-    # earns what a third-person report cannot.
-    first = _first_person(opening)
-    if first:
-        score += 2
-        evidence.append("Speaks in first person — the voice of the person living the moment.")
-    else:
-        evidence.append("No first-person voice; the opening reports the moment instead of living it.")
+    # First person is deliberately NOT paid here (ADR 0188): it was
+    # earning in Hook, Audience truth and Demo handoff at once, so one
+    # trait moved three scores. Its one home is Audience truth, the
+    # customer-voice category; this category pays for what stops the
+    # scroll — the problem, the anchor, the gap, the compression.
     if _has_trigger(opening):
         score += 1
         evidence.append("Names a trigger the viewer can recognise.")
@@ -274,7 +288,7 @@ def _score_hook(hook, cover=""):
         score -= min(3, len(abstract))
         evidence.append(f"Abstract mood words carry the idea ({', '.join(abstract[:3])}).")
     return _clamp(score, 0, 20), evidence, (
-        "Open on the moment in first person, one concrete detail, the "
+        "Open on the moment, one concrete detail, the "
         "resolution withheld; cut any app-behavior cue."
     )
 
@@ -288,7 +302,9 @@ def _score_audience(hook, script):
     # First person is how the viewer talks about their own life (ADR
     # 0145): a hook spoken as the person living it sounds true; a hook
     # that only reports the viewer in the third person sounds written
-    # about them.
+    # about them. This is first person's ONE home (ADR 0188): Hook and
+    # Demo handoff used to pay for it too, so the same words moved
+    # three category scores at once.
     first = _first_person(hook)
     if first:
         score += 2
@@ -399,17 +415,16 @@ def _score_story(hook, script, check):
     # but the resolution cues are read before the last sentence only —
     # a script that resolves in its final line closes the very question
     # Demo handoff needs open, and the two dimensions must not pay for
-    # opposite endings. The open ending earns its own credit here, so a
-    # deliberately unresolved close is worth more to the arc, not less.
+    # opposite endings. The open ending itself is NOT paid here (ADR
+    # 0188): it was earning in Story arc and Demo handoff at once. Its
+    # one home is Demo handoff, the category that owns the last line;
+    # this category keeps the problem, the insight and the mid-script
+    # shift.
     sentences = _sentences(script)
     before_last = " ".join(sentences[:-1]) if len(sentences) > 1 else ""
     if before_last and _hits(before_last, _RESOLUTION_CUES):
         score += 3
         evidence.append("The script lands a shift or a name for what changed before its last line.")
-    last = _last_sentence(script)
-    if _has_gap(last) and not _has_closure(last):
-        score += 2
-        evidence.append("The script ends open, on the line the demo answers — the arc completes there, by design.")
     story = check.get("story") or {}
     if story.get("echoes_hook"):
         score += 1
@@ -445,10 +460,10 @@ def _score_story(hook, script, check):
         score -= 2
         evidence.append("The payoff names a vague stand-in ('a word', 'that vague sense').")
     return _clamp(score, 0, 15), evidence, (
-        "Make the script answer the hook's problem in its first clause, live in "
-        "first person, and end on the strongest concrete line that opens the "
-        "discovery for the demo — never a quote, a narration, a repeat of "
-        "the hook, a vague stand-in, or a wrapped-up ending."
+        "Answer the hook in the first clause and land the shift before "
+        "the last line; leave the last line open, on the question the "
+        "demo answers — that ending is scored in Demo handoff. Never a "
+        "quote, a narration, a repeat of the hook, or a vague stand-in."
     )
 
 
@@ -497,9 +512,10 @@ def _score_handoff(script):
     if _has_gap(last):
         score += 4
         evidence.append("The last line leaves a gap the demo can answer.")
-    if re.search(r"\bi\b", _norm(last)):
-        score += 2
-        evidence.append("The last line is a first-person thought, ready to hand off.")
+    # First person is deliberately NOT paid here (ADR 0188): its one
+    # home is Audience truth. This category owns the ending alone —
+    # the gap, the named question, and the two ways an ending can
+    # close the demo's question before it starts.
     if _names_question(last):
         score += 2
         evidence.append("The last line names the question the demo will answer.")

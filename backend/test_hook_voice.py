@@ -269,9 +269,14 @@ def test_the_plan_loop_keeps_a_first_person_hook(monkeypatch):
     # ending — is calibrated to the shipped rubric: it totals 80, at the
     # craft-retry bar, so no craft retry fires either, and the draft
     # lands as written with no EDITORIAL CORRECTION spent on it.
+    # Recalibrated for ADR 0188: first person and the open ending are
+    # each paid in one category now, which cost this pair 4 points; the
+    # script earns them back with an insight the old draft lacked
+    # ("because I said it out loud") and one fewer abstract noun, and
+    # the pair totals 80 again.
     good = _plan(
         "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open and name the feeling out loud, one word at a time. What sets it off is still unclear.",
+        "I sit with my notebook open and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 
@@ -299,7 +304,7 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
     )
     good = _plan(
         "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open and name the feeling out loud, one word at a time. What sets it off is still unclear.",
+        "I sit with my notebook open and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 

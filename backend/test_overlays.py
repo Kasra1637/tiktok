@@ -23,8 +23,21 @@ class TestCanvasRescale:
     """
     Every clip ships at the canvas size. Providers render below it (Grok
     Imagine Video at 720p) and the platform expects 1080x1920, so the
-    finalize pass rescales before the camera cut and the upload.
+    finalize pass rescales before the upload — after the camera move
+    for a sub-canvas render, before it for an oversized one (ADR 0192).
     """
+
+    def test_upscale_command_encodes_veryfast(self):
+        """
+        Pinned (ADR 0192): the rescale is an upscale that adds no
+        detail, so the medium preset's extra analysis bought nothing
+        and cost ~22s of the save on the reference clip. veryfast at
+        the same CRF is the recorded choice; a silent return to medium
+        would hand the founder back a slower save invisibly.
+        """
+        argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
+        assert argv[argv.index("-preset") + 1] == "veryfast"
+        assert argv[argv.index("-crf") + 1] == "20"
 
     def test_upscale_command_targets_the_canvas(self):
         argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))
@@ -169,14 +182,49 @@ class TestCameraMoveStandalone:
             assert warnings == [], f"at={at!r} warned on a clean skip"
         assert clip.is_file()
 
-    def test_undersized_clip_is_skipped(self, tmp_path, monkeypatch):
+    def test_undersized_clip_is_moved_at_its_native_size(self, tmp_path, monkeypatch):
+        # ADR 0192: the finalize path moves the clip BEFORE the canvas
+        # rescale, so sub-canvas renders (480p HeyGen, 720p Grok) arrive
+        # here at native size. The geq's coordinates are relative to the
+        # frame's own W/H, so the move must be ATTEMPTED, not skipped —
+        # skipping it would silently strip the zoom from exactly the
+        # renders the reorder exists to speed up. ffmpeg is stubbed to
+        # fail; the captured argv proves the attempt.
         clip = tmp_path / "clip.mp4"
         clip.write_bytes(b"not really a video")
         monkeypatch.setattr(overlays, "probe_duration", lambda _path: 12.0)
         monkeypatch.setattr(overlays, "probe_video_dims", lambda _path: (720, 1280))
+        captured = {}
+
+        def fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            return type("P", (), {"returncode": 1, "stderr": "boom"})()
+
+        monkeypatch.setattr(overlays.subprocess, "run", fake_run)
         path, warnings = overlays.apply_camera_move_sync(clip, 2.1)
-        assert path is None
-        assert warnings
+        graph = captured["argv"][captured["argv"].index("-filter_complex") + 1]
+        assert "geq=" in graph and "(X-W/2)/" in graph
+        assert path is None and warnings
+
+    @needs_ffmpeg
+    def test_move_renders_at_native_size_below_the_canvas(self, tmp_path):
+        # The real encode, end to end, at 480p: the move lands, the
+        # frame size is untouched (the canvas rescale owns size, and it
+        # runs after), and the duration survives.
+        source = tmp_path / "src.mp4"
+        subprocess.run(
+            [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", "testsrc=duration=3:size=480x854:rate=30",
+             "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+             str(source)],
+            check=True,
+        )
+        path, warnings = overlays.apply_camera_move_sync(source, 2.1)
+        assert warnings == []
+        assert path == source
+        assert overlays.probe_video_dims(source) == (480, 854)
+        assert abs(overlays.probe_duration(source) - 3.0) < 0.3
 
     def test_centered_zoom_needs_no_face_detection(self, tmp_path, monkeypatch):
         """
@@ -251,8 +299,9 @@ class TestCameraMoveStandalone:
 
     @needs_ffmpeg
     def test_move_renders_and_preserves_duration(self, tmp_path, monkeypatch):
-        # Canvas-sized, as the finalize path guarantees: the canvas resize
-        # runs before the move, and the crop window is the canvas throughout.
+        # Canvas-sized: the move still works at 1080x1920 (the finalize
+        # path now runs it at native size first, ADR 0192, but the graph
+        # is resolution-relative and both sizes must land).
         # Exercise the centered zoom through the real processing entry point.
         source = tmp_path / "src.mp4"
         subprocess.run(

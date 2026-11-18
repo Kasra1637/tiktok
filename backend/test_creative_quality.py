@@ -32,11 +32,12 @@ def test_sample_is_scored_as_competent_but_generic():
     assert 55 <= report["total"] <= 65
     assert report["grade"] == "C"
     assert report["band"] == "competent_but_generic"
-    # The hook pin rose from 10 when ADR 0145 landed: the sample hook is
-    # first person with a time anchor, and that voice now earns points
-    # instead of a diary tax. The pair stays generic on the other seven
-    # dimensions — app behavior, written phrasing, a wrapped-up ending —
-    # which is what keeps the total in the C band above.
+    # The hook pin sits at 10: ADR 0145's first-person payment moved to
+    # its one home in Audience truth (ADR 0188), so the sample hook's
+    # voice no longer lifts this category — and its wrapped-up ending
+    # costs the handoff the same way. The pair stays generic on the
+    # other dimensions — app behavior, written phrasing — which is what
+    # keeps the total in the C band above.
     assert _dims(report)["hook_stopping_power"]["score"] <= 13
     assert _dims(report)["spoken_naturalness"]["score"] <= 5
     assert _dims(report)["demo_handoff"]["score"] <= 5
@@ -88,7 +89,10 @@ def test_first_person_hooks_outscore_third_person_reports():
     # person — "After masking all day words in the quiet garden aren't
     # mine" — so the scorer rewards the anchored first-person voice
     # instead of taxing it as a diary. Same moment, same place; only the
-    # voice differs.
+    # voice differs. Since ADR 0188 the reward has ONE home — Audience
+    # truth, the customer-voice category — so the voice moves that
+    # score alone: Hook stopping power reads the same moment either
+    # way and scores the pair identically there.
     first = creative_quality.assess_spoken_quality(
         "After masking all day, words in the quiet garden aren't mine.",
         REWRITE_SCRIPT, hook_seconds=3, total_seconds=15,
@@ -99,12 +103,12 @@ def test_first_person_hooks_outscore_third_person_reports():
     )
 
     assert (
-        _dims(first)["hook_stopping_power"]["score"]
-        > _dims(third)["hook_stopping_power"]["score"]
-    )
-    assert (
         _dims(first)["audience_truth"]["score"]
         > _dims(third)["audience_truth"]["score"]
+    )
+    assert (
+        _dims(first)["hook_stopping_power"]["score"]
+        == _dims(third)["hook_stopping_power"]["score"]
     )
 
 
@@ -174,6 +178,58 @@ def test_story_arc_does_not_punish_the_open_ending():
         _dims(opened)["demo_handoff"]["score"]
         > _dims(closed)["demo_handoff"]["score"]
     )
+
+
+def test_the_open_ending_is_paid_once_in_demo_handoff():
+    # ADR 0188: the open ending used to earn in Story arc AND Demo
+    # handoff, so one trait moved two scores. It now has one home —
+    # Demo handoff, which owns the last line. Two scripts sharing every
+    # beat but the ending therefore score the SAME story arc, and the
+    # whole difference lands in the handoff.
+    open_script = (
+        "In the garden, I talked through my day. There it was again: flat "
+        "afternoon, busy morning. I can see the pattern clear as day, "
+        "but not what sets it off."
+    )
+    closed_script = (
+        "In the garden, I talked through my day. There it was again: flat "
+        "afternoon, busy morning. Now I finally know the answer and it is fixed."
+    )
+    opened = creative_quality.assess_spoken_quality(REWRITE_HOOK, open_script)
+    closed = creative_quality.assess_spoken_quality(REWRITE_HOOK, closed_script)
+
+    assert (
+        _dims(opened)["story_arc"]["score"]
+        == _dims(closed)["story_arc"]["score"]
+    )
+    assert (
+        _dims(opened)["demo_handoff"]["score"]
+        > _dims(closed)["demo_handoff"]["score"]
+    )
+
+
+def test_everyday_places_count_as_concrete():
+    # ADR 0188: the cue lists stopped at rooms and furniture, so real
+    # scripts set on the quad steps or a station platform scored as if
+    # the scene were abstract. Both scripts below are the founder's
+    # actual rendered lines; each names its in-between place, and the
+    # platform script's announcement is a sound that grounds the scene.
+    steps = creative_quality.assess_spoken_quality(
+        REWRITE_HOOK,
+        "I say it out loud on the quad steps after class on Thursday. "
+        "That tight chest feeling is what I can tell a friend now.",
+    )
+    platform = creative_quality.assess_spoken_quality(
+        REWRITE_HOOK,
+        "I speak for sixty seconds while the announcement plays on the "
+        "platform. On my Tuesday commute I still don't know what sets it off.",
+    )
+
+    for report in (steps, platform):
+        evidence = " ".join(
+            _dims(report)["concreteness"]["evidence"]).lower()
+        assert "a place is named" in evidence
+    assert _dims(platform)["concreteness"]["score"] >= 8
 
 
 def test_report_sums_to_its_total_and_exposes_one_next_step():
