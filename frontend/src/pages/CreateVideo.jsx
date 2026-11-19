@@ -3,6 +3,7 @@ import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanel
 import HookLineEditor from "../components/studio/HookLineEditor";
 import CoverTextEditor from "../components/studio/CoverTextEditor";
 import ScriptRewrite from "../components/studio/ScriptRewrite";
+import AngleRegenConfirmDialog from "../components/studio/AngleRegenConfirmDialog";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
@@ -719,7 +720,8 @@ export default function CreateVideo() {
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,
     goalsRevealed, setGoalsRevealed, revealGoals, angleRegenNotice,
-    clearAngleRegenNotice,
+    clearAngleRegenNotice, angleRegenConfirm, confirmAngleRegen,
+    cancelAngleRegen,
     handleGenerateAngles, handleRegenerateAngles,
     handleGenerateGoals, handleRegenerateGoals,
   } = useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft });
@@ -3697,6 +3699,12 @@ export default function CreateVideo() {
           );
         })}
       </div>
+
+      <AngleRegenConfirmDialog
+        confirm={angleRegenConfirm}
+        onCancel={cancelAngleRegen}
+        onConfirm={confirmAngleRegen}
+      />
 
       {/* Sticky action bar: the arrow-only pair and the one line naming what
           the step in view is waiting on, in one glass cluster that stays

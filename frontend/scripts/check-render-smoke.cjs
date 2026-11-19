@@ -8995,48 +8995,83 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // ADR 0198: the pre-click confirm names the cross-draft cost — the
+  // ADR 0198 + 0210: the pre-click confirmation is the app's own branded
+  // dialog, not the browser's confirm. It names the cross-draft cost — the
   // regen-impact preflight counts drafts on ANY generated angle of the
-  // profile, not only the draft on the selected angle (the old confirm
-  // fired only for the selected one and named only it) — and declining
-  // it spends nothing.
-  await check("the regen confirm names drafts beyond the selected angle and gates the spend", async (ctx) => {
-    const seen = [];
-    const originalConfirm = dom.window.confirm;
-    dom.window.confirm = (message) => {
-      seen.push(message);
-      return false;
-    };
-    try {
-      await withApi(
-        {
-          getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
-          getAngleRegenImpact: async () => ({ projects_affected: 2 }),
-          regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {}, projects_affected: 2 }),
-        },
-        async () => {
-          global.__SMOKE_PARAMS = "";
-          const before = apiCalls.length;
-          try {
-            await mount(CreateVideo, {})(ctx);
-            await openStep(ctx, "Audience & template");
-            await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
-            await new Promise((r) => setTimeout(r, 150));
-            if (seen.length !== 1) throw new Error(`expected one regen confirm, saw ${seen.length}`);
-            if (!/2 drafts were planned around generated angles/.test(seen[0]) || !/hand-written/.test(seen[0])) {
-              throw new Error(`the confirm does not name the cross-draft cost: ${seen[0]}`);
-            }
-            if (apiCalls.slice(before).includes("regenerateContentAngles")) {
-              throw new Error("declining the confirm still spent the regenerate call");
-            }
-          } finally {
-            global.__SMOKE_PARAMS = "";
+  // profile, not only the draft on the selected angle — cancelling it
+  // spends nothing, and confirming spends exactly once.
+  await check("the branded regen dialog names drafts beyond the selected angle and gates the spend", async (ctx) => {
+    await withApi(
+      {
+        getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {} }),
+        getAngleRegenImpact: async () => ({ projects_affected: 2 }),
+        regenerateContentAngles: async () => ({ angles: [ANGLE, ANGLE_B], objective_evidence: {}, projects_affected: 2 }),
+      },
+      async () => {
+        global.__SMOKE_PARAMS = "";
+        const before = apiCalls.length;
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Audience & template");
+          const doc = ctx.container.ownerDocument;
+          doc.querySelectorAll('[data-testid="regenerate-angles-dialog"]').forEach((n) => n.remove());
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button");
+          await new Promise((r) => setTimeout(r, 150));
+          const dialog = doc.querySelector('[data-testid="regenerate-angles-dialog"]');
+          if (!dialog) throw new Error("the branded regen dialog did not open");
+          if (dialog.getAttribute("role") !== "dialog") {
+            throw new Error("the regen confirmation is not a real dialog");
           }
+          for (const phrase of [
+            "Regenerate angles?",
+            "Fresh angles replace the generated ones",
+            "hand-written angles stay",
+            "2 drafts keep their drafts but lose their stories",
+            "Rebuild each affected strategy at Review",
+            "Cancel",
+          ]) {
+            if (!dialog.textContent.includes(phrase)) {
+              throw new Error(`the regen dialog is missing ${JSON.stringify(phrase)}: ${dialog.textContent}`);
+            }
+          }
+          if (apiCalls.slice(before).includes("regenerateContentAngles")) {
+            throw new Error("opening the dialog still spent the regenerate call");
+          }
+          const cancel = dialog.querySelector('[data-testid="regenerate-angles-cancel"]');
+          if (!cancel) throw new Error("the regen dialog carries no Cancel");
+          await clickEl(ctx, cancel, "the regen dialog Cancel does nothing");
+          await new Promise((r) => setTimeout(r, 50));
+          if (doc.querySelector('[data-testid="regenerate-angles-dialog"]')) {
+            throw new Error("the regen dialog stayed open after Cancel");
+          }
+          if (apiCalls.slice(before).includes("regenerateContentAngles")) {
+            throw new Error("cancelling the dialog still spent the regenerate call");
+          }
+          // Confirming is the spend: the dialog closes and the endpoint
+          // runs exactly once.
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-angles-button"]'), "no regenerate button after Cancel");
+          await new Promise((r) => setTimeout(r, 150));
+          const reopened = doc.querySelector('[data-testid="regenerate-angles-dialog"]');
+          if (!reopened) throw new Error("the regen dialog did not reopen after Cancel");
+          const confirm = reopened.querySelector('[data-testid="regenerate-angles-confirm"]');
+          if (!confirm) throw new Error("the regen dialog carries no confirm button");
+          await clickEl(ctx, confirm, "the regen dialog confirm does nothing");
+          await new Promise((r) => setTimeout(r, 150));
+          const spends = apiCalls.slice(before).filter((c) => c === "regenerateContentAngles").length;
+          if (spends !== 1) throw new Error(`confirming spent ${spends} regenerate calls, not one`);
+          if (doc.querySelector('[data-testid="regenerate-angles-dialog"]')) {
+            throw new Error("the regen dialog stayed open after confirming");
+          }
+          const notice = ctx.container.querySelector('[data-testid="angle-regen-notice"]');
+          if (!notice) throw new Error("the confirmed regen shows no receipt");
+          if (!notice.textContent.includes("Regenerated. 2 drafts lost their stories. Rebuild their strategies at Review.")) {
+            throw new Error(`the regen receipt is not the short form: ${notice.textContent}`);
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
         }
-      );
-    } finally {
-      dom.window.confirm = originalConfirm;
-    }
+      }
+    );
   });
 
   // The vertical scrollbar's gutter stays reserved, so switching between

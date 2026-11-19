@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, getErrorMessage } from "../lib/api";
 
 /**
@@ -90,6 +90,34 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     setGoalsRevealed(true);
   }, []);
   const [angleRegenNotice, setAngleRegenNotice] = useState(null);
+  // The branded confirmation the branded-dialog change (ADR 0210) puts in
+  // place of the browser's confirm: the pending cost, held while the dialog
+  // is open, and the resolver for the click that is waiting on its answer.
+  // The spend itself stays behind the answer — opening the dialog calls
+  // nothing, and cancelling resolves the waiting handler as a refusal.
+  const [angleRegenConfirm, setAngleRegenConfirm] = useState(null);
+  const angleRegenConfirmResolverRef = useRef(null);
+  const settleAngleRegenConfirm = useCallback((ok) => {
+    const resolve = angleRegenConfirmResolverRef.current;
+    angleRegenConfirmResolverRef.current = null;
+    setAngleRegenConfirm(null);
+    if (resolve) resolve(ok);
+  }, []);
+  const requestAngleRegenConfirm = useCallback((affected) => {
+    if (angleRegenConfirmResolverRef.current) {
+      return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+      angleRegenConfirmResolverRef.current = resolve;
+      setAngleRegenConfirm({ affected });
+    });
+  }, []);
+  const confirmAngleRegen = useCallback(() => {
+    settleAngleRegenConfirm(true);
+  }, [settleAngleRegenConfirm]);
+  const cancelAngleRegen = useCallback(() => {
+    settleAngleRegenConfirm(false);
+  }, [settleAngleRegenConfirm]);
   // What a completed angle regen cost: how many of the profile's drafts were
   // built on angles it replaced. Shown as a one-time receipt on the angle
   // step only (ADR 0198) — Review carries its own live signal (the rebuild
@@ -106,7 +134,8 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     setGoalsRevealed(false);
     setAnglesSessionFresh(false);
     setAngleRegenNotice(null);
-  }, [profileId]);
+    settleAngleRegenConfirm(false);
+  }, [profileId, settleAngleRegenConfirm]);
   useEffect(() => {
     setLiveGoals(null);
     setLiveGoalsError(null);
@@ -131,36 +160,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
   //
   // Reports success so the gated copy can open the list only on a real
   // fresh set: a failed spend leaves the gate (and its error) in place.
-  const handleRegenerateAngles = useCallback(async () => {
-    if (!profileId) return false;
-    const selectedHasProject = Boolean(project && project.content_angle_id && project.content_angle_id === angleId);
-    let affected = null;
-    try {
-      const impact = await api.getAngleRegenImpact(profileId);
-      affected = Number(impact?.projects_affected) || 0;
-    } catch {
-      affected = null;
-    }
-    const mustConfirm = affected === null ? selectedHasProject : affected > 0;
-    if (mustConfirm) {
-      const cost =
-        affected && affected > 0
-          ? `${affected} draft${affected === 1 ? " was" : "s were"} planned around generated angles on this profile — ` +
-            `each keeps its draft but loses its story, and its strategy must be rebuilt at Review. `
-          : "A draft on this step is built around the angle you picked — it keeps its draft but loses " +
-            "its story, and its strategy must be rebuilt at Review. Other drafts on this profile " +
-            "planned around generated angles lose their stories the same way. ";
-      const ok =
-        typeof window === "undefined" || typeof window.confirm !== "function"
-          ? false
-          : window.confirm(
-              "Regenerating replaces this profile's generated angles with fresh ones " +
-                "(your hand-written angles are kept). " +
-                cost +
-                "Continue?"
-            );
-      if (!ok) return false;
-    }
+  const runAngleRegeneration = useCallback(async () => {
     setGeneratingAngles(true);
     setAngleError(null);
     setAngleRegenNotice(null);
@@ -176,14 +176,13 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
       }
       const affected = Number(data?.projects_affected) || 0;
       if (affected > 0) {
-        // Plain words, named next step: the angle the draft was planned
-        // around no longer exists, and the fix is rebuilding the strategy
-        // for the new angle at Review. The button below carries the founder
-        // there — a notice with no action is a dead end.
+        // Short receipt, named next step (ADR 0210): the confirmation has
+        // already carried the detail, so the receipt states the outcome
+        // once and the button below carries the founder to Review.
         setAngleRegenNotice(
           affected === 1
-            ? "Regenerated. 1 draft was planned around an angle that no longer exists — its story is gone. A new angle is already picked for this draft; rebuild its strategy at Review."
-            : `Regenerated. ${affected} drafts were planned around angles that no longer exist — their stories are gone. For each affected draft: pick a new angle, then rebuild its strategy at Review. This draft already has its new angle picked.`
+            ? "Regenerated. 1 draft lost its story. Rebuild its strategy at Review."
+            : `Regenerated. ${affected} drafts lost their stories. Rebuild their strategies at Review.`
         );
       }
       if (!data.angles?.length) {
@@ -199,7 +198,26 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, project, objective, adoptAngles]);
+  }, [profileId, angleId, objective, adoptAngles, dispatchDraft]);
+  // The click behind Regenerate: preflight first, the branded dialog when
+  // a draft is at stake, and the spend only after the founder confirms.
+  const handleRegenerateAngles = useCallback(async () => {
+    if (!profileId) return false;
+    const selectedHasProject = Boolean(project && project.content_angle_id && project.content_angle_id === angleId);
+    let affected = null;
+    try {
+      const impact = await api.getAngleRegenImpact(profileId);
+      affected = Number(impact?.projects_affected) || 0;
+    } catch {
+      affected = null;
+    }
+    const mustConfirm = affected === null ? selectedHasProject : affected > 0;
+    if (mustConfirm) {
+      const ok = await requestAngleRegenConfirm(affected && affected > 0 ? affected : null);
+      if (!ok) return false;
+    }
+    return runAngleRegeneration();
+  }, [profileId, angleId, project, requestAngleRegenConfirm, runAngleRegeneration]);
   // The generate action behind the angle panel's "Generate angles" CTA,
   // which since Part 3 renders only over an empty set on the angle step
   // (the Review copy's gate button redirects here instead of calling
@@ -305,7 +323,8 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     anglesRevealed, setAnglesRevealed, revealAngles, anglesSessionFresh,
     cyclingGoals, liveGoals, liveGoalsLoading, liveGoalsError,
     goalsRevealed, setGoalsRevealed, revealGoals, angleRegenNotice,
-    clearAngleRegenNotice,
+    clearAngleRegenNotice, angleRegenConfirm, confirmAngleRegen,
+    cancelAngleRegen,
     handleGenerateAngles, handleRegenerateAngles,
     handleGenerateGoals, handleRegenerateGoals,
   };
