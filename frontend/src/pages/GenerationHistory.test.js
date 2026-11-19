@@ -162,17 +162,24 @@ describe("history attention contract", () => {
 
   test.each([
     ["a repair beats a kit-less render", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "f1", status: "failed" }], "repair", "f1"],
-    ["a filed copy with no kit", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "kitless", "k1"],
-    ["an archived filed copy with no kit", [{ id: "a1", status: "archived", post_kit: null, r2_url: FILED_COPY }], "kitless", "a1"],
   ])("selects %s", (_label, rows, kind, firstId) => {
     const attention = getHistoryAttention(rows);
     expect(attention.kind).toBe(kind);
     expect(attention.first.id).toBe(firstId);
   });
 
+  // ADR 0207: a finished render that merely lacks post copy raises no
+  // page attention — its own card's Generate post copy offer (ADR 0060)
+  // is the only path, so kit-less rows alone draw no banner.
   test.each([
-    ["kit-less", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "1 finished render has no post copy yet.", "Generate post copy", "Review without copy"],
-    ["two kit-less", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "k2", status: "completed", post_kit: null, r2_url: FILED_COPY }], "2 finished renders have no post copy yet.", "Generate post copy", "Review without copy"],
+    ["a filed copy with no kit", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }]],
+    ["an archived filed copy with no kit", [{ id: "a1", status: "archived", post_kit: null, r2_url: FILED_COPY }]],
+    ["two filed copies with no kit", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }, { id: "k2", status: "completed", post_kit: null, r2_url: FILED_COPY }]],
+  ])("no banner for %s", (_label, rows) => {
+    expect(getHistoryAttention(rows)).toBeNull();
+  });
+
+  test.each([
     ["failed", [{ id: "f1", status: "failed" }], "1 clip needs attention.", "provider reason", "Review repair"],
     ["two failed", [{ id: "f1", status: "failed" }, { id: "f2", status: "failed" }], "2 clips need attention.", "Open each card", "Review repair"],
     ["awaiting", [{ id: "g1", status: "generating" }], "1 clip needs attention.", "keeps checking on its own", "Review repair"],
@@ -186,7 +193,6 @@ describe("history attention contract", () => {
 
   // The page passes the live URLSearchParams object, not a string.
   test.each([
-    ["kit-less links to the without side, keeping server filters", [{ id: "k1", status: "completed", post_kit: null, r2_url: FILED_COPY }], "profile=b1&q=noise", "?profile=b1&copy=without", "#generation-k1"],
     ["repair links to the side holding its first clip", [{ id: "f1", status: "failed", audience: "QA" }], "", "?copy=with", "#generation-f1"],
   ])("link: %s", (_label, rows, params, search, hash) => {
     const link = historyAttentionLink(new URLSearchParams(params), getHistoryAttention(rows));

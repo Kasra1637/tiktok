@@ -2663,11 +2663,16 @@ def _post_kit_candidate_pool(raw) -> list:
 
 COVER_TEXT_JSON_SCHEMA = _strict_object({"cover_text": _str_prop()})
 
-# The cover's shape, as data: a few words a viewer can read inside the
-# opening's first two seconds (the post kit's long-standing under-eight
-# ask, with a little headroom), and short enough to sit on one frame.
-COVER_TEXT_MAX_WORDS = 10
-COVER_TEXT_MAX_CHARS = 100
+# The cover's shape, as data: the words a viewer can read inside the
+# opening's first two seconds. The ask is 3 to 5 words (ADR 0206 —
+# Kasra rejected the looser sizing, ten words and a hundred characters
+# behind an under-eight ask, as still too long: the headroom swallowed
+# the ask). These ceilings sit just past the ask, so a cover at the
+# top of the ask always fits and anything longer is corrected against
+# them, never shipped. The character ceiling is Kasra's final sizing
+# of a cover — 30 to 35 characters — superseding an interim 50.
+COVER_TEXT_MAX_WORDS = 6
+COVER_TEXT_MAX_CHARS = 35
 
 
 async def generate_cover_text(
@@ -2867,7 +2872,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '    "about (the low-competition classification anchor), one or two "\n'
         '    "from the niche\'s own community or interest vocabulary, and one "\n'
         '    "broad app-category tag; the app\'s own name may be one of them"],\n'
-        '  "cover_text": "the cover text, written to these rules: under 8 words, first person in the person\'s own voice (never a label or title), the moment and place up front with one concrete felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
+        '  "cover_text": "the cover text, written to these rules: 3 to 5 words, eye catching, punchy and enticing, first person in the person\'s own voice (never a label or title), the moment and place up front with one concrete felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
         "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
@@ -3350,11 +3355,14 @@ def _cover_text_rules_block() -> str:
     rules (ADR 0145), from what stops his own scroll: it is half of the
     first two seconds, so it is written with the same care as the hook
     and scored with it, but it is a second angle on the moment, never a
-    copy of the spoken line.
+    copy of the spoken line. The sizing is ADR 0206: 3 to 5 words —
+    the two seconds are all a viewer gets, and the looser sizing
+    before it kept producing covers that read long.
     """
     return (
         "COVER TEXT — the words that sit on the video's opening frame (post copy, never spoken):\n"
-        "- A few words only — under eight — readable inside the first two seconds.\n"
+        "- SHORT and punchy: 3 to 5 words — all a viewer can read inside the first two seconds, every word earning its place.\n"
+        "- Eye catching, punchy and enticing: curiosity up front — it makes the viewer want the answer the video is holding back.\n"
         "- First person, the person's own voice; never a label, a title, or ad copy.\n"
         "- The moment and the place up front, with one concrete felt detail.\n"
         "- It works WITH the opening image: never repeat what the picture already shows.\n"
@@ -3915,7 +3923,9 @@ async def rewrite_spoken_line(
     The hook role delegates to `rewrite_hook_line`: its form rules (problem
     first, first-person voice, a question only when the founder's hook asks)
     are hook-only (ADR 0084), and `max_chars` forwards with it as the
-    hook's set length. A middle line is one sentence of the script,
+    hook's set length. The script role delegates to `rewrite_whole_script`
+    (ADR 0205): the whole spoken story remade in one call, bounded by the
+    script's full set length. A middle line is one sentence of the script,
     rewritten inside its story: it keeps its meaning, its place and roughly
     its length, because its seconds are already spoken for by the rest of
     the script — `max_chars`, when given, is the line's share of the
@@ -3934,6 +3944,11 @@ async def rewrite_spoken_line(
     """
     if role == "hook":
         return await rewrite_hook_line(profile, angle, line, objective, max_chars=max_chars)
+    if role == "script":
+        return await rewrite_whole_script(
+            profile, angle, line,
+            hook_line=hook_line, objective=objective, max_chars=max_chars,
+        )
     original = str(line or "").strip()
     if not original:
         raise RuntimeError("There is no line to rewrite yet.")
@@ -4013,6 +4028,134 @@ async def rewrite_spoken_line(
                 f"\n\nCORRECTION: that rewrite is {len(candidate)} characters, "
                 f"but this line's seconds hold {max_chars}. Say the same "
                 "thing in fewer, plainer words."
+            )
+            continue
+        return candidate
+    raise RewriteRefusal(refusal)
+
+
+async def rewrite_whole_script(
+    profile: dict,
+    angle: Optional[dict],
+    script: str,
+    *,
+    hook_line: str = "",
+    objective: str = "",
+    max_chars: int = 0,
+) -> str:
+    """A clearer version of the whole script at once — the whole-script remake.
+
+    The script role of the rewrite assist (ADR 0205): one call rewrites
+    the entire spoken story coherently — same moment, same facts, the
+    hook untouched — instead of sharpening one sentence at a time. It
+    rides the shared spoken-line rules block, so the craft lessons of
+    ADR 0201 come with it: the remake opens on the moment itself, its
+    first sentence names the place and answers the hook in the same
+    sentence, preamble openings are banned, no sentence runs past 18
+    words, every sentence is finished, the ending stays open on the
+    strongest concrete line and never lands on a vague stand-in payoff.
+    It stays statements: the hook carries the question and the script
+    never asks one.
+
+    `max_chars`, when given, is the script's full set-length ceiling —
+    the whole middle's seconds, not a per-line share (ADR 0130's rule at
+    the scale of the whole script). A remake past it is rejected, never
+    accepted and trimmed. A current script already past its ceiling is
+    exactly what this fixes, so the remake is always attempted and a
+    shorter compliant answer is the success case.
+
+    A suggestion only: nothing is saved here. The model's answer is
+    taken whole — whitespace tidied, the identity rule applied — never
+    cut to its first sentence: the answer IS the whole script. A reply
+    that fails a repair-able check — handed back unchanged, a question,
+    over the ceiling — gets one correction; a reply still failing after
+    it raises RewriteRefusal with the reason, so the founder never sees
+    a fake improvement.
+    """
+    original = str(script or "").strip()
+    if not original:
+        raise RuntimeError("There is no script to rewrite yet.")
+    p = profile or {}
+    facts = "\n".join(
+        f"- {k}: {str(p.get(k)).strip()}"
+        for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
+        if str(p.get(k) or "").strip()
+    )
+    if max_chars:
+        budget = (
+            f" The script's seconds hold {max_chars} characters in all "
+            "— the whole middle's set length — and the remake must fit "
+            "inside it: the words are laid over the video when rendered, "
+            "so a longer script overlaps and breaks the visual."
+        )
+    else:
+        budget = (
+            " Keep roughly its length — its seconds are already set."
+        )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
+        f"{_angle_goal_block(angle, objective)}\n\n"
+        f"{_spoken_line_rules_block()}\n"
+        f"HOOK: {str(hook_line or '').strip()}\n"
+        f"CURRENT SCRIPT: {original}\n\n"
+        "Rewrite the CURRENT SCRIPT whole, as one clearer spoken story: "
+        "the same moment, the same facts, the same feeling, in the plain "
+        "loose words a real person says out loud to a friend. The hook "
+        "stays untouched — the remake follows it and never repeats it. "
+        "The remake opens on the moment itself: its first sentence "
+        "stands in the scene, names the place and answers the hook in "
+        "the same sentence, with no looking-back preamble before it. "
+        "Every sentence finished, no sentence past 18 words, statements "
+        "only — the hook carries the question and the script never asks "
+        "one. End on the strongest concrete line, its thought left open, "
+        "never a vague stand-in payoff."
+        f"{budget} Never name the app. No quotation marks. "
+        'Return JSON: {"line": "..."}'
+    )
+    refusal = "The remake came back unchanged; try again, or edit the script yourself."
+    # The echo comparison reads the original the way a reply is read —
+    # whitespace collapsed — so a script handed back with its line
+    # breaks tidied away still counts as unchanged.
+    echo = re.sub(r"\s+", " ", character_policy.neutralize(original)).strip().lower()
+    for _ in range(2):
+        raw = await _chat_json(
+            system_message="You rewrite one spoken TikTok script, whole. Return one JSON object only.",
+            prompt=prompt,
+            context="Script rewrite",
+            max_tokens=REWRITE_MAX_TOKENS,
+            attempts=2,
+            json_schema=LINE_REWRITE_JSON_SCHEMA,
+        )
+        candidate = re.sub(r"\s+", " ", str((raw or {}).get("line") or "")).strip().strip('"“”')
+        # The remake is spoken, so it passes the same identity rule as
+        # every other spoken line (ADR 0089). It is taken whole: no
+        # sentence is extracted from it and nothing is clamped — the
+        # multi-sentence story is the suggestion.
+        candidate = character_policy.neutralize(candidate)
+        if not candidate or candidate.lower() == echo:
+            refusal = "The remake came back unchanged; try again, or edit the script yourself."
+            prompt += (
+                "\n\nCORRECTION: that was the current script handed back unchanged. "
+                "Write a genuinely different, clearer version of the whole story — same moment, new words."
+            )
+            continue
+        if "?" in candidate:
+            refusal = "The remake kept asking a question; try again, or edit the script yourself."
+            prompt += (
+                "\n\nCORRECTION: that remake asked a question. The hook "
+                "carries the question and the script never asks one — "
+                "rewrite it as statements that say the same thing directly."
+            )
+            continue
+        if max_chars and len(candidate) > max_chars:
+            refusal = (
+                f"The remake kept running long — past the {max_chars} characters "
+                "the script's seconds hold; try again, or edit the script yourself."
+            )
+            prompt += (
+                f"\n\nCORRECTION: that remake is {len(candidate)} characters, "
+                f"but the script's seconds hold {max_chars}. Say the same "
+                "story in fewer, plainer words."
             )
             continue
         return candidate
@@ -4626,7 +4769,7 @@ async def generate_creative_plan(
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: open with what she is trying to do — the goal for this video as a plain first-person trying-line, never naming or announcing the place (the viewer can already see it) — and name ONE specific, recognizable feeling from this video\'s own story (physical where possible), with one lived detail, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
-        '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: a few words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
+        '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: 3 to 5 words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said — the movement first: a rapid movement already underway in the first frame that physically performs the story\'s central action, through the channel this story calls for, never a resting pose or a slow settle"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said — ending on a sharp closing beat with the opening\'s energy, the story\'s action left visibly unfinished, never a soft fade or a passive smile hold"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'

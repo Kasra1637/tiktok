@@ -195,3 +195,144 @@ def test_post_kit_ships_the_approved_cover(monkeypatch):
     out = asyncio.run(ai_service.generate_post_kit(
         project, {"brand_name": "Voice Journal", "status": "approved"}))
     assert out["cover_text"] == COVER
+
+
+# ------------------------------------------------ the tightened cover
+#
+# ADR 0206: covers still came out too long at the old sizing — the ask
+# said under eight words while the caps allowed ten words and a
+# hundred characters, and the headroom swallowed the ask. Kasra's
+# ruling: the cover lives on screen for the opening's first two
+# seconds, so the optimized cover is 3 to 5 words, eye catching,
+# punchy and enticing; an 8-word cap was proposed and he rejected it
+# as too long. The caps now sit just past the ask — 6 words, 35
+# characters (his final sizing for a cover: 30 to 35 characters,
+# superseding an interim 50) — so a cover at the top of the ask
+# always fits, and the bounded correction corrects against the
+# tighter caps.
+
+SEVEN_WORDS = "Bakery queue on Friday, words won't come"  # 7 words, 40 chars
+LONG_FIVE = "Grandmother's heavy old suitcase collection"  # 5 words, 43 chars
+
+
+def test_cover_caps_sit_just_past_the_ask():
+    import ai_service
+    assert ai_service.COVER_TEXT_MAX_WORDS == 6
+    assert ai_service.COVER_TEXT_MAX_CHARS == 35
+
+
+def test_cover_rules_ask_for_three_to_five_words():
+    import ai_service
+    block = ai_service._cover_text_rules_block()
+    assert "3 to 5 words" in block
+    # Kasra's words for what the short cover must still be.
+    assert "Eye catching, punchy and enticing" in block
+    assert "under eight" not in block
+    assert "under 8" not in block
+
+
+def _recording_chat(monkeypatch, replies):
+    import ai_service
+    queue = list(replies)
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return queue.pop(0) if queue else {}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    return calls
+
+
+def test_generate_cover_text_corrects_a_seven_word_cover(monkeypatch):
+    import ai_service
+    # Seven words passed the old ten-word cap untouched; the tighter
+    # ceiling corrects it, naming the new limit.
+    calls = _recording_chat(monkeypatch, [
+        {"cover_text": SEVEN_WORDS}, {"cover_text": COVER},
+    ])
+    out = asyncio.run(ai_service.generate_cover_text(
+        {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+        current_cover="Old cover",
+    ))
+    assert out == COVER
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "6 words at most" in calls[1]["prompt"]
+
+
+def test_generate_cover_text_corrects_a_cover_past_the_char_cap(monkeypatch):
+    import ai_service
+    # Five words — inside the word ask — but 43 characters: inside
+    # the interim 50 cap, past Kasra's 35. The char ceiling is a
+    # real second bound, not a formality.
+    calls = _recording_chat(monkeypatch, [
+        {"cover_text": LONG_FIVE}, {"cover_text": COVER},
+    ])
+    out = asyncio.run(ai_service.generate_cover_text(
+        {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+        current_cover="Old cover",
+    ))
+    assert out == COVER
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+
+
+def test_generate_cover_text_refuses_a_cover_that_stays_long(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [
+        {"cover_text": SEVEN_WORDS}, {"cover_text": SEVEN_WORDS},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal, match="running long"):
+        asyncio.run(ai_service.generate_cover_text(
+            {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+            current_cover="Old cover",
+        ))
+
+
+def test_post_kit_prompt_asks_for_three_to_five_words(monkeypatch):
+    import ai_service
+    import hashtag_volume
+    calls = _recording_chat(monkeypatch, [{
+        "caption": "I stopped fighting my phone and cleared one list instead — you?",
+        "hashtags": ["#one", "#two", "#three", "#four", "#five"],
+        "cover_text": "A different unseen draft",
+    }])
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts", AsyncMock(return_value={}))
+    project = {
+        "hook_line": HOOK, "script": SCRIPT, "cta": "",
+        "cover_text": COVER,
+    }
+    asyncio.run(ai_service.generate_post_kit(
+        project, {"brand_name": "Voice Journal", "status": "approved"}))
+    prompt = calls[0]["prompt"]
+    assert "3 to 5 words" in prompt
+    assert "under 8 words" not in prompt
+
+
+def test_plan_prompt_asks_for_three_to_five_words(monkeypatch):
+    import ai_service
+    prompts = []
+
+    async def capture(system_message, prompt, context, **kwargs):
+        prompts.append(prompt)
+        return {
+            "hook_line": "Naming what I felt never worked.",
+            "script": "One sentence each night helped me understand the pattern.",
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+
+    monkeypatch.setattr(ai_service, "_chat_json", capture)
+    asyncio.run(ai_service.generate_creative_plan(
+        profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+        duration_seconds=15,
+    ))
+    # Every cover-writing surface reads the tightened ask: the shared
+    # block rides in the plan prompt, and no plan prompt still carries
+    # the old sizing.
+    assert any("3 to 5 words" in prompt for prompt in prompts)
+    assert all("under eight" not in prompt for prompt in prompts)
+    assert all("under 8 words" not in prompt for prompt in prompts)

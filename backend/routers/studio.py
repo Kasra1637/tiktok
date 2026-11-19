@@ -1546,14 +1546,19 @@ async def suggest_line_rewrite(
     role runs the hook rewrite bounded by the hook's set length; a
     middle line is rewritten inside its share of the middle's set
     length — the room the rest of the script leaves in the middle's
-    seconds. A suggestion past its line's set length is rejected, never
-    accepted and trimmed (ADR 0130): the spoken words are laid over
-    the video when rendered, so an over-length line overlaps and breaks
-    the visual, which is why generation is sized by the set lengths
-    rather than checked after the fact. A shorter suggestion is exactly
-    how an over-ceiling body gets pulled back under. When no share is
-    left, the refusal says to shorten the script first instead of
-    offering a rewrite that could never fit.
+    seconds. The script role (ADR 0205) remakes the whole script in one
+    call, bounded by the script's full set-length ceiling — the whole
+    middle's seconds, never a per-line share — and is never refused
+    for lack of room: a script already past its ceiling is exactly
+    what the remake fixes. A suggestion past its set length is
+    rejected, never accepted and trimmed (ADR 0130): the spoken words
+    are laid over the video when rendered, so an over-length line
+    overlaps and breaks the visual, which is why generation is sized
+    by the set lengths rather than checked after the fact. A shorter
+    suggestion is exactly how an over-ceiling body gets pulled back
+    under. When no share is left for a middle line, the refusal says
+    to shorten the script first instead of offering a rewrite that
+    could never fit.
     """
     require_ai_configured()
     row = await _fetch_one(
@@ -1562,14 +1567,16 @@ async def suggest_line_rewrite(
     if not row:
         raise HTTPException(status_code=404, detail="Studio project not found")
     role = str(payload.role or "").strip().lower()
-    if role not in ("hook", "middle"):
+    if role not in ("hook", "middle", "script"):
         raise HTTPException(
             status_code=400,
-            detail="Say which line it is — the hook or a script line — then ask for a clearer one.",
+            detail="Say which line it is — the hook, a script line or the whole script — then ask for a clearer one.",
         )
     original = (payload.line or "").strip()
     if role == "hook" and not original:
         original = (row.get("hook_line") or "").strip()
+    if role == "script" and not original:
+        original = (payload.script or row.get("script") or "").strip()
     if not original:
         raise HTTPException(status_code=400, detail="Write the line first, then ask for a clearer one.")
     profile = await _fetch_one(
@@ -1589,6 +1596,16 @@ async def suggest_line_rewrite(
         max_chars = check_spoken_story(
             original, script, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
         )["hook"]["target"]
+    if role == "script":
+        # The whole middle's set length (ADR 0130's rule at the scale of
+        # the whole script): the remake is bounded by the script's full
+        # ceiling, never a per-line share. There is no no-room refusal
+        # here the way the middle role has below: a script already past
+        # its ceiling is exactly what the remake fixes, and a shorter
+        # compliant answer is the success case.
+        max_chars = check_spoken_story(
+            hook_line, original, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
+        )["script"]["ceiling"]
     if role == "middle":
         # A missing duration falls back to fifteen seconds, the same reading
         # the craft score gives an old project: it must not be measured

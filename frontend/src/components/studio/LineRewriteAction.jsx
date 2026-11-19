@@ -5,18 +5,19 @@ import { api, getErrorMessage } from "../../lib/api";
 
 /**
  * The clearer-line rewrite for one spoken line — the hook, or one sentence
- * of the script.
+ * of the script — and, with the whole script as its line, the script's
+ * one whole-script remake (ADR 0205).
  *
  * A suggestion only, offered on every line with no warning gate: the
  * founder asks, reads the suggestion beside their own words, and either
- * takes it — "Use this line" goes through the normal draft edit, so
+ * takes it — the accept button goes through the normal draft edit, so
  * autosave and the version rules run exactly as if they had typed it — or
  * keeps theirs. A suggestion made for a line the founder has since edited
  * is stale and hides rather than overwriting their newer words.
  */
 export default function LineRewriteAction({
   projectId, line, role, hookLine = "", script = "", onAccept, disabled,
-  testIdPrefix, buttonLabel, busyLabel,
+  testIdPrefix, buttonLabel, busyLabel, acceptLabel = "Use this line",
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -57,7 +58,7 @@ export default function LineRewriteAction({
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" disabled={disabled} data-testid={`${testIdPrefix}-accept`}
               onClick={() => { onAccept(live); setSuggestion(null); }}>
-              Use this line
+              {acceptLabel}
             </Button>
             <Button type="button" variant="ghost" size="sm" data-testid={`${testIdPrefix}-dismiss`}
               onClick={() => setSuggestion(null)}>

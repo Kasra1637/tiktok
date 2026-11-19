@@ -2,7 +2,7 @@ import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker, Pres
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import CoverTextEditor from "../components/studio/CoverTextEditor";
-import ScriptLineRewrites from "../components/studio/ScriptLineRewrites";
+import ScriptRewrite from "../components/studio/ScriptRewrite";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
@@ -1826,11 +1826,12 @@ export default function CreateVideo() {
       footerHint = "Ready \u2014 continue to Review & submit.";
     }
   } else if (STEPS[step].key === "finish") {
-    // The last step's line names its one input: the finished render. With
-    // it, the editor is the work; without it, the render is the work, and
-    // the line sends the founder back to the step that makes it.
+    // The last step's line names its one missing input: the finished
+    // render. Without it, the render is the work, and the line sends the
+    // founder back to the step that makes it. With it, the bar carries
+    // no line at all — the editor is the work, and its buttons stand alone.
     footerHint = finishedGeneration
-      ? "Add your demo and closing message — exports save beside the original."
+      ? null
       : "Render the piece first — the finished clip opens here.";
   } else if (activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
@@ -2903,11 +2904,11 @@ export default function CreateVideo() {
                   or shorten the script above.
                 </p>
               )}
-              {/* Every spoken line carries the clearer-line rewrite, not
-                  only a flagged hook: the assist the hook has, per script
-                  sentence, each accepted suggestion editing just that
-                  sentence through the same draft edit as the textarea. */}
-              <ScriptLineRewrites
+              {/* The script carries one rewrite assist, not one per
+                  sentence (ADR 0205): a single remake of the whole
+                  script, its accepted suggestion replacing the entire
+                  script through the same draft edit as the textarea. */}
+              <ScriptRewrite
                 projectId={project?.id}
                 hookLine={editValue("hook_line", "")}
                 script={editValue("script", "")}
@@ -3719,13 +3720,17 @@ export default function CreateVideo() {
             <ChevronLeft className="h-5 w-5" />
           </Button>
           {/* The one line the task line does not duplicate: what this step is
-              waiting on right now, beside the controls that move. */}
-          <span
-            data-testid="wizard-footer-hint"
-            className="max-w-[46ch] px-1 text-sm text-muted-foreground"
-          >
-            {footerHint}
-          </span>
+              waiting on right now, beside the controls that move. A step
+              with nothing to name (the last step, render in hand) renders
+              no line at all. */}
+          {footerHint && (
+            <span
+              data-testid="wizard-footer-hint"
+              className="max-w-[46ch] px-1 text-sm text-muted-foreground"
+            >
+              {footerHint}
+            </span>
+          )}
           {/* The bar's primary slot (ADR 0133): when the step in view is
               blocked, the slot carries the ONE action that unblocks it —
               the section's own button, same handler and busy behavior —

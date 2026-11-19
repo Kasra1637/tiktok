@@ -1082,10 +1082,8 @@ const handleGenerate = async () => {
           className="text-base text-muted-foreground"
         >
           <p>
-            Your render is finished — saving its durable copy is taking longer than usual. That step
-            downloads the clip and re-encodes it for TikTok's canvas, and it can run a few minutes on
-            a busy box. It has not stopped: the video will appear here the moment the save lands, and
-            it will be in History too.
+            Your render is finished. Saving it is taking longer than usual, but it has not stopped.
+            The video will appear here, and in History, the moment the save lands.
           </p>
         </div>
       )}

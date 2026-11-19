@@ -1,6 +1,6 @@
 # 0204 — The History filters share one row, and the attention action leaves the banner
 
-Status: accepted
+Status: partially superseded by 0207 (the attention action this record seats beside the toggle is the repair action alone; the kit-less banner and its "Review without copy" action are removed)
 
 ## Context
 

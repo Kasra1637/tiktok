@@ -1707,6 +1707,11 @@ async function main() {
         if (segment.getAttribute("data-state") !== "done") {
           throw new Error("a project with a finished render does not read the finishing step as done");
         }
+        // Kasra's order: with a finished render, the sticky bar on the last
+        // step carries no hint line at all — its buttons stand alone.
+        if (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')) {
+          throw new Error("the finishing step's bar still carries a hint line beside a finished render");
+        }
       }
     );
   });
@@ -1730,6 +1735,13 @@ async function main() {
         const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-finish"]');
         if (segment && segment.getAttribute("data-state") === "done") {
           throw new Error("the finishing step reads done with no finished render");
+        }
+        // The no-render hint stays: only the finished-render hint was removed.
+        const hint = (
+          ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || ""
+        ).trim();
+        if (hint !== "Render the piece first — the finished clip opens here.") {
+          throw new Error(`the finishing step's no-render bar hint changed: ${JSON.stringify(hint)}`);
         }
       }
     );
@@ -18276,7 +18288,11 @@ async function runDemoCtaChecks() {
     }
   });
 
-  await check("History attention banner names kit-less finished renders", async (ctx) => {
+  // ADR 0207: the kit-less banner and its action are removed — a
+  // finished render that merely lacks post copy raises no page
+  // attention at all; its own card's Generate post copy offer
+  // (ADR 0060) is the only path. The repair banner is untouched.
+  await check("History raises no attention for kit-less finished renders", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -18287,14 +18303,11 @@ async function runDemoCtaChecks() {
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
         await mount(History)(ctx);
-        const banner = ctx.container.querySelector('[data-testid="history-attention"]');
-        if (!banner || !/no post copy/.test(banner.textContent || "")) {
-          throw new Error("kit-less finished renders get no attention banner");
+        if (ctx.container.querySelector('[data-testid="history-attention"]')) {
+          throw new Error("kit-less finished renders still raise the attention banner");
         }
-        const link = ctx.container.querySelector('[data-testid="history-attention-review"]');
-        const url = new URL(link.getAttribute('href'), 'http://localhost/history');
-        if (url.hash !== '#generation-kb-1' || url.searchParams.get('copy') !== 'without') {
-          throw new Error('kit-less banner must link the without-copy side at the render');
+        if (ctx.container.querySelector('[data-testid="history-attention-review"]')) {
+          throw new Error("kit-less finished renders still raise the attention action");
         }
       });
     } finally {
@@ -18312,14 +18325,16 @@ async function runDemoCtaChecks() {
   // so its three controls are items of the same row instead of a stacked
   // second row), and the attention banner's action leaves the banner for
   // the toolbar's right cluster, beside the toggle — the banner keeps its
-  // sentence only.
+  // sentence only. ADR 0207 removes the kit-less banner outright, so the
+  // attention this check seats beside the toggle is the repair action
+  // alone, raised here by a completed render with no durable copy.
   await check("History filters share one row, and the attention action sits beside the view toggle", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
       global.__SMOKE_PARAMS = "";
       await withApi({
-        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kb-2" }] }),
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kb-2", video_url: null, playback_url: null, r2_url: null }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
         await mount(History)(ctx);
@@ -18365,16 +18380,16 @@ async function runDemoCtaChecks() {
         // toggle, with its exact label — and the banner keeps its
         // sentence only, with no link inside it.
         const banner = ctx.container.querySelector('[data-testid="history-attention"]');
-        if (!banner) throw new Error("the kit-less banner does not render");
+        if (!banner) throw new Error("the repair banner does not render");
         const group = banner.querySelector('[data-testid="history-attention-text"]');
-        if (!group || !/no post copy yet/.test(group.textContent || "") || !/Open its card and press Generate post copy/.test(group.textContent || "")) {
+        if (!group || !/needs attention/.test(group.textContent || "") || !/Open its card and press Retry durable save/.test(group.textContent || "")) {
           throw new Error("the attention banner lost the notice's words");
         }
         if (banner.querySelector('[data-testid="history-attention-review"]')) {
           throw new Error("the attention action still sits inside the banner");
         }
         const action = cluster.querySelector('[data-testid="history-attention-review"]');
-        if (!action || !/Review without copy/.test(action.textContent || "")) {
+        if (!action || !/Review repair/.test(action.textContent || "")) {
           throw new Error("the attention action does not sit beside the view toggle with its label");
         }
         if (!(action.compareDocumentPosition(toggle) & 4)) {

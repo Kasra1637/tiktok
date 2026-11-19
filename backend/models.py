@@ -579,10 +579,13 @@ class RewriteLineRequest(BaseModel):
     """One spoken line to sharpen, and where it sits in the pair.
 
     `line` is the line itself, in the founder's current draft wording;
-    `role` is "hook" or "middle". For a middle line, `script` carries the
-    full current script so the rewrite keeps its place in the story and is
-    budgeted by the room the rest of the script leaves in the middle's
-    seconds; both context fields fall back to the project's saved words.
+    `role` is "hook", "middle" or "script". For a middle line, `script`
+    carries the full current script so the rewrite keeps its place in
+    the story and is budgeted by the room the rest of the script leaves
+    in the middle's seconds. For the script role, `line` carries the
+    whole current script and the suggestion is the whole story remade,
+    budgeted by the script's full set length; both context fields fall
+    back to the project's saved words.
     """
     line: Optional[str] = None
     role: str = "middle"

@@ -674,3 +674,143 @@ def test_a_truly_unknown_failure_keeps_the_generic_line(api, monkeypatch):
         "Couldn't write a clearer line just now. "
         "Try again, or edit the line yourself."
     )
+
+
+# --------------------------------------------- the whole-script remake
+#
+# ADR 0205: the per-sentence buttons in Review are replaced by one
+# remake of the whole script. The endpoint grows a third role, "script":
+# the payload's line is the entire current script, one model call
+# rewrites the whole spoken story, and the suggestion is bounded by the
+# script's full set-length ceiling (ADR 0130's rule at the scale of the
+# whole middle) — never by a per-line share, and never refused for lack
+# of room: when the current script already runs past its ceiling, a
+# shorter compliant remake is exactly the fix being asked for.
+
+REMADE_SCRIPT = (
+    "Writing in my journal is the last thing I want at night. "
+    "My head stays loud from the whole day. "
+    "Saying it out loud is the only way it quiets down."
+)
+
+
+def test_script_suggestion_remakes_the_whole_script_and_saves_nothing(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls, REMADE_SCRIPT))
+    out = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(line=SCRIPT, role="script"), ANON))
+    assert out == {"line": REMADE_SCRIPT, "original": SCRIPT, "role": "script"}
+    assert calls[0]["line"] == SCRIPT
+    assert calls[0]["role"] == "script"
+    assert calls[0]["hook_line"] == HOOK
+    assert calls[0]["script"] == SCRIPT
+    # The budget handed to the remake is the script's FULL set-length
+    # ceiling — the whole middle's seconds — not a per-line share of it.
+    ceiling = spoken_targets(
+        project.get("hook_seconds") or 3, project.get("duration_seconds") or 15,
+    )["script"]["ceiling"]
+    assert calls[0]["max_chars"] == ceiling
+    stored = _run(api.get_studio_project(project["id"], ANON))
+    assert stored["script"] == SCRIPT
+    assert stored["hook_line"] == HOOK
+
+
+def test_script_role_falls_back_to_the_saved_script(api, monkeypatch):
+    from models import RewriteLineRequest
+    project = _project(api)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls, REMADE_SCRIPT))
+    out = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(role="script"), ANON))
+    assert out == {"line": REMADE_SCRIPT, "original": SCRIPT, "role": "script"}
+    assert calls[0]["line"] == SCRIPT
+
+
+def test_script_role_rewrites_a_script_already_past_its_ceiling(api, monkeypatch):
+    from models import RewriteLineRequest
+    # The middle role refuses this project outright — the rest of the
+    # script leaves no line any room ("shorten it first"). The script
+    # role must not: the over-ceiling script is the thing being fixed,
+    # and the remake is handed the full ceiling to come back under it.
+    project = _project(api, script="word " * 400)
+    calls = []
+    monkeypatch.setattr(api.ai_service, "rewrite_spoken_line", _fake(calls, REMADE_SCRIPT))
+    out = _run(api.suggest_line_rewrite(
+        project["id"], RewriteLineRequest(line=project["script"], role="script"), ANON))
+    assert out["line"] == REMADE_SCRIPT
+    assert out["role"] == "script"
+    assert len(calls) == 1
+    ceiling = spoken_targets(
+        project.get("hook_seconds") or 3, project.get("duration_seconds") or 15,
+    )["script"]["ceiling"]
+    assert calls[0]["max_chars"] == ceiling
+
+
+def test_script_rewrite_returns_every_sentence_of_the_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([{"line": REMADE_SCRIPT}], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))
+    # The whole multi-sentence script comes back — the remake is never
+    # cut down to its first sentence the way a one-line rewrite is read.
+    assert line == REMADE_SCRIPT
+    assert calls[0]["context"] == "Script rewrite"
+    prompt = calls[0]["prompt"]
+    assert f"HOOK: {HOOK}" in prompt
+    assert f"CURRENT SCRIPT: {SCRIPT}" in prompt
+    assert "Rewrite the CURRENT SCRIPT whole" in prompt
+    # Kasra's named requirement for the remake: it opens on the moment
+    # itself — the scene, in the moment — with no preamble before it.
+    assert "opens on the moment" in prompt
+    assert "never asks one" in prompt
+
+
+def test_script_rewrite_corrects_a_question_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "Why does my head stay loud the whole day?"},
+        {"line": REMADE_SCRIPT},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))
+    assert line == REMADE_SCRIPT
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "never asks one" in calls[1]["prompt"]
+
+
+def test_script_rewrite_keeps_the_whole_scripts_budget(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": REMADE_SCRIPT},
+        {"line": "My head stays loud all day. Saying it helps."},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT, max_chars=60))
+    assert line == "My head stays loud all day. Saying it helps."
+    assert len(line) <= 60
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "script's seconds hold 60" in calls[1]["prompt"]
+
+
+def test_script_rewrite_refuses_a_persistent_overrun(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": REMADE_SCRIPT}),
+    )
+    with pytest.raises(RuntimeError, match="running long"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT, max_chars=60))
+
+
+def test_script_rewrite_unchanged_reply_raises(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": SCRIPT}),
+    )
+    with pytest.raises(RuntimeError, match="unchanged"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))

@@ -153,9 +153,12 @@ describe("history kit-less rescue flow", () => {
     api.regeneratePostKit.mockResolvedValue({ post_kit: { ...KIT } });
     const { container } = await renderHistoryPage("copy=without");
 
-    // The offer: the banner names the missing copy and the row offers to write it.
-    expect(container.querySelector('[data-testid="history-attention"]')).not.toBeNull();
-    expect(container.textContent).toContain("has no post copy yet");
+    // The offer: the row itself offers to write its copy — no page
+    // banner names the missing copy and no toolbar action points at it
+    // (ADR 0207 removed the kit-less banner and its action).
+    expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
+    expect(container.querySelector('[data-testid="history-attention-review"]')).toBeNull();
+    expect(container.textContent).not.toContain("has no post copy yet");
     const button = container.querySelector(
       '[data-testid="history-generate-post-copy-button-kitless-1"]'
     );
@@ -169,7 +172,8 @@ describe("history kit-less rescue flow", () => {
     expect(api.regeneratePostKit).toHaveBeenCalledTimes(1);
     expect(api.regeneratePostKit).toHaveBeenCalledWith("kitless-1");
 
-    // The kit is written, so the banner clears even before navigation.
+    // The kit is written; no banner stood before the press and none
+    // appears after it.
     expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
 
     // The press follows the row to the with-copy side through a real
@@ -196,8 +200,8 @@ describe("history kit-less rescue flow", () => {
 
     // The refusal is loud: the row names the next step...
     expect(container.textContent).toContain("That draft is gone");
-    // ...the banner still offers the rescue, nothing navigated away...
-    expect(container.querySelector('[data-testid="history-attention"]')).not.toBeNull();
+    // ...no banner appears for the missing copy, nothing navigated away...
+    expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
     expect(global.__testRouter.navigations).toHaveLength(0);
     expect(global.__testRouter.query).toBe("copy=without");
     // ...and the button is pressable again.
@@ -220,7 +224,7 @@ describe("history kit-less rescue flow", () => {
 
     expect(container.textContent).toContain("connection dropped");
     expect(container.textContent).toContain("write this render's post copy");
-    expect(container.querySelector('[data-testid="history-attention"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
     expect(global.__testRouter.navigations).toHaveLength(0);
     expect(global.__testRouter.query).toBe("copy=without");
     expect(button.textContent).toContain("Generate post copy");

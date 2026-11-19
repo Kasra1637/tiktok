@@ -42,38 +42,23 @@ export function isThrottlingError(err) {
 }
 
 /**
- * Which attention the History banner owes the founder, if any. Repairs
- * first: a failed, awaiting, or undurable row beats a finished render that
- * merely lacks post copy. Single owner for the rule the banner reads, so
- * the two boxes cannot disagree about which one shows.
+ * Which attention the History banner owes the founder, if any: repairs
+ * only. A finished render that merely lacks post copy raises no page
+ * attention (ADR 0207 removed the kit-less banner and its action); its
+ * own card's Generate post copy offer (ADR 0060) is the only path.
+ * Single owner for the rule the banner reads.
  */
 export function getHistoryAttention(rows) {
   const repair = rows.filter(needsHistoryRepairRow);
   if (repair.length > 0) return { kind: "repair", items: repair, first: repair[0] };
-  const kitless = rows.filter(
-    (r) => (r.status === "completed" || r.status === "archived") && !r.post_kit
-  );
-  if (kitless.length > 0) return { kind: "kitless", items: kitless, first: kitless[0] };
   return null;
 }
 
 /**
- * The banner's words for one attention: the count, the next step, and the
- * link label. Pure, so the page renders one box driven by data instead of
- * two near-identical boxes differing only in copy.
+ * The banner's words for the repair attention: the count, the next step,
+ * and the link label. Pure, so the page renders the box driven by data.
  */
 export function describeHistoryAttention(attention) {
-  if (attention.kind === "kitless") {
-    const n = attention.items.length;
-    return {
-      summary:
-        n === 1
-          ? "1 finished render has no post copy yet. "
-          : `${n} finished renders have no post copy yet. `,
-      guidance: "Open its card and press Generate post copy.",
-      cta: "Review without copy",
-    };
-  }
   const n = attention.items.length;
   const first = attention.first;
   const many = n > 1;
@@ -105,11 +90,7 @@ export function describeHistoryAttention(attention) {
  */
 export function historyAttentionLink(searchParams, attention) {
   const params = new URLSearchParams(searchParams);
-  if (attention.kind === "kitless") {
-    params.set("copy", "without");
-  } else {
-    params.set("copy", hasCopyContext(attention.first) ? "with" : "without");
-  }
+  params.set("copy", hasCopyContext(attention.first) ? "with" : "without");
   params.delete("q");
   return { search: `?${params.toString()}`, hash: `#generation-${attention.first.id}` };
 }
