@@ -15,6 +15,7 @@ import { FactChip, FactList } from "../components/FactChip";
 import { resolveActiveProfileId, profileLabel, partitionProfiles } from "../lib/profileSelection";
 import { readCurrentAppId, rememberCurrentAppId } from "../lib/currentApp";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
+import { DeleteAssetConfirmDialog } from "../components/studio/DeleteAssetConfirmDialog";
 import {
   Images, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
   ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
@@ -459,6 +460,24 @@ export default function AssetLibrary({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  // The branded delete confirmation (ADR 0212): while deleting an asset
+  // that projects still use waits on the founder's answer, this holds
+  // what the dialog says — the use count and the project names — and
+  // the ref holds the waiting click's resolver. Opening the dialog
+  // deletes nothing; cancelling, closing or unmounting resolves the
+  // wait as a refusal.
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const deleteConfirmResolveRef = useRef(null);
+  const settleDeleteConfirm = (answer) => {
+    const resolve = deleteConfirmResolveRef.current;
+    deleteConfirmResolveRef.current = null;
+    setDeleteConfirm(null);
+    resolve?.(answer);
+  };
+  useEffect(() => () => {
+    deleteConfirmResolveRef.current?.(false);
+    deleteConfirmResolveRef.current = null;
+  }, []);
   const [label, setLabel] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   // Standalone only: the library reads like History, so it searches like it.
@@ -691,18 +710,21 @@ export default function AssetLibrary({
 
   const handleDelete = async (asset) => {
     // Deleting the file does not rewrite the projects that referenced it, so
-    // the founder is warned first: those projects lose their reference until
-    // a new photograph is attached.
+    // the founder is warned first — in the branded dialog (ADR 0212), not
+    // the browser's confirm box: those projects lose their reference until
+    // a new photograph is attached. The click waits on the promise the
+    // dialog settles, so the ask itself deletes nothing. An asset used
+    // nowhere asks nothing and deletes on the click.
     const uses = asset.used_in || [];
-    if (
-      uses.length &&
-      !window.confirm(
-        `This asset is used in ${uses.length} project${uses.length === 1 ? "" : "s"} ` +
-          `(${uses.map((u) => u.name).join(", ")}). Deleting it removes the face ` +
-          `reference from those projects until a new one is attached. Delete anyway?`
-      )
-    ) {
-      return;
+    if (uses.length) {
+      const confirmed = await new Promise((resolve) => {
+        deleteConfirmResolveRef.current = resolve;
+        setDeleteConfirm({
+          count: uses.length,
+          names: uses.map((u) => u.name).join(", "),
+        });
+      });
+      if (!confirmed) return;
     }
     setBusy(true);
     try {
@@ -1085,6 +1107,11 @@ export default function AssetLibrary({
         />
       )}
       </div>
+      <DeleteAssetConfirmDialog
+        confirm={deleteConfirm}
+        onCancel={() => settleDeleteConfirm(false)}
+        onConfirm={() => settleDeleteConfirm(true)}
+      />
     </PageFrame>
   );
 }

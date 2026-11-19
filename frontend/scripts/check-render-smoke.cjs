@@ -2302,8 +2302,8 @@ async function main() {
     // the row's updated_at: the polls that notice the finish and watch
     // the save never bump it, so it stands at the moment the save
     // began. Past two minutes of watched saving the panel names it —
-    // the render is finished, the save has not stopped, and the video
-    // will appear here (and in History) when it lands.
+    // the render is finished, the save is slow rather than stuck, and
+    // the video will appear here (and in History) when it lands.
     const GenerationPanel = load("components/GenerationPanel.jsx").default;
     const longAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const savingLong = {
@@ -2317,7 +2317,7 @@ async function main() {
     if (!ctx.container.querySelector('[data-testid="render-save-long"]')) {
       throw new Error("a save watched past two minutes raised no long-save notice");
     }
-    expectText(ctx, "taking longer than usual", "the long-save notice does not name the wait honestly");
+    expectText(ctx, "The save is just slow, not stuck.", "the long-save notice does not name the wait honestly");
   });
 
   await check("a fresh save and a rendering row raise no long-save notice", async (ctx) => {
@@ -2335,7 +2335,7 @@ async function main() {
       pollGeneration: async () => fresh,
     }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
     if (ctx.container.querySelector('[data-testid="render-save-long"]')) {
-      throw new Error("a save that just began already claims to be taking longer than usual");
+      throw new Error("a save that just began already claims its save is slow");
     }
     const longAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const rendering = {
@@ -4043,6 +4043,9 @@ async function main() {
     if (doc.querySelector('[data-testid="strategy-suggestion-modal"]')) {
       throw new Error("a modal opened when no direction changed");
     }
+    if (doc.querySelector('[data-testid="rebuild-strategy-dialog"]')) {
+      throw new Error("the branded rebuild dialog opened on the direct path");
+    }
     const builds = apiCalls.filter((c) => c === "generateStrategy").length;
     if (builds !== 1) {
       throw new Error(`the direct path fired ${builds} rebuilds, not one`);
@@ -5261,8 +5264,6 @@ async function main() {
     global.__SMOKE_PARAMS = "?project=p1";
     let strategyCalls = 0;
     let renderCalls = 0;
-    const originalConfirm = dom.window.confirm;
-    dom.window.confirm = () => true;
     try {
       await withApi(
         {
@@ -5283,12 +5284,19 @@ async function main() {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
+          // The re-roll asks first, in the branded dialog (ADR 0212);
+          // the render this check counts is the confirmed one.
+          const doc = ctx.container.ownerDocument;
+          await new Promise((r) => setTimeout(r, 150));
+          const confirm = doc.querySelector('[data-testid="generate-another-confirm"]');
+          if (!confirm) throw new Error("the re-roll never asked in the branded dialog");
+          await clickEl(ctx, confirm, "the re-roll dialog confirm does nothing");
+          await act(async () => {});
           await act(async () => {});
         }
       );
     } finally {
       global.__SMOKE_PARAMS = "";
-      dom.window.confirm = originalConfirm;
     }
     if (renderCalls !== 1) throw new Error(`expected one confirmed render, saw ${renderCalls}`);
     if (strategyCalls !== 0) {
@@ -5296,12 +5304,12 @@ async function main() {
     }
   });
 
-  await check("generating another video asks first, and a no renders nothing", async (ctx) => {
+  await check("the branded generate-another dialog gates the second render", async (ctx) => {
     // Idempotency stops a duplicated click, not a deliberate one the founder
-    // did not mean. A re-roll is a second render, so it asks first, and a
-    // "no" must leave everything exactly as it was.
+    // did not mean. A re-roll is a second render, so it asks first — in the
+    // branded dialog (ADR 0212) — and a "no" must leave everything exactly
+    // as it was.
     global.__SMOKE_PARAMS = "?project=p1";
-    const originalConfirm = dom.window.confirm;
     let renderCalls = 0;
     try {
       await withApi(
@@ -5318,29 +5326,56 @@ async function main() {
           if (!/Generate another/.test((btn.textContent || "").trim())) {
             throw new Error("expected a re-roll button when a generation already exists");
           }
-          dom.window.confirm = () => false;
-          await act(async () => {
-            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
-          await act(async () => {});
+          const doc = ctx.container.ownerDocument;
+          doc.querySelectorAll('[data-testid="generate-another-dialog"]').forEach((n) => n.remove());
+          await clickEl(ctx, btn, "the re-roll button does nothing");
+          await new Promise((r) => setTimeout(r, 150));
+          const dialog = doc.querySelector('[data-testid="generate-another-dialog"]');
+          if (!dialog) throw new Error("the branded generate-another dialog did not open");
+          if (dialog.getAttribute("role") !== "dialog") {
+            throw new Error("the re-roll confirmation is not a real dialog");
+          }
+          for (const phrase of [
+            "Generate another video?",
+            "This runs a second render from this plan.",
+            "The video you already have stays in History.",
+            "Cancel",
+          ]) {
+            if (!dialog.textContent.includes(phrase)) {
+              throw new Error(`the generate-another dialog is missing ${JSON.stringify(phrase)}: ${dialog.textContent}`);
+            }
+          }
+          if (renderCalls !== 0) {
+            throw new Error("opening the dialog still spent a render");
+          }
+          const cancel = dialog.querySelector('[data-testid="generate-another-cancel"]');
+          if (!cancel) throw new Error("the generate-another dialog carries no Cancel");
+          await clickEl(ctx, cancel, "the generate-another dialog Cancel does nothing");
+          await new Promise((r) => setTimeout(r, 50));
+          if (doc.querySelector('[data-testid="generate-another-dialog"]')) {
+            throw new Error("the generate-another dialog stayed open after Cancel");
+          }
           if (renderCalls !== 0) {
             throw new Error("a declined re-roll still spent a render");
           }
           // And a "yes" still renders, so the gate asks rather than blocks.
-          dom.window.confirm = () => true;
-          await act(async () => {
-            btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
-          await act(async () => {});
+          await clickEl(ctx, renderButton(ctx), "the re-roll button does nothing after Cancel");
+          await new Promise((r) => setTimeout(r, 150));
+          const reopened = doc.querySelector('[data-testid="generate-another-dialog"]');
+          if (!reopened) throw new Error("the generate-another dialog did not reopen after Cancel");
+          const confirm = reopened.querySelector('[data-testid="generate-another-confirm"]');
+          if (!confirm) throw new Error("the generate-another dialog carries no confirm button");
+          await clickEl(ctx, confirm, "the generate-another dialog confirm does nothing");
+          await new Promise((r) => setTimeout(r, 150));
           if (renderCalls !== 1) {
             throw new Error(`an accepted re-roll rendered ${renderCalls} time(s), expected 1`);
+          }
+          if (doc.querySelector('[data-testid="generate-another-dialog"]')) {
+            throw new Error("the generate-another dialog stayed open after confirming");
           }
         }
       );
     } finally {
-      dom.window.confirm = originalConfirm;
       global.__SMOKE_PARAMS = "";
     }
   });
@@ -5511,17 +5546,11 @@ async function main() {
     }
   });
 
-  await check("rebuilding a stale strategy asks first", async (ctx) => {
+  await check("the branded rebuild dialog names the plan versions and gates the spend", async (ctx) => {
     // A rebuild bumps strategy_version and replaces what the founder reviewed.
     // When the plan has moved on, that replacement is the POINT of the click and
-    // nothing else on screen says so - so it asks before overwriting.
-    const asked = [];
-    const originalConfirm = dom.window.confirm;
-    let answer = false;
-    dom.window.confirm = (message) => {
-      asked.push(message);
-      return answer;
-    };
+    // nothing else on screen says so — so it asks before overwriting, in the
+    // branded dialog (ADR 0212), and the spend waits on the answer.
     apiCalls.length = 0;
     try {
       global.__SMOKE_PARAMS = "?project=p1";
@@ -5538,31 +5567,68 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
+          const doc = ctx.container.ownerDocument;
+          doc.querySelectorAll('[data-testid="rebuild-strategy-dialog"]').forEach((n) => n.remove());
           const rebuild = [...ctx.container.querySelectorAll("button")]
             .find((b) => (b.textContent || "").includes("Rebuild strategy"));
           if (!rebuild) throw new Error("no rebuild control on the last step");
-          await act(async () => {
-            rebuild.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-          });
-          await act(async () => {});
+          await clickEl(ctx, rebuild, "the rebuild control does nothing");
+          await new Promise((r) => setTimeout(r, 150));
+          const dialog = doc.querySelector('[data-testid="rebuild-strategy-dialog"]');
+          if (!dialog) throw new Error("the branded rebuild dialog did not open");
+          if (dialog.getAttribute("role") !== "dialog") {
+            throw new Error("the rebuild confirmation is not a real dialog");
+          }
+          // The confirmation has to be specific about what is being replaced,
+          // or it is a speed bump the founder dismisses without reading.
+          for (const phrase of [
+            "Rebuild the strategy?",
+            "Build a fresh strategy from plan v3.",
+            "It replaces the strategy built from plan v1.",
+            "The render will follow the new strategy.",
+            "Cancel",
+          ]) {
+            if (!dialog.textContent.includes(phrase)) {
+              throw new Error(`the rebuild dialog is missing ${JSON.stringify(phrase)}: ${dialog.textContent}`);
+            }
+          }
+          if (apiCalls.includes("generateStrategy")) {
+            throw new Error("opening the dialog still spent the rebuild call");
+          }
+          const cancel = dialog.querySelector('[data-testid="rebuild-strategy-cancel"]');
+          if (!cancel) throw new Error("the rebuild dialog carries no Cancel");
+          await clickEl(ctx, cancel, "the rebuild dialog Cancel does nothing");
+          await new Promise((r) => setTimeout(r, 50));
+          if (doc.querySelector('[data-testid="rebuild-strategy-dialog"]')) {
+            throw new Error("the rebuild dialog stayed open after Cancel");
+          }
+          // Declining must generate nothing. Reads happen on mount and are
+          // irrelevant; the thing that would be wrong here is a write.
+          const writes = apiCalls.filter((n) => /^(generate|update|create|mark|detach|upload)/.test(n));
+          if (writes.length !== 0) {
+            throw new Error(`cancelling the dialog still wrote: ${JSON.stringify(writes)}`);
+          }
+          // Confirming is the spend: the dialog closes and the endpoint
+          // runs exactly once.
+          const rebuildAgain = [...ctx.container.querySelectorAll("button")]
+            .find((b) => (b.textContent || "").includes("Rebuild strategy"));
+          if (!rebuildAgain) throw new Error("no rebuild control after Cancel");
+          await clickEl(ctx, rebuildAgain, "the rebuild control does nothing after Cancel");
+          await new Promise((r) => setTimeout(r, 150));
+          const reopened = doc.querySelector('[data-testid="rebuild-strategy-dialog"]');
+          if (!reopened) throw new Error("the rebuild dialog did not reopen after Cancel");
+          const confirm = reopened.querySelector('[data-testid="rebuild-strategy-confirm"]');
+          if (!confirm) throw new Error("the rebuild dialog carries no confirm button");
+          await clickEl(ctx, confirm, "the rebuild dialog confirm does nothing");
+          await new Promise((r) => setTimeout(r, 150));
+          const builds = apiCalls.filter((c) => c === "generateStrategy").length;
+          if (builds !== 1) throw new Error(`confirming spent ${builds} rebuild calls, not one`);
+          if (doc.querySelector('[data-testid="rebuild-strategy-dialog"]')) {
+            throw new Error("the rebuild dialog stayed open after confirming");
+          }
         }
       );
-      if (asked.length !== 1) {
-        throw new Error(`a stale rebuild did not confirm (asked ${asked.length} times)`);
-      }
-      // The confirmation has to be specific about what is being replaced, or it
-      // is a speed bump the founder dismisses without reading.
-      if (!/plan v3/.test(asked[0]) || !/plan v1/.test(asked[0])) {
-        throw new Error(`the confirmation does not name the plan versions: ${asked[0]}`);
-      }
-      // Declining must generate nothing. Reads happen on mount and are irrelevant;
-      // the thing that would be wrong here is a write.
-      const writes = apiCalls.filter((n) => /^(generate|update|create|mark|detach|upload)/.test(n));
-      if (writes.length !== 0) {
-        throw new Error(`declining the confirmation still wrote: ${JSON.stringify(writes)}`);
-      }
     } finally {
-      dom.window.confirm = originalConfirm;
       global.__SMOKE_PARAMS = "";
       apiCalls.length = 0;
     }
@@ -6269,19 +6335,40 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
-        // jsdom's confirm exists but answers undefined, which the
-        // Regenerate guard reads as "founder said no". Answer yes, the way
-        // a founder accepting the replace-plan prompt would.
-        const originalConfirm = dom.window.confirm;
-        dom.window.confirm = () => true;
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
+          const doc = ctx.container.ownerDocument;
+          doc.querySelectorAll('[data-testid="regenerate-plan-dialog"]').forEach((n) => n.remove());
           const btn = buttonByText(ctx, /Regenerate plan/);
           await act(async () => {
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
             btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
+          await act(async () => {});
+          // The double tap meets one branded dialog (ADR 0212), not two:
+          // the second click is dropped while the ask is open, and
+          // nothing has generated behind it yet.
+          await new Promise((r) => setTimeout(r, 150));
+          if (planCalls !== 0) {
+            throw new Error(`the ask generated before an answer: ${planCalls}`);
+          }
+          const dialogs = doc.querySelectorAll('[data-testid="regenerate-plan-dialog"]');
+          if (dialogs.length !== 1) {
+            throw new Error(`a double tap opened ${dialogs.length} dialogs, not one`);
+          }
+          for (const phrase of [
+            "Generate a new plan?",
+            "This discards plan v1.",
+            "A new plan is generated in its place.",
+          ]) {
+            if (!dialogs[0].textContent.includes(phrase)) {
+              throw new Error(`the plan dialog is missing ${JSON.stringify(phrase)}: ${dialogs[0].textContent}`);
+            }
+          }
+          const confirm = dialogs[0].querySelector('[data-testid="regenerate-plan-confirm"]');
+          if (!confirm) throw new Error("the plan dialog carries no confirm button");
+          await clickEl(ctx, confirm, "the plan dialog confirm does nothing");
           await act(async () => {});
           if (planCalls !== 1) {
             throw new Error(`double tap started ${planCalls} plan generations`);
@@ -6297,7 +6384,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
             throw new Error("busy never cleared after the generation settled");
           }
         } finally {
-          dom.window.confirm = originalConfirm;
           global.__SMOKE_PARAMS = "";
         }
       }
@@ -9944,12 +10030,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const creates = [];
     const updates = [];
     const plans = [];
-    // Regenerating a plan that exists now asks before discarding it. jsdom's
-    // confirm is not implemented and returns undefined, which is falsy — so
-    // without this the click silently does nothing and the check would report
-    // "no project was updated" for the wrong reason.
-    const originalConfirm = dom.window.confirm;
-    dom.window.confirm = () => true;
+    // Regenerating a plan that exists now asks before discarding it, in
+    // the branded dialog (ADR 0212) — the click below answers it, or the
+    // generation never runs and the check would report "no plan was
+    // generated" for the wrong reason.
     await withApi(
       {
         createStudioProject: async (payload) => {
@@ -10000,10 +10084,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           generate.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
         });
         await act(async () => {});
+        await new Promise((r) => setTimeout(r, 150));
+        const planConfirm = ctx.container.ownerDocument.querySelector('[data-testid="regenerate-plan-confirm"]');
+        if (!planConfirm) throw new Error("regenerating the plan never asked in the branded dialog");
+        await clickEl(ctx, planConfirm, "the plan dialog confirm does nothing");
+        await act(async () => {});
         global.__SMOKE_PARAMS = "";
       }
     );
-    dom.window.confirm = originalConfirm;
     if (creates.length === 0) throw new Error("no project was created along the way");
     if (updates.length === 0) throw new Error("no project was updated along the way");
     if (plans.length === 0) throw new Error("no plan was generated along the way");
@@ -19291,6 +19379,87 @@ async function runDemoCtaChecks() {
         }
         if (!text.includes("1 of 2 match")) {
           throw new Error("the search reports no count of what matched");
+        }
+      }
+    );
+  });
+
+  await check("the branded asset delete dialog names the projects and gates the delete", async (ctx) => {
+    // Deleting a photograph projects still use removes their face
+    // reference until a new one is attached, so that delete asks first —
+    // in the branded dialog (ADR 0212), naming where the asset is used.
+    // An asset used nowhere asks nothing and deletes on the click.
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    let deleteCalls = 0;
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAssets: async () => ({
+          assets: [
+            { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: new Date().toISOString(), used_in: [{ name: "Launch video" }, { name: "Second video" }] },
+            { id: "a2", kind: "character_reference", status: "active", rights_confirmed: true, label: "Group shot", created_at: new Date().toISOString(), used_in: [] },
+          ],
+        }),
+        deleteAsset: async () => { deleteCalls += 1; return {}; },
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1" })(ctx);
+        const doc = ctx.container.ownerDocument;
+        doc.querySelectorAll('[data-testid="delete-asset-dialog"]').forEach((n) => n.remove());
+        const deleteFor = (label) => {
+          const row = [...ctx.container.querySelectorAll("div")].find(
+            (d) => d.className.includes("inset-panel")
+              && (d.textContent || "").includes(label)
+              && d.querySelector('[aria-label="Delete asset"]')
+          );
+          return row ? row.querySelector('[aria-label="Delete asset"]') : null;
+        };
+        // The unused asset asks nothing: one click, one delete, no dialog.
+        await clickEl(ctx, deleteFor("Group shot"), "the unused asset has no delete control");
+        await new Promise((r) => setTimeout(r, 50));
+        if (doc.querySelector('[data-testid="delete-asset-dialog"]')) {
+          throw new Error("deleting an unused asset opened the dialog");
+        }
+        if (deleteCalls !== 1) throw new Error(`the unused asset took ${deleteCalls} deletes, not one`);
+        // The used asset asks, naming where it is used.
+        await clickEl(ctx, deleteFor("Founder photo"), "the used asset has no delete control");
+        await new Promise((r) => setTimeout(r, 150));
+        const dialog = doc.querySelector('[data-testid="delete-asset-dialog"]');
+        if (!dialog) throw new Error("the branded delete dialog did not open");
+        if (dialog.getAttribute("role") !== "dialog") {
+          throw new Error("the asset delete confirmation is not a real dialog");
+        }
+        for (const phrase of [
+          "Delete this asset?",
+          "It is used in 2 projects (Launch video, Second video).",
+          "removes the face reference from those projects until a new one is attached",
+          "Cancel",
+        ]) {
+          if (!dialog.textContent.includes(phrase)) {
+            throw new Error(`the delete dialog is missing ${JSON.stringify(phrase)}: ${dialog.textContent}`);
+          }
+        }
+        if (deleteCalls !== 1) throw new Error("opening the dialog still deleted");
+        const cancel = dialog.querySelector('[data-testid="delete-asset-cancel"]');
+        if (!cancel) throw new Error("the delete dialog carries no Cancel");
+        await clickEl(ctx, cancel, "the delete dialog Cancel does nothing");
+        await new Promise((r) => setTimeout(r, 50));
+        if (doc.querySelector('[data-testid="delete-asset-dialog"]')) {
+          throw new Error("the delete dialog stayed open after Cancel");
+        }
+        if (deleteCalls !== 1) throw new Error("cancelling the dialog still deleted");
+        // Confirming is the delete: exactly one more call, dialog closed.
+        await clickEl(ctx, deleteFor("Founder photo"), "the used asset has no delete control after Cancel");
+        await new Promise((r) => setTimeout(r, 150));
+        const reopened = doc.querySelector('[data-testid="delete-asset-dialog"]');
+        if (!reopened) throw new Error("the delete dialog did not reopen after Cancel");
+        const confirm = reopened.querySelector('[data-testid="delete-asset-confirm"]');
+        if (!confirm) throw new Error("the delete dialog carries no confirm button");
+        await clickEl(ctx, confirm, "the delete dialog confirm does nothing");
+        await new Promise((r) => setTimeout(r, 150));
+        if (deleteCalls !== 2) throw new Error(`confirming brought deletes to ${deleteCalls}, not two`);
+        if (doc.querySelector('[data-testid="delete-asset-dialog"]')) {
+          throw new Error("the delete dialog stayed open after confirming");
         }
       }
     );

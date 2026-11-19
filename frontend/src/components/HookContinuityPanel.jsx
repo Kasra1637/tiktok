@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Disclosure } from "./Disclosure";
 import { GroupLabel } from "./SectionCard";
+import { StrategyRebuildConfirmDialog } from "./studio/StrategyRebuildConfirmDialog";
 
 /**
  * The strategy review: what the render will be, before anything is rendered.
@@ -299,6 +300,24 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
   const [suggestion, setSuggestion] = useState(null);
   const [applying, setApplying] = useState(false);
   const [suggestNote, setSuggestNote] = useState(null);
+  // The branded rebuild confirmation (ADR 0212): while a rebuild that
+  // would discard a stale strategy waits on the founder's answer, this
+  // holds what the dialog says — the two plan versions, or the angle
+  // variant — and the ref holds the waiting click's resolver. Opening
+  // the dialog spends nothing; the dialog's buttons settle the wait,
+  // and cancelling, closing or unmounting resolves it as a refusal.
+  const [rebuildConfirm, setRebuildConfirm] = useState(null);
+  const rebuildConfirmResolveRef = useRef(null);
+  const settleRebuildConfirm = (answer) => {
+    const resolve = rebuildConfirmResolveRef.current;
+    rebuildConfirmResolveRef.current = null;
+    setRebuildConfirm(null);
+    resolve?.(answer);
+  };
+  useEffect(() => () => {
+    rebuildConfirmResolveRef.current?.(false);
+    rebuildConfirmResolveRef.current = null;
+  }, []);
 
   const projectId = project?.id;
   const strategy = project?.strategy;
@@ -336,18 +355,24 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
     // without reading it. A founder who just answered the suggestion modal
     // has already made this choice with the words in front of them, so the
     // modal paths skip the second prompt (skipConfirm).
+    //
+    // The prompt is the branded dialog (ADR 0212), not the browser's
+    // confirm box: the click waits on the promise the dialog settles,
+    // so the ask itself spends nothing and only the confirm button
+    // runs the rebuild below.
     if (!skipConfirm && hasStrategy && (staleStrategy || angleStale)) {
-      const ok = typeof window === "undefined" || typeof window.confirm !== "function"
-        ? true
-        : window.confirm(
-            angleStale && !staleStrategy
-              ? `Rebuild for the newly picked audience angle? This replaces the strategy built ` +
-                `for a different angle, and the render will follow the newer one.`
-              : `Rebuild from plan v${project?.script_version}? This replaces the strategy built ` +
-                `from plan v${project?.strategy_script_version}, and the render will follow the ` +
-                `newer one.`
-          );
-      if (!ok) return;
+      const confirmed = await new Promise((resolve) => {
+        rebuildConfirmResolveRef.current = resolve;
+        setRebuildConfirm(
+          angleStale && !staleStrategy
+            ? { angle: true }
+            : {
+                newVersion: project?.script_version,
+                oldVersion: project?.strategy_script_version,
+              }
+        );
+      });
+      if (!confirmed) return;
     }
     setBusy(true);
     setBusyStartedAt(Date.now());
@@ -942,6 +967,12 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
           </div>
         </div>
       )}
+
+      <StrategyRebuildConfirmDialog
+        confirm={rebuildConfirm}
+        onCancel={() => settleRebuildConfirm(false)}
+        onConfirm={() => settleRebuildConfirm(true)}
+      />
     </div>
   );
 }

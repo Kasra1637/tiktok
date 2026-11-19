@@ -4,6 +4,7 @@ import HookLineEditor from "../components/studio/HookLineEditor";
 import CoverTextEditor from "../components/studio/CoverTextEditor";
 import ScriptRewrite from "../components/studio/ScriptRewrite";
 import AngleRegenConfirmDialog from "../components/studio/AngleRegenConfirmDialog";
+import PlanRegenConfirmDialog from "../components/studio/PlanRegenConfirmDialog";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
@@ -1452,11 +1453,36 @@ export default function CreateVideo() {
   // Silent saves never touch `busy` — disabling the step on every debounced
   // keystroke would interrupt the typing they follow — and the manual Save
   // button stays for an immediate, explicit save.
-  const confirmRegeneratePlan = () => {
-    const message = hasEdits
-      ? "You have unsaved edits. Generating a new plan replaces this one and your edits are lost. Generate anyway?"
-      : `Discard plan v${project?.script_version || 0} and generate a new one?`;
-    if (typeof window.confirm !== "function" || !window.confirm(message)) return;
+  // The branded plan-regeneration confirmation (ADR 0212): while the
+  // discard waits on the founder's answer, this holds what the dialog
+  // says — whether unsaved edits are on the plan, and the plan's
+  // version — and the ref holds the waiting click's resolver. Opening
+  // the dialog generates nothing; cancelling, closing or unmounting
+  // resolves the wait as a refusal, and a second click while the
+  // dialog is open is dropped rather than stacking a second wait.
+  const [planConfirm, setPlanConfirm] = useState(null);
+  const planConfirmResolveRef = useRef(null);
+  const settlePlanConfirm = (answer) => {
+    const resolve = planConfirmResolveRef.current;
+    planConfirmResolveRef.current = null;
+    setPlanConfirm(null);
+    resolve?.(answer);
+  };
+  useEffect(() => () => {
+    planConfirmResolveRef.current?.(false);
+    planConfirmResolveRef.current = null;
+  }, []);
+
+  const confirmRegeneratePlan = async () => {
+    if (planConfirmResolveRef.current) return;
+    const confirmed = await new Promise((resolve) => {
+      planConfirmResolveRef.current = resolve;
+      setPlanConfirm({
+        hasEdits,
+        version: project?.script_version || 0,
+      });
+    });
+    if (!confirmed) return;
     handleGeneratePlan();
   };
 
@@ -3704,6 +3730,12 @@ export default function CreateVideo() {
         confirm={angleRegenConfirm}
         onCancel={cancelAngleRegen}
         onConfirm={confirmAngleRegen}
+      />
+
+      <PlanRegenConfirmDialog
+        confirm={planConfirm}
+        onCancel={() => settlePlanConfirm(false)}
+        onConfirm={() => settlePlanConfirm(true)}
       />
 
       {/* Sticky action bar: the arrow-only pair and the one line naming what

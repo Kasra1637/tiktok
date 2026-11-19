@@ -18,6 +18,7 @@ import {
   Play, Info, Clock, Smartphone, Check, Sparkles,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
+import { GenerateAnotherConfirmDialog } from "./studio/GenerateAnotherConfirmDialog";
 
 /**
  * Paid render progress — the same UI the mock preview used.
@@ -213,6 +214,22 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [retryingStorage, setRetryingStorage] = useState(false);
+  // The branded re-roll confirmation (ADR 0212): while a second render
+  // waits on the founder's answer, this holds the ask and the ref holds
+  // the waiting click's resolver. Opening the dialog spends nothing;
+  // cancelling, closing or unmounting resolves the wait as a refusal.
+  const [rerollConfirm, setRerollConfirm] = useState(false);
+  const rerollConfirmResolveRef = useRef(null);
+  const settleRerollConfirm = (answer) => {
+    const resolve = rerollConfirmResolveRef.current;
+    rerollConfirmResolveRef.current = null;
+    setRerollConfirm(false);
+    resolve?.(answer);
+  };
+  useEffect(() => () => {
+    rerollConfirmResolveRef.current?.(false);
+    rerollConfirmResolveRef.current = null;
+  }, []);
   const timer = useRef(null);
   const generationRef = useRef(null);
   // Keep generationRef current so visibility resumes can read the live row
@@ -583,18 +600,17 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
 const handleGenerate = async () => {
     // "Generate another" runs a second render on a video the founder has
     // already seen. Idempotency stops accidental duplicates of one click, not a
-    // deliberate click the founder did not mean, so a re-roll asks first. Same
-    // window.confirm pattern as the strategy rebuild: one click when there is
-    // nothing to lose, two when there is work on it.
+    // deliberate click the founder did not mean, so a re-roll asks first — in
+    // the branded dialog (ADR 0212), not the browser's confirm box: the
+    // click waits on the promise the dialog settles, so the ask itself
+    // spends nothing. One click when there is nothing to lose, two when
+    // there is work on it.
     if (Boolean(generation)) {
-      const ok =
-        typeof window === "undefined" || typeof window.confirm !== "function"
-          ? true
-          : window.confirm(
-              "Generate another video from this plan? This runs a second render. " +
-              "The video you already have stays in history."
-            );
-      if (!ok) return;
+      const confirmed = await new Promise((resolve) => {
+        rerollConfirmResolveRef.current = resolve;
+        setRerollConfirm(true);
+      });
+      if (!confirmed) return;
     }
     setBusy(true);
     setError(null);
@@ -1082,8 +1098,8 @@ const handleGenerate = async () => {
           className="text-base text-muted-foreground"
         >
           <p>
-            Your render is finished. Saving it is taking longer than usual, but it has not stopped.
-            The video will appear here, and in History, the moment the save lands.
+            Your render is finished. The save is just slow, not stuck.
+            It will appear here and in History the moment it lands.
           </p>
         </div>
       )}
@@ -1287,6 +1303,12 @@ const handleGenerate = async () => {
 
           </div>
       )}
+
+      <GenerateAnotherConfirmDialog
+        confirm={rerollConfirm}
+        onCancel={() => settleRerollConfirm(false)}
+        onConfirm={() => settleRerollConfirm(true)}
+      />
     </div>
   );
 }
