@@ -362,8 +362,8 @@ class TestChatModelRequestShape:
       declares temperature on its endpoints, so the field is sent for it; the
       offline fallback sends it too. _post_chat's retry stays as the net under
       both the declared data and the offline fallback;
-    - reasoning_effort=max is sent for the shipped slug, because Max is
-      how the model is specified to run, and for no other slug;
+    - reasoning_effort=xhigh (extra high, ADR 0211) is sent for the
+      shipped slug, and for no other slug;
     - max_tokens stays (OpenRouter maps it), and reasoning tokens are billed
       against the same budget, which the truncation retry already covers.
     """
@@ -372,20 +372,20 @@ class TestChatModelRequestShape:
         import ai_service
         assert ai_service.TEXT_MODEL == "meta/muse-ember"
         assert ai_service.VISION_MODEL == "meta/muse-ember"
-        assert ai_service.REASONING_EFFORT == "max"
+        assert ai_service.REASONING_EFFORT == "xhigh"
 
-    def test_the_shipped_default_gets_temperature_and_max(self, monkeypatch):
+    def test_the_shipped_default_gets_temperature_and_xhigh(self, monkeypatch):
         """
         Muse Ember declares temperature on its endpoints, so the field is sent
-        rather than spent discovering by 400 — and reasoning_effort=max
-        travels with every call to the shipped slug.
+        rather than spent discovering by 400 — and reasoning_effort=xhigh
+        (extra high, ADR 0211) travels with every call to the shipped slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
         assert rec.payloads[0]["model"] == "meta/muse-ember"
         assert rec.payloads[0]["temperature"] == 0.4
-        assert rec.payloads[0]["reasoning_effort"] == "max"
+        assert rec.payloads[0]["reasoning_effort"] == "xhigh"
 
     def test_no_reasoning_effort_for_an_override_model(self, monkeypatch):
         """
@@ -539,7 +539,11 @@ class TestChatModelRequestShape:
         assert len(rec.payloads) == 5  # +1 hook candidates call (ADR 0130), +1 script-only craft correction at the 80 bar
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
-            assert payload["reasoning_effort"] == "max"
+        # The direct flows (profile research, angles) keep the pinned
+        # extra-high level; the plan chain's three calls — draft, hook
+        # candidates, craft correction — run at High (ADR 0211).
+        assert [p["reasoning_effort"] for p in rec.payloads] == [
+            "xhigh", "xhigh", "high", "high", "high"]
 
 
 class TestLiveAngleGoals:
@@ -1542,6 +1546,147 @@ class TestCreativePlanBudget:
         # hook candidates call runs at HOOK_CANDIDATES_MAX_TOKENS
         # (ADR 0130), and the 80-bar craft correction at PLAN_MAX_TOKENS again.
         assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
+
+
+class TestPlanChainReasoningEffort:
+    """
+    ADR 0211: the plan-and-strategy chain runs at High, not Max.
+
+    One click on Generate plan chains three to seven reasoning calls
+    behind it — the plan's editorial loop, the hook bake-off and its
+    correction, the craft correction, then the strategy call — and at
+    the old global Max pin the founder waited 90-100+ seconds for the
+    pair. The chain's call sites pass
+    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("high") through
+    _chat_json, one level below the app-wide default, which the same
+    decision drops from Max to extra high (REASONING_EFFORT="xhigh";
+    the TestChatModelRequestShape pins above pin that new default).
+    The override rides the same declaration gate as the default
+    (ADR 0003): the field goes only to the shipped slug, never to a
+    model that did not declare it.
+    """
+
+    PLAN = {
+        "hook_line": "Naming the feeling never worked.",
+        "script": ("The suggestions helped me find the words. "
+                   "I understood myself better after writing the entry."),
+        "beat_timeline": [
+            {"start": 0, "end": 3, "label": "hook",
+             "text": "Naming the feeling never worked."},
+            {"start": 3, "end": 15, "label": "middle", "text": "script"},
+        ],
+        "visual_direction": "A person reflecting at their desk.",
+        "demo_brief": "Record the emotion suggestions.",
+        "voice_direction": "Conversational.",
+        "sound_direction": "Voice only.",
+        "claims_used": [],
+    }
+
+    def test_the_chain_is_high_and_the_default_is_xhigh(self):
+        import ai_service
+        assert ai_service.REASONING_EFFORT == "xhigh"
+        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "high"
+
+    def test_an_overridden_call_sends_the_override(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        assert _run(ai_service._chat_json(
+            "sys", "prompt", "Ctx", reasoning_effort="high")) == {"a": 1}
+        assert rec.payloads[0]["reasoning_effort"] == "high"
+
+    def test_an_override_for_another_slug_sends_no_effort_field(self, monkeypatch):
+        """The override is gated exactly where the default is (ADR 0003)."""
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
+        assert _run(ai_service._chat_json(
+            "sys", "prompt", "Ctx", model="z-ai/glm-5.3-flash",
+            reasoning_effort="high")) == {"a": 1}
+        assert "reasoning_effort" not in rec.payloads[0]
+
+    def test_the_plan_chain_carries_high_on_every_call(self, monkeypatch):
+        """Draft, doubled retry, candidates, craft correction — no Max."""
+        import ai_service
+        half = '{"hook_line": "I couldn\'t name what I was feeling.', \
+            '"script": "The sugg'
+        rec = _patch_client(monkeypatch, [
+            _completion(half, finish_reason="length"),
+            _completion(json.dumps(self.PLAN)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["hook_line"] == self.PLAN["hook_line"]
+        # The same run shape the budget pin records: the truncated
+        # draft, its doubled retry, the bake-off candidates call
+        # (ADR 0130) and the 80-bar craft correction (ADR 0115).
+        assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["high"] * 4
+
+    def test_the_bake_off_correction_call_carries_high(self, monkeypatch):
+        """When every candidate breaks a gate, its correction is chained too."""
+        import ai_service
+        script = ("At the kitchen table I speak for sixty seconds before "
+                  "the day starts. My shoulders drop. I don't know what "
+                  "sets off the rush in my head.")
+        too_long = [
+            "I am trying to say the thing that keeps slipping away from me again.",
+            "I keep reaching for the words that vanish every single morning now.",
+            "I want to catch the thought before it dissolves into the noise again.",
+        ]
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps({"hooks": too_long})),
+            _completion(json.dumps(
+                {"hook_line": "I keep losing count of my own thoughts."})),
+        ])
+        _run(ai_service._hook_bake_off(
+            system_message="sys",
+            draft_hook="I keep losing the words I mean to say.",
+            script=script,
+            hook_budget=50,
+            middle_budget=220,
+            hook_target=40,
+            hook_seconds=3,
+            duration_seconds=15,
+            app_name="",
+            allows_question=False,
+            certified_outcome="",
+            story_context="",
+            rules_block="",
+            hook_form_block="",
+            promise_rule="",
+        ))
+        assert [p["max_tokens"] for p in rec.payloads] == [
+            ai_service.HOOK_CANDIDATES_MAX_TOKENS, ai_service.REWRITE_MAX_TOKENS]
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["high", "high"]
+
+    def test_the_strategy_call_carries_high(self, monkeypatch):
+        import ai_service
+        strategy = {
+            "strategy_summary": "s", "audience_problem": "p",
+            "emotional_triggers": ["t"], "hook_concept": "c",
+            "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+            "messaging_pillars": ["m"], "primary_feature": "f",
+            "desired_outcome": "o", "mechanism_beat": "mb",
+            "payoff_beat": "pb", "differentiation_beat": "b",
+            "scene": {"location": "kitchen"},
+            "performance": {"movement": "still"},
+            "segments": [
+                {"index": 0, "role": "hook", "seconds": 3,
+                 "goal": "g", "script": "s", "action": "a"},
+                {"index": 1, "role": "middle", "seconds": 17,
+                 "goal": "g", "script": "s", "action": "a"},
+            ],
+        }
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(strategy))])
+        result = asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Test"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3,
+        ))
+        assert result["strategy_summary"] == "s"
+        assert len(rec.payloads) == 1, "a good reply must not cost a retry"
+        assert rec.payloads[0]["max_tokens"] == ai_service.STRATEGY_MAX_TOKENS
+        assert rec.payloads[0]["reasoning_effort"] == "high"
 
 
 class _PostKitBudgetGate(_BudgetGate):

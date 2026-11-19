@@ -1,6 +1,6 @@
 # 0110 — Chat generation runs on Muse Ember (Max) only
 
-- **Status:** accepted
+- **Status:** accepted (the reasoning_effort=max pin superseded by 0211)
 - **Date:** 2026-11-09
 - **Anchors:** `backend/ai_service.py`
   (`DEFAULT_TEXT_MODEL`, `DEFAULT_VISION_MODEL`, `REASONING_EFFORT`,

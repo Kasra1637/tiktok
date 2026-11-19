@@ -95,14 +95,15 @@ logger = logging.getLogger(__name__)
 #
 # Both chat models default to Muse Ember (Max): Meta's smallest and most
 # efficient Muse tier, multimodal (text+image in) with structured-output
-# support, a 1M-token context window and reasoning effort pinned to Max.
-# It replaces Claude Haiku 5.5 at the same listed price ($0.10/$0.50 per 1M).
+# support, a 1M-token context window and reasoning effort pinned to extra
+# high. It replaces Claude Haiku 5.5 at the same listed price ($0.10/$0.50
+# per 1M).
 #
 # Both slugs are overridable from the environment so a model swap is a config
 # change rather than a code change, the same way the video provider already
 # works (see video_providers.default_model_key). An override is taken as given:
 # the request shape is guarded by _temperature_param below, not by validating
-# the slug here. The Max reasoning level is part of the shipped request
+# the slug here. The pinned reasoning level is part of the shipped request
 # shape — _reasoning_effort_param sends it for the shipped slug only.
 #
 # Consequences that travel with the shipped default everywhere below:
@@ -119,7 +120,19 @@ logger = logging.getLogger(__name__)
 #   than a guarantee.
 DEFAULT_TEXT_MODEL = "meta/muse-ember"
 DEFAULT_VISION_MODEL = "meta/muse-ember"
-REASONING_EFFORT = "max"
+# The app-wide reasoning level: extra high since ADR 0211 (Max before
+# it, ADR 0110). Kasra's ruling was speed across the whole app — every
+# chat call thinks one level less, and the chained plan flow below
+# sits one level under this.
+REASONING_EFFORT = "xhigh"
+# The plan-and-strategy chain runs one level down from the pin above,
+# at High (ADR 0211). It is the one flow that chains three to seven
+# reasoning calls behind a single click — the plan's editorial loop,
+# the hook bake-off, the craft correction, then the strategy — and at
+# Max the founder waited 90-100+ seconds for the pair. The pin stands
+# for every other flow; this constant is passed explicitly by the
+# chain's call sites only, through _chat_json's per-call override.
+PLAN_CHAIN_REASONING_EFFORT = "high"
 
 
 def _model_from_env(var: str, default: str) -> str:
@@ -423,19 +436,24 @@ def _temperature_param(model: str, temperature: float) -> dict:
     return {"temperature": temperature}
 
 
-def _reasoning_effort_param(model: str) -> dict:
+def _reasoning_effort_param(model: str, effort: Optional[str] = None) -> dict:
     """
-    The Max reasoning level, for the shipped model only.
+    The pinned reasoning level, for the shipped model only.
 
-    "Max" is how this model is specified to run at all. The field is sent as
+    Extra high is how this model is specified to run at all since
+    ADR 0211 (Max before it). The field is sent as
     `reasoning_effort`, which the Muse Ember endpoints declare, and only for
     that slug: an override pointed at another model is taken as given for its
     request shape (see _temperature_param — declared data, offline fallback,
     refuse-and-retry), and an effort level meant for one model is not a
     parameter another model declared.
+
+    `effort` is a per-call override (ADR 0211): a flow may ask for a
+    different level than the pin, and the ask is honored under the same
+    declaration gate — the field still goes only to the shipped slug.
     """
     if _normalize_slug(model) == DEFAULT_TEXT_MODEL:
-        return {"reasoning_effort": REASONING_EFFORT}
+        return {"reasoning_effort": effort or REASONING_EFFORT}
     return {}
 
 
@@ -922,6 +940,7 @@ async def _chat_json(
     json_schema: Optional[dict] = None,
     strict: bool = True,
     model: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> dict:
     """
     One chat completion that must come back as a JSON object.
@@ -948,6 +967,11 @@ async def _chat_json(
     see ANGLE_MODEL) passes it, and BOTH the payload and the temperature guard
     follow that slug — sending one model's temperature rules to another is how
     a working call starts 400ing after a config change.
+
+    `reasoning_effort` defaults to None, which sends the pinned default
+    level (REASONING_EFFORT) exactly as before. A flow that chains calls behind
+    one click may pass a lower level (ADR 0211); the field still goes only
+    to the shipped slug — see _reasoning_effort_param.
     """
     model = model or TEXT_MODEL
     last_error = None
@@ -972,7 +996,7 @@ async def _chat_json(
                 {"role": "user", "content": attempt_prompt},
             ],
             **_temperature_param(model, temperature),
-            **_reasoning_effort_param(model),
+            **_reasoning_effort_param(model, reasoning_effort),
             "max_tokens": budget,
         }
         if json_schema is not None:
@@ -4443,6 +4467,7 @@ async def _hook_bake_off(
             max_tokens=HOOK_CANDIDATES_MAX_TOKENS,
             timeout=120,
             json_schema=HOOK_CANDIDATES_JSON_SCHEMA,
+            reasoning_effort=PLAN_CHAIN_REASONING_EFFORT,
         )
     except Exception as exc:
         logger.warning(
@@ -4506,6 +4531,7 @@ async def _hook_bake_off(
             max_tokens=REWRITE_MAX_TOKENS,
             timeout=120,
             json_schema=HOOK_REWRITE_JSON_SCHEMA,
+            reasoning_effort=PLAN_CHAIN_REASONING_EFFORT,
         )
     except Exception as exc:
         logger.warning(
@@ -4951,6 +4977,7 @@ async def generate_creative_plan(
             max_tokens=PLAN_MAX_TOKENS,
             timeout=120,
             json_schema=PLAN_JSON_SCHEMA,
+            reasoning_effort=PLAN_CHAIN_REASONING_EFFORT,
         )
         missing = REQUIRED_PLAN_KEYS - set(result.keys())
         if missing:
@@ -5081,6 +5108,7 @@ async def generate_creative_plan(
                 max_tokens=PLAN_MAX_TOKENS,
                 timeout=120,
                 json_schema=PLAN_JSON_SCHEMA,
+                reasoning_effort=PLAN_CHAIN_REASONING_EFFORT,
             )
             retry_missing = REQUIRED_PLAN_KEYS - set(retry_result.keys())
             if retry_missing:
@@ -6005,6 +6033,7 @@ async def generate_video_strategy(
         max_tokens=STRATEGY_MAX_TOKENS,
         attempts=3,
         json_schema=STRATEGY_JSON_SCHEMA,
+        reasoning_effort=PLAN_CHAIN_REASONING_EFFORT,
     )
     if isinstance(raw.get("strategy"), dict):
         raw = raw["strategy"]
