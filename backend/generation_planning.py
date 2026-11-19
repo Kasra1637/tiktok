@@ -209,8 +209,30 @@ CONDENSE_BELOW = 5000
 # full because at HeyGen's 4,090 ceiling with the script held sacred, the
 # uncompressed sentence landed the saturated prompt 44 over, and fixed
 # text is the only text the squeeze cannot take back.
-FULL_PROMPT_FLOOR = 4013
-CONDENSED_PROMPT_FLOOR = 2476
+#
+# ADR 0213 widens the handheld frame one more step (amending 0113): the
+# market-stall render came back a tight close-up the whole take — head and
+# hair cropped at the top, hands out of frame — despite the mid-chest ask
+# and the never-tighten hold. The starting shot now asks waist up, the
+# full head and all her hair in frame with the headroom measured above
+# the hair itself, and the never-crop rule names the hair beside forehead
+# and chin; both holds name the hair too, so the wider frame is the frame
+# that gets held. The wider sentence added 49; the shot paid 26 of its
+# own back by dropping its repeated "Hold straight-on" (the hold below
+# restates it) and its second "natural". The rest was paid out of a
+# verbatim duplicate both modes carried — "End before the last second"
+# stated in the header and again in the middle heading, which is always
+# present — and, in the condensed text, the identity close's "one take:
+# no cut" (its header's ONE continuous states it; the close keeps the
+# black-frame and title-card bans, which appear nowhere else). The
+# payment was not optional bookkeeping: unpaid, the growth landed a
+# saturated HeyGen prompt 25 over its ceiling and deepened the default
+# squeeze enough to clip the payoff out of a realistic brief. Measured:
+# full floor rose 1 (4013 -> 4014), condensed fell 12 (2476 -> 2464).
+# The single-pass floor did not move: that builder's fixed text carries
+# no starting shot.
+FULL_PROMPT_FLOOR = 4014
+CONDENSED_PROMPT_FLOOR = 2464
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -398,8 +420,13 @@ _CONDENSED_HANDOFF = (
     "or text. Use locked Location/light/props from verified app facts; never invent claims."
 )
 
+# The one-take / no-cut rule is not restated here: the condensed header's
+# "ONE continuous" already states it. The black-frame and title-card bans
+# stay — unlike the full header, the condensed one never states them, so
+# this close is their only carrier (ADR 0213 paid for the wider selfie
+# framing partly out of this duplicate).
 _CONDENSED_IDENTITY_CLOSE = (
-    "Vertical 9:16 throughout, one take: no cut, black frame or title card. Same person, "
+    "Vertical 9:16 throughout: no black frame or title card. Same person, "
     "face/hair exactly as the reference photograph, in the one outfit specified, "
     "same place, under the same light."
 )
@@ -411,10 +438,11 @@ _CONDENSED_IDENTITY_CLOSE = (
 # this same wording so the render is told one framing, not two.
 HANDHELD_SELFIE_FRAMING = (
     "HANDHELD SELFIE: held at arm's length, eye-level, straight-on, about a metre away. "
-    "Frame mid-chest up, full head with headroom, room at the sides for hand "
-    "gestures; never crop the forehead or chin. "
-    "Hold straight-on, no 3/4 angle, no off-centre framing. Natural "
-    "facial proportions, no exaggerated wide-angle distortion. Very subtle natural "
+    "Frame waist up, full head and all her hair in frame with clear headroom "
+    "above the hair, room at the sides for hand gestures; never crop the hair, "
+    "forehead or chin. "
+    "No 3/4 angle, no off-centre framing. Natural "
+    "facial proportions, no exaggerated wide-angle distortion. Very subtle "
     "handheld sway."
 )
 
@@ -504,14 +532,14 @@ _SELFIE_CAMERA_MOVE = (
     "Hold that straight-on selfie framing for the whole take — keep the phone "
     "steady, no push in, pull back, or zoom. In the same "
     "moment the actor makes one small story-specific action{gesture}. Keep it subtle "
-    "and natural, eyes on the lens. No cut. Keep the full head and chin inside "
+    "and natural, eyes on the lens. No cut. Keep the full head, hair and chin inside "
     "frame; never tighten or crop the head."
 )
 
 _CONDENSED_SELFIE_CAMERA_MOVE = (
     "Hold that straight-on selfie framing — keep the phone steady, no zoom. "
     "Simultaneous actor gesture{gesture}; "
-    "subtle, natural, eyes on lens. Never crop the head."
+    "subtle, natural, eyes on lens. Never crop the head or hair."
 )
 
 _CAMERA_MOVE = (
@@ -1826,7 +1854,10 @@ def _assemble_prompt(
             + (
                 "install or try anything. End on the moment the presenter reaches for their phone."
                 if fixed else
-                "install or try anything. End before the last second."
+                # No "End before the last second" here: the MIDDLE heading
+                # states that boundary verbatim, in every build (ADR 0213
+                # paid for the wider selfie framing out of this duplicate).
+                "install or try anything."
             )
         )
     else:
@@ -1837,7 +1868,7 @@ def _assemble_prompt(
                 "End on the moment the presenter reaches for their phone, and do not ask the viewer "
                 "to download or install anything."
                 if fixed else
-                "End before the last second, then one short physical ending, and do not ask "
+                "Then one short physical ending, and do not ask "
                 "the viewer to download or install anything."
             )
         )

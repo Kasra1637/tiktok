@@ -1882,6 +1882,12 @@ class TestStrategyBudget:
         assert "screen to her" not in prompt
         assert "eyes on it" not in prompt
         assert "about a metre away" in prompt
+        # The strategy-side handheld paragraph restates the same framing the
+        # render prompt carries (ADR 0108: one framing, not two), so its
+        # never-crop rule covers the hair too (ADR 0213). This fragment is
+        # unique to that paragraph — the verbatim starting shot does not
+        # contain it — so the pin cannot pass on the shot alone.
+        assert "no push in, pull back, or zoom, never crop the hair" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt
 

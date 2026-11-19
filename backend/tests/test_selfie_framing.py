@@ -51,6 +51,23 @@ def test_handheld_framing_forbids_cropping_the_head():
     assert "chin" in framing.lower()
 
 
+def test_handheld_framing_keeps_the_full_head_and_hair_in_frame():
+    # Kasra's market-stall render (Nov 19 2026) came back a tight close-up
+    # anyway — head and hair cropped at the top, hands out of frame — despite
+    # the mid-chest ask. Mid-chest still read as a close-up, and "headroom"
+    # sat above the head, so the model could treat the hair as outside the
+    # margin it had to keep. The shot now sits one step wider and names the
+    # hair itself: fully in frame, the headroom above the hair, and the
+    # never-crop rule covering it (ADR 0213, amending ADR 0113).
+    framing = generation_planning.HANDHELD_SELFIE_FRAMING
+    lowered = framing.lower()
+    assert "mid-chest" not in lowered
+    assert "waist up" in lowered
+    assert "all her hair in frame" in lowered
+    assert "headroom above the hair" in lowered
+    assert "never crop the hair" in lowered
+
+
 def test_handheld_camera_move_holds_distance_without_tightening():
     # "Keep the full head and chin visible" states a result with no margin,
     # so a tight opening that technically shows the chin still passes. The
