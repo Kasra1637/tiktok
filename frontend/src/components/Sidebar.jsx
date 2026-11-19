@@ -5,6 +5,7 @@ import { isClerkConfigured } from "../lib/clerk";
 import { useOnboarding } from "./onboarding/OnboardingProvider";
 import {
   Sparkles,
+  LayoutDashboard,
   Clapperboard,
   Smartphone,
   Images,
@@ -22,8 +23,13 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
 /**
  * Sidebar navigation model.
  *
- * Ordering follows the working sequence: App Profile first, because everything
- * else is made from it and Create Video refuses to run without an approved one.
+ * Ordering follows the working sequence, with one exception at the top:
+ * Dashboard leads because it is the home a signed-in user lands on
+ * (ADR 0208) — a routing page whose state-aware next action sends a
+ * profile-less user to App Profile before anything else, so App Profile
+ * no longer has to lead the list to protect that first step. After it the
+ * working sequence stands: App Profile, because everything else is made
+ * from it and Create Video refuses to run without an approved one.
  * Create Video makes the hook, Demo + CTA turns the finished hook into an
  * export, History records those renders and exports, and Analytics reads the
  * founder's own logged results. The retired
@@ -31,7 +37,7 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * there is no Research group and no Insight link. Analytics is last, not an
  * Insight group.
  *
- * App Profile leads rather than Create Video for that reason, and it is named
+ * App Profile follows Dashboard rather than leading, and it is named
  * for what the page actually holds. "Your app" described one app, while the page
  * is the list of every app profile you have researched, approved and edited, and
  * the product's own vocabulary everywhere else — the tour, the detail page, the
@@ -54,6 +60,7 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * selectors for `document.querySelector`.
  */
 const NAV_ITEMS = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Start here — pick your next step" },
   { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },

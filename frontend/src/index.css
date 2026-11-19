@@ -467,19 +467,19 @@ body {
     }
 }
 
-/* The expanded clips ledger (ADR 0160): the table region scrolls inside
- * this bound instead of growing the Clip results card past the Renders
- * card it stands paired with. The bound is the collapsed region's own
- * height, summed from its parts: the header row (2rem) plus the
- * collapsed page of three rows at the tall-row rhythm (6rem each — a
- * three-line clip name, its sub-line, and the row's padding). A CSS
- * bound cannot measure the collapsed render, so rows shorter than the
- * rhythm leave the region a touch under-filled and longer ones scroll
- * a touch sooner; the card's height holds either way, and Show less
- * stays outside the region, never scrolled away. */
-.clips-table-scroll {
+/* The expanded clips ledger (ADR 0160, entries since ADR 0209): the
+ * region scrolls inside this bound instead of growing the Clip results
+ * card past the Renders card it stands paired with. The bound is the
+ * collapsed region's own height: ADR 0160 summed it from a header row
+ * plus three tall table rows; the stacked entries carry no header and
+ * stand shorter, so the same 20rem now holds the collapsed three with
+ * room to spare — the number is kept deliberately, because the pair's
+ * one-height behaviour was tuned against it and nothing about the
+ * entries asks the card to grow. The collapsed region carries no
+ * bound at all, so its entries always stand whole; Show less stays
+ * outside the region, never scrolled away. */
+.clips-scroll-region {
     max-height: 20rem;
-    overflow-x: hidden;
     overflow-y: auto;
 }
 

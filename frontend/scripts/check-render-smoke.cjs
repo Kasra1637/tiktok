@@ -11323,6 +11323,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("Checking the sidebar navigation model...");
   await runSidebarNavChecks();
 
+  console.log("");
+  console.log("Checking the Dashboard routing home...");
+  await runDashboardChecks();
+
   // The frame is a map of destinations; the draft line is the one thing in it
   // that remembers a place the founder already is. It has to appear only when
   // there is a real project behind it — a shortcut into an empty wizard looks
@@ -11609,7 +11613,7 @@ async function runAnalyticsChecks() {
     });
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
-    const rows = [...card.querySelectorAll('tbody tr')];
+    const rows = [...card.querySelectorAll('li[data-testid^="result-"]')];
     if (rows.map(r => r.dataset.testid).join() !== "result-top,result-zero,result-missing") throw new Error("comparison order lost zero, missing or status distinction");
     for (const copy of ["1 posted", "2 with recorded views", "2 rated", "not installs, revenue, or conversions", "different posting dates", "never a view threshold"]) {
       if (!card.textContent.includes(copy)) throw new Error(`missing factual result/caveat: ${copy}`);
@@ -11661,7 +11665,7 @@ async function runAnalyticsChecks() {
     });
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
-    const rows = () => [...card.querySelectorAll('tbody tr')];
+    const rows = () => [...card.querySelectorAll('li[data-testid^="result-"]')];
     if (rows().length !== 3) throw new Error(`expected the top 3 rows, found ${rows().length}`);
     const more = card.querySelector('[data-testid="analytics-results-show-more"]');
     if (!more) throw new Error("no show-all control on a long leaderboard");
@@ -11692,11 +11696,11 @@ async function runAnalyticsChecks() {
     if (card.querySelector('[data-testid="analytics-results-toggle"]')) {
       throw new Error("clip results still carries a collapse control");
     }
-    if (card.querySelectorAll("tbody tr").length !== 2) {
+    if (card.querySelectorAll('li[data-testid^="result-"]').length !== 2) {
       throw new Error("clip results did not render its rows on the first paint");
     }
     if (!card.querySelector('[data-testid="analytics-results-table"]')) {
-      throw new Error("clip results did not render its table on the first paint");
+      throw new Error("clip results did not render its ledger on the first paint");
     }
     if (!card.textContent.includes("0 posted")) {
       throw new Error("clip results lost its own count line");
@@ -12136,10 +12140,11 @@ async function runAnalyticsChecks() {
   });
 
   // Expanding the ledger must not grow the card (ADR 0160): the
-  // expanded table region scrolls inside a bound set from the
-  // collapsed region's own parts, so the pair keeps one height in
-  // both states and Show less never scrolls away with the rows.
-  await check("expanding Clip results bounds its table region instead of growing the card", async (ctx) => {
+  // expanded region scrolls inside its bound, so the pair keeps one
+  // height in both states and Show less never scrolls away with the
+  // entries. The collapsed region carries no bound at all (ADR 0209),
+  // so its first entries always stand whole.
+  await check("expanding Clip results bounds its ledger region instead of growing the card", async (ctx) => {
     const generations = Array.from({ length: 17 }, (_, i) => ({
       id: `bound-${i + 1}`,
       status: "completed",
@@ -12161,17 +12166,17 @@ async function runAnalyticsChecks() {
       throw new Error("the pair does not stretch its cards to one height");
     }
     const region = results.querySelector('[data-testid="analytics-results-table"]');
-    if (!region) throw new Error("the clips table region is not marked");
-    if (region.className.includes("clips-table-scroll")) {
+    if (!region) throw new Error("the clips ledger region is not marked");
+    if (region.className.includes("clips-scroll-region")) {
       throw new Error("the collapsed ledger already carries the bounded-scroll treatment");
     }
     const more = results.querySelector('[data-testid="analytics-results-show-more"]');
     if (!more) throw new Error("no show-all control on the collapsed ledger");
     await clickEl(ctx, more, "expand the leaderboard");
-    const rows = results.querySelectorAll("tbody tr");
+    const rows = results.querySelectorAll('li[data-testid^="result-"]');
     if (rows.length !== 17) throw new Error(`expected all 17 rows expanded, found ${rows.length}`);
-    if (!region.className.includes("clips-table-scroll")) {
-      throw new Error("the expanded table region carries no bounded-scroll treatment");
+    if (!region.className.includes("clips-scroll-region")) {
+      throw new Error("the expanded ledger region carries no bounded-scroll treatment");
     }
     const less = results.querySelector('[data-testid="analytics-results-show-more"]');
     if (!less || !/Show less/.test(less.textContent || "")) throw new Error("no show-less control after expanding");
@@ -12180,40 +12185,67 @@ async function runAnalyticsChecks() {
     }
   });
 
-  // The Clip results table fits its card (ADR 0159): a fixed layout
-  // under a seven-column template, so every column is visible at
-  // desktop widths and the card never scrolls sideways.
-  await check("the Clip results table fits its card without sideways scrolling", async (ctx) => {
+  // Clip results are stacked entries whose short fields never wrap
+  // (ADR 0209, superseding ADR 0159's fixed-layout column template):
+  // at the widths this paired card actually gets, seven percentage
+  // columns squeezed the posted state under its dot, split the craft
+  // grade at its middot, wrapped the verdict pill inside itself and
+  // pushed the rank crown out of its cell. The entries keep every
+  // short field on one line by construction, and the card never
+  // scrolls sideways.
+  await check("clip results stack as entries whose short fields never wrap", async (ctx) => {
     await mountAnalytics(ctx, {
       getGenerationHistory: async () => ({ generations: [
         {
           id: "fit-1",
           status: "completed",
-          hook_line: "A hook long enough to wrap inside its column rather than push the table wide",
+          hook_line: "A hook long enough to wrap across the entry rather than squeeze a column",
           tiktok_views: 42,
           tiktok_url: "https://www.tiktok.com/@founder/video/1",
           video_verdict: "up",
+          studio_project_id: "draft1",
+          quality_report: { grade: "B", total: 76 },
         },
+        { id: "fit-2", status: "completed", hook_line: "Unposted and unrated", tiktok_views: null },
       ] }),
-      getStudioProjects: async () => ({ projects: [] }),
+      getStudioProjects: async () => ({ projects: [{ id: "draft1" }] }),
     });
     const card = ctx.container.querySelector('[data-testid="analytics-results"]');
     if (!card) throw new Error("no clip comparison");
+    if (card.querySelector("table")) {
+      throw new Error("clip results are a table again — the column template is what squeezed them");
+    }
     const scroller = [...card.querySelectorAll("div")].find((el) =>
       (el.className || "").includes("overflow-x-auto")
     );
-    if (scroller) throw new Error("the results table still scrolls sideways inside its card");
-    const table = card.querySelector("table");
-    if (!table) throw new Error("the results table is missing");
-    if (!table.className.includes("table-fixed")) {
-      throw new Error("the results table is not fixed-layout, so its columns size the card");
+    if (scroller) throw new Error("the results ledger scrolls sideways inside its card");
+    const entries = [...card.querySelectorAll('li[data-testid^="result-"]')];
+    if (entries.length !== 2) throw new Error(`expected 2 stacked entries, found ${entries.length}`);
+    const nowrap = (el, what) => {
+      if (!el || !(el.className || "").includes("whitespace-nowrap")) {
+        throw new Error(`${what} can wrap internally — it lost its one-line treatment`);
+      }
+    };
+    const craft = card.querySelector('[data-testid="result-craft-fit-1"]');
+    nowrap(craft, "the craft grade");
+    if (!craft.textContent.includes("B · 76")) throw new Error("the craft grade lost its value");
+    const pill = card.querySelector('[data-testid="result-vote-fit-2"] span');
+    nowrap(pill, "the verdict pill");
+    if (!pill.textContent.includes("Not rated")) throw new Error("the verdict pill lost its label");
+    const posted = [...entries[1].querySelectorAll("span")].find(
+      (s) => s.textContent.trim() === "Not posted"
+    );
+    nowrap(posted, "the posted state");
+    const nextLink = [...entries[0].querySelectorAll("a")].find(
+      (a) => a.textContent.trim() === "Another take like this"
+    );
+    nowrap(nextLink, "the next-take link");
+    const rank = card.querySelector('[data-testid="result-rank-fit-1"]');
+    if (!rank || !(rank.className || "").includes("shrink-0")) {
+      throw new Error("the rank cluster can be squeezed by the title beside it");
     }
-    const cols = table.querySelectorAll("colgroup col");
-    if (cols.length !== 7) {
-      throw new Error(`the results table sizes ${cols.length} columns, not its seven`);
-    }
-    if (table.querySelectorAll("thead th").length !== 7) {
-      throw new Error("a results column is missing from the header");
+    if (!rank.querySelector("svg")) {
+      throw new Error("the winner's crown no longer rides beside its rank");
     }
   });
 
@@ -12323,13 +12355,14 @@ async function runAnalyticsChecks() {
  * check.
  *
  * Order is pinned as a whole sequence, the way STEP_LABELS is: the point is that
- * App Profile comes FIRST, because everything else is generated from it and
- * Create Video refuses to run without an approved one. A set comparison would
- * pass just as happily with the profile back in the middle.
+ * Dashboard comes FIRST, because it is the home a signed-in user lands on
+ * (ADR 0208) — its next-action hero sends a profile-less user to App Profile
+ * first, so the profile no longer has to lead the list to protect that step.
+ * A set comparison would pass just as happily with Dashboard back in the middle.
  */
 async function runSidebarNavChecks() {
   await check(
-    "App Profile leads the sidebar, and nothing still calls it \"Your app\"",
+    "Dashboard leads the sidebar, and nothing still calls it \"Your app\"",
     async () => {
       const src = fs.readFileSync(
         path.join(__dirname, "..", "src", "components", "Sidebar.jsx"),
@@ -12339,23 +12372,24 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 6) {
+      if (items.length !== 7) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 6. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
-      if (items[0].to !== "/brand" || items[0].label !== "App Profile") {
+      if (items[0].to !== "/dashboard" || items[0].label !== "Dashboard") {
         throw new Error(
           `the first sidebar link is ${items[0].label} (${items[0].to}), expected ` +
-            "App Profile (/brand). Everything else in the app is generated from " +
-            "the profile, so leading with a screen whose inputs do not exist yet " +
-            "opens on a dead end."
+            "Dashboard (/dashboard). It is the page a signed-in user lands on, " +
+            "and its hero routes a profile-less user to App Profile first, so " +
+            "leading with anything else strands the home link below the work."
         );
       }
       // Analytics is last on purpose: it reads results the pages above it produced,
       // so leading with it would open on an empty ledger during setup.
       const expected = [
+        "/dashboard",
         "/brand",
         "/create",
         "/demo-cta",
@@ -12404,8 +12438,179 @@ async function runSidebarNavChecks() {
             "referenced by convention and /brand by every existing deep link."
         );
       }
+      // The Dashboard link carries its own canonical testid, the one the
+      // tour convention and the smoke suite's selectors look for.
+      if (!/to: "\/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link"/.test(src)) {
+        throw new Error(
+          "the Dashboard link changed its route, icon or testId. dashboard-nav-link " +
+            "is the canonical selector for the sidebar's first link."
+        );
+      }
     }
   );
+}
+
+/**
+ * The Dashboard is a routing home (ADR 0208): one state-aware next
+ * action, the six destinations as visual cards, and the newest renders
+ * as pictures — never the removed dashboard's History restatement (no
+ * totals, no failures, no Retry). These checks pin the route, the
+ * default landing, the auth fallbacks, and the hero's precedence at
+ * the page level; the precedence itself is unit-tested as a pure
+ * function in lib/dashboardNextAction.test.js.
+ */
+async function runDashboardChecks() {
+  const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
+  const stub = (extra = {}) => ({
+    getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    getGenerationHistory: async () => ({ generations: [] }),
+    ...extra,
+  });
+  async function mountDashboard(ctx, extra) {
+    const Dashboard = load("pages/Dashboard.jsx").default;
+    await withApi(stub(extra), async () => {
+      await mount(Dashboard, {})(ctx);
+    });
+  }
+  const heroLink = (ctx) => ctx.container.querySelector('[data-testid="dashboard-next-action-link"]');
+  const expectHero = (ctx, title, href) => {
+    const heroEl = ctx.container.querySelector('[data-testid="dashboard-next-action"]');
+    if (!heroEl) throw new Error("the Dashboard has no next-action hero");
+    if (!heroEl.textContent.includes(title)) {
+      throw new Error(`the hero says "${heroEl.textContent.trim()}", expected it to name "${title}"`);
+    }
+    const link = heroLink(ctx);
+    if (!link) throw new Error("the hero has no action link");
+    if (link.getAttribute("href") !== href) {
+      throw new Error(`the hero action points at ${link.getAttribute("href")}, expected ${href}`);
+    }
+  };
+  const expectGrid = (ctx) => {
+    const cards = [...ctx.container.querySelectorAll('[data-testid^="dashboard-card-"]')];
+    const hrefs = cards.map((c) => c.getAttribute("href"));
+    const expected = ["/create", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
+    if (hrefs.join("|") !== expected.join("|")) {
+      throw new Error(
+        `the workflow grid routes ${hrefs.join(" -> ") || "(none)"}, expected ${expected.join(" -> ")}`
+      );
+    }
+  };
+
+  await check("the Dashboard route exists and authenticated / lands on it", async () => {
+    const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
+    if (!/lazy\(\(\)\s*=>\s*import\("\.\/pages\/Dashboard"\)\)/.test(src)) {
+      throw new Error("the Dashboard page is not lazy-loaded like the other app pages");
+    }
+    if (!/path="\/dashboard"/.test(src)) {
+      throw new Error("App.js has no /dashboard route");
+    }
+    if (!/path="\/" element=\{<Navigate to="\/dashboard" replace \/>\}/.test(src)) {
+      throw new Error('the authenticated "/" redirect does not land on /dashboard');
+    }
+    if (src.includes("The Dashboard is gone")) {
+      throw new Error("the stale dashboard-removal comment is still in App.js");
+    }
+  });
+
+  await check("sign-in and sign-up fall back to the Dashboard, not Create", async () => {
+    const src = fs.readFileSync(path.join(SRC, "components/auth/AuthControls.jsx"), "utf8");
+    if (src.includes('fallbackTo = "/create"')) {
+      throw new Error("an auth trigger still falls back to /create");
+    }
+    const defaults = [...src.matchAll(/fallbackTo = "([^"]+)"/g)].map((m) => m[1]);
+    if (defaults.length !== 2 || defaults.some((d) => d !== "/dashboard")) {
+      throw new Error(
+        `the auth fallbacks are ${defaults.join(", ") || "(none)"}, expected two /dashboard defaults`
+      );
+    }
+  });
+
+  await check("the Dashboard sends a profile-less founder to App Profile, grid complete", async (ctx) => {
+    const { forgetDraft } = load("lib/recentDraft.js");
+    forgetDraft();
+    await mountDashboard(ctx, { getAppProfiles: async () => ({ profiles: [] }) });
+    expectHero(ctx, "Set up your App Profile", "/brand");
+    expectGrid(ctx);
+    if (ctx.container.querySelector('[data-testid^="dashboard-recent-"]')) {
+      throw new Error("a recent renders strip rendered with no generations behind it");
+    }
+  });
+
+  await check("the Dashboard continues the remembered draft before anything newer", async (ctx) => {
+    const { rememberDraft, forgetDraft } = load("lib/recentDraft.js");
+    try {
+      await act(async () => {
+        rememberDraft({ projectId: "proj-42", appName: "Vocolens", step: "review" });
+      });
+      await mountDashboard(ctx, {
+        getGenerationHistory: async () => ({ generations: [{ id: "g1", status: "generating" }] }),
+      });
+      expectHero(ctx, "Continue your draft for Vocolens", "/create?project=proj-42&step=review");
+    } finally {
+      forgetDraft();
+    }
+  });
+
+  await check("the Dashboard watches an in-flight render in History", async (ctx) => {
+    const { forgetDraft } = load("lib/recentDraft.js");
+    forgetDraft();
+    await mountDashboard(ctx, {
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "generating" },
+          { id: "g0", status: "completed", hook_line: "Older finished" },
+        ],
+      }),
+    });
+    expectHero(ctx, "Your video is rendering", "/history");
+  });
+
+  await check("the Dashboard finishes the newest render and shows recent renders as pictures", async (ctx) => {
+    const { forgetDraft } = load("lib/recentDraft.js");
+    forgetDraft();
+    await mountDashboard(ctx, {
+      getGenerationHistory: async () => ({
+        generations: [
+          { id: "g1", status: "completed", hook_line: "First hook", poster_url: "/media/poster-g1.jpg" },
+          { id: "g2", status: "completed", hook_line: "Second hook" },
+          { id: "g3", status: "failed", hook_line: "Third hook" },
+          { id: "g4", status: "completed", hook_line: "Fourth hook" },
+        ],
+      }),
+    });
+    expectHero(ctx, "Finish your latest video", "/demo-cta/g1");
+    const tiles = [...ctx.container.querySelectorAll('[data-testid^="dashboard-recent-"]')];
+    if (tiles.length !== 3) {
+      throw new Error(`the recent strip shows ${tiles.length} tiles, expected the newest 3`);
+    }
+    const poster = tiles[0].querySelector("img");
+    if (!poster || !(poster.getAttribute("src") || "").includes("poster-g1.jpg")) {
+      throw new Error("the newest tile does not show its poster frame");
+    }
+    if (tiles[1].querySelector("img")) {
+      throw new Error("a tile with no poster drew an image instead of the icon tile");
+    }
+    if (!tiles[0].textContent.includes("First hook") || !tiles[0].textContent.includes("Completed")) {
+      throw new Error("the newest tile lost its hook line or its status");
+    }
+    for (const tile of tiles) {
+      if (tile.getAttribute("href") !== "/history") {
+        throw new Error(`a recent tile points at ${tile.getAttribute("href")}, expected /history`);
+      }
+    }
+  });
+
+  await check("the Dashboard still routes when its reads fail", async (ctx) => {
+    const { forgetDraft } = load("lib/recentDraft.js");
+    forgetDraft();
+    await mountDashboard(ctx, {
+      getAppProfiles: async () => {
+        throw new Error("offline");
+      },
+    });
+    expectHero(ctx, "Create a video", "/create");
+    expectGrid(ctx);
+  });
 }
 
 /**
@@ -14373,6 +14578,7 @@ async function runDemoCtaChecks() {
       ["AssetLibrary.jsx", "Asset Library", []],
       ["GenerationHistory.jsx", "Generation History", []],
       ["Analytics.jsx", "Analytics", ["Your recent renders and how they performed."]],
+      ["Dashboard.jsx", "Dashboard", ["One next step up top, and every workflow one click away."]],
     ];
     for (const [file, title, expected] of pages) {
       const text = fs.readFileSync(path.join(SRC, "pages", file), "utf8");

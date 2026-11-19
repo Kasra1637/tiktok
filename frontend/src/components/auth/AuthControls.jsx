@@ -37,7 +37,7 @@ export function UnauthedOnly({ children }) {
  * Opens Clerk's sign-in modal. `children` must be a single clickable element.
  * Falls back to a plain link into the app when Clerk isn't configured.
  */
-export function SignInTrigger({ children, fallbackTo = "/create" }) {
+export function SignInTrigger({ children, fallbackTo = "/dashboard" }) {
   if (!isClerkConfigured) {
     return <Link to={fallbackTo}>{children}</Link>;
   }
@@ -45,7 +45,7 @@ export function SignInTrigger({ children, fallbackTo = "/create" }) {
 }
 
 /** Opens Clerk's sign-up modal. Same fallback behaviour as SignInTrigger. */
-export function SignUpTrigger({ children, fallbackTo = "/create" }) {
+export function SignUpTrigger({ children, fallbackTo = "/dashboard" }) {
   if (!isClerkConfigured) {
     return <Link to={fallbackTo}>{children}</Link>;
   }

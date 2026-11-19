@@ -19,6 +19,7 @@ import SignUp from "./pages/SignUp";
 // lazy chunk: the landing page and auth gates never download them, and
 // navigating between pages only fetches the one opened. Public pages stay
 // eager — they are light and most visits start there.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const GenerationHistory = lazy(() => import("./pages/GenerationHistory"));
 const BrandSetup = lazy(() => import("./pages/BrandSetup"));
 const AppProfileDetail = lazy(() => import("./pages/AppProfileDetail"));
@@ -120,16 +121,20 @@ function App() {
                         <Route path="/app-profiles/:profileId" element={<LazyPage><AppProfileDetail /></LazyPage>} />
                         <Route path="/app-profiles/:profileId/assets" element={<LazyPage><AssetLibrary /></LazyPage>} />
                         <Route path="/assets" element={<LazyPage><AssetLibrary /></LazyPage>} />
-                        {/* The Dashboard is gone. It restated what Generation
-                            History already shows — totals and failed
-                            generations with a Retry button — and then linked out
-                            to Create Video, App Profiles and Templates, all of
-                            which are in the sidebar anyway. "/" now goes where
-                            the work is. A redirect rather than a dead route, so
-                            the sidebar logo and any bookmark still land somewhere
-                            real. The public "/" for signed-out visitors is the
-                            landing page, declared above and unaffected. */}
-                        <Route path="/" element={<Navigate to="/create" replace />} />
+                        {/* The Dashboard is back as a routing home (ADR 0208):
+                            one state-aware next action, the six destinations
+                            as visual cards, and the newest renders as
+                            pictures. It is deliberately not the dashboard
+                            that was removed — that one restated what
+                            Generation History already shows (totals and
+                            failed generations with a Retry button) and then
+                            linked out to pages already in the sidebar; this
+                            one carries no stats and no retries, only
+                            orientation. Authenticated "/" lands here. The
+                            public "/" for signed-out visitors is the landing
+                            page, declared above and unaffected. */}
+                        <Route path="/dashboard" element={<LazyPage><Dashboard /></LazyPage>} />
+                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
                         {/* Results and what the app learned from them. The page
                             this route used to serve reported what a render cost
                             this operator, and the product stopped metering that,

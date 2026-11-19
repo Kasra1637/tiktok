@@ -1,6 +1,6 @@
 # ADR 0159: The Analytics and History polish bundle
 
-Status: accepted
+Status: partially superseded by 0209 (the Clip results fixed-layout column template; the rest of the bundle stands)
 
 Follows ADRs 0143/0149/0150/0151/0153 (the History card's balance
 rules) and the 2026-11-14 audit's Analytics findings; refines them
