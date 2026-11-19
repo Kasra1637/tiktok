@@ -72,3 +72,10 @@ in a seven-item order; new Dashboard smoke checks pin the route, the
 level, the grid's six routes, the recent strip's tiles and the
 failure fallback; the pure precedence helper carries a Jest suite
 over its five cases and their outranking.
+
+## Addendum — Nov 18 2026: the recent strip shows five
+
+The founder raised the recent renders strip from up to three tiles
+to the last five renders. The strip's flex-wrap row is unchanged —
+five tiles wrap the same way three did — and the smoke pin now
+expects the newest five from six fixture rows, the sixth left off.

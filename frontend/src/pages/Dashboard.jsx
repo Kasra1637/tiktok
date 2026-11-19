@@ -172,7 +172,7 @@ export default function Dashboard() {
         draftLink: draftHref(draft),
         generations: state.generations,
       });
-  const recent = state.generations.slice(0, 3);
+  const recent = state.generations.slice(0, 5);
 
   return (
     <PageFrame className="space-y-6">

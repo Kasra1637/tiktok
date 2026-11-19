@@ -12575,13 +12575,18 @@ async function runDashboardChecks() {
           { id: "g2", status: "completed", hook_line: "Second hook" },
           { id: "g3", status: "failed", hook_line: "Third hook" },
           { id: "g4", status: "completed", hook_line: "Fourth hook" },
+          { id: "g5", status: "completed", hook_line: "Fifth hook" },
+          { id: "g6", status: "completed", hook_line: "Sixth hook" },
         ],
       }),
     });
     expectHero(ctx, "Finish your latest video", "/demo-cta/g1");
     const tiles = [...ctx.container.querySelectorAll('[data-testid^="dashboard-recent-"]')];
-    if (tiles.length !== 3) {
-      throw new Error(`the recent strip shows ${tiles.length} tiles, expected the newest 3`);
+    if (tiles.length !== 5) {
+      throw new Error(`the recent strip shows ${tiles.length} tiles, expected the newest 5`);
+    }
+    if (!tiles[4].textContent.includes("Fifth hook")) {
+      throw new Error("the fifth tile is not the fifth newest render");
     }
     const poster = tiles[0].querySelector("img");
     if (!poster || !(poster.getAttribute("src") || "").includes("poster-g1.jpg")) {
