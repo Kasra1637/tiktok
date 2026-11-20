@@ -1712,6 +1712,15 @@ async function main() {
         if (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')) {
           throw new Error("the finishing step's bar still carries a hint line beside a finished render");
         }
+        // ADR 0217: the last step carries no Back arrow, and with no hint,
+        // no bar action and no forward arrow left to carry, the bar itself
+        // stands down instead of floating an empty pill.
+        if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
+          throw new Error("the finishing step still offers a Back arrow");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
+          throw new Error("the finishing step floats an empty action bar beside a finished render");
+        }
       }
     );
   });
@@ -1742,6 +1751,14 @@ async function main() {
         ).trim();
         if (hint !== "Render the piece first — the finished clip opens here.") {
           throw new Error(`the finishing step's no-render bar hint changed: ${JSON.stringify(hint)}`);
+        }
+        // ADR 0217: no Back arrow on the last step here either, but the bar
+        // itself stays — it still carries this hint and the render action.
+        if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
+          throw new Error("the finishing step still offers a Back arrow");
+        }
+        if (!ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
+          throw new Error("the finishing step lost its action bar before a render exists");
         }
       }
     );
@@ -4498,6 +4515,11 @@ async function main() {
     if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
       throw new Error("Continue is offered on the last step");
     }
+    // Kasra's rule (ADR 0217): the last step offers no way back either —
+    // the Back arrow is the earlier steps' control alone.
+    if (back()) {
+      throw new Error("Back is offered on the last step");
+    }
   });
 
   // The wizard reads as one canvas now: all four step sections stand on the
@@ -5098,9 +5120,10 @@ async function main() {
     }
   });
 
-  // The wizard keeps one way back on every step: the arrow in the action bar.
-  // The last-step "Back to your app" exit is gone, so leaving the studio is the
-  // sidebar's job and no second, worded back control can stack under the bar.
+  // The wizard keeps one way back on every step but the last (ADR 0217):
+  // the arrow in the action bar. The last-step "Back to your app" exit is
+  // gone, so leaving the studio is the sidebar's job and no second, worded
+  // back control can stack under the bar.
   await check("review's way back is the wizard arrow, never a separate exit", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {

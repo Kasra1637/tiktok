@@ -2035,6 +2035,18 @@ export default function CreateVideo() {
     step < STEPS.length - 1 &&
     (STEPS[step].key !== "review" ||
       (Boolean(finishedGeneration) && !renderBarAction?.flight));
+  // The finish step has no Back arrow (ADR 0217, reversing the every-step
+  // rule for the last step alone): Demo + CTA is the end of the flow, and
+  // Kasra's order takes the way back off it. Every earlier step keeps the
+  // arrow exactly as it stands, disabled on the first step.
+  const isLastStep = step === STEPS.length - 1;
+  // What the bar would carry once its Back arrow is gone from the last
+  // step. With a finished render that is nothing at all — no hint, no bar
+  // action, no forward arrow — so the bar itself stands down instead of
+  // floating an empty pill; every other state keeps the bar and whatever
+  // it still carries.
+  const barStandsDown =
+    isLastStep && !footerHint && !barAction && !showContinueArrow;
   // The rail score, derived per segment so the bar, the quarters and the
   // number can never disagree: a done step claims its full quarter, the step
   // in view claims half until it is done, the rest claim nothing.
@@ -3743,11 +3755,15 @@ export default function CreateVideo() {
           within reach however long the canvas runs. Arrow-only — the
           destination lives in the aria-label, never words on the button.
           Continue is locked until the step in view is done: a locked arrow
-          shows a padlock and cannot move. The Back arrow stays on every
-          step, the last one included — the wizard has no separate exit
-          control, so leaving the studio is the sidebar's job. */}
+          shows a padlock and cannot move. The Back arrow rides on every
+          step but the last (ADR 0217): Demo + CTA is the end of the flow
+          and carries no way back, and when that step has nothing else to
+          carry the bar itself stands down rather than floating empty.
+          Leaving the studio stays the sidebar's job. */}
+      {!barStandsDown && (
       <div className="sticky bottom-4 z-30 flex justify-center px-2" data-testid="wizard-arrows">
         <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
+          {!isLastStep && (
           <Button
             variant="ghost"
             size="icon"
@@ -3759,6 +3775,7 @@ export default function CreateVideo() {
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
+          )}
           {/* The one line the task line does not duplicate: what this step is
               waiting on right now, beside the controls that move. A step
               with nothing to name (the last step, render in hand) renders
@@ -3851,6 +3868,7 @@ export default function CreateVideo() {
           )}
         </div>
       </div>
+      )}
     </PageFrame>
   );
 }
