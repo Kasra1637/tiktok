@@ -254,7 +254,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
       const data = await api.generateContentAngles(profileId, { objective });
       const fresh = adoptAngles(data) || [];
       // Generated in-session at the founder's own click: there is nothing to
-      // gate, so the fresh six render immediately.
+      // gate, so the fresh four render immediately.
       revealAngles();
       setAnglesSessionFresh(true);
       // The fresh set has new row ids, so a previous pick would dangle and

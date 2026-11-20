@@ -2030,7 +2030,7 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     return cleaned
 
 
-async def generate_content_angles(profile: dict, max_angles: int = 6,
+async def generate_content_angles(profile: dict, max_angles: int = 4,
                                   angle_feedback: Optional[dict] = None,
                                   objective: str = "",
                                   prior_angles: Optional[list] = None) -> list:
@@ -2192,7 +2192,7 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
         "terms. A feature without its outcome is a demo, not a reason to care.\n"
         "- label: three to six words, no colon -- and never a bedroom-or-car staging "
         "(no 'in the car', 'bedroom reset', or indoor equivalents).\n\n"
-        "Vary the kinds, and make the six differ in ARGUMENT -- the specific reason "
+        "Vary the kinds, and make them differ in ARGUMENT -- the specific reason "
         "this viewer would care. If two angles could be swapped onto the same "
         "script, they are one angle: replace one of them.\n\n"
         "Never use these words in any field: seamless, effortless, game-changing, "
@@ -2202,17 +2202,17 @@ async def generate_content_angles(profile: dict, max_angles: int = 6,
     )
 
     # Objective-aware generation: the video these angles will be picked for is
-    # already built toward a chosen outcome. Without this, all six hedge across
-    # every possible outcome; with it, they argue six different cases FOR the
-    # chosen one. Empty when no objective is chosen yet (approval-time
-    # generation), so the default path reads exactly as before.
+    # already built toward a chosen outcome. Without this, the set hedges
+    # across every possible outcome; with it, the angles argue different
+    # cases FOR the chosen one. Empty when no objective is chosen yet
+    # (approval-time generation), so the default path reads exactly as before.
     if (objective or "").strip():
         prompt = (
             "OBJECTIVE TO ARGUE TOWARD (the video this angle will be picked for is "
             "built toward this outcome):\n"
             f"- Every angle's viewer_outcome must serve this objective: {(objective or '').strip()}.\n"
-            "- The six arguments are six different cases FOR that objective, not six "
-            "guesses about what the founder wants.\n\n"
+            "- The arguments are different cases FOR that objective, not guesses "
+            "about what the founder wants.\n\n"
         ) + prompt
 
     # Goal thumbs, when any exist. Counts and fixed kind/objective names

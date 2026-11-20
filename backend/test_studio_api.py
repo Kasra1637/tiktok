@@ -2438,3 +2438,72 @@ class TestStrategyRefusesBannedClaims:
     def test_banned_claim_in_strategy_fails_loudly(self, monkeypatch):
         result = self._strategy(monkeypatch, "h", "This app cures anxiety for good.")
         assert result["segments"][1]["script"] == "This app cures anxiety for good."
+
+
+class TestProjectKind:
+    """The kind marker (ADR 0227): a project is a hook video ('video')
+    unless it is a story ('story'). The marker is the row's identity —
+    set at creation, carried by the serializer, and never editable, so a
+    video can never quietly become a story through a draft edit."""
+
+    def test_create_defaults_to_video(self, api):
+        from models import CreateStudioProjectRequest
+
+        profile = _approved_profile(api, "Kind Default")
+        project = _run(api.create_studio_project(CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), ANON))
+        assert project["kind"] == "video"
+        assert _run(api.get_studio_project(project["id"], ANON))["kind"] == "video"
+        row = _run(api._fetch_one(
+            "SELECT kind FROM studio_projects WHERE id = ?", (project["id"],)))
+        assert row["kind"] == "video"
+
+    def test_a_story_row_is_created_and_read_back_distinctly(self, api):
+        from models import CreateStudioProjectRequest
+
+        profile = _approved_profile(api, "Kind Story")
+        project = _run(api.create_studio_project(CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], kind="story"), ANON))
+        assert project["kind"] == "story"
+        assert _run(api.get_studio_project(project["id"], ANON))["kind"] == "story"
+        row = _run(api._fetch_one(
+            "SELECT kind FROM studio_projects WHERE id = ?", (project["id"],)))
+        assert row["kind"] == "story"
+
+    def test_an_unknown_kind_is_refused_at_the_model(self, api):
+        from models import CreateStudioProjectRequest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CreateStudioProjectRequest(brand_profile_id="p", kind="reel")
+
+    def test_kind_is_not_an_editable_field(self, api):
+        from models import (
+            STUDIO_EDITABLE_FIELDS,
+            CreateStudioProjectRequest,
+            UpdateStudioProjectRequest,
+        )
+
+        assert "kind" not in STUDIO_EDITABLE_FIELDS
+        assert "kind" not in UpdateStudioProjectRequest.model_fields
+
+        profile = _approved_profile(api, "Kind Locked")
+        project = _run(api.create_studio_project(CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), ANON))
+        edited = _run(api.update_studio_project(
+            project["id"],
+            UpdateStudioProjectRequest(**{"tone": "Casual", "kind": "story"}),
+            ANON,
+        ))
+        assert edited["kind"] == "video"
+        assert edited["tone"] == "Casual"
+
+    def test_serializer_defaults_a_row_without_the_marker_to_video(self, api):
+        # A row dict from before migration step 7 has no kind key at all;
+        # it is a hook video, and the serializer must say so rather than
+        # pass a missing marker through.
+        payload = api._public_project({"id": "pre-marker", "brand_profile_id": "p"})
+        assert payload["kind"] == "video"
+        payload = api._public_project(
+            {"id": "a-story", "brand_profile_id": "p", "kind": "story"})
+        assert payload["kind"] == "story"

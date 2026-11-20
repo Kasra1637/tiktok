@@ -257,6 +257,10 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     out["assets"] = out.get("assets") or []
     out["duration_seconds"] = out.get("duration_seconds") or 0
     out["script_version"] = out.get("script_version") or 0
+    # The kind marker (ADR 0227): a row from before migration step 7 has
+    # no marker at all, and it is a hook video — say so rather than pass
+    # a missing kind through to a reader that branches on it.
+    out["kind"] = out.get("kind") or "video"
     out["camera_setup"] = out.get("camera_setup") or "handheld"
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
@@ -1011,14 +1015,15 @@ async def create_studio_project(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
              objective, audience, duration_seconds, hook_seconds, extend_intent, tone, assets,
-             script_version, status, created_at, updated_at, user_id, camera_setup)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             script_version, status, created_at, updated_at, user_id, camera_setup, kind)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
          duration, hook_seconds, 1, (payload.tone or "").strip() or None,
-         json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup),
+         json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup,
+         payload.kind),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
     return _public_project(

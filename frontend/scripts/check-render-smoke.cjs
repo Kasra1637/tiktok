@@ -6694,7 +6694,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       });
       await act(async () => {});
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (!step?.textContent.includes("Get your six audience angles, then pick one to move forward.")) {
+      if (!step?.textContent.includes("Get four audience angles, then pick one to move forward.")) {
         throw new Error("the empty angle state does not carry the single CTA copy");
       }
       const button = step.querySelector('[data-testid="generate-angles-button"]');
@@ -8998,12 +8998,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
   });
 
-  // Regenerate angles replaces the list with six fresh serialized rows and
+  // Regenerate angles replaces the list with four fresh serialized rows and
   // keeps the goal step populated: the old pick's id is gone, so the wizard
   // parks on the strongest new angle instead of collapsing to the wait
   // state, and every fresh row still opens with its kind's glyph.
-  await check("regenerate angles shows six fresh options and keeps goals", async (ctx) => {
-    const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
+  await check("regenerate angles shows four fresh options and keeps goals", async (ctx) => {
+    const FRESH = [0, 1, 2, 3].map((i) => ({
       id: `n${i}`,
       kind: "problem_solution",
       label: `Fresh angle ${i}`,
@@ -9030,7 +9030,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await new Promise((r) => setTimeout(r, 150));
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
           const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
-          if (rows.length !== 6) throw new Error(`expected six fresh angles, saw ${rows.length}`);
+          if (rows.length !== 4) throw new Error(`expected four fresh angles, saw ${rows.length}`);
           if (ctx.container.querySelector('[data-testid="angle-option-a1"]')) {
             throw new Error("the replaced angle row is still rendered");
           }
@@ -9040,8 +9040,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
           if (goals.length !== 3) throw new Error(`expected three goal cards after regen, saw ${goals.length}`);
           const glyphs = [...ctx.container.querySelectorAll('[data-testid="angle-row-check"]')];
-          if (glyphs.length !== 6) {
-            throw new Error(`the six fresh rows lost their check marks: saw ${glyphs.length}`);
+          if (glyphs.length !== 4) {
+            throw new Error(`the four fresh rows lost their check marks: saw ${glyphs.length}`);
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -22343,7 +22343,7 @@ async function passGoalGate(ctx) {
  */
 async function openTemplateStep(ctx) {
   await openStep(ctx, "Audience & template");
-  // The six render on open; passAngleGate only still acts over an empty
+  // The angles render on open; passAngleGate only still acts over an empty
   // set, where its click is the generation itself.
   await passAngleGate(ctx);
   const angleButton = [...ctx.container.querySelectorAll('[data-testid="audience-goal-step"] button')]

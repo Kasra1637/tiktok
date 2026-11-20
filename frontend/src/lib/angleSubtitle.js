@@ -222,7 +222,7 @@ export function goalFitScore({ index = 0, total = 6, evidence = null, hasFitReas
 // before any result exists; evidence can still pull a tested angle lower.
 const UNTESTED_ANGLE_FLOOR = 3;
 
-export function angleFitScore({ index = 0, total = 6, evidence = null, contentFit = null } = {}) {
+export function angleFitScore({ index = 0, total = 4, evidence = null, contentFit = null } = {}) {
   const tested =
     (Number(evidence?.wins) || 0) + (Number(evidence?.flops) || 0) + (Number(evidence?.posted) || 0) > 0;
   if (tested) return goalFitScore({ index, total, evidence, hasFitReason: false });

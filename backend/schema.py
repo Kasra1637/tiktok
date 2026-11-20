@@ -1113,12 +1113,30 @@ async def _migration_0006_project_cover_text(conn):
     await conn.commit()
 
 
+async def _migration_0007_project_kind(conn):
+    """Project kind marker (ADR 0227): a studio project is a hook video
+    unless it is a story. Stories are project rows, not a second table —
+    their renders are ordinary generations — so the row itself carries
+    the marker that tells the two apart. Every existing row becomes
+    'video' by the column default; story rows are created with 'story'
+    from the Stories build onward. Added only when missing, so a
+    database that already has it passes through untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "kind" not in cols:
+        await conn.execute(
+            "ALTER TABLE studio_projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
     (4, "per-profile offered angle history", _migration_0004_offered_angle_history),
     (5, "hashtag volume research cache", _migration_0005_hashtag_volume_cache),
     (6, "project cover text", _migration_0006_project_cover_text),
+    (7, "project kind marker", _migration_0007_project_kind),
 )
 
 

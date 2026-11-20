@@ -1892,7 +1892,7 @@ class TestRegenerateContentAngles:
         _run(api.approve_app_profile(profile_id=profile["id"], payload={}, user_id=ANON))
         seen = {}
 
-        async def fake_generate(profile_arg, max_angles=6, angle_feedback=None, objective="", prior_angles=None):
+        async def fake_generate(profile_arg, max_angles=4, angle_feedback=None, objective="", prior_angles=None):
             seen["objective"] = objective
             return [dict(a) for a in CANNED_ANGLES]
 

@@ -122,6 +122,83 @@ class TestMigrationConvergence:
 
         asyncio.run(main())
 
+    def test_project_kind_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 7
+
+            db_path = tmp_path / "kind.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 7"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "kind" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                cols = {r[1]: r for r in await cur.fetchall()}
+                assert "kind" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["kind"]
+                assert col_type == "TEXT"
+                assert notnull == 1
+                assert dflt == "'video'"
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_existing_projects_become_video_and_story_rows_stay_story(
+        self, api, tmp_path
+    ):
+        async def main():
+            db_path = tmp_path / "kind-rows.db"
+
+            # A database from before the step: baseline only, carrying a
+            # project row written when no kind marker existed.
+            await _apply(api, db_path, baseline_only=True)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                await conn.execute(
+                    "INSERT INTO studio_projects (id) VALUES ('legacy-project')"
+                )
+                await conn.commit()
+            finally:
+                await conn.close()
+
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT kind FROM studio_projects WHERE id = 'legacy-project'"
+                )
+                (kind,) = await cur.fetchone()
+                assert kind == "video"
+
+                await conn.execute(
+                    "INSERT INTO studio_projects (id, kind) "
+                    "VALUES ('story-project', 'story')"
+                )
+                await conn.execute(
+                    "INSERT INTO studio_projects (id) VALUES ('plain-project')"
+                )
+                await conn.commit()
+                cur = await conn.execute(
+                    "SELECT id, kind FROM studio_projects ORDER BY id"
+                )
+                rows = {r[0]: r[1] for r in await cur.fetchall()}
+                assert rows == {
+                    "legacy-project": "video",
+                    "plain-project": "video",
+                    "story-project": "story",
+                }
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
     def test_rerun_is_a_noop_for_the_record(self, api, tmp_path):
         async def main():
             db_path = tmp_path / "twice.db"

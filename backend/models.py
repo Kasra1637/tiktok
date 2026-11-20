@@ -322,6 +322,13 @@ class CreateStudioProjectRequest(BaseModel):
     that is duration_seconds. 0 means "decide from the template".
     """
     brand_profile_id: str
+    # The row's kind (ADR 0227): a hook video unless it is a story. It is
+    # the project's identity, set here at creation and carried by the
+    # serializer — deliberately not an editable field, so a draft edit
+    # can never turn a video into a story. The Stories endpoints that
+    # create with kind="story" arrive with the Stories router; the data
+    # layer holds and exposes the marker from this phase on.
+    kind: Literal["video", "story"] = "video"
     camera_setup: Literal["handheld", "fixed"] = "handheld"
     content_angle_id: Optional[str] = ""
     template_id: Optional[str] = ""

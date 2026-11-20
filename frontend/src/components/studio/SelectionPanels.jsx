@@ -22,12 +22,12 @@ import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, Che
 import AssetLibrary from "../../pages/AssetLibrary";
 
 /* The single instruction for the angle picker, shared by the empty state
-   (click generates the six) and the reveal state (click shows the six).
+   (click generates the four) and the reveal state (click shows the four).
    One line on purpose: three stacked explanations said the same thing in
    different words, and the step stalled on reading instead of moving. The
    verb is deliberately neutral — "get" covers generating fresh angles and
    revealing pre-generated ones, so the line never disagrees with its button. */
-const ANGLES_CTA_COPY = "Get your six audience angles, then pick one to move forward.";
+const ANGLES_CTA_COPY = "Get four audience angles, then pick one to move forward.";
 
 /* The single instruction for the goal picker, shared by the empty state
    (click generates the six) and the reveal state (click shows the six).
@@ -332,7 +332,7 @@ export function TemplateShape({ template, middle: actualMiddle = "" }) {
  * never a second copy of this list: the goal picker there waits silently.
  *
  * On Audience & template the list renders on open: a founder whose app
- * already has angles lands on the six themselves, not on a click-to-reveal
+ * already has angles lands on the four themselves, not on a click-to-reveal
  * gate (Part 3 removed that click — it cost a press on every fresh project
  * and bought nothing the list does not say itself). The set's age still
  * rides beside Regenerate, so a stale set reads as stale in plain view

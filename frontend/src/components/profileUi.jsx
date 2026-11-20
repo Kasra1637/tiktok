@@ -26,7 +26,7 @@ import { ListenButton } from "./ListenButton";
  *   row's rhythm, not a roomier one of our own
  * - cards are the angle row's own frame — rounded-xl, hairline border,
  *   bg-card/70 — and sit inside one `.inset-panel` well per group, the way
- *   the six angle rows sit inside the age picker well on Create Video.
+ *   the angle rows sit inside the age picker well on Create Video.
  *   Group edge to card text therefore stacks 16/24 + 16 + 16, exactly where
  *   a step card's row text sits. Nested sub-cards stay the shared
  *   `.inset-panel` (12px radius, 16px gutter) rather than a local copy of it
@@ -154,7 +154,7 @@ export function InfoChipList({ label, items, tone = "default", labelClassName })
  * with the count summary beneath it in the row's 12/18 meta token, chevron
  * right, indigo hover. Opening reveals the angle picker's layering, not just
  * its chrome: a hairline under the bar, then the cards grouped inside one
- * `.inset-panel` well with 16px between them — the same well the six angle
+ * `.inset-panel` well with 16px between them — the same well the angle
  * rows sit in. The summary indents to the title, so the bar reads as one
  * column of text with its glyph in the margin rather than two left edges.
  *

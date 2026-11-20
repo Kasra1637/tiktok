@@ -794,13 +794,13 @@ class TestAngleFeedbackPromptWiring:
         _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
         assert "PAST VERDICTS" not in captured["prompt"]
 
-    def test_generation_caps_at_six_angles(self, monkeypatch):
-        """The audience step shows exactly six suggestions: the prompt asks
-        for exactly six and the cap holds even when the model overshoots."""
+    def test_generation_caps_at_four_angles(self, monkeypatch):
+        """The audience step shows exactly four suggestions: the prompt asks
+        for exactly four and the cap holds even when the model overshoots."""
         import ai_service
 
         async def fake_chat_json(system_message, prompt, context, **kwargs):
-            assert "exactly 6" in prompt
+            assert "exactly 4" in prompt
             return [{**self.ANGLE, "user_problem": problem, "hook_promise": hook} for problem, hook in [
                 ("Paper rota disappears", "Where is the rota?"),
                 ("Timer setup takes too long", "Start before tea cools"),
@@ -815,7 +815,7 @@ class TestAngleFeedbackPromptWiring:
 
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         out = _run(ai_service.generate_content_angles({"brand_name": "Taskly"}))
-        assert len(out) == 6
+        assert len(out) == 4
 
 
 class TestAngleDiversity:
