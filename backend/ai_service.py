@@ -3574,25 +3574,37 @@ def _behavior_direction_rules_block() -> str:
     mouth, hand, camera or something", unique to the video, and the
     mural's finger-count corrected as "not every time". The requirement
     is consistent across all videos; the movement itself never is.
+
+    ADR 0223 (Nov 19 2026) tightened the snap: renders kept landing the
+    opening's energy near a full second in, so the wording now states
+    the founder's settled doctrine — the snap completes inside the
+    first half second, the action is caught at its sharpest instant
+    (not a lead-in to it, not a settle into it), and the voice starts
+    with the first frame: she is already speaking when the video opens,
+    no lead-in pause, breath or silent beat before the hook's first
+    sound. No new element was added — movement and voice only.
     """
     return (
         "BEHAVIOR DIRECTION — how the presenter moves (every action line: the plan's "
         "hook beat, hook_action, both section actions, performance.movement):\n"
         "- OPEN MID-MOTION, RAPID: the first frame catches a movement already underway "
-        "and its snap completes inside roughly the first second — the body arrives "
-        "before the words settle. Never open on a resting pose or a slow settle: no "
+        "and its snap completes inside the first half second — the body arrives "
+        "before the words settle, and she is already speaking from that first frame: "
+        "the hook's first sound lands with the first frame, no lead-in pause, breath "
+        "or silent beat before it. Never open on a resting pose or a slow settle: no "
         "hand sitting on the chest, no hands resting at the sides, no standing still "
         "waiting to speak.\n"
         "- THE MOVEMENT ENACTS THE STORY: the opening movement physically performs the "
-        "central action of THIS video's script — the thing the person is doing in the "
-        "story's own moment (counting the days is counted out where the camera can "
+        "central action of THIS video's script, caught at its sharpest instant — not "
+        "a lead-in to the action and not a settle into it — the thing the person is "
+        "doing in the story's own moment (counting the days is counted out where the camera can "
         "see it). Name that concrete movement in the action lines, derived from the "
         "script's moment. A movement that could sit unchanged on any other video is "
         "a failed opening — rewrite it until only this story could have produced it.\n"
         "- THE CHANNEL IS THIS VIDEO'S ALONE: the rapid movement may ride on a hand or "
         "the fingers, the face or an expression shift, the mouth, the whole body, or "
         "a camera move toward the presenter — whichever this story's action calls "
-        "for. The requirement (rapid, story-enacting, inside the first second) is "
+        "for. The requirement (rapid, story-enacting, inside the first half second) is "
         "the same in every video; the movement itself never is. Never a fixed "
         "gesture, never a gesture library, never the same device by default.\n"
         "- CLOSE WITH ENERGY: the last second or two carries a sharp closing beat "
@@ -4801,7 +4813,7 @@ async def generate_creative_plan(
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: open with what she is trying to do — the goal for this video as a plain first-person trying-line, never naming or announcing the place (the viewer can already see it) — and name ONE specific, recognizable feeling from this video\'s own story (physical where possible), with one lived detail, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
         '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: 3 to 5 words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
-        f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said — the movement first: a rapid movement already underway in the first frame that physically performs the story\'s central action, through the channel this story calls for, never a resting pose or a slow settle"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said — ending on a sharp closing beat with the opening\'s energy, the story\'s action left visibly unfinished, never a soft fade or a passive smile hold"}}],\n'
+        f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said — the movement first: a rapid movement already underway in the first frame, its snap complete inside the first half second, that physically performs the story\'s central action at its sharpest instant, through the channel this story calls for, never a resting pose or a slow settle"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said — ending on a sharp closing beat with the opening\'s energy, the story\'s action left visibly unfinished, never a soft fade or a passive smile hold"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
         '  "visual_direction": "lighting, wardrobe and visual treatment across both sections, without repeating Location",\n'
         '  "demo_brief": "ONE sentence trading in PLAIN PERSONAL-CONTENT language, written in third person about the footage itself — the thing to record on the phone, not what you ask the founder to do. Name the specific angle-relevant state or action the phone should capture (phone already in use, specific screen or feature shown, the moment captured). This never reaches the generated video.",\n'
@@ -5718,8 +5730,8 @@ async def generate_video_strategy(
         '  "hook_concept": "what the first seconds DO, visually and dramatically — not a slogan",\n'
         f'  "hook_line": "the single spoken hook line, said to this viewer about this problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation), in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration, {_strategy_hook_min_words}-12 words (about {hook_seconds}s of speech — long enough to fill the hook beat, never a short fragment)",\n'
         '  "hook_promise": "what the hook promises the viewer in the next few seconds",\n'
-        '  "hook_action": "the opening physical performance: a rapid movement ALREADY UNDERWAY in the first frame — its snap complete inside roughly the first second — that physically performs the central action of this video\'s script, through the channel this story calls for (a hand or the fingers, the face or an expression shift, the mouth, the whole body, or a camera move toward the presenter); never a resting pose, a hand sitting on the chest, or a slow settle — then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
-        '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none",\n'
+        '  "hook_action": "the opening physical performance: a rapid movement ALREADY UNDERWAY in the first frame — its snap complete inside the first half second — that physically performs the central action of this video\'s script at its sharpest instant, not a lead-in to it and not a settle into it, through the channel this story calls for (a hand or the fingers, the face or an expression shift, the mouth, the whole body, or a camera move toward the presenter); never a resting pose, a hand sitting on the chest, or a slow settle — then ordered, timed beats across face, gaze, head, shoulders, hands and props",\n'
+        '  "hook_dialogue": "the exact words spoken in the hook, or the delivery direction if none — the voice starts with the first frame: she is already speaking as the video opens, no lead-in pause, breath or silent beat before the first word",\n'
         '  "messaging_pillars": ["2-4 viewer outcomes/benefits the video must land, each translated from a real feature -- what changes in the viewer\'s life or how they feel after using it, never the feature spec itself"],\n'
         f'  "primary_feature": "the ONE feature this video shows, from the facts above",\n'
         '  "desired_outcome": "what the viewer ends up with, written from the viewer\'s point of view, described as a change the app supports, never a guarantee",\n'
@@ -5744,7 +5756,7 @@ async def generate_video_strategy(
         '  },\n'
         '  "segments": [\n'
         f'    {{"index": 0, "role": "hook", "seconds": {hook_seconds}, "goal": "what these seconds must achieve",'
-        ' "script": "words spoken in this segment", "action": "what they do in this segment; segment 0 opens with the same rapid, story-enacting movement as hook_action — already underway in the first frame, its snap complete inside roughly the first second"}'
+        ' "script": "words spoken in this segment", "action": "what they do in this segment; segment 0 opens with the same rapid, story-enacting movement as hook_action — already underway in the first frame, its snap complete inside the first half second"}'
         + _two_section_schema(plan_seconds, camera_setup)
         + '\n  ],\n'
         + '  "camera_beat": {"direction": "left or right", '

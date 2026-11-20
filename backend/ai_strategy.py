@@ -95,7 +95,7 @@ def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> 
         ',\n    {"index": 0, "role": "hook", "seconds": 3, '
         '"goal": "what the opening beat must achieve to stop the scroll", '
         '"script": "the exact words spoken in the opening - the plan\'s hook line", '
-        '"action": "the opening physical performance: a rapid movement already underway in the first frame, its snap complete inside roughly the first second, that physically performs the central action of this video\'s script through the channel this story calls for (a hand or the fingers, the face, the mouth, the whole body, or a camera move toward the presenter) — never a resting pose or a slow settle — then ordered, timed beats across face, hands, posture and props"}'
+        '"action": "the opening physical performance: a rapid movement already underway in the first frame, its snap complete inside the first half second, that physically performs the central action of this video\'s script at its sharpest instant through the channel this story calls for (a hand or the fingers, the face, the mouth, the whole body, or a camera move toward the presenter) — never a resting pose or a slow settle — then ordered, timed beats across face, hands, posture and props"}'
         f',\n    {{"index": 1, "role": "middle", "seconds": {middle_seconds}, '
         f'"goal": "{middle_goal}", '
         '"script": "the words spoken in the middle - different from the hook", '

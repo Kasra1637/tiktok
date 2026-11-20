@@ -231,8 +231,27 @@ CONDENSE_BELOW = 5000
 # full floor rose 1 (4013 -> 4014), condensed fell 12 (2476 -> 2464).
 # The single-pass floor did not move: that builder's fixed text carries
 # no starting shot.
-FULL_PROMPT_FLOOR = 4014
-CONDENSED_PROMPT_FLOOR = 2464
+#
+# ADR 0223 tightens the opening snap to the founder's settled doctrine
+# (renders kept landing the energy near a full second in): the snap
+# completes inside the first half second, the central action is caught
+# at its sharpest instant, and the voice starts with the first frame —
+# no silent beat before the hook's first sound — replacing the old
+# "words come second". The growth is paid almost entirely out of the
+# same paragraph in both twins: the full text drops "frame by frame",
+# the push-in's "as action", "scrolling", the score's "in order" and
+# a doubled possessive, because a first pass that let the full floor
+# rise ~70 silently squeezed the payoff out of a realistic prompt
+# (the prompt_dedup regression) — the scale divides by the space the
+# floor implies, so fixed growth is taken out of the founder's
+# fields. The condensed twin merges its beat and snap sentences and
+# carries the voice rule as "voice already speaking" alone, because
+# at HeyGen's ceiling with the script held sacred the uncompressed
+# sentence landed the saturated prompt over 4,090, and fixed text is
+# the only text the squeeze cannot take back. Measured: full floor
+# rose 3 (4014 -> 4017), condensed rose 11 (2464 -> 2475).
+FULL_PROMPT_FLOOR = 4017
+CONDENSED_PROMPT_FLOOR = 2475
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -249,7 +268,12 @@ CONDENSED_PROMPT_FLOOR = 2464
 # The single-pass floor rose by 533 for the same ADR 0187 rule stated
 # once in that builder: open mid-motion on the story's own channel, close
 # with the opening's energy.
-SINGLE_PASS_PROMPT_FLOOR = 2835
+#
+# ADR 0223 lands here too: the hook sentence puts the voice on the first
+# frame (no lead-in pause or silent beat before the first word) and the
+# opening sentence states the half-second snap and the sharpest instant.
+# Measured: this floor rose 123 (2835 -> 2958).
+SINGLE_PASS_PROMPT_FLOOR = 2958
 
 # The app's own name, in the prompt, clipped.
 #
@@ -658,33 +682,40 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
 # move in the first 1-2 seconds is the same rule stated as what MUST be on
 # screen, not only what must not: the opening's first beat is something the
 # viewer watches happen.
+#
+# ADR 0223 tightens the snap inside that window: the beat lands in the
+# first half-second (the founder's settled doctrine — renders kept
+# landing the energy near a full second in), the action is caught at
+# its sharpest instant rather than led into or settled into, and the
+# voice starts with the first frame instead of after the move — no
+# silent beat before the hook's first sound. The growth is paid out of
+# this same paragraph and the floor ledger below.
 _OPENING_INTERRUPT = (
-    "HOW THE OPENING MUST PLAY, frame by frame: the first frame is already in motion, "
+    "HOW THE OPENING MUST PLAY: the first frame is already in motion, "
     "and the first 1-2 seconds show a clearly visible movement, gesture or position "
     "change \u2014"
-    " no neutral pose, no fade, drift or slow push-in as action, no "
+    " no neutral pose, no fade, drift or slow push-in, no "
     "greeting to camera. Inside the first half-second, ONE thing a "
-    "scrolling thumb must pause for: the beat that physically performs this "
-    "story's central action, through this video's channel (hand or "
+    "thumb must pause for: the beat that physically performs this "
+    "story's central action at its sharpest instant, through this video's channel (hand or "
     "fingers, a face, the mouth, the body, or a camera move "
-    "toward the presenter) — snap done in the first second, no resting "
-    "pose, no hand sitting on the chest, no slow settle. Two or three beats, "
-    "each bigger than the last, so the "
-    "opening escalates, never settles. The face, gaze, hands and posture carry it; "
-    "words come second. Read the beats below as the physical score, in "
-    "order.\n"
-    "Every beat comes out of THIS video\u2019s own situation \u2014 its props, its place, its "
-    "problem \u2014 and leaves a question the rest of the "
-    "video answers."
+    "toward the presenter) — snap done inside that half-second, no resting "
+    "pose, no hand sitting on the chest, no slow settle. Beats escalate: two or three, "
+    "each bigger than the last, never settling. The face, gaze, hands and posture carry it, "
+    "and she is already speaking from the first frame — no silent beat first. "
+    "Read the beats below as the physical score.\n"
+    "Every beat comes out of THIS video\u2019s own situation \u2014 its props, place and "
+    "problem \u2014 and leaves a question the rest answers."
 )
 
 # The same rule for a provider whose ceiling is too low for the full set. Every
 # constraint above survives; only the examples of how to satisfy them go.
 _CONDENSED_OPENING = (
-    "Pattern interrupt: first frame is already moving; 1-2s: clearly visible "
-    "movement, gesture or position change \u2014 no neutral pose, fade, greeting. "
-    "One clear beat in the first half-second, then escalate via face, gaze, hands, "
-    "posture, not words. It enacts this story's central action via this video's channel (hand, face, mouth, body, camera) — snap in the first second; no resting pose, hand on the chest, or slow settle. Follow the score. Ground beats in this video\u2019s own "
+    "Pattern interrupt: first frame is already moving, voice already speaking; "
+    "1-2s: clearly visible movement, gesture or position change \u2014 "
+    "no neutral pose, fade, greeting. "
+    "One beat enacts this story's central action at its sharpest instant via this video's channel (hand, face, mouth, body, camera) — snap inside the first half-second; then escalate via face, gaze, hands, "
+    "posture; no resting pose, hand on the chest, or slow settle. Follow the score. Ground beats in this video's own "
     "situation; leave a question the rest answers."
 )
 
@@ -904,15 +935,17 @@ def _assemble_single_pass_prompt(
         # constant, so this line agrees with the beat layout below and with the
         # mechanism the founder selected.
         sections.append(
-            f"The first {hook_seconds} seconds are the hook and must land immediately: "
+            f"The first {hook_seconds} seconds are the hook and must land immediately \u2014 "
+            f"she is already speaking from the first frame, no lead-in pause or silent "
+            f"beat before the first word: "
             f"{hook or 'open on the strongest visual beat'}."
         )
         sections.append(
             "Open mid-motion: the first frame catches a rapid movement already underway "
-            "that physically performs the story's central action, through this video's "
+            "that physically performs the story's central action at its sharpest instant, through this video's "
             "own channel — a hand or fingers, a face or expression shift, the mouth, "
             "the body, or a camera move toward the presenter — its snap complete inside "
-            "roughly the first second. Never a resting pose, a hand sitting on the "
+            "the first half second. Never a resting pose, a hand sitting on the "
             "chest, or a slow settle. Close with energy: the last second or two "
             "carries a sharp closing beat with the opening's energy, never a soft "
             "fade or a passive smile hold."

@@ -228,6 +228,128 @@ class TestRenderPrompt:
         assert "passive smile hold" in prompt
 
 
+class TestHalfSecondSnap:
+    """ADR 0223: the snap completes inside the first HALF second, the
+    action is caught at its sharpest instant, and the voice starts with
+    the first frame.
+
+    ADR 0187's wording let the snap complete inside "roughly the first
+    second", and renders kept landing the opening's energy near a full
+    second in — the retention cliff is at seconds 1-2, so a late snap
+    spends the hook's best moment arriving. The founder's settled
+    doctrine was always stricter (the snap inside the first half
+    second); this tightens every surface that states the timing to say
+    it, adds the sharpest-instant tie (the central action caught at its
+    peak — not a lead-in to it, not a settle into it), and puts the
+    voice on the first frame: she is already speaking when the video
+    opens, no lead-in pause, breath or silent beat before the hook's
+    first sound. No new element and no on-screen text: movement and
+    voice only. Generator-side, like 0187 — the scorer stays untouched.
+    """
+
+    def test_the_block_states_the_half_second_snap(self):
+        import ai_service
+
+        block = ai_service._behavior_direction_rules_block()
+        assert "its snap completes inside the first half second" in block
+        assert "(rapid, story-enacting, inside the first half second)" in block
+        assert "roughly the first second" not in block
+
+    def test_the_block_catches_the_action_at_its_sharpest_instant(self):
+        import ai_service
+
+        block = ai_service._behavior_direction_rules_block()
+        assert "at its sharpest instant" in block
+        assert "not a lead-in to the action" in block
+
+    def test_the_block_puts_the_voice_on_the_first_frame(self):
+        import ai_service
+
+        block = ai_service._behavior_direction_rules_block()
+        assert "already speaking from that first frame" in block
+        assert "no lead-in pause, breath or silent beat before it" in block
+
+    def test_the_plan_prompt_states_the_half_second_snap(self, monkeypatch):
+        prompt = _capture_prompt(monkeypatch, "plan")
+        assert "its snap complete inside the first half second" in prompt
+        assert "roughly the first second" not in prompt
+
+    def test_the_strategy_prompt_states_the_half_second_snap(self, monkeypatch):
+        prompt = _capture_prompt(monkeypatch, "strategy")
+        assert "its snap complete inside the first half second" in prompt
+        assert "at its sharpest instant" in prompt
+        assert "roughly the first second" not in prompt
+
+    def test_the_strategy_prompt_puts_the_voice_on_the_first_frame(self, monkeypatch):
+        prompt = _capture_prompt(monkeypatch, "strategy")
+        assert "the voice starts with the first frame" in prompt
+
+    def test_the_two_section_schema_states_the_half_second_snap(self):
+        import ai_strategy
+
+        schema = ai_strategy._two_section_schema(12)
+        assert "its snap complete inside the first half second" in schema
+        assert "at its sharpest instant" in schema
+        assert "roughly the first second" not in schema
+
+    def _render_prompt(self, budget=None):
+        import generation_planning as gp
+
+        strategy = {
+            "camera_setup": "handheld",
+            "hook_line": "I keep losing count by Thursday.",
+            "hook_concept": "She counts the days and loses her place.",
+            "hook_action": "She counts on her fingers in front of the camera, pausing mid-count.",
+            "segments": [
+                {"role": "hook", "goal": "stop the scroll",
+                 "script": "I keep losing count by Thursday.",
+                 "action": "She counts on her fingers in front of the camera, pausing mid-count."},
+                {"role": "middle", "goal": "develop the hook",
+                 "script": "One list on the fridge ended the recounting.",
+                 "action": "She taps the list once and looks back at the lens."},
+            ],
+        }
+        kwargs = dict(
+            strategy=strategy, profile={"brand_name": "ShiftLog"},
+            template={}, duration=12, assets={}, plan={"hook_seconds": 3},
+        )
+        if budget is None:
+            return gp.build_segment_prompt(**kwargs)
+        return gp.build_segment_prompt(**kwargs, prompt_budget=budget)
+
+    def test_the_full_render_prompt_states_the_half_second_snap(self):
+        prompt = self._render_prompt()
+        assert "snap done inside that half-second" in prompt
+        assert "at its sharpest instant" in prompt
+        assert "snap done in the first second" not in prompt
+        assert "roughly the first second" not in prompt
+
+    def test_the_full_render_prompt_puts_the_voice_on_the_first_frame(self):
+        prompt = self._render_prompt()
+        assert "already speaking from the first frame" in prompt
+        assert "words come second" not in prompt
+
+    def test_the_condensed_render_prompt_keeps_the_tightened_rule(self):
+        prompt = self._render_prompt(budget=4096)
+        assert "snap inside the first half-second" in prompt
+        assert "at its sharpest instant" in prompt
+        assert "voice already speaking" in prompt
+        assert "snap in the first second" not in prompt
+
+    def test_the_single_pass_prompt_states_the_tightened_rule(self):
+        import generation_planning as gp
+
+        plan = {
+            "hook_line": "I keep losing count by Thursday.",
+            "script": "One list on the fridge ended the recounting.",
+        }
+        prompt = gp._assemble_single_pass_prompt(plan, {}, {}, 10, "full", False)
+        assert "its snap complete inside the first half second" in prompt
+        assert "at its sharpest instant" in prompt
+        assert "already speaking from the first frame" in prompt
+        assert "roughly the first second" not in prompt
+
+
 class TestScorerUntouched:
     def test_the_rule_never_enters_the_craft_scorer(self):
         """Generator-side only (the founder's standing rule): the Craft
