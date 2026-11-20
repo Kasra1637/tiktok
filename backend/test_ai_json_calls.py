@@ -1858,11 +1858,20 @@ class TestStrategyBudget:
         if camera_setup == "fixed":
             assert FIXED_STARTING_SHOT in prompt
             assert "Camera stays locked" in prompt
+            # ADR 0216: a fixed strategy opens on the set-down, and its
+            # scene must be somewhere a phone can be set down and stay —
+            # or shift to the nearest sensible spot, words untouched.
+            assert "SET-DOWN OPENING" in prompt
+            assert "sets the phone" in prompt
+            assert "nearest sensible spot" in prompt
             assert SELFIE_STARTING_SHOT not in prompt
             assert "same distance from the face" not in prompt
             assert "whole phone" in prompt
             return
         assert SELFIE_STARTING_SHOT in prompt
+        # ADR 0216 is fixed-only: no set-down direction reaches a
+        # handheld strategy prompt.
+        assert "SET-DOWN OPENING" not in prompt
         assert "1.1 metres" not in prompt
         assert '"direction": "left or right"' in prompt
         assert "when the story begins" not in prompt.lower()

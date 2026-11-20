@@ -5932,6 +5932,30 @@ async def generate_video_strategy(
             "In the same moment the actor makes one small story-specific action; "
             "no timestamp or word sync.\n"
         )
+        + (
+            # ADR 0216: the fixed opening is the set-down, and the scene
+            # is chosen so the set-down is physically sensible. Stated
+            # here, where hook_action and the scene are written, so the
+            # strategy's own opening action opens on the placement
+            # instead of competing with it at render time.
+            "- THE SET-DOWN OPENING (fixed camera only): a fixed video opens with the "
+            "phone being set down. The recording is already running as the presenter "
+            "sets the phone on a surface this scene itself offers — the soft thump of "
+            "the landing in the phone's own microphone, the frame settling with a "
+            "natural shake — then steps in front of it and begins. hook_action and the "
+            "hook section's action open on that set-down: it is this setup's opening "
+            "movement, taking roughly the first second, flowing into the story's own "
+            "action as the presenter settles into frame and the hook lands. Choose "
+            "the scene so the phone can plausibly be set down and stay — mostly "
+            "indoors (a table, a counter, a shelf); outdoors only where the scene "
+            "itself offers a resting surface (a bench, the steps, a low wall, a café "
+            "table, a fence rail) — and the surface always comes from the scene, never "
+            "invented. If the moment sits somewhere with no resting surface at all, "
+            "shift the setting to the nearest sensible spot that keeps the moment and "
+            "every spoken word intact — the café table at the street's edge instead of "
+            "mid-road. Only the staging adapts; the words never change.\n"
+            if camera_setup == "fixed" else ""
+        )
         + f"{final_beat_rule}"
         # proof_moment is deliberately NOT a generation input any more. It is the one moment
         # the camera must film to make the claim believable — which is the product demo, and

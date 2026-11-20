@@ -199,6 +199,105 @@ def test_bare_steady_becomes_subtle_sway_for_handheld():
     assert "steady" not in strategy2["scene"]["camera_angle"].lower(), strategy2["scene"]
 
 
+def test_fixed_set_down_opening_names_the_whole_beat():
+    # Kasra's order (Nov 19 2026, ADR 0216): a fixed take opens on the
+    # set-down — the recording already running while the phone is placed,
+    # its own microphone catching the landing, the frame settling — and
+    # only then does the presenter step in and talk. Every element is
+    # named, in both budget modes, because a vague "natural opening"
+    # would let the model skip the beat that is the whole point.
+    for text in (
+        generation_planning.FIXED_SET_DOWN_OPENING,
+        generation_planning._CONDENSED_FIXED_SET_DOWN_OPENING,
+    ):
+        lowered = text.lower()
+        assert "already running" in lowered or "already runs" in lowered
+        assert "sets the phone down" in lowered
+        assert "thump" in lowered
+        assert "surface this scene" in lowered
+        assert "left-to-right" in lowered or "left to right" in lowered
+        assert "hook lands" in lowered
+        assert "1-2" in lowered or "1–2" in lowered or "seconds 1" in lowered
+
+
+def test_fixed_set_down_opening_carries_the_environment_rule():
+    # The surface is the scene's own, never invented — and when the
+    # story's spot offers nothing to rest a phone on (mid-street), the
+    # staging shifts to the nearest sensible spot while the spoken
+    # words never move (Kasra's edge-case ruling, ADR 0216).
+    for text in (
+        generation_planning.FIXED_SET_DOWN_OPENING,
+        generation_planning._CONDENSED_FIXED_SET_DOWN_OPENING,
+    ):
+        lowered = text.lower()
+        assert "bench" in lowered
+        assert "café table" in lowered
+        assert "never invented" in lowered
+        assert "nearest" in lowered
+        assert "words never change" in lowered
+
+
+def _segment_prompt(camera_setup, prompt_budget=None, **overrides):
+    kwargs = dict(
+        strategy={
+            "camera_setup": camera_setup,
+            "camera_beat": {"direction": "left", "gesture": "a small relieved smile"},
+        },
+        profile={}, template={}, duration=10, plan={"hook_seconds": 3},
+    )
+    kwargs.update(overrides)
+    if prompt_budget is not None:
+        kwargs["prompt_budget"] = prompt_budget
+    return generation_planning.build_segment_prompt(**kwargs)
+
+
+@pytest.mark.parametrize("prompt_budget", [None, 4090])
+def test_fixed_render_prompt_opens_with_the_set_down(prompt_budget):
+    prompt = _segment_prompt("fixed", prompt_budget).lower()
+    assert "sets the phone down" in prompt
+    assert "thump" in prompt
+    assert "surface this scene" in prompt
+
+
+@pytest.mark.parametrize("prompt_budget", [None, 4090])
+def test_handheld_render_prompt_has_no_set_down(prompt_budget):
+    # Handheld is completely untouched by ADR 0216: the phone is already
+    # in the presenter's hand, so a set-down opening must never appear.
+    prompt = _segment_prompt("handheld", prompt_budget).lower()
+    assert "sets the phone down" not in prompt
+    assert "set-down" not in prompt
+    assert "thump" not in prompt
+    assert "surface this scene" not in prompt
+
+
+def test_fixed_prompt_for_a_no_surface_scene_carries_the_shift_rule():
+    # A mid-street moment has nothing to rest a phone on. The fixed
+    # prompt must still carry the direction that stages the same moment
+    # at the nearest sensible spot — and the handheld prompt for the
+    # same scene must carry none of it.
+    scene = {"location": "the middle of a busy street"}
+    fixed = _segment_prompt(
+        "fixed", strategy={
+            "camera_setup": "fixed",
+            "camera_beat": {"direction": "left", "gesture": "a small relieved smile"},
+            "scene": scene,
+        },
+        plan={"hook_seconds": 3, "location": "the middle of a busy street"},
+    ).lower()
+    assert "nearest" in fixed
+    assert "words never change" in fixed
+    handheld = _segment_prompt(
+        "handheld", strategy={
+            "camera_setup": "handheld",
+            "camera_beat": {"direction": "left", "gesture": "a small relieved smile"},
+            "scene": scene,
+        },
+        plan={"hook_seconds": 3, "location": "the middle of a busy street"},
+    ).lower()
+    assert "nearest" not in handheld
+    assert "words never change" not in handheld
+
+
 def test_headshot_reference_pads_to_vertical_instead_of_staying_tight():
     # The face-dominates branch returns a tight upload (possibly square) as
     # the reference; as a first frame that is a close-up with no headroom.
