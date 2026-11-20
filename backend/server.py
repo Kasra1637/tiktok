@@ -1427,12 +1427,15 @@ async def _submit_generation(
     model_key = video_providers.resolve(model)[0]
     cap = video_providers.capability(model_key)
     camera_setup = project.get("camera_setup") or "handheld"
-    if camera_setup == "fixed" and cap.get("identity_via_first_frame"):
-            raise HTTPException(status_code=409, detail=_with_request_id(
-                "This model uses your face photo as its literal first frame, so it cannot "
-                "start with fixed-camera head-to-mid-thigh framing. Select a model that "
-                "accepts an identity reference image, or choose Handheld selfie."
-            ))
+    # No model guard stands here (ADR 0225): every model left on the list
+    # pins the photo as its first frame, and a fixed submit renders on
+    # them — the fixed prompt opens on the presenter already framed by a
+    # stationary camera indoors (ADR 0219), so the pinned photo is the
+    # opening frame the model animates from, the same mechanism handheld
+    # renders rely on. The guard that refused this pairing was written
+    # for the placement-first opening ADR 0219 removed. What still
+    # refuses a fixed submit is a strategy whose own directions conflict
+    # with the setup, raised by the prompt builder below (ADR 0064).
     if requested > cap["max_duration"]:
         requested = int(cap["max_duration"])
     seconds = requested

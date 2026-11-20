@@ -285,12 +285,12 @@ class TestCameraSetup:
         selfie" is refused before anything is spent, and the refused submit
         does not rewrite the saved scene.
 
-        Since ADR 0221 the refusal that fires is the model guard, not the
-        direction conflict: every model left on the list pins the face
-        photo as its first frame, so a fixed submit is refused on the
-        model before the prompt is ever built. The direction-conflict
-        refusal itself still stands in the prompt builder and is pinned
-        there (TestFinalPhoneFraming in test_generation.py).
+        Since ADR 0225 the model guard no longer fires for a fixed
+        submit, so the refusal that fires is the direction conflict
+        itself, raised by the prompt builder: a strategy written for a
+        handheld selfie cannot serve a stationary head-to-mid-thigh
+        shot, whichever model is named. That narrower protection is
+        the genuinely unservable case the guard lift leaves standing.
         """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
@@ -305,7 +305,8 @@ class TestCameraSetup:
         with pytest.raises(HTTPException) as exc:
             _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
         assert exc.value.status_code == 409
-        assert "first frame" in exc.value.detail
+        assert "Fixed camera conflicts" in exc.value.detail
+        assert "first frame" not in exc.value.detail
         assert not calls
         assert _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))["generations"] == []
         # The refused submit must not rewrite the scene; reading it back still
@@ -316,16 +317,18 @@ class TestCameraSetup:
         from ai_service import normalize_strategy
         assert saved["strategy"]["scene"] == normalize_strategy(strategy)["scene"]
 
-    def test_fixed_camera_is_snapshotted_and_first_frame_models_refused(self, api, monkeypatch):
+    def test_fixed_camera_renders_on_first_frame_models(self, api, monkeypatch):
         """
-        First-frame models are refused for a fixed camera, before a
-        provider call — H3 Max named, and the default unnamed. Since ADR
-        0221 the default is HeyGen, also a first-frame model, so no model
-        left can serve a fixed camera and none is switched in silently;
-        before the removal the unnamed submit rendered on Hailuo 3's
-        reference-image route. The camera_setup snapshot rule is pinned
-        on the handheld path that can still render: a generation keeps
-        the setup it was rendered under after the project is flipped.
+        A fixed camera renders on every model left on the list — H3 Max
+        named, HeyGen named, and the default unnamed (ADR 0225). Both
+        survivors pin the founder's photo as the literal first frame;
+        the fixed prompt opens on the presenter already framed by a
+        stationary camera indoors (ADR 0219), so the pinned photo is
+        the opening frame the model animates from, the same mechanism
+        handheld renders rely on. The old 409 for this pairing is gone:
+        each submit reaches the provider and records a generation
+        snapshotted as fixed, and the prompt carries the fixed staging
+        with no set-down staging in it.
         """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest, UpdateStudioProjectRequest
@@ -333,30 +336,26 @@ class TestCameraSetup:
         strategy = {**FAKE_STRATEGY, "camera_setup": "fixed"}
         _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
             ("fixed", json.dumps(strategy), project["id"])))
-        with pytest.raises(HTTPException) as exc:
-            _run(api.submit_project_generation(project["id"],
-                StudioGenerationRequest(model="minimax-h3-max"), ANON))
-        assert exc.value.status_code == 409
-        assert "first frame" in exc.value.detail
-        assert not calls
-        with pytest.raises(HTTPException) as exc:
-            _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
-        assert exc.value.status_code == 409
-        assert "first frame" in exc.value.detail
-        assert not calls
-        # Flip the setup by SQL, as the fixture set it: the API update would
-        # drop the project out of ready_for_generation, which is a different
-        # refusal than the one under test. The strategy's own snapshot moves
-        # with it — a plan/strategy setup mismatch is the staleness refusal,
-        # also not the one under test.
-        flipped = {**FAKE_STRATEGY, "camera_setup": "handheld"}
-        _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
-            ("handheld", json.dumps(flipped), project["id"])))
-        result = _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
-        assert result["camera_setup"] == "handheld"
-        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(camera_setup="fixed"), ANON))
+        for payload in (
+            StudioGenerationRequest(model="minimax-h3-max"),
+            StudioGenerationRequest(model="heygen-video-1"),
+            StudioGenerationRequest(),
+        ):
+            result = _run(api.submit_project_generation(project["id"], payload, ANON))
+            assert result["camera_setup"] == "fixed"
+        assert len(calls) == 3
+        rows = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
+        assert len(rows["generations"]) == 3
+        prompt = calls[0]["prompt"]
+        assert "head to mid-thigh" in prompt
+        assert "indoors" in prompt.lower()
+        for phrase in ("sets the phone down", "already running", "thump", "steps in front"):
+            assert phrase not in prompt.lower()
+        # The snapshot rule: a generation keeps the setup it was rendered
+        # under after the project is flipped.
+        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
         saved = _run(api.get_generation(result["id"], ANON))
-        assert saved["camera_setup"] == "handheld"
+        assert saved["camera_setup"] == "fixed"
 
 
 class TestResolutionOverride:

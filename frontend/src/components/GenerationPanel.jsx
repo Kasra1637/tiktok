@@ -734,7 +734,10 @@ const handleGenerate = async () => {
   };
 
   const capability = models?.models?.find((m) => m.key === selectedModel);
-  const cameraIncompatible = project?.camera_setup === "fixed" && capability?.identity_via_first_frame;
+  // No camera/model pairing is incompatible (ADR 0225): every model left
+  // pins the photo as its first frame, and a fixed submit renders on them
+  // — the fixed prompt opens on the presenter already framed, so the
+  // pinned photo is the opening frame the model animates from.
   const inFlight = generation && (generation.status === "submitted" || generation.status === "generating");
   // The saving phase's own honesty (ADR 0179, extending 0171): a
   // failing poll speaks through the stall notice below, but a save
@@ -794,7 +797,7 @@ const handleGenerate = async () => {
   const generateReady =
     !rebuildRequired && !strategyMissing && !planSaveRequired &&
     !busy && !inFlight && Boolean(models) && !hasUnsavedEdits && ready &&
-    !blocked && !tooLong && !cameraIncompatible && Boolean(projectId) &&
+    !blocked && !tooLong && Boolean(projectId) &&
     strategyReady && !noPhoto && !noAngle;
   const generateLabel = generation ? "Generate another" : "Generate the video";
 
@@ -880,13 +883,6 @@ const handleGenerate = async () => {
               label: `${m.name} — one render, up to ${m.max_duration}s${m.key === models.default ? " (default)" : ""}`,
             }))}
           />
-          {cameraIncompatible && (
-            <p className="text-sm text-destructive-text" role="alert" data-testid="fixed-camera-model-warning">
-              This model uses your face photo as its literal first frame. For Fixed camera,
-              select a model that accepts an identity reference image, or save Handheld selfie
-              and rebuild the strategy. No model is switched automatically.
-            </p>
-          )}
           {(capability?.supported_resolutions || []).length > 0 && (
             <div className="space-y-2 pt-1">
               <label htmlFor="gen-resolution" className="text-sm font-semibold">Resolution</label>
@@ -934,7 +930,7 @@ const handleGenerate = async () => {
           onClick={handleGenerate}
           className={generateReady ? "generate-invite" : undefined}
           disabled={
-            busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || cameraIncompatible || !projectId || !strategyReady || noPhoto || noAngle
+            busy || inFlight || !models || hasUnsavedEdits || !ready || blocked || tooLong || !projectId || !strategyReady || noPhoto || noAngle
           }
           busy={busy || inFlight}
           data-testid="render-generate-button"

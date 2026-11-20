@@ -2197,15 +2197,21 @@ async function main() {
 
   await check("GenerationPanel mounts with no project", mount(GenerationPanel, { project: null }));
 
-  await check("fixed camera explains incompatible first-frame models before rendering", async (ctx) => {
+  await check("fixed camera renders on a first-frame model with no warning", async (ctx) => {
+    // ADR 0225: both models left pin the photo as the first frame, and a
+    // fixed submit now renders on them — the panel must not present the
+    // pairing as an error or hold the Generate button for it.
     await withApi({
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({ default: CAPABILITY.key,
         models: [{ ...CAPABILITY, identity_via_first_frame: true }] }),
     }, async () => {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed" } })(ctx);
-      expectText(ctx, "literal first frame");
-      if (!buttonByText(ctx, /Generate the video/).disabled) throw new Error("incompatible fixed-camera render enabled");
+      if (ctx.container.querySelector('[data-testid="fixed-camera-model-warning"]')) {
+        throw new Error("the retired fixed-camera model warning still renders");
+      }
+      expectAbsent(ctx, "literal first frame", "the retired first-frame refusal copy still renders");
+      if (buttonByText(ctx, /Generate the video/).disabled) throw new Error("fixed-camera render on a first-frame model is disabled");
     });
   });
 
