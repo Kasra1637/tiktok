@@ -1183,6 +1183,24 @@ async def update_studio_project(
                         f"step and regenerate the plan, which rewrites the timeline to match."
                     ),
                 )
+        elif key == "story_type":
+            # The story's type is its aim (ADR 0227), and the create
+            # endpoint validates it against the settled catalog loudly.
+            # The draft edit holds the same line (ADR 0235): a PATCH
+            # that stored an unknown id silently would leave the plan
+            # endpoint to refuse later, with the founder further from
+            # the pick that caused it. An empty value clears to NULL,
+            # which the serializer already reads as "no type picked yet".
+            candidate = (value or "").strip() if isinstance(value, str) else ""
+            if candidate and story_types.get_story_type(candidate) is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unknown story type {candidate!r}: pick one of "
+                        + ", ".join(story_types.STORY_TYPE_IDS) + "."
+                    ),
+                )
+            value = candidate or None
         elif key == "frame_count":
             # The story's frame count (ADR 0228): an integer on the row,
             # never below the one frame every story has.

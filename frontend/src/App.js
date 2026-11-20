@@ -24,6 +24,7 @@ const GenerationHistory = lazy(() => import("./pages/GenerationHistory"));
 const BrandSetup = lazy(() => import("./pages/BrandSetup"));
 const AppProfileDetail = lazy(() => import("./pages/AppProfileDetail"));
 const CreateVideo = lazy(() => import("./pages/CreateVideo"));
+const Stories = lazy(() => import("./pages/Stories"));
 const AssetLibrary = lazy(() => import("./pages/AssetLibrary"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 // Split out of the landing chunk: the editor pulls in mediabunny, which the
@@ -151,6 +152,11 @@ function App() {
                         <Route path="/templates" element={<Navigate to="/create" replace />} />
                         <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
                         <Route path="/create" element={<LazyPage><CreateVideo /></LazyPage>} />
+                        {/* Stories: the short-form creation surface beside
+                            Create Video (ADR 0235). A story is a studio
+                            project with kind="story"; the page is one
+                            stacked canvas, not a wizard step. */}
+                        <Route path="/stories" element={<LazyPage><Stories /></LazyPage>} />
                         {/* Native Product Demo + CTA editor. The picker lives at
                             /demo-cta and the editor at /demo-cta/:generationId,
                             so a finished render is the input and the export is

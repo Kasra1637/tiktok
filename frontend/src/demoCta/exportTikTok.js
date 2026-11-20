@@ -4,6 +4,7 @@ import {
 } from "mediabunny";
 import { clipWindow } from "./constants";
 import { passthroughSegmentAudio } from "./audio";
+import { composeImageFrame, imageSequenceDuration } from "./imageSequence";
 
 export const TIKTOK_EXPORT = Object.freeze({
   width: 1080, height: 1920, fps: 30, videoBitrate: 8_000_000, audioBitrate: 192_000,
@@ -62,8 +63,12 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
 /** Decode pinned sources, base then optional upload, on one 30 fps timeline.
  * A muted segment keeps its video length; only its audio is left out.
  * Each clip's start point is where decoding begins, so the file opens on the
- * frame the preview shows — never on footage the founder skipped. */
-export async function exportTikTok({ source, appendSource, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
+ * frame the preview shows — never on footage the founder skipped.
+ * The added segment may instead be an image sequence (ADR 0237): stills
+ * have no track to decode, so its frames are composed — push-in and
+ * crossfade included — at the same 30 fps, and it carries no audio. A real
+ * added clip wins if both are somehow passed; the editor never sends both. */
+export async function exportTikTok({ source, appendSource, appendImages = null, reduceMotion = false, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -82,7 +87,7 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
   try {
     const segments = [];
     let duration = 0;
-    for (const [index, blob] of [source, appendSource].filter(Boolean).entries()) {
+    for (const [index, blob] of (appendSource ? [source, appendSource] : [source]).entries()) {
       const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
       inputs.push(input);
       const track = await input.getPrimaryVideoTrack();
@@ -102,6 +107,14 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       segments.push({ track, audioTrack, origin, duration: length, start: duration, muted: index ? appendMuted : baseMuted });
       duration += length;
     }
+    if (!appendSource && appendImages?.length) {
+      const total = imageSequenceDuration(appendImages);
+      if (!(total > 0)) throw new Error("The added images have no playable duration. Give each image at least a second on screen.");
+      const run = clipWindow(total, appendStart, undefined, appendEnd);
+      if (!(run.duration > 0)) throw new Error("The image sequence has nothing left after its start point. Move the start point earlier.");
+      segments.push({ kind: "images", images: appendImages, audioTrack: null, origin: run.start, duration: run.duration, start: duration, muted: true });
+      duration += run.duration;
+    }
     canvas.width = width;
     canvas.height = height;
     output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
@@ -116,6 +129,21 @@ export async function exportTikTok({ source, appendSource, canvas, drawFrame, on
       for (const [index, segment] of segments.entries()) {
         const first = Math.max(0, Math.ceil(segment.start * fps - 1e-6));
         const last = Math.ceil((segment.start + segment.duration) * fps - 1e-6);
+        if (segment.kind === "images") {
+          // No track to decode: compose each frame from the stills at the
+          // frame's own sequence time, the same composition the preview
+          // paints, and hand it to the painter like a decoded frame.
+          const scratch = document.createElement("canvas");
+          const drawables = segment.images.map((entry) => entry.source);
+          for (let frame = first; frame < last; frame++) {
+            checkCancelled();
+            composeImageFrame(scratch, drawables, segment.images, segment.origin + frame / fps - segment.start, { reduceMotion: !!reduceMotion });
+            drawFrame(frame / fps, scratch, index);
+            await videoSource.add(frame / fps, segments.length > 1 ? Math.min(1 / fps, duration - frame / fps) : 1 / fps);
+            onProgress?.((frame + 1) / frameCount);
+          }
+          continue;
+        }
         const timestamps = function* () {
           for (let frame = first; frame < last; frame++) yield segment.origin + frame / fps - segment.start;
         };

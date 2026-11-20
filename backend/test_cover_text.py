@@ -290,6 +290,38 @@ def test_generate_cover_text_refuses_a_cover_that_stays_long(monkeypatch):
         ))
 
 
+def test_generate_cover_text_corrects_a_cut_off_cover(monkeypatch):
+    import ai_service
+    # ADR 0231: a cover is a fragment by design, but it may not be a
+    # thought cut in half. This reply is 34 characters and 6 words —
+    # inside both caps, so the length branch cannot see it; only the
+    # finished-cover gate catches the dangling 'and'.
+    calls = _recording_chat(monkeypatch, [
+        {"cover_text": "Bakery queue, words won't come and"}, {"cover_text": COVER},
+    ])
+    out = asyncio.run(ai_service.generate_cover_text(
+        {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+        current_cover="Old cover",
+    ))
+    assert out == COVER
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "cut off" in calls[1]["prompt"]
+
+
+def test_generate_cover_text_refuses_a_persistent_cut_off_cover(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [
+        {"cover_text": "Bakery queue, words won't come and"},
+        {"cover_text": "Bakery queue, words won't come and"},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal, match="cut off"):
+        asyncio.run(ai_service.generate_cover_text(
+            {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+            current_cover="Old cover",
+        ))
+
+
 def test_post_kit_prompt_asks_for_three_to_five_words(monkeypatch):
     import ai_service
     import hashtag_volume
@@ -309,6 +341,100 @@ def test_post_kit_prompt_asks_for_three_to_five_words(monkeypatch):
     prompt = calls[0]["prompt"]
     assert "3 to 5 words" in prompt
     assert "under 8 words" not in prompt
+
+
+# ------------------------------------------------ covers validated, never sliced
+#
+# ADR 0232: the plan's first-draft cover and the post kit's model
+# cover were stored after a hard [:100] slice and never validated
+# against the cover rule — a 63-character draft came back stored as
+# its first 100 characters would allow, and a fragment draft was
+# stored whole. Now the draft answers to the same validation as the
+# cover suggestion flow: a plan draft that fails stores NO cover
+# (the plan is never refused over post copy; Review's Suggest flow
+# writes one), a post-kit model cover that fails is a loud error,
+# and the founder's approved cover ships verbatim, unsliced.
+
+OVERLONG_COVER = "Bakery queue on a Friday morning, the words just won't come out"
+FRAGMENT_COVER = "Bakery queue, words won't come and"
+LONG_APPROVED_COVER = (
+    "The founder approved this exact cover line for the opening frame, "
+    "every single word of it, exactly as written"
+)
+
+
+def _plan_with_cover(monkeypatch, cover):
+    import ai_service
+
+    async def capture(system_message, prompt, context, **kwargs):
+        return {
+            "hook_line": "Naming what I felt never worked.",
+            "script": "One sentence each night helped me understand the pattern.",
+            "cover_text": cover,
+            "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
+            "visual_direction": "v", "demo_brief": "d",
+            "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
+        }
+
+    monkeypatch.setattr(ai_service, "_chat_json", capture)
+    return asyncio.run(ai_service.generate_creative_plan(
+        profile={"brand_name": "Journal"}, template={"name": "T", "hook_seconds": 3},
+        duration_seconds=15,
+    ))
+
+
+def test_plan_stores_no_cover_when_the_draft_runs_long(monkeypatch):
+    result = _plan_with_cover(monkeypatch, OVERLONG_COVER)
+    # Never the sliced draft: no cover at all, left to the Suggest flow.
+    assert result["cover_text"] == ""
+
+
+def test_plan_stores_no_cover_when_the_draft_is_a_fragment(monkeypatch):
+    result = _plan_with_cover(monkeypatch, FRAGMENT_COVER)
+    assert result["cover_text"] == ""
+
+
+def test_plan_stores_a_valid_draft_cover_verbatim(monkeypatch):
+    result = _plan_with_cover(monkeypatch, COVER)
+    assert result["cover_text"] == COVER
+
+
+def test_post_kit_refuses_an_over_length_model_cover(monkeypatch):
+    import ai_service
+    import hashtag_volume
+    monkeypatch.setattr(ai_service, "_chat_json", AsyncMock(return_value={
+        "caption": "I stopped fighting my phone and cleared one list instead — you?",
+        "hashtags": ["#one", "#two", "#three", "#four", "#five"],
+        "cover_text": OVERLONG_COVER,
+    }))
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts", AsyncMock(return_value={}))
+    project = {"hook_line": HOOK, "script": SCRIPT, "cta": ""}
+    with pytest.raises(RuntimeError, match="cover"):
+        asyncio.run(ai_service.generate_post_kit(
+            project, {"brand_name": "Voice Journal", "status": "approved"}))
+
+
+def test_post_kit_ships_a_long_approved_cover_verbatim(monkeypatch):
+    import ai_service
+    import hashtag_volume
+    assert len(LONG_APPROVED_COVER) > 100
+    monkeypatch.setattr(ai_service, "_chat_json", AsyncMock(return_value={
+        "caption": "I stopped fighting my phone and cleared one list instead — you?",
+        "hashtags": ["#one", "#two", "#three", "#four", "#five"],
+        "cover_text": "A different unseen draft",
+    }))
+    monkeypatch.setattr(
+        hashtag_volume, "lookup_hashtag_counts", AsyncMock(return_value={}))
+    project = {
+        "hook_line": HOOK, "script": SCRIPT, "cta": "",
+        "cover_text": LONG_APPROVED_COVER,
+    }
+    out = asyncio.run(ai_service.generate_post_kit(
+        project, {"brand_name": "Voice Journal", "status": "approved"}))
+    # ADR 0145 verbatim means verbatim: past the old 100-char slice,
+    # the founder's exact words ship whole.
+    assert out["cover_text"] == LONG_APPROVED_COVER
 
 
 def test_plan_prompt_asks_for_three_to_five_words(monkeypatch):

@@ -377,6 +377,12 @@ export function AngleSelector({
   // "First 3 seconds promise" row then quotes what the video actually opens
   // with, never the angle's paraphrase promising unspoken words (ADR 0108).
   hookLine = "",
+  // The draft's saved camera setup. For a fixed camera the rows already
+  // arrive restated indoors from the server (ADR 0233); this prop only
+  // drives the note that says so, so the founder is never left guessing
+  // why an angle they wrote outdoors now reads as a room — and never
+  // has to re-pick an angle to satisfy the setup.
+  cameraSetup = "",
 }) {
   // Processing lives on the button itself: busy paints the looping sweep and
   // the label names the work concisely ("Generating angles"). The sweep loops
@@ -460,6 +466,11 @@ export function AngleSelector({
             {!objective && !generating && (
               <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
                 Pick a goal first — regenerating aims fresh angles at it.
+              </p>
+            )}
+            {cameraSetup === "fixed" && !generating && (
+              <p className="text-sm text-muted-foreground" data-testid="angles-fixed-indoor-note">
+                With the fixed camera, these angles are staged indoors — an outdoor place shows as its indoor version.
               </p>
             )}
           </div>

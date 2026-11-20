@@ -236,20 +236,28 @@ export const api = {
   refreshAppProfile: (id) => client.post(`/app-profiles/${id}/refresh`, null, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   regenerateEverything: (id) => client.post(`/app-profiles/${id}/regenerate-everything`, null, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
 
-  // Content angles (per App Profile)
-  getContentAngles: (profileId) =>
-    client.get(`/app-profiles/${profileId}/content-angles`).then((r) => r.data),
+  // Content angles (per App Profile). The camera setup only shapes how
+  // the returned angles are DISPLAYED: for a fixed camera the server
+  // restates an outdoor angle's places indoors (ADR 0233), because the
+  // angles were written before the setup was picked (ADR 0220). It never
+  // aims or filters generation, and the stored angles never change.
+  getContentAngles: (profileId, cameraSetup = "") =>
+    client.get(`/app-profiles/${profileId}/content-angles`, {
+      params: { ...(cameraSetup ? { camera_setup: cameraSetup } : {}) },
+    }).then((r) => r.data),
   // An objective aims the fresh set at the video already chosen; empty
   // (nothing picked yet) reads exactly as before.
-  generateContentAngles: (profileId, { objective } = {}) =>
+  generateContentAngles: (profileId, { objective, cameraSetup } = {}) =>
     client.post(`/app-profiles/${profileId}/content-angles`, {
       ...(objective ? { objective } : {}),
+      ...(cameraSetup ? { camera_setup: cameraSetup } : {}),
     }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // Regenerate replaces only the AI-derived angles; hand-written angles are
   // kept server-side, so this is safe to offer on a populated list.
-  regenerateContentAngles: (profileId, { objective } = {}) =>
+  regenerateContentAngles: (profileId, { objective, cameraSetup } = {}) =>
     client.post(`/app-profiles/${profileId}/content-angles/regenerate`, {
       ...(objective ? { objective } : {}),
+      ...(cameraSetup ? { camera_setup: cameraSetup } : {}),
     }, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The pre-click half of the regen count (ADR 0198): how many of this
   // profile's drafts a regenerate would cost their stories, readable
@@ -323,6 +331,32 @@ export const api = {
   getStudioProject: (id) => client.get(`/studio/projects/${id}`).then((r) => r.data),
   createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
+
+  // Stories (ADRs 0227/0228/0235). A story is a studio project with
+  // kind="story", so only CREATION is story-shaped: the stories router
+  // owns it because the type is required there and validated against
+  // the settled catalog. Opening a draft is getStudioProject, saving
+  // the picks is updateStudioProject, and the list below reads the one
+  // project list and keeps the story rows — there is one table, one
+  // serializer and one validated write path, not a parallel set.
+  createStoryProject: (payload) => client.post("/stories/projects", payload).then((r) => r.data),
+  getStoryProjects: (profileId) =>
+    client.get("/studio/projects", { params: { brand_profile_id: profileId } }).then((r) => ({
+      projects: (r.data.projects || []).filter((p) => (p.kind || "video") === "story"),
+    })),
+  // The story flow (ADR 0236). The plan is the stories router's one
+  // generation — a chain-timeout call like the wizard's plan, answered
+  // with the saved project. The render submits one frame at its own
+  // seconds through the same router; polling and generation reads ride
+  // the shared generation endpoints below, like every render.
+  generateStoryPlan: (id, payload = {}) => client.post(`/stories/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  generateStory: (id, payload = {}) => client.post(`/stories/projects/${id}/generate`, payload).then((r) => r.data),
+  // A fresh screen text for the frame: a suggestion only (ADR 0145's
+  // contract) — the endpoint saves nothing, and accepting goes through
+  // the normal project edit, exactly like accepting a cover text.
+  suggestStoryScreenText: (id, payload) => client.post(`/stories/projects/${id}/screen-text-suggestion`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  regenerateStoryKit: (id) =>
+    client.post(`/generations/${id}/story-kit/regenerate`, null, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The one-pass form of the two above: the server writes the plan, then
   // builds the strategy from it, and answers once with both. This is the

@@ -1,10 +1,11 @@
 const mockPost = jest.fn();
+const mockGet = jest.fn();
 
 jest.mock("axios", () => ({
   __esModule: true,
   default: {
     create: () => ({
-      get: jest.fn(),
+      get: (...args) => mockGet(...args),
       post: (...args) => mockPost(...args),
       patch: jest.fn(),
       delete: jest.fn(),
@@ -18,6 +19,94 @@ import { api, DEMO_CTA_PART_BYTES } from "./api";
 beforeEach(() => {
   mockPost.mockReset();
   mockPost.mockResolvedValue({ data: { id: "saved-1" } });
+  mockGet.mockReset();
+  mockGet.mockResolvedValue({ data: {} });
+});
+
+test("the angle list read carries the camera setup when one is given", async () => {
+  // ADR 0233: the wizard reads the angles with the project's setup so a
+  // fixed camera's list restates outdoor places indoors server-side.
+  // No setup (the profile page) sends no param and reads as written.
+  await api.getContentAngles("p1", "fixed");
+  expect(mockGet.mock.calls[0][0]).toBe("/app-profiles/p1/content-angles");
+  expect(mockGet.mock.calls[0][1]).toEqual({ params: { camera_setup: "fixed" } });
+  await api.getContentAngles("p1");
+  expect(mockGet.mock.calls[1][1]).toEqual({ params: {} });
+});
+
+test("angle generation carries the camera setup for the response's display", async () => {
+  await api.generateContentAngles("p1", { cameraSetup: "fixed" });
+  expect(mockPost.mock.calls[0][0]).toBe("/app-profiles/p1/content-angles");
+  expect(mockPost.mock.calls[0][1]).toEqual({ camera_setup: "fixed" });
+  await api.regenerateContentAngles("p1", { objective: "educate_viewers", cameraSetup: "fixed" });
+  expect(mockPost.mock.calls[1][0]).toBe("/app-profiles/p1/content-angles/regenerate");
+  expect(mockPost.mock.calls[1][1]).toEqual({ objective: "educate_viewers", camera_setup: "fixed" });
+  await api.generateContentAngles("p1");
+  expect(mockPost.mock.calls[2][1]).toEqual({});
+});
+
+test("creating a story draft posts to the stories router", async () => {
+  // ADR 0235: creation is the one story-shaped call — the stories
+  // router owns it because the type is required and validated there.
+  // Reads and edits ride the shared studio project endpoints instead.
+  await api.createStoryProject({ brand_profile_id: "p1", story_type: "demo_moment" });
+  expect(mockPost.mock.calls[0][0]).toBe("/stories/projects");
+  expect(mockPost.mock.calls[0][1]).toEqual({ brand_profile_id: "p1", story_type: "demo_moment" });
+});
+
+test("the story draft list reads the profile's projects and keeps only stories", async () => {
+  // One table, one list endpoint (ADR 0227): the read asks for the
+  // profile's projects and the kind marker does the separating, so a
+  // hook-video draft for the same app never shows up as a story draft.
+  mockGet.mockResolvedValue({
+    data: {
+      projects: [
+        { id: "s1", kind: "story", story_type: "hook_teaser" },
+        { id: "v1", kind: "video" },
+        { id: "s2", kind: "story", story_type: "question_poll" },
+        { id: "v0" },
+      ],
+    },
+  });
+  const { projects } = await api.getStoryProjects("p1");
+  expect(mockGet.mock.calls[0][0]).toBe("/studio/projects");
+  expect(mockGet.mock.calls[0][1]).toEqual({ params: { brand_profile_id: "p1" } });
+  expect(projects.map((p) => p.id)).toEqual(["s1", "s2"]);
+});
+
+test("the story plan posts to the stories router with the chain timeout", async () => {
+  // ADR 0236: the plan is the stories router's one generation call —
+  // the page's click makes it, and the answer is the saved project.
+  await api.generateStoryPlan("s1", { story_type: "question_poll", frame_seconds: 5 });
+  expect(mockPost.mock.calls[0][0]).toBe("/stories/projects/s1/plan");
+  expect(mockPost.mock.calls[0][1]).toEqual({ story_type: "question_poll", frame_seconds: 5 });
+  expect(mockPost.mock.calls[0][2]).toEqual({ timeout: 600000 });
+});
+
+test("a story render posts to the stories router's generate endpoint", async () => {
+  // ADR 0236: one frame through the one render path — the payload is
+  // the studio generation shape (model, resolution, the frame's own
+  // seconds, the render intent key).
+  await api.generateStory("s1", { model: "heygen-video-1", duration_seconds: 5, idempotency_key: "k1" });
+  expect(mockPost.mock.calls[0][0]).toBe("/stories/projects/s1/generate");
+  expect(mockPost.mock.calls[0][1]).toEqual({ model: "heygen-video-1", duration_seconds: 5, idempotency_key: "k1" });
+});
+
+test("the screen text suggestion posts the editor's current values", async () => {
+  // ADR 0236: advisory like the cover suggestion — the editor's
+  // current words ride along so the suggestion answers to them.
+  await api.suggestStoryScreenText("s1", { screen_text: "Old text here", hook_line: "Hook.", script: "Script." });
+  expect(mockPost.mock.calls[0][0]).toBe("/stories/projects/s1/screen-text-suggestion");
+  expect(mockPost.mock.calls[0][1]).toEqual({ screen_text: "Old text here", hook_line: "Hook.", script: "Script." });
+  expect(mockPost.mock.calls[0][2]).toEqual({ timeout: 600000 });
+});
+
+test("the story kit regenerate posts to the generation's story-kit path", async () => {
+  // ADR 0236: the kit's regenerate mirrors the post kit's — a click on
+  // the finished render's own kit endpoint, never the post kit's.
+  await api.regenerateStoryKit("g1");
+  expect(mockPost.mock.calls[0][0]).toBe("/generations/g1/story-kit/regenerate");
+  expect(mockPost.mock.calls[0][2]).toEqual({ timeout: 300000 });
 });
 
 test("a small export saves in one request to the generation path", async () => {

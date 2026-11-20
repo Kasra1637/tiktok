@@ -266,8 +266,14 @@ class GenerateContentAnglesRequest(BaseModel):
     When the founder has already picked the video's objective, angles argue
     toward it instead of hedging across every outcome. Empty (approval-time
     generation, nothing chosen yet) reads exactly as before.
+
+    `camera_setup` never aims or filters generation: it only shapes how
+    the RESPONSE's angles are displayed — for a fixed camera, an outdoor
+    angle's places restate indoors (ADR 0233), the same shaping the angle
+    list applies.
     """
     objective: Optional[str] = ""
+    camera_setup: Optional[str] = ""
 
 
 class UpdateContentAngleRequest(BaseModel):
@@ -430,6 +436,21 @@ class GenerateStoryPlanRequest(BaseModel):
     story_type: Optional[str] = None
     frame_seconds: Optional[int] = None
     countdown_date: Optional[str] = ""
+
+
+class SuggestStoryScreenTextRequest(BaseModel):
+    """
+    Ask for one fresh screen text for a story frame (ADR 0236).
+
+    Advisory like the cover suggestion (ADR 0145): the endpoint writes
+    nothing, and accepting is the page's own draft edit. The fields are
+    the editor's current values — the founder may hold unsaved edits
+    the suggestion should answer to; each omitted field falls back to
+    the saved row's.
+    """
+    screen_text: Optional[str] = None
+    hook_line: Optional[str] = None
+    script: Optional[str] = None
 
 
 class GeneratePlanRequest(BaseModel):

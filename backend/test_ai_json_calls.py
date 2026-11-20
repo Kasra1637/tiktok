@@ -1947,6 +1947,88 @@ class TestStrategyBudget:
             assert "must be INDOORS" not in text
             assert "FIXED CAMERA" not in text
 
+    @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
+    def test_plan_prompt_fits_the_action_to_the_room_for_fixed_only(self, monkeypatch, camera_setup):
+        # ADR 0233 extends ADR 0219 from place to activity: a fixed plan
+        # must stage actions that can happen in the room, restaging an
+        # outdoor activity as its indoor-plausible equivalent — and the
+        # rule is fixed-only, so a handheld plan prompt never carries it.
+        import ai_service
+        plan = {
+            "hook_line": "Naming the feeling never worked.",
+            "script": ("The suggestions helped me find the words. "
+                       "I understood myself better after writing the entry."),
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook",
+                 "text": "Naming the feeling never worked."},
+                {"start": 3, "end": 15, "label": "middle", "text": "script"},
+            ],
+            "visual_direction": "A person reflecting at their desk.",
+            "demo_brief": "Record the emotion suggestions.",
+            "voice_direction": "Conversational.",
+            "sound_direction": "Voice only.",
+            "claims_used": [],
+        }
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(plan))])
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "B"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15, camera_setup=camera_setup,
+        ))
+        text = "\n".join(
+            str(message.get("content") or "")
+            for payload in rec.payloads
+            for message in payload.get("messages", [])
+        )
+        if camera_setup == "fixed":
+            assert "THE ACTION MUST FIT THE ROOM" in text
+            assert "pacing by a large window" in text
+            assert "only bedroom-plausible actions" in text
+            assert "The spoken words never change" in text
+        else:
+            assert "THE ACTION MUST FIT THE ROOM" not in text
+
+    @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
+    def test_strategy_prompt_fits_the_action_to_the_room_for_fixed_only(self, monkeypatch, camera_setup):
+        # ADR 0233: the strategy writes the hook_action and the segment
+        # actions the render performs, so the activity-fit rule is stated
+        # in its indoor block too — fixed-only, like the place rule.
+        import ai_service
+
+        captured = {}
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            captured["prompt"] = prompt
+            return {
+                "strategy_summary": "s", "audience_problem": "p",
+                "emotional_triggers": ["t"], "hook_concept": "c",
+                "hook_line": "h", "hook_promise": "p", "hook_action": "a",
+                "messaging_pillars": ["m"], "primary_feature": "f",
+                "desired_outcome": "o", "mechanism_beat": "mb",
+                "payoff_beat": "pb", "differentiation_beat": "b",
+                "scene": {"location": "kitchen"},
+                "performance": {"movement": "still"},
+                "segments": [
+                    {"index": 0, "role": "hook", "seconds": 3,
+                     "goal": "g", "script": "s", "action": "a"},
+                    {"index": 1, "role": "middle", "seconds": 17,
+                     "goal": "g", "script": "s", "action": "a"},
+                ],
+            }
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        asyncio.run(ai_service.generate_video_strategy(
+            profile={"brand_name": "Test"},
+            template={"name": "T", "hook_seconds": 3},
+            hook_seconds=3, camera_setup=camera_setup,
+        ))
+        prompt = captured["prompt"]
+        if camera_setup == "fixed":
+            assert "THE ACTION MUST FIT THE ROOM" in prompt
+            assert "pacing by a large window" in prompt
+            assert "only bedroom-plausible actions" in prompt
+        else:
+            assert "THE ACTION MUST FIT THE ROOM" not in prompt
+
     def test_camera_beat_keeps_only_direction_and_a_short_gesture(self):
         import ai_service
 

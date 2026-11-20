@@ -226,6 +226,41 @@ def test_rewrite_refuses_a_persistent_echo(monkeypatch):
         asyncio.run(ai_service.rewrite_hook_line({}, None, "Fridays feel off."))
 
 
+def test_rewrite_corrects_a_fragment_hook(monkeypatch):
+    # ADR 0231: the finished-sentence gate reaches the rewrite surface.
+    # A reply squeezed against its length keeps its start and drops its
+    # tail; before the gate, that fragment passed every check here.
+    replies = [
+        {"hook_line": "I'm trying to keep count, Saturday afternoon and I keep"},
+        {"hook_line": "I'm trying to keep count, Saturday afternoon, and I keep losing count."},
+    ]
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return replies[len(calls) - 1]
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    line = asyncio.run(ai_service.rewrite_hook_line(
+        {}, None, "I'm trying to keep count on Saturdays."))
+    assert line == "I'm trying to keep count, Saturday afternoon, and I keep losing count."
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "unfinished" in calls[1]["prompt"]
+
+
+def test_rewrite_refuses_a_persistent_fragment_hook(monkeypatch):
+    monkeypatch.setattr(
+        ai_service,
+        "_chat_json",
+        AsyncMock(return_value={
+            "hook_line": "I'm trying to keep count, Saturday afternoon and I keep"}),
+    )
+    with pytest.raises(ai_service.RewriteRefusal, match="unfinished"):
+        asyncio.run(ai_service.rewrite_hook_line(
+            {}, None, "I'm trying to keep count on Saturdays."))
+
+
 def test_rewrite_prompt_opens_with_the_goal_not_the_place(monkeypatch):
     # ADR 0182 supersedes the place half of ADR 0167's NAME THE MOMENT
     # (Kasra's goal rule): the rewrite opens with what she is trying to

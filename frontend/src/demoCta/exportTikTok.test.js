@@ -215,3 +215,114 @@ test("missing frames and cancellation never finalize partial output", async () =
   expect(output.cancel).toHaveBeenCalledTimes(2);
   expect(output.finalize).not.toHaveBeenCalled();
 });
+
+// An image sequence in the added slot: no video track exists to decode, so
+// the segment's frames are composed from the stills — push-in and crossfade
+// included — at the same 30 fps the clip segments decode at. The scratch
+// canvas is stubbed with a recording context so the composed draws are the
+// assertion surface.
+function stubScratchCanvas() {
+  const calls = [];
+  const ctx = {
+    globalAlpha: 1, fillStyle: null,
+    clearRect() {}, fillRect() {}, save() {}, restore() {},
+    drawImage(img, dx, dy, dw, dh) { calls.push({ img, dx, dy, dw, dh, alpha: this.globalAlpha }); },
+  };
+  const scratch = { width: 0, height: 0, getContext: () => ctx };
+  const realCreate = document.createElement.bind(document);
+  jest.spyOn(document, "createElement").mockImplementation((tag) => (tag === "canvas" ? scratch : realCreate(tag)));
+  return { scratch, calls };
+}
+
+const still = (w = 100, h = 200) => ({ width: w, height: h, naturalWidth: w, naturalHeight: h });
+
+test("an image sequence exports as the added segment, composed frame by frame", async () => {
+  input.getPrimaryAudioTrack = async () => null;
+  const { calls } = stubScratchCanvas();
+  try {
+    const first = still(), second = still();
+    const perFrame = [];
+    let cursor = 0;
+    const drawFrame = jest.fn((time, frame, segment) => {
+      if (segment === 1) perFrame.push({ time, draws: calls.slice(cursor) });
+      cursor = calls.length;
+    });
+    const result = await encode({ drawFrame, appendImages: [{ source: first, seconds: 1 }, { source: second, seconds: 1 }] });
+    expect(result.duration).toBeCloseTo(2.11);
+    expect(drawFrame.mock.calls.map(([, , segment]) => segment)).toEqual([...Array(4).fill(0), ...Array(60).fill(1)]);
+    expect(videoSource.add).toHaveBeenCalledTimes(64);
+    // The opening frame of the sequence: one still, barely pushed in yet.
+    expect(perFrame[0].draws).toHaveLength(1);
+    expect(perFrame[0].draws[0].img).toBe(first);
+    expect(perFrame[0].draws[0].dw).toBeGreaterThan(100.2);
+    expect(perFrame[0].draws[0].dw).toBeLessThan(101);
+    // Halfway through the first still the push-in has visibly grown.
+    const mid = perFrame.find(({ time }) => Math.abs(time - 0.11 - 0.5) < 1 / 30);
+    expect(mid.draws).toHaveLength(1);
+    expect(mid.draws[0].dw).toBeGreaterThan(perFrame[0].draws[0].dw + 3);
+    // Inside the crossfade both stills paint, the incoming one translucent.
+    const fade = perFrame.find(({ time }) => time - 0.11 > 0.7 && time - 0.11 < 0.95);
+    expect(fade.draws).toHaveLength(2);
+    expect(fade.draws[0].img).toBe(first);
+    expect(fade.draws[1].img).toBe(second);
+    expect(fade.draws[1].alpha).toBeGreaterThan(0);
+    expect(fade.draws[1].alpha).toBeLessThan(1);
+    // Past the cut only the second still paints.
+    const after = perFrame[perFrame.length - 1];
+    expect(after.draws).toHaveLength(1);
+    expect(after.draws[0].img).toBe(second);
+    expect(output.addAudioTrack).not.toHaveBeenCalled();
+    expect(result.audioSegments).toEqual([]);
+  } finally {
+    jest.restoreAllMocks();
+  }
+});
+
+test("the added slot's trims bound the image sequence like a clip", async () => {
+  input.getPrimaryAudioTrack = async () => null;
+  const { calls } = stubScratchCanvas();
+  try {
+    const first = still(), second = still();
+    const drawFrame = jest.fn();
+    const result = await encode({ drawFrame, appendStart: 1.5, appendImages: [{ source: first, seconds: 1 }, { source: second, seconds: 1 }] });
+    expect(result.duration).toBeCloseTo(0.61);
+    const segmentFrames = drawFrame.mock.calls.filter(([, , segment]) => segment === 1);
+    expect(segmentFrames).toHaveLength(15);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every(({ img }) => img === second)).toBe(true);
+  } finally {
+    jest.restoreAllMocks();
+  }
+});
+
+test("an image sequence carries no audio of its own; the base's join is untouched", async () => {
+  const { calls } = stubScratchCanvas();
+  global.OfflineAudioContext = jest.fn().mockImplementation(() => ({
+    destination: {},
+    createBufferSource: () => ({ connect: jest.fn(), start: jest.fn() }),
+    startRendering: async () => ({ numberOfChannels: 2, getChannelData: () => new Float32Array(9120) }),
+  }));
+  AudioSample.fromAudioBuffer.mockReturnValue([]);
+  AudioSampleSink.mockImplementation(() => ({ samples: async function* () {
+    yield { timestamp: 0.5, duration: 0.11, toAudioBuffer: () => ({}), close: jest.fn() };
+  } }));
+  try {
+    const result = await encode({ appendImages: [{ source: still(), seconds: 1 }, { source: still(), seconds: 1 }] });
+    expect(result.duration).toBeCloseTo(2.11);
+    expect(result.audioSegments).toHaveLength(1);
+    expect(result.audioSegments[0].start).toBe(0);
+    expect(calls.length).toBeGreaterThan(0);
+  } finally {
+    delete global.OfflineAudioContext;
+    jest.restoreAllMocks();
+  }
+});
+
+test("a real added clip wins over images: the two are never both composited", async () => {
+  input.getPrimaryAudioTrack = async () => null;
+  addClip();
+  const drawFrame = jest.fn();
+  const result = await encode({ appendSource: new Blob(), drawFrame, appendImages: [{ source: still(), seconds: 1 }] });
+  expect(result.duration).toBeCloseTo(0.19);
+  expect(drawFrame.mock.calls.map(([, , segment]) => segment)).toEqual([0, 0, 0, 0, 1, 1]);
+});

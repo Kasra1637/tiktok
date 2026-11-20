@@ -208,6 +208,30 @@ class TestCreateStoryProject:
         assert stored["screen_text"] == SCREEN
         assert stored["sticker_plan"] == STICKERS
 
+    def test_patch_accepts_a_catalog_story_type(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _ = _story(api, "Patch Type Ok")
+        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(
+            story_type="demo_moment"), ANON))
+        stored = _run(api.get_studio_project(project["id"], ANON))
+        assert stored["story_type"] == "demo_moment"
+
+    def test_patch_refuses_an_unknown_story_type(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _ = _story(api, "Patch Type Bad")
+        # The create endpoint validates the type against the catalog;
+        # the draft edit must hold the same line. A PATCH that stored
+        # an unknown id silently would leave the plan endpoint to
+        # refuse later, with the founder further from the pick that
+        # caused it — so the refusal names the bad id here, at the edit.
+        with pytest.raises(HTTPException) as exc:
+            _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(
+                story_type="testimonial"), ANON))
+        assert exc.value.status_code == 400
+        assert "testimonial" in exc.value.detail
+        stored = _run(api.get_studio_project(project["id"], ANON))
+        assert stored["story_type"] == "question_poll"
+
     def test_story_frame_length_survives_a_patch(self, api):
         from models import UpdateStudioProjectRequest
         project, _ = _story(api, "Patch Length")
@@ -457,3 +481,47 @@ def test_stories_router_never_imports_the_composition_root():
         elif isinstance(node, ast.ImportFrom):
             imports.add((node.module or "").split(".")[0])
     assert "server" not in imports
+
+
+# ------------------------------------------------- screen-text suggestion
+
+class TestStoryScreenTextSuggestion:
+    def test_suggestion_answers_and_writes_nothing(self, api, monkeypatch):
+        from models import SuggestStoryScreenTextRequest
+        project, _ = _story(api, "Suggest Writes Nothing")
+        _plan(api, project["id"], monkeypatch)
+
+        async def fake_suggest(project_arg, profile_arg):
+            return "Counting tomatoes, losing count again"
+
+        monkeypatch.setattr(
+            api.ai_service, "suggest_story_screen_text", fake_suggest)
+        out = _run(api.suggest_story_screen_text(
+            project["id"], SuggestStoryScreenTextRequest(), ANON))
+        assert out["screen_text"] == "Counting tomatoes, losing count again"
+        assert out["original"] == SCREEN
+        # Advisory like the cover suggestion (ADR 0145): the stored
+        # text is still the plan's — accepting is the page's own edit.
+        row = _run(api._fetch_one(
+            "SELECT screen_text FROM studio_projects WHERE id = ?",
+            (project["id"],)))
+        assert row["screen_text"] == SCREEN
+
+    def test_suggestion_refuses_a_hook_video_project(self, api):
+        from models import (
+            CreateStudioProjectRequest, SuggestStoryScreenTextRequest)
+        profile = _profile(api, "Suggest Video")
+        project = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), user_id=ANON))
+        with pytest.raises(HTTPException) as exc:
+            _run(api.suggest_story_screen_text(
+                project["id"], SuggestStoryScreenTextRequest(), ANON))
+        assert exc.value.status_code == 400
+        assert "not a story" in exc.value.detail
+
+    def test_suggestion_404s_for_a_missing_project(self, api):
+        from models import SuggestStoryScreenTextRequest
+        with pytest.raises(HTTPException) as exc:
+            _run(api.suggest_story_screen_text(
+                "no-such-project", SuggestStoryScreenTextRequest(), ANON))
+        assert exc.value.status_code == 404

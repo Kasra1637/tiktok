@@ -20,9 +20,8 @@ ANON = "anonymous"
 
 KIT = {
     "caption": (
-        "Stop writing empty pages with one timed start — "
-        "a focus timer that starts in one tap. "
-        "What stalls your first sentence?"
+        "Stop writing empty pages — the first line is the hard part. "
+        "What stalls yours?"
     ),
     "hashtags": ["#FocusTimer", "#productivity", "#studytok", "#focus"],
     "cover_text": "Stop writing empty pages",
@@ -31,8 +30,8 @@ KIT = {
 KIT2 = {
     "caption": (
         "Stop staring at a blank page — "
-        "this timer starts your session in one tap. "
-        "What will you start first?"
+        "the first line never comes easy. "
+        "What starts you?"
     ),
     "hashtags": ["#FocusTimer", "#studywithme", "#deepwork", "#habits"],
     "cover_text": "Start without stalling",
@@ -419,7 +418,7 @@ class TestPostKitCaptionGuards:
     def test_happy_path_returns_single_caption(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -434,7 +433,7 @@ class TestPostKitCaptionGuards:
     def test_too_few_hashtags_is_loud(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -460,7 +459,7 @@ class TestPostKitCaptionGuards:
     def test_caption_without_its_question_is_loud(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap.",
+                "caption": "Stop writing empty pages — the first line is the hardest part.",
                 "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -490,7 +489,7 @@ class TestPostKitCaptionGuards:
         for caption in (
             "Timer on, pages done. What worked?",  # 34 chars: too short
             "Stop writing empty pages with one timed start — "
-            "a focus timer that starts in one tap. "
+            "the first line is the hardest part of the whole page. "
             "What stalls your first sentence?",  # over 100 chars: too long
         ):
             async def fake_chat(**kwargs):
@@ -508,7 +507,7 @@ class TestPostKitCaptionGuards:
     def test_five_classified_hashtags_are_enough(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits", "#phonehabits"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -521,7 +520,7 @@ class TestPostKitCaptionGuards:
     def test_four_candidates_cannot_make_a_kit(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer", "#a", "#b", "#c"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -537,7 +536,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             seen.update(kwargs)
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer", "#studytok", "#deepwork", "#writinghabits", "#phonehabits"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -558,7 +557,7 @@ class TestPostKitCaptionGuards:
         async def fake_chat(**kwargs):
             seen.update(kwargs)
             return {
-                "caption": "Stop writing empty pages — a timer that starts in one tap. What stalls you?",
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
                 "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
                 "cover_text": "Stop writing empty pages",
             }
@@ -570,3 +569,34 @@ class TestPostKitCaptionGuards:
         assert "50 to 80" in brief
         assert "everyday user" in brief
         assert "founder" in brief
+
+    def test_caption_prompt_sells_the_watch_not_the_app(self, api, monkeypatch):
+        """Kasra's ruling (ADR 0234): the caption sells the watch, not
+        the app — it leads with what the viewer gets, payoff withheld,
+        never narrates the recording, the place, or using the app,
+        never makes the app its subject, and its closing question is
+        about the viewer's own experience. The old instruction — name
+        what the app did for you — is gone."""
+        seen = {}
+
+        async def fake_chat(**kwargs):
+            seen.update(kwargs)
+            return {
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        _run(api.ai_service.generate_post_kit(project, profile))
+        brief = str(seen.get("system_message", "")) + str(seen.get("prompt", ""))
+        assert "SELLS THE WATCH" in brief
+        assert "what the viewer gets from watching" in brief
+        assert "payoff withheld" in brief
+        assert "Never narrate the recording, the place, or using the app" in brief
+        assert "never make the app the caption\u2019s subject" in brief
+        assert "question about the viewer\u2019s own experience" in brief
+        assert "never about the app" in brief
+        assert "did for you" not in brief
+        assert "name what the app" not in brief

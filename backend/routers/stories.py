@@ -33,6 +33,7 @@ from models import (
     CreateStoryProjectRequest,
     GenerateStoryPlanRequest,
     GenerateStoryRequest,
+    SuggestStoryScreenTextRequest,
     now_iso,
 )
 
@@ -459,6 +460,60 @@ async def generate_story_plan(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
         brand_name=(profile.get("brand_name") or "").strip(),
     )
+
+
+@router.post("/stories/projects/{project_id}/screen-text-suggestion")
+async def suggest_story_screen_text(
+    project_id: str, payload: SuggestStoryScreenTextRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    One fresh screen text the founder may accept (ADR 0236).
+
+    Advisory like the cover text's suggestion (ADR 0145): writes
+    nothing, and accepting goes through the page's normal draft edit.
+    The suggestion is written from the editor's current values — the
+    payload's lines win, the saved row fills what the payload omits —
+    under the plan's own screen-text rules, so it obeys the same caps
+    and the same sound-off doctrine as the text it would replace. A
+    refusal surfaces with its reason, in the founder's words (the
+    studio rewrite endpoints' rule).
+    """
+    require_ai_configured()
+    row = await _story_project_row(project_id, user_id)
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+
+    suggestion_project = dict(row)
+    if payload.hook_line is not None:
+        suggestion_project["hook_line"] = payload.hook_line
+    if payload.script is not None:
+        suggestion_project["script"] = payload.script
+    if payload.screen_text is not None:
+        suggestion_project["screen_text"] = payload.screen_text
+    if row.get("content_angle_id"):
+        angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
+            (row["content_angle_id"], row.get("brand_profile_id"), user_id),
+        )
+        suggestion_project["content_angle"] = angle
+    try:
+        text = await _log_model_call(
+            "story_screen_text", "text", TEXT_MODEL,
+            lambda: ai_service.suggest_story_screen_text(suggestion_project, profile),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=project_id,
+        )
+    except ai_service.RewriteRefusal as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Story screen text suggestion failed: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=502, detail=f"Screen text suggestion failed: {str(e)[:800]}")
+    return {
+        "screen_text": text,
+        "original": " ".join(str(suggestion_project.get("screen_text") or "").split()).strip(),
+    }
 
 
 @router.post("/stories/projects/{project_id}/generate", status_code=202)

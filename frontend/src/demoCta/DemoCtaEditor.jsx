@@ -10,6 +10,8 @@ import {
   Clapperboard,
   Download,
   Film,
+  ImagePlus,
+  Images,
   Megaphone,
   Pause,
   Play,
@@ -76,6 +78,8 @@ import { useOpeningMessages } from "./useOpeningMessages";
 import { TRANSITIONS } from "./transitions";
 import { useEditSession } from "./editSession";
 import { readDraft } from "./draftStorage";
+import { IMAGE_SECONDS, clampImageSeconds, composeImageFrame, imageSequenceDuration } from "./imageSequence";
+import { createImageSequencePlayer } from "./imagePlayer";
 import { TrimTimeline } from "./TrimTimeline";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
@@ -869,6 +873,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const appendVideoRef = useRef(null);
   const appendObjectUrlRef = useRef(null);
   const appendInputRef = useRef(null);
+  // The second slot's other media kind (ADR 0237): a sequence of still
+  // images — the founder's app screens — instead of a clip. The draft
+  // stores the entries (their blobs ride the same IndexedDB draft as the
+  // clips' bytes); the decoded elements, their object URLs and the
+  // sequence's virtual player are derived state, rebuilt from the entries
+  // and never stored. One slot, one kind: attaching either clears the
+  // other, the way Replace second clip swaps one clip for another.
+  const [appendImages, setAppendImages] = useState(null);
+  const appendImagesRef = useRef(null);
+  appendImagesRef.current = appendImages;
+  const appendDrawablesRef = useRef([]);
+  const appendDrawableCacheRef = useRef(new Map());
+  const appendPlayerRef = useRef(null);
+  const appendScratchRef = useRef(null);
+  const appendImagesInputRef = useRef(null);
+  const appendImagesModeRef = useRef("replace");
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
 
   // Preview transport + scoped replay + frame painting live in
   // usePreviewLoop; the editor only reads the playhead and calls the
@@ -922,6 +944,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
+    appendImages, reduceMotion,
     baseStart, appendStart, baseEnd, appendEnd,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -931,6 +954,93 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setSaving, setSaved, setSaveError, setError,
   });
   const latestExportError = exportErrors[exportErrors.length - 1] || null;
+
+  // Retire the image sequence's derived state: the player, its decoded
+  // stills and their object URLs. The append element ref only ever holds
+  // the player when the sequence owns the slot, so a mounted clip element
+  // is never mistaken for it (the player alone answers frameCanvas).
+  const clearAppendImages = () => {
+    if (appendPlayerRef.current) {
+      appendPlayerRef.current.dispose();
+      appendPlayerRef.current = null;
+    }
+    if (appendVideoRef.current && typeof appendVideoRef.current.frameCanvas === "function") {
+      appendVideoRef.current = null;
+    }
+    appendDrawableCacheRef.current.forEach((rec) => URL.revokeObjectURL(rec.url));
+    appendDrawableCacheRef.current.clear();
+    appendDrawablesRef.current = [];
+  };
+
+  // Images in the second slot: decode the stored entries, stand the
+  // sequence's virtual player in the append element's place, and report
+  // the sequence to the timeline as a clip of the summed holds
+  // (appendMeta), exactly as a loaded clip reports itself — so trims, the
+  // joint transition and the end card's window all read it unchanged.
+  // The player composes each frame from the decoded stills at paint time,
+  // and the export composes the same way from the same entries, so the
+  // two cannot disagree (ADR 0007's contract, ADR 0237).
+  useEffect(() => {
+    if (!appendImages || appendImages.length === 0) return undefined;
+    let cancelled = false;
+    // Stills that left the sequence (removed, or a set replaced) release
+    // their URLs; the ones that stay keep their decode.
+    const live = new Set(appendImages.map((entry) => entry.id));
+    appendDrawableCacheRef.current.forEach((rec, id) => {
+      if (!live.has(id)) {
+        URL.revokeObjectURL(rec.url);
+        appendDrawableCacheRef.current.delete(id);
+      }
+    });
+    (async () => {
+      const drawables = [];
+      for (const entry of appendImages) {
+        let rec = appendDrawableCacheRef.current.get(entry.id);
+        if (!rec) {
+          const url = URL.createObjectURL(entry.blob);
+          const img = new Image();
+          rec = { url, img };
+          appendDrawableCacheRef.current.set(entry.id, rec);
+          await new Promise((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error(`"${entry.name || "An image"}" couldn't be read as an image. Choose a PNG or JPEG screenshot, or remove it.`));
+            img.src = url;
+          });
+        }
+        drawables.push(rec.img);
+      }
+      if (cancelled) return;
+      appendDrawablesRef.current = drawables;
+      const total = imageSequenceDuration(appendImages);
+      if (!appendPlayerRef.current) {
+        if (!appendScratchRef.current) appendScratchRef.current = document.createElement("canvas");
+        const player = createImageSequencePlayer({
+          duration: total,
+          frameAt: (t) => composeImageFrame(appendScratchRef.current, appendDrawablesRef.current, appendImagesRef.current, t, { reduceMotion: reduceMotionRef.current }),
+        });
+        appendPlayerRef.current = player;
+        appendVideoRef.current = player;
+      } else {
+        appendPlayerRef.current.setDuration(total);
+      }
+      const first = drawables[0];
+      const w = first?.naturalWidth || first?.width || 0;
+      const h = first?.naturalHeight || first?.height || 0;
+      setAppendMeta((prev) => (prev && prev.w === w && prev.h === h && prev.d === total ? prev : { w, h, d: total }));
+      setAppendName(`${appendImages.length} image${appendImages.length === 1 ? "" : "s"}`);
+      setAppendError(null);
+      dirtyRef.current = true;
+      kickPreviewRef.current?.();
+    })().catch((err) => {
+      if (cancelled) return;
+      // No half-known sequence: without its stills decoded there is no
+      // duration to trim or export against, so the slot reads not-ready
+      // (Export stays disabled) until the bad still is removed.
+      setAppendMeta(null);
+      setAppendError(err?.message || "An added image couldn't be read.");
+    });
+    return () => { cancelled = true; };
+  }, [appendImages]);
   // The "Export ready" card, so a finished export can put itself in front of
   // the founder. A ref rather than a scrollIntoView on mount because the card
   // renders inside the PREVIEW column, which is its own scroll container at
@@ -1189,7 +1299,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // cannot leave an earlier file marked ready. With locks, transport updates
   // the slider readbacks but not the exported framing, so use the locks alone.
   const exportEditKey = JSON.stringify([
-    videoUrl, appendUrl, baseStart, appendStart, baseEnd, appendEnd,
+    videoUrl, appendUrl, appendImages?.map((entry) => `${entry.id}:${entry.seconds}`).join("|") || "", baseStart, appendStart, baseEnd, appendEnd,
     device, preset, viewMode, appendMode, bg, anim, envBg,
     appendBg, appendAnim, appendEnv, mockupStretchY, videoFit,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
@@ -1210,7 +1320,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   }, [exportEditKey, invalidateSequence]);
 
   const editSnapshot = {
-    baseMedia, appendMedia, baseStart, appendStart, baseEnd, appendEnd, sourceReplaced, openingProfileId,
+    baseMedia, appendMedia, appendImages, baseStart, appendStart, baseEnd, appendEnd, sourceReplaced, openingProfileId,
     bg, anim, mockupStretchY, videoFit, viewMode, envBg, screenX, screenY, screenW, screenH,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyText, storyTiming, storyOffsetY,
@@ -1225,6 +1335,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     videoRef.current?.pause();
     appendVideoRef.current?.pause();
     setIsPlaying(false);
+    // Leaving an image sequence behind (an undo, a redo, a restored draft
+    // carrying a clip instead) retires its player and decoded stills; if
+    // the restored edit carries a sequence, the decode effect rebuilds
+    // them from its entries.
+    if (!edit.appendImages?.length) clearAppendImages();
     const setters = {
       baseStart: setBaseStart, appendStart: setAppendStart, baseEnd: setBaseEnd, appendEnd: setAppendEnd, sourceReplaced: setSourceReplaced, openingProfileId: setOpeningProfileId,
       bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit, viewMode: setViewMode,
@@ -1239,6 +1354,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       appendOverlays: setAppendOverlays, transition: setTransition, baseMuted: setBaseMuted, appendMuted: setAppendMuted,
       appendVideoFit: setAppendVideoFit, appendVideoScale: setAppendVideoScale,
       appendVideoOffsetX: setAppendVideoOffsetX, appendVideoOffsetY: setAppendVideoOffsetY,
+      appendImages: setAppendImages,
       zoomKeyframes: setZoomKeyframes,
     };
     Object.entries(setters).forEach(([key, setter]) => { if (key in edit) setter(edit[key]); });
@@ -1324,6 +1440,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const handleAppendFile = (file) => {
     if (!file) return;
     invalidateSequence();
+    // One slot, one kind: the clip takes the place of any image sequence.
+    clearAppendImages();
+    setAppendImages(null);
     setAppendError(null);
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
     const url = URL.createObjectURL(file);
@@ -1336,8 +1455,73 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setAppendName(file.name || "added clip");
   };
 
+  const handleAppendImages = (files, mode = "replace") => {
+    const picked = [...(files || [])].filter(
+      (f) => f && (f.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif)$/i.test(f.name || ""))
+    );
+    if (!picked.length) {
+      setAppendError("Choose image files — PNG or JPEG screenshots of your app.");
+      return;
+    }
+    invalidateSequence();
+    setAppendError(null);
+    const entries = picked.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      blob: file,
+      name: file.name || "image",
+      seconds: IMAGE_SECONDS.default,
+    }));
+    if (mode === "add" && appendImages?.length) {
+      setAppendImages([...appendImages, ...entries]);
+      return;
+    }
+    // A fresh set takes the slot: an attached clip leaves, the way Replace
+    // second clip swaps one clip for another. The decode effect stands the
+    // new sequence's player up from the entries.
+    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
+    appendObjectUrlRef.current = null;
+    setAppendUrl(null);
+    setAppendMedia(null);
+    setAppendMeta(null);
+    setAppendStart(0);
+    setAppendEnd(null);
+    setAppendImages(entries);
+  };
+
+  const removeAppendImage = (id) => {
+    if (!appendImages) return;
+    invalidateSequence();
+    const next = appendImages.filter((entry) => entry.id !== id);
+    if (!next.length) {
+      removeAppend();
+      return;
+    }
+    setAppendImages(next);
+  };
+
+  const moveAppendImage = (id, direction) => {
+    if (!appendImages) return;
+    const index = appendImages.findIndex((entry) => entry.id === id);
+    const swap = index + direction;
+    if (index < 0 || swap < 0 || swap >= appendImages.length) return;
+    invalidateSequence();
+    const next = [...appendImages];
+    [next[index], next[swap]] = [next[swap], next[index]];
+    setAppendImages(next);
+  };
+
+  const setAppendImageSeconds = (id, seconds) => {
+    if (!appendImages) return;
+    // No invalidateSequence here: the export edit key carries the holds,
+    // the same way the crop sliders invalidate — a drag fires dozens of
+    // changes and the key catches every one.
+    setAppendImages(appendImages.map((entry) => (entry.id === id ? { ...entry, seconds: clampImageSeconds(seconds) } : entry)));
+  };
+
   const removeAppend = () => {
     invalidateSequence();
+    clearAppendImages();
+    setAppendImages(null);
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
     appendObjectUrlRef.current = null;
     setAppendUrl(null);
@@ -1356,6 +1540,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   useEffect(() => () => {
     if (sourceObjectUrlRef.current) URL.revokeObjectURL(sourceObjectUrlRef.current);
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
+    clearAppendImages();
   }, []);
 
   // Probe metadata and park the preview on its first frame
@@ -1626,7 +1811,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // room to spare: overestimating only scrolls a column sooner, while
   // underestimating would grow a page scrollbar beside a studio that fits.
   const settingsRef = useRef(null);
-  const appendNotReady = !!appendUrl && !appendMeta;
+  const appendNotReady = (!!appendUrl || !!appendImages?.length) && !appendMeta;
   // The plan's recording note, when there is a plan behind this clip. Sits at
   // the top of the settings column rather than inside a group: only one group
   // is open at a time, and the instruction has to stay readable while the
@@ -1695,11 +1880,30 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           }}
         />
         )}
+        {/* The images input is its own door for the same reason: one input
+            per source. Which button opened it (a fresh set, or more for the
+            set on screen) rides the mode ref, so one input serves both. */}
+        {videoUrl && (
+        <input
+          ref={appendImagesInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          aria-label="Choose images to add after base"
+          data-testid="append-images-input"
+          className="sr-only"
+          onChange={(e) => {
+            const files = e.target.files;
+            e.target.value = "";
+            if (files?.length) handleAppendImages(files, appendImagesModeRef.current);
+          }}
+        />
+        )}
         {/* The recording note reads until the demo exists: once the second
             clip is attached the founder has done what it asked, and a
             standing instruction for finished work reads as an unanswered
             debt. Removing the clip brings it back. */}
-        {recordBrief && !appendUrl && <RecordBriefNote brief={recordBrief} />}
+        {recordBrief && !appendUrl && !appendImages?.length && <RecordBriefNote brief={recordBrief} />}
         <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
@@ -1895,7 +2099,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             "before" was the second upload button nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
-          <p className="text-sm text-muted-foreground">Plays after the base, with its own audio and style. One export covers both.</p>
+          <p className="text-sm text-muted-foreground">Plays after the base, in its own style — a clip, or your app screens as an image sequence. One export covers both.</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -1907,13 +2111,23 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <Upload className="h-3.5 w-3.5" />
               <span>{appendUrl ? "Replace second clip" : "Add second clip"}</span>
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10"
+              onClick={() => { appendImagesModeRef.current = "replace"; appendImagesInputRef.current?.click(); }}
+              data-testid="append-images-button"
+            >
+              <Images className="h-3.5 w-3.5" />
+              <span>{appendImages?.length ? "Replace images" : appendUrl ? "Replace with images" : "Add images"}</span>
+            </Button>
             {appendName && (
               <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={appendName} data-testid="append-file-name">
                 {appendName}
                 {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendDuration.toFixed(1)}s${appendStart > 0 ? " used" : ""}` : ""}
               </span>
             )}
-            {appendUrl && (
+            {(appendUrl || !!appendImages?.length) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1928,8 +2142,43 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             )}
           </div>
           {appendError && <p role="alert" className="text-sm text-destructive-text">{appendError}</p>}
-          {appendUrl && !appendMeta && !appendError && <p role="status" className="text-sm text-muted-foreground">Loading added clip…</p>}
-          {appendUrl && (
+          {!appendMeta && !appendError && (appendUrl || !!appendImages?.length) && <p role="status" className="text-sm text-muted-foreground">{appendImages?.length ? "Loading added images…" : "Loading added clip…"}</p>}
+          {!!appendImages?.length && (
+            <div className="space-y-2" data-testid="append-images-list">
+              <SubLabel>Image sequence · {imageSequenceDuration(appendImages).toFixed(1)}s</SubLabel>
+              <p className="text-sm text-muted-foreground">
+                Each screen pushes in gently and crossfades into the next, so the sequence plays as one flow. Put them in the order the story walks through the app; the end card can close over the last one.
+              </p>
+              {appendImages.map((entry, index) => (
+                <div key={entry.id} className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2" data-testid={`append-image-row-${entry.id}`}>
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 flex-1 truncate text-sm" title={entry.name}>{index + 1}. {entry.name}</span>
+                    <Button variant="ghost" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendImage(entry.id, -1)} data-testid={`append-image-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 w-8" disabled={index === appendImages.length - 1} onClick={() => moveAppendImage(entry.id, 1)} data-testid={`append-image-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 w-8" onClick={() => removeAppendImage(entry.id)} data-testid={`append-image-remove-${entry.id}`} title="Remove this image" aria-label={`Remove ${entry.name}`}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <ControlSlider label="Show for" value={entry.seconds ?? IMAGE_SECONDS.default} min={IMAGE_SECONDS.min} max={IMAGE_SECONDS.max} step={IMAGE_SECONDS.step} onChange={(v) => setAppendImageSeconds(entry.id, v)} testId={`append-image-seconds-${entry.id}`} format={(v) => `${Number(v).toFixed(1)}s`} />
+                </div>
+              ))}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-10"
+                onClick={() => { appendImagesModeRef.current = "add"; appendImagesInputRef.current?.click(); }}
+                data-testid="append-images-add-more"
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                <span>Add more images</span>
+              </Button>
+            </div>
+          )}
+          {(appendUrl || !!appendImages?.length) && (
             <StylePicker
               label="Second clip style"
               value={appendMode}
@@ -1957,18 +2206,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <AnimationPicker value={appendAnim} onChange={setAppendAnim} prefix="append-" />
             </>
           )}
-          {appendUrl && (
+          {(appendUrl || !!appendImages?.length) && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
                 <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
                   onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
                 Overlays on both clips
               </label>
+              {/* A still is silent: the mute belongs to clips only, so an
+                  image sequence never offers it. */}
+              {appendUrl && (
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
                 <input type="checkbox" checked={appendMuted} data-testid="append-audio-mute"
                   onChange={(event) => { invalidateSequence(); setAppendMuted(event.target.checked); }} />
                 Mute second clip · preview + export
               </label>
+              )}
             </div>
           )}
           {/* The added clip's own Video crop (ADR 0164): the same block the
@@ -2895,7 +3148,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           className="pointer-events-none absolute h-px w-px opacity-0"
           playsInline
           muted={previewMuted}
-          loop={!appendUrl}
+          loop={!appendUrl && !appendImages?.length}
         />
         {/* Second-segment playback; export decodes the original bytes. */}
         {appendUrl && (

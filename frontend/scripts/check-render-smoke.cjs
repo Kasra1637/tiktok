@@ -472,6 +472,32 @@ const apiStub = {
   // the eager create adopts and which hides the auto-generation this suite
   // is about behind a plan the founder never wrote.
   createStudioProject: async () => ({ ...BASE_PROJECT }),
+  // A story draft is a studio project with kind="story" (ADR 0227):
+  // creation answers with the fresh row, and the story list reads the
+  // profile's projects and keeps the story rows. Empty by default;
+  // the Stories checks override these with the drafts they exercise.
+  createStoryProject: async (payload) => ({
+    ...BASE_PROJECT,
+    id: "story-1",
+    kind: "story",
+    brand_profile_id: payload?.brand_profile_id || "b1",
+    story_type: payload?.story_type || "",
+    // The server's create writes the type's settled default length.
+    duration_seconds:
+      { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+        payload?.story_type
+      ] || 10,
+    frame_count: 1,
+  }),
+  getStoryProjects: async () => ({ projects: [] }),
+  // The Stories flow (ADR 0236): plan, render submit, screen-text
+  // suggestion and kit regenerate. Benign by default — the Stories
+  // checks override them with the rows their fixtures exercise.
+  generateStoryPlan: async () => ({}),
+  generateStory: async () => SEGMENT,
+  suggestStoryScreenText: async () => ({ screen_text: "" }),
+  regenerateStoryKit: async () => ({ story_kit: null }),
+  refreshDirectionOptions: async () => ({ options: [] }),
   updateStudioProject: async () => PROJECT_WITH_STRATEGY,
   detachAsset: async () => BASE_PROJECT,
   getProjects: async () => ({ projects: [] }),
@@ -1252,6 +1278,42 @@ async function main() {
       if (!still || still.getAttribute("aria-pressed") !== "true") {
         throw new Error("the pick was lost on return to the step");
       }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a fixed camera's angle section says the angles are staged indoors", async (ctx) => {
+    // ADR 0233: the angles were written before the camera setup was
+    // picked, so under a fixed camera the angle section carries a small
+    // note that they are staged indoors (their places arrive restated
+    // from the server). The note belongs to the fixed setup alone, and
+    // nobody is asked to re-pick an angle to satisfy it.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch, strategy_is_current: false };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Audience & template");
+        if (ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
+          throw new Error("the indoor note shows under a handheld camera");
+        }
+        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
+        if (!ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
+          throw new Error("the indoor note is missing under a fixed camera");
+        }
+        expectText(ctx, "staged indoors", "the note does not say the angles are staged indoors");
+        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "handheld");
+        if (ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
+          throw new Error("the indoor note stays after flipping back to handheld");
+        }
+      });
     } finally {
       global.__SMOKE_PARAMS = "";
     }
@@ -11790,6 +11852,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("Checking the Dashboard routing home...");
   await runDashboardChecks();
 
+  console.log("");
+  console.log("Checking the Stories page shell...");
+  await runStoriesChecks();
+
   // The frame is a map of destinations; the draft line is the one thing in it
   // that remembers a place the founder already is. It has to appear only when
   // there is a real project behind it — a shortcut into an empty wizard looks
@@ -12835,9 +12901,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 7) {
+      if (items.length !== 8) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 8. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -12855,6 +12921,7 @@ async function runSidebarNavChecks() {
         "/dashboard",
         "/brand",
         "/create",
+        "/stories",
         "/demo-cta",
         "/history",
         "/assets",
@@ -12909,13 +12976,22 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
+      // The Stories link carries its own canonical testid (ADR 0235);
+      // the sequence assertion above proves it sits directly after
+      // Create Video, and this one proves the entry's own shape.
+      if (!/to: "\/stories", label: "Stories", icon: Layers, testId: "stories-nav-link"/.test(src)) {
+        throw new Error(
+          "the Stories link changed its route, icon or testId. stories-nav-link " +
+            "is the canonical selector for the sidebar's Stories link."
+        );
+      }
     }
   );
 }
 
 /**
  * The Dashboard is a routing home (ADR 0208): one state-aware next
- * action, the six destinations as visual cards, and the newest renders
+ * action, the seven destinations as visual cards, and the newest renders
  * as pictures — never the removed dashboard's History restatement (no
  * totals, no failures, no Retry). These checks pin the route, the
  * default landing, the auth fallbacks, and the hero's precedence at
@@ -12951,7 +13027,7 @@ async function runDashboardChecks() {
   const expectGrid = (ctx) => {
     const cards = [...ctx.container.querySelectorAll('[data-testid^="dashboard-card-"]')];
     const hrefs = cards.map((c) => c.getAttribute("href"));
-    const expected = ["/create", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
+    const expected = ["/create", "/stories", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
     if (hrefs.join("|") !== expected.join("|")) {
       throw new Error(
         `the workflow grid routes ${hrefs.join(" -> ") || "(none)"}, expected ${expected.join(" -> ")}`
@@ -13078,6 +13154,533 @@ async function runDashboardChecks() {
     });
     expectHero(ctx, "Create a video", "/create");
     expectGrid(ctx);
+  });
+}
+
+/**
+ * The Stories page shell (ADR 0235): a sidebar link after Create
+ * Video, a route, a Dashboard card, and a page that is one stacked
+ * canvas — an app picker and the four story types, with the wizard's
+ * autosave pattern and nothing generated on a pick (ADR 0122). The
+ * plan, direction and render flow are the next phase; these checks
+ * pin the shell: the picks, the background draft creation, the
+ * debounced save, and the deep-link open.
+ */
+async function runStoriesChecks() {
+  const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
+  const storyRow = (overrides = {}) => ({
+    id: "story-9",
+    kind: "story",
+    brand_profile_id: "p1",
+    story_type: "hook_teaser",
+    duration_seconds: 10,
+    frame_count: 1,
+    status: "draft",
+    updated_at: "2026-11-20T10:00:00Z",
+    ...overrides,
+  });
+  // Mounts the page inside the stub scope and runs the check's
+  // interactions there: withApi restores the base stub when its body
+  // returns, so a click after the mount would hit the wrong stub.
+  async function inStories(ctx, extra = {}, params = "", body = async () => {}) {
+    const Stories = load("pages/Stories.jsx").default;
+    global.__SMOKE_PARAMS = params;
+    try {
+      await withApi(
+        {
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getStoryProjects: async () => ({ projects: [] }),
+          ...extra,
+        },
+        async () => {
+          await mount(Stories, {})(ctx);
+          await act(async () => {});
+          await body();
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  }
+  const typeCard = (ctx, id) => ctx.container.querySelector(`[data-testid="story-type-${id}"]`);
+  const saveStatus = (ctx) => ctx.container.querySelector('[data-testid="stories-autosave-status"]');
+
+  await check("the Stories route exists behind the app shell", async () => {
+    const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
+    if (!/lazy\(\(\)\s*=>\s*import\("\.\/pages\/Stories"\)\)/.test(src)) {
+      throw new Error("the Stories page is not lazy-loaded like the other app pages");
+    }
+    if (!/path="\/stories"/.test(src)) {
+      throw new Error("App.js has no /stories route");
+    }
+  });
+
+  await check("the Stories shell offers the four types and creates the draft on the type pick", async (ctx) => {
+    const creates = [];
+    await inStories(
+      ctx,
+      {
+        createStoryProject: async (payload) => {
+          creates.push(payload);
+          return storyRow({
+            id: "story-1",
+            story_type: payload.story_type,
+            duration_seconds:
+              { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+                payload.story_type
+              ] || 10,
+          });
+        },
+      },
+      "",
+      async () => {
+        // apiCalls is the whole suite's record, not this check's:
+        // only the calls this check's own interactions add count.
+        const callsBefore = apiCalls.length;
+        // The app preselects like the wizard does, but nothing is
+        // created until BOTH picks exist: opening the page is free.
+        if (!ctx.text().includes("Threadly")) {
+          throw new Error("the approved app is not preselected in the picker");
+        }
+        if (creates.length !== 0) {
+          throw new Error("a draft was created before a story type was picked");
+        }
+        const picker = ctx.container.querySelector('[data-testid="story-type-picker"]');
+        if (!picker) throw new Error("the story type picker did not render");
+        for (const [id, seconds] of [
+          ["hook_teaser", 10],
+          ["question_poll", 5],
+          ["demo_moment", 15],
+          ["announcement_countdown", 10],
+        ]) {
+          const card = typeCard(ctx, id);
+          if (!card) throw new Error(`the ${id} type card is missing`);
+          if (!card.textContent.includes(`${seconds}s`)) {
+            throw new Error(`the ${id} card does not name its ${seconds}s frame`);
+          }
+        }
+        await clickEl(ctx, typeCard(ctx, "question_poll"));
+        await act(async () => {});
+        if (creates.length !== 1) {
+          throw new Error(`picking a type created ${creates.length} drafts, expected exactly one`);
+        }
+        if (creates[0].brand_profile_id !== "p1" || creates[0].story_type !== "question_poll") {
+          throw new Error(
+            `the draft was created with ${JSON.stringify(creates[0])}, expected the picked app and type`
+          );
+        }
+        if (typeCard(ctx, "question_poll").getAttribute("aria-pressed") !== "true") {
+          throw new Error("the picked type does not read as picked");
+        }
+        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
+          throw new Error("the created draft shows no saved confirmation");
+        }
+        // ADR 0122: a pick creates a draft row and nothing else — no
+        // plan, no render, no generation call of any kind.
+        const generationCalls = apiCalls.slice(callsBefore).filter((name) =>
+          ["generateStoryPlan", "generateStory", "generatePlan", "generatePlanAndStrategy", "generateVideo", "generateStrategy"].includes(name)
+        );
+        if (generationCalls.length) {
+          throw new Error(`picking spent generation calls: ${generationCalls.join(", ")}`);
+        }
+      }
+    );
+  });
+
+  await check("a story type change autosaves the type and its default length together", async (ctx) => {
+    const patches = [];
+    let saved = null;
+    await inStories(
+      ctx,
+      {
+        createStoryProject: async (payload) => {
+          saved = storyRow({
+            id: "story-1",
+            story_type: payload.story_type,
+            duration_seconds:
+              { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+                payload.story_type
+              ] || 10,
+          });
+          return saved;
+        },
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      },
+      "",
+      async () => {
+        await clickEl(ctx, typeCard(ctx, "question_poll"));
+        await act(async () => {});
+        if (!saved) throw new Error("the type pick created no draft to edit");
+        await clickEl(ctx, typeCard(ctx, "demo_moment"));
+        if (patches.length !== 0) throw new Error("a type change saved before the debounce elapsed");
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (patches.length !== 1) {
+          throw new Error(`the type change autosaved ${patches.length} times, expected once`);
+        }
+        // The shell offers no length pick, so the new type brings its
+        // settled default with it (ADR 0235) — a 15s demo moment must
+        // not stay stored as the question/poll frame's 5s.
+        if (patches[0].story_type !== "demo_moment" || patches[0].duration_seconds !== 15) {
+          throw new Error(
+            `the autosave carried ${JSON.stringify(patches[0])}, expected the type and its 15s default`
+          );
+        }
+        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
+          throw new Error("no saved confirmation after the type autosave");
+        }
+      }
+    );
+  });
+
+  await check("a ?project= link opens the saved story draft and creates nothing", async (ctx) => {
+    const row = storyRow();
+    let creates = 0;
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => row,
+        getStoryProjects: async () => ({ projects: [row] }),
+        createStoryProject: async () => {
+          creates += 1;
+          return row;
+        },
+      },
+      "?project=story-9",
+      async () => {
+        if (creates !== 0) throw new Error("opening a saved draft created another one");
+        if (typeCard(ctx, "hook_teaser").getAttribute("aria-pressed") !== "true") {
+          throw new Error("the opened draft's type does not read as picked");
+        }
+        const draftRow = ctx.container.querySelector('[data-testid="story-draft-story-9"]');
+        if (!draftRow) throw new Error("the opened draft is not listed among the app's story drafts");
+        if (!draftRow.textContent.includes("Open now")) {
+          throw new Error("the open draft is not marked as the one being worked on");
+        }
+        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
+          throw new Error("the opened draft shows no saved confirmation");
+        }
+      }
+    );
+  });
+
+  await check("a ?project= link to a hook video is refused in words, not opened as a story", async (ctx) => {
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => storyRow({ id: "vid-1", kind: "video" }),
+      },
+      "?project=vid-1",
+      async () => {
+        const alert = ctx.container.querySelector('[data-testid="stories-error"]');
+        if (!alert || !alert.textContent.includes("hook video")) {
+          throw new Error("a video project link was not refused as a hook video");
+        }
+        if (!ctx.container.querySelector('[data-testid="story-type-picker"]')) {
+          throw new Error("the refusal took the pickers down with it");
+        }
+      }
+    );
+  });
+
+  // ------------------------------------------------------ phase 4 (0236)
+
+  const STORY_HOOK = "I keep losing count again.";
+  const STORY_SCRIPT = "At the stall I say it out loud once.";
+  const STORY_SCREEN = "Losing count by the tomatoes again";
+  const STORY_STICKERS = [
+    { platform: "both", sticker: "poll", wording: "Do you lose count too? — Yes / Every time", placement: "lower third, above the caption zone" },
+  ];
+  const storyCheck = (key, label) => ({
+    key, label, passed: true,
+    evidence: [`${label} holds on the settled plan.`],
+    next_step: "unused while passing",
+  });
+  const STORY_QUALITY = {
+    version: 1, advisory: true, kind: "story", passed: 4, total: 4,
+    checks: {
+      first_second_hook: storyCheck("first_second_hook", "Hook inside the first second"),
+      screen_text_stands_alone: storyCheck("screen_text_stands_alone", "Screen text stands alone muted"),
+      one_idea_per_frame: storyCheck("one_idea_per_frame", "One idea per frame"),
+      sticker_plan_present: storyCheck("sticker_plan_present", "Sticker plan present"),
+    },
+    next_steps: [],
+  };
+  const plannedRow = (overrides = {}) => storyRow({
+    hook_line: STORY_HOOK,
+    script: STORY_SCRIPT,
+    screen_text: STORY_SCREEN,
+    sticker_plan: STORY_STICKERS,
+    story_quality: STORY_QUALITY,
+    assets: [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }],
+    ...overrides,
+  });
+  const STORY_KIT = {
+    caption: "Losing count by the tomatoes, again.",
+    screen_text: STORY_SCREEN,
+    sticker_plan: STORY_STICKERS,
+    checklist: ["Add the screen text as a native text sticker — the exact words are in this kit."],
+    story_type: "question_poll",
+    frame_seconds: 5,
+  };
+
+  await check("the direction section reuses the wizard's picks and a fixed camera re-reads them", async (ctx) => {
+    const setups = [];
+    const patches = [];
+    let saved = plannedRow();
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => saved,
+        getStoryProjects: async () => ({ projects: [saved] }),
+        getDirectionOptions: async (_profileId, _angleId, cameraSetup) => {
+          setups.push(cameraSetup || "");
+          return {
+            location: ["Indoor kitchen", "Living room"],
+            lighting: ["Lighting one"],
+            wardrobe: ["Wardrobe one", "Wardrobe two"],
+          };
+        },
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      },
+      "?project=story-9",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="stories-direction-card"]');
+        if (!card) throw new Error("the direction section did not render for an opened draft");
+        const camera = ctx.container.querySelector('[data-testid="story-camera-setup"]');
+        if (!camera) throw new Error("the camera setup pick is missing from the direction section");
+        if (!ctx.container.querySelector('[data-testid="story-location-direction"]')) {
+          throw new Error("the location pick is not the wizard's DirectionSelect");
+        }
+        if (!ctx.container.querySelector('[data-testid="story-wardrobe"]')) {
+          throw new Error("the wardrobe pick is missing from the direction section");
+        }
+        if (!ctx.container.querySelector('[data-testid="template-photo"]')) {
+          throw new Error("the presenter photo control did not ride into the direction section");
+        }
+        // ADR 0220: the option lists are keyed on the camera setup —
+        // flipping to Fixed re-reads them under the fixed setup, whose
+        // list is indoor-only on the server.
+        await chooseOption(ctx, camera, "fixed");
+        await act(async () => {});
+        if (!setups.includes("fixed")) {
+          throw new Error(`the direction options were never re-read for a fixed camera (saw ${JSON.stringify(setups)})`);
+        }
+        if (!ctx.text().includes("Phone on a shelf or tripod")) {
+          throw new Error("the fixed camera's framing note did not replace the handheld one");
+        }
+        // A location pick rides the page's autosave like every edit.
+        const location = ctx.container.querySelector('[data-testid="story-location-direction"]');
+        await chooseOption(ctx, location, "Indoor kitchen");
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        const locationPatch = patches.find((p) => p.location === "Indoor kitchen");
+        if (!locationPatch) {
+          throw new Error(`the location pick never autosaved (patches: ${JSON.stringify(patches)})`);
+        }
+      }
+    );
+  });
+
+  await check("the story plan is one click, and the editors, preview and craft check follow it", async (ctx) => {
+    const planCalls = [];
+    const unplanned = storyRow();
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => unplanned,
+        getStoryProjects: async () => ({ projects: [unplanned] }),
+        generateStoryPlan: async (id, payload) => {
+          planCalls.push({ id, payload });
+          return plannedRow();
+        },
+      },
+      "?project=story-9",
+      async () => {
+        const callsBefore = apiCalls.length;
+        const button = ctx.container.querySelector('[data-testid="story-plan-generate"]');
+        if (!button) throw new Error("the Generate plan button did not render");
+        // ADR 0122: opening the draft generated nothing — the click is
+        // the generation, as everywhere else in the studio.
+        if (apiCalls.slice(callsBefore).includes("generateStoryPlan")) {
+          throw new Error("opening the draft spent a story plan call");
+        }
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (planCalls.length !== 1) {
+          throw new Error(`the plan click made ${planCalls.length} plan calls, expected one`);
+        }
+        if (planCalls[0].payload.story_type !== "hook_teaser" || planCalls[0].payload.frame_seconds !== 10) {
+          throw new Error(`the plan call carried ${JSON.stringify(planCalls[0].payload)}, expected the picked type and its frame length`);
+        }
+        const hookInput = ctx.container.querySelector("#review-hook_line");
+        if (!hookInput || hookInput.value !== STORY_HOOK) {
+          throw new Error("the hook editor does not hold the plan's hook line");
+        }
+        const scriptInput = ctx.container.querySelector('[data-testid="story-script-input"]');
+        if (!scriptInput || scriptInput.value !== STORY_SCRIPT) {
+          throw new Error("the script editor does not hold the plan's script");
+        }
+        const screenInput = ctx.container.querySelector('[data-testid="story-screen-text-value"]');
+        if (!screenInput || screenInput.value !== STORY_SCREEN) {
+          throw new Error("the screen text editor does not hold the plan's screen text");
+        }
+        const stickerPlan = ctx.container.querySelector('[data-testid="story-sticker-plan"]');
+        if (!stickerPlan || !stickerPlan.textContent.includes("poll") || !stickerPlan.textContent.includes("Do you lose count too?")) {
+          throw new Error("the sticker plan does not list the plan's sticker and wording");
+        }
+        const craft = ctx.container.querySelector('[data-testid="story-craft-check"]');
+        if (!craft) throw new Error("the story craft check did not render with the plan");
+        const rows = craft.querySelectorAll('[data-testid="story-craft-check-row"]');
+        if (rows.length !== 4) throw new Error(`the craft check shows ${rows.length} checks, expected the fixed four`);
+        if (!craft.textContent.includes("4 of 4")) {
+          throw new Error("the craft check does not say how many checks pass");
+        }
+        const preview = ctx.container.querySelector('[data-testid="story-preview"]');
+        if (!preview || !preview.textContent.includes(STORY_SCREEN)) {
+          throw new Error("the preview does not carry the screen text as its sticker");
+        }
+      }
+    );
+  });
+
+  await check("the screen text editor enforces the settled caps instead of saving past them", async (ctx) => {
+    const patches = [];
+    let saved = plannedRow();
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => saved,
+        getStoryProjects: async () => ({ projects: [saved] }),
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      },
+      "?project=story-9",
+      async () => {
+        const input = ctx.container.querySelector('[data-testid="story-screen-text-value"]');
+        if (!input) throw new Error("the screen text field did not render");
+        // 90 characters / well past 14 words: the change is refused at
+        // the field — the caps are the editor's contract (ADR 0228),
+        // not a warning after the fact — and nothing of it saves.
+        await typeInto(ctx, input, "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen");
+        if (input.value !== STORY_SCREEN) {
+          throw new Error(`an over-cap screen text entered the field: ${JSON.stringify(input.value)}`);
+        }
+        const note = ctx.container.querySelector('[data-testid="story-screen-text-cap-note"]');
+        if (!note || !note.textContent.includes("80")) {
+          throw new Error("the refused change does not name the cap it hit");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (patches.some((p) => typeof p.screen_text === "string" && p.screen_text.split(" ").length > 14)) {
+          throw new Error("an over-cap screen text was autosaved");
+        }
+        // Inside the caps, typing is an ordinary draft edit.
+        await typeInto(ctx, input, "Counting again by the tomatoes");
+        if (input.value !== "Counting again by the tomatoes") {
+          throw new Error("an in-cap screen text did not enter the field");
+        }
+      }
+    );
+  });
+
+  await check("the render gate names the missing plan instead of offering a click into a refusal", async (ctx) => {
+    const unplanned = storyRow();
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => unplanned,
+        getStoryProjects: async () => ({ projects: [unplanned] }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "?project=story-9",
+      async () => {
+        const gate = ctx.container.querySelector('[data-testid="story-render-gate"]');
+        if (!gate || !gate.textContent.includes("plan")) {
+          throw new Error("the render panel does not name the missing plan");
+        }
+        const button = ctx.container.querySelector('[data-testid="story-render-generate"]');
+        if (!button || !button.disabled) {
+          throw new Error("the render button is not disabled while no plan exists");
+        }
+      }
+    );
+  });
+
+  await check("a five-second frame renders at five seconds and lands with its story kit", async (ctx) => {
+    const submits = [];
+    const planned = plannedRow({ story_type: "question_poll", duration_seconds: 5 });
+    const submitted = {
+      id: "gen-story-1", studio_project_id: "story-9", status: "submitted",
+      duration: 5, model: "minimax-h3-max", video_url: null, r2_url: null, playback_url: null,
+    };
+    const completed = {
+      ...submitted, status: "completed",
+      video_url: "/media/gen-story-1.mp4",
+      playback_url: "/api/media/videos/gen-story-1.mp4?exp=1&sig=abc",
+      story_kit: STORY_KIT, post_kit: null,
+    };
+    await inStories(
+      ctx,
+      {
+        getStudioProject: async () => planned,
+        getStoryProjects: async () => ({ projects: [planned] }),
+        getGenerations: async () => ({ generations: [] }),
+        generateStory: async (id, payload) => {
+          submits.push({ id, payload });
+          return submitted;
+        },
+        pollGeneration: async () => completed,
+      },
+      "?project=story-9",
+      async () => {
+        const button = ctx.container.querySelector('[data-testid="story-render-generate"]');
+        if (!button) throw new Error("the story render button did not render");
+        if (button.disabled) throw new Error("the story render button is disabled under a complete plan");
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (submits.length !== 1) throw new Error(`the render click submitted ${submits.length} jobs, expected one`);
+        // ADR 0228's exact-duration rule, end to end: the frame's own
+        // five seconds ride the submit — never the hook-video floor.
+        if (submits[0].payload.duration_seconds !== 5) {
+          throw new Error(`the story submit carried ${JSON.stringify(submits[0].payload.duration_seconds)} seconds, expected the frame's own 5`);
+        }
+        // The poll chain lands the finished frame and its kit.
+        let kit = null;
+        for (let i = 0; i < 40 && !kit; i += 1) {
+          await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+          kit = ctx.container.querySelector('[data-testid="story-kit-panel"]');
+        }
+        if (!kit) throw new Error("the finished story never showed its story kit");
+        if (!ctx.container.querySelector('[data-testid="story-render-video"]')) {
+          throw new Error("the finished story's video did not land on the page");
+        }
+        if (!kit.textContent.includes(STORY_KIT.caption)) {
+          throw new Error("the story kit does not carry its caption");
+        }
+        if (!kit.textContent.includes(STORY_SCREEN)) {
+          throw new Error("the story kit does not carry the accepted screen text verbatim");
+        }
+        if (!kit.textContent.includes("Do you lose count too?")) {
+          throw new Error("the story kit does not carry the sticker plan's wording");
+        }
+        if (!kit.textContent.includes("native text sticker")) {
+          throw new Error("the story kit does not carry its posting checklist");
+        }
+        // The two kits never mix (ADR 0228): no post kit on a story.
+        if (ctx.container.querySelector('[data-testid="post-kit"]')) {
+          throw new Error("a story render grew a post kit panel");
+        }
+      }
+    );
   });
 }
 
@@ -15111,7 +15714,7 @@ async function runDemoCtaChecks() {
     const MIN = 55;
     const MAX = 60;
     // Keep the same assertions over every owner after splitting the panels.
-    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx"]
+    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx", "pages/Stories.jsx"]
       .map((file) => fs.readFileSync(path.join(SRC, file), "utf8"))
       .join("\n");
     const found = [];
@@ -16015,6 +16618,115 @@ async function runDemoCtaChecks() {
       encoder.exportTikTok = originalEncode;
       global.fetch = originalFetch;
       clip.restore();
+    }
+  });
+
+  await check("the second slot takes an image sequence: ordered stills with holds, saved in the draft", async (ctx) => {
+    // ADR 0237: the added slot's other media kind. The stills are the
+    // founder's app screens; the list is the control surface (order plus a
+    // hold per still), the sequence reports itself to the timeline like a
+    // clip (the joint transition picker wakes on its duration), and the
+    // draft carries the entries — bytes included — so a reload restores
+    // the sequence whole, in the order the founder left it.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-images", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    // jsdom never loads an image: a stand-in that reports phone-screen
+    // dimensions and fires load on the next tick, the image's version of
+    // the clip probe.
+    const RealImage = dom.window.Image;
+    class FakeImage {
+      constructor() { this.naturalWidth = 1080; this.naturalHeight = 1920; this.width = 1080; this.height = 1920; }
+      set src(_value) { setTimeout(() => this.onload && this.onload(), 0); }
+      get src() { return ""; }
+    }
+    dom.window.Image = FakeImage;
+    global.Image = FakeImage;
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const loadPinnedClip = async () => {
+      await mount(Editor, { generation: GEN })(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+      const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+      if (!probe) throw new Error("the uploaded clip was never probed");
+      await act(async () => {
+        probe.onloadedmetadata();
+      });
+      await clip.flush();
+      await clip.flush();
+    };
+    const openSecond = async () => {
+      const toggle = ctx.container.querySelector('[data-testid="demo-cta-second"] button');
+      if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, "open the second clip group");
+      }
+    };
+    const rowNames = () => [...ctx.container.querySelectorAll('[data-testid="append-images-list"] [data-testid^="append-image-row-"]')]
+      .map((row) => row.querySelector("span")?.textContent || "");
+    try {
+      await loadPinnedClip();
+      await openSecond();
+      if (!ctx.container.querySelector('[data-testid="append-images-button"]')) throw new Error("the second group offers no images door");
+      const input = ctx.container.querySelector('[data-testid="append-images-input"]');
+      if (!input) throw new Error("no images input");
+      const files = ["home.png", "chart.png"].map((name) => new dom.window.File([new Uint8Array(8)], name, { type: "image/png" }));
+      Object.defineProperty(input, "files", { value: files, configurable: true });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      await clip.flush();
+      await clip.flush();
+      const names = rowNames();
+      if (names.length !== 2 || !names[0].includes("home.png") || !names[1].includes("chart.png")) {
+        throw new Error(`the sequence did not list both stills in order: ${JSON.stringify(names)}`);
+      }
+      if (!ctx.container.querySelector('[data-testid="transition-whip"]')) throw new Error("the image sequence never reported its duration to the timeline");
+      const fileLine = ctx.container.querySelector('[data-testid="append-file-name"]');
+      if (!fileLine || !fileLine.textContent.includes("2 images") || !fileLine.textContent.includes("5.0s")) {
+        throw new Error(`the sequence's summary line is wrong: ${fileLine?.textContent}`);
+      }
+      if (ctx.container.querySelector('[data-testid="append-video"]')) throw new Error("an image sequence mounted a clip element");
+      if (ctx.container.querySelector('[data-testid="append-audio-mute"]')) throw new Error("a silent sequence offered an audio mute");
+      const rows = [...ctx.container.querySelectorAll('[data-testid^="append-image-row-"]')];
+      const secondId = rows[1].getAttribute("data-testid").replace("append-image-row-", "");
+      if (!ctx.container.querySelector(`[data-testid="append-image-seconds-${secondId}"]`)) throw new Error("a still carries no hold control");
+      await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-up-${secondId}"]`), "move the second still earlier");
+      const reordered = rowNames();
+      if (!reordered[0].includes("chart.png") || !reordered[1].includes("home.png")) {
+        throw new Error(`reorder did not take: ${JSON.stringify(reordered)}`);
+      }
+      await act(async () => ctx.root.unmount());
+      const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-images");
+      if (!saved?.appendImages?.length) throw new Error("the draft did not store the image sequence");
+      if (saved.appendImages.map((e) => e.name).join(",") !== "chart.png,home.png") throw new Error("the draft stored the wrong order");
+      if (!saved.appendImages[0].blob) throw new Error("the draft lost the stills' bytes");
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { generation: GEN })(ctx);
+      await clip.flush();
+      await clip.flush();
+      await clip.flush();
+      await openSecond();
+      const restored = rowNames();
+      if (restored.length !== 2 || !restored[0].includes("chart.png") || !restored[1].includes("home.png")) {
+        throw new Error(`reload did not restore the sequence in order: ${JSON.stringify(restored)}`);
+      }
+      const firstRowId = ctx.container.querySelector('[data-testid^="append-image-row-"]').getAttribute("data-testid").replace("append-image-row-", "");
+      await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-remove-${firstRowId}"]`), "remove the first still");
+      if (rowNames().length !== 1) throw new Error("removing a still did not shorten the sequence");
+      const lastRowId = ctx.container.querySelector('[data-testid^="append-image-row-"]').getAttribute("data-testid").replace("append-image-row-", "");
+      await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-remove-${lastRowId}"]`), "remove the last still");
+      if (ctx.container.querySelector('[data-testid="append-images-list"]')) throw new Error("removing the last still left an empty sequence behind");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      dom.window.Image = RealImage;
+      global.Image = RealImage;
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
     }
   });
 
@@ -17814,7 +18526,7 @@ async function runDemoCtaChecks() {
     // follows the moved code.
     const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8")
       + fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
-    const probeAt = src.indexOf("await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : [])");
+    const probeAt = src.indexOf("await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet ? audioSegments : [])");
     const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
     if (probeAt < 0 || resultAt < probeAt || src.indexOf("await saveExport(blob, name)") < resultAt) throw new Error("invalid MP4 can reach download or History");
     for (const marker of ["probe.onloadeddata", "Math.abs(probe.duration - expectedDuration)", "probe.videoWidth === TIKTOK_EXPORT.width", "probe.videoHeight === TIKTOK_EXPORT.height"]) {

@@ -312,3 +312,105 @@ def test_story_craft_check_flags_a_missing_sticker_plan():
         HOOK, SCRIPT, SCREEN, [{"platform": "both", "sticker": "", "wording": ""}],
         frame_seconds=15)
     assert not report["checks"]["sticker_plan_present"]["passed"]
+
+
+# ------------------------------------------- the screen-text suggestion
+
+SUGGEST_PROJECT = {
+    "id": "story-1",
+    "kind": "story",
+    "story_type": "question_poll",
+    "duration_seconds": 5,
+    "hook_line": HOOK,
+    "script": SCRIPT,
+    "screen_text": SCREEN,
+    "content_angle": dict(PROJECT["content_angle"]),
+}
+
+SUGGEST_PROFILE = {
+    "brand_name": "Vocolens",
+    "app_category": "Wellness",
+    "brand_description": "Speak your journal entry instead of writing it.",
+}
+
+
+def test_suggest_story_screen_text_returns_a_fresh_text(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [{"screen_text": "Counting tomatoes, losing count again"}])
+    text = asyncio.run(
+        ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+    assert text == "Counting tomatoes, losing count again"
+    assert len(text) <= 80 and len(text.split()) <= 14
+
+
+def test_suggest_story_screen_text_prompt_carries_the_rules_block(monkeypatch):
+    import ai_service
+    calls = _stub_chat(monkeypatch, [{"screen_text": "Counting tomatoes, losing count again"}])
+    asyncio.run(
+        ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+    prompt = calls[0]["prompt"]
+    # The suggestion is written under the same rules block the plan's
+    # screen text is written under (ADR 0228): the caps and the
+    # sound-off rule ride along, beside the frame's own spoken words.
+    assert "80 characters" in prompt and "14 words" in prompt
+    assert "sound off" in prompt
+    assert HOOK in prompt and SCRIPT in prompt and SCREEN in prompt
+
+
+def test_suggest_story_screen_text_corrects_an_over_cap_reply(monkeypatch):
+    import ai_service
+    calls = _stub_chat(monkeypatch, [
+        {"screen_text": "word " * 20},
+        {"screen_text": "Counting tomatoes, losing count again"},
+    ])
+    text = asyncio.run(
+        ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+    assert text == "Counting tomatoes, losing count again"
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+
+
+def test_suggest_story_screen_text_refuses_a_reply_that_stays_over_cap(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [
+        {"screen_text": "word " * 20},
+        {"screen_text": "word " * 20},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal):
+        asyncio.run(
+            ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+
+
+def test_suggest_story_screen_text_refuses_an_echo_of_the_current_text(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [
+        {"screen_text": SCREEN},
+        {"screen_text": SCREEN},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal):
+        asyncio.run(
+            ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+
+
+def test_suggest_story_screen_text_refuses_a_copy_of_the_spoken_hook(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [
+        {"screen_text": HOOK},
+        {"screen_text": HOOK},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal):
+        asyncio.run(
+            ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))
+
+
+def test_suggest_story_screen_text_refuses_a_fragment(monkeypatch):
+    import ai_service
+    # Fewer than three words is not a message a muted viewer can read
+    # whole — the craft check's own floor for standing alone.
+    _stub_chat(monkeypatch, [
+        {"screen_text": "Losing count"},
+        {"screen_text": "Losing count"},
+    ])
+    with pytest.raises(ai_service.RewriteRefusal):
+        asyncio.run(
+            ai_service.suggest_story_screen_text(dict(SUGGEST_PROJECT), dict(SUGGEST_PROFILE)))

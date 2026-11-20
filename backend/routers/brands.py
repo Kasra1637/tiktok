@@ -506,7 +506,8 @@ def _founder_verified_context(existing: dict) -> str:
 
 
 def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
-                         profile: Optional[dict] = None) -> dict:
+                         profile: Optional[dict] = None,
+                         camera_setup: str = "") -> dict:
     """Shape a content_angles row for the API (kind is already normalized).
 
     `evidence` is this kind's own verdict tally from
@@ -520,6 +521,13 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
     `profile` tailors the goal order: the same six curated goals, demoting
     ones the profile gives nothing to stand on (no named alternative, no
     recorded objection) instead of letting them lead the row.
+
+    `camera_setup` shapes the DISPLAY only (ADR 0233): for a fixed camera,
+    an outdoor angle's known place phrases restate as their indoor
+    versions in the serialized fields, because the fixed camera stages
+    every angle indoors (ADR 0219). The stored row is never rewritten,
+    the content fit is still scored from the angle as written, and the
+    default (no setup) returns the angle exactly as stored.
     """
     # Stored angles written before screen-interaction stripping still
     # promise unfilmable scroll/chart openings. The serialized row is the
@@ -546,7 +554,7 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
         angle_policy.angle_content_fit(profile, dict(row, hook_promise=_promise))
         if profile else None
     )
-    return {
+    serialized = {
         "id": row.get("id"),
         "brand_profile_id": row.get("brand_profile_id"),
         "kind": row.get("kind"),
@@ -572,6 +580,13 @@ def _serialize_angle_row(row: dict, evidence: Optional[dict] = None,
         "evidence": evidence or {"wins": 0, "flops": 0, "adoptions": 0,
                                    "posted": 0, "views": 0},
     }
+    # ADR 0233: the fixed camera's display restatement overlays the
+    # serialized fields — computed from the display copy above (the
+    # stripped promise the picker shows), never from or into the row.
+    _restated = angle_scene.indoor_restatement(serialized, camera_setup)
+    if _restated:
+        serialized.update(_restated)
+    return serialized
 
 
 def _public_template(template: dict) -> dict:
@@ -833,7 +848,8 @@ async def _research_profile_sources(existing: dict) -> tuple[dict, list]:
     return sources, report
 
 
-async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
+async def _serialize_profile_angles(profile_id: str, user_id: str,
+                                    camera_setup: str = "") -> dict:
     """Re-read this profile's angles and shape the audience-step payload.
 
     The same shape as GET /content-angles: serialized rows (kind evidence
@@ -846,6 +862,10 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     goal_suggestions (the goal picker silently fell back to the static
     order), evidence (verdict chips vanished), and objective_evidence
     (goal chips vanished) until the next reload.
+
+    `camera_setup` is the wizard's display shaping only (ADR 0233): it is
+    threaded into each row's serialization, where a fixed camera restates
+    an outdoor angle's places indoors. It never reaches generation.
     """
     _require_configured()
     rows = await _cfg("_fetch_all")(
@@ -886,7 +906,8 @@ async def _serialize_profile_angles(profile_id: str, user_id: str) -> dict:
     }
     return {
         "angles": [
-            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")), profile)
+            _serialize_angle_row(r, by_kind.get(str(r.get("kind") or "")), profile,
+                                 camera_setup=camera_setup)
             for r in rows
         ],
         "objective_evidence": objective_evidence,
@@ -1649,9 +1670,16 @@ async def refresh_app_profile(profile_id: str, user_id: str = Depends(get_curren
 
 
 @router.get("/app-profiles/{profile_id}/content-angles")
-async def list_content_angles(profile_id: str, user_id: str = Depends(get_current_user_id)):
+async def list_content_angles(profile_id: str, camera_setup: str = "",
+                              user_id: str = Depends(get_current_user_id)):
     """
     This app's angles, each carrying its kind's own verdict tally.
+
+    `camera_setup` is display shaping for the wizard (ADR 0233): with the
+    project's saved setup passed in, a fixed camera's list restates an
+    outdoor angle's places indoors in the serialized fields. The stored
+    angles are never rewritten, and a caller that passes nothing — the
+    profile page — reads the angles exactly as written.
 
     The tally is the same aggregate the generation prompt already reads
     (`_angle_feedback_for_profile`), so the founder picks from angles scored
@@ -1686,7 +1714,8 @@ async def list_content_angles(profile_id: str, user_id: str = Depends(get_curren
     # belonging to one specific angle. Serialized through the shared helper
     # so the list and the generate/regenerate responses can never drift
     # apart in shape again.
-    return await _serialize_profile_angles(profile_id, user_id)
+    return await _serialize_profile_angles(profile_id, user_id,
+                                           camera_setup=camera_setup)
 
 
 @router.delete("/app-profiles/{profile_id}")
@@ -1789,6 +1818,9 @@ async def generate_profile_content_angles(profile_id: str, payload: Optional[Gen
 
     try:
         objective = ((payload.objective if payload else "") or "").strip()
+        # Display shaping for the response only (ADR 0233): the setup
+        # never reaches the generation call itself.
+        camera_setup = ((payload.camera_setup if payload else "") or "").strip()
         prior = await _prior_offered_angles(profile_id, user_id)
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
@@ -1821,7 +1853,8 @@ async def generate_profile_content_angles(profile_id: str, payload: Optional[Gen
     # into the same state the list endpoint feeds, so it must carry the
     # serialized shape (goal suggestions, evidence, origin) or the goal
     # picker and verdict chips degrade until the next reload.
-    payload = await _serialize_profile_angles(profile_id, user_id)
+    payload = await _serialize_profile_angles(profile_id, user_id,
+                                              camera_setup=camera_setup)
     logger.info(f"Generated %d content angle(s) for profile {profile_id}", len(payload["angles"]))
     return payload
 
@@ -1976,6 +2009,9 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
 
     try:
         objective = ((payload.objective if payload else "") or "").strip()
+        # Display shaping for the response only (ADR 0233): the setup
+        # never reaches the generation call itself.
+        camera_setup = ((payload.camera_setup if payload else "") or "").strip()
         prior = await _prior_offered_angles(profile_id, user_id)
         angles = await _cfg("_log_model_call")(
             "content_angles", "text", ANGLE_MODEL,
@@ -2040,7 +2076,8 @@ async def regenerate_content_angles(profile_id: str, payload: Optional[GenerateC
     # verdict chips degrade until the next reload. Manual rows ride along in
     # rank order, which is also what keeps a hand-picked manual selection
     # alive across the replacement.
-    payload = await _serialize_profile_angles(profile_id, user_id)
+    payload = await _serialize_profile_angles(profile_id, user_id,
+                                              camera_setup=camera_setup)
     return {**payload, "manual_kept": len(manual_rows), "projects_affected": projects_affected}
 
 
@@ -2447,7 +2484,7 @@ async def recommend_templates(
         (user_id,),
     )
     if not templates:
-        return {"recommendations": [], "angle": _serialize_angle_row(angle, profile=profile) if angle else None}
+        return {"recommendations": [], "angle": _serialize_angle_row(angle, profile=profile, camera_setup=camera_setup) if angle else None}
 
     # The one learning input ranking reads (ADR 0127): the founder's
     # whole-video verdicts for this profile, each verdict attributed by
@@ -2509,7 +2546,7 @@ async def recommend_templates(
         "recommendations": visible,
         "shared_reasons": shared["shared_reasons"],
         "shared_limitations": shared["shared_limitations"],
-        "angle": _serialize_angle_row(angle, profile=profile) if angle else None,
+        "angle": _serialize_angle_row(angle, profile=profile, camera_setup=camera_setup) if angle else None,
         "objective": norm_objective,
     }
 

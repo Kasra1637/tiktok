@@ -125,15 +125,18 @@ def test_place_rule_only_when_the_angle_names_no_place():
 
 def test_hook_rewrite_returns_the_clearer_line(monkeypatch):
     import ai_service
+    # The canned reply carries its period: since ADR 0231 the rewrite
+    # surface runs the finished-sentence gate, and a reply without a
+    # terminator is a fragment it corrects or refuses, never returns.
     seen = {}
 
     async def fake_chat(**kwargs):
         seen.update(kwargs)
-        return {"hook_line": "I don't want to write in my journal today"}
+        return {"hook_line": "I don't want to write in my journal today."}
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
     line = asyncio.run(ai_service.rewrite_hook_line(
         {"brand_name": "Voice Journal"}, OFFICE, "I don't want to type anything"))
-    assert line == "I don't want to write in my journal today"
+    assert line == "I don't want to write in my journal today."
     assert "I don't want to type anything" in seen["prompt"]
     assert "NAME THE ACTION" in seen["prompt"]
     assert seen["json_schema"] is ai_service.HOOK_REWRITE_JSON_SCHEMA
@@ -149,3 +152,80 @@ def test_hook_rewrite_refuses_empty_and_unchanged(monkeypatch):
         asyncio.run(ai_service.rewrite_hook_line({}, OFFICE, "   "))
     with pytest.raises(RuntimeError):
         asyncio.run(ai_service.rewrite_hook_line({}, OFFICE, "I don't want to type anything"))
+
+
+# ---------------------------------------------------------------------------
+# ADR 0233: a fixed camera's angle display restates outdoor places indoors.
+# The stored angle never changes; only the serialized display fields do,
+# and only for the place phrases the restatement table knows.
+# ---------------------------------------------------------------------------
+
+OUTDOOR_ANGLE = {
+    "label": "The courthouse queue",
+    "target_audience": "busy professionals",
+    "user_problem": "You wait at the courthouse and the blank page wins.",
+    "hook_promise": "Feelings at the coastline finally get words",
+    "app_feature": "Voice journaling",
+    "desired_emotion": "Relief",
+    "viewer_outcome": "They name the feeling before the day starts.",
+    "claims_to_respect": ["Never promise the courthouse Wi-Fi works"],
+}
+
+
+def test_fixed_display_restates_the_known_places():
+    overlay = angle_scene.indoor_restatement(OUTDOOR_ANGLE, "fixed")
+    assert overlay is not None
+    assert overlay["hook_promise"] == "Feelings by the large window finally get words"
+    assert overlay["user_problem"] == "You wait in the living room and the blank page wins."
+    assert overlay["label"] == "The living room queue"
+    assert overlay["claims_to_respect"] == ["Never promise the living room Wi-Fi works"]
+    # Fields naming no known place are absent from the overlay, so the
+    # caller keeps them byte-identical.
+    for field in ("target_audience", "app_feature", "desired_emotion", "viewer_outcome"):
+        assert field not in overlay
+
+
+def test_a_courtyard_moment_restates_as_an_atrium():
+    angle = dict(OUTDOOR_ANGLE, hook_promise="Feelings in the courtyard finally get words")
+    overlay = angle_scene.indoor_restatement(angle, "fixed")
+    assert overlay is not None
+    assert overlay["hook_promise"] == "Feelings in the atrium finally get words"
+
+
+def test_handheld_display_is_never_restated():
+    assert angle_scene.indoor_restatement(OUTDOOR_ANGLE, "handheld") is None
+    assert angle_scene.indoor_restatement(OUTDOOR_ANGLE, "") is None
+    assert angle_scene.indoor_restatement(OUTDOOR_ANGLE, None) is None
+
+
+def test_fixed_display_leaves_an_indoor_angle_alone():
+    angle = dict(OUTDOOR_ANGLE, hook_promise="Feelings in the kitchen finally get words")
+    assert angle_scene.indoor_restatement(angle, "fixed") is None
+
+
+def test_fixed_display_leaves_an_unknown_outdoor_place_alone():
+    # The scene reads outdoors (the café — this module reads it as an
+    # outdoor word), but the restatement table knows no indoor counterpart
+    # for it: the text stays as written and the angle section's note
+    # carries the staging instead (ADR 0233's boundary).
+    angle = dict(
+        OUTDOOR_ANGLE,
+        label="The café queue",
+        user_problem="You sit at the café and the blank page wins.",
+        hook_promise="Feelings at the café finally get words",
+        claims_to_respect=["Never promise the café Wi-Fi works"],
+    )
+    assert angle_scene.indoor_restatement(angle, "fixed") is None
+
+
+def test_the_restatement_changes_only_the_place_phrase():
+    text = "A woman at the beach at 7am, before the emails start"
+    assert angle_scene.restate_text_indoors(text) == \
+        "A woman by the large window at 7am, before the emails start"
+
+
+def test_the_restatement_preserves_sentence_case():
+    assert angle_scene.restate_text_indoors("At the beach she breathes") == \
+        "By the large window she breathes"
+    assert angle_scene.restate_text_indoors("She waits at the courthouse") == \
+        "She waits in the living room"

@@ -476,13 +476,16 @@ SELFIE_STARTING_SHOT = HANDHELD_SELFIE_FRAMING
 # ADR 0219): the phone rests on a shelf or tripod and the presenter is
 # already in frame. The last sentence is ADR 0219's indoor rule at
 # render level — the placed camera is an interior setup, so the shot
-# itself states the scene is an interior room.
+# itself states the scene is an interior room — extended by ADR 0233
+# with its compact activity clause: every action fits that room. The
+# fuller restaging instruction lives in the plan and strategy prompts,
+# which write the actions the render performs.
 FIXED_STARTING_SHOT = (
     "Fixed camera: a stationary phone on a shelf or tripod, eye-level and straight-on. "
     "Frame the standing presenter from head to mid-thigh, full head with headroom, "
     "both hands inside frame with room for gestures. Natural amateur phone footage, "
     "not a polished studio shoot. The scene is indoors: an interior room, never "
-    "outdoors or in transit."
+    "outdoors or in transit, and every action is one that fits that room."
 )
 
 

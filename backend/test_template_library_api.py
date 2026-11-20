@@ -427,6 +427,42 @@ class TestContentAngles:
         listed = _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON))
         assert made["id"] in [a["id"] for a in listed["angles"]]
 
+    def test_angle_list_restates_outdoor_places_for_a_fixed_camera(self, api):
+        # ADR 0233: the wizard reads the angle list with the project's
+        # camera setup; for a fixed camera the DISPLAYED angle restates its
+        # outdoor places indoors, while the stored angle — and every field
+        # naming no known place — stays exactly as written.
+        from models import CreateContentAngleRequest
+        profile = _make_profile(api, ANON)
+        made = _run(api.create_manual_content_angle(
+            profile_id=profile["id"],
+            payload=CreateContentAngleRequest(
+                label="The courthouse queue",
+                target_audience="busy professionals",
+                user_problem="You wait at the courthouse and the blank page wins.",
+                hook_promise="Feelings at the coastline finally get words",
+            ),
+            user_id=ANON,
+        ))
+        fixed = _run(api.list_content_angles(
+            profile_id=profile["id"], camera_setup="fixed", user_id=ANON))
+        (shown,) = [a for a in fixed["angles"] if a["id"] == made["id"]]
+        assert shown["hook_promise"] == "Feelings by the large window finally get words"
+        assert shown["user_problem"] == "You wait in the living room and the blank page wins."
+        assert shown["label"] == "The living room queue"
+        assert shown["target_audience"] == "busy professionals"
+        # The stored angle is untouched: the plain list — and the handheld
+        # list — still read exactly as written.
+        for plain in (
+            _run(api.list_content_angles(profile_id=profile["id"], user_id=ANON)),
+            _run(api.list_content_angles(
+                profile_id=profile["id"], camera_setup="handheld", user_id=ANON)),
+        ):
+            (stored,) = [a for a in plain["angles"] if a["id"] == made["id"]]
+            assert stored["hook_promise"] == "Feelings at the coastline finally get words"
+            assert stored["user_problem"] == "You wait at the courthouse and the blank page wins."
+            assert stored["label"] == "The courthouse queue"
+
     def test_angles_carry_a_content_fit_scored_from_the_profile(self, api):
         # ADR 0193: the serialized angle carries the server-side content
         # fit the picker displays. This angle's feature is the profile's

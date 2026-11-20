@@ -1,6 +1,6 @@
 # 0044 — Post-kit captions are short, user-voiced, and tailored
 
-- **Status:** accepted
+- **Status:** partially superseded by 0234 (the caption's subject — the watch, not the app; the length band and voice stand)
 - **Date:** 2026-10-26
 - **Anchors:** `backend/ai_service.py` (`generate_post_kit`); `backend/test_post_kit_api.py` (`TestPostKitCaptionGuards`)
 

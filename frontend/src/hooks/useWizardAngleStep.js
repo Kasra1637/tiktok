@@ -14,8 +14,12 @@ import { api, getErrorMessage } from "../lib/api";
  * Review's gated copies. Its discipline is unchanged: switching apps
  * re-arms both, a new angle resets the goals reveal, and a pick bypasses
  * the gates via the derived angle/objective the page still owns.
+ *
+ * `cameraSetup` is the draft's saved setup, passed only so the angle
+ * reads and generation responses are DISPLAY-shaped for it (ADR 0233):
+ * a fixed camera's angles restate their outdoor places indoors.
  */
-export function useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft }) {
+export function useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft, cameraSetup = "" }) {
   const [angles, setAngles] = useState([]);
   // The GOAL axis of the verdict tally, keyed by objective name and fetched
   // with the angles (`objective_evidence` on the same response). Own state,
@@ -141,6 +145,25 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     setLiveGoalsError(null);
     setGoalsRevealed(false);
   }, [angleId]);
+  // ADR 0233: the angle display is shaped by the camera setup — for a
+  // fixed camera the server restates an outdoor angle's places indoors,
+  // and flipping back restores the written text. When the effective setup
+  // changes (the founder flips it in the direction section, or a fixed
+  // draft loads), re-read the list under the new setup: a pure read
+  // (ADR 0122), and the row ids are stable, so the pick survives. A
+  // failed re-read keeps the list on screen — only its staging wording
+  // is stale, and the next successful read corrects it.
+  const shownCameraSetupRef = useRef(cameraSetup);
+  useEffect(() => {
+    if (shownCameraSetupRef.current === cameraSetup) return;
+    shownCameraSetupRef.current = cameraSetup;
+    if (!profileId) return;
+    let cancelled = false;
+    api.getContentAngles(profileId, cameraSetup)
+      .then((data) => { if (!cancelled) adoptAngles(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cameraSetup, profileId, adoptAngles]);
   // Regenerating the audience angles without leaving the wizard. Offered on
   // a populated list and behind the Review gate alike, because the
   // regenerate endpoint keeps hand-written angles server-side: what the
@@ -165,7 +188,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     setAngleError(null);
     setAngleRegenNotice(null);
     try {
-      const data = await api.regenerateContentAngles(profileId, { objective });
+      const data = await api.regenerateContentAngles(profileId, { objective, cameraSetup });
       const fresh = adoptAngles(data) || [];
       // Replacement rows carry new ids: a pick aimed at the old set would
       // dangle and the goal picker would collapse to its wait state just
@@ -198,7 +221,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, objective, adoptAngles, dispatchDraft]);
+  }, [profileId, angleId, objective, cameraSetup, adoptAngles, dispatchDraft]);
   // The click behind Regenerate: preflight first, the branded dialog when
   // a draft is at stake, and the spend only after the founder confirms.
   const handleRegenerateAngles = useCallback(async () => {
@@ -251,7 +274,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     try {
       // A picked objective aims the set at this video; nothing picked reads
       // exactly as before.
-      const data = await api.generateContentAngles(profileId, { objective });
+      const data = await api.generateContentAngles(profileId, { objective, cameraSetup });
       const fresh = adoptAngles(data) || [];
       // Generated in-session at the founder's own click: there is nothing to
       // gate, so the fresh four render immediately.
@@ -271,7 +294,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, generatingAngles, angles.length, anglesSessionFresh, revealAngles, handleRegenerateAngles, objective, adoptAngles]);
+  }, [profileId, angleId, generatingAngles, angles.length, anglesSessionFresh, revealAngles, handleRegenerateAngles, objective, cameraSetup, adoptAngles]);
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back
   // the exact new order for every consumer of the angles state.
@@ -280,7 +303,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     setCyclingGoals(true);
     try {
       await api.regenerateContentAngleGoals(profileId, angleId);
-      const data = await api.getContentAngles(profileId);
+      const data = await api.getContentAngles(profileId, cameraSetup);
       adoptAngles(data);
       // Shuffle rotates the persisted suggestions; the angle's live set must
       // not keep shadowing them (AngleGoalPicker prefers liveOrdered). The
@@ -291,7 +314,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     } finally {
       setCyclingGoals(false);
     }
-  }, [profileId, angleId, adoptAngles]);
+  }, [profileId, angleId, cameraSetup, adoptAngles]);
   // Live goals for the selected angle. Billed, so this runs only on the
   // founder's click — never on angle pick. On failure the error names the
   // failure and whatever was showing stays: behind the Review gate that is

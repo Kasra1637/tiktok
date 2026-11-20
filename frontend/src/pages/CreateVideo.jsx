@@ -711,6 +711,11 @@ export default function CreateVideo() {
     });
   }, [step]);
   const profileId = project?.brand_profile_id || selectedProfileId;
+  // The saved camera setup, read the way editValue reads it below — the
+  // draft edit over the project row. It shapes two displays: the staging
+  // line each template card prints (ADR 0224) and the angle list itself,
+  // whose outdoor places restate indoors for a fixed camera (ADR 0233).
+  const savedCameraSetup = edits.camera_setup !== undefined ? edits.camera_setup : project?.camera_setup ?? "handheld";
   // Angle + goals lifecycle (angles/evidence state, click-to-view gates,
   // live billed goals, regenerate handlers) lives in its own hook; the
   // page keeps the draft, picks, step and plan, and clears through the
@@ -726,7 +731,7 @@ export default function CreateVideo() {
     cancelAngleRegen,
     handleGenerateAngles, handleRegenerateAngles,
     handleGenerateGoals, handleRegenerateGoals,
-  } = useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft });
+  } = useWizardAngleStep({ profileId, angleId, objective, project, dispatchDraft, cameraSetup: savedCameraSetup });
 
   const {
     recommendations, sharedFit, recError, recKey, recRequestKey, clearRecommendations,
@@ -738,11 +743,7 @@ export default function CreateVideo() {
     // already exists, so cards never promise words nobody speaks (ADR 0108).
     hookLine: project?.hook_line || "",
     middle: project?.script || project?.spoken_middle || "",
-    // The saved camera setup shapes the staging line each card prints:
-    // a fixed camera's cards state the indoor staging, not the angle's
-    // outdoor wording (ADR 0224, extending 0219 to the card). Read the
-    // way editValue reads it below — the draft edit over the project row.
-    cameraSetup: edits.camera_setup !== undefined ? edits.camera_setup : project?.camera_setup ?? "handheld",
+    cameraSetup: savedCameraSetup,
   });
   // The regen receipt lives on the angle step alone (ADR 0198): leaving
   // that step consumes it. Only the transition AWAY counts — a receipt
@@ -854,7 +855,7 @@ export default function CreateVideo() {
               throw new Error("That draft project is unavailable or its App Profile is not approved.");
             }
             const angleData = await api
-              .getContentAngles(draftProfile.id)
+              .getContentAngles(draftProfile.id, draft.camera_setup || "")
               .catch((err) => {
                 // The deep link still lands: the gate offers Generate, and the
                 // error says why the list is empty.
@@ -2310,6 +2311,7 @@ export default function CreateVideo() {
               hookLine={project?.hook_line || ""}
               notice={angleRegenNotice}
               onDismissNotice={angleRegenNotice ? clearAngleRegenNotice : null}
+              cameraSetup={savedCameraSetup}
             />
             </div>
 

@@ -2617,6 +2617,13 @@ STORY_KIT_JSON_SCHEMA = _strict_object({
     "caption": _str_prop(),
 })
 
+# One fresh screen text for a story frame (ADR 0236): the suggestion
+# the Stories page's editor offers beside the founder's current text,
+# under the same rules block the plan's own text is written under.
+STORY_SCREEN_TEXT_JSON_SCHEMA = _strict_object({
+    "screen_text": _str_prop(),
+})
+
 # The fresh-account hashtag strategy, as data. A new account has no authority
 # for the algorithm to lean on, so the tags' job is classification, not reach:
 # the set states the specific problem, the community, and the category in
@@ -2722,6 +2729,76 @@ COVER_TEXT_MAX_WORDS = 6
 COVER_TEXT_MAX_CHARS = 35
 
 
+def _spoken_gate_issues(line, *, budget, as_script=False, hook="", allows_question=False):
+    """The plan loop's finished-sentence gate, shaped for one suggestion line (ADR 0231).
+
+    `_generated_spoken_issues` judges a hook/script pair; a suggestion
+    surface holds one line, so the pair is assembled around it. A hook
+    or cover line stands in the hook slot with an empty script (whose
+    "script is empty" bookkeeping is dropped — the line is the whole
+    reply). A script line — a middle sentence or a whole-script remake —
+    stands in the script slot beside the founder's saved hook, and the
+    hook slot's own issues are dropped: the saved hook is not the
+    suggestion's defect. `budget` is the surface's own set length when
+    it has one, else the line's length, so the gate's length check
+    never invents a ceiling the surface does not already enforce.
+    """
+    if as_script:
+        issues = _generated_spoken_issues(hook, line, len(hook), budget)
+        return [issue for issue in issues if not issue.startswith("hook_line")]
+    issues = _generated_spoken_issues(
+        line, "", budget, 0, allows_question=allows_question)
+    return [issue for issue in issues if issue != "script is empty"]
+
+
+def _cover_gate_issues(cover):
+    """The finished-sentence gate judged for a cover (ADR 0231).
+
+    A cover is a fragment by design — a few words, no sentence, no
+    period — so the unfinished-sentence charge is waived: requiring a
+    terminator would refuse every legitimate cover. What is NOT waived
+    is a thought cut in half: a cover may not end on a dangling function
+    word or an unfinished comparison, begin as a continuation, join
+    with a semicolon, ask a question, or carry the gate's wording
+    families (promotion, fluff, feature nouns, dropped articles). The
+    issues are renamed to the cover's own name. The honest boundary:
+    a cut that lands on a grammatically complete clause is beyond word
+    arithmetic and stays the prompt's business — the gate refuses the
+    observable cut only.
+    """
+    issues = _generated_spoken_issues(cover, "", len(cover), 0, allows_question=False)
+    waived = {"script is empty", "hook_line has an unfinished sentence"}
+    return [
+        ("cover text" + issue[len("hook_line"):])
+        if issue.startswith("hook_line") else issue
+        for issue in issues
+        if issue not in waived
+    ]
+
+
+def _cover_text_issues(cover):
+    """Every way a drafted cover can fail the cover rules (ADR 0232).
+
+    The caps of ADR 0206 — at most COVER_TEXT_MAX_CHARS characters
+    and COVER_TEXT_MAX_WORDS words, the counts named — plus the
+    finished-cover gate of ADR 0231. This is the one validation the
+    plan's first draft and the post kit's model cover answer to, so
+    a drafted cover is validated whole or not used at all — never
+    sliced down to a size that fits.
+    """
+    issues = []
+    if len(cover) > COVER_TEXT_MAX_CHARS:
+        issues.append(
+            f"cover text has {len(cover)} characters, "
+            f"past the {COVER_TEXT_MAX_CHARS} a cover holds")
+    if len(cover.split()) > COVER_TEXT_MAX_WORDS:
+        issues.append(
+            f"cover text has {len(cover.split())} words, "
+            f"past the {COVER_TEXT_MAX_WORDS} a cover holds")
+    issues.extend(_cover_gate_issues(cover))
+    return issues
+
+
 async def generate_cover_text(
     profile: dict,
     angle: Optional[dict],
@@ -2802,6 +2879,23 @@ async def generate_cover_text(
             prompt += (
                 "\n\nCORRECTION: that cover copies the spoken hook word for word. The cover "
                 "is a second angle on the same moment, never a duplicate of the hook."
+            )
+            continue
+        # The finished-cover gate (ADR 0231): inside the caps is not
+        # the same as complete — a cover squeezed against the ceiling
+        # can keep its start and drop its tail, ending mid-thought on
+        # a word like 'and'. The caps above cannot see that cut; the
+        # gate can, and it gets the same one bounded correction.
+        gate_issues = _cover_gate_issues(cover)
+        if gate_issues:
+            refusal = (
+                "The cover text kept coming back cut off mid-thought; "
+                "try again, or write the cover yourself."
+            )
+            prompt += (
+                "\n\nCORRECTION: that cover is cut off mid-thought: "
+                + "; ".join(gate_issues)
+                + ". Write a complete cover — a few whole words that stand on their own."
             )
             continue
         return cover
@@ -2908,11 +3002,17 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "Write the post kit for THIS clip only. Return ONLY a JSON object:\n"
         "{\n"
         '  "caption": ["one TikTok caption, 50 to 80 characters total including "\n'
-        '    the final \u2018?\u2019: write AS an everyday user of the app in the "\n'
-        '    clip\u2019s situation (first person or plain observation, never "\n'
-        '    promotional, never founder or marketer voice), name what the app "\n'
-        '    did for you using the profile facts and plan above, then end with "\n'
-        '    a short question — the caption\u2019s final character must be \u2018?\u2019"],\n'
+        '    the final \u2018?\u2019: the caption SELLS THE WATCH, not the app — "\n'
+        '    lead with what the viewer gets from watching, the clip\u2019s moment "\n'
+        '    and its tension with the payoff withheld, so the caption itself is "\n'
+        '    a reason to watch. Write AS an everyday user in the clip\u2019s "\n'
+        '    situation (first person or plain observation, never promotional, "\n'
+        '    never founder or marketer voice). "\n'
+        '    Never narrate the recording, the place, or using the app, and "\n'
+        '    never make the app the caption\u2019s subject. End with a short "\n'
+        '    question about the viewer\u2019s own experience, one anyone would "\n'
+        '    care to answer, never about the app — the caption\u2019s final "\n'
+        '    character must be \u2018?\u2019"],\n'
         '  "hashtags": ["12 to 15 candidate tags for THIS clip, ordered most "\n'
         '    "relevant first and written the way its audience writes them: "\n'
         '    "one or two naming the exact problem or behaviour the clip is "\n'
@@ -2965,7 +3065,24 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     # words rather than a second, unseen draft of the same line. The
     # model's cover is used only when the project carries none.
     approved_cover = str((project or {}).get("cover_text") or "").strip()
-    cover_text = (approved_cover or str(parsed.get("cover_text") or "").strip())[:100]
+    if approved_cover:
+        # Verbatim means verbatim (ADR 0145): the founder's words ship
+        # whole — never sliced, never re-validated against the draft
+        # rules below, which govern model drafts only.
+        cover_text = approved_cover
+    else:
+        cover_text = str(parsed.get("cover_text") or "").strip()
+        if cover_text:
+            # The model's cover is a draft, and a draft is validated,
+            # never sliced (ADR 0232): a cover past the caps or cut
+            # mid-thought fails the kit loudly, naming the rules it
+            # broke, instead of shipping as its own first 100 chars.
+            cover_issues = _cover_text_issues(cover_text)
+            if cover_issues:
+                raise RuntimeError(
+                    "Post kit cover text failed the cover rules: "
+                    + "; ".join(cover_issues) + "."
+                )
     if not caption or not cover_text:
         raise RuntimeError("Post kit response was missing caption or cover text.")
     if not caption.endswith("?"):
@@ -3251,6 +3368,130 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
     raise RuntimeError(
         "The story plan came back without its spoken lines. Try again."
     )
+
+
+async def suggest_story_screen_text(project: dict, profile: dict) -> str:
+    """
+    One fresh screen text for a story frame (ADR 0236).
+
+    A suggestion only: nothing is saved here, exactly like the cover
+    text's (ADR 0145) — the Stories page shows it beside the founder's
+    current text and accepting goes through the normal draft edit.
+    It is written under the plan's own rules block
+    (`_story_text_rules_block`, ADR 0228) against the frame's spoken
+    lines, so a suggestion obeys the same doctrine as the text it
+    would replace: the whole message with the sound off, inside the
+    settled caps, a second angle on the moment rather than a copy of
+    the hook. A reply that comes back empty, over the caps, a
+    fragment too short to be the message, the current text handed
+    back unchanged, or a copy of the spoken hook gets one bounded
+    correction; a reply still failing after it raises RewriteRefusal
+    with the reason — the clearer-line rewrites' honesty contract.
+    """
+    project = project or {}
+    profile = profile or {}
+    story_type = story_types.get_story_type(project.get("story_type"))
+    if story_type is None:
+        raise RuntimeError(
+            f"Unknown story type {project.get('story_type')!r}: pick one of "
+            + ", ".join(story_types.STORY_TYPE_IDS) + "."
+        )
+    hook = " ".join(str(project.get("hook_line") or "").split()).strip()
+    body = " ".join(str(project.get("script") or "").split()).strip()
+    if not hook and not body:
+        raise RuntimeError(
+            "Generate the story plan first, then ask for a new screen text.")
+    current = " ".join(str(project.get("screen_text") or "").split()).strip()
+    angle = project.get("content_angle")
+    if not isinstance(angle, dict):
+        angle = None
+    p = profile
+    facts = "\n".join(
+        f"- {k}: {str(p.get(k)).strip()}"
+        for k in ("brand_name", "app_category", "niche", "brand_description", "target_audience", "tone_voice")
+        if str(p.get(k) or "").strip()
+    )
+    prompt = (
+        f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
+        f"{_angle_grounding_block(angle)}\n\n"
+        f"STORY TYPE: {story_type['name']} — {story_type['description']}\n"
+        f"{_STORY_TYPE_BRIEFS[story_type['id']]}\n\n"
+        f"{_story_text_rules_block()}\n\n"
+        f"SPOKEN HOOK: {hook}\n"
+        f"SPOKEN SCRIPT: {body}\n"
+        f"CURRENT SCREEN TEXT: {current or '(none yet)'}\n\n"
+        "Write ONE new screen text for this frame: a second angle on "
+        "the moment in the person's own voice, grounded only in the "
+        "spoken lines and the facts above. Never name the app. "
+        'Return JSON: {"screen_text": "..."}'
+    )
+    system_message = (
+        "You write the on-screen text for one story frame, in the voice "
+        "of a satisfied customer sharing their own experience, never as "
+        "the app's founder, owner or marketer. Respond with STRICT JSON "
+        "only, no markdown fences."
+    )
+    refusal = "No usable screen text came back; try again, or write the text yourself."
+    for _ in range(2):
+        raw = await _chat_json(
+            system_message=system_message,
+            prompt=prompt,
+            context="Story screen text",
+            max_tokens=REWRITE_MAX_TOKENS,
+            attempts=2,
+            json_schema=STORY_SCREEN_TEXT_JSON_SCHEMA,
+        )
+        text = " ".join(str((raw or {}).get("screen_text") or "").split()).strip()
+        if text:
+            text = character_policy.neutralize(text)
+        if not text:
+            refusal = "The screen text came back empty; try again, or write the text yourself."
+            prompt += "\n\nCORRECTION: that reply was empty. Write the screen text."
+            continue
+        if len(text) > STORY_TEXT_MAX_CHARS or len(text.split()) > STORY_TEXT_MAX_WORDS:
+            refusal = (
+                f"The screen text kept running long — past the {STORY_TEXT_MAX_CHARS} "
+                f"characters / {STORY_TEXT_MAX_WORDS} words a muted viewer can read "
+                "inside the frame; try again, or write the text yourself."
+            )
+            prompt += (
+                f"\n\nCORRECTION: that screen text ran {len(text)} characters / "
+                f"{len(text.split())} words. The screen text must be at most "
+                f"{STORY_TEXT_MAX_CHARS} characters and at most "
+                f"{STORY_TEXT_MAX_WORDS} words, carrying the whole message "
+                "with the sound off. Rewrite it inside the caps."
+            )
+            continue
+        if len(text.split()) < 3:
+            refusal = (
+                "The screen text kept coming back a fragment — too short "
+                "to carry the message with the sound off; try again, or "
+                "write the text yourself."
+            )
+            prompt += (
+                "\n\nCORRECTION: that screen text is a fragment, not the "
+                "message. Write the whole message — the moment and the "
+                "point — in a few words more."
+            )
+            continue
+        if current and text.lower() == current.lower():
+            refusal = "The screen text came back unchanged; try again, or write the text yourself."
+            prompt += (
+                "\n\nCORRECTION: that was the current screen text handed "
+                "back unchanged. Write a genuinely different one — same "
+                "moment, new angle."
+            )
+            continue
+        if hook and text.lower() == hook.lower():
+            refusal = "The screen text just copied the spoken hook; try again, or write the text yourself."
+            prompt += (
+                "\n\nCORRECTION: that screen text copies the spoken hook "
+                "word for word. The text is a second angle on the same "
+                "moment, never a duplicate of the hook."
+            )
+            continue
+        return text
+    raise RewriteRefusal(refusal)
 
 
 def _story_posting_checklist(story_type_id: str) -> list:
@@ -4405,18 +4646,35 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         # only fits a question: preserving a founder-approved question is
         # preserving their request, not defaulting to one.
         allows_question = original.strip().endswith("?") or _angle_invites_question(angle)
-        if allows_question or not line.rstrip().endswith("?"):
-            return line
-        # One bounded correction: the hook is the first thing a viewer hears,
-        # so a question rewrite the angle does not invite is not an improvement
-        # worth returning. First person is never the defect (ADR 0145): the
-        # rewrite speaks as the person living the moment, and no count of
-        # its 'I's is taken here.
-        refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
-        prompt += (
-            "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
-            "names the viewer's feeling or situation directly, not a question."
-        )
+        if not allows_question and line.rstrip().endswith("?"):
+            # One bounded correction: the hook is the first thing a viewer hears,
+            # so a question rewrite the angle does not invite is not an improvement
+            # worth returning. First person is never the defect (ADR 0145): the
+            # rewrite speaks as the person living the moment, and no count of
+            # its 'I's is taken here.
+            refusal = "The rewrite kept asking a question; try again, or edit the line yourself."
+            prompt += (
+                "\n\nCORRECTION: that rewrite was a question. Rewrite it as a statement that "
+                "names the viewer's feeling or situation directly, not a question."
+            )
+            continue
+        # The finished-sentence gate (ADR 0231): the plan's editorial
+        # loop has always refused an unfinished draft, but this surface
+        # checked length, echo and question shape only — a reply
+        # squeezed against its set length kept its start, dropped its
+        # tail, and passed. The gate runs last, beside those checks,
+        # with the surface's own question allowance.
+        gate_issues = _spoken_gate_issues(
+            line, budget=max_chars or len(line), allows_question=allows_question)
+        if gate_issues:
+            refusal = "The rewrite kept coming back unfinished; try again, or edit the line yourself."
+            prompt += (
+                "\n\nCORRECTION: that rewrite is not a finished line: "
+                + "; ".join(gate_issues)
+                + ". Finish the thought in one complete sentence."
+            )
+            continue
+        return line
     raise RewriteRefusal(refusal)
 
 
@@ -4546,6 +4804,21 @@ async def rewrite_spoken_line(
                 "thing in fewer, plainer words."
             )
             continue
+        # The finished-sentence gate (ADR 0231), judged as a script
+        # line beside the saved hook: a fragment that kept its start
+        # and dropped its tail passed this surface's length, echo and
+        # question checks untouched before the gate ran here.
+        gate_issues = _spoken_gate_issues(
+            candidate, budget=max_chars or len(candidate),
+            as_script=True, hook=hook_line)
+        if gate_issues:
+            refusal = "The rewrite kept coming back unfinished; try again, or edit the line yourself."
+            prompt += (
+                "\n\nCORRECTION: that rewrite is not a finished line: "
+                + "; ".join(gate_issues)
+                + ". Finish the thought in one complete sentence."
+            )
+            continue
         return candidate
     raise RewriteRefusal(refusal)
 
@@ -4672,6 +4945,22 @@ async def rewrite_whole_script(
                 f"\n\nCORRECTION: that remake is {len(candidate)} characters, "
                 f"but the script's seconds hold {max_chars}. Say the same "
                 "story in fewer, plainer words."
+            )
+            continue
+        # The finished-sentence gate (ADR 0231), judged as the script
+        # beside the saved hook: a remake whose last sentence lost its
+        # tail passed this surface's checks untouched before the gate
+        # ran here — the hook slot's own issues are the founder's saved
+        # words, not the remake's defect, and are not counted.
+        gate_issues = _spoken_gate_issues(
+            candidate, budget=max_chars or len(candidate),
+            as_script=True, hook=hook_line)
+        if gate_issues:
+            refusal = "The remake kept coming back unfinished; try again, or edit the script yourself."
+            prompt += (
+                "\n\nCORRECTION: that remake is not finished: "
+                + "; ".join(gate_issues)
+                + ". Finish every sentence and return the whole script."
             )
             continue
         return candidate
@@ -5272,7 +5561,8 @@ async def generate_creative_plan(
     # fixed plan's location is an interior. Stated in the rules the
     # location field is written under — the same rule the strategy and
     # render prompts carry for this setup. Handheld plans keep any
-    # location, outdoors included.
+    # location, outdoors included. ADR 0233 extends the rule from place
+    # to activity: the staged action must fit the room too.
     fixed_location_rule = (
         "- FIXED CAMERA: this plan's location must be INDOORS — inside a home, "
         "an office, a bedroom, an interior space like those — never outdoors "
@@ -5280,7 +5570,14 @@ async def generate_creative_plan(
         "rooftop or airplane). If the brief or the angle's moment sits "
         "outdoors, stage the same moment at the nearest indoor setting that "
         "keeps it intact: only the setting moves inside — the story and the "
-        "spoken words do not change.\n"
+        "spoken words do not change. THE ACTION MUST FIT THE ROOM: every "
+        "action the beat timeline stages must be one that can happen in "
+        "that room — no swimming, running or flying indoors. When the "
+        "angle's moment carries an outdoor activity, stage its "
+        "indoor-plausible equivalent that keeps the feeling (a walk along "
+        "the coastline becomes pacing by a large window or through an "
+        "atrium); in a bedroom, only bedroom-plausible actions. The spoken "
+        "words never change — only the staging adapts.\n"
         if camera_setup == "fixed" else ""
     )
 
@@ -5697,10 +5994,24 @@ async def generate_creative_plan(
     # normalized like a spoken line for identity (ADR 0089) but never
     # budget-checked against the spoken seconds — it is read, not said.
     # Optional by design: a reply that omitted it stores an empty cover
-    # and Review offers the cover's own generate button.
-    result["cover_text"] = character_policy.neutralize(
+    # and Review offers the cover's own generate button. A draft that
+    # fails the cover rules stores that same empty cover (ADR 0232):
+    # the draft is validated whole against the caps and the
+    # finished-cover gate, never sliced down to a size that fits, and
+    # a plan is never refused over post copy — the failure is logged
+    # and the cover is left to the Suggest flow.
+    drafted_cover = character_policy.neutralize(
         re.sub(r"\s+", " ", str(result.get("cover_text") or "")).strip().strip('"\u201c\u201d')
-    )[:100]
+    )
+    if drafted_cover:
+        cover_issues = _cover_text_issues(drafted_cover)
+        if cover_issues:
+            logger.warning(
+                "Plan cover draft failed the cover rules (%s); storing no cover.",
+                "; ".join(cover_issues),
+            )
+            drafted_cover = ""
+    result["cover_text"] = drafted_cover
 
     result["beat_timeline"] = _normalize_beats(result.get("beat_timeline"), duration_seconds)
     result["beat_timeline"] = _enforce_two_sections(result["beat_timeline"], hook_seconds)
@@ -6448,7 +6759,9 @@ async def generate_video_strategy(
             # render time. For this setup the rule outranks the outdoor
             # steering in scene_location_guidance above; handheld keeps
             # that steering untouched. (This block replaces ADR 0216's
-            # set-down opening, reversed in the same decision.)
+            # set-down opening, reversed in the same decision.) ADR 0233
+            # adds the activity-fit sentences: the actions written here
+            # must fit the room, not just the place.
             "- THE SCENE IS INDOORS (fixed camera only): a fixed camera stands "
             "inside a room, so scene.location must be an interior — inside a "
             "home, an office, a bedroom, an interior space like those — never "
@@ -6457,7 +6770,14 @@ async def generate_video_strategy(
             "moment or the usage moment sits outdoors, stage the same moment "
             "at the nearest indoor setting that keeps the moment and every "
             "spoken word intact. Only the setting moves inside; the words "
-            "never change.\n"
+            "never change. THE ACTION MUST FIT THE ROOM: the hook_action and "
+            "every segment action must be an action that can happen in that "
+            "room — no swimming, running or flying indoors. An outdoor "
+            "activity is staged as its indoor-plausible equivalent that "
+            "keeps the feeling (a coastline walk becomes pacing by a large "
+            "window or through an atrium); in a bedroom, only "
+            "bedroom-plausible actions. The hook_line and the segment "
+            "scripts never change — only the direction adapts.\n"
             if camera_setup == "fixed" else ""
         )
         + f"{final_beat_rule}"

@@ -29,6 +29,7 @@ _OUTDOOR = (
     r"\bcommut(?:e|es|ing)\b", r"\bstation\b", r"\bplatform\b", r"\bporch\b",
     r"\bstoop\b", r"\bcaf[e\u00e9]\b", r"\bhilltop\b", r"\bbridge\b", r"\bcampus\b",
     r"\bdriveway\b", r"\bbackyard\b", r"\bwaterfront\b", r"\bon a run\b",
+    r"\bcoastline\b", r"\bcoast\b", r"\bcourthouse\b",
     r"\bback steps?\b", r"\bfront steps?\b",
     r"\bout of the (?:office|building|house|car|gym|station)\b",
 )
@@ -163,6 +164,157 @@ def video_scene(angle: Optional[dict]) -> dict:
         "place": scene["place"] or from_problem["place"],
         "time": scene["time"] or from_problem["time"],
     }
+
+
+# ---------------------------------------------------------------------------
+# ADR 0233: the fixed camera's indoor restatement of the angle display.
+#
+# Angles are written before the camera setup is picked (ADR 0220), so an
+# angle can name an outdoor place the fixed camera can never stage
+# (ADR 0219). The template cards already restate their staging line
+# (ADR 0224); the angle display now restates the angle's own text the same
+# way. The stored angle is never rewritten — this shapes the serialized
+# display only, and flipping back to Handheld shows the angle as written.
+#
+# The tables are deliberately a bounded list of known place phrases, not
+# a prose rewriter: a framed phrase ("at the courthouse") swaps together
+# with its preposition ("in the living room"), and a bare noun swaps on
+# its own where the words around it already fit the indoor room. A place
+# the tables do not know passes through unchanged; the angle section's
+# note still tells the founder the angles are staged indoors.
+# ---------------------------------------------------------------------------
+
+_FRAMED_INDOOR_RESTATEMENTS = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        (r"\b(?:at|in|inside) the courthouse\b", "in the living room"),
+        (r"\b(?:in|at) the courtyard\b", "in the atrium"),
+        (r"\b(?:at|on|along) the coastline\b", "by the large window"),
+        (r"\b(?:at|on|along) the coast\b", "by the large window"),
+        (r"\b(?:at|on) the beach\b", "by the large window"),
+        (r"\b(?:at|on|along) the waterfront\b", "by the large window"),
+        (r"\b(?:on|at) the hilltop\b", "by the large window"),
+        (r"\b(?:on|at) the balcony\b", "by the large window"),
+        (r"\b(?:on|at) the terrace\b", "by the large window"),
+        (r"\b(?:on|at) the rooftop\b", "in the living room"),
+        (r"\b(?:in|at) the park\b", "in the living room"),
+        (r"\b(?:in|at) the garden\b", "in the atrium"),
+        (r"\b(?:in|at) the backyard\b", "in the atrium"),
+        (r"\b(?:in|at|on) the plaza\b", "in the atrium"),
+        (r"\b(?:on|at|in) the patio\b", "in the atrium"),
+        (r"\b(?:in|through) the forest\b", "in the atrium"),
+        (r"\b(?:on|at) the porch\b", "in the hallway"),
+        (r"\b(?:on|at) the stoop\b", "in the hallway"),
+        (r"\b(?:on|at) the (?:back|front) steps?\b", "in the hallway"),
+        (r"\bat the bus stop\b", "in the hallway"),
+        (r"\b(?:in|at) the parking lot\b", "in the hallway"),
+        (r"\b(?:on|along) the sidewalk\b", "in the hallway"),
+        (r"\b(?:at|in) the market\b", "in the living room"),
+        (r"\b(?:at|in) the station\b", "in the hallway"),
+        (r"\b(?:on|at) the platform\b", "in the hallway"),
+        (r"\b(?:on|along) the trail\b", "in the hallway"),
+        (r"\b(?:on|along) the path\b", "in the hallway"),
+        (r"\bdown the street\b", "down the hallway"),
+        (r"\b(?:on|along) the street\b", "in the living room"),
+        (r"\b(?:on|across) the bridge\b", "in the hallway"),
+        (r"\b(?:on|across) the campus\b", "in the living room"),
+        (r"\b(?:in|on) the driveway\b", "in the hallway"),
+        (r"\b(?:in|on|at) the crosswalk\b", "in the hallway"),
+        (r"\b(?:at|in) the airport\b", "in the living room"),
+        (r"\b(?:on|in) the airplane\b", "in the living room"),
+    )
+)
+
+# Bare mentions outside a framed phrase ("the courthouse queue"), where
+# the words around the noun already fit the indoor room. Ambiguous nouns
+# (market, station, platform, street, café…) get no bare entry: only
+# their framed phrases above restate.
+_BARE_INDOOR_RESTATEMENTS = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        (r"\bcourthouse\b", "living room"),
+        (r"\bcourtyard\b", "atrium"),
+        (r"\bcoastline\b", "large window"),
+        (r"\b(?<!west )(?<!east )coast\b", "large window"),
+        (r"\bbeach\b", "large window"),
+        (r"\bwaterfront\b", "large window"),
+        (r"\bhilltop\b", "large window"),
+        (r"\bbalcony\b", "large window"),
+        (r"\bterrace\b", "large window"),
+        (r"\brooftop\b", "living room"),
+        (r"\bpark\b(?!\s+bench)", "living room"),
+        (r"\bgarden\b(?!\s+gate)", "atrium"),
+        (r"\bbackyard\b", "atrium"),
+        (r"\bplaza\b", "atrium"),
+        (r"\bpatio\b", "atrium"),
+        (r"\bforest\b", "atrium"),
+        (r"\bporch\b", "hallway"),
+        (r"\bstoop\b", "hallway"),
+        (r"\b(?:back|front) steps?\b", "hallway"),
+        (r"\bbus stop\b", "hallway"),
+        (r"\bparking lot\b", "hallway"),
+        (r"\bsidewalk\b", "hallway"),
+        (r"\boutdoors\b", "indoors"),
+        (r"\boutside\b", "inside"),
+    )
+)
+
+_ANGLE_DISPLAY_FIELDS = (
+    "label", "target_audience", "user_problem", "hook_promise",
+    "app_feature", "desired_emotion", "viewer_outcome",
+)
+
+
+def _restated_case(matched: str, replacement: str) -> str:
+    """The replacement wearing the matched phrase's first-letter case."""
+    if matched[:1].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
+
+
+def restate_text_indoors(text: str) -> str:
+    """`text` with its known outdoor place phrases restated as indoor ones.
+
+    Only the phrases in the restatement tables change; every other word is
+    returned exactly as written, and a text naming no known place comes
+    back unchanged.
+    """
+    out = str(text or "")
+    for pattern, replacement in _FRAMED_INDOOR_RESTATEMENTS + _BARE_INDOOR_RESTATEMENTS:
+        out = pattern.sub(lambda m: _restated_case(m.group(0), replacement), out)
+    return out
+
+
+def indoor_restatement(angle: Optional[dict], camera_setup: str = "") -> Optional[dict]:
+    """The angle's display fields restated for a fixed camera, or None.
+
+    Display-only (ADR 0233): the caller overlays the returned fields on
+    the serialized angle; the stored angle is never rewritten, and a
+    field absent from the result keeps its written text byte-for-byte.
+    Restates only when the setup is fixed AND the angle's scene — the
+    moment's place, per `video_scene` — is outdoors. An indoor angle, a
+    handheld or unstated setup, or an outdoor place the tables do not
+    know all return None.
+    """
+    if str(camera_setup or "").strip().lower() != "fixed":
+        return None
+    if video_scene(angle)["place"] != "outdoor":
+        return None
+    source = angle or {}
+    overlay = {}
+    for field in _ANGLE_DISPLAY_FIELDS:
+        raw = str(source.get(field) or "")
+        if raw:
+            restated = restate_text_indoors(raw)
+            if restated != raw:
+                overlay[field] = restated
+    claims = source.get("claims_to_respect")
+    if isinstance(claims, list):
+        written = [str(claim or "") for claim in claims]
+        restated_claims = [restate_text_indoors(claim) for claim in written]
+        if restated_claims != written:
+            overlay["claims_to_respect"] = restated_claims
+    return overlay or None
 
 
 def conflict_reason(text: str, scene: dict) -> str:

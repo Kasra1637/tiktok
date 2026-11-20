@@ -197,6 +197,7 @@ from routers.stories import (
     router as stories_router,
     configure_stories,
     create_story_project, generate_story_plan, generate_story,
+    suggest_story_screen_text,
     regenerate_story_kit, _parse_story_kit, _maybe_write_story_kit,
     _schedule_story_kit, _load_story_kit_materials,
 )

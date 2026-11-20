@@ -814,3 +814,61 @@ def test_script_rewrite_unchanged_reply_raises(monkeypatch):
     with pytest.raises(RuntimeError, match="unchanged"):
         asyncio.run(ai_service.rewrite_spoken_line(
             {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))
+
+
+# ------------------------------------------------- the finished-sentence gate
+#
+# ADR 0231: the plan's editorial loop has always refused a draft whose
+# sentence is unfinished; the suggestion surfaces checked length, echo
+# and question shape only, so a reply squeezed against its ceiling
+# kept its start, dropped its tail, and passed. The gate now runs on
+# every surface: a fragment gets one correction naming the defect,
+# then the surface's loud refusal — never a silent pass.
+
+
+def test_middle_rewrite_corrects_a_fragment_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "It turns at one, after lunch at my desk and"},
+        {"line": "It turns at one, right after lunch at my desk."},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+    assert line == "It turns at one, right after lunch at my desk."
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "unfinished" in calls[1]["prompt"]
+
+
+def test_middle_rewrite_refuses_a_persistent_fragment(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": "It turns at one, after lunch at my desk and"}),
+    )
+    with pytest.raises(RuntimeError, match="unfinished"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
+
+
+def test_script_rewrite_corrects_a_fragment_reply(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "My head stays loud from the whole day and I"},
+        {"line": REMADE_SCRIPT},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))
+    assert line == REMADE_SCRIPT
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "unfinished" in calls[1]["prompt"]
+
+
+def test_script_rewrite_refuses_a_persistent_fragment(monkeypatch):
+    monkeypatch.setattr(
+        ai_service, "_chat_json",
+        AsyncMock(return_value={"line": "My head stays loud from the whole day and I"}),
+    )
+    with pytest.raises(RuntimeError, match="unfinished"):
+        asyncio.run(ai_service.rewrite_spoken_line(
+            {}, None, SCRIPT, "script", hook_line=HOOK, script=SCRIPT))

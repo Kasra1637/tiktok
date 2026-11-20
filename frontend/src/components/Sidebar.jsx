@@ -7,6 +7,7 @@ import {
   Sparkles,
   LayoutDashboard,
   Clapperboard,
+  Layers,
   Smartphone,
   Images,
   Briefcase,
@@ -30,8 +31,9 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * no longer has to lead the list to protect that first step. After it the
  * working sequence stands: App Profile, because everything else is made
  * from it and Create Video refuses to run without an approved one.
- * Create Video makes the hook, Demo + CTA turns the finished hook into an
- * export, History records those renders and exports, and Analytics reads the
+ * Create Video makes the hook, Stories makes the short story frames
+ * beside it, Demo + CTA turns the finished hook into an export, History
+ * records those renders and exports, and Analytics reads the
  * founder's own logged results. The retired
  * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
  * there is no Research group and no Insight link. Analytics is last, not an
@@ -63,6 +65,9 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Start here — pick your next step" },
   { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
+  /* Stories sits directly after Create Video: it is the other creation
+     surface, the short-form sibling of the hook video (ADR 0235). */
+  { to: "/stories", label: "Stories", icon: Layers, testId: "stories-nav-link", hint: "Short clips, posted as stories" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
   /* The library sits with the working pages, directly above Analytics: it holds

@@ -3,9 +3,38 @@ import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
+import { clampImageSeconds } from "./imageSequence";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
+
+/**
+ * Decode one added image for the export's compositor. ImageBitmap is the
+ * direct path; the element fallback covers browsers without it. A blob
+ * that cannot decode refuses the export by name — an image segment built
+ * from a missing still would bake a blank stretch into the file.
+ */
+async function decodeExportImage(entry) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(entry.blob);
+    } catch {
+      // Fall through to the element path rather than refusing on one
+      // decoder's say-so; the element is the older, wider road.
+    }
+  }
+  const url = URL.createObjectURL(entry.blob);
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`"${entry.name || "An added image"}" couldn't be read for export. Re-add it and export again.`));
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 /**
  * Load a recorded blob into a throwaway video element and confirm it has a
@@ -81,6 +110,7 @@ export function useExportFlow(settings) {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
+    appendImages = null, reduceMotion = false,
     baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -171,9 +201,20 @@ export function useExportFlow(settings) {
         if (!response.ok) throw new Error("The added clip could not be read. Reload it and export again.");
         appendBlob = await response.blob();
       }
+      // An image sequence in the added slot decodes still by still instead
+      // of fetching a clip; the holds ride along so the assembler composes
+      // the same sequence the preview played.
+      let appendImageSet = null;
+      if (!appendBlob && appendImages?.length) {
+        appendImageSet = [];
+        for (const entry of appendImages) {
+          controller.signal.throwIfAborted();
+          appendImageSet.push({ source: await decodeExportImage(entry), seconds: clampImageSeconds(entry.seconds) });
+        }
+      }
       const canvas = document.createElement("canvas");
       const { blob, duration, audioSegments } = await exportTikTok({
-        source: await response.blob(), appendSource: appendBlob, canvas, signal: controller.signal,
+        source: await response.blob(), appendSource: appendBlob, appendImages: appendImageSet, reduceMotion: !!reduceMotion, canvas, signal: controller.signal,
         baseMuted: !!baseMuted, appendMuted: !!appendMuted,
         baseStart, appendStart, baseEnd, appendEnd,
         drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
@@ -186,7 +227,7 @@ export function useExportFlow(settings) {
       // (videoMeta/appendMeta), which can disagree with the export-time decode
       // by more than the gate allows and fail a perfectly good file.
       const expectedDuration = duration;
-      await probeRecordingPlays(blob, expectedDuration, appendBlob ? audioSegments : []);
+      await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet ? audioSegments : []);
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
       if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);

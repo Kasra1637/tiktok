@@ -1005,9 +1005,15 @@ export function usePreviewLoop(settings) {
         return;
       }
       if (playing) editingZoomRef.current = false;
+      // An image sequence stands in a virtual player for its element
+      // (ADR 0237): it hands over the frame it composes for its own
+      // clock, and the painter treats that canvas like any decoded
+      // clip frame. A real element paints itself, as before.
+      const segment = v === appendVideoRef?.current ? 1 : 0;
+      const frame = segment === 1 && v && typeof v.frameCanvas === "function" ? v.frameCanvas() || v : v;
       if (playing || dirtyRef.current) {
         dirtyRef.current = false;
-        paintFrame(canvas, timelineTime(v), v, v === appendVideoRef?.current ? 1 : 0);
+        paintFrame(canvas, timelineTime(v), frame, segment);
       }
       // A scoped replay parks at its window end instead of playing past it:
       // pausing here lands the scrubber on the exact window frame, and the

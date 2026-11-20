@@ -1476,6 +1476,34 @@ class TestFinalPhoneFraming:
             assert gp.SELFIE_STARTING_SHOT not in prompt
             assert len(prompt) <= limit
 
+    def test_fixed_camera_fits_the_action_to_the_room(self):
+        # ADR 0233 extends ADR 0219's indoor rule from place to activity
+        # at the render prompt too: the fixed starting shot states that
+        # every action is one that fits the room. The fuller restaging
+        # instruction lives in the plan and strategy prompts, which write
+        # the actions; this is the render's compact backstop, and it must
+        # survive saturation at the tightest ceiling.
+        prompt = gp.build_segment_prompt(
+            strategy={"camera_setup": "fixed"},
+            profile={}, template={}, duration=10, plan={"hook_seconds": 3},
+        )
+        assert "every action is one that fits that room" in prompt
+        kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
+        kwargs["strategy"]["camera_setup"] = "fixed"
+        for key in vp.STUDIO_ELIGIBLE:
+            limit = vp.capability(key)["prompt_char_limit"]
+            saturated = gp.build_segment_prompt(
+                **kwargs, prompt_budget=limit, script_sacred=vp.script_is_sacred(key),
+            )
+            assert "every action is one that fits that room" in saturated
+            assert len(saturated) <= limit
+        # Handheld carries no such line: the rule is fixed-only.
+        handheld = gp.build_segment_prompt(
+            strategy={"camera_setup": "handheld"},
+            profile={}, template={}, duration=10, plan={"hook_seconds": 3},
+        )
+        assert "every action is one that fits that room" not in handheld
+
     @pytest.mark.parametrize("direction", ["left", "right"])
     def test_selfie_final_beat_survives_a_saturated_strategy_at_every_ceiling(self, direction):
         kwargs = TestPerProviderPromptBudget()._verbose_kwargs()
