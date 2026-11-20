@@ -23,7 +23,7 @@ import { exceedsSinglePass, readPieceSeconds } from "../../lib/videoLength";
  *
  * The submit goes through the stories router's generate endpoint,
  * which renders the frame at its OWN seconds (exact duration —
- * a 5-second question frame renders and bills at 5, never at the
+ * a 3-second question frame renders and bills at 3, never at the
  * hook-video clamp's 8). Progress is the app's pattern: an
  * indeterminate bar, a stage checklist naming the real backend
  * phase, and the elapsed clock — never a percentage (ADR 0140).

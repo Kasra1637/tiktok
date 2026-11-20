@@ -189,7 +189,7 @@ export default function Dashboard() {
 
       <section className="space-y-4">
         <SectionHeading icon={Compass}>Where to next</SectionHeading>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="dashboard-destinations">
           {DESTINATIONS.map((destination, index) => {
             const Icon = destination.icon;
             return (
@@ -216,7 +216,7 @@ export default function Dashboard() {
       </section>
 
       {!state.loading && recent.length > 0 && (
-        <section className="space-y-4">
+        <section className="space-y-4" data-testid="dashboard-recents">
           <SectionHeading icon={HistoryIcon}>Recent renders</SectionHeading>
           <div className="flex flex-wrap gap-4">
             {recent.map((row, index) => (

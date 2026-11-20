@@ -409,7 +409,7 @@ class CreateStoryProjectRequest(BaseModel):
 
     Only the profile and the story type are required: the type is the
     story's aim, and its settled default supplies the frame length
-    unless the founder picks another of the 5/10/15 lengths. The type
+    unless the founder picks another of the 3/4/5 lengths. The type
     id is validated against the catalog at the endpoint, loudly — the
     model here carries the shape, the catalog owns the set. An angle
     may seed the story now or be picked later; direction rides the

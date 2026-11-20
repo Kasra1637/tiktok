@@ -34,6 +34,7 @@ import StoryCraftCheck from "../components/studio/StoryCraftCheck";
 import StoryRenderPanel from "../components/studio/StoryRenderPanel";
 import StoryKitPanel from "../components/studio/StoryKitPanel";
 import { useWizardDirections } from "./useWizardDirections";
+import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { api, getErrorMessage, durableMediaUrl, mediaUrl } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { sentenceCase } from "../lib/copyCase";
@@ -166,6 +167,12 @@ export default function Stories() {
   const [loadError, setLoadError] = useState(null);
   const [error, setError] = useState(null);
   const [drafts, setDrafts] = useState([]);
+  // Whether the drafts read for the current app has settled. The tour
+  // eligibility below reads the drafts list as its "nothing made yet"
+  // signal, and an unsettled read also reports an empty list — the
+  // settled flag is what separates "no drafts" from "not known yet",
+  // the same loading guard the other tour pages register behind.
+  const [draftsSettled, setDraftsSettled] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [autosaving, setAutosaving] = useState(false);
   const [draft, dispatch] = useReducer(storyDraftReducer, undefined, () => createStoryDraft());
@@ -213,19 +220,27 @@ export default function Stories() {
   useEffect(() => {
     if (!profileId) {
       setDrafts([]);
+      setDraftsSettled(true);
       return undefined;
     }
+    setDraftsSettled(false);
     let cancelled = false;
     api
       .getStoryProjects(profileId)
       .then((data) => {
-        if (!cancelled) setDrafts(data.projects || []);
+        if (!cancelled) {
+          setDrafts(data.projects || []);
+          setDraftsSettled(true);
+        }
       })
       .catch(() => {
         // The list is a convenience beside the pickers, not the
         // page's load: a failed read empties it quietly rather than
         // failing the page over a sidebar.
-        if (!cancelled) setDrafts([]);
+        if (!cancelled) {
+          setDrafts([]);
+          setDraftsSettled(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -416,6 +431,15 @@ export default function Stories() {
   };
 
   const { approved, unapproved } = partitionProfiles(profiles);
+  // The Stories tour's first-run state (ADR 0240, on ADR 0118's
+  // fork-page rule): the page has loaded, an approved app is picked,
+  // no draft is open or created yet, and the app's draft list has
+  // settled empty — the founder has not made a story. A page with
+  // drafts, an open draft, or a read still in flight never offers it.
+  useTourEligibility(
+    "stories",
+    loadState === "ready" && approved.length > 0 && !project && draftsSettled && drafts.length === 0
+  );
   const activeType = storyTypeById(editValue("story_type", storyType));
   const hasPlan = Boolean(
     String(editValue("hook_line")).trim() && String(editValue("script")).trim()
@@ -684,7 +708,7 @@ export default function Stories() {
               </div>
 
               {hasPlan && (
-                <div className="space-y-4">
+                <div className="space-y-4" data-testid="story-editors">
                   <GroupLabel icon={AudioLines}>Spoken lines and screen text</GroupLabel>
                   <p className="text-sm text-muted-foreground" data-subtitle="">
                     The spoken lines and the sticker text, checked as you edit.

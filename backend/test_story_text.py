@@ -13,8 +13,8 @@ import asyncio
 
 import pytest
 
-HOOK = "I keep losing count by the second bag."
-SCRIPT = "Saturday afternoon at the market stall, I say it out loud once. The count holds."
+HOOK = "I keep losing count again."
+SCRIPT = "Saturday at the stall, the count holds."
 SCREEN = "Losing count by the tomatoes again"
 STICKERS = [
     {"platform": "both", "sticker": "poll",
@@ -90,7 +90,7 @@ def test_story_text_caps_are_the_settled_numbers():
     import ai_service
     import story_types
     # Research-derived (plan section 6, Q3): the text reads whole inside
-    # the shortest 5-second frame and stands alone muted.
+    # the shortest 3-second frame and stands alone muted.
     assert story_types.STORY_TEXT_MAX_CHARS == 80
     assert story_types.STORY_TEXT_MAX_WORDS == 14
     assert ai_service.STORY_TEXT_MAX_CHARS == 80
@@ -171,6 +171,59 @@ def test_story_plan_refuses_a_screen_text_that_stays_over_cap(monkeypatch):
         asyncio.run(ai_service.generate_story_plan(dict(PROJECT), dict(PROFILE)))
 
 
+def test_story_plan_prompt_carries_the_word_budget(monkeypatch):
+    import ai_service
+    calls = _stub_chat(monkeypatch, [_plan_reply()])
+    asyncio.run(ai_service.generate_story_plan(dict(PROJECT), dict(PROFILE)))
+    prompt = calls[0]["prompt"]
+    # ADR 0238: a 5s frame holds one spoken line of at most 12 words —
+    # the budget is instructed, not just enforced after the fact.
+    assert "at most 12 WORDS" in prompt
+
+
+def test_story_plan_corrects_spoken_lines_over_the_word_budget(monkeypatch):
+    import ai_service
+    long_hook = "I keep losing count by the second bag again today."
+    long_script = (
+        "Saturday afternoon at the market stall I say it out loud "
+        "once more before I buy anything at all."
+    )
+    calls = _stub_chat(monkeypatch, [
+        _plan_reply(hook_line=long_hook, script=long_script), _plan_reply(),
+    ])
+    out = asyncio.run(ai_service.generate_story_plan(dict(PROJECT), dict(PROFILE)))
+    assert out["hook_line"] == HOOK
+    assert len(calls) == 2
+    assert "CORRECTION" in calls[1]["prompt"]
+    assert "12 words" in calls[1]["prompt"]
+
+
+def test_story_plan_refuses_spoken_lines_that_stay_over_the_word_budget(monkeypatch):
+    import ai_service
+    long_hook = "I keep losing count by the second bag again today."
+    long_script = (
+        "Saturday afternoon at the market stall I say it out loud "
+        "once more before I buy anything at all."
+    )
+    _stub_chat(monkeypatch, [
+        _plan_reply(hook_line=long_hook, script=long_script),
+        _plan_reply(hook_line=long_hook, script=long_script),
+    ])
+    with pytest.raises(RuntimeError, match="spoken lines"):
+        asyncio.run(ai_service.generate_story_plan(dict(PROJECT), dict(PROFILE)))
+
+
+def test_story_plan_word_budget_scales_with_the_frame(monkeypatch):
+    import ai_service
+    # A 3s question/poll frame holds 7 words: the settled 5s pair
+    # (12 words) is already too long there, and is refused after one
+    # correction rather than stored.
+    project = {**PROJECT, "duration_seconds": 3}
+    _stub_chat(monkeypatch, [_plan_reply(), _plan_reply()])
+    with pytest.raises(RuntimeError, match="7 words"):
+        asyncio.run(ai_service.generate_story_plan(project, dict(PROFILE)))
+
+
 def test_story_plan_refuses_an_unknown_story_type():
     import ai_service
     with pytest.raises(RuntimeError, match="story type"):
@@ -201,7 +254,7 @@ def test_story_plan_for_announcement_names_the_platform_asymmetry(monkeypatch):
     import ai_service
     calls = _stub_chat(monkeypatch, [_plan_reply()])
     project = {**PROJECT, "story_type": "announcement_countdown",
-               "duration_seconds": 10, "countdown_date": "May 3"}
+               "duration_seconds": 5, "countdown_date": "May 3"}
     asyncio.run(ai_service.generate_story_plan(project, dict(PROFILE)))
     prompt = calls[0]["prompt"]
     # TikTok has no countdown sticker: the date rides the screen text and
@@ -232,6 +285,42 @@ def test_generate_story_kit_ships_the_accepted_text_verbatim(monkeypatch):
     joined = " ".join(kit["checklist"])
     assert "native text sticker" in joined
     assert "one or two" in joined.lower()
+
+
+def test_story_kit_checklist_names_the_link_sticker_instagram_only(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [{"caption": "The full one is up."}])
+    project = {
+        **PROJECT, "story_type": "hook_teaser", "hook_line": HOOK,
+        "script": SCRIPT, "screen_text": SCREEN,
+        "sticker_plan": [dict(s) for s in STICKERS],
+    }
+    kit = asyncio.run(ai_service.generate_story_kit(
+        project, dict(PROFILE), {"id": "gen-1"}))
+    joined = " ".join(kit["checklist"])
+    # ADR 0238: TikTok Stories has no link sticker — the kit says the
+    # step is Instagram-only and points TikTok viewers at the profile.
+    assert "Instagram-only" in joined
+    assert "TikTok has no link sticker" in joined
+    assert "profile" in joined
+
+
+def test_story_kit_checklist_names_the_countdown_sticker_instagram_only(monkeypatch):
+    import ai_service
+    _stub_chat(monkeypatch, [{"caption": "Launch day is coming."}])
+    project = {
+        **PROJECT, "story_type": "announcement_countdown", "hook_line": HOOK,
+        "script": SCRIPT, "screen_text": SCREEN,
+        "sticker_plan": [dict(s) for s in STICKERS],
+    }
+    kit = asyncio.run(ai_service.generate_story_kit(
+        project, dict(PROFILE), {"id": "gen-1"}))
+    joined = " ".join(kit["checklist"])
+    # ADR 0238: TikTok Stories has no countdown sticker either — the
+    # date goes in the text sticker there instead.
+    assert "Instagram-only" in joined
+    assert "TikTok has no countdown sticker" in joined
+    assert "text sticker" in joined
 
 
 def test_story_kit_caption_carries_no_hashtag_machinery(monkeypatch):

@@ -4,7 +4,7 @@ DB-backed like test_cover_text.py, with OpenRouter fully mocked. These
 assert OUR rules: a story is a project row with kind='story' and a type;
 the plan saves the whole written layer plus the assembled strategy; the
 generate endpoint submits ONE frame through the one render path at the
-frame's own seconds (a 5s question/poll frame renders at 5, never
+frame's own seconds (a 3s question/poll frame renders at 3, never
 rounded up to the hook-video floor of 8); and at completion a story
 render grows a story kit and never a post kit, while a hook-video
 render does the reverse.
@@ -13,6 +13,9 @@ import asyncio
 import importlib
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -26,8 +29,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 ANON = "anonymous"
 
-HOOK = "I keep losing count again."
-SCRIPT = "At the stall I say it out loud once."
+HOOK = "I keep losing count."
+SCRIPT = "The stall count holds."
 SCREEN = "Losing count by the tomatoes again"
 STICKERS = [
     {"platform": "both", "sticker": "poll",
@@ -45,7 +48,7 @@ PLAN = {
     "middle_action": "Turns back to the stall, still counting quietly.",
     "location": LOCATION,
     "story_type": "question_poll",
-    "frame_seconds": 5,
+    "frame_seconds": 3,
 }
 
 KIT = {
@@ -54,7 +57,7 @@ KIT = {
     "sticker_plan": [dict(s) for s in STICKERS],
     "checklist": ["Add the screen text as a native text sticker."],
     "story_type": "question_poll",
-    "frame_seconds": 5,
+    "frame_seconds": 3,
 }
 
 
@@ -166,8 +169,8 @@ class TestCreateStoryProject:
         project, _ = _story(api, "Create Basic")
         assert project["kind"] == "story"
         assert project["story_type"] == "question_poll"
-        # The settled default for a question/poll frame (research Q4).
-        assert project["duration_seconds"] == 5
+        # The settled default for a question/poll frame (ADR 0238).
+        assert project["duration_seconds"] == 3
         assert project["frame_count"] == 1
         assert project["status"] == "draft"
         row = _run(api._fetch_one(
@@ -176,8 +179,8 @@ class TestCreateStoryProject:
         assert row["kind"] == "story" and row["story_type"] == "question_poll"
 
     def test_create_accepts_a_frame_length_pick(self, api):
-        project, _ = _story(api, "Create Pick", frame_seconds=15)
-        assert project["duration_seconds"] == 15
+        project, _ = _story(api, "Create Pick", frame_seconds=5)
+        assert project["duration_seconds"] == 5
 
     def test_create_refuses_an_unknown_type_loudly(self, api):
         from models import CreateStoryProjectRequest
@@ -235,8 +238,8 @@ class TestCreateStoryProject:
     def test_story_frame_length_survives_a_patch(self, api):
         from models import UpdateStudioProjectRequest
         project, _ = _story(api, "Patch Length")
-        # The hook-video clamp's floor is 8: a story's 5s pick must not
-        # be silently rewritten to 8 by a draft edit.
+        # The hook-video clamp's floor is 8: a story's picked length
+        # must not be silently rewritten to 8 by a draft edit.
         _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(
             duration_seconds=5), ANON))
         stored = _run(api.get_studio_project(project["id"], ANON))
@@ -270,7 +273,7 @@ class TestStoryPlanEndpoint:
         if isinstance(strategy, str):
             strategy = json.loads(strategy)
         assert strategy["scene"]["location"] == LOCATION
-        assert strategy["story_brief"]["frame_seconds"] == 5
+        assert strategy["story_brief"]["frame_seconds"] == 3
         assert strategy["story_brief"]["story_type"] == "question_poll"
         assert strategy["segments"][0]["script"] == HOOK
         assert strategy["segments"][1]["script"] == SCRIPT
@@ -300,9 +303,9 @@ class TestStoryPlanEndpoint:
 class TestStoryGenerateEndpoint:
     def test_generate_submits_one_frame_at_the_frames_own_seconds(
             self, api, monkeypatch):
-        """The end-to-end proof: plan, then one provider submit at 5s —
-        the question/poll frame's settled length, not the hook-video
-        clamp's 8s floor — with the story brief in the prompt."""
+        """The end-to-end proof: plan, then one provider submit at 3s —
+        the question/poll frame's settled length (ADR 0238), not the
+        hook-video clamp's 8s floor — with the story brief in the prompt."""
         from models import GenerateStoryRequest
         project, _ = _story(api, "Generate E2E")
         _plan(api, project["id"], monkeypatch)
@@ -311,10 +314,10 @@ class TestStoryGenerateEndpoint:
         generation = _run(api.generate_story(
             project["id"], GenerateStoryRequest(), ANON))
         assert len(calls) == 1
-        assert calls[0]["duration"] == 5
+        assert calls[0]["duration"] == 3
         prompt = calls[0]["prompt"]
         assert "STORY FRAME" in prompt
-        assert "5 seconds" in prompt
+        assert "3 seconds" in prompt
         # The founder's sticker sits in the lower frame at posting, so
         # the brief keeps the presenter's gestures out of it.
         assert "lower" in prompt
@@ -322,7 +325,7 @@ class TestStoryGenerateEndpoint:
         row = _run(api._fetch_one(
             "SELECT requested_duration, segment_index FROM generations WHERE id = ?",
             (generation["id"],)))
-        assert row["requested_duration"] == 5
+        assert row["requested_duration"] == 3
         assert row["segment_index"] == 0
 
     def test_generate_refuses_before_a_plan_exists(self, api):
@@ -342,6 +345,135 @@ class TestStoryGenerateEndpoint:
             _run(api.generate_story(
                 project["id"], GenerateStoryRequest(model="no-such-model"), ANON))
         assert exc.value.status_code == 400
+
+
+class TestStoryBeatTrim:
+    """ADR 0239: the saved story IS its beat length, not the floor's.
+
+    Both catalog models floor a real render at 5 seconds, and
+    generate_video's payload clamps up to that floor — so a 3- or
+    4-second frame comes back from the provider as a 5-second file.
+    The submit therefore records the frame's own seconds as the
+    row's trim_to_seconds, and the persist path cuts the tail back
+    to exactly the beat before the file is stored (the cut itself is
+    pinned against real clips in test_story_tail_trim.py). The
+    submit still ASKS for the frame's own seconds through the
+    exact-duration path (ADRs 0228/0238): what the app requests and
+    what the row records never move; only the delivered file was
+    longer than both.
+    """
+
+    def _generate(self, api, monkeypatch, name, **create_kwargs):
+        from models import GenerateStoryRequest
+        project, _ = _story(api, name, **create_kwargs)
+        _plan(api, project["id"], monkeypatch)
+        _attach_face(api, project)
+        calls = _mock_submit(api, monkeypatch)
+        generation = _run(api.generate_story(
+            project["id"], GenerateStoryRequest(), ANON))
+        row = _run(api._fetch_one(
+            "SELECT trim_to_seconds, duration FROM generations WHERE id = ?",
+            (generation["id"],)))
+        return calls, row
+
+    def test_a_three_second_story_records_a_trim_to_three(
+            self, api, monkeypatch):
+        calls, row = self._generate(api, monkeypatch, "Beat Trim Three")
+        assert calls[0]["duration"] == 3
+        assert row["duration"] == 3
+        assert row["trim_to_seconds"] == 3
+
+    def test_a_four_second_story_records_a_trim_to_four(
+            self, api, monkeypatch):
+        calls, row = self._generate(
+            api, monkeypatch, "Beat Trim Four", frame_seconds=4)
+        assert calls[0]["duration"] == 4
+        assert row["duration"] == 4
+        assert row["trim_to_seconds"] == 4
+
+    def test_a_five_second_story_records_no_trim(self, api, monkeypatch):
+        calls, row = self._generate(
+            api, monkeypatch, "Beat Trim Five", frame_seconds=5)
+        assert calls[0]["duration"] == 5
+        # At the floor the render already IS the beat: nothing to cut.
+        assert row["trim_to_seconds"] == 0
+
+
+FFMPEG = shutil.which("ffmpeg")
+FFPROBE = shutil.which("ffprobe")
+needs_ffmpeg = pytest.mark.skipif(
+    not (FFMPEG and FFPROBE), reason="ffmpeg/ffprobe not on PATH"
+)
+
+
+def _clip_duration(path: Path) -> float:
+    out = subprocess.run(
+        [FFPROBE, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    return float(re.search(r"[\d.]+", out.stdout).group())
+
+
+def _floor_render(path: Path) -> Path:
+    """A 5-second clip standing in for the provider's floor render:
+    blue for the first 3 seconds, red for the last 2 — so a saved
+    3-second story can only be the render's own head, tail cut."""
+    subprocess.run([
+        FFMPEG, "-y",
+        "-f", "lavfi", "-i", "color=c=blue:size=360x640:rate=30:duration=3",
+        "-f", "lavfi", "-i", "color=c=red:size=360x640:rate=30:duration=2",
+        "-f", "lavfi", "-i", "sine=frequency=880:duration=5:sample_rate=48000",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[vv]",
+        "-map", "[vv]", "-map", "2:a",
+        "-c:v", "libx264", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path),
+    ], check=True, capture_output=True)
+    return path
+
+
+@needs_ffmpeg
+class TestStoryBeatTrimPersist:
+    """ADR 0239 end to end: a real 3-second story generation row,
+    persisted against a 5-second provider render, lands as a
+    3-second stored file — the beat, not the floor."""
+
+    def test_the_saved_file_is_the_beat_not_the_floor(
+            self, api, monkeypatch, tmp_path):
+        from models import GenerateStoryRequest
+        project, _ = _story(api, "Beat Trim Persist")
+        _plan(api, project["id"], monkeypatch)
+        _attach_face(api, project)
+        _mock_submit(api, monkeypatch)
+        generation = _run(api.generate_story(
+            project["id"], GenerateStoryRequest(), ANON))
+        row = _run(api._fetch_one(
+            "SELECT * FROM generations WHERE id = ?", (generation["id"],)))
+
+        source = _floor_render(tmp_path / "floor-render.mp4")
+        videos = tmp_path / "videos"
+        videos.mkdir()
+        generated = tmp_path / "generated"
+        generated.mkdir()
+        monkeypatch.setattr(api.pipeline, "VIDEOS_DIR", videos)
+        monkeypatch.setattr(api.pipeline, "GENERATED_DIR", generated)
+
+        async def fake_download(url, gid):
+            target = videos / f"{gid}.mp4"
+            shutil.copyfile(source, target)
+            return target, None
+
+        monkeypatch.setattr(api, "_download_generation_video", fake_download)
+        monkeypatch.setattr(
+            api.storage_service, "upload_video",
+            lambda user_id, gid, path: f"https://storage.example/{gid}.mp4")
+        stored_url, _err, delivered = _run(api._persist_generation_clip(
+            row, ANON, "https://provider.example/render.mp4"))
+        canonical = videos / f"{generation['id']}.mp4"
+        assert stored_url == f"https://storage.example/{generation['id']}.mp4"
+        assert delivered == 3
+        assert abs(_clip_duration(canonical) - 3.0) < 0.06, \
+            _clip_duration(canonical)
 
 
 # ------------------------------------------------------------------- kit

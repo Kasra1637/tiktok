@@ -3178,10 +3178,11 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
     on-screen text, and the sticker plan, written together in one call.
 
     A story plan replaces the hook video's plan → strategy pair: the
-    format is one frame of 5–15 seconds, reviewed once, so the written
-    layers are drafted against each other in a single pass — the screen
-    text must carry the message the spoken line tells, and the sticker
-    plan is the interaction the render cannot carry.
+    format is one frame of 3–5 seconds (ADR 0238), reviewed once, so
+    the written layers are drafted against each other in a single
+    pass — the screen text must carry the message the spoken line
+    tells, and the sticker plan is the interaction the render cannot
+    carry.
 
     Grounded in the profile facts and the picked angle exactly as
     generate_creative_plan is grounded (the caller resolves the angle
@@ -3192,9 +3193,15 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
     The spoken lines follow the shared spoken-line rules with the
     story's tightening — the hook's move lands inside the first
     second — and the frame's total budget from spoken_budget(seconds).
-    The screen text follows its own rules block with the settled caps
-    (story_types.STORY_TEXT_MAX_CHARS / _WORDS); a reply over the caps
-    gets one bounded correction, and a reply still over raises, like
+    They also carry the frame's spoken-WORD budget
+    (story_types.spoken_word_budget: 3s → 7 words, 4s → 9, 5s → 12,
+    ADR 0238): natural speech runs about two and a half words a
+    second, so more words than the budget cannot be spoken inside
+    the frame at all. A reply over either budget gets one bounded
+    correction, and a reply still over raises — an over-long line is
+    never stored silently. The screen text follows its own rules
+    block with the settled caps (story_types.STORY_TEXT_MAX_CHARS /
+    _WORDS) under the same one-correction-then-raise contract, like
     the cover text's honesty contract.
     """
     project = project or {}
@@ -3234,6 +3241,7 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
         "known_limitations": profile.get("known_limitations") or "(none recorded)",
     }
     total_budget = spoken_budget(seconds)
+    word_budget = story_types.spoken_word_budget(seconds)
     countdown_date = str(project.get("countdown_date") or "").strip()
 
     prompt = (
@@ -3270,6 +3278,10 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
         "at its start, never a slow build.\n"
         f"- The two spoken lines together run at most {total_budget} "
         f"characters — what {seconds} seconds holds at a natural pace.\n"
+        f"- The two spoken lines together run at most {word_budget} "
+        f"WORDS — one spoken line for {seconds} seconds at a natural "
+        "pace of about two and a half words a second. A thought that "
+        "needs more words is a second frame, never a longer line.\n"
         "- The script continues the hook and ends on the type's closing "
         "beat above. ONE idea only — a second idea is a second frame, "
         "never packed into this one.\n"
@@ -3299,7 +3311,7 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
         "STRICT JSON only, no markdown fences."
     )
     correction = ""
-    last_over_cap = False
+    last_failure = ""
     for _attempt in range(2):
         data = await _chat_json(
             system_message=system_message,
@@ -3320,11 +3332,24 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
         if screen_text:
             screen_text = character_policy.neutralize(screen_text)
         if not hook or not script:
-            last_over_cap = False
+            last_failure = "missing"
             correction = (
                 "\n\nCORRECTION: the previous reply came back without both "
                 "spoken lines. Return the full object with hook_line and "
                 "script both filled."
+            )
+            continue
+        spoken_words = len(hook.split()) + len(script.split())
+        if word_budget is not None and spoken_words > word_budget:
+            last_failure = "spoken"
+            correction = (
+                f"\n\nCORRECTION: the previous spoken lines ran "
+                f"{spoken_words} words together. A {seconds}-second "
+                f"frame holds at most {word_budget} words at a natural "
+                "pace — one spoken line, no more. Rewrite hook_line and "
+                "script so the two together run at most "
+                f"{word_budget} words, keeping the one idea, and return "
+                "the full object again."
             )
             continue
         if (
@@ -3332,7 +3357,7 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
             or len(screen_text) > STORY_TEXT_MAX_CHARS
             or len(screen_text.split()) > STORY_TEXT_MAX_WORDS
         ):
-            last_over_cap = True
+            last_failure = "screen"
             correction = (
                 f"\n\nCORRECTION: the previous screen text ran "
                 f"{len(screen_text)} characters / "
@@ -3358,7 +3383,13 @@ async def generate_story_plan(project: dict, profile: dict) -> dict:
             "story_type": story_type["id"],
             "frame_seconds": seconds,
         }
-    if last_over_cap:
+    if last_failure == "spoken":
+        raise RuntimeError(
+            "The spoken lines kept running long — past the "
+            f"{word_budget} words a {seconds}-second frame can hold "
+            "at a natural pace. Try again, or write the lines yourself."
+        )
+    if last_failure == "screen":
         raise RuntimeError(
             "The screen text kept running long — past the "
             f"{STORY_TEXT_MAX_CHARS} characters / {STORY_TEXT_MAX_WORDS} "
@@ -3514,9 +3545,10 @@ def _story_posting_checklist(story_type_id: str) -> list:
     ]
     if story_type_id == "hook_teaser":
         checklist.append(
-            "Instagram: attach the Link sticker to the full post. TikTok "
-            "has no link sticker in stories — the spoken line points at "
-            "the post on your profile, so keep that post newest or pinned."
+            "Instagram: attach the Link sticker to the full post — the "
+            "link sticker is Instagram-only. TikTok has no link sticker "
+            "in stories, so there point viewers to the post on your "
+            "profile instead, and keep that post newest or pinned."
         )
     elif story_type_id == "question_poll":
         checklist.append(
@@ -3530,9 +3562,10 @@ def _story_posting_checklist(story_type_id: str) -> list:
         )
     elif story_type_id == "announcement_countdown":
         checklist.append(
-            "Instagram: set the countdown sticker to your date. TikTok "
-            "has no countdown sticker — the date already rides the screen "
-            "text and the spoken line."
+            "Instagram: set the countdown sticker to your date — the "
+            "countdown sticker is Instagram-only. TikTok has no "
+            "countdown sticker, so put the date in the text sticker "
+            "instead; it already rides the screen text and the spoken line."
         )
     return checklist
 
@@ -3567,7 +3600,7 @@ async def generate_story_kit(project: dict, profile: dict, generation: dict) -> 
     type_name = story_type["name"] if story_type else "Story"
     seconds = int(project.get("duration_seconds") or 0)
     if seconds not in story_types.STORY_FRAME_SECONDS:
-        seconds = story_type["default_seconds"] if story_type else 10
+        seconds = story_type["default_seconds"] if story_type else 4
     sticker_plan = _normalize_sticker_plan(project.get("sticker_plan"))
     app_name = profile.get("brand_name") or "the app"
 
@@ -4100,14 +4133,14 @@ def _story_text_rules_block() -> str:
     message with the sound off while the spoken line stays a first-class
     second channel. The caps are the settled build numbers (80
     characters / 14 words, from TikTok's 5–10 words-per-second pacing),
-    sized so the text reads whole inside the shortest 5-second frame.
+    sized so the text reads whole inside the shortest 3-second frame.
     Same family as the cover rules — first person, the moment up front,
     the answer withheld — but a story text stands alone, where a cover
     only has to earn the next two seconds beside the picture.
     """
     return (
         "SCREEN TEXT — the words the founder places on the story as a native text sticker (post copy, never spoken, never burned into the render):\n"
-        "- SHORT: at most 80 characters and at most 14 words — it must read whole inside the shortest 5-second frame.\n"
+        "- SHORT: at most 80 characters and at most 14 words — it must read whole inside the shortest 3-second frame.\n"
         "- It carries the WHOLE message with the sound off: a muted viewer who never hears a word still gets the moment, the point, and what to do. Never a teaser for the spoken line, never half the thought.\n"
         "- First person, the person's own voice; never a label, a title, or ad copy.\n"
         "- The moment up front, with one concrete felt detail.\n"

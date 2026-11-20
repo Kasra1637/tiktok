@@ -278,7 +278,7 @@ async def create_story_project(
     same table, same PATCH, same reads — only the create path and the
     plan/generate/kit endpoints are story-shaped. The type is validated
     against the settled catalog loudly, and the frame length is the
-    type's default or the founder's pick from the settled 5/10/15 set.
+    type's default or the founder's pick from the settled 3/4/5 set (ADR 0238).
     hook_seconds is 2, the shared machinery's floor: the story's
     first-second rule lives in the plan prompt and the craft check, and
     the row only needs a value inside the range the shared repairs
@@ -299,7 +299,7 @@ async def create_story_project(
     if seconds not in story_types.STORY_FRAME_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="A story frame runs 5, 10, or 15 seconds.",
+            detail="A story frame runs 3, 4, or 5 seconds.",
         )
 
     project_id = str(uuid.uuid4())
@@ -529,7 +529,7 @@ async def generate_story(
     itself — no plan, no render — plus the same model, resolution and
     single-pass checks every submit makes. The frame submits at its
     own seconds (exact_duration: the hook-video clamp floors at 8 and
-    would silently rewrite a 5-second frame), with the stored strategy
+    would silently rewrite a 3-second frame), with the stored strategy
     rebound to the project's current words, so an edit made after the
     plan is what renders.
     """
@@ -551,7 +551,7 @@ async def generate_story(
     if seconds not in story_types.STORY_FRAME_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="A story frame runs 5, 10, or 15 seconds.",
+            detail="A story frame runs 3, 4, or 5 seconds.",
         )
     _assert_within_single_pass_cap(
         video_providers.resolve(payload.model or None)[0], seconds)

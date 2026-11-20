@@ -23,9 +23,13 @@ const AUTO_START_DELAY_MS = 400;
 
 // The core set whose tours may auto-open on a page's registered first-run
 // state (ADR 0077, expanded by ADR 0118 to the journey's fork pages:
-// Demo + CTA, Analytics, Assets). Every other tour — the per-record App
-// Profile detail included — is replay-only via "Show me around".
-const CORE_AUTO_OPEN_TOURS = ["brand", "create", "history", "demo-cta", "analytics", "assets"];
+// Demo + CTA, Analytics, Assets; ADR 0240 adds Stories, the other
+// creation surface, on the same fork-page rule). Every other tour — the
+// per-record App Profile detail and the Dashboard included — is
+// replay-only via "Show me around": the Dashboard is the arrival screen
+// itself, and an overlay over it is the ambush the retired home-page
+// tour taught against.
+const CORE_AUTO_OPEN_TOURS = ["brand", "create", "history", "demo-cta", "analytics", "assets", "stories"];
 
 // The retired first-run gating persisted seen tour ids under this key. Once
 // seen-checking came back (see lib/onboarding/seenTours) this older key is dead

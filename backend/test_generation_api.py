@@ -679,6 +679,24 @@ class TestDurationIsOnePass:
 
 
 
+class TestHookVideosRecordNoBeatTrim:
+    def test_a_hook_video_submit_records_no_trim(self, api, monkeypatch):
+        """ADR 0239's tail trim belongs to story frames only: a hook
+        video submits through the same one render path with
+        exact_duration off, and its row keeps trim_to_seconds at 0 —
+        the persist path must never cut a hook video down."""
+        from models import StudioGenerationRequest
+        _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "No Beat Trim")
+        gen = _run(api.submit_project_generation(
+            project_id=project["id"],
+            payload=StudioGenerationRequest(), user_id=ANON))
+        row = _run(api._fetch_one(
+            "SELECT trim_to_seconds FROM generations WHERE id = ?",
+            (gen["id"],)))
+        assert row["trim_to_seconds"] == 0
+
+
 class TestPolling:
     def _submitted(self, api, monkeypatch, name="Poll App"):
         from models import StudioGenerationRequest

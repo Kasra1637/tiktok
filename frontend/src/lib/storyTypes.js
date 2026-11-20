@@ -10,6 +10,9 @@
  * changes here in the same commit, and the smoke suite pins the ids
  * and lengths the picker renders against this list.
  *
+ * The lengths were re-settled by ADR 0238: a story frame is a beat of
+ * 3–5 seconds carrying one spoken line, not a short video.
+ *
  * Testimonial-style is deliberately absent, here as there: the app
  * has no claim-safety system (ADR 0119) and no source of real user
  * quotes to ground one.
@@ -18,16 +21,17 @@ export const STORY_TYPES = [
   {
     id: "hook_teaser",
     name: "Hook teaser",
-    defaultSeconds: 10,
+    defaultSeconds: 4,
     description:
       "Points at the founder's newest hook video or post: the moment, " +
       "the promise, and 'the full one is up' as the closing beat; " +
-      "the kit carries the link sticker.",
+      "the kit carries the link sticker for Instagram — TikTok has " +
+      "no link sticker, so there it points at the profile.",
   },
   {
     id: "question_poll",
     name: "Question / poll prompt",
-    defaultSeconds: 5,
+    defaultSeconds: 3,
     description:
       "The presenter asks the audience one question drawn from the " +
       "angle's tension; the kit carries the poll or question sticker " +
@@ -36,7 +40,7 @@ export const STORY_TYPES = [
   {
     id: "demo_moment",
     name: "Demo moment",
-    defaultSeconds: 15,
+    defaultSeconds: 5,
     description:
       "One app moment as a presenter beat: the spoken line ends open, " +
       "and the kit's checklist walks the founder through attaching " +
@@ -45,16 +49,17 @@ export const STORY_TYPES = [
   {
     id: "announcement_countdown",
     name: "Announcement / countdown",
-    defaultSeconds: 10,
+    defaultSeconds: 4,
     description:
       "A launch, update, or deadline beat; the kit carries the " +
-      "countdown sticker set to the date the founder chooses.",
+      "countdown sticker for Instagram, set to the date the founder " +
+      "chooses — on TikTok the date rides the text sticker.",
   },
 ];
 
 /** The frame lengths the page offers: a story frame is one render of
- *  5, 10 or 15 seconds (backend `STORY_FRAME_SECONDS`). */
-export const STORY_FRAME_SECONDS = [5, 10, 15];
+ *  3, 4 or 5 seconds (backend `STORY_FRAME_SECONDS`, ADR 0238). */
+export const STORY_FRAME_SECONDS = [3, 4, 5];
 
 /** The catalog entry for an id, or null — an unknown id is a data
  *  error to surface, never a reason to substitute another type. */

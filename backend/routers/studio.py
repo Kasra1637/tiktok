@@ -1140,9 +1140,9 @@ async def update_studio_project(
             value = template_library.normalize_objective(value)
         elif key == "duration_seconds" and (row.get("kind") or "video") == "story":
             # A story's length is its frame length (ADR 0228): one of the
-            # settled 5/10/15 pick, stored exactly. The hook-video clamp
+            # settled 3/4/5 pick, stored exactly. The hook-video clamp
             # below floors at 8 seconds, which would silently rewrite a
-            # 5-second frame into an 8-second one — refuse an off-pick
+            # 3-second frame into an 8-second one — refuse an off-pick
             # value instead of storing a length nobody chose.
             try:
                 want_seconds = int(value or 0)
@@ -1152,7 +1152,7 @@ async def update_studio_project(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "A story frame runs 5, 10, or 15 seconds — "
+                        "A story frame runs 3, 4, or 5 seconds — "
                         f"{want_seconds or 'that length'} is not one of them."
                     ),
                 )

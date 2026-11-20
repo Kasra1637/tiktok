@@ -484,7 +484,7 @@ const apiStub = {
     story_type: payload?.story_type || "",
     // The server's create writes the type's settled default length.
     duration_seconds:
-      { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+      { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
         payload?.story_type
       ] || 10,
     frame_count: 1,
@@ -3454,6 +3454,7 @@ async function main() {
       ["analytics", "/analytics"],
       ["demo-cta", "/demo-cta"],
       ["assets", "/assets"],
+      ["stories", "/stories"],
     ];
     try {
       for (const [id, path] of pages) {
@@ -13155,6 +13156,55 @@ async function runDashboardChecks() {
     expectHero(ctx, "Create a video", "/create");
     expectGrid(ctx);
   });
+
+  await check("the sidebar offers Show me around on the Dashboard and it opens the Dashboard tour", async (ctx) => {
+    // ADR 0240: the sidebar's tour entry is the current page's tour, and
+    // the Dashboard — the landing since ADR 0208 — had no tour mapped,
+    // so the entry silently vanished exactly where a signed-in founder
+    // arrives. The Dashboard tour restores it: same footer place, same
+    // "Show me around" label, same replay behavior. The Dashboard is
+    // replay-only (it is not in the provider's auto-open set), so the
+    // wait below also pins that nothing opens on its own.
+    const { Sidebar } = load("components/Sidebar.jsx");
+    const { useOnboarding } = load("components/onboarding/OnboardingProvider.jsx");
+    const { forgetDraft } = load("lib/recentDraft.js");
+    const storage = dom.window.localStorage;
+    storage.removeItem("hookforge_seen_tours.v2");
+    forgetDraft();
+    let state;
+    function Driver() {
+      state = useOnboarding();
+      return null;
+    }
+    global.__SMOKE_PATHNAME = "/dashboard";
+    try {
+      await act(async () => {
+        ctx.root.render(
+          React.createElement(
+            OnboardingProvider,
+            null,
+            React.createElement(Driver),
+            React.createElement(Sidebar, { collapsed: false, onToggleCollapsed: () => {} })
+          )
+        );
+      });
+      await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+      if (state.activeTour) throw new Error("the Dashboard tour opened on its own; it is replay-only");
+      const button = [...ctx.container.querySelectorAll("button")].find((b) =>
+        b.textContent.includes("Show me around")
+      );
+      if (!button) throw new Error("the sidebar shows no Show me around entry on the Dashboard");
+      await act(async () => { button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+      if (state.activeTour?.id !== "dashboard") {
+        throw new Error("the sidebar entry did not open the Dashboard tour");
+      }
+      await act(async () => { state.skip(); });
+    } finally {
+      delete global.__SMOKE_PATHNAME;
+      storage.removeItem("hookforge_seen_tours.v2");
+      forgetDraft();
+    }
+  });
 }
 
 /**
@@ -13173,7 +13223,7 @@ async function runStoriesChecks() {
     kind: "story",
     brand_profile_id: "p1",
     story_type: "hook_teaser",
-    duration_seconds: 10,
+    duration_seconds: 4,
     frame_count: 1,
     status: "draft",
     updated_at: "2026-11-20T10:00:00Z",
@@ -13226,7 +13276,7 @@ async function runStoriesChecks() {
             id: "story-1",
             story_type: payload.story_type,
             duration_seconds:
-              { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+              { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
                 payload.story_type
               ] || 10,
           });
@@ -13248,10 +13298,10 @@ async function runStoriesChecks() {
         const picker = ctx.container.querySelector('[data-testid="story-type-picker"]');
         if (!picker) throw new Error("the story type picker did not render");
         for (const [id, seconds] of [
-          ["hook_teaser", 10],
-          ["question_poll", 5],
-          ["demo_moment", 15],
-          ["announcement_countdown", 10],
+          ["hook_teaser", 4],
+          ["question_poll", 3],
+          ["demo_moment", 5],
+          ["announcement_countdown", 4],
         ]) {
           const card = typeCard(ctx, id);
           if (!card) throw new Error(`the ${id} type card is missing`);
@@ -13298,7 +13348,7 @@ async function runStoriesChecks() {
             id: "story-1",
             story_type: payload.story_type,
             duration_seconds:
-              { hook_teaser: 10, question_poll: 5, demo_moment: 15, announcement_countdown: 10 }[
+              { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
                 payload.story_type
               ] || 10,
           });
@@ -13322,11 +13372,11 @@ async function runStoriesChecks() {
           throw new Error(`the type change autosaved ${patches.length} times, expected once`);
         }
         // The shell offers no length pick, so the new type brings its
-        // settled default with it (ADR 0235) — a 15s demo moment must
-        // not stay stored as the question/poll frame's 5s.
-        if (patches[0].story_type !== "demo_moment" || patches[0].duration_seconds !== 15) {
+        // settled default with it (ADR 0235) — a 5s demo moment must
+        // not stay stored as the question/poll frame's 3s.
+        if (patches[0].story_type !== "demo_moment" || patches[0].duration_seconds !== 5) {
           throw new Error(
-            `the autosave carried ${JSON.stringify(patches[0])}, expected the type and its 15s default`
+            `the autosave carried ${JSON.stringify(patches[0])}, expected the type and its 5s default`
           );
         }
         if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
@@ -13516,7 +13566,7 @@ async function runStoriesChecks() {
         if (planCalls.length !== 1) {
           throw new Error(`the plan click made ${planCalls.length} plan calls, expected one`);
         }
-        if (planCalls[0].payload.story_type !== "hook_teaser" || planCalls[0].payload.frame_seconds !== 10) {
+        if (planCalls[0].payload.story_type !== "hook_teaser" || planCalls[0].payload.frame_seconds !== 4) {
           throw new Error(`the plan call carried ${JSON.stringify(planCalls[0].payload)}, expected the picked type and its frame length`);
         }
         const hookInput = ctx.container.querySelector("#review-hook_line");
@@ -13681,6 +13731,70 @@ async function runStoriesChecks() {
         }
       }
     );
+  });
+
+  // ------------------------------------------------------ tours (0240)
+
+  await check("the Stories tour walks the settled flow on the page's own anchors", async () => {
+    // ADR 0240: the tour data itself, pinned the way the type catalog
+    // is pinned — the walk order is the page's order, the first two
+    // steps anchor to what a first-run page already shows (so they
+    // are required), and everything past the type pick is optional
+    // because it waits on a draft or a plan the founder has not made
+    // yet. The tour-targets audit proves each testid exists; this
+    // proves the tours point at the right ones in the right order.
+    const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
+    if (getTourIdForPath("/stories") !== "stories") {
+      throw new Error("/stories does not resolve to the stories tour");
+    }
+    if (getTourIdForPath("/dashboard") !== "dashboard") {
+      throw new Error("/dashboard does not resolve to the dashboard tour");
+    }
+    const tour = TOURS.stories;
+    if (!tour) throw new Error("there is no stories tour");
+    const targets = tour.steps.map((s) => s.target);
+    const expected = [
+      '[data-testid="stories-app-picker"]',
+      '[data-testid="story-type-picker"]',
+      '[data-testid="stories-direction-card"]',
+      '[data-testid="story-plan-generate"]',
+      '[data-testid="story-editors"]',
+      '[data-testid="story-craft-check"]',
+      '[data-testid="story-preview"]',
+      '[data-testid="story-render-panel"]',
+      '[data-testid="story-kit-panel"]',
+    ];
+    if (JSON.stringify(targets) !== JSON.stringify(expected)) {
+      throw new Error(`the stories tour walks ${JSON.stringify(targets)}, expected ${JSON.stringify(expected)}`);
+    }
+    if (tour.steps[0].optional || tour.steps[1].optional) {
+      throw new Error("the stories tour's picker steps must be required — a first-run page already shows them");
+    }
+    if (tour.steps.slice(2).some((s) => !s.optional)) {
+      throw new Error("a stories tour step past the type pick is required, but its section waits on a draft or a plan");
+    }
+    const dash = TOURS.dashboard;
+    if (!dash) throw new Error("there is no dashboard tour");
+    const dashTargets = dash.steps.map((s) => s.target);
+    const dashExpected = [
+      '[data-testid="dashboard-next-action"]',
+      '[data-testid="dashboard-destinations"]',
+      '[data-testid="dashboard-recents"]',
+    ];
+    if (JSON.stringify(dashTargets) !== JSON.stringify(dashExpected)) {
+      throw new Error(`the dashboard tour walks ${JSON.stringify(dashTargets)}, expected ${JSON.stringify(dashExpected)}`);
+    }
+  });
+
+  await check("the Stories page registers its first-run tour eligibility", async () => {
+    // The provider half of the wiring is pinned by the fork-page
+    // onboarding check; this pins the page half — Stories itself
+    // must ask, in the ADR 0077 pattern, or the tour can never
+    // auto-open no matter what the provider allows.
+    const src = fs.readFileSync(path.join(SRC, "pages", "Stories.jsx"), "utf8");
+    if (!/useTourEligibility\(\s*"stories",/.test(src)) {
+      throw new Error("Stories.jsx does not register useTourEligibility for its tour");
+    }
   });
 }
 

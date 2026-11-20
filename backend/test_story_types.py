@@ -1,10 +1,12 @@
 """
 The v1 story-type catalog (ADR 0227): four types, data only.
 
-Kasra delegated the Stories decisions to platform research (Nov 19 2026);
-the settled set is these four types with per-type default frame lengths —
-teaser 10s, question/poll 5s, demo moment 15s, announcement 10s — inside
-the page's 5/10/15 pick. Testimonial-style is deliberately absent: the app
+Kasra delegated the Stories decisions to platform research (Nov 19 2026)
+and ruled on Nov 20 2026 that the first lengths were far too long — a
+story frame is a beat, not a short video (ADR 0238). The settled set is
+these four types with per-type default frame lengths — teaser 4s,
+question/poll 3s, demo moment 5s, announcement 4s — inside the page's
+3/4/5 pick. Testimonial-style is deliberately absent: the app
 has no source of real user quotes to ground one, and inventing a quote is
 not a type, it is a fabrication. These tests pin the catalog so a later
 phase cannot quietly add, drop, rename, or re-time a type.
@@ -38,17 +40,27 @@ class TestStoryTypeCatalog:
         }
 
     def test_default_frame_lengths_are_the_researched_ones(self):
-        assert story_types.default_frame_seconds("hook_teaser") == 10
-        assert story_types.default_frame_seconds("question_poll") == 5
-        assert story_types.default_frame_seconds("demo_moment") == 15
-        assert story_types.default_frame_seconds("announcement_countdown") == 10
+        assert story_types.default_frame_seconds("hook_teaser") == 4
+        assert story_types.default_frame_seconds("question_poll") == 3
+        assert story_types.default_frame_seconds("demo_moment") == 5
+        assert story_types.default_frame_seconds("announcement_countdown") == 4
 
-    def test_every_default_fits_the_single_pass_cap(self):
-        # A story frame is one render of 5-15 seconds: the catalog models
-        # cap a single pass at 15s and the page offers a 5/10/15 pick, so
-        # no default may sit outside that band.
+    def test_the_frame_pick_is_three_four_five(self):
+        # ADR 0238: the page offers exactly the beat lengths — 5s is the
+        # ceiling (Instagram's photo hold), never a default to grow into.
+        assert story_types.STORY_FRAME_SECONDS == (3, 4, 5)
+
+    def test_every_default_fits_the_frame_pick(self):
         for story_type in story_types.STORY_TYPES:
-            assert 5 <= story_type["default_seconds"] <= 15
+            assert story_type["default_seconds"] in story_types.STORY_FRAME_SECONDS
+
+    def test_spoken_word_budgets_scale_with_the_frame(self):
+        # Natural speech runs about two and a half words a second
+        # (ADR 0238): 3s holds 7 words, 4s holds 9, 5s holds 12.
+        assert story_types.spoken_word_budget(3) == 7
+        assert story_types.spoken_word_budget(4) == 9
+        assert story_types.spoken_word_budget(5) == 12
+        assert story_types.spoken_word_budget(10) is None
 
     def test_every_type_says_what_it_is_for_in_one_line(self):
         for story_type in story_types.STORY_TYPES:
@@ -68,4 +80,4 @@ class TestStoryTypeCatalog:
     def test_lookup_returns_the_catalog_entry(self):
         entry = story_types.get_story_type("demo_moment")
         assert entry["name"] == "Demo moment"
-        assert entry["default_seconds"] == 15
+        assert entry["default_seconds"] == 5
