@@ -85,7 +85,7 @@ async def _load_post_kit_materials(generation_row: dict, user_id: str):
     project = None
     if generation_row.get("studio_project_id"):
         project = await _fetch_one(
-            "SELECT hook_line, script, cta, objective, audience, demo_brief FROM studio_projects WHERE id = ? AND user_id = ?",
+            "SELECT hook_line, script, cta, objective, audience, demo_brief, kind FROM studio_projects WHERE id = ? AND user_id = ?",
             (generation_row["studio_project_id"], user_id),
         )
     profile = None
@@ -117,6 +117,11 @@ async def _maybe_write_post_kit(generation_id: str, user_id: str) -> Optional[di
     if not project or not profile:
         logger.warning(
             "Post kit skipped for generation %s: render material not found.", generation_id)
+        return None
+    if (project.get("kind") or "video") == "story":
+        # The two kits are mutually exclusive by kind (ADR 0228): a
+        # story render grows a story kit, never a post kit — its
+        # caption is story copy, not feed copy with researched tags.
         return None
     try:
         kit = await _log_model_call(
@@ -165,6 +170,11 @@ async def regenerate_post_kit(
     if not project or not profile:
         raise HTTPException(
             status_code=404, detail="Render material not found for a fresh post kit."
+        )
+    if (project.get("kind") or "video") == "story":
+        raise HTTPException(
+            status_code=409,
+            detail="This is a story render — regenerate its story kit instead.",
         )
     try:
         kit = await _log_model_call(

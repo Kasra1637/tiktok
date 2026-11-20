@@ -1571,6 +1571,45 @@ def strategy_brief(strategy: dict) -> str:
     return _clip(brief, 700, protect=True)
 
 
+def story_brief_section(strategy) -> str:
+    """The STORY FRAME section for a story render (ADR 0228).
+
+    A story plan stores its frame brief on the strategy under
+    `story_brief` (the type's name, the frame's seconds, the accepted
+    screen text). When it is present, the prompt says what the render
+    is: a single story frame of exactly that many seconds, one idea,
+    with the placement discipline the native text sticker needs — the
+    founder places the screen text at posting, so the presenter never
+    gestures over the lower third where that sticker will sit. When it
+    is absent — every hook-video render — this returns "" and the
+    assembled prompt is byte-identical to before.
+    """
+    brief = strategy.get("story_brief") if isinstance(strategy, dict) else None
+    if not isinstance(brief, dict):
+        return ""
+    seconds = int(brief.get("frame_seconds") or 0) or 10
+    type_name = str(brief.get("story_type_name") or "Story").strip() or "Story"
+    screen_text = str(brief.get("screen_text") or "").strip()
+    lines = [
+        "STORY FRAME:",
+        f"- This render is a single story frame of {seconds} seconds "
+        f"({type_name}) — one self-contained vertical story, not part of "
+        "a longer video. Hold the frame's one idea for the whole "
+        f"{seconds} seconds; nothing is cut or continued later.",
+        "- The founder places the frame's on-screen text as a native "
+        "text sticker after the render: keep the lower third of the "
+        "frame visually clean — no gesturing over it, nothing important "
+        "living there — so the placed text stays readable.",
+    ]
+    if screen_text:
+        lines.append(
+            f"- The placed text will read: \"{screen_text}\" — perform "
+            "the moment it names; never mouth it as on-screen copy or "
+            "point at where it will sit."
+        )
+    return "\n".join(lines)
+
+
 def build_segment_prompt(
     strategy: dict,
     profile: dict,
@@ -1977,6 +2016,10 @@ def _assemble_prompt(
     brief = strategy_brief(strategy)
     if brief:
         sections.append(brief)
+
+    story_brief = story_brief_section(strategy)
+    if story_brief:
+        sections.append(story_brief)
 
     # The seam block that used to live here is gone. It described carrying a
     # previous clip's frame, its established facts and its do-not-repeat list

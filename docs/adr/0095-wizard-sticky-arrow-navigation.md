@@ -2,8 +2,9 @@
 
 - **Status:** accepted (the hint-free bar superseded by 0099; the
   "Back to your app" exit removed — the arrow Back covers every step);
-  the sticky arrow navigation itself is superseded by 0218 (the wizard
-  bar is removed on every step; the task line under the title stands)
+  the sticky arrow navigation itself was superseded by 0218 (the wizard
+  bar removed on every step) and is restored by 0229 (the bar returns;
+  the task line under the title stands)
 - **Date:** 2026-11-04
 - **Anchors:** `frontend/src/pages/CreateVideo.jsx` (`wizard-step-task` under
   `PageHeader`, `wizard-arrows` sticky bar, `wizard-back-button` /

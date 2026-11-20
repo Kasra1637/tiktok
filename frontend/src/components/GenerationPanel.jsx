@@ -197,7 +197,7 @@ function resolutionStorageKey(projectId) {
   return `studio-video-resolution:${projectId}`;
 }
 
-export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate, onRenderActionChange }) {
   const [models, setModels] = useState(null);
   const [modelError, setModelError] = useState(null);
   const [modelRetry, setModelRetry] = useState(0);
@@ -304,35 +304,31 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
   const planSaveRequired =
     !ready && !noPhoto && !noAngle && !staleStrategy && !angleStale && !directionStale;
 
-  // Every refusal the panel can name must also name its remedy: the step and
-  // the control that fixes it. A block with no jump button is a wall, not a
-  // guard — the founders who hit it stop trusting the panel and ask whether
-  // the app broke. The wizard can only jump within this page, so the remedies
-  // are:
-  //   noAngle        -> Audience & template (angle pick)
-  //   blockedOnAssets -> Audience & template (photo requirement)
+  // Every refusal the panel can name must also name its remedy. Since
+  // ADR 0229 the remedies are only the ones this same step can act on:
   //   hasUnsavedEdits -> save edits on Review & submit (same page)
   //   angleStale      -> rebuild the strategy on Review & submit (same page)
   //   staleStrategy   -> rebuild the strategy on Review & submit (same page)
   //   directionStale  -> rebuild the strategy on Review & submit (same page)
   //   !ready          -> Review & submit (same page, save the plan)
-  // Anything the panel cannot name here (overflow, camera-incompatible,
-  // tooLong, model load) is self-evident from its own alert, so it needs no
-  // jump. When this page cannot navigate between steps, the block falls
-  // through with no jump — the button is still disabled with the reason.
+  // A gap that lives on another step (no angle picked, no presenter
+  // photo) is named by the panel's own alert in words, and the founder
+  // walks there by the rail segments or the sticky bar — the panel
+  // carries no jump to another step, so a block here is a named guard,
+  // never a wall with a stranger's button on it. Anything the panel
+  // cannot name here (overflow, camera-incompatible, tooLong, model
+  // load) is self-evident from its own alert, so it needs no remedy.
   const remedies = [];
-  if (noAngle) remedies.push({ label: "Pick an audience angle first", action: "goto-angle" });
-  else if (angleStale || staleStrategy || directionStale) {
+  if (!noAngle && (angleStale || staleStrategy || directionStale)) {
     // One label for the rebuild everywhere it is offered (the strategy
     // panel's button reads the same): the reason it is owed lives in the
     // alert above, and two phrasings of one action read as two actions.
-    // It wears Sparkles, the same icon as the strategy panel's rebuild
+    // It wears Sparkles, the same icon as the sticky bar's rebuild
     // action — never Play, which is Generate's signature (ADR 0144): a
     // Play on the rebuild made it read as Generate renamed (Kasra's
     // screenshot, Nov 14).
     remedies.push({ label: "Rebuild strategy", action: "rebuild-strategy", icon: "sparkles" });
   }
-  if (noPhoto) remedies.push({ label: "Attach the presenter photo", action: "goto-photo" });
   if (planSaveRequired) {
     remedies.push({ label: "Review and save the plan", action: "save-edits" });
   }
@@ -788,18 +784,71 @@ const handleGenerate = async () => {
   // The ready-state invitation (ADR 0144): when nothing holds the founder
   // back — strategy current, plan saved, models loaded, no render in
   // flight — the Generate button below wears the invitation (the play
-  // icon it already carries, plus the generate-invite glow). In every
-  // owed or blocked state the button invites nothing. The click is an
-  // explicit press on a generate button, the sanctioned trigger —
-  // navigation still generates nothing (ADR 0122). This panel's button
-  // is the only Generate (ADR 0218): the model and the resolution live
-  // here and nowhere else, and no floating bar mirrors the action.
+  // icon it already carries, plus the generate-invite glow), and the
+  // panel registers the SAME action for the wizard's sticky bar: same
+  // words, same icon, same invitation. The bar's click runs this panel's
+  // own handleGenerate — with the model and resolution chosen here,
+  // which live in this panel and nowhere else — and then asks the page
+  // to bring the generation section into view, so the founder watches
+  // the render where it happens. In every owed or blocked state the
+  // panel registers nothing and invites nothing: the bar keeps the
+  // unblocking action or the plain way forward (ADRs 0133/0142). The
+  // click is an explicit press on a generate button, the sanctioned
+  // trigger — navigation still generates nothing (ADR 0122).
+  // Registration follows the strategy panel's pattern: keyed on the
+  // action's visible state, the click goes through a ref so a re-render
+  // never re-registers a stale closure, and unmounting clears the slot.
   const generateReady =
     !rebuildRequired && !strategyMissing && !planSaveRequired &&
     !busy && !inFlight && Boolean(models) && !hasUnsavedEdits && ready &&
     !blocked && !tooLong && Boolean(projectId) &&
     strategyReady && !noPhoto && !noAngle;
   const generateLabel = generation ? "Generate another" : "Generate the video";
+  const generateClickRef = useRef(null);
+  generateClickRef.current = () => {
+    handleGenerate();
+    onNavigate?.("goto-render-section");
+  };
+  const stableGenerateClick = useRef(() => generateClickRef.current?.()).current;
+  // A render in flight registers its own bar state (ADR 0147): this
+  // panel's busy presentation — the same "Generating video" words the
+  // button below carries, disabled and busy — so the bar narrates the
+  // wait instead of offering the CTA again. It is not the ready action
+  // with a busier label: no play icon, no invitation and no click,
+  // because the click already happened. `busy` here is only ever the
+  // render submit's own flight (the storage and preview retries carry
+  // their own state), and `inFlight` is the submitted/generating row.
+  const renderInFlight = busy || Boolean(inFlight);
+  const renderBarSig = generateReady
+    ? `ready|${generateLabel}`
+    : renderInFlight
+      ? `flight|${generation?.id || "starting"}`
+      : "not-ready";
+  useEffect(() => {
+    if (!onRenderActionChange) return;
+    if (generateReady) {
+      onRenderActionChange({
+        label: generateLabel,
+        icon: "play",
+        invite: true,
+        blocks: false,
+        testId: "wizard-generate-video",
+        onClick: stableGenerateClick,
+      });
+    } else if (renderInFlight) {
+      onRenderActionChange({
+        label: "Generating video",
+        busy: true,
+        disabled: true,
+        flight: true,
+        testId: "wizard-render-progress",
+      });
+    } else {
+      onRenderActionChange(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderBarSig]);
+  useEffect(() => () => onRenderActionChange?.(null), [onRenderActionChange]);
 
   return (
     /* This panel is its own card now (ADR 0144): a full .surface below
@@ -1200,32 +1249,30 @@ const handleGenerate = async () => {
               {/* The native next step. The download above is the finish line for
                   anyone who does not want it: this panel adds nothing to what
                   they already have, changes no gate, and takes nothing away.
-                  Inside the wizard it walks to the flow's own finishing step,
-                  where this exact render is already loaded in the editor —
-                  the wizard's last step IS Demo + CTA now, so leaving the
-                  flow to reach it would strand the step the flow ends on.
-                  Mounted without the wizard's navigation (a direct mount),
-                  it keeps the route link to the standalone editor. */}
+                  Inside the wizard this block does not render at all (ADR
+                  0229): the flow's own finishing step is the way onward —
+                  the sticky bar's forward arrow carries a finished review
+                  there, where this exact render is already loaded in the
+                  editor — and a button inside this section that jumps
+                  steps would compete with it. Mounted without the wizard's
+                  navigation (a direct mount), the block stands with its
+                  route link to the standalone editor. */}
+              {!onNavigate && (
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
                 <div className="flex flex-wrap gap-2">
-                  {onNavigate ? (
-                    <Button variant="accent" size="sm" onClick={() => onNavigate("goto-finish")}>
+                  <Button variant="accent" size="sm" asChild>
+                    <Link to={`/demo-cta/${generation.id}`}>
                       <Smartphone className="h-3.5 w-3.5" /> Open in Demo + CTA
-                    </Button>
-                  ) : (
-                    <Button variant="accent" size="sm" asChild>
-                      <Link to={`/demo-cta/${generation.id}`}>
-                        <Smartphone className="h-3.5 w-3.5" /> Open in Demo + CTA
-                      </Link>
-                    </Button>
-                  )}
+                    </Link>
+                  </Button>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   This is the hook and the middle. Use it as is, or open it in Demo + CTA
                   to add your demo and call to action — exports save beside the original.
                 </p>
               </div>
+              )}
             </>
           )}
 

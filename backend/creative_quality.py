@@ -15,6 +15,7 @@ import re
 
 import ai_spoken
 import final_beat
+import story_types
 
 VERSION = 1
 
@@ -688,3 +689,179 @@ def assess_spoken_quality(
     # as F, its two charges being unfinished sentences — and the
     # report carried a capped_by marker no surface read.
     return report
+
+
+# ---------------------------------------------------------------------------
+# The story craft check (ADR 0228)
+#
+# A story is not a short hook video: it is tapped through faster, its
+# text must carry the message muted, and its interaction layer is a
+# sticker plan the render cannot carry. So beside the spoken-pair
+# scorer above — untouched, and never applied to a story's words as if
+# they were a hook and a middle — a story plan gets its own fixed
+# checklist of the four things the format demands. Fixed rules, stated
+# as the measurements they are: like the scorer, this check is advisory
+# and never calibrated against outcomes (Kasra's ruling covers both).
+
+# The opening line's ceiling. At the brisk hook pace the app budgets by
+# (20 characters a second) a finished sentence much past this has its
+# move landing mid-line instead of at the open; the story rule is the
+# hook's move inside the first second, and a single short sentence is
+# the longest opening whose move cannot help but land first.
+STORY_HOOK_MAX_CHARS = 50
+
+
+def assess_story_quality(hook_line, script, screen_text, sticker_plan, *,
+                         frame_seconds=10):
+    """Check one story frame's written layer against the format's rules.
+
+    Four checks, each a plain measurement with its evidence stated:
+    the hook's move lands inside the first second (one finished
+    sentence, short enough that the move is at its start); the screen
+    text stands alone muted (present, inside the settled caps, a real
+    message rather than a fragment); the frame holds one idea (the
+    spoken words fit the frame's seconds at the app's own budget, and
+    the script is at most two sentences — a frame that needs a second
+    idea is frame two); and the sticker plan is present (at least one
+    entry naming a sticker and its wording). Advisory only: it refuses
+    nothing and gates no render.
+    """
+    hook = str(hook_line or "").strip()
+    body = str(script or "").strip()
+    text = " ".join(str(screen_text or "").split()).strip()
+    plan = sticker_plan if isinstance(sticker_plan, list) else []
+    seconds = int(frame_seconds or 0) or 10
+
+    checks = {}
+
+    hook_sentences = _sentences(hook)
+    hook_finished = bool(hook) and hook[-1] in ".!?"
+    hook_ok = (
+        bool(hook) and len(hook_sentences) == 1 and hook_finished
+        and len(hook) <= STORY_HOOK_MAX_CHARS
+    )
+    if not hook:
+        hook_evidence = ["No opening line yet."]
+    elif len(hook_sentences) != 1 or not hook_finished:
+        hook_evidence = ["The opening is not one finished sentence."]
+    elif len(hook) > STORY_HOOK_MAX_CHARS:
+        hook_evidence = [
+            f"The opening line runs {len(hook)} characters — its move lands "
+            "mid-line instead of inside the first second."
+        ]
+    else:
+        hook_evidence = [
+            f"One finished sentence of {len(hook)} characters — the move "
+            "lands at the open."
+        ]
+    checks["first_second_hook"] = {
+        "key": "first_second_hook",
+        "label": "Hook inside the first second",
+        "passed": hook_ok,
+        "evidence": hook_evidence,
+        "next_step": (
+            "Open on one short finished sentence whose move lands in the "
+            "first second."
+        ),
+    }
+
+    words = _words(text)
+    text_ok = (
+        bool(text)
+        and len(text) <= story_types.STORY_TEXT_MAX_CHARS
+        and len(words) <= story_types.STORY_TEXT_MAX_WORDS
+        and len(words) >= 3
+    )
+    if not text:
+        text_evidence = ["No screen text yet — a muted viewer gets nothing."]
+    elif len(text) > story_types.STORY_TEXT_MAX_CHARS or len(words) > story_types.STORY_TEXT_MAX_WORDS:
+        text_evidence = [
+            f"The screen text runs {len(text)} characters / {len(words)} words, "
+            f"past the {story_types.STORY_TEXT_MAX_CHARS}-character / "
+            f"{story_types.STORY_TEXT_MAX_WORDS}-word cap that lets it read "
+            "whole inside the shortest frame."
+        ]
+    elif len(words) < 3:
+        text_evidence = ["The screen text is a fragment, not the message."]
+    else:
+        text_evidence = [
+            f"{len(text)} characters / {len(words)} words — the whole "
+            "message, readable with the sound off."
+        ]
+    checks["screen_text_stands_alone"] = {
+        "key": "screen_text_stands_alone",
+        "label": "Screen text stands alone muted",
+        "passed": text_ok,
+        "evidence": text_evidence,
+        "next_step": (
+            "Write the screen text so the whole message reads with the "
+            "sound off, inside 80 characters and 14 words."
+        ),
+    }
+
+    budget = ai_spoken.spoken_budget(seconds)
+    spoken_chars = len(hook) + len(body)
+    body_sentences = _sentences(body)
+    idea_ok = spoken_chars <= budget and len(body_sentences) <= 2
+    if spoken_chars > budget:
+        idea_evidence = [
+            f"The spoken words run {spoken_chars} characters against the "
+            f"{seconds}-second frame's {budget}-character budget — a second "
+            "idea is packed into this frame."
+        ]
+    elif len(body_sentences) > 2:
+        idea_evidence = [
+            f"The script runs {len(body_sentences)} sentences — a frame "
+            "holds one idea, in at most two."
+        ]
+    else:
+        idea_evidence = [
+            f"{spoken_chars} spoken characters inside the {seconds}-second "
+            f"frame's {budget}-character budget, one idea."
+        ]
+    checks["one_idea_per_frame"] = {
+        "key": "one_idea_per_frame",
+        "label": "One idea per frame",
+        "passed": idea_ok,
+        "evidence": idea_evidence,
+        "next_step": (
+            "Keep one idea in this frame; a second idea becomes the "
+            "next frame."
+        ),
+    }
+
+    usable = [
+        entry for entry in plan
+        if isinstance(entry, dict)
+        and str(entry.get("sticker") or "").strip()
+        and str(entry.get("wording") or "").strip()
+    ]
+    sticker_ok = bool(usable)
+    checks["sticker_plan_present"] = {
+        "key": "sticker_plan_present",
+        "label": "Sticker plan present",
+        "passed": sticker_ok,
+        "evidence": (
+            [f"{len(usable)} sticker(s) planned with their wording."]
+            if sticker_ok else
+            ["No sticker carries a wording — the frame's interaction "
+             "layer is missing."]
+        ),
+        "next_step": (
+            "Plan the frame's native sticker — its kind, its exact "
+            "wording, and where it sits."
+        ),
+    }
+
+    passed = sum(1 for check in checks.values() if check["passed"])
+    return {
+        "version": VERSION,
+        "advisory": True,
+        "kind": "story",
+        "passed": passed,
+        "total": len(checks),
+        "checks": checks,
+        "next_steps": [
+            check["next_step"] for check in checks.values() if not check["passed"]
+        ],
+    }

@@ -82,6 +82,20 @@ STORY_TYPES = (
 
 STORY_TYPE_IDS = tuple(story_type["id"] for story_type in STORY_TYPES)
 
+# The frame lengths the page offers (research Q4): per-type defaults
+# above, and the founder's pick is one of these three — a story frame
+# is one render of 5–15 seconds, and no platform prescribes a length
+# between them.
+STORY_FRAME_SECONDS = (5, 10, 15)
+
+# The on-screen text caps (research Q3): the text is a native text
+# sticker the founder places at posting, and it must read whole inside
+# the shortest 5-second frame and carry the whole message alone for
+# the muted minority. Derived from TikTok's 5–10 words-per-second
+# pacing rule — a build number, not a published platform limit.
+STORY_TEXT_MAX_CHARS = 80
+STORY_TEXT_MAX_WORDS = 14
+
 _BY_ID = {story_type["id"]: story_type for story_type in STORY_TYPES}
 
 

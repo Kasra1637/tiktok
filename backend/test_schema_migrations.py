@@ -126,7 +126,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-1][0] == 7
+            assert 7 in [step[0] for step in schema.MIGRATION_STEPS]
 
             db_path = tmp_path / "kind.db"
             await _apply(api, db_path)
@@ -145,6 +145,40 @@ class TestMigrationConvergence:
                 assert col_type == "TEXT"
                 assert notnull == 1
                 assert dflt == "'video'"
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_story_fields_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 8
+
+            db_path = tmp_path / "story-fields.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 8"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "story" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                project_cols = {r[1]: r for r in await cur.fetchall()}
+                for name in ("story_type", "screen_text", "sticker_plan"):
+                    assert name in project_cols
+                    assert project_cols[name][2] == "TEXT"
+                assert "frame_count" in project_cols
+                assert project_cols["frame_count"][2] == "INTEGER"
+                assert project_cols["frame_count"][4] == "1"
+
+                cur = await conn.execute("PRAGMA table_info(generations)")
+                generation_cols = {r[1]: r for r in await cur.fetchall()}
+                assert "story_kit" in generation_cols
+                assert generation_cols["story_kit"][2] == "TEXT"
             finally:
                 await conn.close()
 

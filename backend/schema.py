@@ -1130,6 +1130,33 @@ async def _migration_0007_project_kind(conn):
     await conn.commit()
 
 
+async def _migration_0008_story_fields(conn):
+    """Story fields and the story kit column (ADR 0228): a story project
+    carries its type, the accepted on-screen text, the sticker plan and
+    its frame count on the project row, and a story render carries its
+    frozen story kit beside the post kit's column. Hook-video rows leave
+    every one of these NULL (frame_count 1), and nothing reads them for
+    a 'video' row. Each column is added only when missing, so a database
+    that already has it passes through untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    project_cols = {row[1] for row in await cursor.fetchall()}
+    for name, ddl in (
+        ("story_type", "ALTER TABLE studio_projects ADD COLUMN story_type TEXT"),
+        ("screen_text", "ALTER TABLE studio_projects ADD COLUMN screen_text TEXT"),
+        ("sticker_plan", "ALTER TABLE studio_projects ADD COLUMN sticker_plan TEXT"),
+        ("frame_count", "ALTER TABLE studio_projects ADD COLUMN frame_count INTEGER DEFAULT 1"),
+    ):
+        if name not in project_cols:
+            await conn.execute(ddl)
+    cursor = await conn.execute("PRAGMA table_info(generations)")
+    generation_cols = {row[1] for row in await cursor.fetchall()}
+    if "story_kit" not in generation_cols:
+        await conn.execute(
+            "ALTER TABLE generations ADD COLUMN story_kit TEXT"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
@@ -1137,6 +1164,7 @@ MIGRATION_STEPS = (
     (5, "hashtag volume research cache", _migration_0005_hashtag_volume_cache),
     (6, "project cover text", _migration_0006_project_cover_text),
     (7, "project kind marker", _migration_0007_project_kind),
+    (8, "story fields and the story kit column", _migration_0008_story_fields),
 )
 
 

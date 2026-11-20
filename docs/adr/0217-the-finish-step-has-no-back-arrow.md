@@ -1,6 +1,8 @@
 # 0217 — The finish step has no Back arrow
 
-Status: superseded by 0218 (the whole wizard bar is removed, so no step carries a Back arrow)
+Status: accepted (superseded by 0218 on Nov 20 2026; restored the
+same day by 0229, which reversed the removal and brought the bar —
+and this exception with it — back)
 
 ## Context
 

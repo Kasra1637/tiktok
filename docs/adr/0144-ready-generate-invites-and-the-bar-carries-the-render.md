@@ -1,8 +1,9 @@
 # ADR 0144: Ready-state Generate invites the click, and the sticky bar carries the render itself
 
 Status: partially superseded by 0218 (the sticky bar carrying the render —
-the wizard bar is removed; the ready-state invitation on the panel's own
-Generate button stands)
+the wizard bar was removed; the ready-state invitation on the panel's own
+Generate button stands); the bar provision is restored by 0229, with the
+bar's click re-scoped to a scroll by 0169
 
 ## Context
 

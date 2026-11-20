@@ -35,6 +35,7 @@ from template_library import (
     clamp_duration,
 )
 import feedback
+import story_types
 import angle_scene as _angle_scene_policy
 import character_policy
 import creative_quality
@@ -72,6 +73,13 @@ from ai_spoken import (
     strip_quote_marks,
     spoken_targets, strategy_text, strip_leading_hook,
     trend_evidence_sentence, trim_spoken_body, trim_to_sentence,
+)
+# The story screen-text caps live with the story catalog (story_types)
+# and are re-exported here beside the cover text's, so a prompt, a
+# serializer and a test read one number from either home (ADR 0228).
+from story_types import (  # noqa: E402
+    STORY_TEXT_MAX_CHARS,
+    STORY_TEXT_MAX_WORDS,
 )
 from ai_strategy import (
     GENERATED_SECTIONS, SECTION_ROLES, _STRATEGY_TEXT_LIMITS,
@@ -2582,6 +2590,33 @@ POST_KIT_JSON_SCHEMA = _strict_object({
     "cover_text": _str_prop(),
 })
 
+# One story frame's written layer (ADR 0228): the spoken pair, the
+# on-screen text, the two physical beats and the place, and the sticker
+# plan — each sticker entry naming its platform, its kind, its exact
+# wording and where it sits.
+STORY_PLAN_JSON_SCHEMA = _strict_object({
+    "hook_line": _str_prop(),
+    "script": _str_prop(),
+    "screen_text": _str_prop(),
+    "hook_action": _str_prop(),
+    "middle_action": _str_prop(),
+    "location": _str_prop(),
+    "sticker_plan": {"type": "array", "items": _strict_object({
+        "platform": _str_prop(),
+        "sticker": _str_prop(),
+        "wording": _str_prop(),
+        "placement": _str_prop(),
+    })},
+})
+
+# The story kit's one generated field (ADR 0228): the caption. The
+# screen text, the sticker plan and the checklist are assembled in
+# code, never modelled — the text ships verbatim and the checklist is
+# settled guidance, so neither belongs in a model's mouth.
+STORY_KIT_JSON_SCHEMA = _strict_object({
+    "caption": _str_prop(),
+})
+
 # The fresh-account hashtag strategy, as data. A new account has no authority
 # for the algorithm to lean on, so the tags' job is classification, not reach:
 # the set states the specific problem, the community, and the category in
@@ -2941,6 +2976,433 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         )
 
     return {"caption": caption, "hashtags": hashtags, "cover_text": cover_text}
+
+
+# The budgets for the story calls (ADR 0228). Same lesson as the post
+# kit's (ADR 0183): the visible answer is small — two spoken lines, one
+# screen text, a sticker plan — but the shipped text model reasons at
+# extra high and bills that reasoning against max_tokens, so a small
+# budget returns empty content with a length finish. 6000 is twice the
+# largest budget observed to fail for the post kit, the codebase's
+# standing answer to that failure shape.
+STORY_PLAN_MAX_TOKENS = 6000
+STORY_KIT_MAX_TOKENS = 6000
+
+# One story type's extra brief, by catalog id: the closing beat the
+# format asks for and the platform asymmetry its sticker plan lives
+# under (research Q6 — countdown, questions and slider stickers exist
+# only on Instagram; both platforms have a poll sticker; neither has a
+# link sticker in stories the other also has).
+_STORY_TYPE_BRIEFS = {
+    "hook_teaser": (
+        "This frame points at the founder's newest hook video or post: the "
+        "moment, the promise, and 'the full one is up' as the closing beat. "
+        "Sticker plan: on Instagram a Link sticker to the full post; TikTok "
+        "stories have no link sticker, so there the spoken line and the "
+        "screen text point at the post on the profile instead."
+    ),
+    "question_poll": (
+        "This frame asks the audience ONE question drawn from the angle's "
+        "tension: the spoken line asks it, and the sticker collects the "
+        "answer. Sticker plan: a poll sticker with two answer labels "
+        "written out — both platforms have one. On Instagram a questions "
+        "sticker (open text) may ride alongside; TikTok has no questions "
+        "sticker, so there the poll carries the question alone."
+    ),
+    "demo_moment": (
+        "This frame is one app moment as a presenter beat: the spoken line "
+        "ends open, the way a demo handoff does — the founder's own screen "
+        "recording is the next frame, never generated footage. No "
+        "interaction sticker is required; the recording step rides the "
+        "kit's checklist."
+    ),
+    "announcement_countdown": (
+        "This frame is a launch, update, or deadline beat, closing on the "
+        "date. Sticker plan: on Instagram a countdown sticker set to the "
+        "founder's date; TikTok has NO countdown sticker, so on TikTok "
+        "the date rides the screen text and the spoken line instead."
+    ),
+}
+
+
+def _normalize_sticker_plan(raw) -> list:
+    """The model's sticker plan, cleaned to the kit's shape.
+
+    Each entry names one native sticker: the platform it belongs to
+    ('instagram', 'tiktok', or 'both' — the platforms' sticker sets are
+    not the same, research Q6), the sticker kind, its exact wording,
+    and where it sits, in words. An entry with neither a sticker nor a
+    wording is not a plan entry and drops out; an unrecognized platform
+    becomes 'both' rather than a platform the kit cannot serve.
+    """
+    plan = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        sticker = str(item.get("sticker") or "").strip()
+        wording = str(item.get("wording") or "").strip()
+        if not sticker and not wording:
+            continue
+        platform = str(item.get("platform") or "").strip().lower()
+        if platform not in ("instagram", "tiktok"):
+            platform = "both"
+        plan.append({
+            "platform": platform,
+            "sticker": sticker,
+            "wording": wording,
+            "placement": str(item.get("placement") or "").strip(),
+        })
+    return plan
+
+
+async def generate_story_plan(project: dict, profile: dict) -> dict:
+    """
+    One story plan for one frame (ADR 0228): the spoken lines, the
+    on-screen text, and the sticker plan, written together in one call.
+
+    A story plan replaces the hook video's plan → strategy pair: the
+    format is one frame of 5–15 seconds, reviewed once, so the written
+    layers are drafted against each other in a single pass — the screen
+    text must carry the message the spoken line tells, and the sticker
+    plan is the interaction the render cannot carry.
+
+    Grounded in the profile facts and the picked angle exactly as
+    generate_creative_plan is grounded (the caller resolves the angle
+    row onto the project dict as `content_angle`). Deliberately NOT
+    grounded in verdict feedback: story rows take no verdict and never
+    enter the ADR 0124 bundles, in either direction (ADR 0227).
+
+    The spoken lines follow the shared spoken-line rules with the
+    story's tightening — the hook's move lands inside the first
+    second — and the frame's total budget from spoken_budget(seconds).
+    The screen text follows its own rules block with the settled caps
+    (story_types.STORY_TEXT_MAX_CHARS / _WORDS); a reply over the caps
+    gets one bounded correction, and a reply still over raises, like
+    the cover text's honesty contract.
+    """
+    project = project or {}
+    profile = profile or {}
+    story_type = story_types.get_story_type(project.get("story_type"))
+    if story_type is None:
+        raise RuntimeError(
+            f"Unknown story type {project.get('story_type')!r}: pick one of "
+            + ", ".join(story_types.STORY_TYPE_IDS) + "."
+        )
+    seconds = int(project.get("duration_seconds") or 0)
+    if seconds not in story_types.STORY_FRAME_SECONDS:
+        seconds = story_type["default_seconds"]
+    angle = project.get("content_angle")
+    if not isinstance(angle, dict):
+        angle = None
+
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "desired_outcomes": _list("desired_outcomes"),
+        "outcome_statements": profile.get("outcome_statements") or [],
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "known_limitations": profile.get("known_limitations") or "(none recorded)",
+    }
+    total_budget = spoken_budget(seconds)
+    countdown_date = str(project.get("countdown_date") or "").strip()
+
+    prompt = (
+        f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
+        f"{_angle_grounding_block(angle)}\n\n"
+        f"{_angle_goal_block(angle, '')}\n\n"
+        f"STORY TYPE: {story_type['name']} — {story_type['description']}\n"
+        f"{_STORY_TYPE_BRIEFS[story_type['id']]}\n"
+    )
+    if story_type["id"] == "announcement_countdown":
+        if countdown_date:
+            prompt += (
+                f"The founder's date for this announcement: {countdown_date}. "
+                "Use exactly this date; never invent one.\n"
+            )
+        else:
+            prompt += (
+                "The founder has not set a date: do not invent one — the "
+                "sticker and the kit will ask them to set it.\n"
+            )
+    if (project.get("camera_setup") or "handheld") == "fixed":
+        prompt += (
+            "FIXED CAMERA: the camera is placed, not held — the location "
+            "must be indoors (inside a home, an office, a bed), never "
+            "outdoors; move an outdoor moment to its nearest indoor setting.\n"
+        )
+    prompt += (
+        f"\nFRAME: one story frame of {seconds} seconds, vertical 9:16.\n\n"
+        f"{_spoken_line_rules_block()}\n\n"
+        f"{_story_text_rules_block()}\n\n"
+        "STORY SPOKEN RULES (this frame, on top of the craft above):\n"
+        "- The hook's move lands inside the first second: hook_line is ONE "
+        "short finished sentence of at most 45 characters whose point lands "
+        "at its start, never a slow build.\n"
+        f"- The two spoken lines together run at most {total_budget} "
+        f"characters — what {seconds} seconds holds at a natural pace.\n"
+        "- The script continues the hook and ends on the type's closing "
+        "beat above. ONE idea only — a second idea is a second frame, "
+        "never packed into this one.\n"
+        "- hook_action: what the presenter physically does in the first "
+        "second — the story's own central action, already moving, caught "
+        "at its sharpest instant. middle_action: the one physical action "
+        "of the remaining seconds.\n"
+        "- location: the one place the frame happens, drawn from the "
+        "angle's moment.\n"
+        "- sticker_plan: one entry per sticker the frame wants, each with "
+        "platform ('instagram', 'tiktok', or 'both'), the sticker kind, "
+        "its exact wording, and where it sits, in words.\n\n"
+        "Return ONLY a JSON object: "
+        "{\"hook_line\": \"...\", \"script\": \"...\", \"screen_text\": \"...\", "
+        "\"hook_action\": \"...\", \"middle_action\": \"...\", "
+        "\"location\": \"...\", \"sticker_plan\": [{\"platform\": \"...\", "
+        "\"sticker\": \"...\", \"wording\": \"...\", \"placement\": \"...\"}]}"
+    )
+
+    system_message = (
+        "You are a short-form video creative director for mobile app "
+        "promotions. You write ONE story frame: a few seconds of presenter "
+        "video a founder posts as an Instagram or TikTok story. Write every "
+        "spoken line in the voice of a satisfied customer sharing their own "
+        "experience, never as the app's founder, owner or marketer. Ground "
+        "everything ONLY in the verified product facts below. Respond with "
+        "STRICT JSON only, no markdown fences."
+    )
+    correction = ""
+    last_over_cap = False
+    for _attempt in range(2):
+        data = await _chat_json(
+            system_message=system_message,
+            prompt=prompt + correction,
+            context="Story plan",
+            max_tokens=STORY_PLAN_MAX_TOKENS,
+            attempts=2,
+            json_schema=STORY_PLAN_JSON_SCHEMA,
+        )
+        data = data if isinstance(data, dict) else {}
+        hook = " ".join(str(data.get("hook_line") or "").split()).strip()
+        script = " ".join(str(data.get("script") or "").split()).strip()
+        screen_text = " ".join(str(data.get("screen_text") or "").split()).strip()
+        if hook:
+            hook = character_policy.neutralize(hook)
+        if script:
+            script = character_policy.neutralize(script)
+        if screen_text:
+            screen_text = character_policy.neutralize(screen_text)
+        if not hook or not script:
+            last_over_cap = False
+            correction = (
+                "\n\nCORRECTION: the previous reply came back without both "
+                "spoken lines. Return the full object with hook_line and "
+                "script both filled."
+            )
+            continue
+        if (
+            not screen_text
+            or len(screen_text) > STORY_TEXT_MAX_CHARS
+            or len(screen_text.split()) > STORY_TEXT_MAX_WORDS
+        ):
+            last_over_cap = True
+            correction = (
+                f"\n\nCORRECTION: the previous screen text ran "
+                f"{len(screen_text)} characters / "
+                f"{len(screen_text.split())} words (or came back empty). "
+                f"The screen text must be at most {STORY_TEXT_MAX_CHARS} "
+                f"characters and at most {STORY_TEXT_MAX_WORDS} words, "
+                "carrying the whole message with the sound off. Rewrite "
+                "ONLY the screen_text inside the caps and return the full "
+                "object again."
+            )
+            continue
+        return {
+            "hook_line": hook,
+            "script": script,
+            "screen_text": screen_text,
+            "sticker_plan": _normalize_sticker_plan(data.get("sticker_plan")),
+            "hook_action": " ".join(
+                str(data.get("hook_action") or "").split()).strip(),
+            "middle_action": " ".join(
+                str(data.get("middle_action") or "").split()).strip(),
+            "location": " ".join(
+                str(data.get("location") or "").split()).strip(),
+            "story_type": story_type["id"],
+            "frame_seconds": seconds,
+        }
+    if last_over_cap:
+        raise RuntimeError(
+            "The screen text kept running long — past the "
+            f"{STORY_TEXT_MAX_CHARS} characters / {STORY_TEXT_MAX_WORDS} "
+            "words a muted viewer can read inside the frame. Try again, "
+            "or write the screen text yourself."
+        )
+    raise RuntimeError(
+        "The story plan came back without its spoken lines. Try again."
+    )
+
+
+def _story_posting_checklist(story_type_id: str) -> list:
+    """The story posting checklist, written in code (ADR 0228).
+
+    Settled guidance, not generated copy: the text sticker placement
+    (upper third, below the handle, clear of the bottom caption zone),
+    the sticker step, and the cadence (one or two stories on a posting
+    day — more buys little), plus the one follow-through line the
+    picked type asks for. A checklist the model rewrote each time
+    would drift; this one cannot.
+    """
+    checklist = [
+        "Add the screen text as a native text sticker — the exact words "
+        "are in this kit. Place it in the upper third, below the handle, "
+        "clear of the bottom caption zone.",
+        "Add each sticker in the plan with its exact wording — a live "
+        "sticker only exists once you add it in the app.",
+        "Post one or two stories on a posting day; more frames buy little.",
+    ]
+    if story_type_id == "hook_teaser":
+        checklist.append(
+            "Instagram: attach the Link sticker to the full post. TikTok "
+            "has no link sticker in stories — the spoken line points at "
+            "the post on your profile, so keep that post newest or pinned."
+        )
+    elif story_type_id == "question_poll":
+        checklist.append(
+            "Answer a few replies while the story is live; the poll "
+            "result is your next story's seed."
+        )
+    elif story_type_id == "demo_moment":
+        checklist.append(
+            "To run the demo right behind this frame, attach your screen "
+            "recording as the next frame straight after posting."
+        )
+    elif story_type_id == "announcement_countdown":
+        checklist.append(
+            "Instagram: set the countdown sticker to your date. TikTok "
+            "has no countdown sticker — the date already rides the screen "
+            "text and the spoken line."
+        )
+    return checklist
+
+
+async def generate_story_kit(project: dict, profile: dict, generation: dict) -> dict:
+    """
+    The story kit for one finished frame (ADR 0228): the posting layer
+    the render cannot carry.
+
+    Assembled, not wholly generated: the accepted screen text ships
+    VERBATIM — it is the founder's native text sticker, placed at
+    posting, never burned in and never redrafted here — the sticker
+    plan is the plan's own, and the checklist is the settled posting
+    guidance written in code. Only the caption is a model call: short,
+    story register, and deliberately NOT the post kit's machinery —
+    stories are not feed posts, so ADR 0139's researched hashtag
+    selection does not apply, and a caption carrying hashtags is
+    corrected once, then refused.
+    """
+    project = project or {}
+    profile = profile or {}
+    screen_text = " ".join(str(project.get("screen_text") or "").split()).strip()
+    if not screen_text:
+        raise RuntimeError(
+            "The story kit needs the frame's accepted screen text — "
+            "generate the story plan first."
+        )
+    hook = str(project.get("hook_line") or "").strip()
+    script = str(project.get("script") or "").strip()
+    story_type = story_types.get_story_type(project.get("story_type"))
+    type_id = story_type["id"] if story_type else ""
+    type_name = story_type["name"] if story_type else "Story"
+    seconds = int(project.get("duration_seconds") or 0)
+    if seconds not in story_types.STORY_FRAME_SECONDS:
+        seconds = story_type["default_seconds"] if story_type else 10
+    sticker_plan = _normalize_sticker_plan(project.get("sticker_plan"))
+    app_name = profile.get("brand_name") or "the app"
+
+    prompt = (
+        f"Write the caption for one posted story frame of {app_name}.\n\n"
+        f"STORY TYPE: {type_name}\n"
+        f"THE FRAME'S SPOKEN HOOK: {hook}\n"
+        f"THE FRAME'S SPOKEN SCRIPT: {script}\n"
+        f"THE FRAME'S SCREEN TEXT (already on the story as a text sticker): {screen_text}\n\n"
+        "THE CAPTION:\n"
+        "- One short line, at most 150 characters — a story caption is a "
+        "note under the frame, not a feed post.\n"
+        "- Story register: first person, plain and loose, the same voice "
+        "as the frame; never a sales pitch, never the founder's voice.\n"
+        "- NO hashtags — stories are not feed posts and tags do not "
+        "travel with them.\n"
+        "- Never repeat the screen text word for word; a caption that "
+        "duplicates the sticker says nothing twice.\n\n"
+        "Return ONLY a JSON object: {\"caption\": \"...\"}"
+    )
+    system_message = (
+        "You write posting copy for a founder's app stories. You write in "
+        "the voice of a satisfied customer sharing their own experience, "
+        "never as the app's founder, owner or marketer. Respond with "
+        "STRICT JSON only, no markdown fences."
+    )
+    correction = ""
+    last_had_hashtags = False
+    caption = ""
+    for _attempt in range(2):
+        data = await _chat_json(
+            system_message=system_message,
+            prompt=prompt + correction,
+            context="Story kit",
+            max_tokens=STORY_KIT_MAX_TOKENS,
+            attempts=2,
+            json_schema=STORY_KIT_JSON_SCHEMA,
+        )
+        data = data if isinstance(data, dict) else {}
+        caption = " ".join(str(data.get("caption") or "").split()).strip()
+        if caption:
+            caption = character_policy.neutralize(caption)
+        if "#" in caption:
+            last_had_hashtags = True
+            correction = (
+                "\n\nCORRECTION: the previous caption carried hashtags. "
+                "Stories are not feed posts — return the caption with NO "
+                "hashtags at all."
+            )
+            continue
+        if not caption or len(caption) > 200:
+            last_had_hashtags = False
+            correction = (
+                "\n\nCORRECTION: the previous caption came back empty or "
+                "ran past a story caption's length. Return one short "
+                "caption line, at most 150 characters."
+            )
+            continue
+        break
+    else:
+        caption = ""
+    if not caption:
+        if last_had_hashtags:
+            raise RuntimeError(
+                "The story caption kept carrying hashtags — stories are "
+                "not feed posts. Try again."
+            )
+        raise RuntimeError("The story caption came back empty. Try again.")
+    return {
+        "caption": caption,
+        "screen_text": screen_text,
+        "sticker_plan": sticker_plan,
+        "checklist": _story_posting_checklist(type_id),
+        "story_type": type_id,
+        "frame_seconds": seconds,
+    }
 
 
 # How many tailored structures each approved profile gets, per objective.
@@ -3380,6 +3842,36 @@ def _cover_text_rules_block() -> str:
         "- It works WITH the opening image: never repeat what the picture already shows.\n"
         "- It withholds the resolution — the video still has something to answer.\n"
         "- Never a copy of the spoken hook: a second angle on the same moment, not a duplicate."
+    )
+
+
+def _story_text_rules_block() -> str:
+    """
+    Story screen-text best practice, one block for every prompt that
+    writes a story's on-screen text (ADR 0228).
+
+    The story's text is the words the founder places as a native text
+    sticker at posting — never spoken, never burned into the render:
+    the two platforms' safe zones differ too much for one burned
+    position, and native text survives upload compression. It inverts
+    the hook video's hierarchy: stories are tapped through fast and a
+    muted minority watches every one, so the text must carry the whole
+    message with the sound off while the spoken line stays a first-class
+    second channel. The caps are the settled build numbers (80
+    characters / 14 words, from TikTok's 5–10 words-per-second pacing),
+    sized so the text reads whole inside the shortest 5-second frame.
+    Same family as the cover rules — first person, the moment up front,
+    the answer withheld — but a story text stands alone, where a cover
+    only has to earn the next two seconds beside the picture.
+    """
+    return (
+        "SCREEN TEXT — the words the founder places on the story as a native text sticker (post copy, never spoken, never burned into the render):\n"
+        "- SHORT: at most 80 characters and at most 14 words — it must read whole inside the shortest 5-second frame.\n"
+        "- It carries the WHOLE message with the sound off: a muted viewer who never hears a word still gets the moment, the point, and what to do. Never a teaser for the spoken line, never half the thought.\n"
+        "- First person, the person's own voice; never a label, a title, or ad copy.\n"
+        "- The moment up front, with one concrete felt detail.\n"
+        "- It ends before the payoff — it withholds the resolution, so the frame still has something to answer.\n"
+        "- It is never a copy of the spoken hook: a second angle on the same moment, not a duplicate."
     )
 
 

@@ -284,7 +284,7 @@ function SectionRow({ section, cameraSetup }) {
   );
 }
 
-export function HookContinuityPanel({ project, onProjectChange, onStrategyBuilt }) {
+export function HookContinuityPanel({ project, onProjectChange, onActionChange, onStrategyBuilt }) {
   const [busy, setBusy] = useState(false);
   const [busyStartedAt, setBusyStartedAt] = useState(null);
   const [error, setError] = useState(null);
@@ -466,15 +466,45 @@ export function HookContinuityPanel({ project, onProjectChange, onStrategyBuilt 
     await runRebuild({ skipConfirm: true });
   };
 
-  // This panel's one action stands on its own button below (ADR 0218):
-  // the same handler and busy anchor it always had — the floating wizard
-  // bar that used to mirror it is gone, so nothing registers the action
-  // with the page any more.
+  // The sticky wizard bar carries this panel's one action while Review is
+  // the step in view (ADR 0133): the same handler, the same busy anchor,
+  // so the bar and the button above are one control in two places, never
+  // two competing ones. Registration is keyed on the action's visible
+  // state; the click goes through a ref so a re-render never re-registers
+  // a stale closure, and unmounting clears the slot.
+  const clickRef = useRef(null);
+  clickRef.current = handleGenerateStrategy;
+  const stableClick = useRef(() => clickRef.current?.()).current;
   const actionLabel = suggesting
     ? "Checking direction"
     : busy
       ? "Building strategy"
       : hasStrategy ? "Rebuild strategy" : "Build the strategy";
+  // The bar carries this action only while it is the step's unblocker:
+  // no strategy yet, a rebuild owed, an angle still to pick, or a flight
+  // in progress. A current strategy's rebuild is optional — the step can
+  // proceed as-is — so it never displaces the bar's way forward.
+  const barOwed = Boolean(
+    busy || suggesting || needsAngle || !hasStrategy || staleStrategy || angleStale || directionStale
+  );
+  const barSig = [
+    barOwed ? "owed" : "free", actionLabel,
+    busy || suggesting ? "busy" : "idle",
+    needsAngle ? "needs-angle" : "ready", busyStartedAt || "",
+  ].join("|");
+  useEffect(() => {
+    if (!onActionChange) return;
+    onActionChange(barOwed ? {
+      label: actionLabel,
+      busy: busy || suggesting,
+      disabled: busy || suggesting || !projectId || needsAngle,
+      etaSeconds: suggesting ? BUSY_ETA_SECONDS.planStrategy : BUSY_ETA_SECONDS.strategy,
+      busyStartedAt,
+      onClick: stableClick,
+    } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barSig]);
+  useEffect(() => () => onActionChange?.(null), [onActionChange]);
 
   // No auto-build: mounting this panel is navigation, and navigation
   // generates nothing (ADR 0122). A project that arrives ready with no

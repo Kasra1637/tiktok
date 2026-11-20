@@ -1225,10 +1225,10 @@ h1,
 .animate-marquee { animation: marquee-x 40s linear infinite; }
 
 /* The ready-state invitation on the one paid action (ADR 0144): a soft
- * indigo glow breathing around the render panel's Generate — its only
- * carrier since the wizard bar went (ADR 0218) — only while nothing
- * holds the founder back. Owed, blocked and busy states never wear
- * it, and reduced motion turns it off with the other animations below. */
+ * indigo glow breathing around Generate — in the render panel and on
+ * the wizard bar alike — only while nothing holds the founder back.
+ * Owed, blocked and busy states never wear it, and reduced motion
+ * turns it off with the other animations below. */
 @keyframes generate-glow {
     0%, 100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45); }
     50% { box-shadow: 0 0 22px 5px rgba(129, 140, 248, 0.35); }

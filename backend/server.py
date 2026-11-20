@@ -190,6 +190,18 @@ from routers.history import (
 )
 api_router.include_router(history_router)
 
+# Stories: story project create, plan, render submit, and the story kit
+# (single owner in routers.stories), re-exporting the handlers and kit
+# helpers the completion hook and the tests still call from `server`.
+from routers.stories import (
+    router as stories_router,
+    configure_stories,
+    create_story_project, generate_story_plan, generate_story,
+    regenerate_story_kit, _parse_story_kit, _maybe_write_story_kit,
+    _schedule_story_kit, _load_story_kit_materials,
+)
+api_router.include_router(stories_router)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -331,6 +343,12 @@ configure_assets(sys.modules[__name__])
 # History router: configure with the composition root so call sites resolve
 # the patched DB helpers and the render-lifecycle helpers at call time.
 configure_history(sys.modules[__name__])
+
+# Stories router: configure with the composition root so its endpoints
+# resolve the DB helpers, the render submit and the serializers at call
+# time — the same call-time contract as studio, so a test patching
+# server.<name> intercepts the story calls too.
+configure_stories(sys.modules[__name__])
 
 
 # The face-swap target is never uploaded by the client. It must be a file this
@@ -1154,6 +1172,11 @@ def _public_generation(row: dict) -> dict:
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     out["trim_to_seconds"] = int(out.get("trim_to_seconds") or 0)
     out["post_kit"] = _parse_post_kit(row.get("post_kit"))
+    # The story kit rides beside the post kit (ADR 0228): a story render
+    # carries one, a hook-video render never does — the two are mutually
+    # exclusive by the project's kind, and a missing column reads as no
+    # kit, like the post kit's.
+    out["story_kit"] = _parse_story_kit(row.get("story_kit"))
     out["quality_report"] = _quality_report_for_row(row)
     # The project's words ride along on the detail/history joins only so the
     # quality fallback above can recompute for pre-column rows; they are not
@@ -1392,6 +1415,7 @@ async def _submit_generation(
      hook_trim: int = 0,
      idempotency_key: str = "",
      request_id: str = "",
+     exact_duration: bool = False,
  ) -> dict:
     """
     Submit ONE video generation job. This is the only render path.
@@ -1421,9 +1445,20 @@ async def _submit_generation(
     rid = request_id or _request_id()
     logger.info("submit_generation project=%s user=%s model=%s request_id=%s",
                 project.get("id"), user_id, model or project.get("model"), rid)
-    requested = template_library.clamp_duration(
-        duration or project.get("duration_seconds") or 0
-    )
+    if exact_duration:
+        # A story frame's length is the render's length (ADR 0228): the
+        # settled pick runs 5/10/15 seconds, and the hook-video clamp
+        # below floors at 8 — it would silently rewrite a 5-second
+        # question frame into an 8-second render nobody chose. The
+        # caller (the stories router) has already validated the value
+        # against the pick, and the model's own maximum below still
+        # caps it. Every other caller leaves this off and clamps as
+        # before.
+        requested = int(duration or project.get("duration_seconds") or 0)
+    else:
+        requested = template_library.clamp_duration(
+            duration or project.get("duration_seconds") or 0
+        )
     model_key = video_providers.resolve(model)[0]
     cap = video_providers.capability(model_key)
     camera_setup = project.get("camera_setup") or "handheld"
@@ -3053,6 +3088,11 @@ async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: st
     # response like the poster: a kit failure leaves NULL, never invented
     # copy. A NULL kit renders as no kit.
     await _schedule_post_kit(background_tasks, generation_id, user_id)
+    # The story kit's turn (ADR 0228): scheduled beside its sibling with
+    # the same contract. Each writer checks the project's kind, so a
+    # completion grows exactly one kit — the post kit for a hook video,
+    # the story kit for a story, never both.
+    await _schedule_story_kit(background_tasks, generation_id, user_id)
     if stored_url:
         # Poster is best-effort and off the critical path: History works
         # without it. Scheduled after the response so the save never stacks

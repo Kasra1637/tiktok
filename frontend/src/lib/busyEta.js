@@ -12,8 +12,10 @@
 // polling progress bar with real position — takes no countdown at all.
 //
 // Values per operation, from backend/ai_service.py token/timeout budgets:
-// - angles: founder-measured 50s for six fielded angles (Nov 2026; the
-//   budget-derived 30s ran short against the wait founders actually see).
+// - angles: founder-dictated 40s (Nov 20 2026, ADR 0230) for the
+//   four-angle set (ADR 0226), superseding the founder-measured 50s for
+//   six fielded angles. The one entry drives both the Generate angles
+//   and Regenerate angles countdowns.
 // - goals: no entry — it completes under 10s in practice, so its button
 //   keeps the sweep alone and never counts down.
 // - templates: founder-measured 20s for 3 structures (Nov 2026).
@@ -34,7 +36,7 @@
 export const BUSY_ETA_THRESHOLD_SECONDS = 10;
 
 export const BUSY_ETA_SECONDS = {
-  angles: 50,
+  angles: 40,
   templates: 20,
   plan: 50,
   planStrategy: 50,

@@ -58,8 +58,10 @@ One render path, single-pass video generation via OpenRouter.
 - `backend/generation_planning.py` — prompt assembly + `is_recoverable_error`
   (retry policy). Prompt budget + sacred-script rule live here.
 - `frontend/src/components/GenerationPanel.jsx` — the render panel; errors via
-  `lib/errorMessage.js`. Its own Generate is the only one (ADR 0218 removed
-  the wizard bar and the panel's registration with the page); the model,
+  `lib/errorMessage.js`. Its own Generate is the only one that submits: the
+  panel registers its ready/flight faces with the page for the wizard's
+  sticky bar (restored by ADR 0229, superseding 0218), and the bar's click
+  only scrolls to the panel (ADR 0169); the model,
   resolution and render handler live here and nowhere else. Card
   padding/spacing tokens live in `index.css`.
 - `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
@@ -206,8 +208,9 @@ One render path, single-pass video generation via OpenRouter.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
-  generic take. A refusal must name the next step. A red button that cannot
-  act must navigate to what's missing instead of dying silently.
+  generic take. A refusal must name the next step. A gate that cannot
+  act names what's missing in words instead of dying silently — in the
+  wizard, the rail segments and the sticky bar do the navigating (ADR 0229).
 - No claim-safety system exists (ADR 0119): wording is never checked,
   reported on, or refused anywhere in the app; the angle's bounded-by lines
   are prompt guidance for the generator only, never a gate on a result.
@@ -224,13 +227,19 @@ One render path, single-pass video generation via OpenRouter.
   as a named `storage_error` — completed, retry offered — never an eternal
   `generating`. The detached heartbeat extends the lease only inside the
   bound; it protects a slow save, it cannot keep a hung one alive.
-- The wizard has no floating bar (ADR 0218, superseding the bar rules
-  of 0144/0147/0169): the rail segments and section headers own step
-  navigation, and each section's own buttons own its actions — the
-  render panel's Generate, beside the model and resolution, is the
-  only button that submits, the Review halves switch by their own
-  tabs, and a render in flight is narrated by the panel alone. No
-  panel registers an action with the page for a second surface.
+- The wizard's sticky bar is back (ADR 0229, superseding 0218 and
+  restoring the bar rules of 0144/0147/0169): the rail segments and
+  the bar own step navigation, and each section's own buttons own its
+  actions — nothing inside a section jumps the user to another step
+  (gap panels name the gap in words instead). The render panel's
+  Generate, beside the model and resolution, is the only button that
+  submits: the bar wears its face on the render half but its click
+  only scrolls (ADR 0169), the Review halves switch by their own
+  tabs, and a render in flight is narrated by the panel and the bar's
+  registered flight face alike. The strategy and render panels
+  register their bar actions with the page; the finish step carries
+  no Back arrow (ADR 0217), and the bar stands down there over a
+  finished render.
 - The craft scorer (`backend/creative_quality.py`) rewards first person and
   penalizes only diary framing; the story arc ends open, the demo completes
   it, and the cover text is scored with the hook (ADR 0145). Generation
@@ -292,7 +301,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and twenty-seven decisions (0001–0227) now
+Read `docs/adr/README.md` first. Two hundred and thirty decisions (0001–0230) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

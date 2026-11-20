@@ -1331,9 +1331,11 @@ async function main() {
         }
       });
 
-      await check("Review's angle redirect keeps its own label", async (ctx) => {
-        // The honesty rule renames the gate, never a button that leaves the
-        // step: Review's redirect names its destination, not the click's cost.
+      await check("Review's angle gate names the angle in its own words", async (ctx) => {
+        // ADR 0229: Review carries no angle redirect at all — the gate is
+        // a sentence in the panel's own words naming the step that holds
+        // the pick, never a button and never the honesty rule's wording
+        // for the step-1 gate.
         global.__SMOKE_PARAMS = "?project=p1";
         try {
           await withApi(
@@ -1343,14 +1345,14 @@ async function main() {
             async () => {
               await mount(CreateVideo, {})(ctx);
               await openStep(ctx, "Review & submit");
-              const labels = [...ctx.container.querySelectorAll('[data-testid="generate-angles-button"]')]
-                .map((b) => b.textContent || "");
-              if (!labels.some((t) => t.includes("Pick an audience angle first"))) {
-                throw new Error(`the redirect lost its label to the honesty rule: ${JSON.stringify(labels)}`);
+              if (ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+                throw new Error("an angle button still stands on Review");
               }
-              if (labels.some((t) => t.includes("Show your angles"))) {
-                throw new Error("the honesty rule renamed a button that leaves the step");
+              const name = ctx.container.querySelector('[data-testid="first-gap-name"]');
+              if (!name || !(name.textContent || "").includes("Pick an audience angle on the Audience & template step to continue.")) {
+                throw new Error(`the gate does not name the angle in its own words: ${name ? JSON.stringify(name.textContent) : "no naming"}`);
               }
+              expectAbsent(ctx, "Show your angles", "the honesty rule's gate wording leaked onto Review");
             }
           );
         } finally {
@@ -1707,17 +1709,19 @@ async function main() {
         if (segment.getAttribute("data-state") !== "done") {
           throw new Error("a project with a finished render does not read the finishing step as done");
         }
-        // ADR 0218: the floating wizard bar is gone on every step — no
-        // hint line, no Back arrow, no bar at all beside the finished
-        // render. The editor is the step's whole surface.
+        // Kasra's order: with a finished render, the sticky bar on the last
+        // step carries no hint line at all — its buttons stand alone.
         if (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')) {
-          throw new Error("the finishing step still carries the removed bar's hint line");
+          throw new Error("the finishing step's bar still carries a hint line beside a finished render");
         }
+        // ADR 0217: the last step carries no Back arrow, and with no hint,
+        // no bar action and no forward arrow left to carry, the bar itself
+        // stands down instead of floating an empty pill.
         if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
           throw new Error("the finishing step still offers a Back arrow");
         }
         if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
-          throw new Error("the finishing step still floats the removed wizard bar");
+          throw new Error("the finishing step floats an empty action bar beside a finished render");
         }
       }
     );
@@ -1736,24 +1740,35 @@ async function main() {
         if (!section || !section.querySelector('[data-testid="finish-needs-render"]')) {
           throw new Error("the finishing step shows nothing honest before a render exists");
         }
-        if (!section.querySelector('[data-testid="finish-goto-render"]')) {
-          throw new Error("the finishing step offers no way back to the render it is waiting on");
+        // ADR 0229: the section's own panel no longer carries a jump back
+        // to the render — the way there is the sticky bar's action below,
+        // beside the top segments. The panel names the missing render in
+        // its sentence and nothing more.
+        if (section.querySelector('[data-testid="finish-goto-render"]')) {
+          throw new Error("the finishing step still carries its own jump back to the render");
         }
         const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-finish"]');
         if (segment && segment.getAttribute("data-state") === "done") {
           throw new Error("the finishing step reads done with no finished render");
         }
-        // ADR 0218: the bar is gone in this state too — no floating hint
-        // line names the missing render; the section's own panel above
-        // names it and carries the way back to the render.
-        if (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')) {
-          throw new Error("the finishing step still carries the removed bar's hint line");
+        // The no-render hint stays: only the finished-render hint was removed.
+        const hint = (
+          ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || ""
+        ).trim();
+        if (hint !== "Render the piece first — the finished clip opens here.") {
+          throw new Error(`the finishing step's no-render bar hint changed: ${JSON.stringify(hint)}`);
         }
+        // ADR 0217: no Back arrow on the last step here either, but the bar
+        // itself stays — it still carries this hint and the render action.
         if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
           throw new Error("the finishing step still offers a Back arrow");
         }
-        if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
-          throw new Error("the finishing step still floats the removed wizard bar");
+        if (!ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
+          throw new Error("the finishing step lost its action bar before a render exists");
+        }
+        const barAction = ctx.container.querySelector('[data-testid="wizard-bar-action"]');
+        if (!barAction || !(barAction.textContent || "").includes("Go to the render")) {
+          throw new Error("the bar offers no way back to the render the finishing step is waiting on");
         }
       }
     );
@@ -2545,12 +2560,16 @@ async function main() {
     );
     expectText(ctx, "No audience angle picked", "the missing-angle gate did not render");
     expectText(ctx, "Audience & template", "the gate did not name the step that fixes it");
-    // The remedies bar names the fix as a jump — a block with no jump is a
-    // wall, not a guard. It must appear whenever the block is present.
-    if (!ctx.container.querySelector('[data-testid="render-remedies"]')) {
-      throw new Error("the remedies jump did not render for a missing angle");
+    // ADR 0229: the panel names the fix in words and offers no jump of
+    // its own — moving steps is the top segments' and the sticky bar's
+    // job, so no cross-step remedy renders for a missing angle.
+    if (ctx.container.querySelector('[data-testid="render-remedies"]')) {
+      throw new Error("a cross-step remedy still renders for a missing angle");
     }
-    expectText(ctx, "Pick an audience angle first", "the angle remedy label is missing");
+    const jump = [...ctx.container.querySelectorAll("button")].find((b) =>
+      (b.textContent || "").includes("Pick an audience angle first")
+    );
+    if (jump) throw new Error("a button still offers to jump to the angle pick");
     const generate = [...ctx.container.querySelectorAll("button")]
       .find((b) => (b.textContent || "").includes("Generate the video"));
     if (!generate) throw new Error("no Generate button to gate");
@@ -2681,14 +2700,16 @@ async function main() {
 
   await check("GenerationPanel invites the render only when nothing holds it back", async (ctx) => {
     // The ready-state invitation (ADR 0144): strategy current, plan saved,
-    // models loaded — the panel's Generate wears the invitation. ADR 0218:
-    // the panel registers nothing with the page — its button is the only
-    // Generate anywhere, and its click runs this panel's own render with
-    // the model and resolution chosen here. A panel that still owes
-    // something invites nothing and renders no Generate at all.
+    // models loaded — the panel's Generate wears the invitation, and the
+    // panel registers the SAME action for the wizard bar (same words,
+    // play icon, same invitation), whose click runs this panel's own
+    // generate with the model and resolution chosen here. A panel that
+    // still owes something registers nothing and invites nothing.
+    const seen = [];
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
       mount(GenerationPanel, {
         project: PROJECT_WITH_STRATEGY,
+        onRenderActionChange: (action) => seen.push(action),
       })(ctx)
     );
     const button = ctx.container.querySelector('[data-testid="render-generate-button"]');
@@ -2711,16 +2732,44 @@ async function main() {
     if (!title) {
       throw new Error("the render section is not titled 'Generate your video'");
     }
+    const action = seen.filter(Boolean).pop();
+    if (!action) throw new Error("the ready panel registered no bar action");
+    if (action.label !== "Generate the video" || action.icon !== "play" || action.invite !== true) {
+      throw new Error(
+        `the registered action does not mirror the panel's Generate: ${JSON.stringify({ label: action.label, icon: action.icon, invite: action.invite })}`
+      );
+    }
     apiCalls.length = 0;
-    await clickEl(ctx, button, "the panel's Generate the video");
+    await act(async () => { action.onClick(); });
+    if (!apiCalls.includes("generateVideo")) {
+      throw new Error("the registered action did not run the panel's render");
+    }
+    // The panel's own button runs the same render — asserted on a fresh
+    // instance (a new key: re-rendering into this root would reconcile
+    // and keep the state), because the click above leaves a created
+    // generation behind and a second Generate on that instance is a
+    // re-roll, which asks first in the branded dialog (ADR 0212)
+    // instead of spending.
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY, key: "panel-own-button" })(ctx)
+    );
+    const ownButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
+    if (!ownButton) throw new Error("the fresh ready panel renders no Generate button");
+    apiCalls.length = 0;
+    await clickEl(ctx, ownButton, "the panel's Generate the video");
     if (!apiCalls.includes("generateVideo")) {
       throw new Error("the panel's Generate did not run the render");
     }
+    const owedSeen = [];
     await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
       mount(GenerationPanel, {
         project: { ...PROJECT_WITH_STRATEGY, strategy: {} },
+        onRenderActionChange: (action) => owedSeen.push(action),
       })(ctx)
     );
+    if (owedSeen.some((a) => a && a.invite)) {
+      throw new Error("a panel that still owes a strategy registers an inviting bar action");
+    }
     if (ctx.container.querySelector(".generate-invite")) {
       throw new Error("a panel that still owes a strategy invites the render");
     }
@@ -4135,14 +4184,20 @@ async function main() {
     }
   });
 
-  await check("no rebuild is offered for a current strategy", async (ctx) => {
-    // The owed rule (ADR 0142), in-section since ADR 0218: the panel's
-    // build button exists only while a rebuild is the step's unblocker.
-    // A current strategy offers no rebuild control anywhere — there is
-    // no bar left to carry one either.
+  await check("the wizard bar carries the rebuild only while one is owed", async (ctx) => {
+    // The sticky bar's per-state map (ADR 0133) under the owed rule (ADR
+    // 0142): the panel registers its rebuild with the page only while the
+    // rebuild is the step's unblocker. A current strategy registers
+    // nothing, so the bar keeps its way forward — and the panel itself
+    // offers no rebuild control either.
+    const seen = [];
     await mount(HookContinuityPanel, {
       project: PROJECT_WITH_STRATEGY,
+      onActionChange: (action) => seen.push(action),
     })(ctx);
+    if (seen.some((a) => a && a.label === "Rebuild strategy")) {
+      throw new Error("the bar carries a rebuild for a current strategy");
+    }
     if (ctx.container.querySelector('[data-testid="strategy-build-button"]')) {
       throw new Error("a rebuild button renders for a current strategy");
     }
@@ -4152,12 +4207,15 @@ async function main() {
     if (stray) throw new Error("a rebuild control renders for a current strategy");
   });
 
-  await check("the strategy panel carries the rebuild while the direction has drifted", async (ctx) => {
-    // ADR 0218: the rebuild stands on the panel's own button — the same
-    // control the removed bar used to mirror.
+  await check("the wizard bar carries the rebuild while the direction has drifted", async (ctx) => {
+    const seen = [];
     await mount(HookContinuityPanel, {
       project: PROJECT_WITH_DIRECTION_DRIFT,
+      onActionChange: (action) => seen.push(action),
     })(ctx);
+    if (!seen.some((a) => a && a.label === "Rebuild strategy")) {
+      throw new Error("the bar does not carry the rebuild while one is owed");
+    }
     const build = ctx.container.querySelector('[data-testid="strategy-build-button"]');
     if (!build) throw new Error("the panel offers no rebuild while one is owed");
     if (!(build.textContent || "").includes("Rebuild strategy")) {
@@ -4479,52 +4537,57 @@ async function main() {
     });
   }
 
-  // ADR 0218: the floating wizard bar is removed on every step — the rail
-  // segments are the wizard's one navigation, and they walk the steps in
-  // either direction. Nothing floats at the bottom of the scroll: no bar,
-  // no Back or Continue arrows, no bar action, no hint line, on any step.
-  await check("the wizard has no floating bar, and its rail segments walk the steps", async (ctx) => {
+  // Sequential arrows beside free-jump pills: Continue walks one phase
+  // forward and Back walks one back, and neither is offered where it cannot
+  // go. Skipping phases stays the pills' job alone. The arrows are arrow-only
+  // (no Back/Continue words), centred, and sticky to the bottom of the scroll
+  // so they are always within reach on a long step.
+  await check("wizard arrows walk the steps in order", async (ctx) => {
     // ?step=profile pins the wizard on step 1: without it the profile load
     // auto-advances to the angle step (CreateVideo selectProfile path).
     global.__SMOKE_PARAMS = "?step=profile";
     await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    const barParts = () =>
-      ["wizard-arrows", "wizard-back-button", "wizard-continue-button", "wizard-bar-action", "wizard-footer-hint"]
-        .filter((id) => ctx.container.querySelector(`[data-testid="${id}"]`));
-    if (barParts().length) {
-      throw new Error(`the first step still renders the removed wizard bar: ${barParts().join(", ")}`);
+    const back = () => ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const next = () => ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (!back() || back().disabled !== true) throw new Error("Back is not disabled on the first step");
+    if (!next()) throw new Error("Continue is missing on the first step");
+    // Profile auto-loads on mount, so Continue starts unlocked on step 1.
+    if (next().disabled) throw new Error("Continue is locked after profile load");
+    if (next().getAttribute("aria-label") !== "Continue to Audience & template") {
+      throw new Error(`Continue does not name its destination: ${next().getAttribute("aria-label")}`);
     }
-    // The rail carries all four segments from the first step.
-    for (const key of ["profile", "angle", "review", "finish"]) {
-      if (!ctx.container.querySelector(`[data-testid="studio-progress-segment-${key}"]`)) {
-        throw new Error(`the progress rail lost its ${key} segment`);
-      }
+    if (back().textContent.trim() || next().textContent.trim()) {
+      throw new Error("the wizard arrows carry words — they are arrow-only");
     }
-    await clickEl(
-      ctx,
-      ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
-      "the Audience segment"
-    );
+    const arrows = ctx.container.querySelector('[data-testid="wizard-arrows"]');
+    if (!arrows || !/sticky/.test(arrows.className) || !/bottom-/.test(arrows.className)) {
+      throw new Error("the wizard arrows are not sticky to the bottom of the scroll");
+    }
+    if (!/justify-center/.test(arrows.className)) {
+      throw new Error("the wizard arrows are not centred as one cluster");
+    }
+    await clickEl(ctx, next(), "Continue to the angle step");
     if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
-      throw new Error("the Audience segment did not move to the Audience & template step");
+      throw new Error("Continue did not move to the Audience & template step");
     }
-    if (barParts().length) {
-      throw new Error(`the angle step still renders the removed wizard bar: ${barParts().join(", ")}`);
-    }
-    await clickEl(
-      ctx,
-      ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]'),
-      "the App Profile segment"
-    );
+    if (back().disabled !== false) throw new Error("Back is still disabled after moving forward");
+    await clickEl(ctx, back(), "Back to the profile step");
     if (ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
-      throw new Error("the App Profile segment did not return to the profile step");
+      throw new Error("Back did not return to the profile step");
     }
-    // The last step too: reached by its segment, and no bar waits there.
+    // Last step: there is nowhere to continue to. Review used to be that
+    // step; the finishing step is now, so Review offers the Continue that
+    // walks into it and Demo + CTA offers none.
     await openStep(ctx, "Demo + CTA");
-    if (barParts().length) {
-      throw new Error(`the last step still renders the removed wizard bar: ${barParts().join(", ")}`);
+    if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+      throw new Error("Continue is offered on the last step");
+    }
+    // Kasra's rule (ADR 0217): the last step offers no way back either —
+    // the Back arrow is the earlier steps' control alone.
+    if (back()) {
+      throw new Error("Back is offered on the last step");
     }
   });
 
@@ -4628,17 +4691,9 @@ async function main() {
       if (standing().length !== 1 || standing()[0] !== "review") {
         throw new Error("paging to Review did not swap the page");
       }
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
-        "the Audience segment"
-      );
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="wizard-back-button"]'), "Back to the angle step");
       if (standing().length !== 1 || standing()[0] !== "angle") {
-        throw new Error("the Audience segment did not return to the Audience page");
-      }
-      // ADR 0218: no floating wizard bar rides the paged layout either.
-      if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
-        throw new Error("the paged wizard still floats the removed wizard bar");
+        throw new Error("the Back arrow did not return to the Audience page");
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
@@ -4796,68 +4851,94 @@ async function main() {
     // Walking back to a done step holds its quarter whole: 1 of 4 = 25%.
     await clickEl(
       ctx,
-      ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]'),
-      "the App Profile segment"
+      ctx.container.querySelector('[data-testid="wizard-back-button"]'),
+      "Back to the profile step"
     );
     if (pct() !== "25%") throw new Error(`the rail ignores the completed step: ${JSON.stringify(pct())}`);
     await clickEl(
       ctx,
-      ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
-      "the Audience segment"
+      ctx.container.querySelector('[data-testid="wizard-continue-button"]'),
+      "Continue to the angle step"
     );
     if (pct() !== "38%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
   });
 
-  // ADR 0218: no floating bar names the next action any more — the step
-  // states its task once, under the title, and each section carries its
-  // own controls. The old "Continue when ready" promise stays gone too.
-  await check("no floating bar names the next action on the angle step", async (ctx) => {
+  // The action bar names the one next action beside the arrow-only pair, so a
+  // founder never has to guess what the wizard is waiting on. The line never
+  // repeats the task line above and never carries the old "Continue when
+  // ready" promise the task line replaced.
+  await check("the action bar names the next action beside its arrows", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    // Profile load auto-advances to the angle step.
-    if (!ctx.container.querySelector('[data-testid="audience-goal-step"]')) {
-      throw new Error("the profile load did not land on the angle step");
-    }
-    for (const id of ["wizard-arrows", "wizard-footer-hint", "wizard-back-button", "wizard-continue-button", "wizard-bar-action"]) {
-      if (ctx.container.querySelector(`[data-testid="${id}"]`)) {
-        throw new Error(`the angle step still renders the removed wizard bar's ${id}`);
-      }
+    const bar = ctx.container.querySelector('[data-testid="wizard-arrows"]');
+    const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
+    if (!bar || !hint || !bar.contains(hint)) {
+      throw new Error("the action bar carries no next-action line");
     }
     if (/continue when ready/i.test(ctx.text())) {
-      throw new Error("the page brings back the old Continue promise");
+      throw new Error("the bar brings back the old Continue promise");
     }
-    // The one guidance line that stands is the task line under the title.
-    const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
-    if (!task || !task.textContent.includes("Step 2 of 4")) {
-      throw new Error("the angle step lost its task line under the title");
+    const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (back.textContent.trim() || next.textContent.trim()) {
+      throw new Error("the action bar arrows carry words");
+    }
+    // Profile load auto-advances to the angle step, so the bar names the angle gate.
+    const angleHint = (
+      ctx.container.querySelector('[data-testid="wizard-footer-hint"]').textContent || ""
+    ).trim();
+    if (/ranks the next/.test(angleHint)) {
+      throw new Error("the action bar repeats the task line");
+    }
+    if (!/click/i.test(angleHint)) {
+      throw new Error("the angle step's bar does not name its gate");
     }
   });
 
-  // ADR 0218: a ready review's Generate lives only in its panel — no bar
-  // mirrors it, no shortcut duplicates the tabs. The halves switch by
-  // their own tabs, and the panel's button is the only one that submits.
-  await check("a ready review carries Generate only in its panel, and its tabs switch the halves", async (ctx) => {
+  // The bar must name only the real blocker. A ready review (plan, photo,
+  // no edits) used to fall through to the blocked copy and ask for a save and
+  // a photo that were already done.
+  await check("the ready review names no blocker and the bar offers Generate's face only on the render half, its click only a scroll", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       // No finished render exists for this project, so the ready state
-      // is the panel's alone. A finished row's state has its own check
-      // ("a finished review goes onward by its rail segment, the panel
-      // keeping its Generate").
+      // is the bar's to fill (ADR 0147). A finished row would retire
+      // Generate from the bar to the forward arrow alone — that state
+      // has its own check ("the bar leaves a finished review to the
+      // forward arrow alone").
       await withApi({ getGenerations: async () => ({ generations: [] }) }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-        // A fresh plan lands on the plan half first.
+        const hint = () =>
+          (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+        if (/attach a photo|save your edits/i.test(hint())) {
+          throw new Error(`the ready review still names a blocker: ${JSON.stringify(hint())}`);
+        }
+        if (!/ready/i.test(hint())) throw new Error("the ready review bar does not say it is ready");
+        // A fresh plan lands on the plan half first, and Kasra's tab rule
+        // (ADR 0147) scopes the bar's Generate to the render half: on the
+        // plan half the bar is the navigation-only shortcut — the pre-0144
+        // way forward, no play icon, no invitation — and the round forward
+        // arrow stays hidden until a finished render exists.
         const planTab = ctx.container.querySelector('[data-testid="review-tab-plan"]');
         if (!planTab || planTab.getAttribute("aria-selected") !== "true") {
           throw new Error("the ready review did not land on the plan half");
         }
-        // No bar face of any kind on the plan half.
-        for (const id of ["wizard-arrows", "wizard-generate-video", "wizard-goto-render", "wizard-continue-button"]) {
-          if (ctx.container.querySelector(`[data-testid="${id}"]`)) {
-            throw new Error(`the plan half still renders the removed wizard bar's ${id}`);
-          }
+        if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+          throw new Error("the bar offers Generate on the plan half");
+        }
+        const shortcut = ctx.container.querySelector('[data-testid="wizard-goto-render"]');
+        if (!shortcut) throw new Error("the ready review offers no way to the render half from the bar");
+        if ((shortcut.textContent || "").trim() !== "Go to render") {
+          throw new Error(`the plan half's bar action is not the render shortcut: ${shortcut.textContent}`);
+        }
+        if (shortcut.classList.contains("generate-invite") || (shortcut.innerHTML || "").includes("lucide-play")) {
+          throw new Error("the render shortcut wears Generate's invitation");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+          throw new Error("the forward arrow shows on a ready review before any render exists");
         }
         // The render section stands as its own card, detached from the
         // strategy panel above it by the normal section gap (ADR 0144).
@@ -4865,31 +4946,53 @@ async function main() {
         if (!submit || !submit.classList.contains("mt-4")) {
           throw new Error("the render section has no section gap above it");
         }
-        // The render half is reached by its own tab, and switching halves
-        // submits nothing (ADR 0122).
+        // The shortcut only navigates (ADR 0122): it switches the half in
+        // view and submits nothing.
         apiCalls.length = 0;
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="review-tab-render"]'), "the Render & result tab");
+        await clickEl(ctx, shortcut, "the bar's Go to render");
         if (apiCalls.includes("generateVideo")) {
-          throw new Error("switching to the render half submitted a render");
+          throw new Error("the bar's shortcut submitted a render");
         }
         const renderTab = ctx.container.querySelector('[data-testid="review-tab-render"]');
         if (!renderTab || renderTab.getAttribute("aria-selected") !== "true") {
-          throw new Error("the tab did not bring the render half into view");
+          throw new Error("the bar's shortcut did not bring the render half into view");
         }
-        // On the render half there is still no bar: the panel's own
-        // Generate stands alone, wearing its invitation (ADR 0144), and
-        // it is the only button that submits (ADR 0169's rule, now
-        // structural — there is no second face left to confuse it with).
-        for (const id of ["wizard-arrows", "wizard-generate-video", "wizard-goto-render", "wizard-continue-button"]) {
-          if (ctx.container.querySelector(`[data-testid="${id}"]`)) {
-            throw new Error(`the render half still renders the removed wizard bar's ${id}`);
-          }
+        // On the render half the bar wears Generate's face (ADR 0169,
+        // reversing 0144/0147): the panel's own words and invitation —
+        // and still no forward arrow beside it. But the face is all it
+        // carries: its click is navigation, a scroll to the panel, and
+        // the panel's own button is the only one that submits.
+        if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+          throw new Error("the navigation-only render shortcut survives on the render half");
         }
-        const panelGo = ctx.container.querySelector('[data-testid="render-generate-button"]');
-        if (!panelGo) throw new Error("the render half lost the panel's own Generate");
-        if (!panelGo.classList.contains("generate-invite")) {
+        const go = ctx.container.querySelector('[data-testid="wizard-generate-video"]');
+        if (!go) throw new Error("the render half offers no Generate from the bar");
+        const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
+        if (!panelButton || (go.textContent || "").trim() !== (panelButton.textContent || "").trim()) {
+          throw new Error(`the bar's action does not carry the panel's own Generate words: ${go.textContent} vs ${panelButton?.textContent}`);
+        }
+        if (!go.classList.contains("generate-invite")) {
+          throw new Error("the bar's Generate carries no invitation");
+        }
+        if (!panelButton || !panelButton.classList.contains("generate-invite")) {
           throw new Error("the panel's Generate carries no invitation");
         }
+        if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+          throw new Error("the forward arrow shows beside the bar's Generate");
+        }
+        apiCalls.length = 0;
+        await clickEl(ctx, go, "the bar's Generate the video");
+        if (apiCalls.includes("generateVideo")) {
+          throw new Error("the bar's Generate submitted a render");
+        }
+        const renderTabAfter = ctx.container.querySelector('[data-testid="review-tab-render"]');
+        if (!renderTabAfter || renderTabAfter.getAttribute("aria-selected") !== "true") {
+          throw new Error("the bar's Generate did not leave the render half in view");
+        }
+        // The panel's own Generate is the only button that submits
+        // (ADR 0169): the same click there runs the render.
+        const panelGo = ctx.container.querySelector('[data-testid="render-generate-button"]');
+        if (!panelGo) throw new Error("the render half lost the panel's own Generate");
         apiCalls.length = 0;
         await clickEl(ctx, panelGo, "the panel's Generate the video");
         if (!apiCalls.includes("generateVideo")) {
@@ -4902,7 +5005,7 @@ async function main() {
     }
   });
 
-  await check("a render in flight is narrated by its panel, and no bar offers anything", async (ctx) => {
+  await check("the bar narrates a render in flight and offers neither Generate nor the arrow", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       const generating = { ...SEGMENT, id: "gen-flight", status: "generating", playback_url: null, r2_url: null, video_url: null };
@@ -4916,24 +5019,28 @@ async function main() {
           await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
-          // ADR 0218: no bar narrates the flight — the removed bar's
-          // Generate, shortcut, arrow and progress are all gone.
-          for (const id of ["wizard-arrows", "wizard-generate-video", "wizard-goto-render", "wizard-continue-button", "wizard-render-progress"]) {
-            if (ctx.container.querySelector(`[data-testid="${id}"]`)) {
-              throw new Error(`a render in flight still renders the removed wizard bar's ${id}`);
-            }
+          // The render is already running, so Kasra's flight rule (ADR
+          // 0147) retires the CTA from the bar entirely — no Generate,
+          // no shortcut, no forward arrow — and the bar carries the
+          // panel's busy presentation instead: disabled, busy, the
+          // panel's own words for the wait, never Generate's invitation.
+          if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+            throw new Error("the bar offers Generate while a render is in flight");
           }
-          // The panel itself narrates the wait: its Generate stands
-          // disabled and busy with the flight's own words, and the
-          // progress block stands in the section.
-          const panelButton = ctx.container.querySelector('[data-testid="render-generate-button"]');
-          if (!panelButton) throw new Error("the panel lost its Generate during the flight");
-          if (!panelButton.disabled) throw new Error("the panel's Generate is not disabled during the flight");
-          if ((panelButton.textContent || "").trim() !== "Generating video") {
-            throw new Error(`the panel's flight words changed: ${panelButton.textContent}`);
+          if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+            throw new Error("the bar offers the render shortcut while a render is in flight");
           }
-          if (!ctx.container.querySelector('[data-testid="paid-render-progress"]')) {
-            throw new Error("the panel carries no render progress during the flight");
+          if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
+            throw new Error("the forward arrow shows while a render is in flight");
+          }
+          const progress = ctx.container.querySelector('[data-testid="wizard-render-progress"]');
+          if (!progress) throw new Error("the bar carries no render progress during the flight");
+          if (!progress.disabled) throw new Error("the bar's render progress is not disabled");
+          if ((progress.textContent || "").trim() !== "Generating video") {
+            throw new Error(`the bar's flight presentation is not the panel's busy words: ${progress.textContent}`);
+          }
+          if (progress.classList.contains("generate-invite") || (progress.innerHTML || "").includes("lucide-play")) {
+            throw new Error("the bar's flight presentation wears Generate's invitation");
           }
         }
       );
@@ -4943,9 +5050,8 @@ async function main() {
     }
   });
 
-  // A review missing only the photo says exactly that, in its own
-  // section — never a save it does not owe — and no bar shortcut offers
-  // the render half around the gap (ADR 0218).
+  // A review missing only the photo says exactly that — never a save it does
+  // not owe — and a blocked review never offers the render shortcut.
   await check("a review missing only the photo names only the photo", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
@@ -4954,40 +5060,45 @@ async function main() {
         () => mount(CreateVideo, {})(ctx)
       );
       await openStep(ctx, "Review & submit");
-      if (!ctx.text().includes("needs a character reference")) {
-        throw new Error("the photo-only blocker is not named in the section");
+      const hint = (
+        ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || ""
+      ).trim();
+      if (!/attach a photo/i.test(hint)) {
+        throw new Error(`the photo-only blocker is not named: ${JSON.stringify(hint)}`);
+      }
+      if (/save your edits/i.test(hint)) {
+        throw new Error("the photo-only blocker asks for a save it does not owe");
       }
       if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
         throw new Error("a blocked review offers the render shortcut anyway");
-      }
-      if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
-        throw new Error("a blocked review still floats the removed wizard bar");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
     }
   });
 
-  // ADR 0218: no bar hint follows the angle step's substeps — the step's
-  // own sections carry each phase, and no floating bar appears as the
-  // founder advances through them. The picks here are the founder's own
-  // clicks: the revealed list's strongest row, then its goal.
-  await check("no floating bar appears as the angle step's substeps advance", async (ctx) => {
+  // The angle hint follows the substep the founder is on, not a standing
+  // sentence: the angle first, then the goal the moment a pick exists, then
+  // the template. The pick here is the founder's own click on the revealed
+  // list's strongest row.
+  await check("the angle hint follows the substep the founder is on", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Audience & template");
-    const barParts = () =>
-      ["wizard-arrows", "wizard-footer-hint", "wizard-bar-action", "wizard-continue-button"]
-        .filter((id) => ctx.container.querySelector(`[data-testid="${id}"]`));
-    if (barParts().length) {
-      throw new Error(`the angle step opens with the removed wizard bar: ${barParts().join(", ")}`);
+    const hint = () =>
+      (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+    if (!/pick an angle/i.test(hint())) {
+      throw new Error(`the bar does not name the angle first: ${JSON.stringify(hint())}`);
     }
     await passAngleGate(ctx);
     // The list renders on open now (Part 3): the founder picks the
     // strongest row directly — nothing parks a pick on view any more.
     await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "the strongest angle");
-    if (barParts().length) {
-      throw new Error(`picking an angle brought back the removed wizard bar: ${barParts().join(", ")}`);
+    if (/pick an angle/i.test(hint())) {
+      throw new Error("the bar still asks for an angle after one is picked");
+    }
+    if (!/goal/i.test(hint())) {
+      throw new Error(`the bar does not move to the goal phase: ${JSON.stringify(hint())}`);
     }
     await passGoalGate(ctx);
     await clickEl(
@@ -4995,33 +5106,29 @@ async function main() {
       ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'),
       "the goal"
     );
-    if (barParts().length) {
-      throw new Error(`picking a goal brought back the removed wizard bar: ${barParts().join(", ")}`);
+    if (/pick a goal/i.test(hint())) {
+      throw new Error("the bar still asks for a goal after one is picked");
     }
-    // The tailoring action stands in the section itself.
-    const tailor = ctx.container.querySelector('[data-testid="templates-generate"]');
-    if (!tailor || !(tailor.textContent || "").includes("Generate tailored templates")) {
-      throw new Error("the angle step's own tailoring button is missing after the goal pick");
+    if (!/template/i.test(hint())) {
+      throw new Error(`the bar does not move to the template phase: ${JSON.stringify(hint())}`);
     }
   });
 
-  // An unfinished step locks the way forward on its rail segment —
-  // padlocked and named — and no Continue arrow exists anywhere (ADR 0218).
-  await check("an unfinished step locks its rail segment and offers no Continue arrow", async (ctx) => {
+  // Unfinished steps lock Continue: disabled with a padlock and dashed
+  // border, instead of reading like a finished step's primary that can walk
+  // ahead to an empty next step.
+  await check("the action bar locks Continue on an unfinished step", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
-    if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
-      throw new Error("a Continue arrow exists on an unfinished step");
+    const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+    if (!next || !next.disabled) throw new Error("Continue is not locked on an unfinished step");
+    if (!/border-dashed/.test(next.className)) {
+      throw new Error("the unfinished step's Continue carries no unfinished cue");
     }
-    const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
-    if (!segment) throw new Error("the rail lost its Audience segment");
-    if (segment.getAttribute("data-locked") !== "true" || segment.getAttribute("data-state") !== "locked") {
-      throw new Error("the unfinished step's next segment does not read locked");
-    }
-    if (!/locked/i.test(segment.getAttribute("aria-label") || "")) {
-      throw new Error("the locked segment does not name its seal");
+    if (!/locked/i.test(next.getAttribute("aria-label") || "")) {
+      throw new Error("the locked Continue does not name its seal");
     }
   });
 
@@ -5029,9 +5136,10 @@ async function main() {
   // names what finishes the screen; the footer used to say the same thing
   // again between the arrows, so step two read "pick the angle, goal,
   // template, then add your photo" above "Angle, goal, template and photo —
-  // each one ranks the next". ADR 0218 removes the footer bar entirely, so
-  // the task line is the step's only standing sentence.
-  await check("the wizard states the step once under the title and carries no footer bar", async (ctx) => {
+  // each one ranks the next". The arrows are one centred cluster now: pinned
+  // to opposite edges with a sentence between them, the pair read as two
+  // unrelated controls.
+  await check("the wizard states the step once under the title and centres its arrows", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [PROFILE] }) }, () =>
       mount(CreateVideo, {})(ctx)
@@ -5064,25 +5172,28 @@ async function main() {
       throw new Error("the task line is not between the title and the progress pills");
     }
     if (ctx.text().includes("Continue when ready")) {
-      throw new Error("the page still leads with the Continue promise instead of the title");
+      throw new Error("the footer still leads with the Continue promise instead of the title");
     }
-    // ADR 0218: there is no footer to repeat the line — the floating bar,
-    // its hint and its arrows are gone from the step entirely.
-    if (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')) {
-      throw new Error("the removed bar's hint line still stands under the step");
+    const hint = ctx.container.querySelector('[data-testid="wizard-footer-hint"]');
+    if (hint && hint.textContent.includes("ranks the next")) {
+      throw new Error("the footer repeats the task line the founder just read");
     }
-    if (ctx.container.querySelector('[data-testid="wizard-arrows"]')) {
-      throw new Error("the removed wizard bar still floats under the step");
+    const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+    const row = back && back.parentElement;
+    if (!row) throw new Error("the wizard arrows are gone");
+    if (!/justify-center/.test(row.className)) {
+      throw new Error("the wizard arrows are pinned to the edges again, not one cluster");
     }
-    if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
-      throw new Error("the removed bar's Back arrow still stands under the step");
+    if (back.textContent.trim()) {
+      throw new Error("the Back arrow carries words — it is arrow-only");
     }
   });
 
-  // The wizard's way back is its rail: a segment walks back exactly like
-  // it walks forward (ADR 0218). No separate exit and no worded back
-  // control stands anywhere — leaving the studio is the sidebar's job.
-  await check("review's way back is its rail segment, never a separate exit", async (ctx) => {
+  // The wizard keeps one way back on every step but the last (ADR 0217):
+  // the arrow in the action bar. The last-step "Back to your app" exit is
+  // gone, so leaving the studio is the sidebar's job and no second, worded
+  // back control can stack under the bar.
+  await check("review's way back is the wizard arrow, never a separate exit", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -5098,16 +5209,13 @@ async function main() {
       if (words.length !== 0) {
         throw new Error(`Review shows a worded back control again: ${words.length}`);
       }
-      if (ctx.container.querySelector('[data-testid="wizard-back-button"]')) {
-        throw new Error("Review still offers the removed bar's Back arrow");
+      const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+      if (!back || back.disabled) {
+        throw new Error("Review has no working Back arrow");
       }
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
-        "the Audience segment"
-      );
+      await clickEl(ctx, back, "Back to the angle step");
       if (!ctx.container.querySelector('[data-testid="wizard-section-angle"][data-active="true"]')) {
-        throw new Error("the Audience segment did not return to the angle step");
+        throw new Error("the Back arrow did not return to the angle step");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -5666,10 +5774,11 @@ async function main() {
     }
   });
 
-  // The strategy panel carries its own unblocking action (ADR 0218):
-  // while no strategy exists, the panel's button is the build — no bar
-  // mirrors it, and no forward arrow exists to show beside it.
-  await check("the strategy panel carries Build the strategy while no strategy exists", async (ctx) => {
+  // The sticky bar carries the one unblocking action (ADR 0133): while a
+  // step is blocked, the bar's primary slot is that action's real button
+  // and no forward arrow shows beside it; when the step can proceed
+  // as-is, the bar offers the way forward instead.
+  await check("the bar carries Build the strategy while no strategy exists", async (ctx) => {
     apiCalls.length = 0;
     try {
       global.__SMOKE_PARAMS = "?project=p1";
@@ -5682,25 +5791,22 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
-            throw new Error("a bar still mirrors the strategy build");
+          const bar = ctx.container.querySelector('[data-testid="wizard-bar-action"]');
+          if (!bar) throw new Error("the bar offers no action while the strategy is missing");
+          if (!(bar.textContent || "").includes("Build the strategy")) {
+            throw new Error(`the bar's action is not the strategy build: ${bar.textContent}`);
           }
           if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
-            throw new Error("a forward arrow exists beside the unblocking action");
-          }
-          const build = ctx.container.querySelector('[data-testid="strategy-build-button"]');
-          if (!build) throw new Error("the strategy panel offers no build while the strategy is missing");
-          if (!(build.textContent || "").includes("Build the strategy")) {
-            throw new Error(`the panel's action is not the strategy build: ${build.textContent}`);
+            throw new Error("a forward arrow shows beside the bar's unblocking action");
           }
           await act(async () => {
-            build.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+            bar.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
           });
           await act(async () => {});
         }
       );
       if (!apiCalls.includes("generateStrategy")) {
-        throw new Error("the panel's Build button did not run the build");
+        throw new Error("the bar's Build button did not run the build");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -5708,7 +5814,7 @@ async function main() {
     }
   });
 
-  await check("the plan panel carries Generate your plan while no plan exists", async (ctx) => {
+  await check("the bar carries Generate your plan while no plan exists", async (ctx) => {
     try {
       global.__SMOKE_PARAMS = "?project=p1";
       await withApi(
@@ -5716,16 +5822,13 @@ async function main() {
         async () => {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
-          if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
-            throw new Error("a bar still mirrors the plan generation");
+          const bar = ctx.container.querySelector('[data-testid="wizard-bar-action"]');
+          if (!bar) throw new Error("the bar offers no action while the plan is missing");
+          if (!(bar.textContent || "").includes("Generate your plan")) {
+            throw new Error(`the bar's action is not the plan generation: ${bar.textContent}`);
           }
           if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
-            throw new Error("a forward arrow exists beside the unblocking action");
-          }
-          const generate = ctx.container.querySelector('[data-testid="plan-generate-button"]');
-          if (!generate) throw new Error("the plan panel offers no generation while the plan is missing");
-          if (!(generate.textContent || "").includes("Generate your plan")) {
-            throw new Error(`the panel's action is not the plan generation: ${generate.textContent}`);
+            throw new Error("a forward arrow shows beside the bar's unblocking action");
           }
         }
       );
@@ -5735,7 +5838,7 @@ async function main() {
     }
   });
 
-  await check("a finished review goes onward by its rail segment, the panel keeping its Generate", async (ctx) => {
+  await check("the bar leaves a finished review to the forward arrow alone", async (ctx) => {
     try {
       global.__SMOKE_PARAMS = "?project=p1";
       await withApi(
@@ -5753,30 +5856,27 @@ async function main() {
           await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
+          if (ctx.container.querySelector('[data-testid="wizard-bar-action"]')) {
+            throw new Error("the bar carries an action for a step that can proceed as-is");
+          }
           // The default generations fixture carries this project's
           // finished render (SEGMENT, completed), so this review is in
-          // the finished state. ADR 0218: no bar remains to carry or
-          // retire anything — no bar action, no Generate face, no
-          // shortcut, no forward arrow.
-          for (const id of ["wizard-arrows", "wizard-bar-action", "wizard-generate-video", "wizard-goto-render", "wizard-continue-button"]) {
-            if (ctx.container.querySelector(`[data-testid="${id}"]`)) {
-              throw new Error(`a finished review still renders the removed wizard bar's ${id}`);
-            }
+          // Kasra's finished state (ADR 0147): Generate retires from
+          // the bar — the panel keeps its own re-roll — the shortcut
+          // goes with it, and the round forward arrow is the bar's only
+          // way onward, to Demo + CTA.
+          if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+            throw new Error("the bar still offers Generate beside a finished render");
           }
-          // The panel keeps its own Generate for a founder who wants
-          // another render.
-          const panelGenerate = ctx.container.querySelector('[data-testid="render-generate-button"]');
-          if (!panelGenerate) {
-            throw new Error("a finished review lost the panel's own Generate");
+          if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+            throw new Error("the navigation-only render shortcut survives beside the forward arrow");
           }
-          // The way onward is the finishing segment of the rail.
-          await clickEl(
-            ctx,
-            ctx.container.querySelector('[data-testid="studio-progress-segment-finish"]'),
-            "the Demo + CTA segment"
-          );
-          if (!ctx.container.querySelector('[data-testid="wizard-section-finish"][data-active="true"]')) {
-            throw new Error("the Demo + CTA segment did not open the finishing step");
+          const next = ctx.container.querySelector('[data-testid="wizard-continue-button"]');
+          if (!next) {
+            throw new Error("a finished review lost its forward arrow");
+          }
+          if (next.disabled) {
+            throw new Error("the finished review's forward arrow is locked");
           }
         }
       );
@@ -6848,10 +6948,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Review & submit never generates angles: its red button names Audience & template
-  // and jumps there, so no call goes out from a screen whose job is the render.
-  // The render section's own angle CTA is covered by the same-control check below.
-  await check("Review & submit redirects angle-less founders instead of generating", async (ctx) => {
+  // Review & submit never generates angles, and since ADR 0229 it no
+  // longer jumps either: its still-missing panel names the angle in
+  // words, and the founder walks back by the rail segment — no call
+  // goes out from a screen whose job is the render.
+  await check("Review & submit names the missing angle instead of generating or jumping", async (ctx) => {
     const FRESH = { ...PROFILE, id: "b9", brand_name: "Freshly" };
     await withApi({
       getAppProfiles: async () => ({ profiles: [FRESH] }),
@@ -6861,27 +6962,33 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Review & submit");
       if (ctx.container.querySelector('[data-testid="create-draft-button"]')) throw new Error("a draft action that cannot run competes with the missing-input action");
-      const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
-      if (!btn) throw new Error("no angle CTA on Review & submit with no angle picked");
-      if (!/Pick an audience angle/.test(btn.textContent || "")) {
-        throw new Error(`the CTA does not name its destination: ${JSON.stringify(btn.textContent)}`);
+      if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+        throw new Error("Review & submit still carries a first-gap jump button");
+      }
+      const name = ctx.container.querySelector('[data-testid="first-gap-name"]');
+      if (!name) throw new Error("no gap named on Review & submit with no angle picked");
+      if (!/Pick an audience angle first/.test(name.textContent || "")) {
+        throw new Error(`the panel does not name the missing angle: ${JSON.stringify(name.textContent)}`);
+      }
+      if (name.tagName === "BUTTON") {
+        throw new Error("the named gap is a button again, not a sentence");
       }
       if (ctx.container.querySelector('[data-testid^="angle-option-"]')) {
-        throw new Error("an angle list rendered on Review instead of only its redirect");
+        throw new Error("an angle list rendered on Review instead of only its naming");
       }
       apiCalls.length = 0;
-      await clickEl(ctx, btn);
+      await openStep(ctx, "Audience & template");
       if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
-        throw new Error("Review & submit spent an angle call instead of redirecting");
+        throw new Error("walking back to the angle step spent an angle call");
       }
       const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
       if (!pill || pill.getAttribute("aria-current") !== "step") {
-        throw new Error("the red button did not land on the Audience & template step");
+        throw new Error("the Audience segment did not land on the Audience & template step");
       }
       // Landed home: the list itself is there to pick from (Part 3) —
       // the recovery is the pick, not another gate.
       if (!ctx.container.querySelector('[data-testid^="angle-option-"]')) {
-        throw new Error("the redirect landed on no list to pick from");
+        throw new Error("the walk back landed on no list to pick from");
       }
       expectAbsent(ctx, "Generate and pick an audience angle first", "the removed angle-first hint is back");
       expectAbsent(ctx, "Pick a goal above", "goal guidance points at a hidden control");
@@ -7970,17 +8077,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
               `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
             );
           }
-          // And Review names the gap with its red button instead of stranding
-          // the founder under a plan that can never generate. Two extra
-          // flushes after the pill: entering Review mounts effects that read
-          // the project from the API, and the state they set lands on the
+          // And Review names the gap in words instead of stranding the
+          // founder under a plan that can never generate (ADR 0229: the
+          // panel carries no jump of its own). Two extra flushes after
+          // the pill: entering Review mounts effects that read the
+          // project from the API, and the state they set lands on the
           // next act.
           await openStep(ctx, "Review & submit");
           await act(async () => {});
           await act(async () => {});
-          const gap = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+          if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+            throw new Error("the missing template still gets a jump button back to its step");
+          }
+          const gap = ctx.container.querySelector('[data-testid="first-gap-name"]');
           if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
-            throw new Error("the missing template has no red button back to its step");
+            throw new Error("the missing template is not named on Review");
           }
           if (ctx.text().includes("Template not found")) {
             throw new Error("opening Review refires the dangling template id at the server");
@@ -7996,7 +8107,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // The pick was valid when chosen — the row vanished between picking and
     // saving, so the 404 arrives from the plan write, not the sync the check
     // above owns. The page must translate that into the gap it already owns
-    // (the red button back to the template step), never banner text no button
+    // (the gap named in words on Review), never banner text no button
     // on the page can fix, and never a retry that would 404 again.
     const gone = () => {
       const err = new Error("not found");
@@ -8039,9 +8150,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (ctx.text().includes("Template not found")) {
             throw new Error("a template deleted after picking 404s the page instead of naming the gap");
           }
-          const gap = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
+          if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+            throw new Error("the deleted template still gets a jump button back to its step");
+          }
+          const gap = ctx.container.querySelector('[data-testid="first-gap-name"]');
           if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
-            throw new Error("the deleted template has no red button back to its step");
+            throw new Error("the deleted template is not named on Review");
           }
         }
       );
@@ -9088,9 +9202,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   // The regen notice must tell the founder what to DO, not just what
   // happened: the story the draft was planned around is gone, and the fix
-  // lives at Review (rebuild the strategy for the new angle). A notice with
-  // no action is a dead end — the button carries the founder there.
-  await check("the regen notice names rebuilding at Review and carries the founder there", async (ctx) => {
+  // lives at Review (rebuild the strategy for the new angle). ADR 0229:
+  // the notice names that next step in its sentence and carries no jump
+  // of its own — moving steps is the top segments' and the sticky bar's
+  // job — and its Dismiss stands beside the sentence as before.
+  await check("the regen notice names rebuilding at Review and carries no jump of its own", async (ctx) => {
     const FRESH = [0, 1, 2, 3, 4, 5].map((i) => ({
       id: `n${i}`,
       kind: "problem_solution",
@@ -9122,12 +9238,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (!/Review/.test(notice.textContent) || !/rebuild/i.test(notice.textContent)) {
             throw new Error(`the notice names no next step: ${notice.textContent}`);
           }
-          const action = notice.querySelector('[data-testid="angle-regen-notice-action"]');
-          if (!action) throw new Error("the regen notice carries no action — it is a dead end");
-          await clickEl(ctx, action, "the regen notice action does nothing");
+          if (notice.querySelector('[data-testid="angle-regen-notice-action"]')) {
+            throw new Error("the regen notice still carries its own jump to Review");
+          }
+          if (!notice.querySelector('[data-testid="angle-regen-notice-dismiss"]')) {
+            throw new Error("the regen notice lost its Dismiss with its action");
+          }
+          // The way to Review is the rail segment, as everywhere now.
+          await openStep(ctx, "Review & submit");
           const review = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
           if (!review || review.getAttribute("aria-current") !== "step") {
-            throw new Error("the regen notice action does not land on Review & submit");
+            throw new Error("the Review segment does not land on Review & submit");
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -9360,12 +9481,21 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await openStep(ctx, "Review & submit");
         if (plans !== 0) throw new Error("a plan was generated before an angle was selected");
         if (ctx.text().includes("Generating your plan")) throw new Error("Review spins while missing an angle");
-        // No angle control lives here anymore: one red jump back to step 1,
-        // where selection happens, then back to Review for the plan.
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="goto-first-gap-button"]'), "no first-gap button on Review");
+        // No angle control lives here, and no jump either (ADR 0229):
+        // the panel names the missing angle in words, and the founder
+        // walks back by the segment to step 1, where selection happens,
+        // then back to Review for the plan.
+        if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+          throw new Error("a first-gap jump button still stands on Review");
+        }
+        const gapName = ctx.container.querySelector('[data-testid="first-gap-name"]');
+        if (!gapName || !/Pick an audience angle first/.test(gapName.textContent || "")) {
+          throw new Error("Review does not name the missing angle");
+        }
+        await openStep(ctx, "Audience & template");
         const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
-          throw new Error("the red button did not land on the Audience & template step");
+          throw new Error("the Audience segment did not land on the Audience & template step");
         }
         await passAngleGate(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'));
@@ -9383,10 +9513,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     } finally { global.__SMOKE_PARAMS = ""; }
   });
 
-  // The still-missing panel offers one red button to the first missing choice
-  // in flow order — never a generate action while anything is missing, and
-  // never two black buttons naming their destinations beside two subtitles.
-  await check("Review sends a missing profile back to its step on one red button", async (ctx) => {
+  // The still-missing panel names the first missing choice in flow
+  // order, in words (ADR 0229) — never a generate action while anything
+  // is missing, and never a jump button of its own: the walk back is
+  // the rail segment's, as everywhere.
+  await check("Review names a missing profile in words and offers no jump", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     try {
       await withApi({
@@ -9397,24 +9528,30 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-        const btn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
-        if (!btn) throw new Error("no single red button on the still-missing panel");
-        if (!/Choose an App Profile/.test(btn.textContent || "")) {
-          throw new Error(`the button does not name the first gap: ${JSON.stringify(btn.textContent)}`);
+        if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+          throw new Error("a first-gap jump button still stands on the still-missing panel");
         }
-        await clickEl(ctx, btn);
+        const name = ctx.container.querySelector('[data-testid="first-gap-name"]');
+        if (!name) throw new Error("nothing names the first gap on the still-missing panel");
+        if (!/Choose an App Profile first/.test(name.textContent || "")) {
+          throw new Error(`the panel does not name the first gap: ${JSON.stringify(name.textContent)}`);
+        }
+        if (ctx.container.querySelector('[data-testid="plan-generate-button"]')) {
+          throw new Error("a generate action renders while a profile is missing");
+        }
+        await openStep(ctx, "App Profile");
         const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
         if (!pill || pill.getAttribute("aria-current") !== "step") {
-          throw new Error("the red button did not land on the App Profile step");
+          throw new Error("the App Profile segment did not land on the App Profile step");
         }
       });
     } finally { global.__SMOKE_PARAMS = ""; }
   });
 
-  // One gap, one button — never two competing "first" asks. With a profile and
-  // template present but no angle or goal, the panel shows the angle action
+  // One gap, one naming — never two competing "first" asks. With a profile and
+  // template present but no angle or goal, the panel names the angle
   // only; the goal waits for the angle that would rank it.
-  await check("Review shows only the gap actually missing, never two firsts", async (ctx) => {
+  await check("Review names only the gap actually missing, never two firsts", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({
@@ -9430,55 +9567,62 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-      const firsts = [...ctx.container.querySelectorAll("button")]
+      const firstButtons = [...ctx.container.querySelectorAll("button")]
         .filter((b) => /first/.test((b.textContent || "")));
-      if (firsts.length !== 1) {
-        throw new Error(`expected exactly one 'first' action, saw ${firsts.length}: ${JSON.stringify(firsts.map((b) => b.textContent))}`);
+      if (firstButtons.length !== 0) {
+        throw new Error(`expected no 'first' buttons, saw ${firstButtons.length}: ${JSON.stringify(firstButtons.map((b) => b.textContent))}`);
       }
-        if (!/Pick an audience angle first/.test(firsts[0].textContent || "")) {
-          throw new Error(`the lone action does not name the missing angle: ${JSON.stringify(firsts[0].textContent)}`);
+      const names = [...ctx.container.querySelectorAll('[data-testid="first-gap-name"]')];
+      if (names.length !== 1) {
+        throw new Error(`expected exactly one named gap, saw ${names.length}`);
+      }
+        if (!/Pick an audience angle first/.test(names[0].textContent || "")) {
+          throw new Error(`the lone naming does not name the missing angle: ${JSON.stringify(names[0].textContent)}`);
         }
       });
     } finally { global.__SMOKE_PARAMS = ""; }
   });
 
-  // The red "Pick an audience angle first" above the plan is the same ask as the
-  // render section's own angle CTA below it, so it must be the same control:
-  // the small size read as a lesser action than the button it duplicates.
-  // One check, two drafts on separate roots: no plan (the missing panel names
-  // the gap) and a plan but no angle (the render section asks instead of
-  // generating). Re-mounting in one container would keep the first draft's
-  // state and prove nothing about the second.
-  await check("Review & submit's angle gap asks once, with one shared control", async (ctx) => {
+  // The "Pick an audience angle first" naming above the plan and the
+  // render section's own angle gate below it are the same ask, so both
+  // states name it the same way: in words, as a sentence — since ADR
+  // 0229 neither carries a jump back to step 1.
+  // One check, two drafts on separate roots: no plan (the missing panel
+  // names the gap) and a plan but no angle (the render section names it
+  // instead of generating). Re-mounting in one container would keep the
+  // first draft's state and prove nothing about the second.
+  await check("Review & submit's angle gap asks once, in words, in both states", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     const second = dom.window.document.createElement("div");
     dom.window.document.body.appendChild(second);
     const secondRoot = createRoot(second);
     const later = { root: secondRoot, container: second, text: () => second.textContent || "" };
-    let reviewBtn = null;
     try {
       await withApi({
         getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "" }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-        reviewBtn = ctx.container.querySelector('[data-testid="goto-first-gap-button"]');
-        if (!reviewBtn) throw new Error("Review & submit has no first-gap button");
-        if (!/Pick an audience angle first/.test(reviewBtn.textContent || "")) {
-          throw new Error(`Review & submit's first-gap button names something else: ${JSON.stringify(reviewBtn.textContent)}`);
+        if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+          throw new Error("Review & submit still carries a first-gap button");
+        }
+        const name = ctx.container.querySelector('[data-testid="first-gap-name"]');
+        if (!name) throw new Error("Review & submit names no gap");
+        if (!/Pick an audience angle first/.test(name.textContent || "")) {
+          throw new Error(`Review & submit's naming names something else: ${JSON.stringify(name.textContent)}`);
         }
         await withApi({
           getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "" }),
         }, async () => {
           await mount(CreateVideo, {})(later);
           await openStep(later, "Review & submit");
-          const hookBtn = later.container.querySelector('[data-testid="generate-angles-button"]');
-          if (!hookBtn) throw new Error("the render section has no angle CTA to compare against");
-          if (hookBtn.className !== reviewBtn.className) {
-            throw new Error(
-              "Review & submit's first-gap button is not the render gate control:\n" +
-                `  review: ${reviewBtn.className}\n  hook:   ${hookBtn.className}`
-            );
+          if (later.container.querySelector('[data-testid="generate-angles-button"]')) {
+            throw new Error("the render section still offers an angle jump on Review");
+          }
+          const gateName = later.container.querySelector('[data-testid="first-gap-name"]');
+          if (!gateName) throw new Error("the render section names no gap");
+          if (!/Pick an audience angle on the Audience & template step to continue/.test(gateName.textContent || "")) {
+            throw new Error(`the render gate names something else: ${JSON.stringify(gateName.textContent)}`);
           }
         });
       });
@@ -9489,23 +9633,30 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // Every gate is one section wherever it appears: the red action first, the
+  // Every gate is one section wherever it appears: its ask first, the
   // helper line under it, spaced the same everywhere. Review's stack is
   // the reference, so a gate cannot drift tighter and make the same ask read as
-  // a different kind of control.
-  await check("every gate puts its red action above its hint", async (ctx) => {
+  // a different kind of control. Since ADR 0229 the Review gates' ask
+  // is a named sentence, not a red jump button — the spacing rule is
+  // unchanged, only the lead's form differs by step.
+  await check("every gate leads with its ask above its hint, spaced the same", async (ctx) => {
     const gates = [];
-    const record = (label, button) => {
-      if (!button || button.tagName !== "BUTTON") throw new Error(`no red action on ${label}`);
-      if (!button.className.includes("bg-[color:var(--brand-indigo)]")) {
-        throw new Error(`the gate action on ${label} is not the indigo button`);
+    const record = (label, lead, { button = false } = {}) => {
+      if (!lead) throw new Error(`no lead on ${label}`);
+      if (button) {
+        if (lead.tagName !== "BUTTON") throw new Error(`the gate lead on ${label} is not its action`);
+        if (!lead.className.includes("bg-[color:var(--brand-indigo)]")) {
+          throw new Error(`the gate action on ${label} is not the indigo button`);
+        }
+        const hint = lead.nextElementSibling;
+        if (!hint || hint.tagName !== "P") {
+          throw new Error(`no hint directly under the red action on ${label}`);
+        }
+      } else if (lead.tagName === "BUTTON") {
+        throw new Error(`the gate lead on ${label} is a jump button again, not a named sentence`);
       }
-      const hint = button.nextElementSibling;
-      if (!hint || hint.tagName !== "P") {
-        throw new Error(`no hint directly under the red action on ${label}`);
-      }
-      const token = (/space-y-\d/.exec(hint.parentElement.className) || [""])[0];
-      if (!token) throw new Error(`the gate action on ${label} shares no spacing token with its hint`);
+      const token = (/space-y-\d/.exec(lead.parentElement.className) || [""])[0];
+      if (!token) throw new Error(`the gate lead on ${label} shares no spacing token with its section`);
       gates.push({ label, token });
     };
 
@@ -9519,10 +9670,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
-      record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'));
+      record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'), { button: true });
     });
     await openStep(ctx, "Review & submit");
-    record("Review & submit", ctx.container.querySelector('[data-testid="goto-first-gap-button"]'));
+    record("Review & submit", ctx.container.querySelector('[data-testid="first-gap-name"]'));
 
     // The render gate with an angle but no template: the gate that used to state
     // the problem with no way out. A planned project, because the gate below
@@ -9536,7 +9687,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await openStep(ctx, "Review & submit");
-        record("render gate", ctx.container.querySelector('[data-testid="hook-first-gap-button"]'));
+        record("render gate", ctx.container.querySelector('[data-testid="first-gap-name"]'));
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -9622,7 +9773,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await openStep(ctx, "Review & submit");
     before(
       ctx.container,
-      ctx.container.querySelector('[data-testid="goto-first-gap-button"]'),
+      ctx.container.querySelector('[data-testid="first-gap-name"]'),
       hintStartingWith(ctx.container, "Set the choices above"),
       "the still-missing panel"
     );
@@ -9638,8 +9789,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(c);
           await openStep(c, "Review & submit");
-          const gate = c.container.querySelector('[data-testid="hook-first-gap-button"]');
-          before(c.container, gate, gate?.parentElement?.querySelector("p"), "the render gate");
+          // ADR 0229: the render gate is a named sentence now — no
+          // button of its own stands in the panel to order against.
+          const gate = c.container.querySelector('[data-testid="first-gap-name"]');
+          if (!gate) throw new Error("the render gate names no gap");
+          const gatePanel = gate.closest(".inset-panel");
+          if (gatePanel && gatePanel.querySelector("button")) {
+            throw new Error("the render gate still carries a button of its own");
+          }
         } finally { await c.cleanup(); }
       });
     } finally {
@@ -9682,8 +9839,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         try {
           await mount(CreateVideo, {})(c);
           await openStep(c, "Review & submit");
+          // ADR 0229: the photo gate names the requirement and carries
+          // no jump of its own — the upload is reached by the segments
+          // and the bar, like every other step change.
           const add = buttonWithText(c.container, "Add your photo");
-          before(c.container, add, add?.closest(".inset-panel")?.querySelector("p"), "the photo gate");
+          if (add) throw new Error("the photo gate still carries its own jump to the upload");
+          const name = [...c.container.querySelectorAll("p")].find((p) =>
+            (p.textContent || "").includes("needs a character reference")
+          );
+          before(c.container, name, name?.closest(".inset-panel")?.querySelector("[data-subtitle]"), "the photo gate");
         } finally { await c.cleanup(); }
       });
     } finally {
@@ -13360,14 +13524,16 @@ async function runIconChecks() {
     const etaValues = [...etaValuesBlock[1].matchAll(/:\s*(\d+)/g)].map((m) => Number(m[1]));
     if (!etaValues.length || etaValues.some((v) => v < 10)) throw new Error("busyEta estimate falls below the 10s threshold");
     // Founder-measured countdowns (Nov 2026): the budget-derived numbers ran
-    // short against the waits founders actually see, so angles, templates
+    // short against the waits founders actually see, so templates
     // and plan carry the measured times, and goals carries none — it
     // completes under 10s and shows the sweep alone. planStrategy is the
     // founder's dictated 50 (Nov 19 2026, ADR 0214): the whole
     // plan-generation wait reads exactly 50s, not the plan's 50 plus the
-    // strategy's ~30 summed.
+    // strategy's ~30 summed. angles is the founder's dictated 40
+    // (Nov 20 2026, ADR 0230) for the four-angle set (ADR 0226): the
+    // one entry drives both the Generate and Regenerate countdowns.
     const etaPairs = Object.fromEntries([...etaValuesBlock[1].matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
-    if (etaPairs.angles !== 50 || etaPairs.templates !== 20 || etaPairs.plan !== 50 || etaPairs.planStrategy !== 50) throw new Error("busyEta countdowns drifted from the founder's times (angles 50, templates 20, plan 50, planStrategy 50)");
+    if (etaPairs.angles !== 40 || etaPairs.templates !== 20 || etaPairs.plan !== 50 || etaPairs.planStrategy !== 50) throw new Error("busyEta countdowns drifted from the founder's times (angles 40, templates 20, plan 50, planStrategy 50)");
     if ("goals" in etaPairs) throw new Error("goals carries a countdown estimate; it completes under 10s and must show the sweep alone");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of ['.btn-studio[data-busy="true"]::before', '.btn-studio[data-busy="true"][data-progress="true"]::before', "@keyframes busy-sweep", "--busy-progress"]) {

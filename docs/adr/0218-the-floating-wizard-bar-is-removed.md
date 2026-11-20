@@ -1,6 +1,8 @@
 # 0218 — The floating wizard bar is removed
 
-Status: accepted
+Status: superseded by 0229 (Kasra reversed the removal the next day:
+the bar returns, and the cross-step CTAs inside the sections are
+removed instead)
 
 ## Context
 

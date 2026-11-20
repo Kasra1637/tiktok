@@ -61,7 +61,7 @@ import { useDesktopWidth } from "../lib/desktopWidth";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -644,9 +644,28 @@ export default function CreateVideo() {
   // 80s, and the flight itself — latched by planInFlightRef — lands on
   // return exactly as if the founder never left.
   const [planFlightStartedAt, setPlanFlightStartedAt] = useState(null);
-  // No panel registers an action with the page any more (ADR 0218):
-  // the strategy panel's build and the render panel's Generate stand in
-  // their own sections, and there is no floating bar to carry a copy.
+  // The strategy panel's action, registered while Review is the step in
+  // view so the sticky bar can carry it (ADR 0133). The panel owns the
+  // handler and its busy anchor; the bar only renders what it is given.
+  const [strategyBarAction, setStrategyBarAction] = useState(null);
+  const registerStrategyBarAction = useCallback((action) => {
+    setStrategyBarAction(action);
+  }, []);
+  // The render panel's bar registrations, while Review is the step in
+  // view (ADR 0144, scoped by ADR 0147, the ready click re-scoped by
+  // ADR 0169): in the ready state the panel registers its own Generate
+  // — same words, play icon and invitation — and the bar wears that
+  // face while its click only scrolls to the panel (ADR 0169); during
+  // a render the panel registers its busy presentation instead,
+  // marked `flight`, so the bar narrates the wait. The panel owns the
+  // handler, the model and the resolution; the bar only renders what
+  // it is given, and decides by the half in view and the render's
+  // state which registration — if any — it carries, exactly like the
+  // strategy action above.
+  const [renderBarAction, setRenderBarAction] = useState(null);
+  const registerRenderBarAction = useCallback((action) => {
+    setRenderBarAction(action);
+  }, []);
   // Confirm-on-arrival: a ?project= link that lands with an intact plan
   // (script_version > 0) says so once, so the founder knows the Review step
   // below is their render's plan and not a blank draft. Dismissible, and
@@ -753,12 +772,6 @@ export default function CreateVideo() {
   // and switching apps re-arms it, so a set viewed for one app never counts
   // as viewed for another app's recovery panel.
   const angle = angles.find((a) => a.id === angleId) || null;
-  // "Viewed" for the gated Review copies: the gate was clicked, or the pick
-  // names a real row — selecting an angle is itself the viewing the gate
-  // asks for. A stale ?angle= param or a draft pointing at a deleted angle
-  // does NOT count: it must not open a list of strangers in the recovery
-  // panel on first view, which is the exact screenshot this rule fixes.
-  const showAngles = anglesRevealed || Boolean(angle);
   const showGoals = goalsRevealed || Boolean(objective);
   // The reveal lasts for the visit, not the mount. Entering the angle step
   // without a resolved pick re-arms both gates, so a list viewed earlier
@@ -1587,10 +1600,11 @@ export default function CreateVideo() {
   // First missing choice in flow order, for the one red button on panels that
   // refuse to generate until the plan's inputs exist: profile, then angle,
   // then goal (angle and goal both live on step 1), then template. Exactly
-  // one button ever renders — it names whichever prerequisite is actually
-  // missing and jumps there — so two gaps can never show two competing
-  // "first" actions. The label carries "first" because the action gates
-  // everything after it.
+  // one naming ever renders — it names whichever prerequisite is actually
+  // missing, in words (ADR 0229: the panels carry no jump of their own;
+  // the rail segments and the sticky bar do the walking) — so two gaps
+  // can never show two competing "first" asks. The label carries "first"
+  // because the gap gates everything after it.
   const firstGap = !profileId
     ? { step: 0, label: "Choose an App Profile first" }
     : !angle
@@ -1802,7 +1816,8 @@ export default function CreateVideo() {
   // Sequential unlock: a step is sealed until every previous step is done.
   // The rail and canvas headers wear the padlock (dimming + "locked" chip)
   // and the body opens on a lock banner naming the predecessor, so the
-  // founder sees they must finish it first.
+  // founder sees they must finish it first. Continue is the hard gate:
+  // disabled with a padlock until this step is done. Back stays free.
   const unlocked = STEPS.map((_, i) => {
     if (i === 0) return true;
     return stepStates.slice(0, i).every((s) => s.state === "done");
@@ -1833,7 +1848,237 @@ export default function CreateVideo() {
 
   const stepContent = renderStep();
 
-  // The rail score, derived per segment so the rail, the quarters and the
+  /* Only state the task line cannot know — that is the footer's whole job
+     now. It used to restate the step's own task a second time, once above the
+     card and once in the middle of the arrows: step two read "pick the angle,
+     goal, template, then add your photo" over "Angle, goal, template and
+     photo — each one ranks the next". That ranking sentence lives in the task
+     line now, so nothing here repeats it. Plain body copy, deliberately NOT a
+     data-subtitle: the subtitle budget (text-sm, 55-60 chars) covers
+     label-attached helpers only. A step stays locked until every previous
+     step is done: the arrows, the rail segments and the canvas headers all
+     refuse to advance past an unfinished step, and the locked visual (padlock
+     + dimming + "locked" chip) names what must finish first. */
+  const activeStepState = stepStates.find((s) => s.step.key === STEPS[step].key);
+  /* The action bar's one line: what the step in view is waiting on, derived
+     from the same states the pills and the rail read. It never restates the
+     task line under the title, names only a blocker that is actually true —
+     a photo already attached is never asked for again — and says the click
+     where a click is the gate (ADR 0098). */
+  let footerHint;
+  if (STEPS[step].key === "profile") {
+    footerHint = profileId
+      ? "Ready \u2014 continue to Audience & template."
+      : "Pick the app this video is for.";
+  } else if (STEPS[step].key === "angle") {
+    // One line per substep, in the order they finish the screen: the
+    // standing sentence still asked for the angle at 4 of 4 done.
+    if (!angleId) {
+      footerHint = "Pick an angle \u2014 templates wait for your click.";
+    } else if (!objective) {
+      footerHint = "Pick a goal \u2014 the templates rank for it.";
+    } else if (!template?.id) {
+      footerHint = "Generate and pick a template when ready.";
+    } else if (missingIdentity.length > 0) {
+      footerHint = "Attach the presenter photo this template needs.";
+    } else {
+      footerHint = "Ready \u2014 continue to Review & submit.";
+    }
+  } else if (STEPS[step].key === "finish") {
+    // The last step's line names its one missing input: the finished
+    // render. Without it, the render is the work, and the line sends the
+    // founder back to the step that makes it. With it, the bar carries
+    // no line at all — the editor is the work, and its buttons stand alone.
+    footerHint = finishedGeneration
+      ? null
+      : "Render the piece first \u2014 the finished clip opens here.";
+  } else if (activeStepState?.state === "todo") {
+    footerHint = "Generate a plan above, read it, then render.";
+  } else if (activeStepState?.state === "blocked") {
+    // Name only what is owed: the lumped copy asked for a save and a photo
+    // even when one of them was already done, and a save in flight says so
+    // instead of demanding one the autosave is already writing.
+    const needsPhoto = missingIdentity.length > 0;
+    if (hasEdits && needsPhoto) {
+      footerHint = "Save your edits and attach a photo before rendering.";
+    } else if (hasEdits) {
+      footerHint = autosaving
+        ? "Saving your edits \u2014 one moment before rendering."
+        : "Save your edits before rendering.";
+    } else if (needsPhoto) {
+      footerHint = "Attach a photo before rendering.";
+    } else {
+      footerHint = "Finish this step before rendering.";
+    }
+  } else {
+    // The review is done: nothing left to ask, so the bar states readiness
+    // and the button beside it opens the render half.
+    footerHint = "Ready \u2014 review the render below.";
+  }
+  /* The sticky bar's primary slot (ADR 0133): the ONE action that unblocks
+     the step in view, carried by the bar itself — the section's own button,
+     same handler, same busy/countdown behavior — and the forward arrow
+     shows only when the step can proceed as-is. This generalizes the
+     review step's "Go to render" state, which already worked this way:
+     a blocked step's bar offers the unblocking action, never a disabled
+     arrow beside it. Picks (an angle card, a goal, a template, a photo)
+     are clicks on content, not buttons, so those states keep the locked
+     arrow and the hint line names the pick. In-flight generations mirror
+     their progress here too, anchored where the flight began. */
+  let barAction = null;
+  if (STEPS[step].key === "angle" && activeStepState?.state !== "done") {
+    if (generatingAngles) {
+      barAction = {
+        label: "Generating angles", busy: true, disabled: true,
+        etaSeconds: BUSY_ETA_SECONDS.angles,
+      };
+    } else if (!angles?.length) {
+      barAction = {
+        label: "Generate angles", onClick: handleGenerateAngles,
+        etaSeconds: BUSY_ETA_SECONDS.angles,
+      };
+    } else if (
+      angle && objective && profileId &&
+      !(recommendationsVisible && visibleRecommendations.length > 0)
+    ) {
+      barAction = tailoring
+        ? {
+            label: "Tailoring your template", busy: true, disabled: true,
+            etaSeconds: BUSY_ETA_SECONDS.templates,
+          }
+        : {
+            label: "Generate tailored templates",
+            onClick: () => runTailoring(false),
+            etaSeconds: BUSY_ETA_SECONDS.templates,
+          };
+    }
+  } else if (STEPS[step].key === "review") {
+    if (!project?.script_version) {
+      if (busy || loading) {
+        barAction = {
+          label: loading && !busy ? "Loading your draft" : "Generating your plan",
+          busy: true, disabled: true,
+          etaSeconds: busy ? BUSY_ETA_SECONDS.planStrategy : null,
+          busyStartedAt: planFlightStartedAt,
+        };
+      } else if (planFailed && !firstGap) {
+        barAction = {
+          label: "Try again", onClick: handleGeneratePlan,
+          disabled: !canGenerate || !objective || !angle,
+          etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+          busyStartedAt: planFlightStartedAt,
+        };
+      } else if (!planFailed && canGenerate && effectiveObjective && angle) {
+        barAction = {
+          label: "Generate your plan", onClick: handleGeneratePlan,
+          etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+          busyStartedAt: planFlightStartedAt,
+        };
+      }
+      // The missing-input states carry no bar action: the panel names
+      // the gap in words (ADR 0229), and exactly one 'first' naming ever
+      // renders — the bar mirroring it would print the competing
+      // duplicate that rule exists to prevent. The locked arrow and the
+      // hint line carry those states, as today.
+    } else if (busy && planFlightStartedAt) {
+      barAction = {
+        label: "Regenerating plan", busy: true, disabled: true,
+        etaSeconds: BUSY_ETA_SECONDS.planStrategy,
+        busyStartedAt: planFlightStartedAt,
+      };
+    } else if (hasEdits) {
+      barAction = {
+        label: busy ? "Saving edits" : "Save edits",
+        onClick: () => handleSaveEdits(),
+        busy, disabled: busy,
+      };
+    } else if (strategyBarAction) {
+      barAction = strategyBarAction;
+    } else if (activeStepState?.state === "done") {
+      // The settled half of Review, in Kasra's order (ADR 0147): a
+      // render in flight narrates itself and offers nothing else; a
+      // finished render leaves the bar to the forward arrow alone;
+      // only with neither does the bar carry an action of its own, and
+      // which one depends on the half in view. None of these is an
+      // unblocker — the states above this branch own those.
+      if (renderBarAction?.flight) {
+        // In flight: the panel's registered busy presentation. It
+        // carries no blocks:false, so the forward arrow stands down
+        // beside it like beside every blocking action — the way
+        // forward opens only when the render lands.
+        barAction = renderBarAction;
+      } else if (finishedGeneration) {
+        // Finished: Generate retires from the bar. The forward arrow
+        // (rendered below, and on Review only in this state) is the
+        // way onward to Demo + CTA; the panel keeps its own Generate
+        // for a founder who wants another render.
+        barAction = null;
+      } else if (renderBarAction && effectiveReviewTab === "render") {
+        // Ready on the render half (ADR 0169, reversing 0144/0147):
+        // the bar wears the registered Generate's face — same words,
+        // play icon and invitation — but its click is navigation
+        // only: it scrolls to the render section, where the model
+        // and the resolution stand beside the one button that
+        // submits. A render never fires from the bar; the panel's
+        // registered handler stays the panel's alone (ADR 0122,
+        // strengthened).
+        barAction = { ...renderBarAction, onClick: () => scrollToSubmit() };
+      } else {
+        // Ready on the plan half — and the fallback for a render half
+        // whose panel cannot register (its gates refuse the render):
+        // the navigation-only shortcut, restored to the plan half by
+        // ADR 0147. It never generates (ADR 0122); it only switches
+        // the half in view, and the panel's gates still decide.
+        barAction = {
+          label: "Go to render", testId: "wizard-goto-render", icon: "render",
+          blocks: false,
+          onClick: () => {
+            setReviewTab("render");
+            scrollToSubmit();
+          },
+        };
+      }
+    }
+  } else if (
+    STEPS[step].key === "finish" &&
+    !finishedGeneration &&
+    finishedGeneration !== undefined
+  ) {
+    barAction = {
+      label: "Go to the render", icon: "render", blocks: false,
+      onClick: () => {
+        setStep(STEPS.findIndex((s) => s.key === "review"));
+        setReviewTab("render");
+        scrollToSubmit();
+      },
+    };
+  }
+  // Kasra's arrow rule (ADR 0147): on Review the round forward arrow is
+  // the finished render's way forward and nothing else's. It renders
+  // only once a finished render exists for the project and no render is
+  // in flight — every earlier Review state leaves the bar to its one
+  // action or its hint line, so the arrow never walks a founder past
+  // the Generate this step exists to offer. Other steps keep the
+  // standing rule: the arrow shows beside a non-blocking bar action,
+  // or where there is no bar action at all.
+  const showContinueArrow =
+    (!barAction || barAction.blocks === false) &&
+    step < STEPS.length - 1 &&
+    (STEPS[step].key !== "review" ||
+      (Boolean(finishedGeneration) && !renderBarAction?.flight));
+  // The finish step has no Back arrow (ADR 0217, reversing the every-step
+  // rule for the last step alone): Demo + CTA is the end of the flow, and
+  // Kasra's order takes the way back off it. Every earlier step keeps the
+  // arrow exactly as it stands, disabled on the first step.
+  const isLastStep = step === STEPS.length - 1;
+  // What the bar would carry once its Back arrow is gone from the last
+  // step. With a finished render that is nothing at all — no hint, no bar
+  // action, no forward arrow — so the bar itself stands down instead of
+  // floating an empty pill; every other state keeps the bar and whatever
+  // it still carries.
+  const barStandsDown =
+    isLastStep && !footerHint && !barAction && !showContinueArrow;
+  // The rail score, derived per segment so the bar, the quarters and the
   // number can never disagree: a done step claims its full quarter, the step
   // in view claims half until it is done, the rest claim nothing.
   const railPct = Math.round(
@@ -2064,15 +2309,6 @@ export default function CreateVideo() {
               sessionFresh={anglesSessionFresh}
               hookLine={project?.hook_line || ""}
               notice={angleRegenNotice}
-              noticeAction={
-                angleRegenNotice
-                  ? {
-                      label: "Go to Review and rebuild",
-                      testId: "angle-regen-notice-action",
-                      onClick: () => setStep(STEPS.findIndex((s) => s.key === "review")),
-                    }
-                  : null
-              }
               onDismissNotice={angleRegenNotice ? clearAngleRegenNotice : null}
             />
             </div>
@@ -2545,25 +2781,21 @@ export default function CreateVideo() {
              own (ADR 0122), so the retry is the only way forward from here.
              The photo is not listed: it is required to render, never to plan. */
           <div className="inset-panel space-y-4">
-            {/* The retry buttons lead and the explanation follows them: one red
-                button naming the single gap, then the goal list (which shows
-                its waits marker until the angle is picked). Button and subtitle
-                sit in one panel so the ask never splits in two. */}
+            {/* The named gap leads and the retry follows it: one line
+                naming the single gap (ADR 0229: in words — the panel
+                carries no jump of its own), then the goal list (which
+                shows its waits marker until the angle is picked). The
+                naming and the subtitle sit in one panel so the ask never
+                splits in two. */}
             {firstGap && (
-              <Button
-                variant="accent"
-                className="gap-1.5"
-                onClick={() => setStep(firstGap.step)}
-                data-testid="plan-first-gap-button"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
+              <p className="text-base font-semibold" data-testid="first-gap-name">
                 {firstGap.label}
-              </Button>
+              </p>
             )}
             {angle && !objective && (
               /* Angle and goal are chosen on step 1, not here: this panel used
                  to carry the shared selector, but a second full copy beside
-                 the retry button split the flow in two. The red button above
+                 the retry split the flow in two. The line above
                  names whichever choice is missing first, and the goal list
                  below stays absent until an angle exists — only an angle can
                  rank it. */
@@ -2653,28 +2885,24 @@ export default function CreateVideo() {
              it and fix it here — picking the goal below readies this step's
              Generate button; the plan still waits for that click. */
           <div className="inset-panel space-y-4">
-            {/* One red button to the first missing choice, in flow order. The
-                two black navigation buttons this replaces named their
-                destinations but sat beside two different subtitles, so the
-                panel read as three separate asks. The button names where it
-                goes; the single subtitle below stays constant. Angle and goal
-                stay fixable in place just beneath it. */}
+            {/* One line naming the first missing choice, in flow order
+                (ADR 0229: in words — the panel carries no jump of its
+                own; the rail segments and the sticky bar do the
+                walking). The two black navigation buttons this panel
+                once carried named their destinations but sat beside two
+                different subtitles, so the panel read as three separate
+                asks. The single subtitle below stays constant. Angle and
+                goal stay fixable in place just beneath the naming. */}
             <GroupLabel icon={ListChecks}>Still missing</GroupLabel>
             {firstGap && (
-              <Button
-                variant="accent"
-                className="gap-1.5"
-                onClick={() => setStep(firstGap.step)}
-                data-testid="goto-first-gap-button"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
+              <p className="text-base font-semibold" data-testid="first-gap-name">
                 {firstGap.label}
-              </Button>
+              </p>
             )}
             <p className="text-sm text-muted-foreground" data-subtitle="">
               Set the choices above, then generate your free plan here.
             </p>
-            {/* Angle and goal are chosen on step 1, not here. The red button
+            {/* Angle and goal are chosen on step 1, not here. The line
                 above names the first missing choice, and the goal list below
                 stays absent until an angle exists; angle selection itself
                 lives in exactly one place. */}
@@ -3025,7 +3253,6 @@ export default function CreateVideo() {
             )}
             <MissingRequirements
               identity={missingIdentity}
-              onGoToTemplatePhoto={scrollToTemplatePhoto}
             />
 
             {/* The render panel closes this step below, so the plan above
@@ -3039,51 +3266,37 @@ export default function CreateVideo() {
                 their exact behavior). */}
             <div className={scriptVersion && effectiveReviewTab !== "render" ? "hidden" : undefined}>
             {(project?.script_version || !firstGap) && (!angle && project?.script_version ? (
-              /* The render is built around the audience angle, so it is the
-                 first thing asked for here. This step never generates: its red
-                 button sends the founder to Audience & template, where selection
-                 lives, instead of spending a call from a screen whose job is
-                 the render. Same control and gate as step two; only the red
-                 action differs, and its label names the destination. Only once
-                 a plan exists: before that the missing panel above already
-                 names the gap with its own red button, and a second identical
+              /* The render is built around the audience angle, so its
+                 absence is the first thing named here. This step never
+                 generates, and since ADR 0229 it no longer jumps either:
+                 the gap is named in words and the founder walks back by
+                 the rail segments or the sticky bar — the angle pick
+                 itself lives on Audience & template, where selection
+                 lives. Only once a plan exists: before that the missing
+                 panel above already names the gap, and a second identical
                  ask below would split one decision in two. */
-              <AngleSelector
-                angles={angles}
-                angleId={angleId}
-                onSelect={handleAnglePick}
-                showAngles={showAngles}
-                landingGate
-                generating={generatingAngles}
-                error={angleError}
-                onGenerate={() => setStep(1)}
-                generateLabel="Pick an audience angle first"
-                sessionFresh={anglesSessionFresh}
-                hookLine={project?.hook_line || ""}
-                onRegenerate={handleRegenerateAngles}
-                objective={effectiveObjective}
-              />
+              <div className="inset-panel space-y-4">
+                <p className="text-base text-muted-foreground" data-testid="first-gap-name">
+                  Pick an audience angle on the Audience & template step to continue.
+                </p>
+              </div>
             ) : !canGenerate && project?.script_version ? (
               <div className="inset-panel space-y-4">
                 {/* Names what is actually missing, read from the same two
                     values that gated this panel. It used to spell out the
                     whole chain ("choose an App Profile, goal, and template,
                     then review the free plan") — a fourth copy of an
-                    instruction the pills and each step already carry. The red
-                    button leads and the explanation follows it: a gate that cannot act
-                    names the step that fixes it instead of stating the problem
-                    and stopping. Only once a plan exists, for the same reason
-                    as the angle gate above: one gap, one red button. */}
+                    instruction the pills and each step already carry. The
+                    named gap leads and the explanation follows it: a gate
+                    that cannot act names the step that fixes it instead of
+                    stating the problem and stopping — in words, since ADR
+                    0229, never a jump of its own. Only once a plan exists,
+                    for the same reason as the angle gate above: one gap,
+                    one naming. */}
                 {firstGap && (
-                  <Button
-                    variant="accent"
-                    className="gap-1.5"
-                    onClick={() => setStep(firstGap.step)}
-                    data-testid="hook-first-gap-button"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
+                  <p className="text-base font-semibold" data-testid="first-gap-name">
                     {firstGap.label}
-                  </Button>
+                  </p>
                 )}
                 <p className="text-base text-muted-foreground">
                   {!profileId
@@ -3094,7 +3307,6 @@ export default function CreateVideo() {
             ) : blockedOnAssets ? (
               <MissingRequirements
                 identity={missingIdentity}
-                onGoToTemplatePhoto={scrollToTemplatePhoto}
               />
             ) : !project ? (
               <div className="inset-panel">
@@ -3122,6 +3334,7 @@ export default function CreateVideo() {
                     <HookContinuityPanel
                       project={project}
                       onProjectChange={receiveProject}
+                      onActionChange={registerStrategyBarAction}
                       onStrategyBuilt={clearAngleRegenNotice}
                     />
                     {/* No script rating (ADR 0124): per-element thumbs
@@ -3131,6 +3344,7 @@ export default function CreateVideo() {
                     <div id="review-submit" className="scroll-mt-4 mt-4">
                       <GenerationPanel
                         project={project}
+                        onRenderActionChange={registerRenderBarAction}
                         onGenerationChange={(fresh) => {
                           // Adopt the row into project-level state so the
                           // result area never holds a stale pre-poll snapshot
@@ -3148,9 +3362,7 @@ export default function CreateVideo() {
                         onProjectChange={receiveProject}
                         hasUnsavedEdits={hasEdits}
                         onNavigate={(action) => {
-                          if (action === "goto-angle" || action === "goto-photo") {
-                            scrollToTemplatePhoto();
-                          } else if (action === "goto-finish") {
+                          if (action === "goto-finish") {
                             setStep(STEPS.findIndex((s) => s.key === "finish"));
                           } else if (action === "save-edits") {
                             document
@@ -3162,6 +3374,13 @@ export default function CreateVideo() {
                               ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
                           } else if (action === "goto-review") {
                             setReviewTab("plan");
+                            scrollToSubmit();
+                          } else if (action === "goto-render-section") {
+                            // The bar's Generate just started the render
+                            // in the panel (ADR 0144): bring the render
+                            // half into view so the founder watches the
+                            // progress where it happens.
+                            setReviewTab("render");
                             scrollToSubmit();
                           }
                         }}
@@ -3180,9 +3399,11 @@ export default function CreateVideo() {
       /* The finishing step. With a finished render it IS the Demo + CTA
          editor, opened on that render — the very loader the standalone
          route renders, so the flow's last step and /demo-cta/:id can never
-         disagree about what opening a render means. Without one it says so
-         and walks back to the render it is waiting on: a step that cannot
-         act yet must navigate to what is missing, not sit blank. */
+         disagree about what opening a render means. Without one it says
+         so in words: the way back to the render it is waiting on is the
+         sticky bar's own action (ADR 0229), not a button inside the
+         panel — a step that cannot act yet names what is missing and
+         lets the bar do the walking, never sits blank. */
       if (finishedGeneration) {
         return (
           <DemoCtaGenerationEditor
@@ -3199,25 +3420,11 @@ export default function CreateVideo() {
               Looking for this project&rsquo;s finished render&hellip;
             </p>
           ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Nothing to finish yet. This step opens with your finished render
-                loaded in the editor — render the piece first, then continue
-                here to add your demo and closing message.
-              </p>
-              <Button
-                variant="accent"
-                size="sm"
-                onClick={() => {
-                  setStep(STEPS.findIndex((s) => s.key === "review"));
-                  setReviewTab("render");
-                  scrollToSubmit();
-                }}
-                data-testid="finish-goto-render"
-              >
-                <Clapperboard className="h-3.5 w-3.5" /> Go to the render
-              </Button>
-            </>
+            <p className="text-sm text-muted-foreground">
+              Nothing to finish yet. This step opens with your finished render
+              loaded in the editor — render the piece first, then continue
+              here to add your demo and closing message.
+            </p>
           )}
         </div>
       );
@@ -3262,8 +3469,8 @@ export default function CreateVideo() {
       />
       {/* The step task, directly under the title: the pills below show state
           per step, and this names the one thing to do on the screen in view.
-          One guidance line stands here, and it is the only one: no footer
-          repeats the step's own sentence (ADR 0218). Plain body copy,
+          One guidance line stands here, and it is the only one: the sticky
+          footer no longer repeats the step's own sentence. Plain body copy,
           not a data-subtitle, so the subtitle budget (text-sm, 55-60 chars)
           stays for label-attached helpers. */}
       <p className="text-sm text-muted-foreground" data-testid="wizard-step-task">
@@ -3420,8 +3627,8 @@ export default function CreateVideo() {
           page as a section, the one in view expanded and the rest collapsed
           to a header and a state chip (ADR 0099). At lg and up only the
           step in view stands, as its own page: the other steps' sections
-          are not rendered, so navigation — a segment or a header — swaps
-          the page instead of expanding a section in one
+          are not rendered, so navigation — a segment, a header, the bar's
+          arrows — swaps the page instead of expanding a section in one
           long scroll (ADR 0141). A locked header cannot open until its
           predecessor is done; the padlock, dimming and "locked — finish
           <prev> first" banner name the seal. Opening an unlocked header
@@ -3536,6 +3743,126 @@ export default function CreateVideo() {
         onCancel={() => settlePlanConfirm(false)}
         onConfirm={() => settlePlanConfirm(true)}
       />
+
+      {/* Sticky action bar: the arrow-only pair and the one line naming what
+          the step in view is waiting on, in one glass cluster that stays
+          within reach however long the canvas runs. Arrow-only — the
+          destination lives in the aria-label, never words on the button.
+          Continue is locked until the step in view is done: a locked arrow
+          shows a padlock and cannot move. The Back arrow rides on every
+          step but the last (ADR 0217): Demo + CTA is the end of the flow
+          and carries no way back, and when that step has nothing else to
+          carry the bar itself stands down rather than floating empty.
+          Leaving the studio stays the sidebar's job. */}
+      {!barStandsDown && (
+      <div className="sticky bottom-4 z-30 flex justify-center px-2" data-testid="wizard-arrows">
+        <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
+          {!isLastStep && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setStep(Math.max(0, step - 1))}
+            disabled={step === 0}
+            aria-label={step === 0 ? "Back (already on the first step)" : `Back to ${STEPS[step - 1].label}`}
+            data-testid="wizard-back-button"
+            className="h-11 w-11 rounded-full border border-[color:var(--hairline)] bg-background/90 shadow-sm backdrop-blur"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          )}
+          {/* The one line the task line does not duplicate: what this step is
+              waiting on right now, beside the controls that move. A step
+              with nothing to name (the last step, render in hand) renders
+              no line at all. */}
+          {footerHint && (
+            <span
+              data-testid="wizard-footer-hint"
+              className="max-w-[46ch] px-1 text-sm text-muted-foreground"
+            >
+              {footerHint}
+            </span>
+          )}
+          {/* The bar's primary slot (ADR 0133): when the step in view is
+              blocked, the slot carries the ONE action that unblocks it —
+              the section's own button, same handler and busy behavior —
+              and no forward arrow shows beside it. When the step can
+              proceed as-is there is no bar action, and the arrow below is
+              the way forward. A ready review's bar action is scoped by
+              the half in view and the render's state (ADR 0147, refining
+              0144; the render-half click re-scoped by ADR 0169): on the
+              render half it wears the panel's registered Generate face —
+              the same words and invitation as the panel's button — while
+              its click only scrolls to the render section, the panel's
+              own button being the only one that submits; on the plan
+              half it is the navigation-only shortcut; during a flight
+              it is the panel's busy presentation; and once a render has
+              finished it retires entirely, leaving the arrow as the only
+              way onward. */}
+          {barAction && (
+            <Button
+              variant="accent"
+              size="sm"
+              className={`gap-1.5${barAction.invite ? " generate-invite" : ""}`}
+              onClick={barAction.onClick}
+              disabled={barAction.disabled}
+              busy={barAction.busy}
+              etaSeconds={barAction.etaSeconds ?? null}
+              busyStartedAt={barAction.busyStartedAt ?? null}
+              data-testid={barAction.testId || "wizard-bar-action"}
+            >
+              {barAction.icon === "render" ? (
+                <Clapperboard className="h-3.5 w-3.5" />
+              ) : barAction.icon === "play" ? (
+                <Play className="h-3.5 w-3.5" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {barAction.label}
+            </Button>
+          )}
+          {/* Earns prominence: a finished step turns Continue primary, so the
+              way forward lights up the moment there is somewhere to go. An
+              unfinished step locks Continue: the button is disabled and
+              wears a padlock, so the founder sees they must finish this
+              step before the next unlocks. The line beside it names what
+              is still missing. While a blocking bar action is offered it
+              replaces this arrow entirely — one working action at a time.
+              On Review the arrow answers to Kasra's rule instead (ADR
+              0147): it renders only once a finished render exists and no
+              render is in flight, computed as showContinueArrow above. */}
+          {showContinueArrow && (
+            <Button
+              variant={activeStepState?.state === "done" ? "accent" : "secondary"}
+              size="icon"
+              disabled={activeStepState?.state !== "done"}
+              onClick={() => setStep(step + 1)}
+              aria-label={
+                activeStepState?.state === "done"
+                  ? `Continue to ${STEPS[step + 1].label}`
+                  : `Locked \u2014 finish ${STEPS[step].label} to continue to ${STEPS[step + 1].label}`
+              }
+              title={
+                activeStepState?.state === "done"
+                  ? undefined
+                  : `Locked \u2014 finish ${STEPS[step].label} first`
+              }
+              data-testid="wizard-continue-button"
+              className={`h-11 w-11 rounded-full shadow-sm ${
+                activeStepState?.state === "done"
+                  ? ""
+                  : "cursor-not-allowed border border-dashed border-[color:var(--hairline)] opacity-60"
+              }`}
+            >
+              {activeStepState?.state === "done" ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <Lock className="h-5 w-5" />
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+      )}
     </PageFrame>
   );
 }

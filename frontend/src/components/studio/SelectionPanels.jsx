@@ -326,10 +326,10 @@ export function TemplateShape({ template, middle: actualMiddle = "" }) {
 }
 
 /**
- * The studio's angle-selection control. It lives on Audience & template and on
- * Review & submit — one control, one behaviour, wherever the founder is asked
- * for it. The review copy picks the angle through the single red jump back to step 1,
- * never a second copy of this list: the goal picker there waits silently.
+ * The studio's angle-selection control. It lives on Audience & template —
+ * the one place selection happens. Review & submit never hosts a copy of
+ * this list: since ADR 0229 it names a missing angle in words and the
+ * founder walks back by the rail segments or the sticky bar.
  *
  * On Audience & template the list renders on open: a founder whose app
  * already has angles lands on the four themselves, not on a click-to-reveal
@@ -339,9 +339,6 @@ export function TemplateShape({ template, middle: actualMiddle = "" }) {
  * rather than being hidden behind a button. Only an empty set shows the
  * "Generate angles" action, where the click is the generation itself.
  *
- * The Review recovery copy passes `landingGate`: that screen never hosts
- * the list (selection lives on step 1), so its gate form stays — one red
- * action whose click is the jump back, with the honesty rule naming it.
  * "Regenerate angles" appears only beside a visible list, where it always
  * has a current generation to act on.
  */
@@ -355,16 +352,10 @@ export function AngleSelector({
   onGenerate,
   onRegenerate,
   notice = "",
-  // The notice's way out, when one exists: { label, onClick, testId }. The
-  // regen notice carries "Go to Review and rebuild" — a notice that names a
-  // next step without offering it is a dead end. Rendered inside the alert so
-  // the action reads as part of the message, not a second decision.
-  noticeAction = null,
   onDismissNotice = null,
-  // Steps other than Audience & template never generate inline: their red button
-  // sends the founder to step 1, where selection lives, instead of spending
-  // a call from a screen whose job is something else. The label names the
-  // destination so the redirect never reads as a broken Generate.
+  // The empty set's one action is the generation itself, on this step —
+  // the only step that generates angles. Steps whose job is something
+  // else never host this control at all (ADR 0229).
   generateLabel = "Generate angles",
   generatingLabel = "Generating angles",
   // The video's picked goal, when one is picked. Angle generation aims the
@@ -477,29 +468,16 @@ export function AngleSelector({
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
           <AlertDescription>
             {notice}
-            {(noticeAction || onDismissNotice) && (
+            {onDismissNotice && (
               <span className="mt-2 flex flex-wrap gap-2">
-                {noticeAction && (
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={noticeAction.onClick}
-                    data-testid={noticeAction.testId || "angle-regen-notice-action"}
-                  >
-                    {noticeAction.label}
-                  </Button>
-                )}
-                {onDismissNotice && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={onDismissNotice}
-                    data-testid="angle-regen-notice-dismiss"
-                  >
-                    Dismiss
-                  </Button>
-                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onDismissNotice}
+                  data-testid="angle-regen-notice-dismiss"
+                >
+                  Dismiss
+                </Button>
               </span>
             )}
           </AlertDescription>
@@ -1053,23 +1031,20 @@ export function PresenterPhotoControl({
  * person the model would invent one, and the founder would pay for a video
  * of somebody who looks nothing like them. The server refuses that case
  * before rendering, so this is the early warning rather than the guarantee.
- * It lives with the photo control it points at; the jump itself
- * (onGoToTemplatePhoto) stays with the page, which owns step navigation.
+ * It lives with the photo control it points at. It names the requirement
+ * and carries no jump of its own (ADR 0229): the upload is reached by the
+ * rail segments and the sticky bar, like every other step change.
  */
-export function MissingRequirements({ identity, onGoToTemplatePhoto }) {
+export function MissingRequirements({ identity }) {
   if (!identity || identity.length === 0) return null;
 
   return (
     <div className="inset-panel space-y-4">
-      {/* The button leads and the explanation follows it: the button says where
-          the upload is, and the upload is on the template step now. It used
-          to point at a step called "Assets" whose only content was this same
-          upload. */}
-      {onGoToTemplatePhoto && (
-        <Button variant="secondary" size="sm" onClick={onGoToTemplatePhoto}>
-          <ImageIcon className="h-3.5 w-3.5" /> Add your photo
-        </Button>
-      )}
+      {/* The requirement leads and the explanation follows it: the panel
+          names what is missing, in words — the upload itself is on the
+          Audience & template step, reached by the segments and the bar.
+          It used to point at a step called "Assets" whose only content
+          was this same upload. */}
       <p className="text-base font-semibold">
         This template needs a character reference before it can generate
       </p>
