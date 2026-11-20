@@ -2380,6 +2380,7 @@ async def recommend_templates(
     objective: str = "",
     hook_line: str = "",
     middle: str = "",
+    camera_setup: str = "",
     limit: int = 3,
     user_id: str = Depends(get_current_user_id),
 ):
@@ -2392,6 +2393,12 @@ async def recommend_templates(
     actually opens and develops with instead of paraphrasing a promise into
     words nobody speaks (ADR 0108). They only shape the display; ranking is
     unchanged.
+
+    `camera_setup` carries the setup saved on the founder's project draft,
+    the way the direction-options read takes the picked setup (ADR 0220).
+    It shapes one display line: under a fixed camera, each card's staging
+    line states the indoor staging the plan will use, never the angle's
+    outdoor wording (ADR 0224).
 
     The picker shows exactly three rows (ADR 0096): the scored top three,
     backfilled from the longest list available when fewer than three are
@@ -2455,6 +2462,7 @@ async def recommend_templates(
         result = _score_template_for_angle(
             tpl, profile, angle, norm_objective, verdict_rows,
             hook_line=hook_line or None, middle=middle or None,
+            camera_setup=camera_setup,
         )
         # A tailored row generated for a different problem is not a candidate
         # for this video at all: dropping it is the difference between "fewer

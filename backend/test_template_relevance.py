@@ -293,6 +293,27 @@ class TestOpeningStaging:
     def test_no_promise_means_no_staging_line(self):
         assert angle_scene.opening_staging({}) == ""
 
+    def test_fixed_camera_stages_an_outdoor_angle_indoors(self):
+        # ADR 0224: the card the founder reads before the plan exists follows
+        # the same indoor rule the plan will (ADR 0219) — an outdoor moment
+        # under a fixed camera reads as its indoor staging, at the same time
+        # of day, instead of promising an outdoor opening.
+        staging = angle_scene.opening_staging(ANGLE, camera_setup="fixed")
+        assert "Indoors at night" in staging
+        assert "Outdoors" not in staging
+        assert "photo you upload" in staging
+
+    def test_handheld_staging_is_the_angle_as_written(self):
+        staging = angle_scene.opening_staging(ANGLE, camera_setup="handheld")
+        assert "Outdoors at night" in staging
+
+    def test_fixed_camera_leaves_an_indoor_angle_untouched(self):
+        staging = angle_scene.opening_staging(
+            {"hook_promise": "A person sits at the kitchen table at night and says it out loud."},
+            camera_setup="fixed",
+        )
+        assert "Indoors at night" in staging
+
 
 class TestRecommendationPayload:
     def test_the_scored_card_carries_one_opening_and_the_relevance_verdict(self):
@@ -302,6 +323,17 @@ class TestRecommendationPayload:
         assert "photo you upload" in result["angle_scene"]["staging"]
         assert result["relevance"]["passes"] is True
         assert "woman" not in result["angle_scene"]["moment"]
+
+    def test_the_scorer_threads_the_fixed_camera_to_the_card(self):
+        # ADR 0224: the setup the founder picked reaches the scored card, so
+        # its staging line is the indoor staging under a fixed camera and
+        # the angle's own wording under handheld.
+        profile = {"id": "p1", "brand_name": "Vocolens", "app_category": "Health"}
+        fixed = score_template_for_angle(
+            ON_TOPIC, profile, ANGLE, "address_user_problem", camera_setup="fixed")
+        assert "Indoors at night" in fixed["angle_scene"]["staging"]
+        handheld = score_template_for_angle(ON_TOPIC, profile, ANGLE, "address_user_problem")
+        assert "Outdoors at night" in handheld["angle_scene"]["staging"]
 
     def test_an_off_topic_card_says_why_on_the_card(self):
         # A tailored row for THIS profile that opens elsewhere is the failure

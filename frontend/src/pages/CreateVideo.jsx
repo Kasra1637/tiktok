@@ -38,6 +38,7 @@ import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { api, getErrorMessage } from "../lib/api";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordBehavior, classifyScriptEdit } from "../lib/feedback";
+import { readyRefusalMessage } from "../lib/readyRefusal";
 import { rememberDraft } from "../lib/recentDraft";
 import {
   partitionProfiles,
@@ -718,6 +719,11 @@ export default function CreateVideo() {
     // already exists, so cards never promise words nobody speaks (ADR 0108).
     hookLine: project?.hook_line || "",
     middle: project?.script || project?.spoken_middle || "",
+    // The saved camera setup shapes the staging line each card prints:
+    // a fixed camera's cards state the indoor staging, not the angle's
+    // outdoor wording (ADR 0224, extending 0219 to the card). Read the
+    // way editValue reads it below — the draft edit over the project row.
+    cameraSetup: edits.camera_setup !== undefined ? edits.camera_setup : project?.camera_setup ?? "handheld",
   });
   // The regen receipt lives on the angle step alone (ADR 0198): leaving
   // that step consumes it. Only the transition AWAY counts — a receipt
@@ -1511,6 +1517,16 @@ export default function CreateVideo() {
       // detached) is reported rather than hidden -- so
       // the render button is disabled with a stated reason instead of the screen
       // looking broken.
+      //
+      // One refusal is not reported: this handler also autosaves the picks
+      // made before any plan exists (the direction section sits on the
+      // Audience & template step), and a project with no script yet is
+      // refused for exactly that — it is not ready, quietly, and flashing
+      // "Generate or write a script before marking this ready." over an
+      // ordinary pick reads as the app breaking when nothing is wrong.
+      // readyRefusalMessage keys that on the saved row's script, the
+      // server's own first check, so a refusal on a scripted project
+      // still lands here in full.
       let settled = updated;
       let readyError = null;
       try {
@@ -1522,7 +1538,7 @@ export default function CreateVideo() {
       if (settled?.id) {
         syncedProjectsRef.current[settled.id] = settled.updated_at || "";
       }
-      setError(readyError ? getErrorMessage(readyError) : null);
+      setError(readyRefusalMessage(updated, readyError));
       dispatchDraft({ type: "plan-accepted", project: settled, savedEdits });
       if (silent) setSaveStatus("All changes saved");
     } catch (err) {

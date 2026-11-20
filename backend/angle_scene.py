@@ -359,14 +359,32 @@ def opening_development(angle: Optional[dict], template: Optional[dict] = None, 
     return _development_beat(template or {}, video_scene(angle))
 
 
-def opening_staging(angle: Optional[dict]) -> str:
+def _scene_for_setup(scene: dict, camera_setup: str) -> dict:
+    """The scene as the picked camera setup stages it (ADR 0224).
+
+    A fixed camera is indoors only (ADR 0219): an angle whose moment sits
+    outdoors is staged at the nearest indoor setting, so a surface printed
+    for a fixed project reads indoors — the staging the plan will use.
+    The moment and its time of day do not move; only the place does. Any
+    other setup, and a scene that names no outdoor place, passes through
+    untouched.
+    """
+    if (camera_setup or "").strip().lower() == "fixed" and scene.get("place") == "outdoor":
+        return {**scene, "place": "indoor"}
+    return scene
+
+
+def opening_staging(angle: Optional[dict], camera_setup: str = "") -> str:
     """Where and when the opening happens, and where the character comes from.
 
     The card's second line: the shape says what happens, this says where and
     when it happens and that the person on screen is the founder's uploaded
     photo. Never a described face or a named kind of person (ADR 0089).
+    Under a fixed camera the where is the indoor staging of ADR 0219's
+    move, so the card never promises an outdoor opening the plan will not
+    write (ADR 0224).
     """
-    scene = video_scene(angle)
+    scene = _scene_for_setup(video_scene(angle), camera_setup)
     if not scene["moment"]:
         return ""
     where = _where(scene)
@@ -626,7 +644,7 @@ def reconcile_location(strategy: Optional[dict], location: str, thorough: bool =
     return {"strategy": result, "changed": changed, "blocked": blocked}
 
 
-def template_angle_fit(template: dict, angle: Optional[dict], hook_line=None, middle=None) -> dict:
+def template_angle_fit(template: dict, angle: Optional[dict], hook_line=None, middle=None, camera_setup: str = "") -> dict:
     """How a template reads against the angle's opening.
 
     `structure` is the plain reason the template's fixed shape contradicts the
@@ -636,7 +654,9 @@ def template_angle_fit(template: dict, angle: Optional[dict], hook_line=None, mi
     from the promise (or the approved hook line, when a plan exists), and
     where and when that opening happens; `development` is what this template
     does next (the approved middle, when a plan exists), printed as its own
-    line (ADRs 0089, 0108).
+    line (ADRs 0089, 0108). The fit itself is judged against the angle as
+    written; `camera_setup` shapes only the staging line's place, the way
+    the picked setup will stage it (ADR 0224).
     """
     scene = angle_scene(angle)
     structural = " ".join(
@@ -647,7 +667,7 @@ def template_angle_fit(template: dict, angle: Optional[dict], hook_line=None, mi
     return {
         "moment": scene["moment"],
         "shape": opening_shape(angle, template, hook_line=hook_line, middle=middle),
-        "staging": opening_staging(angle),
+        "staging": opening_staging(angle, camera_setup=camera_setup),
         "development": opening_development(angle, template, hook_line=hook_line, middle=middle),
         "structure": (
             f"Doesn't fit this angle: its opening {reason}, but your angle opens {_where(scene)}."

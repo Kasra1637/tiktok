@@ -252,6 +252,7 @@ def score_template_for_angle(
     verdict_rows=(),
     hook_line=None,
     middle=None,
+    camera_setup: str = "",
 ) -> dict:
     """
     Score one template against an App Profile + angle + objective.
@@ -282,6 +283,10 @@ def score_template_for_angle(
     Reasons describe what the footage DOES for the viewer — where it leaves
     them — which is still a structural claim about the video, not a promise
     about what it will earn. No performance claims, ever.
+
+    `camera_setup` never scores: it shapes the card's staging line only,
+    so a fixed camera's card states the indoor staging the plan will use
+    (ADRs 0219, 0224).
     """
     score = 0.0
     weighted = []  # (weight, reason), sorted by weight at the end
@@ -524,7 +529,7 @@ def score_template_for_angle(
     # card's shape and development come from the approved hook line and
     # middle when a plan exists, so they never promise words the video never
     # speaks (ADR 0108).
-    scene_fit = angle_scene.template_angle_fit(template, angle, hook_line=hook_line, middle=middle)
+    scene_fit = angle_scene.template_angle_fit(template, angle, hook_line=hook_line, middle=middle, camera_setup=camera_setup)
     if scene_fit["structure"]:
         score -= 3.0
         limitations.insert(0, scene_fit["structure"])

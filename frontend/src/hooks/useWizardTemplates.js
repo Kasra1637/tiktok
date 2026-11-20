@@ -4,7 +4,7 @@ import { api, getErrorMessage } from "../lib/api";
 const emptyFit = () => ({ reasons: [], limitations: [] });
 
 /** Template loading is a separate lifecycle from draft writes and plan saves. */
-export function useWizardTemplates({ profileId, angleId, objective, hookLine = "", middle = "" }) {
+export function useWizardTemplates({ profileId, angleId, objective, hookLine = "", middle = "", cameraSetup = "" }) {
   const [ranked, setRanked] = useState({ key: "", rows: [], shared: emptyFit(), error: null });
   const [tailored, setTailored] = useState({ key: "", templates: [] });
   const [tailoring, setTailoring] = useState(false);
@@ -13,8 +13,8 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
   const tailorRequestRef = useRef(0);
   // Latest wizard identity: a tailor flight that resolves after the founder
   // moves on must not reload recommendations for the profile/angle it left.
-  const latestRef = useRef({ profileId, angleId, objective, hookLine, middle });
-  latestRef.current = { profileId, angleId, objective, hookLine, middle };
+  const latestRef = useRef({ profileId, angleId, objective, hookLine, middle, cameraSetup });
+  latestRef.current = { profileId, angleId, objective, hookLine, middle, cameraSetup };
 
   const clearRecommendations = useCallback(() => {
     setRanked((previous) => ({ ...previous, rows: [], shared: emptyFit(), error: null }));
@@ -24,18 +24,22 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
   // guarantees the count; the client asks for three so both agree. Called
   // only inside a tailoring flight — never as an effect: no template
   // request, free or billed, fires on the goal pick (ADR 0098).
-  const loadRecommendations = useCallback(async (pid, aid, oid = objective, hook = hookLine, mid = middle) => {
+  const loadRecommendations = useCallback(async (pid, aid, oid = objective, hook = hookLine, mid = middle, setup = cameraSetup) => {
     if (!pid) return;
     const request = ++recRequestRef.current;
     // The approved spoken words shape each card's display (ADR 0108), so
     // they ride the same request and key: a new plan is a new set of cards.
-    const key = `${pid || ""}:${aid || ""}:${oid || ""}:${hook || ""}:${mid || ""}`;
+    // The camera setup rides along the same way (ADR 0224): it shapes the
+    // staging line each card prints, so a flip of the setup is a new set
+    // of cards too, never the old set wearing the wrong place.
+    const key = `${pid || ""}:${aid || ""}:${oid || ""}:${hook || ""}:${mid || ""}:${setup || ""}`;
     setRanked({ key, rows: [], shared: emptyFit(), error: null });
     try {
       const rec = await api.getTemplateRecommendations(pid, {
         angle_id: aid || undefined, objective: oid || undefined,
         ...(String(hook || "").trim() ? { hook_line: String(hook).trim() } : {}),
         ...(String(mid || "").trim() ? { middle: String(mid).trim() } : {}),
+        ...(setup ? { camera_setup: setup } : {}),
         limit: 3,
       });
       if (recRequestRef.current !== request) return;
@@ -50,7 +54,7 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
       if (recRequestRef.current !== request) return;
       setRanked({ key, rows: [], shared: emptyFit(), error: getErrorMessage(err) });
     }
-  }, [objective, hookLine, middle]);
+  }, [objective, hookLine, middle, cameraSetup]);
 
   const runTailoring = useCallback(async (regenerate) => {
     if (!profileId || !objective) return;
@@ -97,7 +101,7 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
       latest.angleId === startAid &&
       latest.objective === startObjective
     ) {
-      await loadRecommendations(startPid, startAid, startObjective, latest.hookLine, latest.middle);
+      await loadRecommendations(startPid, startAid, startObjective, latest.hookLine, latest.middle, latest.cameraSetup);
     }
     if (tailorRequestRef.current === request) setTailoring(false);
   }, [profileId, objective, angleId, loadRecommendations]);
@@ -114,7 +118,7 @@ export function useWizardTemplates({ profileId, angleId, objective, hookLine = "
   const tailorKey = profileId && objective
     ? `${profileId}:${objective}:${angleId || ""}`
     : "";
-  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}:${hookLine || ""}:${middle || ""}`;
+  const recRequestKey = `${profileId || ""}:${angleId || ""}:${objective || ""}:${hookLine || ""}:${middle || ""}:${cameraSetup || ""}`;
   const tailoredReady = Boolean(tailorKey && tailored.key === tailorKey && tailored.templates.length > 0);
   const tailorFallbackVisible = Boolean(
     tailorKey && tailored.key === tailorKey && !tailored.templates.length && tailorError && !tailoring
