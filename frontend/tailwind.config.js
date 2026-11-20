@@ -16,6 +16,14 @@ module.exports = {
         display: ['"Space Grotesk"', 'Figtree', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace']
       },
+      // The landing hero headline's dictated sizes (ADR 0215): Kasra
+      // named 42px on mobile and 50px on desktop exactly, off the
+      // display ladder, so they ride as named tokens — arbitrary
+      // text sizes stay banned in marketing source.
+      fontSize: {
+        hero: '42px',
+        'hero-wide': '50px'
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

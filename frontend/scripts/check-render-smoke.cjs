@@ -1596,7 +1596,7 @@ async function main() {
     // reset and the run later surfaced as a failure. The flight belongs to
     // the click (ADR 0122), not to the section on screen: leaving must not
     // discard it, returning must show it still running with the countdown
-    // where the wait actually is (never a restarted 80s), no second call
+    // where the wait actually is (never a restarted 50s), no second call
     // may fire, and the plan must land from the one call already running.
     let releasePass;
     const passGate = new Promise((resolve) => { releasePass = resolve; });
@@ -1635,7 +1635,7 @@ async function main() {
           throw new Error("the click did not put Review into its generating state");
         }
         const firstEta = etaOf();
-        if (firstEta === null || firstEta < 79) {
+        if (firstEta === null || firstEta < 49) {
           throw new Error(`the generating button opens without its full countdown (saw ${firstEta})`);
         }
         if (passes !== 1) throw new Error(`the click fired ${passes} passes, not one`);
@@ -1652,7 +1652,7 @@ async function main() {
         if (returnedEta === null) {
           throw new Error("the returned generating button shows no countdown");
         }
-        if (returnedEta > 77) {
+        if (returnedEta > 47) {
           throw new Error(`the countdown restarted on return (saw ${returnedEta}s after 3+ seconds away)`);
         }
         if (passes !== 1) throw new Error(`stepping away and back fired a second pass (${passes})`);
@@ -10998,6 +10998,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
       throw new Error("the hero headline does not carry the one animated gradient treatment");
     }
+    // The headline's size is Kasra's Nov 19 2026 dictation (ADR 0215):
+    // 42px on mobile, 50px from sm up, down from the 48/60 the Tailwind
+    // steps gave, carried as the fontSize tokens text-hero /
+    // sm:text-hero-wide (arbitrary sizes stay banned in marketing).
+    // Only the size moved — words, gradient, font, weight, leading and
+    // tracking stand — and the pin keeps the steps from quietly
+    // restoring the bigger sizes.
+    const h1Classes = h1.className.split(/\s+/);
+    for (const cls of ["text-hero", "sm:text-hero-wide"]) {
+      if (!h1Classes.includes(cls)) {
+        throw new Error(`the hero headline lost its dictated size class ${cls}`);
+      }
+    }
+    for (const cls of ["text-5xl", "sm:text-6xl"]) {
+      if (h1Classes.includes(cls)) {
+        throw new Error(`the hero headline is back on the retired size class ${cls}`);
+      }
+    }
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
@@ -13186,9 +13204,12 @@ async function runIconChecks() {
     // Founder-measured countdowns (Nov 2026): the budget-derived numbers ran
     // short against the waits founders actually see, so angles, templates
     // and plan carry the measured times, and goals carries none — it
-    // completes under 10s and shows the sweep alone.
+    // completes under 10s and shows the sweep alone. planStrategy is the
+    // founder's dictated 50 (Nov 19 2026, ADR 0214): the whole
+    // plan-generation wait reads exactly 50s, not the plan's 50 plus the
+    // strategy's ~30 summed.
     const etaPairs = Object.fromEntries([...etaValuesBlock[1].matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
-    if (etaPairs.angles !== 50 || etaPairs.templates !== 20 || etaPairs.plan !== 50) throw new Error("busyEta countdowns drifted from the founder-measured times (angles 50, templates 20, plan 50)");
+    if (etaPairs.angles !== 50 || etaPairs.templates !== 20 || etaPairs.plan !== 50 || etaPairs.planStrategy !== 50) throw new Error("busyEta countdowns drifted from the founder's times (angles 50, templates 20, plan 50, planStrategy 50)");
     if ("goals" in etaPairs) throw new Error("goals carries a countdown estimate; it completes under 10s and must show the sweep alone");
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     for (const token of ['.btn-studio[data-busy="true"]::before', '.btn-studio[data-busy="true"][data-progress="true"]::before', "@keyframes busy-sweep", "--busy-progress"]) {
