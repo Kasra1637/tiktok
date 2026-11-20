@@ -2165,15 +2165,23 @@ async def angle_goal_suggestions(
 
 @router.get("/app-profiles/{profile_id}/direction-options")
 async def profile_direction_options(
-    profile_id: str, angle_id: str = "", user_id: str = Depends(get_current_user_id)
+    profile_id: str, angle_id: str = "", camera_setup: str = "",
+    user_id: str = Depends(get_current_user_id)
 ):
-    """The Review-step direction dropdowns for one App Profile.
+    """The direction dropdowns for one App Profile.
 
     Deterministic category mapping, no model call: the same profile always
     gets the same five option lists (Location, lighting, wardrobe, voice,
     tone). Options are pre-vetted by construction — none describes the
     presenter's face or body — but saving still runs the normal claim
     check, since the dropdown is a UX constraint, not a trust boundary.
+
+    The section sits on the Audience & template step, before the plan
+    exists (ADR 0220), so the location list itself respects the camera
+    setup the founder has picked: a fixed camera is indoors only
+    (ADR 0219), and only locations the shared classifier calls indoor
+    are offered for it — outdoor and unclassifiable alike are withheld,
+    because unknown is never permission. Handheld offers every location.
     """
     _require_configured()
     profile = await _cfg("_fetch_one")(
@@ -2190,21 +2198,32 @@ async def profile_direction_options(
         )
     # The angle owns where and when the video happens (ADR 0084), so no option
     # that contradicts its opening moment is ever offered.
-    return angle_scene.fit_direction_options(options, angle)
+    options = angle_scene.fit_direction_options(options, angle)
+    if (camera_setup or "").strip().lower() == "fixed":
+        options = {
+            **options,
+            "location": [
+                option for option in options.get("location") or []
+                if template_library.location_setting(option) == "indoor"
+            ],
+        }
+    return options
 
 
 @router.post("/app-profiles/{profile_id}/direction-options/refresh")
 async def refresh_profile_direction_options(
     profile_id: str, payload: RefreshDirectionOptionsRequest, user_id: str = Depends(get_current_user_id)
 ):
-    """Four fresh options for one Review-step dropdown, still profile-shaped.
+    """Four fresh options for one direction dropdown, still profile-shaped.
 
     The static category lists repeat themselves across videos; a refresh
     spends one text model call for four new options for ONE field, grounded
     in the profile and the selected angle, avoiding the options already
     shown. Pre-vetted by instruction like the static lists — and saving
     still runs the normal claim check, since the dropdown is a UX
-    constraint, not a trust boundary.
+    constraint, not a trust boundary. A location refresh for a fixed
+    camera is filtered to indoor locations, exactly like the static
+    list (ADRs 0219/0220).
     """
     _require_configured()
     _require_ai_configured()
@@ -2234,6 +2253,11 @@ async def refresh_profile_direction_options(
         raise HTTPException(status_code=502, detail=f"AI direction options failed. Please try again. ({str(e)[:150]})")
     scene = angle_scene.angle_scene(angle)
     options = [o for o in options if not angle_scene.conflict_reason(o, scene)]
+    if field == "location" and (payload.camera_setup or "").strip().lower() == "fixed":
+        options = [
+            o for o in options
+            if template_library.location_setting(o) == "indoor"
+        ]
     return {"field": field, "options": options}
 
 

@@ -2314,7 +2314,7 @@ class TestGoalVerdictEvidencePayload:
 
 
 class TestDirectionOptionsEndpoint:
-    """Review-step dropdowns follow the profile's category group."""
+    """Direction dropdowns follow the profile's category group."""
 
     def test_meditation_and_fitness_profiles_get_different_options(self, api):
         calm = _make_profile(api, ANON, name="Calm Rider", category="Meditation")
@@ -2335,6 +2335,31 @@ class TestDirectionOptionsEndpoint:
             _run(api.profile_direction_options(
                 profile_id=str(uuid.uuid4()), user_id=ANON))
         assert err.value.status_code == 404
+
+    def test_fixed_camera_offers_indoor_locations_only(self, api):
+        # ADR 0220: the direction section now sits before the plan, so
+        # the location list itself respects the camera setup. Fixed is
+        # an indoor-only setup (ADR 0219): outdoor options and options
+        # the classifier cannot place are both withheld — unknown is
+        # never permission. Other fields are not the camera's business.
+        calm = _make_profile(api, ANON, name="Calm Fixed", category="Meditation")
+        out = _run(api.profile_direction_options(
+            profile_id=calm["id"], camera_setup="fixed", user_id=ANON))
+        assert out["location"] == [
+            "Calm living room with a plant beside the chair",
+            "Tidy desk with a notebook",
+        ]
+        assert len(out["wardrobe"]) == 4
+        assert len(out["lighting"]) == 4
+
+    def test_handheld_and_unstated_cameras_offer_every_location(self, api):
+        calm = _make_profile(api, ANON, name="Calm Handheld", category="Meditation")
+        full = _run(api.profile_direction_options(
+            profile_id=calm["id"], user_id=ANON))
+        handheld = _run(api.profile_direction_options(
+            profile_id=calm["id"], camera_setup="handheld", user_id=ANON))
+        assert handheld["location"] == full["location"]
+        assert len(handheld["location"]) == 4
 
 
 class TestDirectionRefresh:
@@ -2385,6 +2410,41 @@ class TestDirectionRefresh:
         # category and the usage moments the options must suit.
         assert "Meditation" in seen["prompt"]
         assert "Starting a task they have been avoiding" in seen["prompt"]
+
+    def test_refresh_for_a_fixed_camera_filters_locations_to_indoor(
+            self, api, monkeypatch):
+        # ADR 0220: a refreshed location list obeys the same rule as the
+        # static one. Of the fake model's four, the rooftop is outdoor
+        # and the riverside steps carry no indoor signal at all — both
+        # are withheld; unknown is never permission (ADR 0219).
+        from models import RefreshDirectionOptionsRequest
+        seen = {}
+        self._fake_refresh(monkeypatch, seen)
+        profile = _make_profile(api, ANON, name="Refresh Fixed",
+                                category="Meditation")
+        out = _run(api.refresh_profile_direction_options(
+            profile_id=profile["id"],
+            payload=RefreshDirectionOptionsRequest(
+                field="location", camera_setup="fixed"),
+            user_id=ANON))
+        assert out["options"] == [
+            "Quiet library corner, tall shelves",
+            "Open-air market aisle, morning",
+        ]
+
+    def test_refresh_for_a_fixed_camera_leaves_other_fields_alone(
+            self, api, monkeypatch):
+        from models import RefreshDirectionOptionsRequest
+        seen = {}
+        self._fake_refresh(monkeypatch, seen)
+        profile = _make_profile(api, ANON, name="Refresh Fixed Wardrobe",
+                                category="Meditation")
+        out = _run(api.refresh_profile_direction_options(
+            profile_id=profile["id"],
+            payload=RefreshDirectionOptionsRequest(
+                field="wardrobe", camera_setup="fixed"),
+            user_id=ANON))
+        assert len(out["options"]) == 4
 
     def test_refresh_rejects_an_unknown_field(self, api, monkeypatch):
         from models import RefreshDirectionOptionsRequest

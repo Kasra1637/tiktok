@@ -2,7 +2,9 @@ import { CONTROL_CLASS } from "../formControls";
 import { AppSelect } from "../AppSelect";
 
 /**
- * One profile-aware dropdown for a Review-step direction field.
+ * One profile-aware dropdown for a direction field (the section sits on
+ * the Audience & template step since ADR 0220; this file keeps the name
+ * it shares with the plan-phase narration below).
  *
  * The options come from the profile's category group (no free typing), and
  * picking only fills the draft — saving still validates like any edit

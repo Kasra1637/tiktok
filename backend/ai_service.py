@@ -1953,7 +1953,7 @@ def _normalize_outcome_statements(result: dict) -> None:
     result["outcome_statements"] = kept
 
 
-# Review-step direction refresh: fresh dropdown options for one field, still
+# Direction refresh: fresh dropdown options for one field, still
 # profile-shaped. The static category lists repeat themselves across videos;
 # a refresh asks the model for four NEW options for one field, grounded in
 # the profile (category, usage moments, outcomes, audience) and the selected

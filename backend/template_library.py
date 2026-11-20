@@ -406,7 +406,7 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
     return (current % slots) + 1
 
 
-# Review-step direction dropdowns, keyed by the app's category group.
+# Direction dropdowns, keyed by the app's category group.
 #
 # Each group offers four plain-language options per field (Location, lighting,
 # wardrobe, voice direction, tone). The options are pre-vetted by
@@ -669,7 +669,7 @@ def direction_group_for_profile(profile: Optional[dict]) -> str:
 
 
 def direction_options_for_profile(profile: Optional[dict] = None) -> dict:
-    """The five Review-step dropdown option lists for one App Profile."""
+    """The five direction dropdown option lists for one App Profile."""
     group = direction_group_for_profile(profile)
     options = DIRECTION_OPTIONS.get(group) or DIRECTION_OPTIONS["default"]
     return {"group": group, **{k: list(v) for k, v in options.items()}}
@@ -680,8 +680,9 @@ def direction_options_for_profile(profile: Optional[dict] = None) -> dict:
 # answer to "is this location an interior?" The generation prompts
 # state the rule in prose for the model; this classifier is the
 # deterministic half a surface can check — the direction options
-# above are its first subject, and a later UI build reuses it to
-# offer a fixed camera indoor locations only. It reads signal words
+# above are its first subject, and the direction-options endpoint
+# spends it to offer a fixed camera indoor locations only
+# (ADR 0220). It reads signal words
 # in the location text. Outdoor signals win on a clash, because the
 # rule it serves is a ban: a place that reads both ways (a cafe
 # terrace) is not an interior. Transit counts as outdoor — a vehicle

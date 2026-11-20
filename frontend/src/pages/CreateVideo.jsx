@@ -1642,7 +1642,9 @@ export default function CreateVideo() {
   // Direction dropdowns live in their own lifecycle owner (profile-keyed
   // options, per-app picks, saved-plan matching, per-field refresh). See
   // useWizardDirections: request ids ignore stale loads, picks reset on app
-  // switch, and a refresh never destroys the founder's current pick.
+  // switch, and a refresh never destroys the founder's current pick. The
+  // lists are keyed on the camera setup too (ADR 0220): a fixed camera is
+  // offered indoor locations only (ADR 0219).
   const {
     directionOptions,
     dirSel,
@@ -1651,7 +1653,25 @@ export default function CreateVideo() {
     refreshError,
     refreshDirectionField,
     refreshProps,
-  } = useWizardDirections({ profileId, project, angle, dispatchDraft });
+  } = useWizardDirections({
+    profileId,
+    project,
+    angle,
+    dispatchDraft,
+    cameraSetup: editValue("camera_setup", "handheld"),
+  });
+
+  // The saved place a fixed camera cannot use (ADR 0220): the setup is
+  // fixed, the lists are loaded, a place is saved, and no offered indoor
+  // location matches it — so the pick reads empty and the section names
+  // why, instead of the value being rewritten behind the founder's back.
+  // The codebase's ineligible-value pattern (the gone template reads the
+  // same way); ADR 0219's plan rule guards generation in the meantime.
+  const directionLocationIneligible =
+    editValue("camera_setup", "handheld") === "fixed" &&
+    Boolean(directionOptions) &&
+    !dirSel.location &&
+    Boolean(String(editValue("location", "") || "").trim());
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback, so a complete draft landing on
@@ -2106,6 +2126,119 @@ export default function CreateVideo() {
                 </div>
               )}
             </div>
+            {/* Visual & audio direction lives on this step now (ADR 0220),
+                below the angle and goal picks: camera setup and location
+                are chosen before the plan exists, so the plan is written
+                already respecting them, and a later change no longer
+                springs the rebuild trap their Review seat caused. The
+                section stays behind one disclosure whose summary says
+                what it holds, because it is optional refinement and this
+                step's required picks come first. Camera setup is inside
+                for the same reason: it is a framing choice, not a gate. */}
+            <Disclosure
+              testId="visual-audio-direction"
+              detailsClassName="group inset-panel space-y-3"
+              summaryClassName="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden"
+              summary={
+                <>
+                  <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
+                  <Badge variant="outline" className="text-xs">optional</Badge>
+                </>
+              }
+            >
+              <p className="text-sm text-muted-foreground" data-subtitle="">
+                Optional scene picks; the plan's defaults render as-is.
+              </p>
+              <div className="space-y-2">
+                <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
+                <AppSelect
+                  id="camera-setup"
+                  testId="camera-setup"
+                  block
+                  className={CONTROL_CLASS}
+                  value={editValue("camera_setup", "handheld")}
+                  disabled={busy}
+                  onChange={(value) => {
+                    dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
+                  }}
+                  options={[
+                    { value: "handheld", label: "Handheld selfie" },
+                    { value: "fixed", label: "Fixed camera" },
+                  ]}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {editValue("camera_setup", "handheld") === "fixed"
+                    ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
+                    : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
+                </p>
+                <p className="text-sm text-muted-foreground">Camera setup controls framing; the plan and the render follow the setup saved here.</p>
+              </div>
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+                <p className="text-sm font-semibold">Location &amp; wardrobe</p>
+                <p className="text-sm text-muted-foreground" data-subtitle="">The place is picked here; wardrobe refines the saved look.</p>
+                <DirectionSelect
+                  id="review-location-direction"
+                  testId="review-location-direction"
+                  label="Location"
+                  value={dirSel.location}
+                  onPick={pickScenePart("location")}
+                  options={directionOptions?.location}
+                  placeholder="Choose a Location…"
+                  disabled={busy}
+                  refresh={refreshProps("location", "review-location-refresh")}
+                />
+                {directionLocationIneligible && (
+                  <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
+                    The saved place is not an indoor location, so it is not offered for a fixed
+                    camera. Pick an indoor location — the plan is written from the pick saved here.
+                  </p>
+                )}
+                <DirectionSelect
+                  id="review-wardrobe"
+                  testId="review-wardrobe"
+                  label="Wardrobe"
+                  value={dirSel.wardrobe}
+                  onPick={pickScenePart("wardrobe")}
+                  options={directionOptions?.wardrobe}
+                  placeholder="Choose wardrobe…"
+                  disabled={busy}
+                  refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
+                />
+                {project?.visual_direction && !edits.visual_direction && (
+                  <p className="text-sm text-muted-foreground">
+                    Plan default: {sentenceCase(project.visual_direction)}
+                  </p>
+                )}
+                <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
+                  Location and wardrobe apply together in the plan written from them. Lighting
+                  is set from this video's scene.
+                </p>
+                {refreshError && (
+                  <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
+                    {refreshError}
+                  </p>
+                )}
+              </div>
+              {(editValue("visual_direction", "") || editValue("voice_direction", "")) && (
+                <div className="inset-panel space-y-1" data-testid="direction-live-preview">
+                  <p className="text-sm font-semibold">What will render</p>
+                  {editValue("visual_direction", "") && (
+                    <p className="text-sm text-muted-foreground">
+                      Scene: {sentenceCase(editValue("visual_direction", ""))}
+                    </p>
+                  )}
+                  {editValue("voice_direction", "") && (
+                    <p className="text-sm text-muted-foreground">
+                      Voice: {sentenceCase(editValue("voice_direction", ""))}
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground" data-subtitle="">
+                    Saved here first; the plan and render read these words.
+                  </p>
+                </div>
+              )}
+            </Disclosure>
+
             {/* Angle, goal, template and photo share one step now: the angle
                 picker above, the goal it ranks, then the templates filtered
                 below it. No step change between choosing and seeing what the
@@ -2777,116 +2910,13 @@ export default function CreateVideo() {
                 A note about your own recording — never reaches the render.
               </p>
             </div>
-            {/* No standalone Location field here (ADR 0136): the place is
-                edited in exactly one place, the Location pick inside Visual
-                & audio direction below. This free-text field and the pick
-                wrote the same project.location through the same save, so
-                the plan carried two editors for one fact. */}
-            {/* Direction is optional refinement, and it was the densest stack
-                in the step: two section labels, a camera select, four
-                dropdowns and a live preview between the plan's words and the
-                save button. It now sits behind one disclosure whose summary
-                says what it holds, so the default read is hook → script →
-                checks → save, and a founder who wants a different scene opens
-                it deliberately. Camera setup is inside for the same reason:
-                it is a framing choice, not a step gate. */}
-            <Disclosure
-              testId="visual-audio-direction"
-              detailsClassName="group inset-panel space-y-3"
-              summaryClassName="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden"
-              summary={
-                <>
-                  <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-                  <Badge variant="outline" className="text-xs">optional</Badge>
-                </>
-              }
-            >
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Optional scene picks; the plan's defaults render as-is.
-              </p>
-              <div className="space-y-2">
-                <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
-                <AppSelect
-                  id="camera-setup"
-                  testId="camera-setup"
-                  block
-                  className={CONTROL_CLASS}
-                  value={editValue("camera_setup", "handheld")}
-                  disabled={busy}
-                  onChange={(value) => {
-                    dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
-                  }}
-                  options={[
-                    { value: "handheld", label: "Handheld selfie" },
-                    { value: "fixed", label: "Fixed camera" },
-                  ]}
-                />
-                <p className="text-sm text-muted-foreground">
-                  {editValue("camera_setup", "handheld") === "fixed"
-                    ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
-                    : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
-                </p>
-                <p className="text-sm text-muted-foreground">Camera setup controls framing; save, then rebuild the strategy before rendering.</p>
-              </div>
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <p className="text-sm font-semibold">Location &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">The place is picked here; wardrobe refines the saved look.</p>
-                <DirectionSelect
-                  id="review-location-direction"
-                  testId="review-location-direction"
-                  label="Location"
-                  value={dirSel.location}
-                  onPick={pickScenePart("location")}
-                  options={directionOptions?.location}
-                  placeholder="Choose a Location…"
-                  disabled={busy}
-                  refresh={refreshProps("location", "review-location-refresh")}
-                />
-                <DirectionSelect
-                  id="review-wardrobe"
-                  testId="review-wardrobe"
-                  label="Wardrobe"
-                  value={dirSel.wardrobe}
-                  onPick={pickScenePart("wardrobe")}
-                  options={directionOptions?.wardrobe}
-                  placeholder="Choose wardrobe…"
-                  disabled={busy}
-                  refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
-                />
-                {project?.visual_direction && !edits.visual_direction && (
-                  <p className="text-sm text-muted-foreground">
-                    Plan default: {sentenceCase(project.visual_direction)}
-                  </p>
-                )}
-                <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                  Location and wardrobe apply together when you rebuild the strategy. Lighting
-                  is set from this video's scene.
-                </p>
-                {refreshError && (
-                  <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
-                    {refreshError}
-                  </p>
-                )}
-              </div>
-              {(editValue("visual_direction", "") || editValue("voice_direction", "")) && (
-                <div className="inset-panel space-y-1" data-testid="direction-live-preview">
-                  <p className="text-sm font-semibold">What will render</p>
-                  {editValue("visual_direction", "") && (
-                    <p className="text-sm text-muted-foreground">
-                      Scene: {sentenceCase(editValue("visual_direction", ""))}
-                    </p>
-                  )}
-                  {editValue("voice_direction", "") && (
-                    <p className="text-sm text-muted-foreground">
-                      Voice: {sentenceCase(editValue("voice_direction", ""))}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground" data-subtitle="">
-                    Set from this video's plan; save edits before rendering.
-                  </p>
-                </div>
-              )}
-            </Disclosure>
+            {/* No direction editing here (ADR 0220): the Visual & audio
+                direction section lives on the Audience & template step,
+                below the angle and goal picks, so the plan is written
+                already respecting the camera setup and location saved
+                there. There is no standalone Location field here either
+                (ADR 0136): the place is edited in exactly one place,
+                that section's Location pick. */}
 
             {/* Read-only, and labelled as such, because it sits among seven
                 editable fields in the same visual style and founders will

@@ -2841,11 +2841,13 @@ async function main() {
     }
   });
 
-  await check("the plan view edits the Location only through the direction pick", async (ctx) => {
+  await check("the Location is edited only through the direction pick, on the audience step", async (ctx) => {
     // The standalone Location textarea that sat above Visual & audio
     // direction is gone (ADR 0136): one fact had a free-text field here and
-    // a pick in the direction section below it. The pick remains, and the
-    // direction check further down pins that picking and saving it writes
+    // a pick in the direction section below it. The pick remains — and the
+    // section itself moved to the Audience & template step (ADR 0220), so
+    // Review carries no Location editor of any kind any more. The direction
+    // check further down pins that picking and saving it writes
     // project.location through the shared PATCH.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
@@ -2865,8 +2867,18 @@ async function main() {
         if (ctx.container.querySelector("#review-location")) {
           throw new Error("the plan still offers a free-text Location editor");
         }
+        if (ctx.container.querySelector("#review-location-direction")) {
+          throw new Error("Review still carries the direction section's Location pick");
+        }
+        if (ctx.container.querySelector("#camera-setup")) {
+          throw new Error("Review still carries the direction section");
+        }
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
         if (!ctx.container.querySelector("#review-location-direction")) {
           throw new Error("the direction section lost the Location pick");
+        }
+        if (!ctx.container.querySelector("#camera-setup")) {
+          throw new Error("the direction section lost the camera setup");
         }
       });
     } finally {
@@ -2993,8 +3005,9 @@ async function main() {
     // native select's open menu belongs to the browser and ignores the
     // page; the founder widened the order to every dropdown in the app.
     // The form-field dropdowns — the render panel's model and resolution,
-    // the Review camera setup and direction picks — are the same app-drawn
-    // listbox now, so neither surface renders a native <select> at all.
+    // the camera setup and direction picks on the audience step — are the
+    // same app-drawn listbox now, so neither surface renders a native
+    // <select> at all.
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
     await withApi({
@@ -3021,7 +3034,7 @@ async function main() {
         }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
         if (ctx.container.querySelector("select")) {
           throw new Error("the wizard still renders a native select");
         }
@@ -3737,12 +3750,13 @@ async function main() {
     // The helper used to say the scene was built on Review & submit, which is
     // not where the Location can be edited. It then pointed at the render
     // panel's editor (ADR 0092); that editor is gone (ADR 0136), and the one
-    // Location editor is the direction pick in Visual & audio direction on
-    // the plan, so the pointer names it. The scene fields now live in
+    // Location editor is the direction pick in Visual & audio direction,
+    // which moved to the Audience & template step (ADR 0220), so the
+    // pointer names that step. The scene fields now live in
     // one closed "Scene details" group with a one-line digest.
     await mount(HookContinuityPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
     expectText(ctx, "Scene details", "the scene fields are not collapsed into one group");
-    expectText(ctx, "Visual & audio direction on the plan", "the scene block does not point at the Location editor");
+    expectText(ctx, "Visual & audio direction on the Audience & template step", "the scene block does not point at the Location editor");
     const group = ctx.container.querySelector('[data-testid="strategy-scene-details"]');
     if (!group || group.open) throw new Error("Scene details is not a closed group");
     if (!group.querySelector("summary")?.textContent.toLowerCase().includes("handheld selfie")) {
@@ -6998,11 +7012,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // server no longer composes â€” and every promise of a finished file a
   // founder would post without the part that makes it convert.
   // -------------------------------------------------------------------------
-  await check("Review sets delivery from the video, never from a control", async (ctx) => {
+  await check("delivery comes from the video, never from a direction control", async (ctx) => {
     // Voice direction and Lighting were founder picks; both are set from each
     // video's own plan and scene now (ADR 0102, superseding 0091), so any
     // delivery control coming back fails here. The value itself still reaches
-    // the panel as read-only copy in the live preview.
+    // the founder as read-only copy in the direction section's live preview —
+    // on the Audience & template step since ADR 0220, and Review no longer
+    // carries the section at all.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -7012,6 +7028,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`Review still offers a delivery control: ${gone}`);
         }
       }
+      if (ctx.container.querySelector("#camera-setup")) {
+        throw new Error("Review still carries the direction section");
+      }
+      await clickEl(ctx, stepPill(ctx, "Audience & template"));
       expectText(ctx, "Voice: Calm.", "the video's own voice direction is not shown");
       expectText(ctx, "Location & wardrobe", "the scene group lost its label");
     } finally {
@@ -7040,7 +7060,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         markProjectReady: async () => saved,
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
         const select = ctx.container.querySelector('#camera-setup');
         if (!select || select.dataset.value !== "handheld") throw new Error("handheld camera is not the default");
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
@@ -7059,7 +7079,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
         await chooseOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
         await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
-        await clickEl(ctx, buttonByText(ctx, /Save edits/));
+        // No save button on this step: the picks ride the page's
+        // autosave, about a second after the last change — the same
+        // server path Review's Save edits button drives (ADR 0220).
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
         expectText(ctx, "Camera setup controls framing");
         if (saved.location !== "Location one") {
@@ -7070,13 +7093,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
-        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
         if (ctx.container.querySelector('#camera-setup')?.dataset.value !== "fixed") throw new Error("saved setup lost on reload");
         for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-wardrobe": "Wardrobe one" })) {
           if (ctx.container.querySelector(`#${id}`)?.dataset.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }
         }
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
         await clickEl(ctx, ctx.container.querySelector('[data-testid="review-tab-render"]'));
         expectText(ctx, "Rebuild");
       });
@@ -7085,11 +7109,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("review edits autosave after every change without the save button", async (ctx) => {
+  await check("wizard edits autosave after every change without the save button", async (ctx) => {
     // The Demo + CTA editor saves its draft shortly after every change; the
-    // Review step does the same through the server path (validation and
+    // wizard's fields do the same through the server path (validation and
     // ready re-mark included), so an unpressed Save button never reads as
-    // lost work. The manual button stays for an immediate, explicit save.
+    // lost work. The manual button stays on Review for an immediate,
+    // explicit save. The vehicle here is a direction pick, which lives on
+    // the Audience & template step since ADR 0220 — the autosave is the
+    // page's, not the step's, so it carries the pick exactly as it did
+    // when the section sat on Review.
     global.__SMOKE_PARAMS = "?project=p1";
     let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
     let saves = 0;
@@ -7108,21 +7136,139 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         markProjectReady: async () => saved,
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        await clickEl(ctx, stepPill(ctx, "Review & submit"));
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
         await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe two");
         if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
         if (saved.visual_direction !== "Wardrobe two") throw new Error("the autosave did not carry the wardrobe pick");
+        // The saved confirmation stands beside Review's save button,
+        // where it always stood; the state is the page's, so it reads
+        // the same after walking over.
+        await clickEl(ctx, stepPill(ctx, "Review & submit"));
         const status = ctx.container.querySelector('[data-testid="review-autosave-status"]');
         if (!status || !status.textContent.includes("All changes saved")) {
           throw new Error("no saved confirmation after the autosave");
         }
         // A second change must schedule a second save, not reuse the first.
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const before = saves;
         await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        if (saves !== before) throw new Error("the second pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
-        if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
+        if (saves !== before + 1) throw new Error(`a second change did not autosave: ${saves} server saves`);
         if (saved.visual_direction !== "Wardrobe one") throw new Error("the second autosave did not carry the newer pick");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a fixed camera is offered indoor locations only, a handheld any location", async (ctx) => {
+    // ADR 0220 spends ADR 0219's classifier at the options endpoint: the
+    // page asks for the list under the camera setup currently picked, so
+    // flipping the setup re-reads the list. The stub plays the server's
+    // part — the backend tests pin the filtering itself; this pins the
+    // wiring: the ask carries the setup, and the menu shows its answer.
+    global.__SMOKE_PARAMS = "?project=p1";
+    const ALL_LOCATIONS = [
+      "Quiet garden bench",
+      "Calm living room with a plant beside the chair",
+      "Balcony with a simple chair",
+      "Tidy desk with a notebook",
+    ];
+    const INDOOR_LOCATIONS = [
+      "Calm living room with a plant beside the chair",
+      "Tidy desk with a notebook",
+    ];
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", location: "", visual_direction: "" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        getDirectionOptions: async (_profileId, _angleId, cameraSetup) => ({
+          group: "default",
+          location: cameraSetup === "fixed" ? INDOOR_LOCATIONS : ALL_LOCATIONS,
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const offered = await offeredOptionValues(ctx, ctx.container.querySelector("#review-location-direction"));
+        if (JSON.stringify(offered) !== JSON.stringify(["", ...ALL_LOCATIONS])) {
+          throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(offered)}`);
+        }
+        await clickEl(ctx, ctx.container.querySelector("#review-location-direction"), "close the location menu");
+        await chooseOption(ctx, ctx.container.querySelector("#camera-setup"), "fixed");
+        await act(async () => {});
+        const offeredFixed = await offeredOptionValues(ctx, ctx.container.querySelector("#review-location-direction"));
+        if (JSON.stringify(offeredFixed) !== JSON.stringify(["", ...INDOOR_LOCATIONS])) {
+          throw new Error(`a fixed camera was not offered indoor locations only: ${JSON.stringify(offeredFixed)}`);
+        }
+        await clickEl(ctx, ctx.container.querySelector("#review-location-direction"), "close the location menu");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a saved place a fixed camera cannot use is named in the section, not silently kept", async (ctx) => {
+    // The codebase's pattern for a saved value that stops being eligible
+    // (the gone template is the sibling): the value is not rewritten
+    // behind the founder's back — the pick reads empty and a notice in
+    // the section names what happened and what to do. ADR 0219's plan
+    // rule guards generation in the meantime. Flipping back to handheld
+    // offers the place again and the pick returns on its own.
+    global.__SMOKE_PARAMS = "?project=p1";
+    const ALL_LOCATIONS = [
+      "Quiet garden bench",
+      "Calm living room with a plant beside the chair",
+      "Balcony with a simple chair",
+      "Tidy desk with a notebook",
+    ];
+    const INDOOR_LOCATIONS = [
+      "Calm living room with a plant beside the chair",
+      "Tidy desk with a notebook",
+    ];
+    let saved = {
+      ...PROJECT_WITH_STRATEGY,
+      camera_setup: "fixed",
+      location: "Quiet garden bench",
+      visual_direction: "",
+    };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        getDirectionOptions: async (_profileId, _angleId, cameraSetup) => ({
+          group: "default",
+          location: cameraSetup === "fixed" ? INDOOR_LOCATIONS : ALL_LOCATIONS,
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const pick = ctx.container.querySelector("#review-location-direction");
+        if (!pick || pick.dataset.value !== "") {
+          throw new Error("the ineligible saved place still reads as the pick");
+        }
+        const notice = ctx.container.querySelector('[data-testid="direction-location-ineligible"]');
+        if (!notice) throw new Error("the section does not name the ineligible saved place");
+        await chooseOption(ctx, ctx.container.querySelector("#camera-setup"), "handheld");
+        await act(async () => {});
+        const restored = ctx.container.querySelector("#review-location-direction");
+        if (!restored || restored.dataset.value !== "Quiet garden bench") {
+          throw new Error("the saved place did not return as the pick under handheld");
+        }
+        if (ctx.container.querySelector('[data-testid="direction-location-ineligible"]')) {
+          throw new Error("the ineligible-place notice outlives its cause");
+        }
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -7974,7 +8120,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!step.textContent.includes(OBJECTIVE_OUTCOMES[expected[0]])) {
       throw new Error("recommended goal choices do not explain their intended outcome");
     }
-    if (step.querySelector("select, details") || step.textContent.includes("See all goals")) {
+    // The step's one <details> is the direction section (ADR 0220); the
+    // all-goals control this line guards against was a disclosure too,
+    // so the guard now names its exception rather than banning the
+    // element outright.
+    const strayDisclosures = [...step.querySelectorAll("details")]
+      .filter((el) => el.dataset.testid !== "visual-audio-direction");
+    if (step.querySelector("select") || strayDisclosures.length > 0 || step.textContent.includes("See all goals")) {
       throw new Error("the removed all-goals control is still present");
     }
     if (!step.textContent.includes("Three suggestions")) throw new Error("the copy does not describe three suggestions");

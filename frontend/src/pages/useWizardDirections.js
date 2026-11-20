@@ -5,6 +5,10 @@ import { api, getErrorMessage } from "../lib/api";
  * Direction dropdown lifecycle: one owner for profile- and angle-keyed options,
  * per-app picks, saved-plan matching and per-field refresh.
  *
+ * The option lists are also keyed on the camera setup (ADR 0220): a fixed
+ * camera is indoors only (ADR 0219), so the server filters the location
+ * list for it, and flipping the setup re-reads the list under the new one.
+ *
  * Navigation safety: every load carries a request id, picks reset when the
  * profile changes, and a refresh never destroys the founder's current pick.
  *
@@ -16,7 +20,7 @@ import { api, getErrorMessage } from "../lib/api";
  * saved tone or voice on an existing project still rides into plan and
  * strategy generation untouched.
  */
-export function useWizardDirections({ profileId, project, angle, dispatchDraft }) {
+export function useWizardDirections({ profileId, project, angle, dispatchDraft, cameraSetup = "" }) {
   const [directionOptions, setDirectionOptions] = useState(null);
   const angleId = angle?.id || "";
   const directionRequestRef = useRef(0);
@@ -28,7 +32,7 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
       return undefined;
     }
     let cancelled = false;
-    api.getDirectionOptions(profileId, angleId)
+    api.getDirectionOptions(profileId, angleId, cameraSetup)
       .then((data) => {
         if (!cancelled && directionRequestRef.current === request) setDirectionOptions(data);
       })
@@ -38,7 +42,7 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
     return () => {
       cancelled = true;
     };
-  }, [profileId, angleId]);
+  }, [profileId, angleId, cameraSetup]);
 
   const [dirSel, setDirSel] = useState({ location: "", lighting: "", wardrobe: "" });
 
@@ -52,17 +56,32 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
     location: project?.location || "",
   };
 
+  const matchedProjectRef = useRef(null);
+
   useEffect(() => {
     if (!directionOptions) return;
+    // A re-read of the lists (the camera setup flipped, the angle
+    // changed) must not clobber a pick the founder just made on this
+    // same project before it saved: a pick that is still offered
+    // survives the re-derivation. A pick the new list no longer offers
+    // — an outdoor place under a fixed camera — falls out instead,
+    // which is the section's ineligible-value pattern: the pick reads
+    // empty and the section names why (ADR 0220).
+    const sameProject = matchedProjectRef.current === project?.id;
+    matchedProjectRef.current = project?.id;
     const { visual: savedVisual, location: savedLocation } = savedDirectionsRef.current;
     const matchPart = (text, list) =>
       (list || []).find((option) => text && text.toLowerCase().includes(option.toLowerCase())) || "";
-    setDirSel({
-      location: matchPart(savedLocation, directionOptions.location) || matchPart(savedVisual, directionOptions.location),
-      // No Lighting control reads this slot any more; it is kept so a wardrobe
-      // pick recomposes the strategy's own lighting word instead of dropping it.
-      lighting: matchPart(savedVisual, directionOptions.lighting),
-      wardrobe: matchPart(savedVisual, directionOptions.wardrobe),
+    setDirSel((previous) => {
+      const keep = (pick, list) =>
+        sameProject && pick && (list || []).includes(pick) ? pick : "";
+      return {
+        location: matchPart(savedLocation, directionOptions.location) || matchPart(savedVisual, directionOptions.location) || keep(previous.location, directionOptions.location),
+        // No Lighting control reads this slot any more; it is kept so a wardrobe
+        // pick recomposes the strategy's own lighting word instead of dropping it.
+        lighting: matchPart(savedVisual, directionOptions.lighting) || keep(previous.lighting, directionOptions.lighting),
+        wardrobe: matchPart(savedVisual, directionOptions.wardrobe) || keep(previous.wardrobe, directionOptions.wardrobe),
+      };
     });
   }, [project?.id, directionOptions]);
 
@@ -89,6 +108,7 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft }
         field,
         avoid: directionOptions?.[field] || [],
         angleId: angle?.id || "",
+        cameraSetup,
       });
       const fresh = (data?.options || []).filter(Boolean);
       if (fresh.length > 0) {

@@ -70,8 +70,10 @@ One render path, single-pass video generation via OpenRouter.
   finishing step renders the Demo+CTA editor loader on the project's newest
   finished render; ADR 0121). At desktop widths the wizard stands one step
   at a time, as pages; below, the canvas stacks (ADR 0141). Selection UI lives in
-  `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); direction
-  dropdowns and plan-phase narration in `ReviewPanels.jsx`. Project writes stay
+  `components/studio/SelectionPanels.jsx` (the only `AngleSelector`); the Visual
+  & audio direction section renders on the Audience & template step, below the
+  angle and goal picks (ADR 0220), and its dropdowns and plan-phase narration
+  live in `ReviewPanels.jsx`. Project writes stay
   in the page. `pages/wizardDraft.js` owns coupled draft transitions;
   `hooks/useWizardTemplates.js` owns recommendation/tailoring state,
   `hooks/useWizardAngleStep.js` owns the angle-step lifecycle (ADR 0112).
@@ -290,7 +292,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and nineteen decisions (0001–0219) now
+Read `docs/adr/README.md` first. Two hundred and twenty decisions (0001–0220) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

@@ -876,7 +876,7 @@ export function HookContinuityPanel({ project, onProjectChange, onStrategyBuilt 
             >
               <StrategyBlock
                 title="The scene"
-                description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Visual & audio direction on the plan, where the wardrobe is picked too; lighting is set from this video's scene."
+                description="One Location, one render: the hook and the middle can't disagree. Edit the Location in Visual & audio direction on the Audience & template step, where the wardrobe is picked too; lighting is set from this video's scene."
                 icon={MapPin}
                 hideTitle
                 specGrid

@@ -400,10 +400,15 @@ class GeneratePlanAndStrategyRequest(BaseModel):
 
 
 class RefreshDirectionOptionsRequest(BaseModel):
-    """Fresh dropdown options for one Review-step direction field."""
+    """Fresh dropdown options for one direction field."""
     field: str = ""
     avoid: Optional[List[str]] = None
     angle_id: Optional[str] = None
+    # The camera setup the founder has picked on the Audience & template
+    # step (ADR 0220): a fixed camera is indoors only (ADR 0219), so a
+    # location refresh for it must not offer outdoor or unclassifiable
+    # places.
+    camera_setup: Optional[str] = None
 
 
 class GenerateStrategyRequest(BaseModel):
