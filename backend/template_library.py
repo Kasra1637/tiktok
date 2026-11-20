@@ -765,7 +765,7 @@ SUPPORTED_DURATIONS = [8, 10, 12, 15]
 DEFAULT_DURATION = 15
 
 # The longest piece any supported model can produce in one pass. 15s is
-# minimax-h3's real ceiling, and a piece is one render — so this is a hard
+# every studio model's real ceiling, and a piece is one render — so this is a hard
 # product limit rather than the top of a menu. A project saved before the
 # one-render change can still carry 20s or 30s, and those are not longer
 # videos: they are unrenderable, so they are brought down to this on read.

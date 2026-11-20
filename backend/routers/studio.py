@@ -645,7 +645,7 @@ def _assert_model_usable(model_key: str) -> str:
     """
     Refuse an unrecognised model key instead of quietly rendering on the default.
 
-    video_providers.resolve() falls back to Hailuo 3 with a reason string, but the
+    video_providers.resolve() falls back to the default with a reason string, but the
     reason is informational: without this guard a stale key would still spend a
     real render on a model the founder did not choose, and the returned clip
     would not match the model on the row. A key that is known but not allowed

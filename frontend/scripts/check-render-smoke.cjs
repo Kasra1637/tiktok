@@ -194,11 +194,11 @@ const { createRoot } = require("react-dom/client");
 // `id` is deliberately stripped, so a fixture carrying `id` instead makes every
 // <option key={m.key}> undefined and renders a misleading key warning.
 const CAPABILITY = {
-  key: "minimax-h3",
-  name: "MiniMax H3",
+  key: "minimax-h3-max",
+  name: "MiniMax H3 Max",
   max_duration: 15,
   min_duration: 5,
-  resolution: "2K",
+  resolution: "768p",
   aspect_ratio: "9:16",
   supports_references: true,
   supports_native_audio: true,
@@ -380,7 +380,7 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
   recordFeedback: async () => ({}),
-  getStudioVideoModels: async () => ({ default: "minimax-h3", models: [CAPABILITY] }),
+  getStudioVideoModels: async () => ({ default: "minimax-h3-max", models: [CAPABILITY] }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -2927,14 +2927,14 @@ async function main() {
   });
 
   await check("no resolution toggle renders for a model with no choice", async (ctx) => {
-    // Minimax H3 renders at its catalog resolution with no per-render option.
+    // MiniMax H3 Max renders at its catalog resolution with no per-render option.
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
     await withApi({
       getGenerations: async () => ({ generations: [] }),
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
     if (ctx.container.querySelector("#gen-resolution")) {
-      throw new Error("a resolution toggle renders for minimax-h3, which offers no choice");
+      throw new Error("a resolution toggle renders for minimax-h3-max, which offers no choice");
     }
   });
 
@@ -2975,7 +2975,7 @@ async function main() {
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({
         default: "heygen-video-1",
-        models: [HEYGEN_CAPABILITY, { ...CAPABILITY, key: "minimax-h3" }],
+        models: [HEYGEN_CAPABILITY, CAPABILITY],
       }),
     }, async () => {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
@@ -2985,9 +2985,9 @@ async function main() {
       if (res.dataset.value !== "480p") throw new Error("the 480p pick did not stick");
       const model = ctx.container.querySelector("#gen-model");
       if (!model) throw new Error("no model picker to switch with");
-      // A 480p pick for heygen must not ride along onto minimax-h3: the server
+      // A 480p pick for heygen must not ride along onto minimax-h3-max: the server
       // refuses values the new model does not offer.
-      await chooseOption(ctx, model, "minimax-h3");
+      await chooseOption(ctx, model, "minimax-h3-max");
       if (ctx.container.querySelector("#gen-resolution")) {
         throw new Error("the resolution toggle survives a switch to a model with no choice");
       }
@@ -10313,10 +10313,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const generation = text("landing-capability-generation");
     const editor = text("landing-capability-editor");
     const review = text("landing-capability-review");
-    for (const phrase of ["one AI-generated clip", "demo and closing message are not generated footage", "Record the demo yourself"]) {
+    for (const phrase of ["one AI-generated clip", "demo and closing message are never generated footage", "Record it yourself"]) {
       if (!generation.includes(phrase)) throw new Error(`missing generation boundary: ${phrase}`);
     }
-    for (const phrase of ["a base clip", "an end card you write", "Second clip", "Real Video", "one TikTok MP4"]) {
+    for (const phrase of ["a base clip", "an end card you write", "second clip", "Real Video", "your TikTok MP4"]) {
       if (!editor.includes(phrase)) throw new Error(`missing editor boundary: ${phrase}`);
     }
     if (!review.includes("A craft grade scores the words")) throw new Error("the review block no longer discloses the craft grade");
@@ -10384,6 +10384,34 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       const title = h.textContent;
       const description = h.parentElement.querySelector("p")?.textContent ?? "";
       if (description.length !== 160) throw new Error(`feature description under "${title}" is ${description.length} chars, not 160`);
+    }
+  });
+
+  // Kasra's rule for the pipeline blocks (ADR 0222): the three bodies
+  // share one length — 231 chars, the length of the third block ("Nothing
+  // ships without your yes"), which stands unchanged — so the three
+  // blocks read as one set and no body ends with ragged empty space.
+  // The titles and lengths are pinned here so a future copy edit cannot
+  // silently drift them apart again.
+  await check("Landing pipeline bodies share one length", async (ctx) => {
+    await mount(Landing)(ctx);
+    const expectedTitles = [
+      "The opening, written to hold",
+      "Your footage, centre stage",
+      "Nothing ships without your yes",
+    ];
+    const blocks = ["generation", "editor", "review"].map(
+      (name) => ctx.container.querySelector(`[data-testid="landing-capability-${name}"]`)
+    );
+    if (blocks.some((b) => !b)) throw new Error("expected three pipeline blocks");
+    const titles = blocks.map((b) => b.querySelector("h3")?.textContent ?? "");
+    if (JSON.stringify(titles) !== JSON.stringify(expectedTitles)) {
+      throw new Error(`pipeline titles drifted: ${JSON.stringify(titles)}`);
+    }
+    for (const b of blocks) {
+      const title = b.querySelector("h3")?.textContent ?? "";
+      const body = b.querySelector("p")?.textContent ?? "";
+      if (body.length !== 231) throw new Error(`pipeline body under "${title}" is ${body.length} chars, not 231`);
     }
   });
 

@@ -28,14 +28,6 @@ def _healthy_records() -> dict:
     under test. Tests override exactly the one model they are about.
     """
     return {
-        "minimax/hailuo-3": {
-            "id": "minimax/hailuo-3",
-            "supported_resolutions": ["2K"],
-            "supported_durations": list(range(5, 16)),
-            "supported_frame_images": ["first_frame", "last_frame"],
-            "generate_audio": True,
-            "allowed_passthrough_parameters": ["aigc_watermark"],
-        },
         "minimax/hailuo-3-max": {
             "id": "minimax/hailuo-3-max",
             "supported_resolutions": ["768p", "480p"],
@@ -72,9 +64,9 @@ class TestCompareCatalogToLive:
 
     def test_a_known_optional_passthrough_is_not_reported(self):
         """
-        aigc_watermark has been advertised by both Hailuo entries all along and
-        is never sent; both render fine. Reporting it every boot would mark the
-        two working models as broken and train everyone to ignore the output.
+        aigc_watermark has been advertised by the Hailuo entry all along and
+        is never sent; it renders fine. Reporting it every boot would mark a
+        working model as broken and train everyone to ignore the output.
         """
         assert "aigc_watermark" in pc._KNOWN_OPTIONAL_PASSTHROUGH
         assert pc.compare_catalog_to_live(_healthy_records()) == []

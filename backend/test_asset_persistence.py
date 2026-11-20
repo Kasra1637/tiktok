@@ -331,7 +331,7 @@ class TestAttachingRestoresBeforeRefusing:
 
 
 class TestGenerationRestoresTheReference:
-    def _reference(self, api, asset_id, model_key="minimax-h3"):
+    def _reference(self, api, asset_id, model_key="heygen-video-1"):
         return _run(api._studio_identity_references(
             assets=[{"asset_id": asset_id, "kind": "character_reference",
                      "label": "Founder"}],

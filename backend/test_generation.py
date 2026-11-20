@@ -15,29 +15,29 @@ import video_providers as vp
 
 class TestProviderResolution:
     def test_default_is_the_configured_app_default(self):
-        assert vp.default_model_key() == "minimax-h3"
+        assert vp.default_model_key() == "heygen-video-1"
 
     def test_env_override_changes_the_default(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "minimax-h3")
-        assert vp.default_model_key() == "minimax-h3"
+        monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "minimax-h3-max")
+        assert vp.default_model_key() == "minimax-h3-max"
 
     def test_bad_env_default_is_ignored(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "not-a-model")
-        assert vp.default_model_key() == "minimax-h3"
+        assert vp.default_model_key() == "heygen-video-1"
 
     def test_allowlist_restricts_usage(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3")
-        assert vp.is_allowed("minimax-h3") is True
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "heygen-video-1")
+        assert vp.is_allowed("heygen-video-1") is True
         assert vp.is_allowed("aleph-2") is False
-        assert vp.default_model_key() == "minimax-h3"
+        assert vp.default_model_key() == "heygen-video-1"
 
     def test_unknown_keys_in_allowlist_do_not_break_default(self, monkeypatch):
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "garbage,minimax-h3")
-        assert vp.default_model_key() == "minimax-h3"
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "garbage,heygen-video-1")
+        assert vp.default_model_key() == "heygen-video-1"
 
     def test_resolve_honours_an_allowed_request(self):
-        key, reason = vp.resolve("minimax-h3")
-        assert key == "minimax-h3"
+        key, reason = vp.resolve("minimax-h3-max")
+        assert key == "minimax-h3-max"
         assert "requested" in reason
 
     def test_resolve_falls_back_for_unknown_model(self):
@@ -52,8 +52,22 @@ class TestProviderResolution:
         never silently keep it.
         """
         key, reason = vp.resolve("seedance-2.5")
-        assert key == "minimax-h3"
+        assert key == "heygen-video-1"
         assert "unknown" in reason
+
+    def test_resolve_falls_back_for_the_removed_hailuo_3(self):
+        """
+        Hailuo 3 was removed from VIDEO_MODELS in ADR 0221. Projects and
+        generation rows saved before that still name minimax-h3, so
+        resolving it must degrade to the default — HeyGen — with a reason,
+        never raise and never silently keep it. Same contract as Seedance
+        above; this pins it for the model whose removal this change made.
+        """
+        assert vp.is_known("minimax-h3") is False
+        key, reason = vp.resolve("minimax-h3")
+        assert key == "heygen-video-1"
+        assert "unknown" in reason
+        assert vp.capability("minimax-h3")["key"] == "heygen-video-1"
 
 
     def test_resolve_defaults_when_no_model_named(self):
@@ -63,7 +77,7 @@ class TestProviderResolution:
 
     def test_editor_is_not_studio_eligible(self):
         assert vp.is_studio_eligible("aleph-2") is False
-        assert vp.is_studio_eligible("minimax-h3") is True
+        assert vp.is_studio_eligible("heygen-video-1") is True
 
     def test_removed_provider_is_not_studio_eligible(self):
         assert vp.is_studio_eligible("seedance-2.5") is False
@@ -75,7 +89,7 @@ class TestProviderResolution:
         rather than a 500 — that is the contract that makes removal safe.
         """
         cap = vp.capability("seedance-2.5")
-        assert cap["key"] == "minimax-h3"
+        assert cap["key"] == "heygen-video-1"
 
 
 class TestCapabilities:
@@ -91,7 +105,7 @@ class TestCapabilities:
         Aleph stays out because it edits a clip rather than making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
+        assert keys == ["minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
@@ -106,16 +120,17 @@ class TestCapabilities:
 
 
 
-    def test_heygen_video_is_opt_in_and_not_the_default(self):
+    def test_heygen_video_is_the_default(self):
         """
-        Audio + listed 2K makes this a default-challenger on paper, but paper
-        is not evidence: likeness and 2K reality are unproven until the first
-        renders. Listing it must not move production spend, so the default
-        stays Hailuo 3 and explicit requests are honoured, not swapped.
+        Kasra's ruling (ADR 0221, Nov 19 2026): Hailuo 3 leaves the list and
+        HeyGen Video is the default in its place. A render that names no
+        model uses HeyGen; a render that names H3 Max is honoured, not
+        swapped — promoting the default must not move explicit picks.
         """
         assert vp.is_studio_eligible("heygen-video-1") is True
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve("heygen-video-1")[0] == "heygen-video-1"
+        assert vp.default_model_key() == "heygen-video-1"
+        assert vp.resolve(None)[0] == "heygen-video-1"
+        assert vp.resolve("minimax-h3-max")[0] == "minimax-h3-max"
 
     def test_heygen_video_is_registered_at_its_real_id(self):
         cap = vp.capability("heygen-video-1")
@@ -136,8 +151,9 @@ class TestCapabilities:
         """
         The endpoint accepts generate_audio for this model (listed, defaults
         off), so the catalog declares it and the studio sends it by default —
-        the second audio-capable entry after Hailuo 3. If real clips come
-        back silent or the field is refused, this is the flag to flip.
+        the catalog's only native-audio entry since Hailuo 3 left the list
+        (ADR 0221). If real clips come back silent or the field is refused,
+        this is the flag to flip.
         """
         assert vp.capability("heygen-video-1")["supports_native_audio"] is True
 
@@ -149,7 +165,6 @@ class TestCapabilities:
         cap = vp.capability("heygen-video-1")
         assert cap["supported_resolutions"] == ["480p", "768p"]
         assert cap["resolution"] == "768p"
-        assert vp.capability("minimax-h3")["supported_resolutions"] == []
         assert vp.capability("minimax-h3-max")["supported_resolutions"] == []
 
     def test_a_pinned_opening_frame_is_told_to_open_in_the_prompted_scene(self):
@@ -207,7 +222,6 @@ class TestCapabilities:
         it silently, and a future loose one does not keep it pointlessly.
         """
         assert vp.script_is_sacred("heygen-video-1") is True
-        assert vp.script_is_sacred("minimax-h3") is False
         assert vp.script_is_sacred("minimax-h3-max") is False
 
     def test_an_removed_provider_falls_back_to_the_default(self):
@@ -226,7 +240,7 @@ class TestCapabilities:
             assert "unknown provider" in reason
 
     def test_minimax_is_capped_at_15s(self):
-        cap = vp.capability("minimax-h3")
+        cap = vp.capability("minimax-h3-max")
         assert cap["max_duration"] == 15
         assert cap["supports_combined_refs"] is False
 
@@ -239,7 +253,7 @@ class TestCapabilities:
         assert "aleph-2" not in keys
 
     def test_capability_record_has_the_planning_fields(self):
-        cap = vp.capability("minimax-h3")
+        cap = vp.capability("minimax-h3-max")
         for field in (
             "id", "name", "min_duration", "max_duration", "resolution",
             "supports_references", "supports_native_audio", "vertical",
@@ -252,35 +266,24 @@ class TestCapabilities:
 
 class TestHailuo3MaxIsOptIn:
     """
-    H3 Max is offered alongside Hailuo 3 so the two can be compared on the same
-    script. These tests pin the two halves of that promise: adding it must not
-    change Hailuo 3, and it must never become the model a render uses unless it
-    was asked for by name.
+    H3 Max stays on the list as an opt-in comparison model (ADR 0221). These
+    tests pin the two halves of that promise: Hailuo 3's removal and HeyGen's
+    promotion must not change H3 Max, and it must never become the model a
+    render uses unless it was asked for by name.
     """
 
-    def test_hailuo_3_entry_is_untouched(self):
+    def test_hailuo_3_is_gone_from_the_catalog(self):
         """
-        The founder's working model is the baseline for every comparison, so its
-        recorded capabilities are pinned. A change here is a deliberate product
-        decision, not a side effect of adding another provider.
+        Kasra's order (ADR 0221): minimax/hailuo-3 leaves the model list.
+        The entry must not creep back as a side effect of editing a
+        neighbour — a render offered a removed model is spend on a model
+        the founder was told is gone.
         """
         from ai_service import VIDEO_MODELS
 
-        assert VIDEO_MODELS["minimax-h3"] == {
-            "id": "minimax/hailuo-3",
-            "name": "MiniMax H3",
-            "description": (
-                "Omni-modal video generation. Native audio, V2V motion transfer, "
-                "2K resolution, up to 15s."
-            ),
-            "max_duration": 15,
-            "min_duration": 5,
-            "supports_references": True,
-            "supports_native_audio": True,
-            "supports_v2v_motion": True,
-            "resolution": "2K",
-            "supports_combined_refs": False,
-        }
+        assert "minimax-h3" not in VIDEO_MODELS
+        assert "minimax/hailuo-3" not in [m["id"] for m in VIDEO_MODELS.values()]
+        assert "minimax-h3" not in vp.STUDIO_ELIGIBLE
 
     def test_h3_max_is_registered_at_its_real_id(self):
         cap = vp.capability("minimax-h3-max")
@@ -293,11 +296,14 @@ class TestHailuo3MaxIsOptIn:
     def test_h3_max_is_768p_not_2k(self):
         """
         OpenRouter accepts only "768p" or "480p" for this model and rejects an
-        unlisted value, so 2K would 400 on every render. This is the one field
-        that cannot be copied from the Hailuo 3 entry.
+        unlisted value, so 2K would 400 on every render. With Hailuo 3 gone
+        (ADR 0221) no catalog entry renders 2K at all — the field that could
+        not be copied from its entry is now moot, and this pins that too.
         """
         assert vp.capability("minimax-h3-max")["resolution"] == "768p"
-        assert vp.capability("minimax-h3")["resolution"] == "2K"
+        assert all(
+            c["resolution"] != "2K" for c in vp.list_capabilities()
+        )
 
     def test_h3_max_does_not_request_native_audio(self):
         """
@@ -311,15 +317,22 @@ class TestHailuo3MaxIsOptIn:
         assert vp.is_studio_eligible("minimax-h3-max")
         assert "minimax-h3-max" in [c["key"] for c in vp.list_capabilities()]
 
-    def test_hailuo_3_remains_the_default(self):
+    def test_heygen_is_the_default_and_hailuo_3_is_absent(self):
         """
-        Listing a second model must not change which one a render uses when the
-        caller does not name one — otherwise adding a test provider would
-        silently move production spend onto a 768p model.
+        Kasra's ruling (ADR 0221, Nov 19 2026): when Hailuo 3 was removed he
+        named HeyGen Video as the default — "HeyGen should be the default
+        model" — knowing Hailuo 3 was the only 2K model on the list, so the
+        standing default is HeyGen at 768p. A caller that names no model
+        gets HeyGen, and the removed key is absent from the catalog and
+        from the studio's eligible list alike.
         """
-        assert vp.default_model_key() == "minimax-h3"
-        assert vp.resolve(None)[0] == "minimax-h3"
-        assert vp.resolve("") [0] == "minimax-h3"
+        from ai_service import VIDEO_MODELS
+
+        assert vp.default_model_key() == "heygen-video-1"
+        assert vp.resolve(None)[0] == "heygen-video-1"
+        assert vp.resolve("") [0] == "heygen-video-1"
+        assert "minimax-h3" not in VIDEO_MODELS
+        assert "minimax-h3" not in vp.STUDIO_ELIGIBLE
 
     def test_named_h3_max_is_honoured(self):
         key, _reason = vp.resolve("minimax-h3-max")
@@ -339,23 +352,23 @@ class TestHailuo3MaxIsOptIn:
         max_cap = vp.capability("minimax-h3-max")
         assert max_cap["max_reference_images"] == 0
         assert max_cap["identity_via_first_frame"] is True
-        # ...while Hailuo 3 keeps the reference-image path, and the editor
-        # keeps refusing both:
-        assert vp.capability("minimax-h3").get("identity_via_first_frame") is not True
-        assert vp.accepts_identity_reference("minimax-h3") is True
+        # ...HeyGen, the default, takes the same first-frame route, and the
+        # editor keeps refusing both:
+        assert vp.capability("heygen-video-1")["identity_via_first_frame"] is True
+        assert vp.accepts_identity_reference("heygen-video-1") is True
         assert vp.accepts_identity_reference("aleph-2") is False
 
-    def test_allowlisting_hailuo_3_alone_still_excludes_h3_max(self, monkeypatch):
+    def test_allowlisting_heygen_alone_still_excludes_h3_max(self, monkeypatch):
         """
         The env allowlist is the existing lever for restricting spend. It must
         keep working now that there is a second model, so a deployment that only
         trusts one provider can still pin itself to it.
         """
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3")
-        assert vp.is_allowed("minimax-h3") is True
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "heygen-video-1")
+        assert vp.is_allowed("heygen-video-1") is True
         assert vp.is_allowed("minimax-h3-max") is False
         assert vp.is_studio_eligible("minimax-h3-max") is False
-        assert [c["key"] for c in vp.list_capabilities()] == ["minimax-h3"]
+        assert [c["key"] for c in vp.list_capabilities()] == ["heygen-video-1"]
 
     def test_allowlisting_h3_max_alone_makes_it_the_default(self, monkeypatch):
         """The documented switch for making H3 Max the production model."""
@@ -363,9 +376,9 @@ class TestHailuo3MaxIsOptIn:
         assert vp.default_model_key() == "minimax-h3-max"
 
 
-class TestHailuo3MaxPayload:
+class TestModelPayloads:
     """
-    What actually goes over the wire for an H3 Max render.
+    What actually goes over the wire, per model.
 
     The capability record is only half the answer; these assert the request
     body, because the failure this guards against is a 400 from the provider on
@@ -434,8 +447,14 @@ class TestHailuo3MaxPayload:
                                              generate_audio=True))
         assert "generate_audio" not in seen[0]
 
-    def test_hailuo_3_still_sends_2k_and_audio(self, monkeypatch):
-        """The comparison only means something if the baseline is unchanged."""
+    def test_a_removed_key_falls_back_to_heygen_inside_the_provider(self, monkeypatch):
+        """
+        Hailuo 3 left the catalog in ADR 0221, so a direct caller still
+        naming it — a stale row, an old script — is resolved to the default
+        before anything is sent, the same last-resort guard the unknown-key
+        test below pins. The payload is HeyGen's: its id, its 768p, and
+        audio when asked for.
+        """
         import asyncio
 
         import ai_service
@@ -444,8 +463,8 @@ class TestHailuo3MaxPayload:
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
                                              duration=10, model="minimax-h3",
                                              generate_audio=True))
-        assert seen[0]["model"] == "minimax/hailuo-3"
-        assert seen[0]["resolution"] == "2K"
+        assert seen[0]["model"] == "heygen/heygen-video-1"
+        assert seen[0]["resolution"] == "768p"
         assert seen[0]["generate_audio"] is True
 
     def test_heygen_sends_768p_and_audio(self, monkeypatch):
@@ -499,9 +518,9 @@ class TestHailuo3MaxPayload:
         assert seen[0]["resolution"] == "768p"
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="minimax-h3",
+                                             duration=10, model="minimax-h3-max",
                                              resolution="480p"))
-        assert seen[0]["resolution"] == "2K"
+        assert seen[0]["resolution"] == "768p"
 
     def test_face_rides_as_first_frame_not_references(self, monkeypatch, tmp_path):
         """
@@ -541,7 +560,7 @@ class TestHailuo3MaxPayload:
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
                                               duration=10, model="not-a-real-model"))
-        assert seen[0]["model"] == "minimax/hailuo-3"
+        assert seen[0]["model"] == "heygen/heygen-video-1"
 
 
 
@@ -553,35 +572,35 @@ class TestDurationPlanning:
     """
 
     def test_duration_within_one_pass_needs_no_extension(self):
-        plan = vp.plan_duration("minimax-h3", 12)
+        plan = vp.plan_duration("heygen-video-1", 12)
         assert plan["primary_seconds"] == 12
         assert plan["needs_extension"] is False
         assert plan["extension_seconds"] == 0
 
     def test_over_limit_splits_into_primary_plus_extension(self):
-        plan = vp.plan_duration("minimax-h3", 30)
+        plan = vp.plan_duration("heygen-video-1", 30)
         assert plan["primary_seconds"] == 15
         assert plan["extension_seconds"] == 15
         assert plan["needs_extension"] is True
 
     def test_split_is_explicitly_explained(self):
-        plan = vp.plan_duration("minimax-h3", 20)
+        plan = vp.plan_duration("heygen-video-1", 20)
         assert plan["needs_extension"] is True
         assert any("second job" in a for a in plan["adjustments"])
 
-    def test_minimax_needs_a_second_job_past_15s(self):
+    def test_a_second_job_is_needed_past_15s(self):
         for want in (20, 30):
-            plan = vp.plan_duration("minimax-h3", want)
+            plan = vp.plan_duration("heygen-video-1", want)
             assert plan["needs_extension"] is True
             assert plan["primary_seconds"] == 15
 
     def test_below_provider_floor_is_raised(self):
-        plan = vp.plan_duration("minimax-h3", 2)
-        assert plan["primary_seconds"] == vp.capability("minimax-h3")["min_duration"]
+        plan = vp.plan_duration("heygen-video-1", 2)
+        assert plan["primary_seconds"] == vp.capability("heygen-video-1")["min_duration"]
         assert any("cannot go below" in a for a in plan["adjustments"])
 
     def test_never_returns_zero(self):
-        assert vp.plan_duration("minimax-h3", 1)["primary_seconds"] > 0
+        assert vp.plan_duration("heygen-video-1", 1)["primary_seconds"] > 0
 
     def test_adjustment_records_provider_fallback(self):
         plan = vp.plan_duration("aleph-2", 20)
@@ -589,7 +608,7 @@ class TestDurationPlanning:
         assert plan["adjustments"]
 
     def test_clamp_helper_matches_plan(self):
-        assert vp.clamp_for_single_pass("minimax-h3", 30) == 15
+        assert vp.clamp_for_single_pass("heygen-video-1", 30) == 15
 
 
 PLAN = {
@@ -1095,13 +1114,13 @@ class TestPromptCeilingRefusal:
         message = gp.prompt_ceiling_refusal(
             prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
             spoken_chars=380,
-            alternative={"name": "Hailuo 3", "prompt_char_limit": 6800},
+            alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
         )
         assert "4294-character prompt" in message
         assert "204 over the 4090 HeyGen Video accepts" in message
         # The roomier model and its ceiling, so "pick another model" has a name.
-        assert "Hailuo 3 accepts 6800" in message
-        assert "switch to Hailuo 3 on the Generate step" in message
+        assert "MiniMax H3 Max accepts 6800" in message
+        assert "switch to MiniMax H3 Max on the Generate step" in message
         # The actionable cut, sized, and free.
         assert "Cut about 204 characters from the script" in message
         assert "nothing has been charged" in message
@@ -1116,13 +1135,13 @@ class TestPromptCeilingRefusal:
         message = gp.prompt_ceiling_refusal(
             prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
             spoken_chars=90,
-            alternative={"name": "Hailuo 3", "prompt_char_limit": 6800},
+            alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
         )
         assert "bigger than the 90 characters your script has" in message
         assert "cutting the script cannot save this render" in message
         assert "Cut about" not in message
         # A new sentence, so it is capitalised — the only lever named.
-        assert "Switch to Hailuo 3 on the Generate step" in message
+        assert "Switch to MiniMax H3 Max on the Generate step" in message
 
     def test_with_no_roomier_model_it_says_so(self):
         """
@@ -1131,7 +1150,7 @@ class TestPromptCeilingRefusal:
         instead of pointing at a picker that cannot help.
         """
         message = gp.prompt_ceiling_refusal(
-            prompt_chars=6900, ceiling=6800, model_name="Hailuo 3",
+            prompt_chars=6900, ceiling=6800, model_name="MiniMax H3 Max",
             spoken_chars=900, alternative=None,
         )
         assert "Cut about 100 characters from the script" in message
@@ -1250,7 +1269,7 @@ class TestRefusalNamesWhereThePhotoWent:
 
     def test_a_render_with_no_photo_says_so(self, monkeypatch):
         self._refusing_client(monkeypatch)
-        message, sent = self._refusal(monkeypatch, model="minimax-h3")
+        message, sent = self._refusal(monkeypatch, model="heygen-video-1")
         assert "frame_images" not in sent[0]
         assert "without your photo" in message
 
@@ -1772,7 +1791,7 @@ class TestPerProviderPromptBudget:
         why this is a prompt-side guarantee and not a data-side one.
         """
         long_name = "N" * 1200
-        for name in ("heygen-video-1", "minimax-h3"):
+        for name in ("heygen-video-1", "minimax-h3-max"):
             limit = vp.capability(name)["prompt_char_limit"]
             saturated = dict(self._verbose_kwargs())
             saturated["profile"] = {**saturated["profile"], "brand_name": long_name}
@@ -1906,7 +1925,7 @@ class TestPerProviderPromptBudget:
             limit = vp.capability(key).get("prompt_char_limit")
             assert isinstance(limit, int) and limit > 0, key
 
-    def test_the_hailuo_prompt_is_untouched_by_all_of_this(self):
+    def test_the_h3_max_prompt_is_untouched_by_all_of_this(self):
         """
         The founder is happy with H3 Max's output, so every mechanism added for
         the tight ceiling has to be invisible to it: clean endings, protected
@@ -1916,7 +1935,7 @@ class TestPerProviderPromptBudget:
         """
         kwargs = self._verbose_kwargs()
         baseline = gp.build_segment_prompt(**kwargs)
-        for key in ("minimax-h3", "minimax-h3-max"):
+        for key in ("minimax-h3-max",):
             limit = vp.capability(key)["prompt_char_limit"]
             assert gp.build_segment_prompt(**kwargs, prompt_budget=limit) == baseline, (
                 f"{key} is not condensed, so nothing here should change its prompt"

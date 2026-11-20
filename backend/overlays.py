@@ -88,7 +88,7 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
     which is below what the platform expects.
 
     Audio is copied when present and dropped when absent, because the providers
-    here differ: Hailuo 3 returns a native audio track and Grok does not. A
+    here differ: HeyGen Video returns a native audio track and H3 Max does not. A
     graph referencing a stream that isn't there fails, so 0:a? is the only form
     that works for both.
     """

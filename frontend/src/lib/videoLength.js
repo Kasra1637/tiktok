@@ -29,7 +29,7 @@
 /**
  * How long a fresh project is when nothing states a length.
  *
- * 15s is the single-pass ceiling of the studio-eligible model (minimax-h3 caps
+ * 15s is the single-pass ceiling of the studio-eligible models (they cap
  * at 15s). It is the top of the supported set, so a fresh project always fits
  * in one render.
  */

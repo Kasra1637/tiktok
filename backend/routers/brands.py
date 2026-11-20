@@ -2345,7 +2345,7 @@ async def template_facets(user_id: str = Depends(get_current_user_id)):
     # How many renders a total length actually takes, so the length picker can
     # say so before the founder chooses rather than after it has run.
     # Derived from the default studio model's real single-pass ceiling -- today
-    # minimax-h3 caps at 15s, which makes the 20s and 30s options two passes.
+    # the default model caps at 15s, which makes the 20s and 30s options two passes.
     # Read per request rather than baked in, so pointing VIDEO_MODEL_DEFAULT at
     # a longer model relabels the options instead of quietly lying.
     default_cap = video_providers.capability()

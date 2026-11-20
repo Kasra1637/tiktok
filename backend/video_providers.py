@@ -35,23 +35,6 @@ logger = logging.getLogger(__name__)
 # supports_combined_refs: whether one request can carry both a first-frame
 # image and other references. False means we must pick one.
 _CAPABILITY_NOTES = {
-    "minimax-h3": {
-        "vertical": True,
-        "max_reference_images": 9,
-        "max_reference_videos": 3,
-        "max_reference_audio": 3,
-        "supports_first_frame": True,
-        "supports_last_frame": False,
-        # Measured live: a 7,724-char prompt to this model was refused with
-        # "content[0].text too long". 6,800 is the ceiling below that, with a
-        # margin for however the provider counts characters.
-        "prompt_char_limit": 6800,
-        "notes": (
-            "2K, native audio, 5-15s per generation. Cannot combine "
-            "frame_images with input_references in one request. Durations "
-            "above 15s need a second job."
-        ),
-    },
     "minimax-h3-max": {
         "vertical": True,
         # Proven REFUSED live: the serving provider 400s input_references with
@@ -70,32 +53,23 @@ _CAPABILITY_NOTES = {
         # Same provider as H3, so the same measured ceiling.
         "prompt_char_limit": 6800,
         "notes": (
-            "768p (not 2K), 5-15s per generation. Faster than Hailuo 3 with "
-            "tighter prompt adherence, which makes it useful for testing a "
+            "768p (not 2K), 5-15s per generation. Faster, with tighter "
+            "prompt adherence, which makes it useful for testing a "
             "script quickly. Picture is softer, and native audio is not "
             "requested because the provider does not document the flag for "
             "this model. Your photo opens the video as its first frame rather "
-            "than riding alongside as a reference image. Opt-in: Hailuo 3 is "
-            "still the default."
+            "than riding alongside as a reference image. Opt-in: HeyGen "
+            "Video is the default."
         ),
     },
     "heygen-video-1": {
         "vertical": True,
-        # One reference image, and it is a REFERENCE — not the opening frame.
-        #
-        # A first frame is a pixel pin, not a hint: the render starts on the
-        # uploaded photograph itself, so the opening of every clip was that
-        # photo — its room, its light, its framing, its wardrobe — and the
-        # planned scene only appeared once the model had morphed away from it.
-        # That is the one thing a prompt cannot overrule, which is why telling
-        # the model to "open in the locked scene, never the photo's room" never
-        # fixed it.
-        #
-        # Identity therefore rides in input_references, the same field Hailuo 3
-        # uses, and the whole clip — first frame to last — is generated from the
-        # plan. The field is listed for this model but not yet proven live: the
-        # first render on it is what settles that, exactly as H3 Max proved the
-        # opposite for itself.
+        # One reference image, carried as the pinned opening frame — see
+        # identity_via_first_frame below. An earlier design rode identity in
+        # input_references as a soft suggestion and the face drifted into a
+        # partial crop; the pin is the deliberate route now, so what is
+        # recorded here is the capacity (one image) and, below, the field it
+        # actually rides in.
         "max_reference_images": 1,
         "max_reference_videos": 0,
         "max_reference_audio": 0,
@@ -118,12 +92,11 @@ _CAPABILITY_NOTES = {
         "script_sacred": True,
         "notes": (
             "Business-video renderer with synthesized audio in one call at "
-            "768p, 5-15s — the only entry besides Hailuo 3 with real audio, "
-            "at a third of its listed 2K price. "
-            "For talking-head hooks and demos. The cropped founder photo rides "
-            "as an identity reference, so the video is generated from the plan "
-            "from its first frame rather than opening on the photograph. "
-            "Opt-in: Hailuo 3 is still the default."
+            "768p, 5-15s — the catalog's only entry with real audio. "
+            "For talking-head hooks and demos. The cropped founder photo "
+            "opens the video as its pinned first frame, so the person is "
+            "anchored from the first frame on. The studio default "
+            "(ADR 0221)."
         ),
     },
 }
@@ -133,13 +106,12 @@ _CAPABILITY_NOTES = {
 # template workflow removed. Any other configured key resolves back to the
 # default with a logged reason.
 #
-# H3 Max sits alongside H3 rather than replacing it: both are generative and
-# both take the same face reference, so the founder can render the same script
-# on either and compare.
-# Order here does not decide the default — that is
-# ai_service.DEFAULT_VIDEO_MODEL, and it stays Hailuo 3. Listing a model
-# only makes it selectable in the studio's model dropdown.
-STUDIO_ELIGIBLE = ("minimax-h3", "minimax-h3-max", "heygen-video-1")
+# H3 Max sits alongside the default as an opt-in comparison: both are
+# generative, so the founder can render the same script on either and
+# compare. Order here does not decide the default — that is
+# ai_service.DEFAULT_VIDEO_MODEL, HeyGen Video since ADR 0221. Listing a
+# model only makes it selectable in the studio's model dropdown.
+STUDIO_ELIGIBLE = ("minimax-h3-max", "heygen-video-1")
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
@@ -225,12 +197,12 @@ def is_studio_eligible(key: str) -> bool:
 def accepts_identity_reference(key: str) -> bool:
     """Whether the provider can take the founder's identity image at all.
 
-    MiniMax H3 accepts up to 9 reference images as input_references with no
-    source video. Hailuo 3 Max refuses input_references outright (proven live:
-    the serving provider 400s it), but takes the photo as the opening frame,
-    so it still accepts the identity — through a different field, selected by
-    identity_via_first_frame. Editors (Aleph) need a real clip to edit — the
-    template workflow has none — so they are refused here too.
+    Hailuo 3 Max refuses input_references outright (proven live: the
+    serving provider 400s it), but takes the photo as the opening frame,
+    so it still accepts the identity — through a different field, selected
+    by identity_via_first_frame. HeyGen Video takes the same first-frame
+    route. Editors (Aleph) need a real clip to edit — the template
+    workflow has none — so they are refused here too.
     """
     if not is_known(key):
         return False

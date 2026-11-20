@@ -367,14 +367,14 @@ const PIPELINE_BLOCKS = [
     tone: "coral",
     kicker: "Hook + Story",
     title: "The opening, written to hold",
-    body: "Create one AI-generated clip: an opening hook built to stop the scroll, followed by the story that earns the click. Your real app demo and closing message are not generated footage. Record the demo yourself, using the separate brief as a guide.",
+    body: "Create one AI-generated clip: a hook built to stop the scroll, followed by the story that earns the click. Your real app demo and closing message are never generated footage. Record it yourself, using the separate brief as a guide.",
   },
   {
     icon: Film,
     tone: "indigo",
     kicker: "Demo + CTA",
     title: "Your footage, centre stage",
-    body: "Style a base clip — your own recording or a finished Hook + Story. Add a Second clip to play after it, or use Real Video to put a separate recording in a phone over the base. Choose each clip's look, framing and zoom, plus hook text and an end card you write. Export the result as one TikTok MP4.",
+    body: "Style a base clip — your recording or Hook + Story. Add a second clip to it, or use Real Video to put a recording in a phone over it. Set each clip's look, framing, zoom, hook text and an end card you write. Export your TikTok MP4.",
   },
   {
     icon: ShieldCheck,

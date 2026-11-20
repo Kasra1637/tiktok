@@ -69,8 +69,9 @@ class TestCanvasRescale:
 
     def test_upscale_command_copies_audio_optionally(self):
         """
-        The providers disagree about audio: Hailuo 3 returns a native track and
-        Grok does not. A hard "0:a" reference fails on the silent one, so the
+        The providers disagree about audio: HeyGen Video returns a native
+        track and H3 Max does not. A hard "0:a" reference fails on the silent
+        one, so the
 optional form is the only one that works for both.
         """
         argv = overlays.build_upscale_command(Path("in.mp4"), Path("out.mp4"))

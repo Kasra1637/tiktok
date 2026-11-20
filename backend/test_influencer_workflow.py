@@ -336,6 +336,15 @@ class TestAppSpecificity:
         The prompt the video model is actually given, captured off a real
         submit. There is no separate hook endpoint any more: the piece is one
         render, so this goes through the same gate as any generation.
+
+        The model is named — H3 Max — because this class pins the FULL-form
+        prompt contract: the headings, the directives and the two apps'
+        content side by side. Since ADR 0221 the default is HeyGen, whose
+        4,090 ceiling hands the builder the condensed form of the same
+        contract; condensing is pinned in its own suites
+        (TestPerProviderPromptBudget, TestHeygenScriptSacred), and asserting
+        full-form phrases against a default submit would test the fit, not
+        the content.
         """
         from models import StudioGenerationRequest
         project, _profile, _template = _make_project(api, spec)
@@ -344,7 +353,8 @@ class TestAppSpecificity:
         _mark_ready(api, project["id"])
         calls = _mock_submit(api, monkeypatch)
         _run(api.submit_project_generation(
-            project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+            project_id=project["id"],
+            payload=StudioGenerationRequest(model="minimax-h3-max"), user_id=ANON))
         assert calls, "the generation never reached the provider"
         return calls[0]["prompt"]
 

@@ -48,10 +48,10 @@ _TIMEOUT_SECONDS = 5.0
 # Passthrough parameters that are known to be OPTIONAL provider controls rather
 # than requirements, so their presence is not drift.
 #
-# `aigc_watermark` is the case that shaped this list. Both Hailuo entries have
+# `aigc_watermark` is the case that shaped this list. The Hailuo entry has
 # advertised it since before this check existed, the studio has never sent it,
-# and both models render fine — so treating "allows passthrough X" as a warning
-# would report both working models on every single boot. A check that always
+# and the model renders fine — so treating "allows passthrough X" as a warning
+# would report a working model on every single boot. A check that always
 # fires is a check nobody reads, which is worse than no check at all.
 #
 # The distinction this module can actually make: a parameter we do not send and

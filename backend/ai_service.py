@@ -154,28 +154,18 @@ ANGLE_MODEL = _model_from_env("AI_ANGLE_MODEL", TEXT_MODEL)
 # rather than a video model, since the opening frame is a single still image.
 
 # Video generation models.
-# The template studio's providers. MiniMax H3 is the default: 2K picture,
-# native audio, V2V motion transfer, up to 15s per pass. Hailuo 3 Max sits
-# alongside it for comparison and gives up 2K for prompt adherence; see its
-# entry below. A video is ONE render either way, so a request longer than
-# the model's single-pass ceiling is refused rather than truncated.
+# The template studio's providers. HeyGen Video is the default (ADR 0221):
+# synthesized audio in a single call, 768p, up to 15s per pass. Hailuo 3 Max
+# sits alongside it as an opt-in comparison; see its entry below. Hailuo 3
+# left this list in ADR 0221 — it was the only model here that rendered 2K,
+# so the standing default's picture is 768p now. A video is ONE render
+# either way, so a request longer than the model's single-pass ceiling is
+# refused rather than truncated.
 VIDEO_MODELS = {
-    "minimax-h3": {
-        "id": "minimax/hailuo-3",
-        "name": "MiniMax H3",
-        "description": "Omni-modal video generation. Native audio, V2V motion transfer, 2K resolution, up to 15s.",
-        "max_duration": 15,
-        "min_duration": 5,  # Confirmed via API: "Supported durations: 5, 6, 7, 8, 9, ..."
-        "supports_references": True,
-        "supports_native_audio": True,
-        "supports_v2v_motion": True,
-        "resolution": "2K",
-        "supports_combined_refs": False,  # Cannot combine frame_images with input_references
-    },
     # Hailuo 3 Max: H3 post-trained by fal.ai for speed and prompt adherence,
     # served on the same OpenRouter key and the same /videos endpoint. Kept
-    # alongside H3 rather than replacing it so the two can be compared on the
-    # same script; H3 stays the default (DEFAULT_VIDEO_MODEL below).
+    # as an opt-in alongside the default so the two can be compared on the
+    # same script; the default is HeyGen Video (DEFAULT_VIDEO_MODEL below).
     #
     # The one field that must NOT be copied from the H3 entry is resolution.
     # OpenRouter lists H3 Max as "768p" | "480p" only and rejects an unlisted
@@ -195,7 +185,7 @@ VIDEO_MODELS = {
         "description": (
             "Hailuo 3 Max: Hailuo 3 post-trained by fal.ai for speed and prompt "
             "adherence. Up to 15s, 768p (not 2K). Opt-in: the studio defaults to "
-            "Hailuo 3."
+            "HeyGen Video."
         ),
         "max_duration": 15,
         "min_duration": 5,
@@ -214,8 +204,8 @@ VIDEO_MODELS = {
 # HeyGen Video: general-purpose short-form business video (brand moments,
     # product demos) with synthesized audio in a single call — dialogue,
     # ambience and effects — from a prompt and the founder's photo as an
-    # identity reference. The first catalog entry besides Hailuo 3 with real
-    # audio.
+    # identity reference. The catalog's only entry with real audio, and the
+    # studio default since ADR 0221.
     #
     # Facts below come from OpenRouter's own video model endpoint
     # (GET /api/v1/videos/models), verified live at entry time:
@@ -226,36 +216,33 @@ VIDEO_MODELS = {
     #     on render evidence.
     #   supported_durations  5-15  -> min 5 / max 15, exactly the studio's
     #     floor and ceiling, so no new trim edge cases.
-    #   supported_frame_images  first_frame  -> listed, and deliberately NOT
-    #     sent. A first frame pins the opening to the uploaded photograph: the
-    #     render began on that photo's own room, light and framing, and only
-    #     reached the planned scene once it had morphed away from it. Identity
-    #     rides as an input_references image instead (video_providers:
-    #     max_reference_images=1 with no identity_via_first_frame), so every
-    #     frame of the clip comes from the plan.
+    #   supported_frame_images  first_frame  -> listed, and sent. The
+    #     founder's photo is pinned as the opening frame (video_providers:
+    #     identity_via_first_frame), the same route H3 Max takes: a soft
+    #     input_references suggestion let the face drift into a partial
+    #     crop, so the photo is a hard anchor, and the prompt tells the
+    #     model the photo supplies the person, never the place.
     #   generate_audio  false (accepted, defaults off), NOT null  -> the field
     #     is sendable, and the studio defaults to requesting audio whenever
     #     the provider offers it (server.py). If real clips come back silent
     #     or the field is ever refused, flip supports_native_audio to False.
     #
-    # supports_references is True because the founder's photo does ride as an
-    # input_references image for this model. The field is listed but not yet
-    # proven live — H3 Max taught that a listed field can still 400 — so the
-    # first render on this model is what settles it. If it is refused, the
-    # submit fails with the provider's words in the log rather than silently
-    # falling back to pinning the opening on the photograph.
+    # supports_references is True because the founder's photo does ride with
+    # the request for this model — as the pinned opening frame (see
+    # video_providers.identity_via_first_frame), not as an input_references
+    # image.
     #
-    # Opt-in, default stays Hailuo 3: audio + 768p at a third of the listed
-    # 2K price is a default-challenger on paper, but likeness is unproven
-    # until the first renders. Promote only on evidence.
+    # The default since ADR 0221 (Kasra's call, Nov 19 2026): Hailuo 3 was
+    # removed from this list and Kasra named HeyGen Video as the default in
+    # its place, so this is the model a render uses when none is named.
     "heygen-video-1": {
         "id": "heygen/heygen-video-1",
         "name": "HeyGen Video",
         "description": (
             "Business-video renderer with synthesized audio in one call — "
-            "dialogue, ambience and effects. The cropped founder photo rides "
-            "as an identity reference, so the whole clip is generated from "
-            "the plan. 768p, 5-15s. For talking-head hooks and demos. Opt-in."
+            "dialogue, ambience and effects. The cropped founder photo opens "
+            "the clip as its pinned first frame. 768p, 5-15s. For "
+            "talking-head hooks and demos. The studio default."
         ),
         "max_duration": 15,
         "min_duration": 5,
@@ -272,9 +259,10 @@ VIDEO_MODELS = {
 }
 # Default for new template-studio generations. The provider remains
 # configurable through VIDEO_MODEL_DEFAULT and VIDEO_MODEL_ALLOWLIST, but
-# MiniMax H3 stays the default: it is the only model here that renders 2K with
-# native audio. Anything else configured resolves back to it with a reason.
-DEFAULT_VIDEO_MODEL = "minimax-h3"
+# HeyGen Video is the standing default (ADR 0221): Kasra removed Hailuo 3 —
+# the only model here that rendered 2K — and named HeyGen as the default in
+# its place. Anything else configured resolves back to it with a reason.
+DEFAULT_VIDEO_MODEL = "heygen-video-1"
 # Legacy fallback
 VIDEO_MODEL = VIDEO_MODELS[DEFAULT_VIDEO_MODEL]["id"]
 

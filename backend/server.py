@@ -1238,12 +1238,12 @@ async def _studio_identity_references(
     works: image reference in, matching person out.
 
     Returns the cropped face PATH, not a request payload, because different
-    models carry it in different fields: Hailuo 3 and HeyGen take it as an
-    input_references identity guide, while Hailuo 3 Max refuses
-    input_references outright (proven live) and takes it as the opening frame
-    instead. The caller (_submit_generation) picks the field from the model's
-    identity_via_first_frame capability — this function only proves which
-    photo, loudly.
+    models carry it in different fields: both studio models take it as the
+    opening frame — Hailuo 3 Max because it refuses input_references
+    outright (proven live), HeyGen because the pinned frame is the hard
+    anchor a soft reference was not. The caller (_submit_generation) picks
+    the field from the model's identity_via_first_frame capability — this
+    function only proves which photo, loudly.
 
     Guardrails, all loud:
     - A project still holding retired uploads (anything but the character
@@ -1635,11 +1635,11 @@ async def _submit_generation(
     # Avatar influencer: the attached character_reference rides along as the
     # identity guide, following the proven legacy face-swap mechanics (identity
     # image + prompt lock, no V2V video involved). WHICH request field carries
-    # it depends on the model, because providers differ: Hailuo 3 and HeyGen
-    # take it as an input_references identity guide, while Hailuo 3 Max refuses
-    # input_references outright (proven live: the serving provider 400s it)
-    # and takes it as the opening frame instead, which OpenRouter documents
-    # as supported for that model. Sending the wrong field spends a failed
+    # it depends on the model, because providers differ: both studio models
+    # take it as the opening frame — Hailuo 3 Max because it refuses
+    # input_references outright (proven live: the serving provider 400s it),
+    # HeyGen because the pinned frame is the hard anchor a soft reference
+    # was not. Sending the wrong field spends a failed
     # submit at best — this branch is what keeps a Max render submittable.
     # Anything else (missing file, a model that takes no identity image at
     # all) fails the submission loudly rather than spending money on a

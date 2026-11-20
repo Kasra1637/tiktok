@@ -280,6 +280,18 @@ class TestAngleLocationConflict:
 
 class TestCameraSetup:
     def test_fixed_camera_conflict_is_refused_before_a_provider_call(self, api, monkeypatch):
+        """
+        A fixed-camera project whose strategy scene still says "handheld
+        selfie" is refused before anything is spent, and the refused submit
+        does not rewrite the saved scene.
+
+        Since ADR 0221 the refusal that fires is the model guard, not the
+        direction conflict: every model left on the list pins the face
+        photo as its first frame, so a fixed submit is refused on the
+        model before the prompt is ever built. The direction-conflict
+        refusal itself still stands in the prompt builder and is pinned
+        there (TestFinalPhoneFraming in test_generation.py).
+        """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
         project, _, _ = _ready_project(api, "Fixed camera conflict")
@@ -293,8 +305,7 @@ class TestCameraSetup:
         with pytest.raises(HTTPException) as exc:
             _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
         assert exc.value.status_code == 409
-        assert "scene.visual_style" in exc.value.detail
-        assert "rebuild" in exc.value.detail.lower()
+        assert "first frame" in exc.value.detail
         assert not calls
         assert _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))["generations"] == []
         # The refused submit must not rewrite the scene; reading it back still
@@ -306,6 +317,16 @@ class TestCameraSetup:
         assert saved["strategy"]["scene"] == normalize_strategy(strategy)["scene"]
 
     def test_fixed_camera_is_snapshotted_and_first_frame_models_refused(self, api, monkeypatch):
+        """
+        First-frame models are refused for a fixed camera, before a
+        provider call — H3 Max named, and the default unnamed. Since ADR
+        0221 the default is HeyGen, also a first-frame model, so no model
+        left can serve a fixed camera and none is switched in silently;
+        before the removal the unnamed submit rendered on Hailuo 3's
+        reference-image route. The camera_setup snapshot rule is pinned
+        on the handheld path that can still render: a generation keeps
+        the setup it was rendered under after the project is flipped.
+        """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest, UpdateStudioProjectRequest
         project, _, _ = _ready_project(api, "Fixed camera submit")
@@ -318,12 +339,24 @@ class TestCameraSetup:
         assert exc.value.status_code == 409
         assert "first frame" in exc.value.detail
         assert not calls
+        with pytest.raises(HTTPException) as exc:
+            _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
+        assert exc.value.status_code == 409
+        assert "first frame" in exc.value.detail
+        assert not calls
+        # Flip the setup by SQL, as the fixture set it: the API update would
+        # drop the project out of ready_for_generation, which is a different
+        # refusal than the one under test. The strategy's own snapshot moves
+        # with it — a plan/strategy setup mismatch is the staleness refusal,
+        # also not the one under test.
+        flipped = {**FAKE_STRATEGY, "camera_setup": "handheld"}
+        _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
+            ("handheld", json.dumps(flipped), project["id"])))
         result = _run(api.submit_project_generation(project["id"], StudioGenerationRequest(), ANON))
-        assert result["camera_setup"] == "fixed"
-        assert "head to mid-thigh" in calls[0]["prompt"]
-        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
+        assert result["camera_setup"] == "handheld"
+        _run(api.update_studio_project(project["id"], UpdateStudioProjectRequest(camera_setup="fixed"), ANON))
         saved = _run(api.get_generation(result["id"], ANON))
-        assert saved["camera_setup"] == "fixed"
+        assert saved["camera_setup"] == "handheld"
 
 
 class TestResolutionOverride:
@@ -613,7 +646,7 @@ class TestDurationIsOnePass:
         with pytest.raises(HTTPException) as err:
             _run(api.submit_project_generation(
                 project_id=project["id"],
-                payload=StudioGenerationRequest(model="minimax-h3", duration_seconds=20),
+                payload=StudioGenerationRequest(model="heygen-video-1", duration_seconds=20),
                 user_id=ANON))
         assert err.value.status_code == 400
         assert "one pass" in str(err.value.detail)
@@ -629,7 +662,7 @@ class TestDurationIsOnePass:
         project, _, _ = _ready_project(api, "One Pass", duration=10)
         result = _run(api.submit_project_generation(
             project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3"),
+            payload=StudioGenerationRequest(model="heygen-video-1"),
             user_id=ANON))
         assert "duration_plan" not in result
         assert result["duration"] == 10
@@ -641,7 +674,7 @@ class TestDurationIsOnePass:
         project, _, _ = _ready_project(api, "At Ceiling", duration=15)
         result = _run(api.submit_project_generation(
             project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3", duration_seconds=15),
+            payload=StudioGenerationRequest(model="heygen-video-1", duration_seconds=15),
             user_id=ANON))
         assert result["duration"] == 15
 
@@ -1084,13 +1117,13 @@ class TestListingAndCapabilities:
     def test_capability_endpoint_reports_studio_models(self, api):
         """
         The endpoint offers exactly the generative providers that remain. The
-        default stays Hailuo 3.
+        default is HeyGen Video; Hailuo 3 left the list (ADR 0221).
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3", "minimax-h3-max", "heygen-video-1"]
+        assert keys == ["minimax-h3-max", "heygen-video-1"]
         assert "aleph-2" not in keys
-        assert result["default"] == "minimax-h3"
+        assert result["default"] == "heygen-video-1"
 
 
 
@@ -1145,22 +1178,30 @@ class TestStudioIdentityReference:
              json.dumps(FAKE_STRATEGY), project["id"])))
         return _run(api.get_studio_project(project["id"], ANON))
 
-    def test_identity_reference_rides_along(self, api, monkeypatch):
+    def test_identity_rides_along_on_the_default_model(self, api, monkeypatch):
+        """
+        A submit that names no model renders on the default — HeyGen Video
+        since ADR 0221 — and the founder's photo still reaches the render.
+        HeyGen's route is the pinned opening frame (the same route H3 Max
+        takes), so the photo arrives as reference_image_path and nothing
+        rides in input_references; before ADR 0221 the default was Hailuo 3
+        and the same photo arrived as a reference image instead. What must
+        not change with the route: the face reaches the provider call, and
+        the prompt names the photograph as the only authority on who the
+        person is.
+        """
         from models import StudioGenerationRequest
         project = self._anchor_project(api)
         calls = _mock_submit(api, monkeypatch)
         _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert len(calls) == 1
+        assert calls[0]["model"] == "heygen-video-1"
+        face = calls[0].get("reference_image_path")
+        assert face is not None, "the photo must ride along, as the pinned opening frame"
+        assert Path(str(face)).is_file()
         refs = calls[0].get("input_references") or []
-        assert len(refs) == 1
-        assert refs[0]["type"] == "image_url"
-        assert refs[0]["image_url"]["url"].startswith("data:image/png;base64,")
-        # Hailuo 3 keeps the reference-image field, so nothing goes in the
-        # frame slot — that routing is H3 Max's alone.
-        assert calls[0].get("reference_image_path") is None
-        # Hailuo 3 and HeyGen both keep the reference-image field, so nothing
-        # goes in the frame slot for either — that routing is H3 Max's alone.
+        assert all(r.get("type") != "image_url" for r in refs)
         # The photograph is named as the only authority on who the person is.
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"]
@@ -1282,18 +1323,49 @@ class TestModelSelectionAtTheApiBoundary:
                 user_id=ANON))
         assert err.value.status_code == 400
         assert "minimax-hailuo-4" in str(err.value.detail)
-        # The message has to say what IS available, or the founder cannot recover.
-        assert "minimax-h3" in str(err.value.detail)
-        assert "minimax-h3-max" in str(err.value.detail)
+        # The message has to say what IS available, or the founder cannot
+        # recover. The offered list is exactly the surviving catalog —
+        # compared as a set because "minimax-h3" is a substring of
+        # "minimax-h3-max", so a plain `in` check cannot prove the removed
+        # key is absent from it.
+        offered = (
+            str(err.value.detail).split("Choose one of: ", 1)[1].split(". ", 1)[0]
+        )
+        assert {k.strip() for k in offered.split(",")} == {
+            "minimax-h3-max", "heygen-video-1",
+        }
         assert not calls, "a render was submitted for an unknown model"
 
-    def test_omitted_model_uses_hailuo_3(self, api, monkeypatch):
+    def test_the_removed_hailuo_3_is_refused_before_spending(self, api, monkeypatch):
+        """
+        The existing-projects case for ADR 0221: a project saved while
+        Hailuo 3 was on the list still names minimax-h3. Submitting it must
+        refuse loudly — a 400 naming the key and the models that remain —
+        rather than quietly rendering on the default, because the founder
+        is charged for a real render and would be handed a clip from a
+        model they did not choose. (Read paths are the opposite contract:
+        resolve()/capability() degrade a stale id to the default with a
+        recorded reason — pinned in test_generation.py.)
+        """
+        from models import StudioGenerationRequest
+        calls = _mock_submit(api, monkeypatch)
+        project, _, _ = _ready_project(api, "Stale Model", duration=10)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="minimax-h3"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "'minimax-h3'" in str(err.value.detail)
+        assert not calls, "a render was submitted for the removed model"
+
+    def test_omitted_model_uses_heygen(self, api, monkeypatch):
         from models import StudioGenerationRequest
         calls = _mock_submit(api, monkeypatch)
         project, _, _ = _ready_project(api, "Default Model", duration=10)
         gen = _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
-        assert gen["model"] == "minimax-h3"
+        assert gen["model"] == "heygen-video-1"
         assert len(calls) == 1
 
     def test_h3_max_is_honoured_when_named(self, api, monkeypatch):
@@ -1380,14 +1452,16 @@ class TestModelSelectionAtTheApiBoundary:
 
         # Squeeze the ceiling below what the prompt's fixed instructions alone
         # occupy, which is the only way the scaled variables cannot save it.
-        original = vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"]
-        vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"] = 200
+        # The submit names no model, so the ceiling squeezed is the default's
+        # — HeyGen Video's since ADR 0221.
+        original = vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"]
+        vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"] = 200
         try:
             with pytest.raises(HTTPException) as err:
                 _run(api.submit_project_generation(
                     project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         finally:
-            vp._CAPABILITY_NOTES["minimax-h3"]["prompt_char_limit"] = original
+            vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"] = original
 
         assert err.value.status_code == 409
         detail = str(err.value.detail)
