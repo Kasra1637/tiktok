@@ -379,6 +379,39 @@ the only authority on appearance."""
                 assert len(set(values)) == 4, f"{group}.{field} repeats an option"
                 assert all(v.strip() for v in values), f"{group}.{field} has a blank option"
 
+    def test_every_curated_location_classifies_indoor_or_outdoor(self):
+        # ADR 0219: the shared indoor/outdoor classification covers the
+        # whole curated location list — a location the classifier cannot
+        # place is a gap the fixed-camera rule would fall through.
+        for group, options in tl.DIRECTION_OPTIONS.items():
+            for value in options["location"]:
+                assert tl.location_setting(value) in ("indoor", "outdoor"), \
+                    f"{group}.location is unclassified: {value!r}"
+
+    def test_location_setting_reads_the_curated_examples(self):
+        # The outdoor entries are the ones Kasra's indoor rule names:
+        # benches, balconies, rooftops and park spots are not interiors.
+        assert tl.location_setting("Quiet garden bench") == "outdoor"
+        assert tl.location_setting("Park bench beside a running path") == "outdoor"
+        assert tl.location_setting("Airy rooftop corner") == "outdoor"
+        assert tl.location_setting("Neutral balcony") == "outdoor"
+        assert tl.location_setting("Park table with a notebook") == "outdoor"
+        assert tl.location_setting("Calm living room with a plant beside the chair") == "indoor"
+        assert tl.location_setting("Tidy home office desk with a laptop") == "indoor"
+        assert tl.location_setting("Market aisle") == "indoor"
+        assert tl.location_setting("Clean cafe corner table") == "indoor"
+        assert tl.location_setting("Tidy desk with a notebook") == "indoor"
+
+    def test_location_setting_reads_free_text_and_transit(self):
+        # Refreshed options and founder text are free prose, and transit
+        # counts as not-indoors: a fixed camera never stands in a plane.
+        assert tl.location_setting("her bedroom by the window") == "indoor"
+        assert tl.location_setting("an airplane seat") == "outdoor"
+        assert tl.location_setting("a cafe terrace") == "outdoor"
+        assert tl.location_setting("") is None
+        assert tl.location_setting(None) is None
+        assert tl.location_setting("somewhere unspecified") is None
+
     def test_no_option_describes_face_or_body(self):
         import re
         banned = [

@@ -231,12 +231,6 @@ CONDENSE_BELOW = 5000
 # full floor rose 1 (4013 -> 4014), condensed fell 12 (2476 -> 2464).
 # The single-pass floor did not move: that builder's fixed text carries
 # no starting shot.
-#
-# ADR 0216 adds the fixed-camera set-down opening (full and condensed
-# forms). It is setup-conditional text and the floors are measured on
-# the selfie default, so neither floor moves; a fixed prompt carries
-# the extra text and the fit loop absorbs it out of the variable room,
-# the same trade every setup-specific block already makes.
 FULL_PROMPT_FLOOR = 4014
 CONDENSED_PROMPT_FLOOR = 2464
 
@@ -454,62 +448,22 @@ HANDHELD_SELFIE_FRAMING = (
 
 SELFIE_STARTING_SHOT = HANDHELD_SELFIE_FRAMING
 
+# The fixed shot as it stood before the set-down (ADR 0216, reversed by
+# ADR 0219): the phone rests on a shelf or tripod and the presenter is
+# already in frame. The last sentence is ADR 0219's indoor rule at
+# render level — the placed camera is an interior setup, so the shot
+# itself states the scene is an interior room.
 FIXED_STARTING_SHOT = (
-    # The phone's resting place is the set-down's business now (ADR 0216):
-    # it sits on a surface the scene offers, not on a tripod — a piece of
-    # equipment no scene here contains — so the shot states the frame only.
-    "Fixed camera: stationary, eye-level, straight-on. "
+    "Fixed camera: a stationary phone on a shelf or tripod, eye-level and straight-on. "
     "Frame the standing presenter from head to mid-thigh, full head with headroom, "
-    "both hands in frame with room for gestures. Natural amateur phone footage, "
-    "not a polished studio shoot."
+    "both hands inside frame with room for gestures. Natural amateur phone footage, "
+    "not a polished studio shoot. The scene is indoors: an interior room, never "
+    "outdoors or in transit."
 )
 
 
 def starting_shot(camera_setup="handheld") -> str:
     return FIXED_STARTING_SHOT if camera_setup == "fixed" else SELFIE_STARTING_SHOT
-
-
-# Fixed camera only (ADR 0216): a fixed take opens on the set-down — the
-# organic first second of every propped-phone video, where the recording is
-# already running while the phone is placed and the frame settles before the
-# presenter steps in. For this setup the set-down IS the opening movement
-# (ADR 0187): the payoff beat in seconds 1-2 is the presenter settled in
-# frame as the hook lands. The thump is the recording phone's own handling
-# sound, not added audio — the voice-only rule below still bans music and
-# added effects. The surface is the scene's own, never invented, and the
-# staging rule at the end is what keeps a no-surface moment (mid-street)
-# from forcing an impossible placement: the setting shifts to the nearest
-# sensible spot and the spoken words never move. Fixed-only text: the
-# measured floors are built on the selfie default, so this costs the
-# handheld prompt nothing.
-FIXED_SET_DOWN_OPENING = (
-    "THE SET-DOWN OPENING (fixed camera only): the recording is already running "
-    "as the presenter sets the phone down on a surface this scene itself offers "
-    "— a table, counter or shelf indoors; outdoors only what the scene gives: a "
-    "bench, the steps themselves, a low wall, a café table, a fence rail. The "
-    "phone's own microphone catches the soft thump and scuff of the landing — "
-    "the take's natural handling sound, not added audio — and the frame shakes "
-    "and settles, a natural left-to-right wobble, as it comes to rest. That "
-    "set-down is the first second's movement. Then the presenter gets in front "
-    "of the phone and settles into the frame above, talking as the hook lands "
-    "in seconds 1-2. The surface is never invented: this scene must be "
-    "somewhere a phone can be set down and stay, so if the story's spot offers "
-    "nothing to rest it on, stage the same moment at the nearest spot that "
-    "does — the words never change, only the staging."
-)
-
-# The same rule for a provider whose ceiling is too low for the full set.
-# Every constraint survives; only the explanation is compressed.
-_CONDENSED_FIXED_SET_DOWN_OPENING = (
-    "Set-down opening (fixed only): recording already runs as the presenter "
-    "sets the phone down on a surface this scene offers — table, counter, shelf; "
-    "outdoors a bench, the steps, a low wall, a café table, a fence rail. Its own "
-    "mic catches the landing's soft thump and scuff — natural handling "
-    "sound, not an effect — as the frame shakes and settles left-to-right. "
-    "Then the presenter steps in, settled, talking as the hook lands "
-    "in 1-2s. Surface never invented: a spot with none shifts to the "
-    "nearest spot with one; the words never change."
-)
 
 
 # Detect explicit conflicting directions, not spoken dialogue. Refuse instead
@@ -629,12 +583,9 @@ _PHONE_HANDOFF_FRAMING = (
 # Condensed twin: every constraint survives. The no-screen rule is carried by the
 # condensed handoff above, so it is not repeated here.
 _CONDENSED_PHONE_HANDOFF_FRAMING = (
-    # "Back to camera" already says the screen faces her, and "central
-    # 88%" already gives the margins — the full form states both halves,
-    # the condensed states each once (ADR 0216 payment).
-    "Final 1-2s: she raises the phone into view, back to camera; whole "
-    "phone visible, uncropped, never behind hand/arm/face, eyes on it, "
-    "excited to the last frame; sharp, opening energy; central 88%."
+    "Final 1-2s: she raises the phone into view, back to camera, screen to her; whole "
+    "phone visible, uncropped, clear margins, never behind hand/arm/face, eyes on it, "
+    "excited, never glancing away, through the last frame; sharp, with the opening's energy; central 88%."
 )
 
 # The selfie ending: one short physical beat in the same final moment the
@@ -684,14 +635,11 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
         template = _CONDENSED_SELFIE_CAMERA_MOVE if condensed else _SELFIE_CAMERA_MOVE
         return template.format(gesture=clause)
     if (strategy or {}).get("camera_setup") == "fixed":
-        # The frame and the phone's place are stated once each, in the
-        # starting shot and the set-down opening above (ADR 0216): a
-        # locked camera cannot reframe mid-take, so the hold does not
-        # restate them the way the selfie hold must (ADR 0213).
         return (
             "Camera stays locked for the whole take: no sway, orbit, pan, tracking or zoom. "
             "When the story begins, one small actor gesture" + clause + ". "
-            "Natural expressions, small weight shifts; do not walk toward the lens."
+            "Natural expressions and small weight shifts; do not walk toward the lens. "
+            "Keep head and both hands in frame; the recording phone is not in her hands."
         )
     template = _CONDENSED_CAMERA_MOVE if condensed else _CAMERA_MOVE
     return template.format(direction=direction, gesture=clause)
@@ -1923,12 +1871,8 @@ def _assemble_prompt(
             f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
             f"mobile app {app_name}, in two sections. "
             + (
-                # The fixed ending is stated twice more in this build —
-                # the MIDDLE heading's "end at the reach" and the handoff
-                # block in full — so the header carries only the ask-ban,
-                # which appears nowhere else in the condensed text. The
-                # saved characters pay for the set-down opening (ADR 0216).
-                "Do not ask the viewer to download or install anything."
+                "End on the moment the presenter reaches for their phone, and do not ask the viewer "
+                "to download or install anything."
                 if fixed else
                 "Then one short physical ending, and do not ask "
                 "the viewer to download or install anything."
@@ -2097,13 +2041,6 @@ def _assemble_prompt(
     # the opening-interrupt directive sits for the same reason: the model reads a
     # standard immediately before the material it is a standard for.
     sections.append(starting_shot(strategy.get("camera_setup")))
-    # Fixed only (ADR 0216): the take opens on the set-down, stated with the
-    # camera block it belongs to — after the framing it lands in, before the
-    # hold that keeps the camera locked for the rest of the take.
-    if fixed:
-        sections.append(
-            _CONDENSED_FIXED_SET_DOWN_OPENING if condensed else FIXED_SET_DOWN_OPENING
-        )
     sections.append(camera_move_section(strategy, hook_seconds, condensed))
     # The final moment: the phone handoff when both hands are free, the chosen
     # physical ending when the camera is the phone in their hand (ADR 0093).

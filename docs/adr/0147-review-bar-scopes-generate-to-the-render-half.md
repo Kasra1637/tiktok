@@ -1,6 +1,8 @@
 # ADR 0147: The Review bar scopes Generate to the render half, and the arrow to the finished render
 
-Status: accepted
+Status: partially superseded by 0218 (the Review bar's scoping — the wizard
+bar is removed; the Review halves, their tabs and the panel's own states
+stand in-section)
 
 Refines ADR 0144.
 

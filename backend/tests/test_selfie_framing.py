@@ -199,42 +199,35 @@ def test_bare_steady_becomes_subtle_sway_for_handheld():
     assert "steady" not in strategy2["scene"]["camera_angle"].lower(), strategy2["scene"]
 
 
-def test_fixed_set_down_opening_names_the_whole_beat():
-    # Kasra's order (Nov 19 2026, ADR 0216): a fixed take opens on the
-    # set-down — the recording already running while the phone is placed,
-    # its own microphone catching the landing, the frame settling — and
-    # only then does the presenter step in and talk. Every element is
-    # named, in both budget modes, because a vague "natural opening"
-    # would let the model skip the beat that is the whole point.
-    for text in (
-        generation_planning.FIXED_SET_DOWN_OPENING,
-        generation_planning._CONDENSED_FIXED_SET_DOWN_OPENING,
-    ):
-        lowered = text.lower()
-        assert "already running" in lowered or "already runs" in lowered
-        assert "sets the phone down" in lowered
-        assert "thump" in lowered
-        assert "surface this scene" in lowered
-        assert "left-to-right" in lowered or "left to right" in lowered
-        assert "hook lands" in lowered
-        assert "1-2" in lowered or "1–2" in lowered or "seconds 1" in lowered
+def test_fixed_starting_shot_is_the_pre_set_down_shot():
+    # ADR 0219 reverses ADR 0216: the starting shot rests the phone on
+    # a shelf or tripod again and states the frame the way it did
+    # before the set-down — plus the indoor rule the shot now carries.
+    shot = generation_planning.FIXED_STARTING_SHOT
+    assert "a stationary phone on a shelf or tripod" in shot
+    assert "both hands inside frame" in shot
+    assert "indoors" in shot.lower()
+    assert "never outdoors" in shot.lower()
 
 
-def test_fixed_set_down_opening_carries_the_environment_rule():
-    # The surface is the scene's own, never invented — and when the
-    # story's spot offers nothing to rest a phone on (mid-street), the
-    # staging shifts to the nearest sensible spot while the spoken
-    # words never move (Kasra's edge-case ruling, ADR 0216).
-    for text in (
-        generation_planning.FIXED_SET_DOWN_OPENING,
-        generation_planning._CONDENSED_FIXED_SET_DOWN_OPENING,
-    ):
-        lowered = text.lower()
-        assert "bench" in lowered
-        assert "café table" in lowered
-        assert "never invented" in lowered
-        assert "nearest" in lowered
-        assert "words never change" in lowered
+def test_fixed_camera_hold_restates_the_frame():
+    # The hold's restatements the set-down was paid out of (ADR 0216)
+    # stand again with the reversal: head and hands in frame, and the
+    # recording phone not in her hands.
+    section = generation_planning.camera_move_section(
+        {"camera_setup": "fixed",
+         "camera_beat": {"direction": "left", "gesture": "a small relieved smile"}},
+    )
+    assert "Keep head and both hands in frame" in section
+    assert "the recording phone is not in her hands" in section
+
+
+def test_condensed_handoff_states_each_fact_in_full():
+    # The condensed handoff's doubled-orientation trim was an ADR 0216
+    # payment; with the set-down gone, the full wording stands again.
+    text = generation_planning._CONDENSED_PHONE_HANDOFF_FRAMING
+    assert "screen to her" in text
+    assert "clear margins" in text
 
 
 def _segment_prompt(camera_setup, prompt_budget=None, **overrides):
@@ -251,51 +244,42 @@ def _segment_prompt(camera_setup, prompt_budget=None, **overrides):
     return generation_planning.build_segment_prompt(**kwargs)
 
 
+# Every phrase that would stage the set-down (ADR 0216, reversed by
+# ADR 0219): the recording already running, the phone being placed on
+# a surface, the landing's thump or settle wobble, stepping into frame.
+_SET_DOWN_STAGING = (
+    "set-down", "sets the phone down", "already running", "already runs",
+    "thump", "surface this scene", "steps in front", "gets in front",
+)
+
+
 @pytest.mark.parametrize("prompt_budget", [None, 4090])
-def test_fixed_render_prompt_opens_with_the_set_down(prompt_budget):
+def test_fixed_render_prompt_has_no_set_down_staging(prompt_budget):
+    # ADR 0219: a fixed render prompt opens on the presenter already in
+    # frame — no set-down staging of any kind, in either budget mode.
     prompt = _segment_prompt("fixed", prompt_budget).lower()
-    assert "sets the phone down" in prompt
-    assert "thump" in prompt
-    assert "surface this scene" in prompt
+    for phrase in _SET_DOWN_STAGING:
+        assert phrase not in prompt, phrase
 
 
 @pytest.mark.parametrize("prompt_budget", [None, 4090])
-def test_handheld_render_prompt_has_no_set_down(prompt_budget):
-    # Handheld is completely untouched by ADR 0216: the phone is already
-    # in the presenter's hand, so a set-down opening must never appear.
+def test_fixed_render_prompt_carries_the_indoor_rule(prompt_budget):
+    # ADR 0219: the fixed prompt itself states the scene is indoors —
+    # an interior room, never outdoors or in transit.
+    prompt = _segment_prompt("fixed", prompt_budget).lower()
+    assert "indoors" in prompt
+    assert "never outdoors" in prompt
+
+
+@pytest.mark.parametrize("prompt_budget", [None, 4090])
+def test_handheld_render_prompt_has_no_set_down_or_indoor_rule(prompt_budget):
+    # Handheld is untouched by the reversal and the indoor rule alike:
+    # the phone is already in the presenter's hand, and a handheld
+    # scene stays free to be anywhere.
     prompt = _segment_prompt("handheld", prompt_budget).lower()
-    assert "sets the phone down" not in prompt
-    assert "set-down" not in prompt
-    assert "thump" not in prompt
-    assert "surface this scene" not in prompt
-
-
-def test_fixed_prompt_for_a_no_surface_scene_carries_the_shift_rule():
-    # A mid-street moment has nothing to rest a phone on. The fixed
-    # prompt must still carry the direction that stages the same moment
-    # at the nearest sensible spot — and the handheld prompt for the
-    # same scene must carry none of it.
-    scene = {"location": "the middle of a busy street"}
-    fixed = _segment_prompt(
-        "fixed", strategy={
-            "camera_setup": "fixed",
-            "camera_beat": {"direction": "left", "gesture": "a small relieved smile"},
-            "scene": scene,
-        },
-        plan={"hook_seconds": 3, "location": "the middle of a busy street"},
-    ).lower()
-    assert "nearest" in fixed
-    assert "words never change" in fixed
-    handheld = _segment_prompt(
-        "handheld", strategy={
-            "camera_setup": "handheld",
-            "camera_beat": {"direction": "left", "gesture": "a small relieved smile"},
-            "scene": scene,
-        },
-        plan={"hook_seconds": 3, "location": "the middle of a busy street"},
-    ).lower()
-    assert "nearest" not in handheld
-    assert "words never change" not in handheld
+    for phrase in _SET_DOWN_STAGING:
+        assert phrase not in prompt, phrase
+    assert "never outdoors" not in prompt
 
 
 def test_headshot_reference_pads_to_vertical_instead_of_staying_tight():

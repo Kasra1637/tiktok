@@ -4776,6 +4776,22 @@ async def generate_creative_plan(
         if camera_setup != "fixed" else ""
     )
 
+    # Fixed camera (ADR 0219): the placed camera lives indoors, so a
+    # fixed plan's location is an interior. Stated in the rules the
+    # location field is written under — the same rule the strategy and
+    # render prompts carry for this setup. Handheld plans keep any
+    # location, outdoors included.
+    fixed_location_rule = (
+        "- FIXED CAMERA: this plan's location must be INDOORS — inside a home, "
+        "an office, a bedroom, an interior space like those — never outdoors "
+        "and never in transit (no bench, park, street, terrace, balcony, "
+        "rooftop or airplane). If the brief or the angle's moment sits "
+        "outdoors, stage the same moment at the nearest indoor setting that "
+        "keeps it intact: only the setting moves inside — the story and the "
+        "spoken words do not change.\n"
+        if camera_setup == "fixed" else ""
+    )
+
     prompt = (
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"TEMPLATE STRUCTURE:\n{json.dumps(structure, indent=2)}\n\n"
@@ -4818,6 +4834,7 @@ async def generate_creative_plan(
         f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
         f"{selfie_ending_rule}"
+        f"{fixed_location_rule}"
         # The spoken budget, in characters, is the same number the render gate
         # imposes downstream (hook spoken separately over the opening beat, the
         # rest over the middle). A script past it is not shortened gracefully at
@@ -5933,27 +5950,22 @@ async def generate_video_strategy(
             "no timestamp or word sync.\n"
         )
         + (
-            # ADR 0216: the fixed opening is the set-down, and the scene
-            # is chosen so the set-down is physically sensible. Stated
-            # here, where hook_action and the scene are written, so the
-            # strategy's own opening action opens on the placement
-            # instead of competing with it at render time.
-            "- THE SET-DOWN OPENING (fixed camera only): a fixed video opens with the "
-            "phone being set down. The recording is already running as the presenter "
-            "sets the phone on a surface this scene itself offers — the soft thump of "
-            "the landing in the phone's own microphone, the frame settling with a "
-            "natural shake — then steps in front of it and begins. hook_action and the "
-            "hook section's action open on that set-down: it is this setup's opening "
-            "movement, taking roughly the first second, flowing into the story's own "
-            "action as the presenter settles into frame and the hook lands. Choose "
-            "the scene so the phone can plausibly be set down and stay — mostly "
-            "indoors (a table, a counter, a shelf); outdoors only where the scene "
-            "itself offers a resting surface (a bench, the steps, a low wall, a café "
-            "table, a fence rail) — and the surface always comes from the scene, never "
-            "invented. If the moment sits somewhere with no resting surface at all, "
-            "shift the setting to the nearest sensible spot that keeps the moment and "
-            "every spoken word intact — the café table at the street's edge instead of "
-            "mid-road. Only the staging adapts; the words never change.\n"
+            # ADR 0219: the fixed camera is an indoor setup, stated here,
+            # where hook_action and the scene are written, so a fixed
+            # strategy is born indoors instead of being corrected at
+            # render time. For this setup the rule outranks the outdoor
+            # steering in scene_location_guidance above; handheld keeps
+            # that steering untouched. (This block replaces ADR 0216's
+            # set-down opening, reversed in the same decision.)
+            "- THE SCENE IS INDOORS (fixed camera only): a fixed camera stands "
+            "inside a room, so scene.location must be an interior — inside a "
+            "home, an office, a bedroom, an interior space like those — never "
+            "outdoors and never in transit: no bench, no park, no street, no "
+            "terrace, no balcony, no rooftop, no airplane. If the angle's "
+            "moment or the usage moment sits outdoors, stage the same moment "
+            "at the nearest indoor setting that keeps the moment and every "
+            "spoken word intact. Only the setting moves inside; the words "
+            "never change.\n"
             if camera_setup == "fixed" else ""
         )
         + f"{final_beat_rule}"

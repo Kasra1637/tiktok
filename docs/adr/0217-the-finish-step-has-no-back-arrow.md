@@ -1,6 +1,6 @@
 # 0217 — The finish step has no Back arrow
 
-Status: accepted
+Status: superseded by 0218 (the whole wizard bar is removed, so no step carries a Back arrow)
 
 ## Context
 

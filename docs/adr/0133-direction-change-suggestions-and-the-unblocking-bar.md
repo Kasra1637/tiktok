@@ -1,6 +1,8 @@
 # 0133 — Direction-change word suggestions, and the bar carries the one unblocking action
 
-- **Status:** accepted
+- **Status:** partially superseded by 0218 (the bar carrying the one
+  unblocking action — the wizard bar is removed, and each section's own
+  button carries its action alone; the direction-change suggestions stand)
 - **Date:** 2026-11-13
 - **Anchors:** `backend/routers/studio.py` (`DIRECTION_FIELDS`,
   `_direction_snapshot`, `_strategy_direction_changes`,

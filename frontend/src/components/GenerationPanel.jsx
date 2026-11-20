@@ -197,7 +197,7 @@ function resolutionStorageKey(projectId) {
   return `studio-video-resolution:${projectId}`;
 }
 
-export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate, onRenderActionChange }) {
+export function GenerationPanel({ project, onGenerationChange, onProjectChange, hasUnsavedEdits = false, onNavigate }) {
   const [models, setModels] = useState(null);
   const [modelError, setModelError] = useState(null);
   const [modelRetry, setModelRetry] = useState(0);
@@ -326,7 +326,7 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     // One label for the rebuild everywhere it is offered (the strategy
     // panel's button reads the same): the reason it is owed lives in the
     // alert above, and two phrasings of one action read as two actions.
-    // It wears Sparkles, the same icon as the sticky bar's rebuild
+    // It wears Sparkles, the same icon as the strategy panel's rebuild
     // action — never Play, which is Generate's signature (ADR 0144): a
     // Play on the rebuild made it read as Generate renamed (Kasra's
     // screenshot, Nov 14).
@@ -785,71 +785,18 @@ const handleGenerate = async () => {
   // The ready-state invitation (ADR 0144): when nothing holds the founder
   // back — strategy current, plan saved, models loaded, no render in
   // flight — the Generate button below wears the invitation (the play
-  // icon it already carries, plus the generate-invite glow), and the
-  // panel registers the SAME action for the wizard's sticky bar: same
-  // words, same icon, same invitation. The bar's click runs this panel's
-  // own handleGenerate — with the model and resolution chosen here,
-  // which live in this panel and nowhere else — and then asks the page
-  // to bring the generation section into view, so the founder watches
-  // the render where it happens. In every owed or blocked state the
-  // panel registers nothing and invites nothing: the bar keeps the
-  // unblocking action or the plain way forward (ADRs 0133/0142). The
-  // click is an explicit press on a generate button, the sanctioned
-  // trigger — navigation still generates nothing (ADR 0122).
-  // Registration follows the strategy panel's pattern: keyed on the
-  // action's visible state, the click goes through a ref so a re-render
-  // never re-registers a stale closure, and unmounting clears the slot.
+  // icon it already carries, plus the generate-invite glow). In every
+  // owed or blocked state the button invites nothing. The click is an
+  // explicit press on a generate button, the sanctioned trigger —
+  // navigation still generates nothing (ADR 0122). This panel's button
+  // is the only Generate (ADR 0218): the model and the resolution live
+  // here and nowhere else, and no floating bar mirrors the action.
   const generateReady =
     !rebuildRequired && !strategyMissing && !planSaveRequired &&
     !busy && !inFlight && Boolean(models) && !hasUnsavedEdits && ready &&
     !blocked && !tooLong && !cameraIncompatible && Boolean(projectId) &&
     strategyReady && !noPhoto && !noAngle;
   const generateLabel = generation ? "Generate another" : "Generate the video";
-  const generateClickRef = useRef(null);
-  generateClickRef.current = () => {
-    handleGenerate();
-    onNavigate?.("goto-render-section");
-  };
-  const stableGenerateClick = useRef(() => generateClickRef.current?.()).current;
-  // A render in flight registers its own bar state (ADR 0147): this
-  // panel's busy presentation — the same "Generating video" words the
-  // button below carries, disabled and busy — so the bar narrates the
-  // wait instead of offering the CTA again. It is not the ready action
-  // with a busier label: no play icon, no invitation and no click,
-  // because the click already happened. `busy` here is only ever the
-  // render submit's own flight (the storage and preview retries carry
-  // their own state), and `inFlight` is the submitted/generating row.
-  const renderInFlight = busy || Boolean(inFlight);
-  const renderBarSig = generateReady
-    ? `ready|${generateLabel}`
-    : renderInFlight
-      ? `flight|${generation?.id || "starting"}`
-      : "not-ready";
-  useEffect(() => {
-    if (!onRenderActionChange) return;
-    if (generateReady) {
-      onRenderActionChange({
-        label: generateLabel,
-        icon: "play",
-        invite: true,
-        blocks: false,
-        testId: "wizard-generate-video",
-        onClick: stableGenerateClick,
-      });
-    } else if (renderInFlight) {
-      onRenderActionChange({
-        label: "Generating video",
-        busy: true,
-        disabled: true,
-        flight: true,
-        testId: "wizard-render-progress",
-      });
-    } else {
-      onRenderActionChange(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderBarSig]);
-  useEffect(() => () => onRenderActionChange?.(null), [onRenderActionChange]);
 
   return (
     /* This panel is its own card now (ADR 0144): a full .surface below

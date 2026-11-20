@@ -1,6 +1,6 @@
 # 0216 — A fixed camera opens on the set-down, on a surface the scene itself offers
 
-Status: accepted
+Status: superseded by 0219 (the set-down opening is reversed on Kasra's order, and fixed camera is indoors-only)
 
 ## Context
 

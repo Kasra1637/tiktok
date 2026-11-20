@@ -1858,20 +1858,27 @@ class TestStrategyBudget:
         if camera_setup == "fixed":
             assert FIXED_STARTING_SHOT in prompt
             assert "Camera stays locked" in prompt
-            # ADR 0216: a fixed strategy opens on the set-down, and its
-            # scene must be somewhere a phone can be set down and stay —
-            # or shift to the nearest sensible spot, words untouched.
-            assert "SET-DOWN OPENING" in prompt
-            assert "sets the phone" in prompt
-            assert "nearest sensible spot" in prompt
+            # ADR 0219 reverses ADR 0216: no set-down staging reaches a
+            # fixed strategy — the take opens on the presenter already
+            # in frame, never on a phone being placed.
+            assert "SET-DOWN" not in prompt
+            assert "sets the phone" not in prompt
+            assert "already running" not in prompt
+            # ADR 0219: a fixed scene is indoors, stated where the scene
+            # is written — an interior, never outdoors or in transit,
+            # with an outdoor moment moved to the nearest indoor setting.
+            assert "THE SCENE IS INDOORS" in prompt
+            assert "never outdoors" in prompt
+            assert "nearest indoor setting" in prompt
             assert SELFIE_STARTING_SHOT not in prompt
             assert "same distance from the face" not in prompt
             assert "whole phone" in prompt
             return
         assert SELFIE_STARTING_SHOT in prompt
-        # ADR 0216 is fixed-only: no set-down direction reaches a
-        # handheld strategy prompt.
+        # The set-down reversal and the indoor rule are both fixed-only:
+        # neither reaches a handheld strategy prompt (ADR 0219).
         assert "SET-DOWN OPENING" not in prompt
+        assert "THE SCENE IS INDOORS" not in prompt
         assert "1.1 metres" not in prompt
         assert '"direction": "left or right"' in prompt
         assert "when the story begins" not in prompt.lower()
@@ -1899,6 +1906,46 @@ class TestStrategyBudget:
         assert "no push in, pull back, or zoom, never crop the hair" in prompt
         assert "do not show a screen" in prompt
         assert "NEVER write a call to action" in prompt
+
+    @pytest.mark.parametrize("camera_setup", ["handheld", "fixed"])
+    def test_plan_prompt_carries_the_indoor_rule_for_fixed_only(self, monkeypatch, camera_setup):
+        # ADR 0219: the plan is where the location is first written, so
+        # the fixed setup's indoor rule is stated in the plan prompt
+        # itself — a fixed plan is born indoors instead of being
+        # corrected by the strategy or the render.
+        import ai_service
+        plan = {
+            "hook_line": "Naming the feeling never worked.",
+            "script": ("The suggestions helped me find the words. "
+                       "I understood myself better after writing the entry."),
+            "beat_timeline": [
+                {"start": 0, "end": 3, "label": "hook",
+                 "text": "Naming the feeling never worked."},
+                {"start": 3, "end": 15, "label": "middle", "text": "script"},
+            ],
+            "visual_direction": "A person reflecting at their desk.",
+            "demo_brief": "Record the emotion suggestions.",
+            "voice_direction": "Conversational.",
+            "sound_direction": "Voice only.",
+            "claims_used": [],
+        }
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(plan))])
+        _run(ai_service.generate_creative_plan(
+            profile={"brand_name": "B"}, template={"name": "T", "hook_seconds": 3},
+            duration_seconds=15, camera_setup=camera_setup,
+        ))
+        text = "\n".join(
+            str(message.get("content") or "")
+            for payload in rec.payloads
+            for message in payload.get("messages", [])
+        )
+        if camera_setup == "fixed":
+            assert "FIXED CAMERA" in text
+            assert "must be INDOORS" in text
+            assert "never outdoors" in text
+        else:
+            assert "must be INDOORS" not in text
+            assert "FIXED CAMERA" not in text
 
     def test_camera_beat_keeps_only_direction_and_a_short_gesture(self):
         import ai_service

@@ -58,11 +58,10 @@ One render path, single-pass video generation via OpenRouter.
 - `backend/generation_planning.py` — prompt assembly + `is_recoverable_error`
   (retry policy). Prompt budget + sacred-script rule live here.
 - `frontend/src/components/GenerationPanel.jsx` — the render panel; errors via
-  `lib/errorMessage.js`. It registers the wizard bar's render states with the
-  page — the ready Generate, and the in-flight busy presentation while a
-  render runs (ADRs 0144/0147; the bar wears the ready face but only
-  scrolls to this panel, ADR 0169); the model, resolution and render handler live
-  here and nowhere else. Card padding/spacing tokens live in `index.css`.
+  `lib/errorMessage.js`. Its own Generate is the only one (ADR 0218 removed
+  the wizard bar and the panel's registration with the page); the model,
+  resolution and render handler live here and nowhere else. Card
+  padding/spacing tokens live in `index.css`.
 - `frontend/src/demoCta/` — canvas overlay system; `overlays.js` motion is a
   pure function of video time (export matches preview), faces come from
   `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007.
@@ -223,18 +222,13 @@ One render path, single-pass video generation via OpenRouter.
   as a named `storage_error` — completed, retry offered — never an eternal
   `generating`. The detached heartbeat extends the lease only inside the
   bound; it protects a slow save, it cannot keep a hung one alive.
-- The Review sticky bar follows the half in view and the render's state
-  (ADR 0147, refining 0144; the ready click re-scoped by ADR 0169): in
-  the ready state the bar wears Generate's face — the panel's words,
-  Play icon and invitation — only on the Render & result half, but its
-  click only scrolls to the render section; the panel's own Generate,
-  beside the model and resolution, is the only button that submits.
-  Read the plan gets the navigation-only "Go to render" shortcut,
-  which switches the half and submits nothing (ADR 0122). During a
-  render the bar carries the panel's busy presentation instead — no
-  Generate, no shortcut. The round forward arrow renders on Review
-  only once a finished render exists and none is in flight; then it is
-  the bar's only way forward.
+- The wizard has no floating bar (ADR 0218, superseding the bar rules
+  of 0144/0147/0169): the rail segments and section headers own step
+  navigation, and each section's own buttons own its actions — the
+  render panel's Generate, beside the model and resolution, is the
+  only button that submits, the Review halves switch by their own
+  tabs, and a render in flight is narrated by the panel alone. No
+  panel registers an action with the page for a second surface.
 - The craft scorer (`backend/creative_quality.py`) rewards first person and
   penalizes only diary framing; the story arc ends open, the demo completes
   it, and the cover text is scored with the hook (ADR 0145). Generation
@@ -296,7 +290,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and seventeen decisions (0001–0217) now
+Read `docs/adr/README.md` first. Two hundred and nineteen decisions (0001–0219) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

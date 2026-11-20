@@ -674,6 +674,48 @@ def direction_options_for_profile(profile: Optional[dict] = None) -> dict:
     options = DIRECTION_OPTIONS.get(group) or DIRECTION_OPTIONS["default"]
     return {"group": group, **{k: list(v) for k, v in options.items()}}
 
+# Indoor/outdoor classification for direction locations (ADR 0219).
+#
+# Fixed camera is an indoor-only setup, so the app needs one shared
+# answer to "is this location an interior?" The generation prompts
+# state the rule in prose for the model; this classifier is the
+# deterministic half a surface can check — the direction options
+# above are its first subject, and a later UI build reuses it to
+# offer a fixed camera indoor locations only. It reads signal words
+# in the location text. Outdoor signals win on a clash, because the
+# rule it serves is a ban: a place that reads both ways (a cafe
+# terrace) is not an interior. Transit counts as outdoor — a vehicle
+# is never a room. A location with no signal either way returns
+# None: unclassified, never guessed at.
+_OUTDOOR_LOCATION_SIGNALS = (
+    "bench", "park", "garden", "balcony", "rooftop", "terrace",
+    "street", "sidewalk", "trail", "beach", "patio", "forest",
+    "hilltop", "outdoor", "outside", "airplane", "airport",
+    "in a car", "car interior",
+)
+
+_INDOOR_LOCATION_SIGNALS = (
+    "living room", "kitchen", "office", "bedroom", "bathroom",
+    "library", "cafe", "café", "dining", "desk", "study",
+    "armchair", "aisle", "coworking", "home", "gym", "hallway",
+)
+
+
+def location_setting(location: Optional[str]) -> Optional[str]:
+    """Classify a direction location as "indoor", "outdoor" or None.
+
+    None means the text carries no signal either way (or is empty);
+    callers must treat it as unknown, never as permission.
+    """
+    text = str(location or "").strip().lower()
+    if not text:
+        return None
+    if any(signal in text for signal in _OUTDOOR_LOCATION_SIGNALS):
+        return "outdoor"
+    if any(signal in text for signal in _INDOOR_LOCATION_SIGNALS):
+        return "indoor"
+    return None
+
 # Content angles, per the product spec. Angles are app-specific and get
 # generated per App Profile; this list is the controlled set of kinds.
 CONTENT_ANGLE_KINDS = [
