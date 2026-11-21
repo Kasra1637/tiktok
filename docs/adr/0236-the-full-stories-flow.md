@@ -1,8 +1,6 @@
 # 0236 — The full Stories flow: direction, editors, preview, render, kit
 
-Status: accepted (Stories phase 4, completing the v1 scope of phases
-1–4; the data layer is 0227, the generation layer is 0228, the page
-shell is 0235)
+Status: superseded by 0243 (the Stories page is removed)
 
 ## Context
 

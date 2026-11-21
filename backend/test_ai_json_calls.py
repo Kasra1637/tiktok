@@ -1797,6 +1797,145 @@ class TestPostKitBudget:
         assert rec.payloads[0]["max_tokens"] == ai_service.POST_KIT_MAX_TOKENS
 
 
+class _DirectionRefreshGate:
+    """A provider whose first reply is all thought and no answer.
+
+    Attempt one always comes back as empty content with
+    finish_reason=length — the reasoning spike. A retry only lands
+    if its (doubled) budget clears THRESHOLD: the recovery the live
+    failure never got, because the old 500 start doubled only to
+    1000, under the demand the shipped model brings to this call
+    at the pinned extra-high reasoning effort (ADR 0211).
+    """
+
+    THRESHOLD = 2000
+
+    def __init__(self, body):
+        self.body = body
+        self.payloads = []
+        self.timeouts = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.payloads.append(json)
+        if len(self.payloads) == 1:
+            return _Response(_completion("", finish_reason="length"))
+        if (json or {}).get("max_tokens", 0) < self.THRESHOLD:
+            return _Response(_completion("", finish_reason="length"))
+        return _Response(_completion(self.body))
+
+
+def _install_direction_transport(monkeypatch, client):
+    """Stand `client` in for httpx.AsyncClient on the direction call.
+
+    The stock doubles swallow the AsyncClient constructor kwargs;
+    the direction refresh's timeout lives there (not in the payload),
+    so this factory records it on the client beside the payloads.
+    The client must carry a `timeouts` list.
+    """
+    import ai_service
+
+    def factory(*a, **k):
+        client.timeouts.append(k.get("timeout"))
+        return client
+
+    monkeypatch.setattr(ai_service.httpx, "AsyncClient", factory)
+    monkeypatch.setattr(ai_service, "OPENROUTER_API_KEY", "test")
+    return client
+
+
+class TestDirectionRefreshBudget:
+    """
+    Production failure, 2026-11-20 (ADR 0241): refreshing the
+    Location or Wardrobe dropdown failed with "AI direction options
+    failed. Please try again." — the refresh endpoint's 502. Both
+    fields are the same call, and it was the last small budget on
+    ADR 0129's watch list: the ONLY model call in the app still
+    starting at 500 tokens, running at the pinned extra-high
+    reasoning effort (ADR 0211), so the model's reasoning alone
+    could spend the 500 — and its doubled 1000 retry, the smallest
+    retry in the system — before any JSON was written. _chat_json
+    named it TruncatedResponse; the endpoint wrapped it as the 502.
+    The ADR 0183 remedy, sized for this call: a named
+    DIRECTION_REFRESH_MAX_TOKENS = 4000 (the answer is four short
+    phrases; the room is for thought), the doubled retry reaching
+    8000, and the timeout raised 60 → 90 to match the call's
+    lightweight peers.
+    """
+
+    PROFILE = {
+        "brand_name": "FocusTimer",
+        "app_category": "productivity",
+        "target_audience": "people with too many lists",
+        "usage_moments": ["morning planning"],
+        "outcome_statements": [{"outcome": "one clear list for the day"}],
+        "must_not_show": [],
+    }
+    OPTIONS = [
+        "a kitchen table by a bright window",
+        "a quiet library corner with wooden shelves",
+        "a park bench under tall trees",
+        "a calm studio desk facing a blank wall",
+    ]
+
+    def test_direction_refresh_uses_a_budget_that_fits_its_reasoning(self):
+        """Guard the number itself, scoped to this caller."""
+        import ai_service
+        src = (BACKEND_DIR / "ai_service.py").read_text(encoding="utf-8")
+        assert ai_service.DIRECTION_REFRESH_MAX_TOKENS >= 4000, (
+            f"DIRECTION_REFRESH_MAX_TOKENS is "
+            f"{ai_service.DIRECTION_REFRESH_MAX_TOKENS}; the 500 start "
+            f"and its doubled 1000 retry both returned length finishes "
+            f"in production, so the start must clear the reasoning "
+            f"demand with headroom, not match it (ADRs 0129/0241)"
+        )
+        assert src.count("max_tokens=DIRECTION_REFRESH_MAX_TOKENS") == 1, (
+            "the direction refresh call must route through "
+            "DIRECTION_REFRESH_MAX_TOKENS"
+        )
+
+    def test_direction_refresh_requests_the_new_budget_and_timeout(self, monkeypatch):
+        """One clean reply: the payload carries the new budget, the client 90s."""
+        import ai_service
+        rec = _Recorder([_completion(json.dumps({"options": self.OPTIONS}))])
+        rec.timeouts = []
+        _install_direction_transport(monkeypatch, rec)
+        result = asyncio.run(
+            ai_service.refresh_direction_options(self.PROFILE, "location")
+        )
+        assert result == self.OPTIONS
+        assert len(rec.payloads) == 1, "a good reply must not cost a retry"
+        assert rec.payloads[0]["max_tokens"] == ai_service.DIRECTION_REFRESH_MAX_TOKENS
+        assert rec.timeouts == [90]
+
+    def test_direction_refresh_recovers_when_the_first_reply_is_all_thinking(self, monkeypatch):
+        """The live failure becomes a result on the doubled retry.
+
+        The gate's first reply is empty content with
+        finish_reason=length — reasoning ate the budget — and a
+        retry lands only if its budget clears the gate. The old
+        500 start doubled to 1000, under the gate, so the old code
+        raises TruncatedResponse here: the founder's exact 502.
+        """
+        import ai_service
+        gate = _DirectionRefreshGate(json.dumps({"options": self.OPTIONS}))
+        _install_direction_transport(monkeypatch, gate)
+        result = asyncio.run(
+            ai_service.refresh_direction_options(self.PROFILE, "wardrobe")
+        )
+        assert result == self.OPTIONS
+        assert [p["max_tokens"] for p in gate.payloads] == [
+            ai_service.DIRECTION_REFRESH_MAX_TOKENS,
+            ai_service.DIRECTION_REFRESH_MAX_TOKENS * 2,
+        ]
+        assert gate.timeouts == [90, 90]
+
+
 def _worst_verdict_bundle(i):
     """A verdict bundle with every field past the prompt builder's caps.
 

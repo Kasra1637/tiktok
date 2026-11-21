@@ -1,6 +1,6 @@
 # 0238 — Stories are beats of three to five seconds
 
-Status: accepted (amends 0227, 0228, 0235, 0236)
+Status: superseded by 0243 (the Stories page is removed; the 4/5-second word budgets live on in the Hook + CTA hook, ADR 0244)
 
 ## Context
 

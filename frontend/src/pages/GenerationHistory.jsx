@@ -62,6 +62,8 @@ import {
   Target,
   Clapperboard,
   MessageSquareText,
+  ListChecks,
+  Check,
 } from "lucide-react";
 
 /**
@@ -145,6 +147,90 @@ function journeyStage(row) {
   if (row.performance_snapshot) return "measured";
   if (row.tiktok_url) return "posted";
   return "finished";
+}
+
+/**
+ * A legacy story render's saved story kit, read-only (ADR 0243).
+ *
+ * The Stories page is retired and no surface writes or regenerates a
+ * story kit anymore, but a story render's kit was the founder's
+ * posting layer for that clip — caption, screen text, sticker plan,
+ * checklist — so it stays readable here, in the panel's own shape,
+ * without its controls. Nothing here writes: there is no regenerate
+ * and no edit, only the record of what the kit said.
+ */
+function LegacyStoryKit({ storyKit }) {
+  const kit = storyKit && typeof storyKit === "object" ? storyKit : {};
+  const caption = typeof kit.caption === "string" ? kit.caption.trim() : "";
+  const screenText = typeof kit.screen_text === "string" ? kit.screen_text.trim() : "";
+  const stickerPlan = Array.isArray(kit.sticker_plan)
+    ? kit.sticker_plan.filter((entry) => entry && (entry.sticker || entry.wording))
+    : [];
+  const checklist = Array.isArray(kit.checklist)
+    ? kit.checklist.map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  if (!caption && !screenText && stickerPlan.length === 0 && checklist.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-3" data-testid="story-kit-panel">
+      <GroupLabel icon={ListChecks}>Story kit</GroupLabel>
+      <dl className="inset-panel divide-y divide-[color:var(--hairline)]" data-testid="story-kit-fields">
+        {caption && (
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Caption</dt>
+            <dd className="min-w-0">
+              <span className="break-words text-base leading-relaxed text-foreground/90">{caption}</span>
+            </dd>
+          </div>
+        )}
+        {screenText && (
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Screen text — add as a native text sticker</dt>
+            <dd className="min-w-0">
+              <span className="post-kit-cover">{screenText}</span>
+            </dd>
+          </div>
+        )}
+        {stickerPlan.length > 0 && (
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Sticker plan</dt>
+            <dd className="min-w-0">
+              <ul className="space-y-2">
+                {stickerPlan.map((entry, i) => (
+                  <li key={i} className="text-base leading-relaxed text-foreground/90">
+                    <span className="font-semibold">{String(entry.sticker || "Sticker")}</span>
+                    {entry.platform && (
+                      <span className="text-muted-foreground"> · {String(entry.platform)}</span>
+                    )}
+                    {entry.wording && <span> — {String(entry.wording)}</span>}
+                    {entry.placement && (
+                      <span className="block text-sm text-muted-foreground">{String(entry.placement)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
+        {checklist.length > 0 && (
+          <div className="post-kit-row post-kit-row-stacked">
+            <dt className="eyebrow">Posting checklist</dt>
+            <dd className="min-w-0">
+              <ul className="space-y-2" data-testid="story-kit-checklist">
+                {checklist.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-base leading-relaxed text-foreground/90">
+                    <Check className="mt-1 h-4 w-4 shrink-0 text-[color:var(--brand-indigo)]" aria-hidden="true" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
 }
 
 /** The latest results snapshot as one line, in HistoryFeedback's words. */
@@ -470,19 +556,29 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // empty panel instead of stacking it under the context at full
   // width the way the mural card did.
   const hasContext = Boolean(row.audience || row.demo_brief || row.location);
-  const showEmptyKit = !row.post_kit && (row.status === "completed" || row.status === "archived");
-  const sectionsPaired = !compact && (Boolean(row.post_kit) || showEmptyKit) && hasContext;
-  // The journey line's post-copy item walks to the control that owns it:
+  // A story render carries the story kit in the same slot and never
+  // post copy (ADR 0242): the two kits are exclusive by the project's
+  // kind, which the history row now names.
+  const isStory = row.project_kind === "story";
+  const showEmptyKit = !isStory && !row.post_kit && (row.status === "completed" || row.status === "archived");
+  const showEmptyStoryKit = isStory && !row.story_kit && (row.status === "completed" || row.status === "archived");
+  const sectionsPaired = !compact && (Boolean(row.post_kit) || Boolean(row.story_kit) || showEmptyKit || showEmptyStoryKit) && hasContext;
+  // The journey line's kit item walks to the control that owns it:
   // the kit itself when one is written (scrolling to its solid section),
   // the generate prompt when none is. One click from the state to the
   // thing it names, the same contract openResults keeps for the link
-  // and results.
+  // and results. A story render's item names its story kit and walks
+  // to the story kit's controls.
   const openPostCopy = () => {
     requestAnimationFrame(() => {
       const target = document.querySelector(
-        row.post_kit
-          ? `[data-testid="history-post-copy-${row.id}"]`
-          : `[data-testid="history-generate-post-copy-${row.id}"]`
+        isStory
+          ? row.story_kit
+            ? `[data-testid="history-story-kit-${row.id}"]`
+            : `[data-testid="history-story-kit-missing-${row.id}"]`
+          : row.post_kit
+            ? `[data-testid="history-post-copy-${row.id}"]`
+            : `[data-testid="history-generate-post-copy-${row.id}"]`
       );
       target?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
     });
@@ -761,7 +857,13 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                       <span className="font-semibold text-muted-foreground">Finished → posted:</span>
                       <span>Export ready</span>
                       <span aria-hidden="true" className="text-muted-foreground">·</span>
-                      {row.post_kit ? (
+                      {isStory ? (
+                        row.story_kit ? (
+                          <button type="button" className="underline" onClick={openPostCopy}>Story kit written</button>
+                        ) : (
+                          <button type="button" className="underline" onClick={openPostCopy}>Story kit not written yet</button>
+                        )
+                      ) : row.post_kit ? (
                         <button type="button" className="underline" onClick={openPostCopy}>Post copy written</button>
                       ) : (
                         <button type="button" className="underline" onClick={openPostCopy}>Post copy not written yet</button>
@@ -790,8 +892,36 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </div>
               )}
               {/* Identity lives once, in the summary at this record's head above — nothing below repeats it. */}
-              {(row.post_kit || showEmptyKit || row.audience || row.demo_brief || row.location) && (
+              {(row.post_kit || row.story_kit || showEmptyKit || showEmptyStoryKit || row.audience || row.demo_brief || row.location) && (
                 <div className={`history-record-sections grid grid-cols-1 items-start gap-3${sectionsPaired ? " history-record-sections-paired" : ""}`}>
+                  {showEmptyStoryKit && (
+                    <div
+                      className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"
+                      data-testid={`history-story-kit-missing-${row.id}`}
+                    >
+                      <p className="flex items-center gap-2 py-1 text-sm font-semibold text-muted-foreground">
+                        <ListChecks aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                        <span>Story kit</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        This story finished before its kit was written, so there is no story kit.
+                      </p>
+                    </div>
+                  )}
+
+                  {row.story_kit && (
+                    <section
+                      className="rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-3"
+                      data-testid={`history-story-kit-${row.id}`}
+                    >
+                      {/* A legacy story render's kit, read-only since
+                          the Stories removal (ADR 0243): the section
+                          shell is the slot, the kit's saved fields are
+                          its content — no surface writes one anymore. */}
+                      <LegacyStoryKit storyKit={row.story_kit} />
+                    </section>
+                  )}
+
                   {showEmptyKit && (
                     <div
                       className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"

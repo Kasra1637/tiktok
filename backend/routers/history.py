@@ -137,6 +137,26 @@ def _parse_post_kit(*a, **k):
     return _cfg("_parse_post_kit")(*a, **k)
 
 
+def _parse_story_kit(value):
+    """The frozen story kit for a generation, or None when never written.
+
+    The read half of the retired Stories feature (ADR 0243): no surface
+    writes a story kit anymore, but a legacy story render's saved kit
+    stays readable here — History shows it read-only beside the render.
+    The parser moved from the deleted stories router to this, its last
+    reader's, home; `server` re-exports it for the generation serializer.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
 def _require_renderable_project(*a, **k):
     return _cfg("_require_renderable_project")(*a, **k)
 
@@ -981,10 +1001,10 @@ async def generation_history(
                    g.template_version, g.script_version, g.model, g.duration,
                    g.status, g.segment_role, g.attempt, g.video_url,
                    g.r2_url, g.error, g.retryable, g.created_at, g.completed_at,
-                   g.post_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at, g.location,
+                   g.post_kit, g.story_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at, g.location,
                    g.quality_report,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
-                   p.strategy_version, ca.kind AS angle_kind
+                   p.strategy_version, p.kind AS project_kind, ca.kind AS angle_kind
             FROM generations g
             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
             LEFT JOIN content_angles ca ON ca.id = p.content_angle_id
@@ -1011,6 +1031,13 @@ async def generation_history(
         entry["playback_url"] = _playback_url(row)
         entry["poster_url"] = _poster_url(row)
         entry["post_kit"] = _parse_post_kit(entry.get("post_kit"))
+        # A story render's card offers its story kit, never post copy
+        # (ADR 0242): the card can only tell the two apart if the row
+        # names the project's kind, and the kit must arrive parsed
+        # like the post kit beside it. A row whose project is gone
+        # reads as a video — the kind every pre-Stories row is.
+        entry["story_kit"] = _parse_story_kit(entry.get("story_kit"))
+        entry["project_kind"] = entry.get("project_kind") or "video"
         entry["tiktok_url"] = (entry.get("tiktok_url") or "").strip() or None
         views = entry.get("tiktok_views")
         entry["tiktok_views"] = int(views) if views is not None else None

@@ -1,6 +1,6 @@
 # 0227 — Stories are projects with a kind marker
 
-Status: accepted
+Status: superseded by 0243 (the Stories page is removed; the kind marker survives as legacy data)
 
 ## Context
 

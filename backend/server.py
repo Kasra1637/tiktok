@@ -187,21 +187,12 @@ from routers.history import (
     set_generation_performance_snapshot, set_generation_video_verdict,
     _posted_performance_rows,
     archive_generation, generation_history, delete_generation,
+    # The story-kit parser lives with History since the Stories removal
+    # (ADR 0243): History is its last reader, and the generation
+    # serializer below reads a legacy story render's kit through it.
+    _parse_story_kit,
 )
 api_router.include_router(history_router)
-
-# Stories: story project create, plan, render submit, and the story kit
-# (single owner in routers.stories), re-exporting the handlers and kit
-# helpers the completion hook and the tests still call from `server`.
-from routers.stories import (
-    router as stories_router,
-    configure_stories,
-    create_story_project, generate_story_plan, generate_story,
-    suggest_story_screen_text,
-    regenerate_story_kit, _parse_story_kit, _maybe_write_story_kit,
-    _schedule_story_kit, _load_story_kit_materials,
-)
-api_router.include_router(stories_router)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -344,12 +335,6 @@ configure_assets(sys.modules[__name__])
 # History router: configure with the composition root so call sites resolve
 # the patched DB helpers and the render-lifecycle helpers at call time.
 configure_history(sys.modules[__name__])
-
-# Stories router: configure with the composition root so its endpoints
-# resolve the DB helpers, the render submit and the serializers at call
-# time — the same call-time contract as studio, so a test patching
-# server.<name> intercepts the story calls too.
-configure_stories(sys.modules[__name__])
 
 
 # The face-swap target is never uploaded by the client. It must be a file this
@@ -1447,14 +1432,14 @@ async def _submit_generation(
     logger.info("submit_generation project=%s user=%s model=%s request_id=%s",
                 project.get("id"), user_id, model or project.get("model"), rid)
     if exact_duration:
-        # A story frame's length is the render's length (ADR 0228): the
-        # settled pick runs 3/4/5 seconds, and the hook-video clamp
-        # below floors at 8 — it would silently rewrite a 3-second
-        # question frame into an 8-second render nobody chose. The
-        # caller (the stories router) has already validated the value
-        # against the pick, and the model's own maximum below still
-        # caps it. Every other caller leaves this off and clamps as
-        # before.
+        # An exact-length render's length is the render's length: the
+        # caller has already validated the value against its settled
+        # pick (the Hook + CTA page's 4/5 seconds, ADR 0244; the retired
+        # Stories frames before it, ADR 0228), and the hook-video clamp
+        # below floors at 8 — it would silently rewrite a 4-second hook
+        # into an 8-second render nobody chose. The model's own maximum
+        # below still caps it. Every other caller leaves this off and
+        # clamps as before.
         requested = int(duration or project.get("duration_seconds") or 0)
     else:
         requested = template_library.clamp_duration(
@@ -3134,11 +3119,6 @@ async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: st
     # response like the poster: a kit failure leaves NULL, never invented
     # copy. A NULL kit renders as no kit.
     await _schedule_post_kit(background_tasks, generation_id, user_id)
-    # The story kit's turn (ADR 0228): scheduled beside its sibling with
-    # the same contract. Each writer checks the project's kind, so a
-    # completion grows exactly one kit — the post kit for a hook video,
-    # the story kit for a story, never both.
-    await _schedule_story_kit(background_tasks, generation_id, user_id)
     if stored_url:
         # Poster is best-effort and off the critical path: History works
         # without it. Scheduled after the response so the save never stacks

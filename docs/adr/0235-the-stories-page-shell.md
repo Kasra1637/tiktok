@@ -1,7 +1,6 @@
 # 0235 — The Stories page shell: nav, route, and a saved draft
 
-Status: accepted (Stories phase 3; the data layer is 0227, the
-generation layer is 0228, the full flow is the next phase)
+Status: superseded by 0243 (the Stories page is removed)
 
 ## Context
 

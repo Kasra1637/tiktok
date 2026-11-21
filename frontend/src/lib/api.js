@@ -332,31 +332,6 @@ export const api = {
   createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
 
-  // Stories (ADRs 0227/0228/0235). A story is a studio project with
-  // kind="story", so only CREATION is story-shaped: the stories router
-  // owns it because the type is required there and validated against
-  // the settled catalog. Opening a draft is getStudioProject, saving
-  // the picks is updateStudioProject, and the list below reads the one
-  // project list and keeps the story rows — there is one table, one
-  // serializer and one validated write path, not a parallel set.
-  createStoryProject: (payload) => client.post("/stories/projects", payload).then((r) => r.data),
-  getStoryProjects: (profileId) =>
-    client.get("/studio/projects", { params: { brand_profile_id: profileId } }).then((r) => ({
-      projects: (r.data.projects || []).filter((p) => (p.kind || "video") === "story"),
-    })),
-  // The story flow (ADR 0236). The plan is the stories router's one
-  // generation — a chain-timeout call like the wizard's plan, answered
-  // with the saved project. The render submits one frame at its own
-  // seconds through the same router; polling and generation reads ride
-  // the shared generation endpoints below, like every render.
-  generateStoryPlan: (id, payload = {}) => client.post(`/stories/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
-  generateStory: (id, payload = {}) => client.post(`/stories/projects/${id}/generate`, payload).then((r) => r.data),
-  // A fresh screen text for the frame: a suggestion only (ADR 0145's
-  // contract) — the endpoint saves nothing, and accepting goes through
-  // the normal project edit, exactly like accepting a cover text.
-  suggestStoryScreenText: (id, payload) => client.post(`/stories/projects/${id}/screen-text-suggestion`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
-  regenerateStoryKit: (id) =>
-    client.post(`/generations/${id}/story-kit/regenerate`, null, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The one-pass form of the two above: the server writes the plan, then
   // builds the strategy from it, and answers once with both. This is the

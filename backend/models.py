@@ -317,14 +317,6 @@ STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     # so editing it writes the column without marking the plan changed
     # or the strategy stale — the spoken words never moved.
     "cover_text",
-    # The story fields (ADR 0228) ride the same PATCH for the same
-    # reason: the Stories page edits the type, the accepted screen text,
-    # the sticker plan and the frame count through the one validated
-    # write path, and none of them is plan content in the wizard's
-    # sense — a story has no plan/strategy staleness to mark. The
-    # update handler gives sticker_plan and frame_count their own
-    # branches (JSON and integer, not the generic string write).
-    "story_type", "screen_text", "sticker_plan", "frame_count",
 )
 
 
@@ -342,9 +334,10 @@ class CreateStudioProjectRequest(BaseModel):
     # The row's kind (ADR 0227): a hook video unless it is a story. It is
     # the project's identity, set here at creation and carried by the
     # serializer — deliberately not an editable field, so a draft edit
-    # can never turn a video into a story. The Stories endpoints that
-    # create with kind="story" arrive with the Stories router; the data
-    # layer holds and exposes the marker from this phase on.
+    # can never turn a video into a story. Since the Stories removal
+    # (ADR 0243) the story value is legacy only: no surface creates
+    # story rows anymore, but existing rows keep the marker and History
+    # reads it to show their saved story kits.
     kind: Literal["video", "story"] = "video"
     camera_setup: Literal["handheld", "fixed"] = "handheld"
     content_angle_id: Optional[str] = ""
@@ -386,71 +379,12 @@ class UpdateStudioProjectRequest(BaseModel):
     # editable like the plan's words, but it is not plan content — the
     # update path writes it without a version bump or a stale strategy.
     cover_text: Optional[str] = None
-    # The story fields (ADR 0228): the Stories page edits the type, the
-    # accepted screen text, the sticker plan and the frame count through
-    # this same PATCH. Like the cover text they are not plan content in
-    # the wizard's sense, so the update path writes them without a
-    # version bump — sticker_plan as JSON, frame_count as an integer.
-    story_type: Optional[str] = None
-    screen_text: Optional[str] = None
-    sticker_plan: Optional[List[dict]] = None
-    frame_count: Optional[int] = None
     assets: Optional[List[dict]] = None
     # The app-specific strategy is editable so a founder can correct the hook
     # line or tighten the locked persona without paying to regenerate. Edits
     # bump strategy_version, which invalidates any unapproved segment built
     # against the old one.
     strategy: Optional[dict] = None
-
-
-class CreateStoryProjectRequest(BaseModel):
-    """
-    Start a story draft (ADR 0227/0228).
-
-    Only the profile and the story type are required: the type is the
-    story's aim, and its settled default supplies the frame length
-    unless the founder picks another of the 3/4/5 lengths. The type
-    id is validated against the catalog at the endpoint, loudly — the
-    model here carries the shape, the catalog owns the set. An angle
-    may seed the story now or be picked later; direction rides the
-    ordinary project PATCH, like every other draft field.
-    """
-    brand_profile_id: str
-    story_type: str
-    content_angle_id: Optional[str] = ""
-    camera_setup: Literal["handheld", "fixed"] = "handheld"
-    frame_seconds: Optional[int] = None
-
-
-class GenerateStoryPlanRequest(BaseModel):
-    """
-    Optional overrides for a story plan generation.
-
-    Empty means "the project's saved type and frame length", which is
-    what a regenerate wants. A supplied type or length is validated
-    against the settled catalog and pick at the endpoint and saved
-    with the plan, so the row and the words never disagree.
-    `countdown_date` is the founder's date for an announcement story:
-    it rides the sticker plan and the kit, and is never invented.
-    """
-    story_type: Optional[str] = None
-    frame_seconds: Optional[int] = None
-    countdown_date: Optional[str] = ""
-
-
-class SuggestStoryScreenTextRequest(BaseModel):
-    """
-    Ask for one fresh screen text for a story frame (ADR 0236).
-
-    Advisory like the cover suggestion (ADR 0145): the endpoint writes
-    nothing, and accepting is the page's own draft edit. The fields are
-    the editor's current values — the founder may hold unsaved edits
-    the suggestion should answer to; each omitted field falls back to
-    the saved row's.
-    """
-    screen_text: Optional[str] = None
-    hook_line: Optional[str] = None
-    script: Optional[str] = None
 
 
 class GeneratePlanRequest(BaseModel):
@@ -553,18 +487,6 @@ class StudioGenerationRequest(BaseModel):
     generate_audio: Optional[bool] = None
     idempotency_key: Optional[str] = None
     resolution: Optional[str] = None
-
-
-class GenerateStoryRequest(StudioGenerationRequest):
-    """
-    Render one story frame.
-
-    The StudioGenerationRequest fields, plus the frame's place in a
-    sequence: v1 renders frame 0 only (the page offers one frame), and
-    the column the fast-follow sequences ride is honoured from the
-    start so a later frame is the same call with its own index.
-    """
-    segment_index: int = 0
 
 
 class UpdateAssetRequest(BaseModel):

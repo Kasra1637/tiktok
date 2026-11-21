@@ -134,6 +134,7 @@ describe("history deep-link and pager helpers", () => {
   test.each([
     ["a copy-less export resolves to the without side", "with", { post_kit: null, audience: "", demo_brief: "" }, "without"],
     ["a copy-carrying render resolves to the with side", "without", { audience: "QA" }, "with"],
+    ["a story-kit-carrying render resolves to the with side", "without", { story_kit: { caption: "Losing count, again." } }, "with"],
     ["without a target the with side is kept", "with", null, "with"],
     ["without a target the without side is kept", "without", null, "without"],
   ])("deep link %s", (_label, param, row, expected) => {

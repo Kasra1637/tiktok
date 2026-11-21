@@ -10,15 +10,17 @@ import LineRewriteAction from "./LineRewriteAction";
  * overwriting the founder's newer words; accepting the suggestion
  * replaces the entire script through the same draft edit the textarea
  * makes.
+ *
+ * The button stands alone, with no explainer line (ADR 0242): the
+ * hook's assist carries none and is understood, and the suggestion
+ * itself arrives with its accept/dismiss, so the "nothing changes
+ * until you accept it" the line used to narrate is visible at the
+ * moment it matters instead.
  */
 export default function ScriptRewrite({ projectId, hookLine, script, onChange, disabled }) {
   if (!String(script || "").trim()) return null;
   return (
     <div className="space-y-3" data-testid="script-rewrite">
-      <p className="text-sm text-muted-foreground">
-        Or remake the script in one go. One suggestion for the whole story,
-        and nothing changes until you accept it.
-      </p>
       <LineRewriteAction
         projectId={projectId}
         line={script}

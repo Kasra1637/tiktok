@@ -86,6 +86,19 @@ describe("ScriptRewrite", () => {
     await view.unmount();
   });
 
+  test("carries no explainer line — the button speaks for itself", async () => {
+    const view = await mount({});
+    // ADR 0242: the "Or remake the script in one go…" explainer is
+    // gone. The hook's assist carries no such line and is understood;
+    // the suggestion itself shows accept/dismiss when it arrives, so
+    // the safety the line described is visible at the moment it
+    // matters instead of narrated beside the button.
+    expect(view.container.textContent).not.toContain("remake the script in one go");
+    expect(view.container.textContent).not.toContain("nothing changes until you accept it");
+    expect(view.q("script-rewrite-button")).not.toBeNull();
+    await view.unmount();
+  });
+
   test("renders nothing for an empty script", async () => {
     const view = await mount({ script: "" });
     expect(view.q("script-rewrite")).toBeNull();

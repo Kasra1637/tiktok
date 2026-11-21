@@ -7,7 +7,6 @@ import {
   Compass,
   History as HistoryIcon,
   Images,
-  Layers,
   LayoutDashboard,
   Smartphone,
   TrendingUp,
@@ -39,13 +38,12 @@ import { CREATE_ACTION, pickDashboardAction } from "../lib/dashboardNextAction";
  * lines for the destinations, and the one rise-and-settle entrance.
  */
 
-// The seven destinations, in the order a founder works through them.
+// The destinations, in the order a founder works through them.
 // Icons and hints are the sidebar's own (Sidebar.jsx NAV_ITEMS), so a
 // card here and its link there can never describe the same place two
 // ways; the sidebar stays the owner of that vocabulary.
 const DESTINATIONS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "dashboard-card-create", hint: "Plan, review, render" },
-  { to: "/stories", label: "Stories", icon: Layers, testId: "dashboard-card-stories", hint: "Short clips, posted as stories" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "dashboard-card-demo-cta", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "dashboard-card-history", hint: "Renders, exports, results" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "dashboard-card-assets", hint: "Presenter photos by app" },

@@ -60,7 +60,7 @@ export const TOURS = {
         target: '[data-testid="dashboard-destinations"]',
         title: "Every workflow, one click away",
         body:
-          "The sidebar's destinations as cards: make a hook video, cut a story, finish it in Demo + CTA, then read what happened in History and Analytics. Nothing here reports numbers — it routes.",
+          "The sidebar's destinations as cards: make a hook video, finish it in Demo + CTA, then read what happened in History and Analytics. Nothing here reports numbers — it routes.",
       },
       {
         target: '[data-testid="dashboard-recents"]',
@@ -130,82 +130,6 @@ export const TOURS = {
         optional: true,
         body:
           "The flow ends in Demo + CTA, with your finished render already loaded — no hunting for the clip you just made. Add the demo you record and your closing message there; the export saves beside the original in History.",
-      },
-    ],
-  },
-
-  // Targets Stories at /stories (ADRs 0235/0236, tour by ADR 0240). The
-  // walk follows the page's own stacking order: app, type, direction,
-  // plan, editors, craft check, preview, render, kit. Only the two
-  // picker steps are required — a first-run page already shows them.
-  // Everything past the type pick waits on a draft (created when the
-  // type is picked) or on a plan (written on its click), so those steps
-  // are optional and skip quietly until the section exists.
-  stories: {
-    id: "stories",
-    label: "Stories tour",
-    steps: [
-      {
-        target: '[data-testid="stories-app-picker"]',
-        title: "Start with an approved app",
-        body:
-          "A story is made from one approved App Profile — its facts and its audience — the same profile your hook videos are written from. Pick the app this story is for.",
-      },
-      {
-        target: '[data-testid="story-type-picker"]',
-        title: "Pick the story's aim",
-        body:
-          "Four types: a hook teaser, a question or poll, a demo moment, an announcement. The type also sets the frame's length — a story is a beat of three to five seconds, not a short video.",
-      },
-      {
-        target: '[data-testid="stories-direction-card"]',
-        title: "Camera, place and wardrobe",
-        optional: true,
-        body:
-          "Direction works the way it does in Create Video: pick the camera setup, the place and the wardrobe, and the plan is written from them. A fixed camera is indoors only, so an outdoor place is not offered for it.",
-      },
-      {
-        target: '[data-testid="story-plan-generate"]',
-        title: "One click writes the plan",
-        optional: true,
-        body:
-          "Generate plan writes the spoken line, the screen text and the sticker plan from the direction above. Nothing is written — and nothing is spent — until you press it.",
-      },
-      {
-        target: '[data-testid="story-editors"]',
-        title: "The line aloud, the text on mute",
-        optional: true,
-        body:
-          "Edit the spoken line and the script here. The screen text is separate: it is the sticker you add by hand when you post, capped at 80 characters and 14 words, and it must carry the same message with the sound off.",
-      },
-      {
-        target: '[data-testid="story-craft-check"]',
-        title: "The story Craft check advises",
-        optional: true,
-        body:
-          "Four checks written for stories: the hook lands in the first second, the screen text stands alone muted, one idea per frame, a sticker plan present. Advisory only — it never blocks a render.",
-      },
-      {
-        target: '[data-testid="story-preview"]',
-        title: "Preview inside the safe zones",
-        optional: true,
-        body:
-          "The phone frame draws the Instagram and TikTok safe zones as quiet guides, so the presenter and the sticker text stay clear of each app's own buttons and captions. Switch platforms to check both.",
-      },
-      {
-        target: '[data-testid="story-render-panel"]',
-        title: "Render the beat at its own length",
-        optional: true,
-        placement: "top",
-        body:
-          "One press renders this frame at the length you picked — three, four or five seconds. The render is the paid step; when it lands, the finished frame plays here with its story kit.",
-      },
-      {
-        target: '[data-testid="story-kit-panel"]',
-        title: "The story kit closes the loop",
-        optional: true,
-        body:
-          "A finished frame lands with its kit: the caption, the screen text to paste as a native sticker, the sticker plan and a posting checklist. Posting stays manual — the kit hands you everything the apps ask for.",
       },
     ],
   },
@@ -479,7 +403,6 @@ export function getTourIdForPath(pathname) {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (path === "/dashboard") return "dashboard";
   if (path === "/create") return "create";
-  if (path === "/stories") return "stories";
   if (path === "/brand") return "brand";
   if (path === "/history") return "history";
   if (path === "/analytics") return "analytics";

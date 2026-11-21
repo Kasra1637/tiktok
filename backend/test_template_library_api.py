@@ -2504,3 +2504,26 @@ class TestDirectionRefresh:
                 payload=RefreshDirectionOptionsRequest(field="location"),
                 user_id=ANON))
         assert err.value.status_code == 404
+
+    def test_refresh_failure_detail_names_no_model_internals(self, api, monkeypatch):
+        # ADR 0242: the founder reads this failure beside the dropdown,
+        # and the raw model error — finish reasons and all — is not a
+        # sentence for them. It is not lost: _log_model_call records
+        # the failure with its error server-side before the endpoint
+        # converts it. The detail is the plain sentence only.
+        import ai_service
+        from models import RefreshDirectionOptionsRequest
+
+        async def failing_chat_json(system_message, prompt, context, **kwargs):
+            raise RuntimeError(
+                "Direction options: model returned no content (finish_reason=length)")
+
+        monkeypatch.setattr(ai_service, "_chat_json", failing_chat_json)
+        profile = _make_profile(api, ANON, name="Refresh Failure")
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_direction_options(
+                profile_id=profile["id"],
+                payload=RefreshDirectionOptionsRequest(field="location"),
+                user_id=ANON))
+        assert err.value.status_code == 502
+        assert err.value.detail == "AI direction options failed. Please try again."

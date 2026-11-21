@@ -2287,7 +2287,11 @@ async def refresh_profile_direction_options(
             brand_profile_id=profile_id,
         )
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=f"AI direction options failed. Please try again. ({str(e)[:150]})")
+        # The founder-facing sentence only (ADR 0242): the raw model
+        # error — finish reasons and all — is not wording for the
+        # dropdown's reader. It is not lost: _log_model_call has
+        # already recorded the failure with its error server-side.
+        raise HTTPException(status_code=502, detail="AI direction options failed. Please try again.")
     scene = angle_scene.angle_scene(angle)
     options = [o for o in options if not angle_scene.conflict_reason(o, scene)]
     if field == "location" and (payload.camera_setup or "").strip().lower() == "fixed":

@@ -1,6 +1,6 @@
 # 0240 — The tutorial entry returns to the Dashboard, and Stories gets its tour
 
-Status: accepted (extends 0118; the Dashboard half settles a gap 0208 left)
+Status: accepted (extends 0118; the Dashboard half settles a gap 0208 left); partially superseded by 0243 (the Stories tour is removed with the page)
 
 ## Context
 

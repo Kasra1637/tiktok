@@ -31,7 +31,6 @@ import ai_service
 import angle_scene
 import creative_quality
 import scene_consistency
-import story_types
 import template_library
 import video_providers
 import final_beat
@@ -434,28 +433,6 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
         }
     else:
         out["plan_trim"] = {}
-    # The story fields (ADR 0228): present on every project response so
-    # the Stories page reads one shape; a hook video leaves them at
-    # their empties. The story craft check is recomputed on read for a
-    # story row with words, like the spoken report beside it — advisory,
-    # never stored, never a gate.
-    out["story_type"] = out.get("story_type") or ""
-    out["screen_text"] = out.get("screen_text") or ""
-    out["sticker_plan"] = (
-        out.get("sticker_plan") if isinstance(out.get("sticker_plan"), list) else []
-    )
-    out["frame_count"] = int(out.get("frame_count") or 1)
-    out["story_quality"] = (
-        creative_quality.assess_story_quality(
-            out.get("hook_line"),
-            out.get("script"),
-            out.get("screen_text"),
-            out.get("sticker_plan"),
-            frame_seconds=out.get("duration_seconds") or 0,
-        )
-        if out["kind"] == "story" and (out.get("hook_line") or out.get("script"))
-        else None
-    )
     return out
 
 
@@ -1138,25 +1115,6 @@ async def update_studio_project(
             value = (value or "").strip() or None
         elif key == "objective":
             value = template_library.normalize_objective(value)
-        elif key == "duration_seconds" and (row.get("kind") or "video") == "story":
-            # A story's length is its frame length (ADR 0228): one of the
-            # settled 3/4/5 pick, stored exactly. The hook-video clamp
-            # below floors at 8 seconds, which would silently rewrite a
-            # 3-second frame into an 8-second one — refuse an off-pick
-            # value instead of storing a length nobody chose.
-            try:
-                want_seconds = int(value or 0)
-            except (TypeError, ValueError):
-                want_seconds = 0
-            if want_seconds not in story_types.STORY_FRAME_SECONDS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "A story frame runs 3, 4, or 5 seconds — "
-                        f"{want_seconds or 'that length'} is not one of them."
-                    ),
-                )
-            value = want_seconds
         elif key == "duration_seconds":
             value = template_library.clamp_duration(value)
             # The plan's beat timeline is built for the length the plan was
@@ -1183,31 +1141,6 @@ async def update_studio_project(
                         f"step and regenerate the plan, which rewrites the timeline to match."
                     ),
                 )
-        elif key == "story_type":
-            # The story's type is its aim (ADR 0227), and the create
-            # endpoint validates it against the settled catalog loudly.
-            # The draft edit holds the same line (ADR 0235): a PATCH
-            # that stored an unknown id silently would leave the plan
-            # endpoint to refuse later, with the founder further from
-            # the pick that caused it. An empty value clears to NULL,
-            # which the serializer already reads as "no type picked yet".
-            candidate = (value or "").strip() if isinstance(value, str) else ""
-            if candidate and story_types.get_story_type(candidate) is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Unknown story type {candidate!r}: pick one of "
-                        + ", ".join(story_types.STORY_TYPE_IDS) + "."
-                    ),
-                )
-            value = candidate or None
-        elif key == "frame_count":
-            # The story's frame count (ADR 0228): an integer on the row,
-            # never below the one frame every story has.
-            try:
-                value = max(1, int(value or 1))
-            except (TypeError, ValueError):
-                value = 1
         elif key == "hook_seconds":
             # Where the middle begins. Directorial, not a render length: the whole
             # piece is one render. 0 means "follow the template", and anything out

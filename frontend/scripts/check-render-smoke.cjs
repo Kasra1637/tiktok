@@ -472,31 +472,6 @@ const apiStub = {
   // the eager create adopts and which hides the auto-generation this suite
   // is about behind a plan the founder never wrote.
   createStudioProject: async () => ({ ...BASE_PROJECT }),
-  // A story draft is a studio project with kind="story" (ADR 0227):
-  // creation answers with the fresh row, and the story list reads the
-  // profile's projects and keeps the story rows. Empty by default;
-  // the Stories checks override these with the drafts they exercise.
-  createStoryProject: async (payload) => ({
-    ...BASE_PROJECT,
-    id: "story-1",
-    kind: "story",
-    brand_profile_id: payload?.brand_profile_id || "b1",
-    story_type: payload?.story_type || "",
-    // The server's create writes the type's settled default length.
-    duration_seconds:
-      { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
-        payload?.story_type
-      ] || 10,
-    frame_count: 1,
-  }),
-  getStoryProjects: async () => ({ projects: [] }),
-  // The Stories flow (ADR 0236): plan, render submit, screen-text
-  // suggestion and kit regenerate. Benign by default — the Stories
-  // checks override them with the rows their fixtures exercise.
-  generateStoryPlan: async () => ({}),
-  generateStory: async () => SEGMENT,
-  suggestStoryScreenText: async () => ({ screen_text: "" }),
-  regenerateStoryKit: async () => ({ story_kit: null }),
   refreshDirectionOptions: async () => ({ options: [] }),
   updateStudioProject: async () => PROJECT_WITH_STRATEGY,
   detachAsset: async () => BASE_PROJECT,
@@ -3454,7 +3429,6 @@ async function main() {
       ["analytics", "/analytics"],
       ["demo-cta", "/demo-cta"],
       ["assets", "/assets"],
-      ["stories", "/stories"],
     ];
     try {
       for (const [id, path] of pages) {
@@ -7436,6 +7410,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
         const notice = ctx.container.querySelector('[data-testid="direction-location-ineligible"]');
         if (!notice) throw new Error("the section does not name the ineligible saved place");
+        if (!notice.textContent.includes("Quiet garden bench")) {
+          throw new Error("the notice does not name the saved place it is about (ADR 0242)");
+        }
         await chooseOption(ctx, ctx.container.querySelector("#camera-setup"), "handheld");
         await act(async () => {});
         const restored = ctx.container.querySelector("#review-location-direction");
@@ -11855,7 +11832,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
 
   console.log("");
   console.log("Checking the Stories page shell...");
-  await runStoriesChecks();
+  await runStoriesRemovalChecks();
 
   // The frame is a map of destinations; the draft line is the one thing in it
   // that remembers a place the founder already is. It has to appear only when
@@ -12902,9 +12879,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 8) {
+      if (items.length !== 7) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 8. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -12922,7 +12899,6 @@ async function runSidebarNavChecks() {
         "/dashboard",
         "/brand",
         "/create",
-        "/stories",
         "/demo-cta",
         "/history",
         "/assets",
@@ -12977,15 +12953,6 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
-      // The Stories link carries its own canonical testid (ADR 0235);
-      // the sequence assertion above proves it sits directly after
-      // Create Video, and this one proves the entry's own shape.
-      if (!/to: "\/stories", label: "Stories", icon: Layers, testId: "stories-nav-link"/.test(src)) {
-        throw new Error(
-          "the Stories link changed its route, icon or testId. stories-nav-link " +
-            "is the canonical selector for the sidebar's Stories link."
-        );
-      }
     }
   );
 }
@@ -13028,7 +12995,7 @@ async function runDashboardChecks() {
   const expectGrid = (ctx) => {
     const cards = [...ctx.container.querySelectorAll('[data-testid^="dashboard-card-"]')];
     const hrefs = cards.map((c) => c.getAttribute("href"));
-    const expected = ["/create", "/stories", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
+    const expected = ["/create", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
     if (hrefs.join("|") !== expected.join("|")) {
       throw new Error(
         `the workflow grid routes ${hrefs.join(" -> ") || "(none)"}, expected ${expected.join(" -> ")}`
@@ -13208,592 +13175,41 @@ async function runDashboardChecks() {
 }
 
 /**
- * The Stories page shell (ADR 0235): a sidebar link after Create
- * Video, a route, a Dashboard card, and a page that is one stacked
- * canvas — an app picker and the four story types, with the wizard's
- * autosave pattern and nothing generated on a pick (ADR 0122). The
- * plan, direction and render flow are the next phase; these checks
- * pin the shell: the picks, the background draft creation, the
- * debounced save, and the deep-link open.
+ * The Stories removal (ADR 0243): the page, its route, its sidebar
+ * link, its Dashboard card and its tour are gone. These checks pin
+ * the absence the way the shell checks pinned the presence — a
+ * surface this size does not get to linger as a dead route or a
+ * nav entry pointing nowhere. What survives is data: a legacy story
+ * render's card in History still shows its saved story kit, and
+ * that is pinned by the History checks, not here.
  */
-async function runStoriesChecks() {
-  const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
-  const storyRow = (overrides = {}) => ({
-    id: "story-9",
-    kind: "story",
-    brand_profile_id: "p1",
-    story_type: "hook_teaser",
-    duration_seconds: 4,
-    frame_count: 1,
-    status: "draft",
-    updated_at: "2026-11-20T10:00:00Z",
-    ...overrides,
-  });
-  // Mounts the page inside the stub scope and runs the check's
-  // interactions there: withApi restores the base stub when its body
-  // returns, so a click after the mount would hit the wrong stub.
-  async function inStories(ctx, extra = {}, params = "", body = async () => {}) {
-    const Stories = load("pages/Stories.jsx").default;
-    global.__SMOKE_PARAMS = params;
-    try {
-      await withApi(
-        {
-          getAppProfiles: async () => ({ profiles: [PROFILE] }),
-          getStoryProjects: async () => ({ projects: [] }),
-          ...extra,
-        },
-        async () => {
-          await mount(Stories, {})(ctx);
-          await act(async () => {});
-          await body();
-        }
-      );
-    } finally {
-      global.__SMOKE_PARAMS = "";
+async function runStoriesRemovalChecks() {
+  await check("the Stories page and its route are gone", async () => {
+    const appSrc = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
+    if (/pages\/Stories/.test(appSrc) || /path="\/stories"/.test(appSrc)) {
+      throw new Error("App.js still routes the retired Stories page");
     }
-  }
-  const typeCard = (ctx, id) => ctx.container.querySelector(`[data-testid="story-type-${id}"]`);
-  const saveStatus = (ctx) => ctx.container.querySelector('[data-testid="stories-autosave-status"]');
-
-  await check("the Stories route exists behind the app shell", async () => {
-    const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
-    if (!/lazy\(\(\)\s*=>\s*import\("\.\/pages\/Stories"\)\)/.test(src)) {
-      throw new Error("the Stories page is not lazy-loaded like the other app pages");
-    }
-    if (!/path="\/stories"/.test(src)) {
-      throw new Error("App.js has no /stories route");
+    if (fs.existsSync(path.join(SRC, "pages", "Stories.jsx"))) {
+      throw new Error("the Stories page file still exists");
     }
   });
 
-  await check("the Stories shell offers the four types and creates the draft on the type pick", async (ctx) => {
-    const creates = [];
-    await inStories(
-      ctx,
-      {
-        createStoryProject: async (payload) => {
-          creates.push(payload);
-          return storyRow({
-            id: "story-1",
-            story_type: payload.story_type,
-            duration_seconds:
-              { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
-                payload.story_type
-              ] || 10,
-          });
-        },
-      },
-      "",
-      async () => {
-        // apiCalls is the whole suite's record, not this check's:
-        // only the calls this check's own interactions add count.
-        const callsBefore = apiCalls.length;
-        // The app preselects like the wizard does, but nothing is
-        // created until BOTH picks exist: opening the page is free.
-        if (!ctx.text().includes("Threadly")) {
-          throw new Error("the approved app is not preselected in the picker");
-        }
-        if (creates.length !== 0) {
-          throw new Error("a draft was created before a story type was picked");
-        }
-        const picker = ctx.container.querySelector('[data-testid="story-type-picker"]');
-        if (!picker) throw new Error("the story type picker did not render");
-        for (const [id, seconds] of [
-          ["hook_teaser", 4],
-          ["question_poll", 3],
-          ["demo_moment", 5],
-          ["announcement_countdown", 4],
-        ]) {
-          const card = typeCard(ctx, id);
-          if (!card) throw new Error(`the ${id} type card is missing`);
-          if (!card.textContent.includes(`${seconds}s`)) {
-            throw new Error(`the ${id} card does not name its ${seconds}s frame`);
-          }
-        }
-        await clickEl(ctx, typeCard(ctx, "question_poll"));
-        await act(async () => {});
-        if (creates.length !== 1) {
-          throw new Error(`picking a type created ${creates.length} drafts, expected exactly one`);
-        }
-        if (creates[0].brand_profile_id !== "p1" || creates[0].story_type !== "question_poll") {
-          throw new Error(
-            `the draft was created with ${JSON.stringify(creates[0])}, expected the picked app and type`
-          );
-        }
-        if (typeCard(ctx, "question_poll").getAttribute("aria-pressed") !== "true") {
-          throw new Error("the picked type does not read as picked");
-        }
-        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
-          throw new Error("the created draft shows no saved confirmation");
-        }
-        // ADR 0122: a pick creates a draft row and nothing else — no
-        // plan, no render, no generation call of any kind.
-        const generationCalls = apiCalls.slice(callsBefore).filter((name) =>
-          ["generateStoryPlan", "generateStory", "generatePlan", "generatePlanAndStrategy", "generateVideo", "generateStrategy"].includes(name)
-        );
-        if (generationCalls.length) {
-          throw new Error(`picking spent generation calls: ${generationCalls.join(", ")}`);
-        }
-      }
-    );
+  await check("the sidebar and Dashboard no longer offer Stories", async () => {
+    const sidebarSrc = fs.readFileSync(path.join(SRC, "components", "Sidebar.jsx"), "utf8");
+    if (sidebarSrc.includes("stories-nav-link") || sidebarSrc.includes('"/stories"')) {
+      throw new Error("the sidebar still links the retired Stories page");
+    }
+    const dashboardSrc = fs.readFileSync(path.join(SRC, "pages", "Dashboard.jsx"), "utf8");
+    if (dashboardSrc.includes("dashboard-card-stories") || dashboardSrc.includes('"/stories"')) {
+      throw new Error("the Dashboard still offers the retired Stories page");
+    }
   });
 
-  await check("a story type change autosaves the type and its default length together", async (ctx) => {
-    const patches = [];
-    let saved = null;
-    await inStories(
-      ctx,
-      {
-        createStoryProject: async (payload) => {
-          saved = storyRow({
-            id: "story-1",
-            story_type: payload.story_type,
-            duration_seconds:
-              { hook_teaser: 4, question_poll: 3, demo_moment: 5, announcement_countdown: 4 }[
-                payload.story_type
-              ] || 10,
-          });
-          return saved;
-        },
-        updateStudioProject: async (_id, patch) => {
-          patches.push(patch);
-          saved = { ...saved, ...patch };
-          return saved;
-        },
-      },
-      "",
-      async () => {
-        await clickEl(ctx, typeCard(ctx, "question_poll"));
-        await act(async () => {});
-        if (!saved) throw new Error("the type pick created no draft to edit");
-        await clickEl(ctx, typeCard(ctx, "demo_moment"));
-        if (patches.length !== 0) throw new Error("a type change saved before the debounce elapsed");
-        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
-        if (patches.length !== 1) {
-          throw new Error(`the type change autosaved ${patches.length} times, expected once`);
-        }
-        // The shell offers no length pick, so the new type brings its
-        // settled default with it (ADR 0235) — a 5s demo moment must
-        // not stay stored as the question/poll frame's 3s.
-        if (patches[0].story_type !== "demo_moment" || patches[0].duration_seconds !== 5) {
-          throw new Error(
-            `the autosave carried ${JSON.stringify(patches[0])}, expected the type and its 5s default`
-          );
-        }
-        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
-          throw new Error("no saved confirmation after the type autosave");
-        }
-      }
-    );
-  });
-
-  await check("a ?project= link opens the saved story draft and creates nothing", async (ctx) => {
-    const row = storyRow();
-    let creates = 0;
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => row,
-        getStoryProjects: async () => ({ projects: [row] }),
-        createStoryProject: async () => {
-          creates += 1;
-          return row;
-        },
-      },
-      "?project=story-9",
-      async () => {
-        if (creates !== 0) throw new Error("opening a saved draft created another one");
-        if (typeCard(ctx, "hook_teaser").getAttribute("aria-pressed") !== "true") {
-          throw new Error("the opened draft's type does not read as picked");
-        }
-        const draftRow = ctx.container.querySelector('[data-testid="story-draft-story-9"]');
-        if (!draftRow) throw new Error("the opened draft is not listed among the app's story drafts");
-        if (!draftRow.textContent.includes("Open now")) {
-          throw new Error("the open draft is not marked as the one being worked on");
-        }
-        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
-          throw new Error("the opened draft shows no saved confirmation");
-        }
-      }
-    );
-  });
-
-  await check("a ?project= link to a hook video is refused in words, not opened as a story", async (ctx) => {
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => storyRow({ id: "vid-1", kind: "video" }),
-      },
-      "?project=vid-1",
-      async () => {
-        const alert = ctx.container.querySelector('[data-testid="stories-error"]');
-        if (!alert || !alert.textContent.includes("hook video")) {
-          throw new Error("a video project link was not refused as a hook video");
-        }
-        if (!ctx.container.querySelector('[data-testid="story-type-picker"]')) {
-          throw new Error("the refusal took the pickers down with it");
-        }
-      }
-    );
-  });
-
-  // ------------------------------------------------------ phase 4 (0236)
-
-  const STORY_HOOK = "I keep losing count again.";
-  const STORY_SCRIPT = "At the stall I say it out loud once.";
-  const STORY_SCREEN = "Losing count by the tomatoes again";
-  const STORY_STICKERS = [
-    { platform: "both", sticker: "poll", wording: "Do you lose count too? — Yes / Every time", placement: "lower third, above the caption zone" },
-  ];
-  const storyCheck = (key, label) => ({
-    key, label, passed: true,
-    evidence: [`${label} holds on the settled plan.`],
-    next_step: "unused while passing",
-  });
-  const STORY_QUALITY = {
-    version: 1, advisory: true, kind: "story", passed: 4, total: 4,
-    checks: {
-      first_second_hook: storyCheck("first_second_hook", "Hook inside the first second"),
-      screen_text_stands_alone: storyCheck("screen_text_stands_alone", "Screen text stands alone muted"),
-      one_idea_per_frame: storyCheck("one_idea_per_frame", "One idea per frame"),
-      sticker_plan_present: storyCheck("sticker_plan_present", "Sticker plan present"),
-    },
-    next_steps: [],
-  };
-  const plannedRow = (overrides = {}) => storyRow({
-    hook_line: STORY_HOOK,
-    script: STORY_SCRIPT,
-    screen_text: STORY_SCREEN,
-    sticker_plan: STORY_STICKERS,
-    story_quality: STORY_QUALITY,
-    assets: [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }],
-    ...overrides,
-  });
-  const STORY_KIT = {
-    caption: "Losing count by the tomatoes, again.",
-    screen_text: STORY_SCREEN,
-    sticker_plan: STORY_STICKERS,
-    checklist: ["Add the screen text as a native text sticker — the exact words are in this kit."],
-    story_type: "question_poll",
-    frame_seconds: 5,
-  };
-
-  await check("the direction section reuses the wizard's picks and a fixed camera re-reads them", async (ctx) => {
-    const setups = [];
-    const patches = [];
-    let saved = plannedRow();
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => saved,
-        getStoryProjects: async () => ({ projects: [saved] }),
-        getDirectionOptions: async (_profileId, _angleId, cameraSetup) => {
-          setups.push(cameraSetup || "");
-          return {
-            location: ["Indoor kitchen", "Living room"],
-            lighting: ["Lighting one"],
-            wardrobe: ["Wardrobe one", "Wardrobe two"],
-          };
-        },
-        updateStudioProject: async (_id, patch) => {
-          patches.push(patch);
-          saved = { ...saved, ...patch };
-          return saved;
-        },
-      },
-      "?project=story-9",
-      async () => {
-        const card = ctx.container.querySelector('[data-testid="stories-direction-card"]');
-        if (!card) throw new Error("the direction section did not render for an opened draft");
-        const camera = ctx.container.querySelector('[data-testid="story-camera-setup"]');
-        if (!camera) throw new Error("the camera setup pick is missing from the direction section");
-        if (!ctx.container.querySelector('[data-testid="story-location-direction"]')) {
-          throw new Error("the location pick is not the wizard's DirectionSelect");
-        }
-        if (!ctx.container.querySelector('[data-testid="story-wardrobe"]')) {
-          throw new Error("the wardrobe pick is missing from the direction section");
-        }
-        if (!ctx.container.querySelector('[data-testid="template-photo"]')) {
-          throw new Error("the presenter photo control did not ride into the direction section");
-        }
-        // ADR 0220: the option lists are keyed on the camera setup —
-        // flipping to Fixed re-reads them under the fixed setup, whose
-        // list is indoor-only on the server.
-        await chooseOption(ctx, camera, "fixed");
-        await act(async () => {});
-        if (!setups.includes("fixed")) {
-          throw new Error(`the direction options were never re-read for a fixed camera (saw ${JSON.stringify(setups)})`);
-        }
-        if (!ctx.text().includes("Phone on a shelf or tripod")) {
-          throw new Error("the fixed camera's framing note did not replace the handheld one");
-        }
-        // A location pick rides the page's autosave like every edit.
-        const location = ctx.container.querySelector('[data-testid="story-location-direction"]');
-        await chooseOption(ctx, location, "Indoor kitchen");
-        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
-        const locationPatch = patches.find((p) => p.location === "Indoor kitchen");
-        if (!locationPatch) {
-          throw new Error(`the location pick never autosaved (patches: ${JSON.stringify(patches)})`);
-        }
-      }
-    );
-  });
-
-  await check("the story plan is one click, and the editors, preview and craft check follow it", async (ctx) => {
-    const planCalls = [];
-    const unplanned = storyRow();
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => unplanned,
-        getStoryProjects: async () => ({ projects: [unplanned] }),
-        generateStoryPlan: async (id, payload) => {
-          planCalls.push({ id, payload });
-          return plannedRow();
-        },
-      },
-      "?project=story-9",
-      async () => {
-        const callsBefore = apiCalls.length;
-        const button = ctx.container.querySelector('[data-testid="story-plan-generate"]');
-        if (!button) throw new Error("the Generate plan button did not render");
-        // ADR 0122: opening the draft generated nothing — the click is
-        // the generation, as everywhere else in the studio.
-        if (apiCalls.slice(callsBefore).includes("generateStoryPlan")) {
-          throw new Error("opening the draft spent a story plan call");
-        }
-        await clickEl(ctx, button);
-        await act(async () => {});
-        if (planCalls.length !== 1) {
-          throw new Error(`the plan click made ${planCalls.length} plan calls, expected one`);
-        }
-        if (planCalls[0].payload.story_type !== "hook_teaser" || planCalls[0].payload.frame_seconds !== 4) {
-          throw new Error(`the plan call carried ${JSON.stringify(planCalls[0].payload)}, expected the picked type and its frame length`);
-        }
-        const hookInput = ctx.container.querySelector("#review-hook_line");
-        if (!hookInput || hookInput.value !== STORY_HOOK) {
-          throw new Error("the hook editor does not hold the plan's hook line");
-        }
-        const scriptInput = ctx.container.querySelector('[data-testid="story-script-input"]');
-        if (!scriptInput || scriptInput.value !== STORY_SCRIPT) {
-          throw new Error("the script editor does not hold the plan's script");
-        }
-        const screenInput = ctx.container.querySelector('[data-testid="story-screen-text-value"]');
-        if (!screenInput || screenInput.value !== STORY_SCREEN) {
-          throw new Error("the screen text editor does not hold the plan's screen text");
-        }
-        const stickerPlan = ctx.container.querySelector('[data-testid="story-sticker-plan"]');
-        if (!stickerPlan || !stickerPlan.textContent.includes("poll") || !stickerPlan.textContent.includes("Do you lose count too?")) {
-          throw new Error("the sticker plan does not list the plan's sticker and wording");
-        }
-        const craft = ctx.container.querySelector('[data-testid="story-craft-check"]');
-        if (!craft) throw new Error("the story craft check did not render with the plan");
-        const rows = craft.querySelectorAll('[data-testid="story-craft-check-row"]');
-        if (rows.length !== 4) throw new Error(`the craft check shows ${rows.length} checks, expected the fixed four`);
-        if (!craft.textContent.includes("4 of 4")) {
-          throw new Error("the craft check does not say how many checks pass");
-        }
-        const preview = ctx.container.querySelector('[data-testid="story-preview"]');
-        if (!preview || !preview.textContent.includes(STORY_SCREEN)) {
-          throw new Error("the preview does not carry the screen text as its sticker");
-        }
-      }
-    );
-  });
-
-  await check("the screen text editor enforces the settled caps instead of saving past them", async (ctx) => {
-    const patches = [];
-    let saved = plannedRow();
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => saved,
-        getStoryProjects: async () => ({ projects: [saved] }),
-        updateStudioProject: async (_id, patch) => {
-          patches.push(patch);
-          saved = { ...saved, ...patch };
-          return saved;
-        },
-      },
-      "?project=story-9",
-      async () => {
-        const input = ctx.container.querySelector('[data-testid="story-screen-text-value"]');
-        if (!input) throw new Error("the screen text field did not render");
-        // 90 characters / well past 14 words: the change is refused at
-        // the field — the caps are the editor's contract (ADR 0228),
-        // not a warning after the fact — and nothing of it saves.
-        await typeInto(ctx, input, "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen");
-        if (input.value !== STORY_SCREEN) {
-          throw new Error(`an over-cap screen text entered the field: ${JSON.stringify(input.value)}`);
-        }
-        const note = ctx.container.querySelector('[data-testid="story-screen-text-cap-note"]');
-        if (!note || !note.textContent.includes("80")) {
-          throw new Error("the refused change does not name the cap it hit");
-        }
-        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
-        if (patches.some((p) => typeof p.screen_text === "string" && p.screen_text.split(" ").length > 14)) {
-          throw new Error("an over-cap screen text was autosaved");
-        }
-        // Inside the caps, typing is an ordinary draft edit.
-        await typeInto(ctx, input, "Counting again by the tomatoes");
-        if (input.value !== "Counting again by the tomatoes") {
-          throw new Error("an in-cap screen text did not enter the field");
-        }
-      }
-    );
-  });
-
-  await check("the render gate names the missing plan instead of offering a click into a refusal", async (ctx) => {
-    const unplanned = storyRow();
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => unplanned,
-        getStoryProjects: async () => ({ projects: [unplanned] }),
-        getGenerations: async () => ({ generations: [] }),
-      },
-      "?project=story-9",
-      async () => {
-        const gate = ctx.container.querySelector('[data-testid="story-render-gate"]');
-        if (!gate || !gate.textContent.includes("plan")) {
-          throw new Error("the render panel does not name the missing plan");
-        }
-        const button = ctx.container.querySelector('[data-testid="story-render-generate"]');
-        if (!button || !button.disabled) {
-          throw new Error("the render button is not disabled while no plan exists");
-        }
-      }
-    );
-  });
-
-  await check("a five-second frame renders at five seconds and lands with its story kit", async (ctx) => {
-    const submits = [];
-    const planned = plannedRow({ story_type: "question_poll", duration_seconds: 5 });
-    const submitted = {
-      id: "gen-story-1", studio_project_id: "story-9", status: "submitted",
-      duration: 5, model: "minimax-h3-max", video_url: null, r2_url: null, playback_url: null,
-    };
-    const completed = {
-      ...submitted, status: "completed",
-      video_url: "/media/gen-story-1.mp4",
-      playback_url: "/api/media/videos/gen-story-1.mp4?exp=1&sig=abc",
-      story_kit: STORY_KIT, post_kit: null,
-    };
-    await inStories(
-      ctx,
-      {
-        getStudioProject: async () => planned,
-        getStoryProjects: async () => ({ projects: [planned] }),
-        getGenerations: async () => ({ generations: [] }),
-        generateStory: async (id, payload) => {
-          submits.push({ id, payload });
-          return submitted;
-        },
-        pollGeneration: async () => completed,
-      },
-      "?project=story-9",
-      async () => {
-        const button = ctx.container.querySelector('[data-testid="story-render-generate"]');
-        if (!button) throw new Error("the story render button did not render");
-        if (button.disabled) throw new Error("the story render button is disabled under a complete plan");
-        await clickEl(ctx, button);
-        await act(async () => {});
-        if (submits.length !== 1) throw new Error(`the render click submitted ${submits.length} jobs, expected one`);
-        // ADR 0228's exact-duration rule, end to end: the frame's own
-        // five seconds ride the submit — never the hook-video floor.
-        if (submits[0].payload.duration_seconds !== 5) {
-          throw new Error(`the story submit carried ${JSON.stringify(submits[0].payload.duration_seconds)} seconds, expected the frame's own 5`);
-        }
-        // The poll chain lands the finished frame and its kit.
-        let kit = null;
-        for (let i = 0; i < 40 && !kit; i += 1) {
-          await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
-          kit = ctx.container.querySelector('[data-testid="story-kit-panel"]');
-        }
-        if (!kit) throw new Error("the finished story never showed its story kit");
-        if (!ctx.container.querySelector('[data-testid="story-render-video"]')) {
-          throw new Error("the finished story's video did not land on the page");
-        }
-        if (!kit.textContent.includes(STORY_KIT.caption)) {
-          throw new Error("the story kit does not carry its caption");
-        }
-        if (!kit.textContent.includes(STORY_SCREEN)) {
-          throw new Error("the story kit does not carry the accepted screen text verbatim");
-        }
-        if (!kit.textContent.includes("Do you lose count too?")) {
-          throw new Error("the story kit does not carry the sticker plan's wording");
-        }
-        if (!kit.textContent.includes("native text sticker")) {
-          throw new Error("the story kit does not carry its posting checklist");
-        }
-        // The two kits never mix (ADR 0228): no post kit on a story.
-        if (ctx.container.querySelector('[data-testid="post-kit"]')) {
-          throw new Error("a story render grew a post kit panel");
-        }
-      }
-    );
-  });
-
-  // ------------------------------------------------------ tours (0240)
-
-  await check("the Stories tour walks the settled flow on the page's own anchors", async () => {
-    // ADR 0240: the tour data itself, pinned the way the type catalog
-    // is pinned — the walk order is the page's order, the first two
-    // steps anchor to what a first-run page already shows (so they
-    // are required), and everything past the type pick is optional
-    // because it waits on a draft or a plan the founder has not made
-    // yet. The tour-targets audit proves each testid exists; this
-    // proves the tours point at the right ones in the right order.
+  await check("the stories tour is gone from the tour system", async () => {
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
-    if (getTourIdForPath("/stories") !== "stories") {
-      throw new Error("/stories does not resolve to the stories tour");
-    }
-    if (getTourIdForPath("/dashboard") !== "dashboard") {
-      throw new Error("/dashboard does not resolve to the dashboard tour");
-    }
-    const tour = TOURS.stories;
-    if (!tour) throw new Error("there is no stories tour");
-    const targets = tour.steps.map((s) => s.target);
-    const expected = [
-      '[data-testid="stories-app-picker"]',
-      '[data-testid="story-type-picker"]',
-      '[data-testid="stories-direction-card"]',
-      '[data-testid="story-plan-generate"]',
-      '[data-testid="story-editors"]',
-      '[data-testid="story-craft-check"]',
-      '[data-testid="story-preview"]',
-      '[data-testid="story-render-panel"]',
-      '[data-testid="story-kit-panel"]',
-    ];
-    if (JSON.stringify(targets) !== JSON.stringify(expected)) {
-      throw new Error(`the stories tour walks ${JSON.stringify(targets)}, expected ${JSON.stringify(expected)}`);
-    }
-    if (tour.steps[0].optional || tour.steps[1].optional) {
-      throw new Error("the stories tour's picker steps must be required — a first-run page already shows them");
-    }
-    if (tour.steps.slice(2).some((s) => !s.optional)) {
-      throw new Error("a stories tour step past the type pick is required, but its section waits on a draft or a plan");
-    }
-    const dash = TOURS.dashboard;
-    if (!dash) throw new Error("there is no dashboard tour");
-    const dashTargets = dash.steps.map((s) => s.target);
-    const dashExpected = [
-      '[data-testid="dashboard-next-action"]',
-      '[data-testid="dashboard-destinations"]',
-      '[data-testid="dashboard-recents"]',
-    ];
-    if (JSON.stringify(dashTargets) !== JSON.stringify(dashExpected)) {
-      throw new Error(`the dashboard tour walks ${JSON.stringify(dashTargets)}, expected ${JSON.stringify(dashExpected)}`);
-    }
-  });
-
-  await check("the Stories page registers its first-run tour eligibility", async () => {
-    // The provider half of the wiring is pinned by the fork-page
-    // onboarding check; this pins the page half — Stories itself
-    // must ask, in the ADR 0077 pattern, or the tour can never
-    // auto-open no matter what the provider allows.
-    const src = fs.readFileSync(path.join(SRC, "pages", "Stories.jsx"), "utf8");
-    if (!/useTourEligibility\(\s*"stories",/.test(src)) {
-      throw new Error("Stories.jsx does not register useTourEligibility for its tour");
+    if (TOURS.stories) throw new Error("the stories tour still exists");
+    if (getTourIdForPath("/stories") !== null) {
+      throw new Error("/stories still resolves to a tour");
     }
   });
 }
@@ -15828,7 +15244,7 @@ async function runDemoCtaChecks() {
     const MIN = 55;
     const MAX = 60;
     // Keep the same assertions over every owner after splitting the panels.
-    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx", "pages/Stories.jsx"]
+    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx"]
       .map((file) => fs.readFileSync(path.join(SRC, file), "utf8"))
       .join("\n");
     const found = [];
@@ -21727,6 +21143,86 @@ await check(
     } finally {
       global.__SMOKE_PARAMS = previousParams;
       delete global.__SMOKE_NAVIGATIONS;
+    }
+  });
+
+  // ADR 0242: a story render's card offers its story kit, never post
+  // copy — the post-kit endpoint refuses stories with a 409 that
+  // named a story kit History did not offer, a dead end. The kit
+  // stands in the Post copy slot's place as the same solid section,
+  // and the journey line names it. ADR 0243 keeps this display
+  // read-only after the Stories removal: the kit is the record.
+  await check("a story render in History offers its story kit, never post copy", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    const STORY_KIT_ROW = {
+      caption: "Losing count by the tomatoes, again.",
+      screen_text: "Losing count by the tomatoes again",
+      sticker_plan: [{ platform: "both", sticker: "poll", wording: "Do you lose count too?", placement: "lower third, above the caption zone" }],
+      checklist: ["Add the screen text as a native text sticker — the exact words are in this kit."],
+      story_type: "question_poll",
+      frame_seconds: 3,
+    };
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "story-1", project_kind: "story", story_kit: STORY_KIT_ROW, post_kit: null, audience: "Night scrollers" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const section = ctx.container.querySelector('[data-testid="history-story-kit-story-1"]');
+        if (!section) throw new Error("a story render shows no story kit section in History");
+        if (!section.textContent.includes(STORY_KIT_ROW.caption)) {
+          throw new Error("the History story kit does not carry its caption");
+        }
+        if (ctx.container.querySelector('[data-testid="history-post-copy-story-1"]')) {
+          throw new Error("a story render grew a post copy section");
+        }
+        if (ctx.container.querySelector('[data-testid="history-generate-post-copy-story-1"]')) {
+          throw new Error("a story render is offered post copy generation");
+        }
+        const journey = ctx.container.querySelector('[data-testid="history-journey-story-1"]');
+        if (!journey || !journey.textContent.includes("Story kit written")) {
+          throw new Error("the journey line does not name the story kit on a story render");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // ADR 0243: with the Stories page retired, nothing writes a story
+  // kit anymore — a kit-less legacy story render says so plainly and
+  // offers no generation, where ADR 0242 offered the kit's own
+  // regenerate. The saved-kit case above stays exactly as it was.
+  await check("a story render without its kit says so, and offers nothing to generate", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "story-2", project_kind: "story", story_kit: null, post_kit: null, audience: "Night scrollers" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        const box = ctx.container.querySelector('[data-testid="history-story-kit-missing-story-2"]');
+        if (!box) throw new Error("a kit-less story render does not say its kit is missing");
+        if (!box.textContent.includes("there is no story kit")) {
+          throw new Error("the missing-kit note does not say there is no story kit");
+        }
+        if (ctx.container.querySelector('[data-testid="history-generate-story-kit-button-story-2"]')) {
+          throw new Error("a kit-less story render still offers to generate a story kit");
+        }
+        if (ctx.container.querySelector('[data-testid="history-generate-post-copy-story-2"]')) {
+          throw new Error("a kit-less story render is offered post copy instead of its story kit");
+        }
+        const journey = ctx.container.querySelector('[data-testid="history-journey-story-2"]');
+        if (!journey || !journey.textContent.includes("Story kit not written yet")) {
+          throw new Error("the journey line does not name the missing story kit on a story render");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
     }
   });
 

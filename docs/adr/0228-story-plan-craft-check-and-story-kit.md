@@ -1,6 +1,6 @@
 # 0228 — The story plan, the story craft check, and the story kit
 
-Status: accepted
+Status: superseded by 0243 (the Stories page is removed)
 
 ## Context
 

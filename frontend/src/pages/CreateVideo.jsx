@@ -2443,8 +2443,9 @@ export default function CreateVideo() {
                 />
                 {directionLocationIneligible && (
                   <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
-                    The saved place is not an indoor location, so it is not offered for a fixed
-                    camera. Pick an indoor location — the plan is written from the pick saved here.
+                    Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
+                    not an indoor location, so it is not offered for a fixed camera. Pick an
+                    indoor location — the plan is written from the pick saved here.
                   </p>
                 )}
                 <DirectionSelect
