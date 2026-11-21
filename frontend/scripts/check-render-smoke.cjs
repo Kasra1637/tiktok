@@ -2290,6 +2290,29 @@ async function main() {
     expectText(ctx, "Download MP4", "the download control did not render");
   });
 
+  await check("GenerationPanel frames the finished render in the platform phone frame", async (ctx) => {
+    await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+    const frame = ctx.container.querySelector('[data-testid="platform-preview"]');
+    if (!frame) throw new Error("the finished render is not framed in the phone frame");
+    const video = frame.querySelector('[data-testid="platform-preview-video"]');
+    if (!video) throw new Error("the finished render's clip is not playing in the frame");
+    if (!(video.getAttribute("src") || "").includes("/api/media/videos/")) {
+      throw new Error("the frame is not playing the durable render URL");
+    }
+    const zones = frame.querySelector('[data-testid="platform-preview-zones"]');
+    if (!zones || zones.dataset.platform !== "instagram") {
+      throw new Error("the frame does not open on the Instagram zones");
+    }
+    await clickEl(ctx, frame.querySelector('[data-testid="platform-preview-platform-tiktok"]'));
+    if (zones.dataset.platform !== "tiktok") {
+      throw new Error("the toggle did not switch the frame to the TikTok zones");
+    }
+    // The rail band exists only under TikTok's furniture.
+    if (zones.children.length !== 5) {
+      throw new Error(`the TikTok zones should carry five bands including the rail, got ${zones.children.length}`);
+    }
+  });
+
   await check("paid render reuses the mock progress UI and the mock section is gone", async (ctx) => {
     // The hypothetical preview was removed: the paid in-flight render must
     // carry its progress bar + stage checklist without the removed mock copy.
@@ -3073,6 +3096,37 @@ async function main() {
       if (!sent) throw new Error("Generate never called the endpoint");
       if (sent.resolution !== "480p") {
         throw new Error(`render request carried resolution ${JSON.stringify(sent.resolution)}, expected "480p"`);
+      }
+    });
+  });
+
+  await check("a silent project submits its render audio off", async (ctx) => {
+    // The voice pick's Create Video half (ADR 0246): the panel sends
+    // generate_audio only when the pick is silent — an explicit true
+    // could hand a model a field its catalog does not list — and the
+    // server forces the same off from the saved pick, so retries and
+    // older clients cannot resurrect the voice.
+    dom.window.localStorage.removeItem("studio-video-model:p1");
+    dom.window.localStorage.removeItem("studio-video-resolution:p1");
+    let sent = null;
+    await withApi({
+      getGenerations: async () => ({ generations: [] }),
+      generateVideo: async (projectId, payload) => {
+        sent = payload;
+        return { ...SEGMENT, status: "submitted" };
+      },
+    }, async () => {
+      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY, voice_mode: "silent" } })(ctx);
+      const btn = renderButton(ctx);
+      if (!btn) throw new Error("the generate button did not render");
+      if (btn.disabled) throw new Error("Generate is not live on a ready silent project");
+      await act(async () => {
+        btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {});
+      if (!sent) throw new Error("Generate never called the endpoint");
+      if (sent.generate_audio !== false) {
+        throw new Error(`a silent project's render carried generate_audio ${JSON.stringify(sent.generate_audio)}, expected false`);
       }
     });
   });
@@ -13457,6 +13511,279 @@ async function runHookCtaChecks() {
       throw new Error("HookCta.jsx does not register the hook-cta tour eligibility");
     }
   });
+
+  await check("the page reopens the app's newest draft instead of minting a new one", async (ctx) => {
+    // The button fix (ADR 0246): a visit used to create a fresh empty
+    // draft and open THAT, so the render read "no hook yet" and its
+    // button stayed gated while the founder's hooked draft sat in
+    // the list below. The newest existing draft is the one that opens.
+    const creates = [];
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const hooked = hookRow({ id: "hook-cta-7", hook_line: HOOK, assets: face, updated_at: "2026-11-20T12:00:00Z" });
+    await inHookCta(
+      ctx,
+      {
+        getHookCtaProjects: async () => ({ projects: [hooked] }),
+        createHookCtaProject: async (payload) => {
+          creates.push(payload);
+          return hookRow({ id: "hook-cta-new" });
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        if (creates.length !== 0) {
+          throw new Error(`the visit minted ${creates.length} new drafts beside the existing one`);
+        }
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field || field.value !== HOOK) {
+          throw new Error("the reopened draft's hook line is not standing in the editor");
+        }
+        const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
+        if (gate) throw new Error(`the render is gated on the reopened draft: ${gate.textContent}`);
+        const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
+        if (!button || button.disabled) {
+          throw new Error("the render button is not enabled on the reopened draft");
+        }
+      }
+    );
+  });
+
+  await check("the length pick on a written hook saves, and the render button stays enabled", async (ctx) => {
+    // The other half of the button fix (ADR 0246): the pick rides the
+    // shared studio PATCH, whose wizard duration rules used to clamp
+    // a hook's 4s to 8 or refuse it outright once a hook existed —
+    // the autosave then never settled and the render gate read the
+    // edits as still saving forever. The backend behavior is pinned
+    // in test_hook_cta_api.py; this pins the page's side of the flow.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    let row = hookRow({ id: "hook-cta-1", duration_seconds: 5, hook_line: HOOK, assets: face });
+    const patches = [];
+    const submits = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          row = { ...row, ...patch };
+          return row;
+        },
+        getGenerations: async () => ({ generations: [] }),
+        generateHookCta: async (_id, payload) => {
+          submits.push(payload);
+          return { ...SEGMENT, id: "gen-hook-4", status: "submitted", duration: 4 };
+        },
+      },
+      "",
+      async () => {
+        const control = ctx.container.querySelector('[data-testid="hook-cta-frame-length"]');
+        if (!control) throw new Error("the hook length control did not render");
+        await chooseOption(ctx, control, "4");
+        // The autosave debounce is a second; give the save its time.
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.duration_seconds === 4)) {
+          throw new Error(`the length pick never reached the save: ${JSON.stringify(patches)}`);
+        }
+        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
+          throw new Error(`the pick did not settle as saved: ${saveStatus(ctx)?.textContent || ""}`);
+        }
+        const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
+        if (gate) throw new Error(`the render is gated after the pick saved: ${gate.textContent}`);
+        const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
+        if (!button || button.disabled) {
+          throw new Error("the render button is disabled after the length pick saved");
+        }
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (submits.length !== 1 || submits[0].duration_seconds !== 4) {
+          throw new Error(`the render did not submit at the picked 4s: ${JSON.stringify(submits)}`);
+        }
+      }
+    );
+  });
+
+  await check("attaching the photo keeps the draft open when the follow-up read fails", async (ctx) => {
+    // The attach signal carries no project (ADR 0246): the library
+    // calls the page's onProjectChanged with no argument, and the
+    // page must keep the draft it holds — Create Video's guard —
+    // rather than adopt the empty signal and unmount every card
+    // until the follow-up read lands. Here that read fails outright,
+    // and the draft still stands.
+    const faceAsset = {
+      id: "face-1", kind: "character_reference", status: "active",
+      rights_confirmed: true, label: "Founder face", name: "face.png",
+      brand_profile_id: "p1",
+    };
+    let failRead = false;
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: [] }),
+        getAssets: async () => ({ assets: [faceAsset] }),
+        attachAsset: async () => {
+          failRead = true;
+          return { assets: [{ asset_id: "face-1", kind: "character_reference", label: "Founder face" }] };
+        },
+        getStudioProject: async () => {
+          if (failRead) throw new Error("read failed");
+          return hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: [] });
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        // With no presenter attached yet, an unattached face in the
+        // library stands as a row of its own — no toggle to open.
+        const useButton = [...ctx.container.querySelectorAll("button")].find((b) => (b.textContent || "").includes("Use this photo"));
+        if (!useButton) throw new Error("the library's use-this-photo button did not render");
+        await clickEl(ctx, useButton);
+        await act(async () => {});
+        if (!ctx.container.querySelector('[data-testid="hook-cta-render-card"]')) {
+          throw new Error("the draft's cards vanished after the attach — the page dropped its project");
+        }
+        if (!ctx.container.querySelector('[data-testid="hook-render-panel"]')) {
+          throw new Error("the render panel vanished after the attach");
+        }
+      }
+    );
+  });
+
+  await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face });
+    const patches = [];
+    const submits = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          row = { ...row, ...patch };
+          return row;
+        },
+        getGenerations: async () => ({ generations: [] }),
+        generateHookCta: async (_id, payload) => {
+          submits.push(payload);
+          return { ...SEGMENT, id: "gen-hook-5", status: "submitted", duration: 5 };
+        },
+      },
+      "",
+      async () => {
+        const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
+        if (!silentPill) throw new Error("the voice pick did not render in the direction card");
+        await clickEl(ctx, silentPill);
+        const note = ctx.container.querySelector('[data-testid="voice-mode-silent-note"]');
+        if (!note) throw new Error("the silent note did not render at the pick");
+        if (!note.textContent.includes("text-to-speech")) {
+          throw new Error("the silent note does not name TikTok's text-to-speech");
+        }
+        if (!note.textContent.includes(HOOK)) {
+          throw new Error("the silent note does not show the hook line itself");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.voice_mode === "silent")) {
+          throw new Error(`the voice pick never saved: ${JSON.stringify(patches)}`);
+        }
+        const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
+        if (!button || button.disabled) {
+          throw new Error("the render button is disabled with the silent pick saved");
+        }
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (submits.length !== 1 || submits[0].generate_audio !== false) {
+          throw new Error(`the silent render did not submit audio off: ${JSON.stringify(submits)}`);
+        }
+      }
+    );
+  });
+
+  await check("each Hook + CTA card carries one header, with no restating group label", async (ctx) => {
+    // The label dedupe (ADR 0246): a card header AND an inner group
+    // label used to restate each other, each with its own icon — the
+    // render card stacked three. One icon+label header per card; the
+    // more informative wording is the one that stands.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const headings = [...ctx.container.querySelectorAll(".section-heading")].map((el) => el.textContent.trim());
+        for (const title of ["Choose an app", "Camera, place and wardrobe", "The hook", "Render the hook", "Demo + CTA", "Post kit"]) {
+          if (!headings.includes(title)) {
+            throw new Error(`the card header "${title}" is missing: ${JSON.stringify(headings)}`);
+          }
+        }
+        const eyebrows = [...ctx.container.querySelectorAll(".eyebrow")].map((el) => el.textContent.trim());
+        for (const dropped of ["The line", "The finished hook", "Finish the video", "Copy for the post"]) {
+          if (eyebrows.includes(dropped)) {
+            throw new Error(`the restating group label "${dropped}" still renders`);
+          }
+        }
+        const all = [...headings, ...eyebrows];
+        for (const title of ["Choose an app", "Camera, place and wardrobe", "Render the hook"]) {
+          if (all.filter((t) => t === title).length !== 1) {
+            throw new Error(`"${title}" does not stand exactly once as a label: ${JSON.stringify(all)}`);
+          }
+        }
+      }
+    );
+  });
+
+  await check("the render stage holds the phone frame's placeholder before any render", async (ctx) => {
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const frame = ctx.container.querySelector('[data-testid="platform-preview"]');
+        if (!frame) throw new Error("the phone frame did not render in the render stage");
+        if (!frame.textContent.includes("The frame previews here once it renders.")) {
+          throw new Error("the frame does not hold its placeholder before a render");
+        }
+        if (frame.querySelector("video")) {
+          throw new Error("the frame shows a video before any render exists");
+        }
+      }
+    );
+  });
+
+  await check("the render stage frames the finished hook and toggles its zones", async (ctx) => {
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const done = { ...SEGMENT, id: "gen-hook-done", status: "completed" };
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face }),
+        getGenerations: async () => ({ generations: [done] }),
+      },
+      "",
+      async () => {
+        const video = ctx.container.querySelector('[data-testid="platform-preview-video"]');
+        if (!video) throw new Error("the finished hook is not playing in the phone frame");
+        if (!(video.getAttribute("src") || "").includes("/api/media/videos/")) {
+          throw new Error("the frame is not playing the durable hook URL");
+        }
+        const zones = ctx.container.querySelector('[data-testid="platform-preview-zones"]');
+        if (!zones || zones.dataset.platform !== "instagram") {
+          throw new Error("the frame does not open on the Instagram zones");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="platform-preview-platform-tiktok"]'));
+        if (zones.dataset.platform !== "tiktok") {
+          throw new Error("the toggle did not switch the frame to the TikTok zones");
+        }
+      }
+    );
+  });
 }
 
 /**
@@ -18856,7 +19183,13 @@ async function runDemoCtaChecks() {
       throw new Error("compact clips draw frame-only gutters beside the fixed-width video");
     }
     const panelSource = fs.readFileSync(path.join(SRC, "components/GenerationPanel.jsx"), "utf8");
-    if (!panelSource.includes('controlsList="nodownload noremoteplayback"')) {
+    if (!panelSource.includes("PlatformPreview")) {
+      throw new Error("the render panel's finished preview is not the platform phone frame");
+    }
+    // The ADR 0137 controls contract rides on the frame's own video
+    // element now (ADR 0245): the shared preview component carries it.
+    const previewSource = fs.readFileSync(path.join(SRC, "components/studio/PlatformPreview.jsx"), "utf8");
+    if (!previewSource.includes('controlsList="nodownload noremoteplayback"') || !previewSource.includes("disablePictureInPicture")) {
       throw new Error("the render panel's finished preview kept the browser overflow menu");
     }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;

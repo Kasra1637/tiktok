@@ -188,7 +188,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-1][0] == 9
+            assert schema.MIGRATION_STEPS[-2][0] == 9
 
             db_path = tmp_path / "surface.db"
             await _apply(api, db_path)
@@ -210,6 +210,37 @@ class TestMigrationConvergence:
                 # that marks its drafts writes a value (ADR 0244).
                 assert notnull == 0
                 assert dflt is None
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_project_voice_mode_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 10
+
+            db_path = tmp_path / "voice-mode.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 10"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "voice mode" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                cols = {r[1]: r for r in await cur.fetchall()}
+                assert "voice_mode" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["voice_mode"]
+                assert col_type == "TEXT"
+                # NOT NULL with the talking default: every existing row
+                # reads as a talking project, which is the behavior it
+                # always had (ADR 0246).
+                assert notnull == 1
+                assert dflt == "'talking'"
             finally:
                 await conn.close()
 

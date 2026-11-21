@@ -263,6 +263,53 @@ class TestHookEndpoint:
         assert exc.value.status_code == 404
 
 
+# ------------------------------------------------- the length pick (PATCH)
+
+class TestHookCtaLengthPatch:
+    """The page's picks autosave through the shared studio PATCH, and the
+    hook length is one of those picks. A hook runs 4 or 5 seconds — the
+    wizard's duration rules (clamp into 8/10/12/15, and the 409 that
+    protects a written plan's timeline) must not reach this surface:
+    clamped, the pick silently becomes 8s and the hook endpoint refuses
+    it; refused, the autosave fails on every retry, the page's edits
+    never clear, and the render gate reads them as still saving —
+    the Generate button stays disabled forever (Kasra's live report,
+    Nov 20 2026)."""
+
+    def test_a_length_pick_saves_as_itself(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = _hook_cta(api, "Length Pick Saves")
+        out = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(duration_seconds=4), ANON))
+        assert out["duration_seconds"] == 4
+
+    def test_a_length_pick_after_the_hook_still_saves(self, api, monkeypatch):
+        from models import UpdateStudioProjectRequest
+        project, _profile = _hook_cta(api, "Length Pick After Hook")
+        _write_hook(api, project["id"], monkeypatch)
+        out = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(duration_seconds=4), ANON))
+        assert out["duration_seconds"] == 4
+
+    def test_a_length_outside_the_pick_is_refused_in_the_pages_words(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = _hook_cta(api, "Length Pick Refused")
+        with pytest.raises(HTTPException) as exc:
+            _run(api.update_studio_project(
+                project["id"], UpdateStudioProjectRequest(duration_seconds=9), ANON))
+        assert exc.value.status_code == 400
+        assert "A hook runs 4 or 5 seconds." in exc.value.detail
+
+    def test_a_wizard_project_keeps_the_wizard_clamp(self, api):
+        from models import CreateStudioProjectRequest, UpdateStudioProjectRequest
+        profile = _profile(api, "Length Wizard Clamp")
+        wizard = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), user_id=ANON))
+        out = _run(api.update_studio_project(
+            wizard["id"], UpdateStudioProjectRequest(duration_seconds=4), ANON))
+        assert out["duration_seconds"] == 8
+
+
 # ------------------------------------------------------- the model call
 
 PROFILE_FACTS = {
@@ -436,3 +483,71 @@ class TestGenerateHook:
         history = _run(api.generation_history(user_id=ANON))
         mine = [g for g in history["generations"] if g["id"] == generation["id"]]
         assert mine and mine[0]["project_kind"] == "video"
+
+
+# ------------------------------------------------------------- voice mode
+
+class TestVoiceMode:
+    """The presenter voice pick (ADR 0246): she talks (the default —
+    voice with lip movement), or she stays silent (no voice, and no
+    lip movement at all). The pick lives on the project row, saves
+    through the same studio PATCH as every other pick, and a silent
+    project submits with audio off and a prompt that says plainly
+    she does not speak and her lips do not move."""
+
+    def test_a_fresh_project_reads_talking(self, api):
+        project, _profile = _hook_cta(api, "Voice Default")
+        assert project["voice_mode"] == "talking"
+
+    def test_the_pick_saves_and_reads_back(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = _hook_cta(api, "Voice Pick Saves")
+        out = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(voice_mode="silent"), ANON))
+        assert out["voice_mode"] == "silent"
+        fresh = _run(api.get_studio_project(project["id"], ANON))
+        assert fresh["voice_mode"] == "silent"
+        back = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(voice_mode="talking"), ANON))
+        assert back["voice_mode"] == "talking"
+
+    def test_the_pick_saves_on_a_wizard_project_too(self, api):
+        from models import CreateStudioProjectRequest, UpdateStudioProjectRequest
+        profile = _profile(api, "Voice Wizard Pick")
+        wizard = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), user_id=ANON))
+        assert wizard["voice_mode"] == "talking"
+        out = _run(api.update_studio_project(
+            wizard["id"], UpdateStudioProjectRequest(voice_mode="silent"), ANON))
+        assert out["voice_mode"] == "silent"
+
+    def test_an_unknown_voice_value_is_refused(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = _hook_cta(api, "Voice Refused")
+        with pytest.raises(HTTPException) as exc:
+            _run(api.update_studio_project(
+                project["id"], UpdateStudioProjectRequest(voice_mode="loud"), ANON))
+        assert exc.value.status_code == 400
+
+    def test_a_silent_hook_submits_audio_off_and_says_so(self, api, monkeypatch):
+        from models import GenerateHookRequest, UpdateStudioProjectRequest
+        project = TestGenerateHook()._ready(api, monkeypatch, "Voice Silent Submit")
+        _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(voice_mode="silent"), ANON))
+        calls = _mock_submit(api, monkeypatch)
+        _silence_poster(api, monkeypatch)
+        _run(api.generate_hook_cta(project["id"], GenerateHookRequest(), ANON))
+        assert calls[0]["generate_audio"] is False
+        prompt = calls[0]["prompt"]
+        assert "does not speak" in prompt
+        assert "no lip movement" in prompt
+        assert "mouth stays closed and still" in prompt
+
+    def test_a_talking_hook_carries_no_silence_direction(self, api, monkeypatch):
+        from models import GenerateHookRequest
+        project = TestGenerateHook()._ready(api, monkeypatch, "Voice Talking Submit")
+        calls = _mock_submit(api, monkeypatch)
+        _silence_poster(api, monkeypatch)
+        _run(api.generate_hook_cta(project["id"], GenerateHookRequest(), ANON))
+        assert calls[0]["generate_audio"] is not False
+        assert "does not speak" not in calls[0]["prompt"]

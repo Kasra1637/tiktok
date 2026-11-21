@@ -6,8 +6,8 @@ import { StatusBadge } from "../StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "../ui/alert";
 import { AppSelect } from "../AppSelect";
 import { CONTROL_CLASS } from "../formControls";
-import { GroupLabel } from "../SectionCard";
 import { GenerateAnotherConfirmDialog } from "./GenerateAnotherConfirmDialog";
+import PlatformPreview from "./PlatformPreview";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../../lib/api";
 import { exceedsSinglePass, readPieceSeconds } from "../../lib/videoLength";
 
@@ -35,7 +35,10 @@ import { exceedsSinglePass, readPieceSeconds } from "../../lib/videoLength";
  * post kit lands beside it (the page renders PostKitSection from
  * the same row): the kit is written at completion by a background
  * task, so a completed row without one is re-read a few times
- * before the panel settles.
+ * before the panel settles. The clip is shown in the platform
+ * phone frame (PlatformPreview, ADR 0245) at the panel's foot —
+ * the founder judges it under each platform's furniture before
+ * the Demo + CTA finish takes it.
  */
 const STAGES = [
   "Sending your approved script",
@@ -370,6 +373,11 @@ export default function HookRenderPanel({
       const created = await api.generateHookCta(projectId, {
         model: selectedModel || undefined,
         resolution: selectedResolution || undefined,
+        // The silent pick (ADR 0246): audio off, sent only when it is
+        // off — an explicit true could hand a model a field its
+        // catalog does not list. The server forces the same off for
+        // a silent project, so retries keep the pick too.
+        ...(project?.voice_mode === "silent" ? { generate_audio: false } : {}),
         // The hook's own seconds (ADR 0244): the endpoint renders
         // exactly this length, so the pick the founder made is the
         // length that bills.
@@ -433,10 +441,15 @@ export default function HookRenderPanel({
 
   return (
     <div className="space-y-3" data-testid="hook-render-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <GroupLabel icon={Play}>Render the hook</GroupLabel>
-        {generation && <StatusBadge status={generation.status} />}
-      </div>
+      {/* No label of the panel's own (ADR 0246): the card above
+          carries the section's one header, and a second "Render the
+          hook" here only restated it — the status badge is the only
+          thing this row still has to say. */}
+      {generation && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <StatusBadge status={generation.status} />
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -634,41 +647,30 @@ export default function HookRenderPanel({
             </Alert>
           )}
 
-          {downloadUrl && (
-            <div className="w-full max-w-[280px] space-y-2">
-              {previewBroken ? (
-                <div className="w-full space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
-                  <p className="text-sm text-muted-foreground">
-                    Preview unavailable — download it to view.
-                  </p>
-                </div>
-              ) : (
-                <video
-                  key={`${generation.id}-${downloadUrl}`}
-                  src={downloadUrl}
-                  controls
-                  playsInline
-                  controlsList="nodownload noremoteplayback"
-                  disablePictureInPicture
-                  preload="none"
-                  poster={posterUrl || undefined}
-                  onError={() => setPreviewBroken(true)}
-                  className="w-full rounded-xl border border-[color:var(--hairline)]"
-                  data-testid="hook-render-video"
-                />
-              )}
-              {saveUrl && (
-                <Button variant="secondary" size="sm" asChild>
-                  <a href={saveUrl} download>
-                    <Download className="h-3.5 w-3.5" />
-                    Download MP4
-                  </a>
-                </Button>
-              )}
+          {saveUrl && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" asChild>
+                <a href={saveUrl} download>
+                  <Download className="h-3.5 w-3.5" />
+                  Download MP4
+                </a>
+              </Button>
             </div>
           )}
         </div>
       )}
+
+      {/* The finished hook in the phone frame (ADR 0245): the founder
+          sees the clip under each platform's furniture before it
+          flows into the Demo + CTA finish. Before a render lands the
+          frame holds its placeholder; the clip itself moves here
+          from the bare player this panel used to show. */}
+      <PlatformPreview
+        videoUrl={generation?.status === "completed" ? downloadUrl || "" : ""}
+        posterUrl={posterUrl || ""}
+        videoBroken={previewBroken}
+        onVideoError={() => setPreviewBroken(true)}
+      />
 
       <GenerateAnotherConfirmDialog
         confirm={rerollConfirm}

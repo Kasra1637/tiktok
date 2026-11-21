@@ -1,6 +1,7 @@
 import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker, PresenterPhotoControl, MissingRequirements, TEMPLATE_PHOTO_ID } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
+import VoiceModeControl from "../components/studio/VoiceModeControl";
 import CoverTextEditor from "../components/studio/CoverTextEditor";
 import ScriptRewrite from "../components/studio/ScriptRewrite";
 import AngleRegenConfirmDialog from "../components/studio/AngleRegenConfirmDialog";
@@ -2426,6 +2427,26 @@ export default function CreateVideo() {
                     : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
                 </p>
                 <p className="text-sm text-muted-foreground">Camera setup controls framing; the plan and the render follow the setup saved here.</p>
+              </div>
+              {/* The voice pick (ADR 0246) sits with the movement and
+                  direction controls: she talks, or she stays silent
+                  and TikTok's text-to-speech carries the lines. It is
+                  a render-time pick — the plan's words never move —
+                  so it saves through the same draft edit as the
+                  camera setup above it. */}
+              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+                <VoiceModeControl
+                  value={editValue("voice_mode", "talking")}
+                  onChange={(value) => {
+                    dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "talking" });
+                  }}
+                  silentText={[editValue("hook_line", ""), editValue("script", "")]
+                    .map((line) => String(line || "").trim())
+                    .filter(Boolean)
+                    .join(" ")}
+                  silentTextName="the spoken lines"
+                  disabled={busy}
+                />
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <p className="text-sm font-semibold">Location &amp; wardrobe</p>

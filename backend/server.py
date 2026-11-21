@@ -1393,6 +1393,22 @@ async def _studio_identity_references(
     return reference_path
 
 
+# The silent performer's direction (ADR 0246): when the founder picks
+# silence, the render still performs the opening and closing beats —
+# only the voice and the mouth turn off. Stated plainly and in full,
+# because a model told a script is "spoken" will mouth it unless the
+# prompt says, in so many words, that she does not.
+SILENT_PERFORMANCE_DIRECTION = (
+    "\n\nSILENT PERFORMANCE — NO VOICE, NO LIP MOVEMENT: this clip is "
+    "silent. She does not speak, does not say the words above aloud, "
+    "and does not mouth them — her mouth stays closed and still for "
+    "the whole clip, with no lip movement at all. She still performs "
+    "the opening and closing actions exactly as directed: the beats, "
+    "gestures, gaze and posture all happen, in silence. The words "
+    "above are the moment she is living, not lines she delivers."
+)
+
+
 async def _submit_generation(
     project: dict,
     profile: dict,
@@ -1462,6 +1478,15 @@ async def _submit_generation(
     model_key = video_providers.resolve(model)[0]
     cap = video_providers.capability(model_key)
     camera_setup = project.get("camera_setup") or "handheld"
+    # The presenter voice pick (ADR 0246): a silent project never bills
+    # audio, whatever the caller passed — the pick is the founder's
+    # standing choice for this project, and a caller that forgot it
+    # (a retry, an older client) must not resurrect a voice the
+    # founder turned off. The prompt carries the matching direction
+    # further down, where the prompt is finished.
+    silent = (project.get("voice_mode") or "talking") == "silent"
+    if silent:
+        generate_audio = False
     # No model guard stands here (ADR 0225): every model left on the list
     # pins the photo as its first frame, and a fixed submit renders on
     # them — the fixed prompt opens on the presenter already framed by a
@@ -1597,7 +1622,18 @@ async def _submit_generation(
     # the spoken script is additionally sacred: the ceiling tripped the
     # protection withdrawal on ordinary strategies, so only the direction and
     # template wording is trimmed there, never the founder's own words.
-    prompt_budget = video_providers.capability(model_key).get("prompt_char_limit")
+    prompt_ceiling = video_providers.capability(model_key).get("prompt_char_limit")
+    prompt_budget = prompt_ceiling
+    if silent and prompt_budget:
+        # The silence direction appended below is a fixed instruction
+        # (ADR 0246): reserve its characters from the BUILDER's budget
+        # so the assembled prompt still fits the provider's ceiling
+        # instead of the ceiling check refusing a hook whose talking
+        # version rendered fine. The check itself keeps the real
+        # ceiling — the reserve is a building allowance, not a new
+        # limit, and its refusal must name the number the provider
+        # actually accepts.
+        prompt_budget = max(1, prompt_budget - len(SILENT_PERFORMANCE_DIRECTION))
     if strategy:
         try:
             prompt = generation_planning.build_segment_prompt(
@@ -1631,6 +1667,14 @@ async def _submit_generation(
             script_sacred=video_providers.script_is_sacred(model_key),
         )
 
+    if silent:
+        # The silence direction (ADR 0246) rides at the prompt's tail,
+        # after every speaking instruction it overrides: she performs
+        # the beats but does not deliver the words. Appended before
+        # the ceiling check below so the check prices it like any
+        # other fixed instruction.
+        prompt = prompt + SILENT_PERFORMANCE_DIRECTION
+
     # The fixed instructions in a prompt do not scale with the budget, only the
     # variables do, so a tight ceiling can still land over it. That is knowable
     # here and nowhere else, and it is knowable BEFORE spending — so it is
@@ -1640,12 +1684,12 @@ async def _submit_generation(
     # is the roomiest one this deployment actually offers above this ceiling, and
     # the shortfall is compared against the project's own spoken words, so a
     # founder is never told to cut more than their script contains.
-    if prompt_budget and len(prompt) > prompt_budget:
+    if prompt_ceiling and len(prompt) > prompt_ceiling:
         capability = video_providers.capability(model_key)
         alternative = None
         for candidate in video_providers.list_capabilities():
             candidate_ceiling = int(candidate.get("prompt_char_limit") or 0)
-            if candidate_ceiling <= int(prompt_budget):
+            if candidate_ceiling <= int(prompt_ceiling):
                 continue
             if alternative is None or candidate_ceiling > int(
                 alternative.get("prompt_char_limit") or 0
@@ -1655,7 +1699,7 @@ async def _submit_generation(
             status_code=409,
             detail=generation_planning.prompt_ceiling_refusal(
                 prompt_chars=len(prompt),
-                ceiling=int(prompt_budget),
+                ceiling=int(prompt_ceiling),
                 model_name=capability.get("name", ""),
                 spoken_chars=len(plan_words.get("hook_line") or "")
                 + len(plan_words.get("script") or ""),

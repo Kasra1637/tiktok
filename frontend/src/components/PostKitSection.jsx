@@ -26,8 +26,14 @@ import { BUSY_ETA_SECONDS } from "../lib/busyEta";
  * Copy is one action for the whole kit. The three fields are selectable text,
  * so a Copy button beside each one only repeated the same clipboard write
  * three more times beside the label it sat next to.
+ *
+ * `ttsText` is the silent render's text-to-speech line (ADR 0246): the
+ * creation surfaces pass the render's spoken words when the project's
+ * voice pick is silent, and the kit shows them as the paste-for-TikTok
+ * guidance beside the rest of the post copy. Empty — every talking
+ * render, and every caller that does not know the pick — shows nothing.
  */
-export function PostKitSection({ postKit: initialKit, generationId, onUpdated }) {
+export function PostKitSection({ postKit: initialKit, generationId, onUpdated, ttsText = "" }) {
   const { copiedKey, copy } = useCopyButton();
   const [kit, setKit] = useState(initialKit);
   const [regenBusy, setRegenBusy] = useState(false);
@@ -101,6 +107,20 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated })
       {regenError && (
         <p className="text-sm text-destructive-text" role="alert" data-testid="postkit-regenerate-error">
           {regenError}
+        </p>
+      )}
+
+      {/* A silent render's voice lives here, with the rest of the post
+          copy (ADR 0246): the kit is what the founder copies at
+          posting time, so the text-to-speech line rides with it —
+          the exact words TikTok should read aloud, named at the
+          moment they are needed. Callers pass the text only for a
+          silent render; a talking render's kit shows nothing. */}
+      {String(ttsText || "").trim() && (
+        <p role="status" className="text-sm text-muted-foreground" data-testid="post-kit-tts-note">
+          This video is silent — she does not speak in it. For a voice on TikTok,
+          paste this into TikTok&rsquo;s text-to-speech so TikTok reads it aloud:{" "}
+          <span className="font-semibold text-foreground">&ldquo;{String(ttsText).trim()}&rdquo;</span>
         </p>
       )}
 

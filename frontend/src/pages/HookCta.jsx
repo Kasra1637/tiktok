@@ -8,7 +8,6 @@ import {
   Compass,
   Film,
   History as HistoryIcon,
-  ListChecks,
   PenLine,
   Share2,
   Sparkles,
@@ -27,6 +26,7 @@ import { DirectionSelect } from "../components/studio/ReviewPanels";
 import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
+import VoiceModeControl from "../components/studio/VoiceModeControl";
 import PostKitSection from "../components/PostKitSection";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
@@ -149,6 +149,11 @@ export default function HookCta() {
   // settled flag is what separates "no drafts" from "not known yet",
   // the same loading guard the other tour pages register behind.
   const [draftsSettled, setDraftsSettled] = useState(false);
+  // Which app the settled drafts belong to. A pick change leaves the
+  // previous app's list on screen until the new read lands, and the
+  // create effect below must not mistake that stale list (or its
+  // settled flag) for the new app's answer.
+  const [draftsFor, setDraftsFor] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [autosaving, setAutosaving] = useState(false);
   const [draft, dispatch] = useReducer(hookCtaDraftReducer, undefined, () => createHookCtaDraft());
@@ -198,9 +203,12 @@ export default function HookCta() {
   // draft is created or opened, so the list the founder sees is the
   // server's.
   const openProjectId = project?.id || "";
+  const projectRef = useRef(null);
+  projectRef.current = project;
   useEffect(() => {
     if (!profileId) {
       setDrafts([]);
+      setDraftsFor("");
       setDraftsSettled(true);
       return undefined;
     }
@@ -210,8 +218,22 @@ export default function HookCta() {
       .getHookCtaProjects(profileId)
       .then((data) => {
         if (!cancelled) {
-          setDrafts(data.projects || []);
+          const rows = data.projects || [];
+          setDrafts(rows);
+          setDraftsFor(profileId);
           setDraftsSettled(true);
+          // A returning founder lands back on their newest draft,
+          // not on a fresh one: the page used to mint a new empty
+          // draft on every visit and open that, so the render read
+          // "no hook yet" and its button stayed gated while the
+          // founder's hooked draft sat in the list below (Kasra's
+          // live report, Nov 20 2026 — the button fix in ADR 0246).
+          // The list is newest-first, so the first row is the draft
+          // to reopen. A ?project= link names its own draft and wins;
+          // a draft already open is never swapped under the founder.
+          if (!requestedProjectId && !projectRef.current && rows.length > 0) {
+            adoptOpenedDraft(rows[0]);
+          }
         }
       })
       .catch(() => {
@@ -220,21 +242,26 @@ export default function HookCta() {
         // failing the page over a sidebar.
         if (!cancelled) {
           setDrafts([]);
+          setDraftsFor(profileId);
           setDraftsSettled(true);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [profileId, openProjectId]);
+  }, [profileId, openProjectId, requestedProjectId, adoptOpenedDraft]);
 
   // Make sure a draft exists without the founder having to ask, the
   // wizard's ensureProject rule: as soon as an app is chosen, the
   // draft is created in the background. A draft calls no model, so
-  // doing this eagerly costs nothing.
+  // doing this eagerly costs nothing. It waits for the drafts read
+  // above to settle empty for THIS app: creating first and asking
+  // later is how every visit used to mint a duplicate empty draft
+  // beside the one the founder had already started (ADR 0246).
   const creatingKeyRef = useRef("");
   useEffect(() => {
     if (!profileId || project) return undefined;
+    if (!draftsSettled || draftsFor !== profileId || drafts.length > 0) return undefined;
     const key = profileId;
     if (creatingKeyRef.current === key) return undefined;
     creatingKeyRef.current = key;
@@ -258,7 +285,7 @@ export default function HookCta() {
       // than sit on a key whose draft it never adopted.
       if (creatingKeyRef.current === key) creatingKeyRef.current = "";
     };
-  }, [profileId, project]);
+  }, [profileId, project, draftsSettled, draftsFor, drafts.length]);
 
   // Autosave: save ~1s after the last pick change, through the same
   // validated PATCH every draft edit rides. Silent saves never block
@@ -463,9 +490,8 @@ export default function HookCta() {
 
       {loadState === "ready" && approved.length > 0 && (
         <>
-          <SectionCard title="App" icon={ListChecks} data-testid="hook-cta-setup-card">
+          <SectionCard title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
             <div className="space-y-4">
-              <GroupLabel icon={Briefcase}>Choose an app</GroupLabel>
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Only approved App Profiles can make a hook in this studio.
               </p>
@@ -508,9 +534,8 @@ export default function HookCta() {
           </SectionCard>
 
           {project && (
-            <SectionCard title="Moment and direction" icon={Compass} data-testid="hook-cta-direction-card">
+            <SectionCard title="Camera, place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
               <div className="space-y-4">
-                <GroupLabel icon={Compass}>Camera, place and wardrobe</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   Camera, place and wardrobe — the hook is written from them.
                 </p>
@@ -535,6 +560,17 @@ export default function HookCta() {
                       : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
                   </p>
                 </div>
+
+                {/* The voice pick sits with the movement and direction
+                    controls it belongs with (ADR 0246): she talks, or
+                    she stays silent and TikTok's text-to-speech carries
+                    the line instead. */}
+                <VoiceModeControl
+                  value={editValue("voice_mode", "talking")}
+                  onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "talking" })}
+                  silentText={String(editValue("hook_line", "") || "").trim()}
+                  silentTextName="the hook line"
+                />
 
                 <DirectionSelect
                   id="hook-cta-location-direction"
@@ -585,7 +621,7 @@ export default function HookCta() {
                   profileId={profileId}
                   busy={false}
                   onEnsureProject={async () => project}
-                  onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated })}
+                  onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
                   onRefreshProject={refreshProject}
                 />
               </div>
@@ -595,7 +631,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="The hook" icon={PenLine} data-testid="hook-cta-hook-card">
               <div className="space-y-4">
-                <GroupLabel icon={Clapperboard}>The line</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   One line, written from your app and the direction you set.
                 </p>
@@ -658,14 +693,17 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="Render" icon={Clapperboard} data-testid="hook-cta-render-card">
+            <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card">
               <div className="space-y-4">
-                <GroupLabel icon={Clapperboard}>The finished hook</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   One press renders the finished hook at its picked length.
                 </p>
                 <HookRenderPanel
-                  project={{ ...project, duration_seconds: editValue("duration_seconds", project.duration_seconds) }}
+                  project={{
+                    ...project,
+                    duration_seconds: editValue("duration_seconds", project.duration_seconds),
+                    voice_mode: editValue("voice_mode", project.voice_mode || "talking"),
+                  }}
                   generation={generation}
                   onGenerationChange={setGeneration}
                   hasUnsavedEdits={hasEdits}
@@ -678,7 +716,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card">
               <div className="space-y-4">
-                <GroupLabel icon={Film}>Finish the video</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   Your demo and call to action, joined onto the hook&apos;s end.
                 </p>
@@ -703,7 +740,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit">
               <div className="space-y-4">
-                <GroupLabel icon={Share2}>Copy for the post</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   The caption and hashtags for posting the finished video.
                 </p>
@@ -712,6 +748,11 @@ export default function HookCta() {
                     <PostKitSection
                       postKit={generation.post_kit}
                       generationId={generation.id}
+                      ttsText={
+                        editValue("voice_mode", "talking") === "silent"
+                          ? String(editValue("hook_line", "") || "").trim()
+                          : ""
+                      }
                       onUpdated={(kit) =>
                         setGeneration((current) =>
                           current ? { ...current, post_kit: kit } : current

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 import { GenerateAnotherConfirmDialog } from "./studio/GenerateAnotherConfirmDialog";
+import PlatformPreview from "./studio/PlatformPreview";
 
 /**
  * Paid render progress — the same UI the mock preview used.
@@ -642,6 +643,11 @@ const handleGenerate = async () => {
       const created = await api.generateVideo(projectId, {
         model: selectedModel || undefined,
         resolution: selectedResolution || undefined,
+        // The silent pick (ADR 0246): audio off, sent only when it is
+        // off — an explicit true could hand a model a field its
+        // catalog does not list. The server forces the same off for
+        // a silent project, so retries keep the pick too.
+        ...(project?.voice_mode === "silent" ? { generate_audio: false } : {}),
         idempotency_key: intentKey.current,
       });
       // The intent is spent. A later deliberate re-roll mints its own key, so
@@ -1166,38 +1172,19 @@ const handleGenerate = async () => {
                     className={`relative rounded-xl ${celebrating ? "render-celebrate" : ""}`}
                     data-testid={celebrating ? "render-celebrate" : undefined}
                   >
-                  {previewBroken ? (
-                    <div className="w-full space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] p-3">
-                      <p className="text-sm text-muted-foreground">
-                        Preview unavailable — download it to view.
-                      </p>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleRetryPreview}
-                        disabled={retryingPreview}
-                        busy={retryingPreview}
-                      >
-                        Try the preview again
-                      </Button>
-                    </div>
-                  ) : (
-                    <video
-                      key={`${generation.id}-${previewUrl}`}
-                      src={previewUrl}
-                      controls
-                      playsInline
-                      // Same native-controls contract as the History card
-                      // (ADR 0137): play, seek, volume and fullscreen stay;
-                      // the browser's three-dots overflow stays empty and gone.
-                      controlsList="nodownload noremoteplayback"
-                      disablePictureInPicture
-                      preload="none"
-                      poster={posterUrl || undefined}
-                      onError={() => setPreviewBroken(true)}
-                      className="w-full rounded-xl border border-[color:var(--hairline)]"
-                    />
-                  )}
+                  {/* The finished render in the platform phone frame
+                      (ADR 0245): this finished block is where the
+                      founder judges the render before finishing, so
+                      the frame stands here — the clip under each
+                      platform's furniture, zones as guides over it.
+                      A clip that will not play says so inside the
+                      frame; the retry stays the panel's, below it. */}
+                  <PlatformPreview
+                    videoUrl={previewUrl}
+                    posterUrl={posterUrl || ""}
+                    videoBroken={previewBroken}
+                    onVideoError={() => setPreviewBroken(true)}
+                  />
                   {celebrating && (
                     <div aria-hidden="true" className="render-celebrate-dots">
                       {CELEBRATE_DOTS.map((dot, i) => (
@@ -1215,6 +1202,17 @@ const handleGenerate = async () => {
                     </div>
                   )}
                   </div>
+                  {previewBroken && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleRetryPreview}
+                      disabled={retryingPreview}
+                      busy={retryingPreview}
+                    >
+                      Try the preview again
+                    </Button>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" size="sm" asChild>
                       <a
@@ -1238,6 +1236,14 @@ const handleGenerate = async () => {
                     <PostKitSection
                       postKit={generation.post_kit}
                       generationId={generation.id}
+                      ttsText={
+                        project?.voice_mode === "silent"
+                          ? [project?.hook_line, project?.script]
+                              .map((line) => String(line || "").trim())
+                              .filter(Boolean)
+                              .join(" ")
+                          : ""
+                      }
                     />
                   </div>
                 )}

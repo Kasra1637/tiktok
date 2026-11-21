@@ -1177,6 +1177,24 @@ async def _migration_0009_project_surface(conn):
     await conn.commit()
 
 
+async def _migration_0010_project_voice_mode(conn):
+    """Project voice mode (ADR 0246): whether the presenter talks in
+    the render — "talking" (her voice, lips moving with the words) or
+    "silent" (no voice, and no lip movement at all; the founder gives
+    the post a voice with the platform's text-to-speech instead). The
+    pick is per project, so the row carries it; every existing row
+    becomes 'talking' by the column default, which is the behavior
+    every render has had until now. Added only when missing, so a
+    database that already has it passes through untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "voice_mode" not in cols:
+        await conn.execute(
+            "ALTER TABLE studio_projects ADD COLUMN voice_mode TEXT NOT NULL DEFAULT 'talking'"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
@@ -1186,6 +1204,7 @@ MIGRATION_STEPS = (
     (7, "project kind marker", _migration_0007_project_kind),
     (8, "story fields and the story kit column", _migration_0008_story_fields),
     (9, "project surface marker", _migration_0009_project_surface),
+    (10, "project voice mode", _migration_0010_project_voice_mode),
 )
 
 

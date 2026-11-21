@@ -37,6 +37,7 @@ import final_beat
 import opening_move
 import generation_planning
 import feedback as feedback_mod
+from ai_spoken import SHORT_HOOK_SECONDS
 from ai_service import (
     TEXT_MODEL,
     normalize_strategy,
@@ -262,6 +263,10 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # a missing kind through to a reader that branches on it.
     out["kind"] = out.get("kind") or "video"
     out["camera_setup"] = out.get("camera_setup") or "handheld"
+    # The presenter voice pick (ADR 0246): a row from before migration
+    # step 10 has no value at all, and it talks — say so rather than
+    # pass a missing pick through to a reader that branches on it.
+    out["voice_mode"] = out.get("voice_mode") or "talking"
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     # Which script the strategy was built from, and whether the script has moved
@@ -1116,30 +1121,67 @@ async def update_studio_project(
         elif key == "objective":
             value = template_library.normalize_objective(value)
         elif key == "duration_seconds":
-            value = template_library.clamp_duration(value)
-            # The plan's beat timeline is built for the length the plan was
-            # generated at, and _normalize_beats clamps every beat to that
-            # length. So changing the duration on a project that already has a
-            # plan leaves a timeline that no longer adds up to the stated
-            # runtime — and nothing in the UI could tell the founder, because
-            # the shot timeline is displayed read-only.
-            #
-            # The length is chosen on the Audience & goal step and consumed by
-            # the plan step, which writes it in the same statement as the beats
-            # it clamped to it. Changing it means regenerating the plan, and
-            # that is the only honest way to get a timeline that fits.
-            if (
-                int(row.get("script_version") or 0) > 0
-                and int(value or 0) != int(row.get("duration_seconds") or 0)
-            ):
+            if (row.get("surface") or "") == "hook_cta":
+                # A Hook + CTA draft (ADR 0244) lives under the hook's
+                # own lengths: the pick is 4 or 5 seconds, which the
+                # wizard clamp below snaps to 8 — a length the page's
+                # hook endpoints then refuse — and the plan-timeline
+                # 409 under it fires on any pick change once a hook
+                # exists, so the page's autosave could never clear its
+                # edits and its render gate read them as still saving
+                # forever. This surface has no plan and no timeline:
+                # the pick saves as itself, validated against the same
+                # set the hook endpoints validate against, in their
+                # words. The hook endpoint rewrites the length with
+                # the words when the hook is regenerated, and the
+                # render rebinds the current words at submit, so a
+                # pick change between the two is already the flow.
+                try:
+                    want = int(value or 0)
+                except (TypeError, ValueError):
+                    want = 0
+                if want not in SHORT_HOOK_SECONDS:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A hook runs 4 or 5 seconds.",
+                    )
+                value = want
+            else:
+                value = template_library.clamp_duration(value)
+                # The plan's beat timeline is built for the length the plan was
+                # generated at, and _normalize_beats clamps every beat to that
+                # length. So changing the duration on a project that already has a
+                # plan leaves a timeline that no longer adds up to the stated
+                # runtime — and nothing in the UI could tell the founder, because
+                # the shot timeline is displayed read-only.
+                #
+                # The length is chosen on the Audience & goal step and consumed by
+                # the plan step, which writes it in the same statement as the beats
+                # it clamped to it. Changing it means regenerating the plan, and
+                # that is the only honest way to get a timeline that fits.
+                if (
+                    int(row.get("script_version") or 0) > 0
+                    and int(value or 0) != int(row.get("duration_seconds") or 0)
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"This project already has a script written to "
+                            f"{int(row.get('duration_seconds') or 0)}s, and its shot timeline is "
+                            f"built to that length. Change the total length on the Audience & goal "
+                            f"step and regenerate the plan, which rewrites the timeline to match."
+                        ),
+                    )
+        elif key == "voice_mode":
+            # The presenter voice pick (ADR 0246) is a closed set, like
+            # the hook lengths above: anything else is a value no
+            # control offers, refused in words rather than stored for
+            # a reader to trip over at render time.
+            value = (value or "").strip().lower()
+            if value not in ("talking", "silent"):
                 raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        f"This project already has a script written to "
-                        f"{int(row.get('duration_seconds') or 0)}s, and its shot timeline is "
-                        f"built to that length. Change the total length on the Audience & goal "
-                        f"step and regenerate the plan, which rewrites the timeline to match."
-                    ),
+                    status_code=400,
+                    detail="Voice is either talking or silent.",
                 )
         elif key == "hook_seconds":
             # Where the middle begins. Directorial, not a render length: the whole

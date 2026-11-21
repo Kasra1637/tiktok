@@ -312,6 +312,11 @@ STUDIO_TEXT_FIELDS = (
 STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     "content_angle_id", "template_id", "objective", "duration_seconds",
     "beat_timeline", "assets", "strategy", "hook_seconds", "camera_setup",
+    # The presenter voice pick (ADR 0246): "talking" or "silent", saved
+    # like camera_setup beside it. Deliberately NOT a studio text field:
+    # the words never move when the voice does — the render reads the
+    # pick at submit and the plan is untouched.
+    "voice_mode",
     # `cover_text` is editable but deliberately NOT a studio text field:
     # it is post copy drafted with the plan (ADR 0145), not plan content,
     # so editing it writes the column without marking the plan changed
@@ -375,6 +380,9 @@ class UpdateStudioProjectRequest(BaseModel):
     demo_brief: Optional[str] = None
     voice_direction: Optional[str] = None
     sound_direction: Optional[str] = None
+    # The presenter voice pick (ADR 0246): "talking" or "silent",
+    # validated in the update path like the hook length is.
+    voice_mode: Optional[str] = None
     # The cover text (ADR 0145): post copy drafted with the plan. It is
     # editable like the plan's words, but it is not plan content — the
     # update path writes it without a version bump or a stale strategy.
