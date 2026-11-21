@@ -1,6 +1,6 @@
 # 0246 — The voice pick, one header per card, and the Hook + CTA render button repaired
 
-Status: accepted
+Status: accepted (partially superseded by 0248 — the voice pick's labels are gender-neutral and a new project starts silent)
 
 ## Context
 

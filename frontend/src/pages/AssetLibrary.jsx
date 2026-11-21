@@ -281,7 +281,13 @@ function AssetRow({
               follows. No hairline here: this is a compact row in a list, and a
               divider between a one-line description and three small buttons
               repeated down the page reads as scaffolding rather than
-              structure. The divider belongs on the card, not the row. */}
+              structure. The divider belongs on the card, not the row.
+              Both wear their names as text, not icons alone (ADR 0248):
+              as two small glyphs beside Remove they read as duplicate
+              bins — Kasra's screenshot of the Hook + CTA page showed
+              exactly that — while the actions are distinct (archive
+              shelves the asset and can be undone; delete is final), so
+              each reads as its own labeled action. */}
           <span className="ml-auto flex items-center gap-1 pl-2">
             <Button
               variant="ghost"
@@ -296,6 +302,7 @@ function AssetRow({
               ) : (
                 <Archive className="h-3.5 w-3.5" />
               )}
+              {asset.status === "archived" ? "Restore" : "Archive"}
             </Button>
             <Button
               variant="ghost"
@@ -305,7 +312,7 @@ function AssetRow({
               onClick={() => onDelete(asset)}
               aria-label="Delete asset"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
           </span>
         </div>

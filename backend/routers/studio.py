@@ -267,6 +267,11 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # step 10 has no value at all, and it talks — say so rather than
     # pass a missing pick through to a reader that branches on it.
     out["voice_mode"] = out.get("voice_mode") or "talking"
+    # The hook picks (ADR 0247): a row from before migration step 11
+    # has no shape at all — it reads as the app's choice, the
+    # behavior its hooks have always had — and no focus.
+    out["hook_shape"] = out.get("hook_shape") or "auto"
+    out["hook_focus"] = out.get("hook_focus") or ""
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
     # Which script the strategy was built from, and whether the script has moved
@@ -1016,19 +1021,27 @@ async def create_studio_project(
     # existing rows carry a value) but is written as 1 and read by nothing: a
     # video is one render, so there is no "hook only" mode to record.
 
+    # A new project starts silent (ADR 0248): the voice pick is written
+    # explicitly at creation rather than left to the column default,
+    # because migration step 10's 'talking' default is the historical
+    # record of what rows that already existed were given — existing
+    # projects keep the pick they carry, and only a row born here
+    # starts on "Character stays silent".
+
     await _execute(
         """INSERT INTO studio_projects
            (id, brand_profile_id, content_angle_id, template_id, template_version,
              objective, audience, duration_seconds, hook_seconds, extend_intent, tone, assets,
-             script_version, status, created_at, updated_at, user_id, camera_setup, kind)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             script_version, status, created_at, updated_at, user_id, camera_setup, kind,
+             voice_mode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], (payload.content_angle_id or "").strip() or None,
          template_id or None, template_version,
          template_library.normalize_objective(payload.objective),
          (payload.audience or profile.get("target_audience") or "").strip() or None,
          duration, hook_seconds, 1, (payload.tone or "").strip() or None,
          json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup,
-         payload.kind),
+         payload.kind, "silent"),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
     return _public_project(
@@ -1076,6 +1089,30 @@ async def update_studio_project(
     if not updates:
         return _public_project(row)
 
+    if "hook_focus" in updates:
+        # The focus pick (ADR 0247) is one of the app profile's own
+        # outcome lines, never an invented one: membership is proven
+        # here, against the profile as it stands, so a stored pick is
+        # grounded by construction. An empty value clears the pick
+        # and needs no proof. Generation resolves the pick against
+        # the profile again when the hook is written, so a line the
+        # profile has since dropped steers nothing.
+        focus = " ".join(str(updates["hook_focus"] or "").split()).strip()
+        if focus:
+            profile = await _fetch_one(
+                "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
+                (row.get("brand_profile_id"), user_id),
+            )
+            if focus not in ai_service.profile_outcome_lines(profile or {}):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Focus has to be one of this app's own outcomes — "
+                        "pick from the app's outcomes, or let the app choose."
+                    ),
+                )
+        updates["hook_focus"] = focus or None
+
     set_clauses, values = [], []
     strategy_edited = False
     # Whether a content field's WRITTEN value actually changed. The background
@@ -1087,6 +1124,13 @@ async def update_studio_project(
     # normalized value about to be stored against the stored row.
     content_changed = False
     _CONTENT_KEYS = set(STUDIO_TEXT_FIELDS) | {"beat_timeline", "assets", "strategy", "camera_setup"}
+    if (row.get("surface") or "") == "hook_cta":
+        # On this surface the tone column carries the hook's tone
+        # pick (ADR 0247) — a steering pick like voice_mode, not plan
+        # content: saving it must not bump the script version or
+        # un-ready anything, because the words never move when the
+        # tone does. Wizard rows keep tone as content.
+        _CONTENT_KEYS.discard("tone")
     for key, value in updates.items():
         if key in ("beat_timeline", "assets", "sticker_plan"):
             # sticker_plan (ADR 0228) is a JSON list on the row, like the
@@ -1183,6 +1227,30 @@ async def update_studio_project(
                     status_code=400,
                     detail="Voice is either talking or silent.",
                 )
+        elif key == "hook_shape":
+            # The hook shape pick (ADR 0247) is a closed set like the
+            # voice pick above: the app's choice, a question, or a
+            # statement. Anything else is a value no control offers.
+            value = (value or "").strip().lower()
+            if value not in ("auto", "question", "statement"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Shape is the app's choice, a question, or a statement.",
+                )
+        elif key == "tone" and (row.get("surface") or "") == "hook_cta":
+            # On the Hook + CTA surface the tone column carries the
+            # hook's tone pick (ADR 0247), not the wizard's free-text
+            # plan tone: a closed set — plain, warm or bold, or empty
+            # for the app's own choice, stored as NULL the way this
+            # surface's create writes it. Wizard rows fall through to
+            # the generic text write below and keep their free text.
+            value = (value or "").strip().lower()
+            if value not in ("", "plain", "warm", "bold"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Tone is plain, warm or bold — or the app's own choice.",
+                )
+            value = value or None
         elif key == "hook_seconds":
             # Where the middle begins. Directorial, not a render length: the whole
             # piece is one render. 0 means "follow the template", and anything out
@@ -1539,6 +1607,24 @@ def _cover_failure_http(exc: Exception) -> HTTPException:
     return HTTPException(status_code=502, detail=detail)
 
 
+def _hook_cta_steering(row: dict) -> dict:
+    """The Hook + CTA steering picks as rewrite kwargs (ADR 0247).
+
+    The clearer-hook surfaces hand the rewrite the picks from the row
+    the founder saved them on — a hook_cta row only. A wizard
+    project's rewrite keeps its own rules, so its kwargs stay empty
+    and the rewrite's defaults govern, exactly as before the picks
+    existed.
+    """
+    if (row.get("surface") or "") != "hook_cta":
+        return {}
+    return {
+        "hook_focus": row.get("hook_focus") or "",
+        "hook_tone": row.get("tone") or "",
+        "hook_shape": row.get("hook_shape") or "auto",
+    }
+
+
 @router.post("/studio/projects/{project_id}/rewrite-hook")
 async def suggest_hook_rewrite(
     project_id: str, payload: RewriteHookRequest, user_id: str = Depends(get_current_user_id)
@@ -1575,7 +1661,7 @@ async def suggest_hook_rewrite(
             "hook_rewrite", "text", TEXT_MODEL,
             lambda: ai_service.rewrite_hook_line(
                 profile or {}, angle, original, row.get("objective") or "",
-                max_chars=hook_max_chars,
+                max_chars=hook_max_chars, **_hook_cta_steering(row),
             ),
             user_id, studio_project_id=project_id,
         )
@@ -1676,6 +1762,10 @@ async def suggest_line_rewrite(
                 status_code=400,
                 detail="The rest of the script already fills its seconds — shorten it first, then rewrite this line.",
             )
+    # The hook role on a Hook + CTA row answers to the founder's
+    # steering picks too (ADR 0247); every other role and surface
+    # passes none.
+    steering = _hook_cta_steering(row) if role == "hook" else {}
     try:
         line = await _log_model_call(
             "line_rewrite", "text", TEXT_MODEL,
@@ -1683,6 +1773,7 @@ async def suggest_line_rewrite(
                 profile or {}, angle, original, role,
                 hook_line=hook_line, script=script,
                 objective=row.get("objective") or "", max_chars=max_chars,
+                **steering,
             ),
             user_id, studio_project_id=project_id,
         )

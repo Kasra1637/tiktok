@@ -1,6 +1,6 @@
 # 0244 — The Hook + CTA page: a short hook flowing straight into a demo
 
-Status: accepted
+Status: accepted (partially superseded by 0248 — the sidebar link is removed; the page is reached from Create Video's flow switcher and the Dashboard card)
 
 ## Context
 

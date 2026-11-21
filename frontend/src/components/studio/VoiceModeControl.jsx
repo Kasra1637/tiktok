@@ -6,12 +6,17 @@ import { GroupLabel } from "../SectionCard";
  * direction card and Create Video's direction section — the two
  * places movement and direction are set.
  *
- * Exactly two choices, Kasra's settled binary: she talks (her voice,
- * her lips moving with the words — the behavior every render has
- * had), or she stays silent (no voice, and NO lip movement at all:
- * her mouth stays closed and still for the whole clip, while the
- * opening and closing actions still happen). There is no voiceover
- * middle option.
+ * Exactly two choices, Kasra's settled binary: the character talks
+ * (voice, lips moving with the words — the behavior every render
+ * used to have by default), or the character stays silent (no
+ * voice, and NO lip movement at all: the mouth stays closed and
+ * still for the whole clip, while the opening and closing actions
+ * still happen). There is no voiceover middle option.
+ *
+ * The words are gender-neutral (ADR 0248): the founder uploads the
+ * face, and the app does not know — or presume — whose it is, so
+ * the pick says "character", never a pronoun. The same neutrality
+ * ADR 0089 already required of the render directions.
  *
  * The pick is the project's, saved through the same draft PATCH as
  * every other direction pick; this control only reports the choice.
@@ -22,19 +27,19 @@ import { GroupLabel } from "../SectionCard";
  * verbatim once it exists.
  */
 const OPTIONS = [
-  { value: "talking", label: "She talks" },
-  { value: "silent", label: "She stays silent" },
+  { value: "talking", label: "Character talks" },
+  { value: "silent", label: "Character stays silent" },
 ];
 
 export default function VoiceModeControl({
-  value = "talking",
+  value = "silent",
   onChange,
   silentText = "",
   silentTextName = "the line",
   disabled = false,
   testId = "voice-mode",
 }) {
-  const current = value === "silent" ? "silent" : "talking";
+  const current = value === "talking" ? "talking" : "silent";
   const text = String(silentText || "").trim();
   return (
     <div className="space-y-2">
@@ -60,11 +65,11 @@ export default function VoiceModeControl({
       </div>
       {current === "talking" ? (
         <p className="text-sm text-muted-foreground">
-          She speaks the line on camera — her voice, and her lips move with the words.
+          The character speaks the line on camera — voice on, and the lips move with the words.
         </p>
       ) : (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
-          She stays silent in this video — no voice, and her mouth does not move at
+          The character stays silent in this video — no voice, and the mouth does not move at
           all. For a voice on TikTok, paste this text into TikTok&rsquo;s
           text-to-speech so TikTok reads it aloud:
           {text ? (

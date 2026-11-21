@@ -1311,6 +1311,61 @@ async function main() {
     }
   });
 
+  await check("the flow switcher offers Hook + CTA and Demo + CTA from Create Video", async (ctx) => {
+    // ADR 0248: Hook + CTA left the sidebar for this menu at the top
+    // of Create Video — the ways to make a video, offered where the
+    // founder decides, before any step is invested in. The closed
+    // face names this page's flow; picking Hook + CTA navigates to
+    // the page; picking Demo + CTA with no project open lands on
+    // the step a project starts from (there is no finish to walk
+    // to yet).
+    global.__SMOKE_NAVIGATIONS = [];
+    global.__SMOKE_PARAMS = "?step=review";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      const control = ctx.container.querySelector('[data-testid="create-flow-switch"]');
+      if (!control) throw new Error("the flow switcher did not render at the top of Create Video");
+      if (!control.textContent.includes("Create Video")) {
+        throw new Error(`the switcher's closed face does not name this page's flow: ${control.textContent}`);
+      }
+      await chooseOption(ctx, control, "hook-cta");
+      if (!global.__SMOKE_NAVIGATIONS.includes("/hook-cta")) {
+        throw new Error(`picking Hook + CTA did not navigate to its page: ${JSON.stringify(global.__SMOKE_NAVIGATIONS)}`);
+      }
+      await chooseOption(ctx, control, "demo-cta");
+      const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
+      if (!task || !task.textContent.includes("Step 1 of 4")) {
+        throw new Error(`with no project open, Demo + CTA did not land on the first step: ${task?.textContent || ""}`);
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+      global.__SMOKE_NAVIGATIONS = [];
+    }
+  });
+
+  await check("the flow switcher's Demo + CTA walks an open draft to its finishing step", async (ctx) => {
+    // The other half of the same pick (ADR 0248): with a draft open,
+    // Demo + CTA means this draft's own finishing step — the step
+    // the rail's last segment walks to — not the standalone page.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        const control = ctx.container.querySelector('[data-testid="create-flow-switch"]');
+        if (!control) throw new Error("the flow switcher did not render");
+        await chooseOption(ctx, control, "demo-cta");
+        const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
+        if (!task || !task.textContent.includes("Step 4 of 4")) {
+          throw new Error(`Demo + CTA did not walk the open draft to its finishing step: ${task?.textContent || ""}`);
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
       await check("a cached set renders revealed and spends nothing on view", async (ctx) => {
         // Part 3: a cached set from an earlier approval renders as-is —
         // no Generate/Show click, and no generation call for the viewing.
@@ -12952,9 +13007,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 8) {
+      if (items.length !== 7) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 8. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -12972,7 +13027,6 @@ async function runSidebarNavChecks() {
         "/dashboard",
         "/brand",
         "/create",
-        "/hook-cta",
         "/demo-cta",
         "/history",
         "/assets",
@@ -13027,13 +13081,18 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
-      // Hook + CTA sits directly after Create Video (ADR 0244), where
-      // Stories sat: the short hook is the Create flow's sibling, not
-      // a finishing step, so it leads Demo + CTA rather than follows it.
-      if (!/to: "\/hook-cta", label: "Hook \+ CTA", icon: Zap, testId: "hook-cta-nav-link"/.test(src)) {
+      // Hook + CTA has NO sidebar link (ADR 0248, superseding 0244's
+      // placement): Kasra asked for fewer sidebar links, so the page
+      // is reached from Create Video's flow switcher and the
+      // Dashboard's destination card — both pinned in their own
+      // checks — while its route stands unchanged (the Hook + CTA
+      // checks pin it). A link creeping back here re-adds the clutter
+      // the removal took out.
+      if (src.includes("hook-cta-nav-link") || /to: "\/hook-cta"/.test(block)) {
         throw new Error(
-          "the Hook + CTA link changed its route, label, icon or testId. " +
-            "hook-cta-nav-link is the canonical selector for the page's link."
+          "a Hook + CTA link is back in the sidebar. ADR 0248 removed it: " +
+            "the page is reached from Create Video's flow switcher and the " +
+            "Dashboard card, not from a sidebar link."
         );
       }
     }
@@ -13651,7 +13710,10 @@ async function runHookCtaChecks() {
 
   await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
-    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face });
+    // The row starts on talking explicitly: a fresh row now starts
+    // silent (ADR 0248), and this check's subject is the switch TO
+    // silent and what it saves and submits.
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "talking" });
     const patches = [];
     const submits = [];
     await inHookCta(
@@ -13694,6 +13756,55 @@ async function runHookCtaChecks() {
         await act(async () => {});
         if (submits.length !== 1 || submits[0].generate_audio !== false) {
           throw new Error(`the silent render did not submit audio off: ${JSON.stringify(submits)}`);
+        }
+      }
+    );
+  });
+
+  await check("a silent draft switches back to talking when the pill is tapped", async (ctx) => {
+    // The regression Kasra hit live (Nov 21 2026, repaired by ADR
+    // 0248): a draft saved silent could never be switched back —
+    // the page's draft reducer deleted any edit equal to the pick's
+    // fallback ("talking"), so the tap produced no edit, no save and
+    // no visible change, and the control read as dead. The wizard's
+    // reducer only omits a pick that restates the SAVED value; this
+    // page's now does the same, and this check is the pin: start
+    // saved-silent, tap talking, and the pick must show and save.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
+    const patches = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          row = { ...row, ...patch };
+          return row;
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const talkingPill = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
+        const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
+        if (!talkingPill || !silentPill) throw new Error("the voice pick did not render in the direction card");
+        if (silentPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the saved silent pick does not read as picked");
+        }
+        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note did not render for the saved silent pick");
+        }
+        await clickEl(ctx, talkingPill);
+        if (talkingPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("tapping Character talks did not pick it — the tap changed nothing");
+        }
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stayed after switching to talking");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.voice_mode === "talking")) {
+          throw new Error(`the switch back to talking never saved: ${JSON.stringify(patches)}`);
         }
       }
     );
@@ -13780,6 +13891,116 @@ async function runHookCtaChecks() {
         await clickEl(ctx, ctx.container.querySelector('[data-testid="platform-preview-platform-tiktok"]'));
         if (zones.dataset.platform !== "tiktok") {
           throw new Error("the toggle did not switch the frame to the TikTok zones");
+        }
+      }
+    );
+  });
+
+  await check("the hook picks render in the Hook card, save through the draft, and stand saved before the hook is written", async (ctx) => {
+    // The steering picks (ADR 0247): focus (one of the app's own
+    // outcome lines, read from the profile detail — the list
+    // endpoint is a trimmed projection without them), tone and
+    // shape. Each pick rides the draft autosave like every other
+    // pick on the page, and Generate flushes the save first, so the
+    // row the hook is written from already carries them.
+    const OUTCOME = "Clearing the day's thoughts out loud";
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: OUTCOME, from_feature: "Voice entries" }],
+      desired_outcomes: ["Fall asleep without replaying the day"],
+    };
+    let row = hookRow({ id: "hook-cta-1" });
+    const events = [];
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          events.push({ patch });
+          row = { ...row, ...patch };
+          return row;
+        },
+        generateHookLine: async () => {
+          events.push({ generate: true });
+          return hookRow({ id: "hook-cta-1", hook_line: HOOK });
+        },
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the Hook card did not render");
+        for (const testid of ["hook-picks-focus", "hook-picks-tone-warm", "hook-picks-shape-question"]) {
+          if (!card.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} pick did not render in the Hook card`);
+          }
+        }
+        await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), OUTCOME);
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-tone-warm"]'));
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-shape-question"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        const patches = events.filter((e) => e.patch).map((e) => e.patch);
+        if (!patches.some((p) => p.hook_focus === OUTCOME)) {
+          throw new Error(`the focus pick never saved: ${JSON.stringify(patches)}`);
+        }
+        if (!patches.some((p) => p.tone === "warm")) {
+          throw new Error(`the tone pick never saved: ${JSON.stringify(patches)}`);
+        }
+        if (!patches.some((p) => p.hook_shape === "question")) {
+          throw new Error(`the shape pick never saved: ${JSON.stringify(patches)}`);
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
+        await act(async () => {});
+        const generateAt = events.findIndex((e) => e.generate);
+        if (generateAt < 0) throw new Error("the Generate hook click never called the hook endpoint");
+        const savedBefore = events.slice(0, generateAt).filter((e) => e.patch).map((e) => e.patch);
+        if (!savedBefore.some((p) => p.hook_shape === "question")) {
+          throw new Error("the hook was written before its picks had saved");
+        }
+      }
+    );
+  });
+
+  await check("changing a pick over a written hook shows the regenerate note and writes nothing", async (ctx) => {
+    // ADR 0247's click-to-generate rule for the picks: a pick change
+    // marks the line on file as predating the picks — it never
+    // regenerates on its own (ADR 0122).
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: "Clearing the day's thoughts out loud", from_feature: "Voice entries" }],
+      desired_outcomes: [],
+    };
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const callsBefore = apiCalls.length;
+        if (ctx.container.querySelector('[data-testid="hook-picks-stale-note"]')) {
+          throw new Error("the regenerate note shows before any pick changed");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-picks-tone-bold"]'));
+        await act(async () => {});
+        const note = ctx.container.querySelector('[data-testid="hook-picks-stale-note"]');
+        if (!note) throw new Error("the regenerate note did not show after the pick changed");
+        if (!note.textContent.includes("regenerate the hook")) {
+          throw new Error("the note does not name the remedy");
+        }
+        const generationCalls = apiCalls.slice(callsBefore).filter((name) =>
+          ["generateHookLine", "generateHookCta"].includes(name)
+        );
+        if (generationCalls.length) {
+          throw new Error(`changing a pick spent generation calls: ${generationCalls.join(", ")}`);
+        }
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field || field.value !== HOOK) {
+          throw new Error("the line on file changed when only a pick changed");
         }
       }
     );

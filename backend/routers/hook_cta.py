@@ -130,6 +130,10 @@ async def create_hook_cta_project(
     tighter character budget, so the words always fit the hook section
     whole and are never re-sliced into a script on read — this page
     has no script.
+
+    The row is born with the voice pick on silent (ADR 0248), like
+    the wizard's create: silence is the starting point for a new
+    project, and talking is the founder's opt-in.
     """
     profile = await _require_profile_for_studio(payload.brand_profile_id, user_id)
 
@@ -147,14 +151,14 @@ async def create_hook_cta_project(
            (id, brand_profile_id, content_angle_id, template_id, template_version,
              objective, audience, duration_seconds, hook_seconds, extend_intent, tone, assets,
              script_version, status, created_at, updated_at, user_id, camera_setup, kind,
-             surface, frame_count)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             surface, frame_count, voice_mode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_id, profile["id"], None,
          None, None, None,
          (profile.get("target_audience") or "").strip() or None,
          seconds, 4, 1, None,
          json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup,
-         "video", "hook_cta", 1),
+         "video", "hook_cta", 1, "silent"),
     )
     logger.info(f"Created hook-cta project {project_id} for profile {profile['id']}")
     return _public_project(

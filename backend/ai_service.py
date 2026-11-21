@@ -2905,6 +2905,125 @@ HOOK_LINE_JSON_SCHEMA = _strict_object({
 })
 
 
+def profile_outcome_lines(profile: dict) -> list:
+    """The outcome lines a hook can lead with, in the profile's own words.
+
+    The evidenced outcome statements first — each is one feature's
+    resulting benefit, phrased as what the user gets — then the flat
+    desired outcomes the statements do not already say. Deduped on
+    the normalized text, order preserved. This list is the Hook +
+    CTA focus pick's whole vocabulary (ADR 0247): the pick is one of
+    these lines — the studio PATCH proves membership against this
+    list when the pick saves, and generation resolves the pick
+    against it again, so a line the profile no longer carries
+    steers nothing.
+    """
+    profile = profile or {}
+    lines = []
+    seen = set()
+
+    def _add(text):
+        text = " ".join(str(text or "").split()).strip()
+        if text and text not in seen:
+            seen.add(text)
+            lines.append(text)
+
+    for entry in profile.get("outcome_statements") or []:
+        if isinstance(entry, dict):
+            _add(entry.get("outcome"))
+        elif entry:
+            _add(entry)
+    desired = profile.get("desired_outcomes")
+    if isinstance(desired, list):
+        for entry in desired:
+            _add(entry)
+    elif desired:
+        _add(desired)
+    return lines
+
+
+# The Hook + CTA hook picks (ADR 0247): the closed sets the founder
+# steers the hook with. The tone pick rides the project's tone
+# column, the shape pick its own; an unpicked tone is empty and an
+# unpicked shape is "auto" — both are the behavior the hook had
+# before the picks existed.
+HOOK_TONE_PICKS = ("plain", "warm", "bold")
+HOOK_SHAPE_PICKS = ("auto", "question", "statement")
+
+
+def _hook_shape_pick(project: dict) -> str:
+    """The project's shape pick, normalized: an unknown value reads
+    as "auto", so a row written by anything else steers nothing."""
+    shape = str((project or {}).get("hook_shape") or "auto").strip().lower()
+    return shape if shape in HOOK_SHAPE_PICKS else "auto"
+
+
+def _hook_steering_block(project: dict, profile: dict) -> str:
+    """The founder's picks as prompt lines, or "" when nothing steers.
+
+    One block, appended to the hook prompt only when at least one
+    pick is set — unpicked, the prompt stays byte-for-byte the one
+    generate_hook_line has always built (pinned in
+    test_hook_cta_api.py). The picks steer WITHIN the doctrine: the
+    goal still leads, the resolution still stays withheld, and the
+    budgets and the finished-sentence gate still bind — the shape
+    is enforced beside them in the validation loop, not just asked
+    for here.
+    """
+    project = project or {}
+    lines = []
+    focus = " ".join(str(project.get("hook_focus") or "").split()).strip()
+    if focus and focus in profile_outcome_lines(profile):
+        lines.append(
+            f"- FOCUS: the founder picked the outcome this hook leads "
+            f"with: \"{focus}\". The GOAL the hook opens with is this "
+            "outcome, in the viewer's own words — what she is trying "
+            "to reach in this moment. Lead with it; do not swap in a "
+            "different outcome from the facts above."
+        )
+    tone = str(project.get("tone") or "").strip().lower()
+    if tone == "plain":
+        lines.append(
+            "- TONE: plain — the plainest everyday words, said flat "
+            "and true; no warmth added, no punch added."
+        )
+    elif tone == "warm":
+        lines.append(
+            "- TONE: warm — gentle and kind in its word choice, like "
+            "a friend who gets it; warmth in the words, never hype."
+        )
+    elif tone == "bold":
+        lines.append(
+            "- TONE: bold — direct and punchy, said with confidence; "
+            "short, hard words and no hedging."
+        )
+    shape = _hook_shape_pick(project)
+    if shape == "question":
+        lines.append(
+            "- SHAPE: a question — the hook is ONE finished question. "
+            "It names the feeling or the pain point and asks it, "
+            "first person and goal-first as above (she asks what she "
+            "is trying to fix), and it holds the answer back: the "
+            "demo that follows is the answer."
+        )
+    elif shape == "statement":
+        lines.append(
+            "- SHAPE: a statement — the hook is a bold first-person "
+            "statement, never a question. It names the feeling or the "
+            "pain point outright and holds the answer back: the demo "
+            "that follows is the answer."
+        )
+    if not lines:
+        return ""
+    return (
+        "\nFOUNDER'S STEERING (the founder's picks for this hook — "
+        "they steer the line inside every rule above, never past "
+        "its budgets):\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 async def generate_hook_line(project: dict, profile: dict) -> dict:
     """
     One hook for the Hook + CTA page (ADR 0244): ONE goal-first spoken
@@ -2934,6 +3053,17 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     first frame, enacting the hook's own central action with its snap
     complete inside the first half second; closing_action is the last
     second's sharp behavior at the same energy, never a fade.
+
+    The founder's steering picks ride the project (ADR 0247): a
+    focus — one of the profile's own outcome lines, resolved against
+    the profile as it stands now, so a line it no longer carries
+    steers nothing — a tone, and a shape. Picked, they enter the
+    prompt as one steering block (`_hook_steering_block`) and the
+    shape is enforced beside the budgets in the loop below: a
+    question pick opens the gate's question charge and requires the
+    line to ask; a statement pick leaves the gate as it is, which
+    already refuses a question. Unpicked, the block is empty and the
+    prompt is byte-for-byte the one this function has always built.
     """
     project = project or {}
     profile = profile or {}
@@ -3005,8 +3135,9 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "second, at the opening's energy — a look, a gesture, a held "
         "reaction the demo can cut away from. Never a fade, never a "
         "settle.\n"
-        "- location: the one place the hook happens, in words.\n\n"
-        "Return ONLY a JSON object: "
+        "- location: the one place the hook happens, in words.\n"
+        f"{_hook_steering_block(project, profile)}"
+        "\nReturn ONLY a JSON object: "
         "{\"hook_line\": \"...\", \"hook_action\": \"...\", "
         "\"closing_action\": \"...\", \"location\": \"...\"}"
     )
@@ -3052,7 +3183,19 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
                 issues.append(
                     f"the hook line runs {len(hook)} characters; at most "
                     f"{char_budget} fit {seconds} seconds")
-            issues.extend(_spoken_gate_issues(hook, budget=char_budget))
+            # The shape pick enforced beside the budgets (ADR 0247):
+            # a question pick opens the gate's question charge and
+            # requires the line to ask; a statement pick leaves the
+            # gate as it is, which already refuses a question.
+            shape = _hook_shape_pick(project)
+            issues.extend(_spoken_gate_issues(
+                hook, budget=char_budget,
+                allows_question=(shape == "question")))
+            if shape == "question" and not hook.rstrip('"\u201d\u2019').endswith("?"):
+                issues.append(
+                    "the founder picked a question hook, but the line "
+                    "is a statement — ask the feeling or pain point as "
+                    "one finished question")
         if not issues:
             return {
                 "hook_line": hook,
@@ -4117,7 +4260,7 @@ HOOK_REWRITE_JSON_SCHEMA = _strict_object({"hook_line": {"type": "string"}})
 REWRITE_MAX_TOKENS = 6000
 
 
-async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "", *, max_chars: int = 0) -> str:
+async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str, objective: str = "", *, max_chars: int = 0, hook_focus: str = "", hook_tone: str = "", hook_shape: str = "") -> str:
     """A clearer version of the founder's hook that names the real action (ADR 0084).
 
     A suggestion only: nothing is saved here. A reply that fails a
@@ -4126,6 +4269,15 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     bounded correction; a reply still failing after it raises
     RewriteRefusal with the reason, so the founder never sees a fake
     improvement.
+
+    The Hook + CTA steering picks (ADR 0247) arrive as the hook_*
+    kwargs when the caller is that page's clearer-hook surface: the
+    rewrite keeps the line's meaning, and the picks say which outcome
+    it keeps leading with, in what tone, and in what shape — a shape
+    pick governs the question rule below, outranking the
+    preserve-the-founder's-form default, because on that page the
+    pick IS the founder's standing request. Unset (every other
+    caller), the rewrite behaves exactly as it always has.
 
     `max_chars`, when given, is the hook's set length — the aim its
     seconds hold, the number Review prints ("aiming for about 60" on a
@@ -4153,6 +4305,37 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         "longer line overlaps and breaks the visual."
         if max_chars else ""
     )
+    # The steering picks (ADR 0247), present only from the Hook + CTA
+    # page's clearer-hook surface: plain sentences appended to the
+    # rewrite instruction, empty for every other caller.
+    steering = ""
+    focus = " ".join(str(hook_focus or "").split()).strip()
+    if focus:
+        steering += (
+            f" The founder picked the outcome this hook leads with — "
+            f"\"{focus}\" — so the clearer line keeps leading with "
+            "that outcome."
+        )
+    tone = str(hook_tone or "").strip().lower()
+    if tone == "plain":
+        steering += " Keep the words plain — flat and true, no warmth or punch added."
+    elif tone == "warm":
+        steering += " Make the words warm — gentle and kind, like a friend who gets it."
+    elif tone == "bold":
+        steering += " Make the words bold — direct and punchy, with no hedging."
+    shape = str(hook_shape or "").strip().lower()
+    if shape not in HOOK_SHAPE_PICKS:
+        shape = ""
+    if shape == "question":
+        steering += (
+            " The founder picked a question hook: the clearer line "
+            "asks the feeling or pain point as one finished question."
+        )
+    elif shape == "statement":
+        steering += (
+            " The founder picked a statement hook: the clearer line "
+            "states it outright, never as a question."
+        )
     prompt = (
         f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
         f"{_angle_goal_block(angle, objective)}\n\n"
@@ -4168,7 +4351,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         "so a place the current line announces comes out, because the viewer "
         "can already see where she is. Keep its "
         "meaning, its feeling and roughly its "
-        f"length (one short spoken sentence).{budget} Never name the app. No quotation marks. "
+        f"length (one short spoken sentence).{budget}{steering} Never name the app. No quotation marks. "
         'Return JSON: {"hook_line": "..."}'
     )
     line = ""
@@ -4216,8 +4399,17 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
             continue
         # The rewrite keeps the founder's form unless the angle/problem
         # only fits a question: preserving a founder-approved question is
-        # preserving their request, not defaulting to one.
-        allows_question = original.strip().endswith("?") or _angle_invites_question(angle)
+        # preserving their request, not defaulting to one. A shape pick
+        # (ADR 0247) outranks that default both ways — on the Hook + CTA
+        # page the pick is the founder's standing request, so a question
+        # pick allows (and the prompt asks for) a question, and a
+        # statement pick refuses one even when the current line asks.
+        if shape == "question":
+            allows_question = True
+        elif shape == "statement":
+            allows_question = False
+        else:
+            allows_question = original.strip().endswith("?") or _angle_invites_question(angle)
         if not allows_question and line.rstrip().endswith("?"):
             # One bounded correction: the hook is the first thing a viewer hears,
             # so a question rewrite the angle does not invite is not an improvement
@@ -4263,13 +4455,17 @@ async def rewrite_spoken_line(
     script: str = "",
     objective: str = "",
     max_chars: int = 0,
+    hook_focus: str = "",
+    hook_tone: str = "",
+    hook_shape: str = "",
 ) -> str:
     """A clearer version of any one spoken line — the per-line rewrite assist.
 
     The hook role delegates to `rewrite_hook_line`: its form rules (problem
     first, first-person voice, a question only when the founder's hook asks)
     are hook-only (ADR 0084), and `max_chars` forwards with it as the
-    hook's set length. The script role delegates to `rewrite_whole_script`
+    hook's set length — as do the Hook + CTA steering picks (ADR 0247),
+    which only that page's hook role ever carries. The script role delegates to `rewrite_whole_script`
     (ADR 0205): the whole spoken story remade in one call, bounded by the
     script's full set length. A middle line is one sentence of the script,
     rewritten inside its story: it keeps its meaning, its place and roughly
@@ -4289,7 +4485,9 @@ async def rewrite_spoken_line(
     improvement.
     """
     if role == "hook":
-        return await rewrite_hook_line(profile, angle, line, objective, max_chars=max_chars)
+        return await rewrite_hook_line(
+            profile, angle, line, objective, max_chars=max_chars,
+            hook_focus=hook_focus, hook_tone=hook_tone, hook_shape=hook_shape)
     if role == "script":
         return await rewrite_whole_script(
             profile, angle, line,

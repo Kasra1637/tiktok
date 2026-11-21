@@ -1397,15 +1397,19 @@ async def _studio_identity_references(
 # silence, the render still performs the opening and closing beats —
 # only the voice and the mouth turn off. Stated plainly and in full,
 # because a model told a script is "spoken" will mouth it unless the
-# prompt says, in so many words, that she does not.
+# prompt says, in so many words, that the presenter does not. The
+# wording is gender-neutral, like every direction the app writes
+# (ADR 0089): the founder uploads the face, and the app does not
+# presume whose it is (ADR 0248).
 SILENT_PERFORMANCE_DIRECTION = (
     "\n\nSILENT PERFORMANCE — NO VOICE, NO LIP MOVEMENT: this clip is "
-    "silent. She does not speak, does not say the words above aloud, "
-    "and does not mouth them — her mouth stays closed and still for "
-    "the whole clip, with no lip movement at all. She still performs "
-    "the opening and closing actions exactly as directed: the beats, "
-    "gestures, gaze and posture all happen, in silence. The words "
-    "above are the moment she is living, not lines she delivers."
+    "silent. The presenter does not speak, does not say the words "
+    "above aloud, and does not mouth them — the mouth stays closed "
+    "and still for the whole clip, with no lip movement at all. The "
+    "presenter still performs the opening and closing actions exactly "
+    "as directed: the beats, gestures, gaze and posture all happen, "
+    "in silence. The words above are the moment being lived, not "
+    "lines delivered aloud."
 )
 
 
@@ -1669,8 +1673,8 @@ async def _submit_generation(
 
     if silent:
         # The silence direction (ADR 0246) rides at the prompt's tail,
-        # after every speaking instruction it overrides: she performs
-        # the beats but does not deliver the words. Appended before
+        # after every speaking instruction it overrides: the presenter
+        # performs the beats but does not deliver the words. Appended before
         # the ceiling check below so the check prices it like any
         # other fixed instruction.
         prompt = prompt + SILENT_PERFORMANCE_DIRECTION

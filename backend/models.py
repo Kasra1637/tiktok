@@ -317,6 +317,18 @@ STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     # the words never move when the voice does — the render reads the
     # pick at submit and the plan is untouched.
     "voice_mode",
+    # The Hook + CTA hook picks (ADR 0247): the founder's focus (one
+    # of the app profile's own outcome lines, stored verbatim) and
+    # shape ("auto", "question" or "statement"). Deliberately NOT
+    # studio text fields, like voice_mode beside them: the picks
+    # steer the next hook the founder generates — and its clearer-
+    # hook rewrite — and never move the words already written. The
+    # tone pick rides the existing `tone` column instead of a third
+    # column: on the hook_cta surface that column is a closed pick
+    # (plain, warm or bold), validated in the update path; on wizard
+    # rows it stays the plan's free-text tone.
+    "hook_focus",
+    "hook_shape",
     # `cover_text` is editable but deliberately NOT a studio text field:
     # it is post copy drafted with the plan (ADR 0145), not plan content,
     # so editing it writes the column without marking the plan changed
@@ -383,6 +395,12 @@ class UpdateStudioProjectRequest(BaseModel):
     # The presenter voice pick (ADR 0246): "talking" or "silent",
     # validated in the update path like the hook length is.
     voice_mode: Optional[str] = None
+    # The Hook + CTA hook picks (ADR 0247): the focus is one of the
+    # app profile's own outcome lines (membership-validated in the
+    # update path; empty clears the pick), the shape a closed set —
+    # both validated there like the voice pick above.
+    hook_focus: Optional[str] = None
+    hook_shape: Optional[str] = None
     # The cover text (ADR 0145): post copy drafted with the plan. It is
     # editable like the plan's words, but it is not plan content — the
     # update path writes it without a version bump or a stale strategy.

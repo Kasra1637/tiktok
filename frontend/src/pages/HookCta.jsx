@@ -27,6 +27,7 @@ import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
+import HookPicksControl, { profileOutcomeLines } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
@@ -90,16 +91,22 @@ function hookCtaDraftReducer(state, action) {
       // The wizard draft's field-edit shape (wizardDraft.js), which
       // is what the shared direction hook dispatches: a pick is a
       // local edit until the autosave lands it, and a pick that
-      // restates the saved value — or the field's fallback — is no
-      // edit at all. The editors ride the same action, so every
-      // unsaved change on the page lives in one edits object and one
-      // autosave carries them all.
+      // restates the saved value is no edit at all. The fallback
+      // stands in for the saved value only when the row carries
+      // none — it is not a second value a pick can restate. This
+      // reducer once deleted any edit equal to the fallback even
+      // when the saved row held the other value, so a draft saved
+      // silent could never be switched back to talking: the tap
+      // produced no edit, no save, and no visible change (Kasra's
+      // live report, Nov 21 2026 — the repair in ADR 0248). The
+      // editors ride the same action, so every unsaved change on
+      // the page lives in one edits object and one autosave
+      // carries them all.
       const edits = { ...state.edits, [action.field]: action.value };
       if (
         action.omitDefault &&
         (!action.value ||
-          action.value === state.project?.[action.field] ||
-          action.value === action.fallback)
+          action.value === (state.project?.[action.field] || action.fallback || ""))
       ) {
         delete edits[action.field];
       }
@@ -359,6 +366,39 @@ export default function HookCta() {
     setGeneration(null);
   }, [openProjectId]);
 
+  // The picked app's full profile, read for its outcome lines: the
+  // profiles list is a trimmed picker projection without them, so
+  // the focus pick's options (ADR 0247) come from this detail read.
+  // A failed read leaves the focus on the app's choice — the tone
+  // and shape picks do not depend on it — rather than failing the
+  // page over one control's options (the drafts read's rule).
+  const [profileDetail, setProfileDetail] = useState(null);
+  useEffect(() => {
+    setProfileDetail(null);
+    if (!profileId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await api.getAppProfile(profileId);
+        if (!cancelled) setProfileDetail(detail);
+      } catch {
+        if (!cancelled) setProfileDetail(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+  const focusOptions = profileOutcomeLines(profileDetail);
+
+  // A steering pick changed while a hook is on file (ADR 0247): the
+  // line predates the picks until the founder regenerates it
+  // themselves — a pick never regenerates on its own.
+  const [picksStale, setPicksStale] = useState(false);
+  useEffect(() => {
+    setPicksStale(false);
+  }, [openProjectId]);
+
   // Direction, through the wizard's own hook: the same option reads,
   // the same fixed-camera indoor rule (ADRs 0219/0233), the same
   // dispatch shape — the hook only ever dispatches on a pick, never
@@ -417,6 +457,7 @@ export default function HookCta() {
         frame_seconds: Number(editValue("duration_seconds", 0)) || undefined,
       });
       dispatch({ type: "project-received", project: hooked });
+      setPicksStale(false);
       setSaveStatus("All changes saved");
     } catch (err) {
       setHookError(getErrorMessage(err));
@@ -437,6 +478,14 @@ export default function HookCta() {
   );
   const hasHook = Boolean(String(editValue("hook_line")).trim());
   const hookFinished = generation?.status === "completed";
+  // The steering picks (ADR 0247) ride the same draft edits as every
+  // other pick on the page; changing one over a written hook marks
+  // the line as predating them — the note in the picks control says
+  // so, and nothing regenerates until the founder presses Generate.
+  const changePick = (field, value, options = {}) => {
+    if (hasHook) setPicksStale(true);
+    editField(field, value, options);
+  };
 
   return (
     <PageFrame className="space-y-6">
@@ -562,12 +611,12 @@ export default function HookCta() {
                 </div>
 
                 {/* The voice pick sits with the movement and direction
-                    controls it belongs with (ADR 0246): she talks, or
-                    she stays silent and TikTok's text-to-speech carries
-                    the line instead. */}
+                    controls it belongs with (ADR 0246): the character
+                    talks, or stays silent and TikTok's text-to-speech
+                    carries the line instead. */}
                 <VoiceModeControl
-                  value={editValue("voice_mode", "talking")}
-                  onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "talking" })}
+                  value={editValue("voice_mode", "silent")}
+                  onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
                   silentText={String(editValue("hook_line", "") || "").trim()}
                   silentTextName="the hook line"
                 />
@@ -651,6 +700,20 @@ export default function HookCta() {
                     }))}
                   />
                 </div>
+                {/* The steering picks (ADR 0247) stand above the
+                    generate action they steer: the focus, tone and
+                    shape the hook is written with, each defaulting
+                    to the app's own choice. */}
+                <HookPicksControl
+                  focusOptions={focusOptions}
+                  focus={editValue("hook_focus", "")}
+                  onFocusChange={(value) => changePick("hook_focus", value, { omitDefault: true, fallback: "" })}
+                  tone={editValue("tone", "")}
+                  onToneChange={(value) => changePick("tone", value, { omitDefault: true, fallback: "" })}
+                  shape={editValue("hook_shape", "auto")}
+                  onShapeChange={(value) => changePick("hook_shape", value, { omitDefault: true, fallback: "auto" })}
+                  stale={picksStale && hasHook}
+                />
                 <div className="space-y-2">
                   <Button
                     variant="accent"
@@ -686,6 +749,7 @@ export default function HookCta() {
                     projectId={project.id}
                     value={editValue("hook_line")}
                     onChange={(next) => editField("hook_line", next)}
+                    clipLabel="short hook clip"
                   />
                 </div>
               )}
@@ -702,7 +766,7 @@ export default function HookCta() {
                   project={{
                     ...project,
                     duration_seconds: editValue("duration_seconds", project.duration_seconds),
-                    voice_mode: editValue("voice_mode", project.voice_mode || "talking"),
+                    voice_mode: editValue("voice_mode", project.voice_mode || "silent"),
                   }}
                   generation={generation}
                   onGenerationChange={setGeneration}
@@ -749,7 +813,7 @@ export default function HookCta() {
                       postKit={generation.post_kit}
                       generationId={generation.id}
                       ttsText={
-                        editValue("voice_mode", "talking") === "silent"
+                        editValue("voice_mode", "silent") === "silent"
                           ? String(editValue("hook_line", "") || "").trim()
                           : ""
                       }

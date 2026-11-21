@@ -20,8 +20,10 @@ async function mount(props = {}) {
 }
 
 describe("VoiceModeControl", () => {
-  test("offers exactly the two choices, talking picked by default", async () => {
+  test("offers exactly the two choices, in gender-neutral words", async () => {
     const view = await mount();
+    expect(view.q("voice-mode-talking").textContent).toBe("Character talks");
+    expect(view.q("voice-mode-silent").textContent).toBe("Character stays silent");
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent-note")).toBeNull();
@@ -35,6 +37,14 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
+  test("picking talking from a silent pick reports the choice", async () => {
+    const view = await mount({ value: "silent" });
+    expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("true");
+    await act(async () => { view.q("voice-mode-talking").click(); });
+    expect(view.onChange).toHaveBeenCalledWith("talking");
+    await view.unmount();
+  });
+
   test("the silent note names the exact text for TikTok's text-to-speech", async () => {
     const view = await mount({
       value: "silent",
@@ -43,7 +53,7 @@ describe("VoiceModeControl", () => {
     });
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
-    expect(note.textContent).toContain("She stays silent in this video");
+    expect(note.textContent).toContain("The character stays silent in this video");
     expect(note.textContent).toContain("text-to-speech");
     expect(note.textContent).toContain("I'm trying to clear my head before bed but my thoughts race.");
     await view.unmount();

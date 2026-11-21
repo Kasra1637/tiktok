@@ -118,7 +118,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           silent render; a talking render's kit shows nothing. */}
       {String(ttsText || "").trim() && (
         <p role="status" className="text-sm text-muted-foreground" data-testid="post-kit-tts-note">
-          This video is silent — she does not speak in it. For a voice on TikTok,
+          This video is silent — the character does not speak in it. For a voice on TikTok,
           paste this into TikTok&rsquo;s text-to-speech so TikTok reads it aloud:{" "}
           <span className="font-semibold text-foreground">&ldquo;{String(ttsText).trim()}&rdquo;</span>
         </p>

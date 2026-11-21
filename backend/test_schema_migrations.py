@@ -188,7 +188,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-2][0] == 9
+            assert schema.MIGRATION_STEPS[-3][0] == 9
 
             db_path = tmp_path / "surface.db"
             await _apply(api, db_path)
@@ -219,7 +219,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-1][0] == 10
+            assert schema.MIGRATION_STEPS[-2][0] == 10
 
             db_path = tmp_path / "voice-mode.db"
             await _apply(api, db_path)
@@ -241,6 +241,45 @@ class TestMigrationConvergence:
                 # always had (ADR 0246).
                 assert notnull == 1
                 assert dflt == "'talking'"
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_project_hook_picks_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 11
+
+            db_path = tmp_path / "hook-picks.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 11"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "hook picks" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                cols = {r[1]: r for r in await cur.fetchall()}
+                assert "hook_focus" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["hook_focus"]
+                assert col_type == "TEXT"
+                # Nullable with no default: the pick is the picked
+                # outcome line verbatim, and an unpicked row carries
+                # nothing — the app chooses (ADR 0247).
+                assert notnull == 0
+                assert dflt is None
+                assert "hook_shape" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["hook_shape"]
+                assert col_type == "TEXT"
+                # NOT NULL with the auto default: every existing row
+                # reads as letting the app choose the hook's shape,
+                # which is the behavior its hooks have always had.
+                assert notnull == 1
+                assert dflt == "'auto'"
             finally:
                 await conn.close()
 

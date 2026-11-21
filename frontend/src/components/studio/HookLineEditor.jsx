@@ -10,11 +10,17 @@ import LineRewriteAction from "./LineRewriteAction";
  * goes through the normal draft edit, so autosave runs as if the founder
  * had typed it.
  */
-export default function HookLineEditor({ projectId, value, onChange, disabled }) {
+export default function HookLineEditor({ projectId, value, onChange, disabled, clipLabel = "Hook + Story clip" }) {
   return (
     <div className="space-y-4">
       <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
-      <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated Hook + Story clip.</p>
+      {/* The helper names the clip the line is spoken in, and the two
+          surfaces' clips differ: Create Video's render is a Hook +
+          Story clip, the Hook + CTA page's is the hook alone — there
+          is no story on that page, so its helper says so (ADR 0248).
+          The caller passes its own clip's name; the default is the
+          wizard's, the editor's original home. */}
+      <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated {clipLabel}.</p>
       {/* The line stands in the cover frame (ADR 0186): the same sunken
           box the History cover line sits in, so the words read as the
           finished line. No quotation marks anywhere in the frame family
