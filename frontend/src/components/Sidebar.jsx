@@ -17,6 +17,8 @@ import {
   X,
   HelpCircle,
   CornerDownRight,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentDraft";
 
@@ -33,10 +35,11 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * Create Video makes the hook video, Demo + CTA turns the finished hook into an export, History
  * records those renders and exports, and Analytics reads the
  * founder's own logged results. Hook + CTA — the short hook that
- * flows straight into a demo — is deliberately NOT a sidebar link
- * (ADR 0248): Kasra asked for fewer links here, so the page is
- * reached from Create Video's flow switcher and the Dashboard's
- * destination card instead; its route is unchanged. The retired
+ * flows straight into a demo — has no sidebar link of its own
+ * (ADR 0248): Kasra asked for fewer links here. Its way in is the
+ * Create Video entry itself, which opens the three ways to make a
+ * video as a pop-up (ADR 0251), and the Dashboard's destination
+ * card; its route is unchanged. The retired
  * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
  * there is no Research group and no Insight link. Analytics is last, not an
  * Insight group.
@@ -145,6 +148,176 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
 }
 
 /**
+ * The Create Video entry is a choice of ways, not a plain link
+ * (ADR 0251, reversing the placement ADR 0248 chose).
+ *
+ * ADR 0248 took Hook + CTA's own link out of this sidebar and put
+ * the three ways to make a video in a "Make it another way"
+ * dropdown at the top of the Create Video page. Kasra's ruling
+ * (Nov 21 2026): the choice belongs on the sidebar entry itself —
+ * clicking Create Video opens a small pop-up naming the ways, and
+ * each way goes exactly where the dropdown went. Create Video to
+ * its own page; Hook + CTA to its page; Demo + CTA to the
+ * remembered draft's finishing step, or the plain Create Video
+ * page when no draft is remembered (the dropdown's no-draft pick
+ * landed on the wizard's first step, which is where that page
+ * opens). The Dashboard keeps its own Hook + CTA card — only the
+ * switcher's placement is reversed, nothing else in 0248 moves.
+ *
+ * The trigger row is NavItem's row, drawn as a button: same rail,
+ * icon, label and hint, so the entry reads as the same line of the
+ * sidebar whether the pop-up is open or shut, and it keeps the
+ * canonical create-nav-link testid the tours anchor to. It stands
+ * active on the Hook + CTA page too — the pop-up's ways are one
+ * family under this entry. The panel wears the app-drawn menu's
+ * language (the .app-select-menu surface and option rows) and
+ * keeps its contract: Escape closes, a press outside closes, and
+ * choosing a way closes the panel and the mobile drawer alike.
+ *
+ * Collapsed, the icon rail has no room for a panel, so there the
+ * entry stays the plain link it has always been in the rail.
+ */
+function CreateFlowMenu({ item, collapsed, active, onNavigate, testIdPrefix }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => readRecentDraft());
+  const wrapRef = useRef(null);
+  const { pathname } = useLocation();
+
+  useEffect(() => subscribeRecentDraft(setDraft), []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onPointerDown = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open ]);
+
+  if (collapsed) {
+    return (
+      <NavItem
+        item={item}
+        collapsed={collapsed}
+        active={active}
+        onNavigate={onNavigate}
+        testId={`${testIdPrefix}${item.testId}`}
+      />
+    );
+  }
+
+  const Icon = item.icon;
+  const onHookCta = pathname === "/hook-cta" || pathname.startsWith("/hook-cta/");
+  // The dropdown's Demo + CTA, preserved: an open draft's finishing
+  // step. The remembered draft is the shell's own memory of the
+  // draft the founder was last inside (recentDraft) — the same
+  // memory the Continue line below reads.
+  const demoHref =
+    draft && draft.projectId
+      ? `/create?project=${encodeURIComponent(draft.projectId)}&step=finish`
+      : "/create";
+  const pick = () => {
+    setOpen(false);
+    if (onNavigate) onNavigate();
+  };
+  const optionClass = "app-select-option w-full";
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        data-testid={`${testIdPrefix}${item.testId}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-current={active ? "page" : undefined}
+        className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-[background-color,color,box-shadow] duration-200 ${
+          active
+            ? "bg-[color:var(--indigo-10)] text-foreground shadow-[inset_0_1px_0_0_rgba(129,140,248,0.2),var(--shadow-xs)]"
+            : "text-muted-foreground hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+        }`}
+      >
+        {/* Active rail — a 3px indigo bar pinned to the panel edge. */}
+        <span
+          aria-hidden="true"
+          className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-[color:var(--brand-indigo)] transition-all duration-200 ${
+            active ? "h-5 w-[3px] opacity-100 shadow-[0_0_10px_var(--brand-indigo)]" : "h-2 w-[3px] opacity-0"
+          } -left-3`}
+        />
+        <Icon
+          className={`h-[18px] w-[18px] shrink-0 transition-[color,transform] duration-200 group-hover:scale-105 ${
+            active ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground group-hover:text-foreground"
+          }`}
+        />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={`truncate text-sm leading-tight ${active ? "font-semibold" : "font-normal"}`}>
+            {item.label}
+          </span>
+          <span className="truncate text-xs leading-tight text-muted-foreground">{item.hint}</span>
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Choose how to make this video"
+          data-testid={`${testIdPrefix}create-flow-menu`}
+          className="app-select-menu"
+          style={{ width: "100%" }}
+        >
+          <Link
+            role="menuitem"
+            data-testid={`${testIdPrefix}create-flow-option-create`}
+            to="/create"
+            onClick={pick}
+            className={optionClass}
+          >
+            <span className="app-select-check" aria-hidden="true">
+              {active && !onHookCta ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span>Create Video — hook + story</span>
+          </Link>
+          <Link
+            role="menuitem"
+            data-testid={`${testIdPrefix}create-flow-option-hook-cta`}
+            to="/hook-cta"
+            onClick={pick}
+            className={optionClass}
+          >
+            <span className="app-select-check" aria-hidden="true">
+              {onHookCta ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span>Hook + CTA — a short hook, finished with your demo</span>
+          </Link>
+          <Link
+            role="menuitem"
+            data-testid={`${testIdPrefix}create-flow-option-demo-cta`}
+            to={demoHref}
+            onClick={pick}
+            className={optionClass}
+          >
+            <span className="app-select-check" aria-hidden="true" />
+            <span>Demo + CTA — add your demo and closing message</span>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * The one line in the frame that remembers work.
  *
  * A nav item is a destination; this is a place the founder already is. It
@@ -188,13 +361,23 @@ function NavList({ collapsed, onNavigate, testIdPrefix = "" }) {
     <nav className={`flex flex-col gap-1.5 ${collapsed ? "items-center px-4" : "px-4"}`} aria-label="Main">
       {NAV_ITEMS.map((item) => (
         <Fragment key={item.to}>
-          <NavItem
-            item={item}
-            collapsed={collapsed}
-            active={isActive(item.to)}
-            onNavigate={onNavigate}
-            testId={`${testIdPrefix}${item.testId}`}
-          />
+          {item.to === "/create" ? (
+            <CreateFlowMenu
+              item={item}
+              collapsed={collapsed}
+              active={isActive(item.to) || isActive("/hook-cta")}
+              onNavigate={onNavigate}
+              testIdPrefix={testIdPrefix}
+            />
+          ) : (
+            <NavItem
+              item={item}
+              collapsed={collapsed}
+              active={isActive(item.to)}
+              onNavigate={onNavigate}
+              testId={`${testIdPrefix}${item.testId}`}
+            />
+          )}
           {item.to === "/create" ? (
             <DraftShortcut collapsed={collapsed} testIdPrefix={testIdPrefix} />
           ) : null}

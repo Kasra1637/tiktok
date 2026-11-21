@@ -232,6 +232,12 @@ async def generate_hook_cta_hook(
 
     hook_project = dict(row)
     hook_project["duration_seconds"] = seconds
+    # Handheld selfie is this surface's only camera (ADR 0252): the
+    # working copy the hook is written from is handheld whatever the
+    # row still stores, so the FIXED CAMERA block and the indoor
+    # restatement never engage here. The stored value is not
+    # rewritten — the submit forces handheld again for the render.
+    hook_project["camera_setup"] = "handheld"
     try:
         hook = await _log_model_call(
             "hook_line", "text", TEXT_MODEL,
@@ -266,11 +272,21 @@ async def generate_hook_cta_hook(
         "scene": {
             "location": location,
             "camera_angle": "", "framing": "", "lighting": "",
-            "visual_style": "", "character_positioning": "",
+            "visual_style": "",
+            # The hook's opening is its physical action (ADR 0250):
+            # the presenter is seated in frame so the hands and body
+            # can perform it — a face alone cannot open this hook.
+            "character_positioning": (
+                "Waist-up, hands and body in frame; "
+                "the opening is the physical action, never face-only."
+            ),
             "wardrobe": (row.get("visual_direction") or "").strip(),
             "props": "", "color_palette": "",
         },
-        "camera_setup": row.get("camera_setup") or "handheld",
+        # The surface's only camera (ADR 0252), stated outright
+        # rather than read from the row: a stored "fixed" must not
+        # leak into the render's direction.
+        "camera_setup": "handheld",
     }
     await _execute(
         "UPDATE studio_projects SET hook_line = ?, "

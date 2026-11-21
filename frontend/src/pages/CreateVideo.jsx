@@ -11,7 +11,7 @@ import { createWizardDraft, wizardDraftReducer } from "./wizardDraft";
 import { useWizardTemplates } from "../hooks/useWizardTemplates";
 import { useWizardAngleStep } from "../hooks/useWizardAngleStep";
 import { useWizardDirections } from "./useWizardDirections";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { CONTROL_CLASS } from "../components/formControls";
 import { AppSelect } from "../components/AppSelect";
@@ -540,7 +540,6 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
 
 export default function CreateVideo() {
   const [params, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   // The server's updated_at for each project this wizard has adopted from a
   // server response, so a row that is already current is never re-read or
@@ -3486,50 +3485,12 @@ export default function CreateVideo() {
     );
   }
 
-  // The flow switcher (ADR 0248): the ways to make a video, offered
-  // where the founder decides — at the top of this page, before any
-  // step is invested in. Hook + CTA left the sidebar for this menu
-  // (Kasra asked for fewer sidebar links); Demo + CTA here means
-  // this draft's own finishing step, the one the rail's last segment
-  // already walks to. The closed face always names this page's flow:
-  // picking another way acts and the face stays, because the founder
-  // is still standing in Create Video until the Hook + CTA pick
-  // actually navigates away.
-  const switchFlow = (flow) => {
-    if (flow === "hook-cta") {
-      navigate("/hook-cta");
-    } else if (flow === "demo-cta") {
-      // With a draft open, its finishing step; with none, the step a
-      // project starts from — there is no finish to walk to yet, and
-      // the honest place is the start of this flow.
-      setStep(project ? STEPS.findIndex((s) => s.key === "finish") : 0);
-    }
-  };
-
   return (
     <PageFrame className="space-y-6">
       <PageHeader
         icon={Clapperboard}
         title="Create Video"
       />
-      <div className="flex flex-wrap items-center gap-3" data-testid="create-flow-switch-row">
-        <span className="text-sm font-semibold">Make it another way</span>
-        <div className="w-80 max-w-full">
-          <AppSelect
-            testId="create-flow-switch"
-            ariaLabel="Choose how to make this video"
-            className={CONTROL_CLASS}
-            block
-            value="create"
-            onChange={switchFlow}
-            options={[
-              { value: "create", label: "Create Video — hook + story" },
-              { value: "hook-cta", label: "Hook + CTA — a short hook, finished with your demo" },
-              { value: "demo-cta", label: "Demo + CTA — add your demo and closing message" },
-            ]}
-          />
-        </div>
-      </div>
       {/* The step task, directly under the title: the pills below show state
           per step, and this names the one thing to do on the screen in view.
           One guidance line stands here, and it is the only one: the sticky

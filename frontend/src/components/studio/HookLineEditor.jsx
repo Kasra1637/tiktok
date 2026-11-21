@@ -9,8 +9,15 @@ import LineRewriteAction from "./LineRewriteAction";
  * script line. The suggestion is never saved by the server: accepting it
  * goes through the normal draft edit, so autosave runs as if the founder
  * had typed it.
+ *
+ * The Hook + CTA page mounts this editor WITHOUT its rewrite
+ * (suggestClearerHook={false}, ADR 0249): that page's one hook button
+ * becomes the clearer-hook suggestion itself once a line exists, so an
+ * editor-mounted second copy would put the same control in the card
+ * twice. The capability stays here for every other surface — Create
+ * Video's Review above all.
  */
-export default function HookLineEditor({ projectId, value, onChange, disabled, clipLabel = "Hook + Story clip" }) {
+export default function HookLineEditor({ projectId, value, onChange, disabled, clipLabel = "Hook + Story clip", suggestClearerHook = true }) {
   return (
     <div className="space-y-4">
       <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
@@ -30,16 +37,18 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
       <div className="post-kit-cover spoken-line-frame">
         <Input id="review-hook_line" value={value} onChange={(e) => onChange(e.target.value)} />
       </div>
-      <LineRewriteAction
-        projectId={projectId}
-        line={value}
-        role="hook"
-        onAccept={onChange}
-        disabled={disabled}
-        testIdPrefix="hook-rewrite"
-        buttonLabel="Suggest a clearer hook"
-        busyLabel="Writing hook"
-      />
+      {suggestClearerHook && (
+        <LineRewriteAction
+          projectId={projectId}
+          line={value}
+          role="hook"
+          onAccept={onChange}
+          disabled={disabled}
+          testIdPrefix="hook-rewrite"
+          buttonLabel="Suggest a clearer hook"
+          busyLabel="Writing hook"
+        />
+      )}
     </div>
   );
 }

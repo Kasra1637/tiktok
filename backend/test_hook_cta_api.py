@@ -895,3 +895,168 @@ class TestHookRewriteSteering:
         prompt = str(calls[0]["prompt"])
         assert STATEMENT_OUTCOME in prompt
         assert "warm" in prompt
+
+
+# ------------------------------------------- complete in meaning (0249)
+
+MOOD_FOCUS = (
+    "You can spot your own rhythms instead of feeling surprised by your mood"
+)
+MOOD_PROFILE = {**PROFILE_FACTS, "desired_outcomes": [MOOD_FOCUS]}
+
+DANGLING_QUESTION = "I'm trying to spot my rhythms, why so surprised?"
+assert len(DANGLING_QUESTION.split()) == 9  # exactly the 4-second budget
+COMPLETE_QUESTION = "Why does my mood keep surprising me at night?"
+assert len(COMPLETE_QUESTION.split()) == 9  # the same budget, thought whole
+
+
+class TestGenerateHookLineCompleteThought:
+    """A hook must be complete in MEANING, not only in punctuation (ADR 0249).
+
+    The live failure: focus "…feeling surprised by your mood", shape
+    Question, 4 seconds — the generator returned "I'm trying to spot
+    my rhythms, why so surprised?". The finished-sentence gate passed
+    it (it ends in "?") but the question dangles: surprised by WHAT?
+    The focus's key noun (mood) was dropped to fit the budget, leaving
+    a bare question tail spliced onto a statement with a comma. The
+    correction loop now names that defect, and a reply that keeps
+    dangling is refused rather than shipped.
+    """
+
+    def _project(self):
+        return _hook_project(
+            duration_seconds=4, hook_focus=MOOD_FOCUS, hook_shape="question")
+
+    def test_a_dangling_question_is_corrected_to_a_complete_one(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat(monkeypatch, [
+            _hook_reply(hook_line=DANGLING_QUESTION),
+            _hook_reply(hook_line=COMPLETE_QUESTION)])
+        out = _run(ai_service.generate_hook_line(self._project(), MOOD_PROFILE))
+        assert out["hook_line"] == COMPLETE_QUESTION
+        assert len(calls) == 2
+        # The correction names the defect, so the rewrite knows what
+        # to fix rather than merely that something failed.
+        assert "dangles" in str(calls[1]["prompt"])
+
+    def test_a_persistently_dangling_question_is_refused(self, monkeypatch):
+        import ai_service
+        _stub_chat(monkeypatch, [
+            _hook_reply(hook_line=DANGLING_QUESTION),
+            _hook_reply(hook_line=DANGLING_QUESTION)])
+        with pytest.raises(RuntimeError):
+            _run(ai_service.generate_hook_line(self._project(), MOOD_PROFILE))
+
+    def test_a_complete_question_passes_first_try(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat(monkeypatch, [
+            _hook_reply(hook_line=COMPLETE_QUESTION)])
+        out = _run(ai_service.generate_hook_line(self._project(), MOOD_PROFILE))
+        assert out["hook_line"] == COMPLETE_QUESTION
+        assert len(calls) == 1
+
+    def test_the_dangling_check_spares_whole_questions(self):
+        import ai_service
+        check = ai_service._dangling_question_issue
+        assert check(DANGLING_QUESTION)
+        assert check("Why so hard?")
+        assert not check(COMPLETE_QUESTION)
+        assert not check("How do I stop losing count?")
+        assert not check("What sets it off?")
+        assert not check("I'm trying to keep count and I keep losing it.")
+
+
+# --------------------------------------------------------- handheld only
+
+class TestHandheldOnly:
+    """Hook + CTA shoots handheld selfie only (ADR 0252, Kasra's
+    ruling): the page's clips are short, and a selfie framing is more
+    engaging than a zoomed-out environment, so the surface carries
+    no camera choice at all. The forcing follows ADR 0246's
+    voice_mode precedent — the submit path and the hook chain treat
+    a hook_cta project as handheld whatever its row still stores,
+    and the stored value is NOT rewritten: a row that somehow holds
+    'fixed' (created before the ruling, or written by another
+    client) renders handheld and reads back exactly as stored."""
+
+    def test_a_stored_fixed_hook_renders_handheld(self, api, monkeypatch):
+        from models import GenerateHookRequest
+        project = TestGenerateHook()._ready(
+            api, monkeypatch, "Handheld Stored Fixed", camera_setup="fixed")
+        calls = _mock_submit(api, monkeypatch)
+        _silence_poster(api, monkeypatch)
+        generation = _run(api.generate_hook_cta(
+            project["id"], GenerateHookRequest(), ANON))
+        prompt = calls[0]["prompt"]
+        assert "HANDHELD SELFIE" in prompt
+        assert "Fixed camera: a stationary phone" not in prompt
+        row = _run(api._fetch_one(
+            "SELECT camera_setup FROM generations WHERE id = ?",
+            (generation["id"],)))
+        assert row["camera_setup"] == "handheld"
+        # The stored pick is not rewritten by the forcing.
+        stored = _run(api.get_studio_project(project["id"], ANON))
+        assert stored["camera_setup"] == "fixed"
+
+    def test_the_hook_line_is_written_for_a_handheld_camera(
+            self, api, monkeypatch):
+        """The hook write itself: a stored-fixed row's hook prompt
+        carries no FIXED CAMERA block, because the working copy the
+        endpoint hands the model is already handheld — the fixed
+        indoor restatement never engages on this surface."""
+        import ai_service
+        from models import GenerateHookLineRequest
+        project, _profile_row = _hook_cta(
+            api, "Handheld Hook Write", camera_setup="fixed")
+        seen = {}
+
+        async def fake_hook_line(project_arg, profile):
+            seen["camera_setup"] = project_arg.get("camera_setup")
+            return {
+                "hook_line": "I'm trying to clear my head before bed.",
+                "hook_action": "Jerks upright, both hands flying up.",
+                "closing_action": "Leans in, holding the look.",
+                "location": "A quiet bedroom in the evening",
+            }
+
+        monkeypatch.setattr(ai_service, "generate_hook_line", fake_hook_line)
+        out = _run(api.generate_hook_cta_hook(
+            project["id"], GenerateHookLineRequest(), ANON))
+        assert seen["camera_setup"] == "handheld"
+        assert out["strategy"]["camera_setup"] == "handheld"
+        stored = _run(api.get_studio_project(project["id"], ANON))
+        assert stored["camera_setup"] == "fixed"
+
+
+# ------------------------------------------------- history names the surface
+
+class TestHistoryNamesTheSurface:
+    """History shows every video in one layout (ADR 0253): the card
+    is shared, but until the list payload named the project's
+    surface it could not tell a hook render from a wizard render —
+    the invisibility behind the hook card's one real divergence,
+    its draft link walking into the wrong page. The list now
+    carries project_surface beside project_kind: "hook_cta" for a
+    hook render, "" for a wizard render (and for a row whose
+    project is gone)."""
+
+    def test_history_rows_carry_the_project_surface(self, api, monkeypatch):
+        from models import CreateStudioProjectRequest, GenerateHookRequest
+        project = TestGenerateHook()._ready(api, monkeypatch, "History Surface")
+        _mock_submit(api, monkeypatch)
+        _silence_poster(api, monkeypatch)
+        generation = _run(api.generate_hook_cta(
+            project["id"], GenerateHookRequest(), ANON))
+        profile = _profile(api, "History Surface Wizard")
+        wizard = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), user_id=ANON))
+        _run(api._execute(
+            "INSERT INTO generations"
+            " (id, user_id, studio_project_id, brand_profile_id, status, created_at)"
+            " VALUES (?, ?, ?, ?, 'completed', '2026-11-21T00:00:00Z')",
+            ("history-surface-wizard", ANON, wizard["id"], profile["id"])))
+        history = _run(api.generation_history(user_id=ANON))
+        by_id = {g["id"]: g for g in history["generations"]}
+        assert by_id[generation["id"]]["project_surface"] == "hook_cta"
+        assert by_id[generation["id"]]["project_kind"] == "video"
+        assert by_id["history-surface-wizard"]["project_surface"] == ""

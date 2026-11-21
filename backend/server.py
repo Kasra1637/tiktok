@@ -1482,6 +1482,16 @@ async def _submit_generation(
     model_key = video_providers.resolve(model)[0]
     cap = video_providers.capability(model_key)
     camera_setup = project.get("camera_setup") or "handheld"
+    # Hook + CTA shoots handheld selfie only (ADR 0252, Kasra's
+    # ruling): the surface carries no camera choice, so a hook_cta
+    # submit renders handheld whatever the project row still stores
+    # — the same forcing shape as the voice pick below (ADR 0246).
+    # The stored value is NOT rewritten: the rebind is this submit's
+    # working copy, and the row keeps the pick it holds. Create
+    # Video's camera pick and its fixed indoor chain are untouched.
+    if (project.get("surface") or "") == "hook_cta" and camera_setup != "handheld":
+        project = {**project, "camera_setup": "handheld"}
+        camera_setup = "handheld"
     # The presenter voice pick (ADR 0246): a silent project never bills
     # audio, whatever the caller passed — the pick is the founder's
     # standing choice for this project, and a caller that forgot it
@@ -1547,6 +1557,14 @@ async def _submit_generation(
     render_plan = {**project, **plan_words}
 
     strategy = strategy or _project_strategy(project)
+    # The strategy carries its own camera_setup, and the prompt chain
+    # reads the strategy's (ADR 0252): a hook_cta render's strategy
+    # is treated as handheld here too, so a strategy stored before
+    # the ruling — or written by a caller that read the row's stored
+    # pick — cannot put a fixed starting shot into a hook's prompt.
+    # Again the working copy only; the stored strategy is untouched.
+    if strategy and (project.get("surface") or "") == "hook_cta":
+        strategy = {**strategy, "camera_setup": "handheld"}
     # The stored angle is the third carrier of the place (see
     # build_segment_prompt): its opening moment must agree with the plan
     # Location before the prompt locks the scene. Resolve it here, where the
@@ -2697,6 +2715,19 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
 # first syllable of the opening line.
 _MODEL_HEAD_TRIM_SECONDS = {"heygen-video-1": 0.2}
 
+# A Hook + CTA hook render's head cut (ADR 0250). The dissolve on the
+# short hook renders runs longer than HeyGen's 0.2s — Kasra's live 4s
+# hook still opened on it — so a hook-surface render takes a longer
+# cut, on BOTH models (MiniMax H3 Max has no entry in the table above
+# at all). The value is derived from the codebase's own precedent,
+# not measured from Kasra's file (his live renders are hosted
+# elsewhere and cannot be read from here): posters.py takes the
+# poster frame at 0.5s precisely because that is "past a possible
+# black first frame". The cut only ever runs composed with the beat
+# tail cut (see _persist_generation_clip): the tail restores the
+# exact picked length, so the longer head never shortens the beat.
+_HOOK_HEAD_TRIM_SECONDS = 0.5
+
 
 async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "") -> tuple:
     """
@@ -2828,9 +2859,54 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # 0244), and its hook_seconds times the camera move further
             # down.
             project_row = await _fetch_one(
-                "SELECT kind, hook_seconds FROM studio_projects WHERE id = ?",
+                "SELECT kind, hook_seconds, surface FROM studio_projects WHERE id = ?",
                 (row.get("studio_project_id") or "",),
             )
+
+            # A beat cut is a property of the generation row (ADR
+            # 0244): the render was requested AT the cut length, which
+            # is exactly what an exact-duration submit records. The
+            # full reasoning rides the tail trim below; the shape is
+            # computed here because the hook head cut that follows is
+            # composed with it.
+            is_beat_cut = (
+                trim_to > 0
+                and int(row.get("requested_duration") or 0) == trim_to
+            )
+
+            # A Hook + CTA hook's head cut (ADR 0250): the dissolve on
+            # the short hook renders outlasts the regular 0.2s cut, so
+            # the hook takes _HOOK_HEAD_TRIM_SECONDS off the head on
+            # either model — composed with its beat tail cut as ONE
+            # outcome, so the delivered length is still exactly the
+            # pick. The composition is staged on a temp file and only
+            # replaces the canonical clip when both cuts land: if
+            # either fails, the ordinary sequence below runs instead,
+            # with its own soft-failure behavior untouched (a failed
+            # beat cut still delivers the full render and says so).
+            # A hook rendered AT the floor records no tail trim, so
+            # there is no tail to give the longer head back and the
+            # composition never engages — its length stays the pick.
+            beat_cut_applied = False
+            if is_beat_cut and (project_row or {}).get("surface") == "hook_cta":
+                head_temp = local_path.with_name(
+                    f".{local_path.stem}_hookhead_{uuid.uuid4().hex}{local_path.suffix}")
+                try:
+                    head_cut_file = await pipeline.trim_head_exact(
+                        local_path, _HOOK_HEAD_TRIM_SECONDS, head_temp)
+                    if head_cut_file and await pipeline.replace_with_trimmed(
+                            head_temp, trim_to):
+                        head_temp.replace(local_path)
+                        beat_cut_applied = True
+                        head_trim_applied = True
+                        logger.info(
+                            f"Generation {generation_id}: cut the first "
+                            f"{_HOOK_HEAD_TRIM_SECONDS:g}s (the hook render's "
+                            f"blurry head) and the tail to {trim_to}s in one "
+                            f"composition (ADR 0250)"
+                        )
+                finally:
+                    head_temp.unlink(missing_ok=True)
 
             # Cut the model's blurry head FIRST, before the hook trim and
             # the rescale, so every later step works on the clip the
@@ -2841,7 +2917,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # delivered as rendered, because losing the video over
             # 0.2s of blur would be the worse failure by far.
             head_trim = _MODEL_HEAD_TRIM_SECONDS.get(row.get("model") or "", 0)
-            if head_trim > 0:
+            if head_trim > 0 and not beat_cut_applied:
                 head_cut = await pipeline.replace_with_head_trimmed(local_path, head_trim)
                 if head_cut:
                     local_path = head_cut
@@ -2883,12 +2959,10 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # "Durable copy missing" alert on every short beat (the
             # head cut's reasoning, ADR 0181) — and a failed cut names
             # what was being cut: the story for a legacy story row,
-            # the hook otherwise.
-            is_beat_cut = (
-                trim_to > 0
-                and int(row.get("requested_duration") or 0) == trim_to
-            )
-            if trim_to > 0:
+            # the hook otherwise. A hook render whose head+tail
+            # composition already landed above (ADR 0250) skips this
+            # block entirely — its tail is already cut to the pick.
+            if trim_to > 0 and not beat_cut_applied:
                 trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
                 if trimmed:
                     local_path = trimmed

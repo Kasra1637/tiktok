@@ -1429,8 +1429,11 @@ class TestOutcomeStatementsSurviveASave:
 
     def test_extraction_is_capped(self):
         import ai_service
+        # Whole standalone phrases (ADR 0249's bar drops fragments
+        # before the cap is reached; the cap is what this test pins).
         result = {"outcome_statements": [
-            {"outcome": f"o{i}", "from_feature": "Sleep timer"} for i in range(20)
+            {"outcome": f"Outcome number {i} stands alone", "from_feature": "Sleep timer"}
+            for i in range(20)
         ]}
         ai_service._normalize_outcome_statements(result)
         assert len(result["outcome_statements"]) == 6

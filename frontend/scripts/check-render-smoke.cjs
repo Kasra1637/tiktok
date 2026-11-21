@@ -1311,55 +1311,46 @@ async function main() {
     }
   });
 
-  await check("the flow switcher offers Hook + CTA and Demo + CTA from Create Video", async (ctx) => {
-    // ADR 0248: Hook + CTA left the sidebar for this menu at the top
-    // of Create Video — the ways to make a video, offered where the
-    // founder decides, before any step is invested in. The closed
-    // face names this page's flow; picking Hook + CTA navigates to
-    // the page; picking Demo + CTA with no project open lands on
-    // the step a project starts from (there is no finish to walk
-    // to yet).
-    global.__SMOKE_NAVIGATIONS = [];
+  await check("Create Video carries no flow switcher — the choice lives in the sidebar", async (ctx) => {
+    // ADR 0251 (reversing 0248's placement, Kasra's ruling): the
+    // "Make it another way" dropdown is gone from this page. The
+    // three ways moved to the sidebar's Create Video entry, which
+    // opens them as a pop-up — pinned at source level with the
+    // sidebar checks (the sidebar is not mounted in this harness).
+    // What this page must keep is its own top: the title and the
+    // step task line, with no switcher row between them — checked
+    // plain and with a draft open, the two mounts the switcher
+    // checks used to make.
     global.__SMOKE_PARAMS = "?step=review";
     try {
       await mount(CreateVideo, {})(ctx);
-      const control = ctx.container.querySelector('[data-testid="create-flow-switch"]');
-      if (!control) throw new Error("the flow switcher did not render at the top of Create Video");
-      if (!control.textContent.includes("Create Video")) {
-        throw new Error(`the switcher's closed face does not name this page's flow: ${control.textContent}`);
+      if (ctx.container.querySelector('[data-testid="create-flow-switch"]')) {
+        throw new Error("the flow switcher still renders at the top of Create Video");
       }
-      await chooseOption(ctx, control, "hook-cta");
-      if (!global.__SMOKE_NAVIGATIONS.includes("/hook-cta")) {
-        throw new Error(`picking Hook + CTA did not navigate to its page: ${JSON.stringify(global.__SMOKE_NAVIGATIONS)}`);
+      if (ctx.container.querySelector('[data-testid="create-flow-switch-row"]')) {
+        throw new Error("the flow switcher's row still renders at the top of Create Video");
       }
-      await chooseOption(ctx, control, "demo-cta");
+      if (ctx.container.textContent.includes("Make it another way")) {
+        throw new Error("the switcher's label still renders on Create Video");
+      }
       const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
-      if (!task || !task.textContent.includes("Step 1 of 4")) {
-        throw new Error(`with no project open, Demo + CTA did not land on the first step: ${task?.textContent || ""}`);
+      if (!task || !task.textContent.includes("Step 3 of 4")) {
+        throw new Error(`the page's own step task did not survive the switcher's removal: ${task?.textContent || ""}`);
       }
     } finally {
       global.__SMOKE_PARAMS = "";
-      global.__SMOKE_NAVIGATIONS = [];
     }
-  });
-
-  await check("the flow switcher's Demo + CTA walks an open draft to its finishing step", async (ctx) => {
-    // The other half of the same pick (ADR 0248): with a draft open,
-    // Demo + CTA means this draft's own finishing step — the step
-    // the rail's last segment walks to — not the standalone page.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({
         getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
       }, async () => {
         await mount(CreateVideo, {})(ctx);
-        const control = ctx.container.querySelector('[data-testid="create-flow-switch"]');
-        if (!control) throw new Error("the flow switcher did not render");
-        await chooseOption(ctx, control, "demo-cta");
-        const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
-        if (!task || !task.textContent.includes("Step 4 of 4")) {
-          throw new Error(`Demo + CTA did not walk the open draft to its finishing step: ${task?.textContent || ""}`);
+        if (ctx.container.querySelector('[data-testid="create-flow-switch"]')) {
+          throw new Error("the flow switcher still renders with a draft open");
         }
+        const task = ctx.container.querySelector('[data-testid="wizard-step-task"]');
+        if (!task) throw new Error("the step task line is missing with a draft open");
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -6354,6 +6345,13 @@ async function main() {
           const coverValue = ctx.container.querySelector('[data-testid="cover-text-value"]');
           if (coverValue && coverValue.closest(".post-kit-cover")) {
             throw new Error("Review's cover text took the frame — it stands plain by rule");
+          }
+          // ADR 0249 unified the Hook + CTA page's hook button; the
+          // wizard's own clearer-hook suggestion is NOT part of that
+          // change and stays exactly where it has always stood.
+          const rewrite = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
+          if (!rewrite || !rewrite.textContent.includes("Suggest a clearer hook")) {
+            throw new Error("Create Video's Review lost its Suggest a clearer hook button");
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -13081,19 +13079,76 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
-      // Hook + CTA has NO sidebar link (ADR 0248, superseding 0244's
-      // placement): Kasra asked for fewer sidebar links, so the page
-      // is reached from Create Video's flow switcher and the
-      // Dashboard's destination card — both pinned in their own
-      // checks — while its route stands unchanged (the Hook + CTA
-      // checks pin it). A link creeping back here re-adds the clutter
-      // the removal took out.
+      // Hook + CTA has NO sidebar link of its own (ADR 0248, its
+      // placement refined by ADR 0251): Kasra asked for fewer
+      // sidebar links, so the page is reached from the Create Video
+      // entry's pop-up and the Dashboard's destination card — the
+      // pop-up pinned in the check below — while its route stands
+      // unchanged (the Hook + CTA checks pin it). A link of its own
+      // creeping back here re-adds the clutter the removal took out.
       if (src.includes("hook-cta-nav-link") || /to: "\/hook-cta"/.test(block)) {
         throw new Error(
-          "a Hook + CTA link is back in the sidebar. ADR 0248 removed it: " +
-            "the page is reached from Create Video's flow switcher and the " +
-            "Dashboard card, not from a sidebar link."
+          "a Hook + CTA link of its own is back in the sidebar. ADR 0248 " +
+            "removed it: the page is reached from the Create Video entry's " +
+            "pop-up and the Dashboard card, not from a sidebar link."
         );
+      }
+    }
+  );
+
+  await check(
+    "the Create Video sidebar entry opens the three ways as a pop-up",
+    async () => {
+      // ADR 0251: the flow choice ADR 0248 put in a dropdown at the
+      // top of Create Video now lives on the sidebar's Create Video
+      // entry — clicking it opens a pop-up with the same three ways,
+      // each going exactly where the dropdown went: Create Video to
+      // its page, Hook + CTA to its page, and Demo + CTA to the
+      // remembered draft's finishing step (the plain page when no
+      // draft is remembered — the dropdown's no-draft landing was
+      // the wizard's first step, which is where /create opens).
+      // Source-level like the nav check above: the sidebar is not
+      // mounted in this harness.
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "components", "Sidebar.jsx"),
+        "utf8"
+      );
+      if (!src.includes('data-testid="create-flow-menu"') && !src.includes("create-flow-menu")) {
+        throw new Error("the sidebar carries no Create Video pop-up (create-flow-menu)");
+      }
+      for (const testId of [
+        "create-flow-option-create",
+        "create-flow-option-hook-cta",
+        "create-flow-option-demo-cta",
+      ]) {
+        if (!src.includes(testId)) {
+          throw new Error(`the pop-up is missing its ${testId} option`);
+        }
+      }
+      for (const label of [
+        "Create Video — hook + story",
+        "Hook + CTA — a short hook, finished with your demo",
+        "Demo + CTA — add your demo and closing message",
+      ]) {
+        if (!src.includes(label)) {
+          throw new Error(`the pop-up lost the switcher's option wording: ${label}`);
+        }
+      }
+      if (!src.includes('to="/hook-cta"')) {
+        throw new Error("the pop-up's Hook + CTA option does not link to the Hook + CTA page");
+      }
+      if (!src.includes("step=finish")) {
+        throw new Error(
+          "the pop-up's Demo + CTA option never builds the finishing-step link " +
+            "for a remembered draft"
+        );
+      }
+      if (!src.includes('aria-haspopup="menu"') || !src.includes('role="menu"')) {
+        throw new Error("the Create Video entry is not a menu trigger with a menu panel");
+      }
+      // The trigger keeps the canonical testid the tours anchor to.
+      if (!src.includes('testId: "create-nav-link"')) {
+        throw new Error("the Create Video nav item lost its create-nav-link testId");
       }
     }
   );
@@ -13485,6 +13540,9 @@ async function runHookCtaChecks() {
       async () => {
         const button = ctx.container.querySelector('[data-testid="hook-generate"]');
         if (!button) throw new Error("the Generate hook button did not render");
+        if (!button.textContent.includes("Generate the hook")) {
+          throw new Error(`the one button reads "${button.textContent}", expected Generate the hook before a line exists`);
+        }
         await clickEl(ctx, button);
         await act(async () => {});
         const field = ctx.container.querySelector("#review-hook_line");
@@ -13495,6 +13553,107 @@ async function runHookCtaChecks() {
         if (!ctx.container.querySelector('[data-testid="hook-editors"]')) {
           throw new Error("the editors block did not open around the written hook");
         }
+        // The unified button (ADR 0249): one control in the card.
+        // With a line written it IS the clearer-hook suggestion —
+        // there is no Regenerate button beside it, and the editor
+        // below does not grow a second suggestion button either.
+        if (ctx.container.querySelector('[data-testid="hook-generate"]')) {
+          throw new Error("the generate button still stands beside the written hook");
+        }
+        const suggest = ctx.container.querySelectorAll('[data-testid="hook-rewrite-button"]');
+        if (suggest.length !== 1 || !suggest[0].textContent.includes("Suggest a clearer hook")) {
+          throw new Error("the one button did not become Suggest a clearer hook once the line existed");
+        }
+        for (const el of ctx.container.querySelectorAll("button")) {
+          if ((el.textContent || "").includes("Regenerate the hook")) {
+            throw new Error("a Regenerate the hook button survives on the Hook + CTA page");
+          }
+        }
+      }
+    );
+  });
+
+  await check("a written hook's one button offers the clearer line and writes it only on accept (ADR 0249)", async (ctx) => {
+    const CLEARER = "I'm trying to notice my mood, and I keep missing it every day.";
+    const rewrites = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+        getGenerations: async () => ({ generations: [] }),
+        rewriteLine: async (id, payload) => {
+          rewrites.push(payload);
+          return { line: CLEARER };
+        },
+      },
+      "",
+      async () => {
+        if (ctx.container.querySelector('[data-testid="hook-generate"]')) {
+          throw new Error("the generate button still stands beside the written hook");
+        }
+        if (ctx.container.querySelectorAll('[data-testid="hook-rewrite-button"]').length !== 1) {
+          throw new Error("the written hook does not have exactly one clearer-hook button");
+        }
+        const button = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
+        if (!button) throw new Error("the unified button is not the clearer-hook suggestion beside a written hook");
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (rewrites.length !== 1 || rewrites[0].line !== HOOK || rewrites[0].role !== "hook") {
+          throw new Error(`the suggestion was not asked for the written line: ${JSON.stringify(rewrites)}`);
+        }
+        const offered = ctx.container.querySelector('[data-testid="hook-rewrite-suggestion"]');
+        if (!offered || !offered.textContent.includes("notice my mood")) {
+          throw new Error("the clearer line was not offered beside the founder's own words");
+        }
+        // Nothing changes until the founder accepts.
+        const before = ctx.container.querySelector("#review-hook_line");
+        if (!before || before.value !== HOOK) {
+          throw new Error("the written line changed before the founder accepted the suggestion");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-rewrite-accept"]'));
+        await act(async () => {});
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field || field.value !== CLEARER) {
+          throw new Error(`accepting did not write the clearer line: ${field && field.value}`);
+        }
+      }
+    );
+  });
+
+  await check("writing the hook shows a plain busy state with no countdown (ADR 0249)", async (ctx) => {
+    let release = null;
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        generateHookLine: () =>
+          new Promise((resolve) => {
+            release = () => resolve(hookRow({ id: "hook-cta-1", hook_line: HOOK }));
+          }),
+      },
+      "",
+      async () => {
+        const button = ctx.container.querySelector('[data-testid="hook-generate"]');
+        if (!button) throw new Error("the Generate hook button did not render");
+        await clickEl(ctx, button);
+        if (!button.hasAttribute("data-busy")) {
+          throw new Error("the generate button is not busy while the hook is being written");
+        }
+        if (!button.textContent.includes("Writing the hook")) {
+          throw new Error(`the busy button does not name the work: ${button.textContent}`);
+        }
+        // Kasra's order: this one wait carries no ticking seconds —
+        // no eta attribute, no countdown span, no "· Ns" suffix. The
+        // plan and angle countdowns elsewhere are untouched.
+        if (
+          button.hasAttribute("data-eta") ||
+          button.querySelector('[data-testid="busy-eta"]') ||
+          /·\s*\d+s/.test(button.textContent)
+        ) {
+          throw new Error(`the hook's busy state still counts down: ${button.textContent}`);
+        }
+        await act(async () => { release(); });
+        await act(async () => {});
       }
     );
   });
@@ -13825,7 +13984,7 @@ async function runHookCtaChecks() {
       "",
       async () => {
         const headings = [...ctx.container.querySelectorAll(".section-heading")].map((el) => el.textContent.trim());
-        for (const title of ["Choose an app", "Camera, place and wardrobe", "The hook", "Render the hook", "Demo + CTA", "Post kit"]) {
+        for (const title of ["Choose an app", "Place and wardrobe", "The hook", "Render the hook", "Demo + CTA", "Post kit"]) {
           if (!headings.includes(title)) {
             throw new Error(`the card header "${title}" is missing: ${JSON.stringify(headings)}`);
           }
@@ -13837,10 +13996,62 @@ async function runHookCtaChecks() {
           }
         }
         const all = [...headings, ...eyebrows];
-        for (const title of ["Choose an app", "Camera, place and wardrobe", "Render the hook"]) {
+        for (const title of ["Choose an app", "Place and wardrobe", "Render the hook"]) {
           if (all.filter((t) => t === title).length !== 1) {
             throw new Error(`"${title}" does not stand exactly once as a label: ${JSON.stringify(all)}`);
           }
+        }
+      }
+    );
+  });
+
+  await check("Hook + CTA shoots handheld only — no camera control, and a stored fixed draft reads handheld", async (ctx) => {
+    // ADR 0252 (Kasra's ruling): the page's clips are short, and a
+    // selfie framing is the more engaging one, so the direction
+    // card carries no camera setup at all and is headed for what
+    // remains — place and wardrobe. A draft that still stores
+    // "fixed" (written before the ruling) is read as handheld: the
+    // page asks the direction hook for the handheld option set, the
+    // saved outdoor place stands as the pick from the full list,
+    // and the fixed camera's ineligible-place notice never renders.
+    const seenSetups = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({
+          id: "hook-cta-1", hook_line: HOOK, camera_setup: "fixed",
+          location: "A riverside path at dawn",
+        }),
+        getDirectionOptions: async (_profileId, _angleId, cameraSetup) => {
+          seenSetups.push(cameraSetup);
+          return {
+            group: "default",
+            location: ["A riverside path at dawn", "A quiet bedroom in the evening"],
+            wardrobe: ["Wardrobe one", "Wardrobe two"],
+            setting: [], lighting: [], voice: [], tone: [],
+          };
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        if (ctx.container.querySelector('[data-testid="hook-cta-camera-setup"]')) {
+          throw new Error("the camera setup control still renders on Hook + CTA");
+        }
+        const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!card) throw new Error("the direction card did not render");
+        if (card.textContent.includes("Camera setup")) {
+          throw new Error("the direction card still names a camera setup");
+        }
+        if (seenSetups.length === 0 || seenSetups.some((s) => s !== "handheld")) {
+          throw new Error(`the page asked for direction options under: ${JSON.stringify(seenSetups)}`);
+        }
+        if (ctx.container.querySelector('[data-testid="hook-cta-direction-location-ineligible"]')) {
+          throw new Error("the fixed camera's ineligible-place notice rendered on Hook + CTA");
+        }
+        const locationSelect = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
+        if (!locationSelect || !locationSelect.textContent.includes("A riverside path at dawn")) {
+          throw new Error("the saved outdoor place does not stand as the location pick from the full handheld set");
         }
       }
     );
@@ -13962,7 +14173,7 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("changing a pick over a written hook shows the regenerate note and writes nothing", async (ctx) => {
+  await check("changing a pick over a written hook shows the stale note and writes nothing", async (ctx) => {
     // ADR 0247's click-to-generate rule for the picks: a pick change
     // marks the line on file as predating the picks — it never
     // regenerates on its own (ADR 0122).
@@ -13983,13 +14194,13 @@ async function runHookCtaChecks() {
       async () => {
         const callsBefore = apiCalls.length;
         if (ctx.container.querySelector('[data-testid="hook-picks-stale-note"]')) {
-          throw new Error("the regenerate note shows before any pick changed");
+          throw new Error("the stale note shows before any pick changed");
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-picks-tone-bold"]'));
         await act(async () => {});
         const note = ctx.container.querySelector('[data-testid="hook-picks-stale-note"]');
-        if (!note) throw new Error("the regenerate note did not show after the pick changed");
-        if (!note.textContent.includes("regenerate the hook")) {
+        if (!note) throw new Error("the stale note did not show after the pick changed");
+        if (!note.textContent.includes("suggest a clearer hook")) {
           throw new Error("the note does not name the remedy");
         }
         const generationCalls = apiCalls.slice(callsBefore).filter((name) =>
@@ -22018,6 +22229,94 @@ await check(
         const journey = ctx.container.querySelector('[data-testid="history-journey-story-2"]');
         if (!journey || !journey.textContent.includes("Story kit not written yet")) {
           throw new Error("the journey line does not name the missing story kit on a story render");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // ADR 0253: one card for every video. A Hook + CTA render and a
+  // Create Video render stand in the same layout — the same paired
+  // Post copy / Plan context sections, the same journey line — and
+  // neither grows the legacy story kit's checklist (that display is
+  // the retired Stories record, ADR 0243, and hook renders never
+  // carried one). The one real divergence the surface marker fixes:
+  // the hook card's draft link used to walk into Create Video,
+  // which would adopt the hook draft into the wizard; it now
+  // reopens the hook on its own page, while the regular card's
+  // Remix link is untouched.
+  await check("a Hook + CTA render's History card matches the regular card, and its draft link reopens the hook", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    const regular = {
+      ...COMPLETED, id: "wiz-hist-1", studio_project_id: "wiz-proj-1",
+      brand_name: "Threadly", duration: 15, audience: "Night scrollers",
+      location: "A tidy desk with a notebook",
+      demo_brief: "Record yourself clearing one list by hand, hands only.",
+      objective: "address_user_problem",
+      post_kit: POST_KIT,
+      hook_line: "I'm trying to keep count, Monday afternoon and I feel heavy.",
+    };
+    const hook = {
+      ...COMPLETED, id: "hook-hist-1", studio_project_id: "hook-proj-1",
+      brand_name: "Threadly", duration: 4, audience: "Night scrollers",
+      location: "A tidy desk with a notebook",
+      demo_brief: null, objective: null, template_id: null,
+      project_kind: "video", project_surface: "hook_cta",
+      post_kit: POST_KIT,
+      hook_line: "I'm trying to journal tonight and I keep stalling.",
+    };
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [regular, hook] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getStudioProjects: async () => ({ projects: [{ id: "wiz-proj-1" }, { id: "hook-proj-1" }] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "?copy=with";
+        await mount(GenerationHistory)(ctx);
+        await act(async () => {});
+        if (ctx.container.querySelector('[data-testid="story-kit-checklist"]')) {
+          throw new Error("a posting checklist rendered on a video card — the checklist is the legacy story kit's alone");
+        }
+        for (const [id, label] of [["wiz-hist-1", "the regular render"], ["hook-hist-1", "the hook render"]]) {
+          const link = ctx.container.querySelector(`[data-testid="history-variation-${id}"]`);
+          if (!link) throw new Error(`${label} has no draft link`);
+          const card = link.closest('[data-testid="history-card"]');
+          if (!card) throw new Error(`${label} is not inside a history card`);
+          if (!card.querySelector(`[data-testid="history-post-copy-${id}"]`)) {
+            throw new Error(`${label} has no Post copy section`);
+          }
+          if (!card.querySelector('[data-testid="history-context"]')) {
+            throw new Error(`${label} has no Plan context section`);
+          }
+          const sections = card.querySelector(".history-record-sections");
+          if (!sections || !sections.className.includes("history-record-sections-paired")) {
+            throw new Error(`${label}'s sections do not pair like a regular card's`);
+          }
+          if (!card.querySelector(`[data-testid="history-journey-${id}"]`)) {
+            throw new Error(`${label} has no journey line`);
+          }
+          if (card.querySelector(`[data-testid="history-story-kit-${id}"]`)) {
+            throw new Error(`${label} grew a story kit section`);
+          }
+        }
+        const regularLink = ctx.container.querySelector('[data-testid="history-variation-wiz-hist-1"]');
+        if (!(regularLink.getAttribute("href") || "").includes("/create?project=wiz-proj-1")) {
+          throw new Error(`the regular card's draft link moved: ${regularLink.getAttribute("href")}`);
+        }
+        if (!regularLink.textContent.includes("Remix this plan")) {
+          throw new Error("the regular card's draft link lost its Remix this plan wording");
+        }
+        const hookLink = ctx.container.querySelector('[data-testid="history-variation-hook-hist-1"]');
+        if (!(hookLink.getAttribute("href") || "").includes("/hook-cta?project=hook-proj-1")) {
+          throw new Error(`the hook card's draft link does not reopen the hook on its own page: ${hookLink.getAttribute("href")}`);
+        }
+        if (!hookLink.textContent.includes("Reopen this hook")) {
+          throw new Error(`the hook card's draft link does not name the hook: ${hookLink.textContent}`);
+        }
+        if (hookLink.textContent.includes("Remix this plan")) {
+          throw new Error("the hook card's draft link still speaks of a plan");
         }
       });
     } finally {

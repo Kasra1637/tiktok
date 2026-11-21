@@ -560,6 +560,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   // post copy (ADR 0242): the two kits are exclusive by the project's
   // kind, which the history row now names.
   const isStory = row.project_kind === "story";
+  // A hook render is a video by kind, made on the Hook + CTA page:
+  // the row names its surface too (ADR 0253), and the one place the
+  // card acts on it is the draft link below — a hook's draft reopens
+  // on its own page, never in the wizard, which would adopt it.
+  const isHookCta = row.project_surface === "hook_cta";
   const showEmptyKit = !isStory && !row.post_kit && (row.status === "completed" || row.status === "archived");
   const showEmptyStoryKit = isStory && !row.story_kit && (row.status === "completed" || row.status === "archived");
   const sectionsPaired = !compact && (Boolean(row.post_kit) || Boolean(row.story_kit) || showEmptyKit || showEmptyStoryKit) && hasContext;
@@ -755,13 +760,19 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                   className="min-w-[150px] flex-1"
                 >
                   <Link
-                    to={`/create?project=${row.studio_project_id}`}
+                    to={isHookCta
+                      ? `/hook-cta?project=${row.studio_project_id}`
+                      : `/create?project=${row.studio_project_id}`}
                     onClick={() => recordSignal("plan_opened", "open_plan", signalRefs)}
-                    title={isWinnerRow(row)
-                      ? "Open this winner's plan in Create Video for another take like this"
-                      : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next plan"}
+                    title={isHookCta
+                      ? isWinnerRow(row)
+                        ? "Open this winner's hook in Hook + CTA for another take like this"
+                        : "Reopen this hook in Hook + CTA \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next hook"
+                      : isWinnerRow(row)
+                        ? "Open this winner's plan in Create Video for another take like this"
+                        : "Reopen this plan in Create Video \u2014 tweak one thing, the rest stays intact. Your verdicts on finished videos steer the next plan"}
                   >
-                    <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : "Remix this plan"}
+                    <CopyPlus className="h-4 w-4" /> {isWinnerRow(row) ? "Another take like this" : isHookCta ? "Reopen this hook" : "Remix this plan"}
                   </Link>
                 </Button>
               )}

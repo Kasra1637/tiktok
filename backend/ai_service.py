@@ -1766,7 +1766,7 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         '  "target_audience": "short label for the primary audience -- when the sources state several audiences (e.g. ADHD, ADD, OCD), name them comma-separated verbatim rather than compressing to one",\n'
         '  "ideal_customer_profile": "2-4 sentences: who they are, what they struggle with, where they spend time online -- keep the sources\' stated audience (including named conditions) verbatim, never infer beyond them",\n'
         '  "icp_segments": ["2-4 segments as one-liners: label, functional need, hook promise -- keep stated audiences verbatim"],\n'
-        '  "desired_outcomes": ["outcomes users want from the app"],\n'
+        '  "desired_outcomes": ["outcomes users want from the app — each ONE complete phrase that stands alone, punchy and plain, the whole outcome in a single entry"],\n'
         # Objects rather than phrases, because a pitch needs the feature an
         # outcome comes from: "fall asleep without checking your phone" only
         # converts when the script knows it belongs to the sleep timer rather
@@ -1817,6 +1817,13 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         "how_it_helps must be benefit phrasing a viewer would recognise from their own "
         "life, never a restatement of the feature spec, and never a guaranteed result. "
         "from_feature must name a core_features entry verbatim. "
+        "Every outcome, in desired_outcomes and in outcome_statements alike, "
+        "stands alone: one complete, punchy phrase naming a single real user "
+        "outcome, plain enough to recognize and pick at a glance. Never chop "
+        "one sentence into several entries at its commas — a piece that only "
+        "makes sense attached to another phrase (a lone word like 'triggers', "
+        "an 'and …' continuation, a trailing 'on your terms') is not an "
+        "outcome; write the whole thought as one entry or leave it out. "
         "Keep every list to 8 items max. Return ONLY valid JSON."
     )
 
@@ -1846,6 +1853,16 @@ async def analyze_app_profile(sources: dict, notes: str = "") -> dict:
         if not isinstance(val, list):
             val = []
         result[key] = [str(v).strip() for v in val if str(v).strip()][:8]
+
+    # The flat outcome list carries a completeness bar the other phrase
+    # lists do not (ADR 0249): it is later offered as a pick list, so an
+    # entry that cannot stand alone reads as a broken option. The
+    # research chopped its own sentences at their commas and stored
+    # the pieces; the pieces are dropped here, at acceptance — the
+    # outcome statements get the same bar in their normalizer below.
+    result["desired_outcomes"] = [
+        v for v in result["desired_outcomes"] if _outcome_stands_alone(v)
+    ]
 
     # The description is one short line, enforced rather than asked for twice:
     # the schema requests it and this keeps the promise when the model
@@ -1902,6 +1919,50 @@ def _normalize_objection_list(result: dict) -> None:
     result["viewer_objections"] = kept
 
 
+# The words a chopped continuation opens with (ADR 0249): conjunctions
+# continue a clause, and prepositions open a modifier phrase that hangs
+# off a head it no longer has. An outcome entry opening with one is the
+# tail of a longer sentence, never an outcome in its own right.
+_OUTCOME_FRAGMENT_OPENERS = frozenset({
+    "and", "but", "or", "nor", "yet", "so",
+    "on", "in", "at", "from", "with", "without", "by", "for", "to",
+    "of", "over", "under", "after", "before", "into", "through",
+    "about", "between", "during", "upon", "within", "toward", "towards",
+})
+
+# The mirror image at the other end: a head piece chopped at its comma
+# stops mid-list, on a conjunction or the comma itself.
+_OUTCOME_FRAGMENT_ENDERS = frozenset({"and", "or", "but", "nor"})
+
+
+def _outcome_stands_alone(text) -> bool:
+    """Whether one outcome entry is a complete phrase in its own right (ADR 0249).
+
+    The research chopped its own outcome sentences at their commas and
+    stored the pieces as separate outcomes — "See your own rhythms",
+    "triggers", "and growth over time" — and the flat list is later
+    offered as a pick list (the Hook + CTA focus pick), so the pieces
+    read as broken options. This is the acceptance bar, applied where
+    the research payload is validated: at least two words (a lone word
+    names a topic, not an outcome), no fragment opener, no chopped
+    ending. Case is deliberately NOT judged: a lowercase verb phrase
+    ("fall asleep without replaying the day") stands alone and stays.
+    Founder-supplied edits and already-stored profiles are untouched —
+    the bar governs new research runs only.
+    """
+    text = str(text or "").strip()
+    words = text.split()
+    if len(words) < 2:
+        return False
+    first = words[0].strip("\"'“”‘’()[],").lower()
+    if first in _OUTCOME_FRAGMENT_OPENERS:
+        return False
+    last = words[-1].strip("\"'“”‘’()[]").lower()
+    if text.endswith(",") or last in _OUTCOME_FRAGMENT_ENDERS:
+        return False
+    return True
+
+
 def _normalize_outcome_statements(result: dict) -> None:
     """
     Coerce the model reply's outcome_statements into usable linked entries.
@@ -1937,6 +1998,11 @@ def _normalize_outcome_statements(result: dict) -> None:
             "how_it_helps": str(item.get("how_it_helps") or "").strip()[:300],
         }
         if not entry["outcome"] or not entry["from_feature"]:
+            continue
+        if not _outcome_stands_alone(entry["outcome"]):
+            # A fragment outcome is a chopped sentence piece wearing
+            # an outcome's clothes (ADR 0249): dropped whole, like the
+            # other malformed entries above, never repaired into a guess.
             continue
         kept.append(entry)
     result["outcome_statements"] = kept
@@ -2720,6 +2786,59 @@ def _spoken_gate_issues(line, *, budget, as_script=False, hook="", allows_questi
     return [issue for issue in issues if issue != "script is empty"]
 
 
+# The question words a bare tail opens with, and the auxiliaries whose
+# presence gives a question a subject and a verb — a whole question
+# carries one, a fragment tail never does.
+_DANGLING_QUESTION_OPENERS = frozenset({
+    "why", "how", "what", "when", "where", "who", "whom", "whose", "which",
+})
+_QUESTION_AUXILIARIES = frozenset({
+    "do", "does", "did", "is", "are", "was", "were", "am",
+    "can", "could", "will", "would", "shall", "should",
+    "have", "has", "had", "may", "might",
+})
+
+
+def _dangling_question_issue(line):
+    """The dangling-question defect of a question-shaped hook (ADR 0249).
+
+    The finished-sentence gate reads punctuation, so a line ending in
+    "?" passes it even when the question is a bare tail: "I'm trying
+    to spot my rhythms, why so surprised?" asks surprised by WHAT —
+    the focus's key noun was dropped to fit the budget and the comma
+    splice hides the hole. What word arithmetic can honestly see: the
+    question segment (the words after the line's last comma or
+    sentence break) opens with a question word, runs to at most three
+    words, and carries no auxiliary verb — no subject, no object,
+    nothing the question is about. A whole question carries its
+    object ("Why does my mood keep surprising me?"). Returns the
+    issue text, or None. Judged only on a line ending in a question
+    mark; whether a question is allowed at all is the gate's business,
+    and the check is wired only where a question is the picked shape.
+    """
+    text = " ".join(str(line or "").split()).strip().rstrip('"\u201d\u2019')
+    if not text.endswith("?"):
+        return None
+    segment = re.split(r"[,.!;]", text[:-1])[-1].strip()
+    words = [w.strip("\"'“”‘’()[]").lower() for w in segment.split()]
+    words = [w for w in words if w]
+    if (
+        len(words) <= 3
+        and words
+        and words[0] in _DANGLING_QUESTION_OPENERS
+        and not any(w in _QUESTION_AUXILIARIES for w in words)
+    ):
+        return (
+            f"the question dangles ('{segment}?') — it asks without "
+            "saying what it is about, a bare question tail spliced "
+            "onto the line; ask the whole thought as one finished "
+            "question that carries its object from the focus (what "
+            "the feeling or action is about), never a comma followed "
+            "by a fragment question"
+        )
+    return None
+
+
 def _cover_gate_issues(cover):
     """The finished-sentence gate judged for a cover (ADR 0231).
 
@@ -3044,9 +3163,12 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     budget (spoken_budget), the second being what keeps the render's
     spoken-word partition from ever spilling the line into a script
     this page does not have. The finished-sentence gate (ADR 0231)
-    judges the line whole. A reply over a budget or through the gate
-    gets one bounded correction; a reply still failing raises — an
-    over-long or unfinished line is never stored silently.
+    judges the line whole, and a question-shaped line is also judged
+    for a dangling question (ADR 0249): a bare tail that asks about
+    nothing is charged by name in the same correction. A reply over a
+    budget or through the gate gets one bounded correction; a reply
+    still failing raises — an over-long or unfinished line is never
+    stored silently.
 
     The direction carries the opening-action bookends (ADRs 0187 and
     0223): hook_action is the opening move, already in motion in the
@@ -3125,12 +3247,28 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "seconds holds at a natural pace. A thought that needs more "
         "words does not fit this hook; write a smaller thought whole "
         "rather than a bigger one cut off.\n"
+        "- hook_line is complete in MEANING, not only in punctuation: "
+        "one whole thought, spelled and grammared whole. Never drop "
+        "the focus's key noun — the thing the feeling or action is "
+        "about — to squeeze under the budget; write a smaller thought "
+        "that keeps it. When the line is a question, the question "
+        "carries its object: it asks about the thing itself (\"why "
+        "does my mood keep surprising me?\"), never a bare tail after "
+        "a comma (\"…, why so surprised?\") — a comma-spliced fragment "
+        "question is a failed line.\n"
         "- hook_action: what the presenter physically does in the "
         "opening — already in motion in the very first frame, head "
         "already lifting, eyes already rising into the camera; the move "
         "is rapid and enacts the hook's own central action, caught at "
         "its sharpest instant, its snap complete inside the first half "
-        "second. Never an opening on a still, downward-looking frame.\n"
+        "second. Never an opening on a still, downward-looking frame. "
+        "The central action is performed as a physical gesture with "
+        "the hands and body, in frame from the first frame: when the "
+        "scene has a physical action (writing in the notebook, "
+        "counting on the fingers, lifting the cup) the hands and body "
+        "perform it, and a face-only change — eyes widening, an "
+        "expression shifting — never counts as the opening beat; the "
+        "face rides the gesture, it never replaces it.\n"
         "- closing_action: the one sharp physical beat of the last "
         "second, at the opening's energy — a look, a gesture, a held "
         "reaction the demo can cut away from. Never a fade, never a "
@@ -3196,6 +3334,15 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
                     "the founder picked a question hook, but the line "
                     "is a statement — ask the feeling or pain point as "
                     "one finished question")
+            if shape == "question":
+                # Complete in meaning, not only in punctuation (ADR
+                # 0249): a bare question tail passes the gate's
+                # terminator check while asking about nothing, so the
+                # dangling shape is charged here, by name, and the
+                # correction above carries it to the rewrite.
+                dangling = _dangling_question_issue(hook)
+                if dangling:
+                    issues.append(dangling)
         if not issues:
             return {
                 "hook_line": hook,
@@ -3907,7 +4054,11 @@ def _spoken_line_rules_block() -> str:
         "('and', 'but', 'because', 'the'), no fragment stands in for a "
         "sentence in the script either, and the hook joins no clauses with "
         "a semicolon. The open ending is a complete sentence whose thought "
-        "stays open — never an unfinished sentence.\n"
+        "stays open — never an unfinished sentence. Finished in "
+        "MEANING too (ADR 0249): a question carries its object ('why "
+        "does my mood keep surprising me?'), never a bare tail after a "
+        "comma ('…, why so surprised?'), and the key noun is never "
+        "dropped to fit — a smaller whole thought wins.\n"
         "- HOOK POWER (the hook line only — it earns the stop, or nothing after "
         "it matters): speak as the person living the moment, never as a report "
         "about it. FIRST PERSON, LIVED FEELING: the feeling in the speaker's "

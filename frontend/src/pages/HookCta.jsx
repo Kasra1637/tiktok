@@ -25,6 +25,7 @@ import { CONTROL_CLASS } from "../components/formControls";
 import { DirectionSelect } from "../components/studio/ReviewPanels";
 import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
+import LineRewriteAction from "../components/studio/LineRewriteAction";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
 import HookPicksControl, { profileOutcomeLines } from "../components/studio/HookPicksControl";
@@ -33,7 +34,6 @@ import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { api, getErrorMessage } from "../lib/api";
-import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { sentenceCase } from "../lib/copyCase";
 import {
   describeEmptySelection,
@@ -400,11 +400,15 @@ export default function HookCta() {
   }, [openProjectId]);
 
   // Direction, through the wizard's own hook: the same option reads,
-  // the same fixed-camera indoor rule (ADRs 0219/0233), the same
-  // dispatch shape — the hook only ever dispatches on a pick, never
-  // on load, so opening a draft cannot rewrite its direction.
+  // the same dispatch shape — the hook only ever dispatches on a
+  // pick, never on load, so opening a draft cannot rewrite its
+  // direction. The camera is not a pick on this page (ADR 0252):
+  // every hook here shoots handheld selfie, so the hook is handed
+  // the literal and the fixed-camera indoor rule (ADRs 0219/0233)
+  // never engages — the location list is the full handheld set, a
+  // stored "fixed" value on an older draft changes nothing here,
+  // and the submit forces handheld again on the server side.
   const dispatchDraft = useCallback((action) => dispatch(action), []);
-  const cameraSetup = editValue("camera_setup", "handheld");
   const {
     directionOptions,
     dirSel,
@@ -416,19 +420,8 @@ export default function HookCta() {
     project,
     angle: null,
     dispatchDraft,
-    cameraSetup,
+    cameraSetup: "handheld",
   });
-  // ADR 0220's rule, computed the way the wizard computes it: the
-  // setup is fixed, the lists are loaded, a place is saved, and the
-  // hook's derivation offered no match for it — so the pick reads
-  // empty and the section names why, instead of the value being
-  // rewritten behind the founder's back. Flipping back to handheld
-  // restores the pick.
-  const directionLocationIneligible =
-    cameraSetup === "fixed" &&
-    Boolean(directionOptions) &&
-    !dirSel.location &&
-    Boolean(String(editValue("location", "") || "").trim());
 
   const refreshProject = useCallback(async () => {
     if (!project?.id) return;
@@ -481,7 +474,8 @@ export default function HookCta() {
   // The steering picks (ADR 0247) ride the same draft edits as every
   // other pick on the page; changing one over a written hook marks
   // the line as predating them — the note in the picks control says
-  // so, and nothing regenerates until the founder presses Generate.
+  // so, and nothing rewrites the line until the founder presses the
+  // one hook button (Suggest a clearer hook, ADR 0249).
   const changePick = (field, value, options = {}) => {
     if (hasHook) setPicksStale(true);
     editField(field, value, options);
@@ -583,37 +577,16 @@ export default function HookCta() {
           </SectionCard>
 
           {project && (
-            <SectionCard title="Camera, place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
+            <SectionCard title="Place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
-                  Camera, place and wardrobe — the hook is written from them.
+                  Place and wardrobe — the hook is written from these picks.
                 </p>
 
-                <div className="space-y-2">
-                  <label htmlFor="hook-cta-camera-setup" className="text-sm font-semibold">Camera setup</label>
-                  <AppSelect
-                    id="hook-cta-camera-setup"
-                    testId="hook-cta-camera-setup"
-                    block
-                    value={cameraSetup}
-                    onChange={(value) => editField("camera_setup", value, { omitDefault: true, fallback: "handheld" })}
-                    className={CONTROL_CLASS}
-                    options={[
-                      { value: "handheld", label: "Handheld selfie" },
-                      { value: "fixed", label: "Fixed camera" },
-                    ]}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {cameraSetup === "fixed"
-                      ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
-                      : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
-                  </p>
-                </div>
-
-                {/* The voice pick sits with the movement and direction
-                    controls it belongs with (ADR 0246): the character
-                    talks, or stays silent and TikTok's text-to-speech
-                    carries the line instead. */}
+                {/* The voice pick sits with the direction controls it
+                    belongs with (ADR 0246): the character talks, or
+                    stays silent and TikTok's text-to-speech carries
+                    the line instead. */}
                 <VoiceModeControl
                   value={editValue("voice_mode", "silent")}
                   onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
@@ -631,13 +604,6 @@ export default function HookCta() {
                   placeholder="Choose a Location…"
                   refresh={directionRefreshProps("location", "hook-cta-location-refresh")}
                 />
-                {directionLocationIneligible && (
-                  <p className="text-sm text-muted-foreground" data-testid="hook-cta-direction-location-ineligible">
-                    Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
-                    not an indoor location, so it is not offered for a fixed camera. Pick an
-                    indoor location — the hook is written from the pick saved here.
-                  </p>
-                )}
                 <DirectionSelect
                   id="hook-cta-wardrobe"
                   testId="hook-cta-wardrobe"
@@ -714,27 +680,47 @@ export default function HookCta() {
                   onShapeChange={(value) => changePick("hook_shape", value, { omitDefault: true, fallback: "auto" })}
                   stale={picksStale && hasHook}
                 />
+                {/* The card's ONE hook button (ADR 0249): before a
+                    line exists it is Generate the hook, driving the
+                    generation flow from the picks above; once a line
+                    exists the same control is Suggest a clearer hook,
+                    the suggestion offered beside the founder's words
+                    and written only on accept. There is no second
+                    regenerate button — Kasra tested both and kept the
+                    suggestion as the one control. The editor below
+                    mounts without its own rewrite, so the suggestion
+                    stands exactly once in the card. The generate busy
+                    state is plain: no countdown rides this wait
+                    (Kasra's order) — the plan and angle countdowns
+                    elsewhere keep theirs. */}
                 <div className="space-y-2">
-                  <Button
-                    variant="accent"
-                    onClick={generateHook}
-                    disabled={hookBusy}
-                    busy={hookBusy}
-                    etaSeconds={BUSY_ETA_SECONDS.plan}
-                    data-testid="hook-generate"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {hookBusy ? "Writing the hook" : hasHook ? "Regenerate the hook" : "Generate hook"}
-                  </Button>
+                  {hasHook ? (
+                    <LineRewriteAction
+                      projectId={project.id}
+                      line={editValue("hook_line")}
+                      role="hook"
+                      onAccept={(next) => editField("hook_line", next)}
+                      testIdPrefix="hook-rewrite"
+                      buttonLabel="Suggest a clearer hook"
+                      busyLabel="Writing hook"
+                    />
+                  ) : (
+                    <Button
+                      variant="accent"
+                      onClick={generateHook}
+                      disabled={hookBusy}
+                      busy={hookBusy}
+                      data-testid="hook-generate"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {hookBusy ? "Writing the hook" : "Generate the hook"}
+                    </Button>
+                  )}
                   {hookError && (
                     <p role="alert" className="text-sm text-destructive-text" data-testid="hook-generate-error">
                       {hookError}
                     </p>
                   )}
-                  <p className="text-sm text-muted-foreground">
-                    One click writes the hook line and its opening move from the direction
-                    above. Nothing is written until you press it.
-                  </p>
                 </div>
               </div>
 
@@ -750,6 +736,7 @@ export default function HookCta() {
                     value={editValue("hook_line")}
                     onChange={(next) => editField("hook_line", next)}
                     clipLabel="short hook clip"
+                    suggestClearerHook={false}
                   />
                 </div>
               )}

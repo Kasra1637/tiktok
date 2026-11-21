@@ -1004,7 +1004,8 @@ async def generation_history(
                    g.post_kit, g.story_kit, g.tiktok_url, g.tiktok_views, g.tiktok_views_at, g.location,
                    g.quality_report,
                    b.brand_name, p.objective, p.hook_line, p.demo_brief, p.audience,
-                   p.strategy_version, p.kind AS project_kind, ca.kind AS angle_kind
+                   p.strategy_version, p.kind AS project_kind,
+                   p.surface AS project_surface, ca.kind AS angle_kind
             FROM generations g
             LEFT JOIN studio_projects p ON p.id = g.studio_project_id
             LEFT JOIN content_angles ca ON ca.id = p.content_angle_id
@@ -1038,6 +1039,13 @@ async def generation_history(
         # reads as a video — the kind every pre-Stories row is.
         entry["story_kit"] = _parse_story_kit(entry.get("story_kit"))
         entry["project_kind"] = entry.get("project_kind") or "video"
+        # The project's surface rides beside its kind (ADR 0253):
+        # kind says WHAT a render is (every Hook + CTA render is a
+        # video), surface says WHERE it was made — the distinction
+        # the card needs to send a hook render's draft link back to
+        # its own page instead of into the wizard. "" when the
+        # project carries no surface (every wizard row) or is gone.
+        entry["project_surface"] = entry.get("project_surface") or ""
         entry["tiktok_url"] = (entry.get("tiktok_url") or "").strip() or None
         views = entry.get("tiktok_views")
         entry["tiktok_views"] = int(views) if views is not None else None

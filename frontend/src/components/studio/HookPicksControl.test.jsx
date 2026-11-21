@@ -113,7 +113,7 @@ describe("HookPicksControl", () => {
     const view = await mount({ stale: true });
     const note = view.q("hook-picks-stale-note");
     expect(note).not.toBeNull();
-    expect(note.textContent).toContain("regenerate the hook");
+    expect(note.textContent).toContain("suggest a clearer hook");
     await view.unmount();
   });
 });

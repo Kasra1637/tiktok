@@ -1359,6 +1359,82 @@ class TestResearchedDescriptionIsOneLine:
         assert ai_service.clip_app_description(short) == short
 
 
+class TestResearchedOutcomesStandAlone:
+    """
+    The outcome layer is stored whole (ADR 0249).
+
+    A research run chopped its own outcome sentences at their commas
+    and stored the pieces as separate outcomes — "See your own
+    rhythms", "triggers", "and growth over time" — so the Hook + CTA
+    focus pick offered sentence fragments as if they were outcomes.
+    Nothing downstream splits the list; the research acceptance layer
+    let the pieces in. The bar lives there: an outcome is ONE complete
+    phrase that stands alone, or it is not stored. A lowercase verb
+    phrase ("fall asleep without replaying the day") stands alone and
+    stays — the bar refuses continuations and stray words, not case.
+    """
+
+    FRAGMENTS = ["triggers", "and growth over time", "on your terms", "from your own words"]
+    WHOLE = [
+        "See your own rhythms",
+        "Emotional clarity without hunting for labels yourself",
+        "Reflect privately at your own pace",
+    ]
+
+    def _profile(self):
+        import ai_service
+        list_keys = set(ai_service.APP_PROFILE_LIST_KEYS) | {
+            "outcome_statements", "viewer_objections"}
+        profile = {
+            k: ([] if k in list_keys else "x")
+            for k in ai_service.REQUIRED_APP_PROFILE_KEYS}
+        profile["brand_name"] = "Vocolens"
+        profile["desired_outcomes"] = [
+            self.WHOLE[0], self.FRAGMENTS[0], self.FRAGMENTS[1],
+            self.WHOLE[1], self.FRAGMENTS[2], self.FRAGMENTS[3], self.WHOLE[2],
+        ]
+        profile["outcome_statements"] = [
+            {
+                "outcome": "Name the feeling in your own words",
+                "who_feels_it": "people who go blank on their feelings",
+                "from_feature": "Voice entries",
+                "how_it_helps": "speaking names it without a blank page",
+            },
+            {
+                "outcome": "and growth over time",
+                "who_feels_it": "people who go blank on their feelings",
+                "from_feature": "Voice entries",
+                "how_it_helps": "the tail of a chopped sentence, not an outcome",
+            },
+            {
+                "outcome": "fall asleep without replaying the day",
+                "who_feels_it": "people who journal at night",
+                "from_feature": "Voice entries",
+                "how_it_helps": "the day is said, so it stops looping",
+            },
+        ]
+        return profile
+
+    def test_fragments_are_not_stored_and_whole_outcomes_are(self, monkeypatch):
+        import ai_service
+        _patch_client(monkeypatch, [_completion(json.dumps(self._profile()))])
+        result = _run(ai_service.analyze_app_profile({"website": "text"}))
+        assert result["desired_outcomes"] == self.WHOLE
+        kept = [entry["outcome"] for entry in result["outcome_statements"]]
+        assert kept == [
+            "Name the feeling in your own words",
+            "fall asleep without replaying the day",
+        ]
+
+    def test_the_prompt_asks_for_whole_punchy_outcomes(self, monkeypatch):
+        import ai_service
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(self._profile()))])
+        _run(ai_service.analyze_app_profile({"website": "text"}))
+        prompt = rec.payloads[0]["messages"][1]["content"]
+        assert "stands alone" in prompt
+        assert "Never chop one sentence" in prompt
+
+
 class TestScriptVoiceAndTarget:
     """
     The script generation rules: a natural-delivery target rather than a hard

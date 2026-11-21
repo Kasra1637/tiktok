@@ -156,7 +156,7 @@ export const TOURS = {
         title: "Set the direction first",
         optional: true,
         body:
-          "Camera, place, wardrobe and the presenter photo. The hook is written from these picks, so they come before the words — a fixed camera offers indoor places only, because that is what a placed camera can film.",
+          "Place, wardrobe and the presenter photo. The hook is written from these picks, so they come before the words — and every hook here is shot handheld selfie, the framing a short clip wears best.",
       },
       {
         target: '[data-testid="hook-generate"]',

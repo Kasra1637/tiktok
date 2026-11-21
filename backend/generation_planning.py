@@ -722,6 +722,43 @@ _CONDENSED_OPENING = (
     "situation; leave a question the rest answers."
 )
 
+# The Hook + CTA hook's two extra requirements (ADR 0250). They ride
+# only a hook-surface plan's prompt: the regular doctrine above lets
+# the opening play through a face channel (ADR 0187), but a hook's
+# central action is a physical gesture by construction — its hook
+# line names a moment with props in it — and Kasra's live hook opened
+# on a face-only flicker instead, with the chosen place nowhere in
+# frame. So for this surface the opening's channel is narrowed to the
+# gesture itself, and the place is required to render as a scene.
+_HOOK_PHYSICAL_OPENING = (
+    "FOR THIS HOOK, THE OPENING IS PHYSICAL: the opening movement MUST be the "
+    "hook's physical gesture — the story's central action performed with the "
+    "hands and body, visibly in frame, the presenter framed waist-up (head, "
+    "all hair and hands in frame) and already mid-gesture in the first frame. "
+    "A face-only change — eyes widening, brows lifting, an expression "
+    "shifting — does NOT satisfy the opening beat when the scene has a "
+    "physical action to perform; the face rides the gesture, it never "
+    "replaces it."
+)
+
+_CONDENSED_HOOK_PHYSICAL_OPENING = (
+    "This hook opens on its physical gesture: hands and body perform the "
+    "story's central action, waist-up, already mid-gesture in frame one. "
+    "A face-only change does not open this hook."
+)
+
+_HOOK_REAL_SCENE = (
+    "THE PLACE MUST BE IN FRAME: the location above renders as a real scene "
+    "behind the presenter — its surfaces, objects and light present and "
+    "readable for the whole take, the presenter inside the place, not pasted "
+    "in front of nothing. A plain, empty or white background is a failed render."
+)
+
+_CONDENSED_HOOK_REAL_SCENE = (
+    "The location renders as a real scene behind the presenter for the whole "
+    "take; a plain or white backdrop is a failed render."
+)
+
 # The App Profile's must_not_show list, turned into a prompt section.
 #
 # This field's UI label used to promise "Must never be contradicted by promos"
@@ -1960,6 +1997,15 @@ def _assemble_prompt(
     # fact about the video.
     sections.append(_CONDENSED_OPENING if condensed else _OPENING_INTERRUPT)
 
+    # A hook render's opening is its physical gesture, not a face
+    # channel (ADR 0250) — stated beside the general opening rule it
+    # narrows, and only for the hook surface: every other plan's
+    # prompt is byte-for-byte what it was.
+    if str(plan.get("surface") or "") == "hook_cta":
+        sections.append(
+            _CONDENSED_HOOK_PHYSICAL_OPENING if condensed else _HOOK_PHYSICAL_OPENING
+        )
+
     hook_line = _clip(strategy.get("hook_line"), 200, protect=True, sacred=True)
     hook_concept = _clip(strategy.get("hook_concept"), 120, protect=True)
     hook_action = _clip(strategy.get("hook_action"), 280, protect=True)
@@ -2011,6 +2057,14 @@ def _assemble_prompt(
             "WHERE THIS HAPPENS — one place, one time, for the whole take, and "
             f"every visual detail happens here: {location}"
         )
+        # A hook render must actually show its place (ADR 0250):
+        # Kasra's live hook rendered on a plain white backdrop
+        # despite a chosen location, so the requirement is stated
+        # as a defect to avoid, beside the place it governs.
+        if str(plan.get("surface") or "") == "hook_cta":
+            sections.append(
+                _CONDENSED_HOOK_REAL_SCENE if condensed else _HOOK_REAL_SCENE
+            )
 
     lock = character_scene_lock(strategy, location)
     if lock:

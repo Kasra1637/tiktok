@@ -77,4 +77,20 @@ describe("HookLineEditor", () => {
     expect(view.q("hook-rewrite-button").disabled).toBe(true);
     await view.unmount();
   });
+
+  test("the Hook + CTA usage drops the editor's rewrite and keeps the editable field (ADR 0249)", async () => {
+    // One button does the hook work on Hook + CTA: the page's unified
+    // control generates the first line, then becomes the clearer-hook
+    // suggestion itself — so the page mounts this editor without its
+    // own rewrite, or the card would carry the suggestion twice. The
+    // field itself stays — the line is still the founder's to sharpen
+    // by hand. Create Video mounts the editor as here by default,
+    // rewrite included (the tests above).
+    const view = await mount({ suggestClearerHook: false });
+    expect(view.q("hook-rewrite-button")).toBeNull();
+    const field = document.querySelector("#review-hook_line");
+    expect(field).not.toBeNull();
+    expect(field.value).toBe("I don't want to type anything");
+    await view.unmount();
+  });
 });

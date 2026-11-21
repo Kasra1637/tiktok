@@ -32,7 +32,8 @@ import { GroupLabel } from "../SectionCard";
  * choices. Changing a pick never regenerates on its own
  * (click-to-generate only): when a hook is already on file the
  * stale note says the line predates the picks and names the
- * remedy — the Regenerate button the founder presses themselves.
+ * remedy — the one hook button, Suggest a clearer hook, which the
+ * founder presses themselves (ADR 0249's unified control).
  */
 
 export function profileOutcomeLines(profile) {
@@ -163,7 +164,7 @@ export default function HookPicksControl({
 
       {stale && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-stale-note`}>
-          The line on file was written before these picks — regenerate the hook to
+          The line on file was written before these picks — suggest a clearer hook to
           write it with them.
         </p>
       )}
