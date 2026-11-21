@@ -680,6 +680,33 @@ export default function HookCta() {
                   onShapeChange={(value) => changePick("hook_shape", value, { omitDefault: true, fallback: "auto" })}
                   stale={picksStale && hasHook}
                 />
+              </div>
+
+              {/* The spoken line area (ADR 0254): the label, the line
+                  itself and the card's one hook button at the area's
+                  foot, in that order in BOTH states. Kasra ruled the
+                  button refines the line, so it stands inside this
+                  area under the editor — it used to render ahead of
+                  the area, above the line it refines. The area
+                  stands before a line exists too: the editor renders
+                  gracefully empty (a labelled field, no checks or
+                  warnings of its own), so the order — line first,
+                  button under it — holds from the first visit and
+                  the control never changes home. */}
+              <div className="space-y-4" data-testid="hook-editors">
+                <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
+                <p className="text-sm text-muted-foreground" data-subtitle="">
+                  The hook line, checked as you edit — sharpen it if you like.
+                </p>
+
+                <HookLineEditor
+                  projectId={project.id}
+                  value={editValue("hook_line")}
+                  onChange={(next) => editField("hook_line", next)}
+                  clipLabel="short hook clip"
+                  suggestClearerHook={false}
+                />
+
                 {/* The card's ONE hook button (ADR 0249): before a
                     line exists it is Generate the hook, driving the
                     generation flow from the picks above; once a line
@@ -687,7 +714,7 @@ export default function HookCta() {
                     the suggestion offered beside the founder's words
                     and written only on accept. There is no second
                     regenerate button — Kasra tested both and kept the
-                    suggestion as the one control. The editor below
+                    suggestion as the one control. The editor above
                     mounts without its own rewrite, so the suggestion
                     stands exactly once in the card. The generate busy
                     state is plain: no countdown rides this wait
@@ -723,23 +750,6 @@ export default function HookCta() {
                   )}
                 </div>
               </div>
-
-              {hasHook && (
-                <div className="space-y-4" data-testid="hook-editors">
-                  <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
-                  <p className="text-sm text-muted-foreground" data-subtitle="">
-                    The hook line, checked as you edit — sharpen it if you like.
-                  </p>
-
-                  <HookLineEditor
-                    projectId={project.id}
-                    value={editValue("hook_line")}
-                    onChange={(next) => editField("hook_line", next)}
-                    clipLabel="short hook clip"
-                    suggestClearerHook={false}
-                  />
-                </div>
-              )}
             </SectionCard>
           )}
 

@@ -13573,6 +13573,67 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("Suggest a clearer hook stands under the hook line inside the spoken line area (ADR 0254)", async (ctx) => {
+    // Kasra's ruling: the button refines the line, so it belongs
+    // inside the spoken line area, below the line it refines —
+    // never above it, where it stood when the button block rendered
+    // ahead of the editors block.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const area = ctx.container.querySelector('[data-testid="hook-editors"]');
+        if (!area) throw new Error("the spoken line area did not render beside the written hook");
+        const field = area.querySelector("#review-hook_line");
+        if (!field || field.value !== HOOK) {
+          throw new Error("the spoken line area does not hold the written hook line");
+        }
+        const suggest = area.querySelector('[data-testid="hook-rewrite-button"]');
+        if (!suggest) {
+          throw new Error("Suggest a clearer hook does not stand inside the spoken line area");
+        }
+        if (!(field.compareDocumentPosition(suggest) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("Suggest a clearer hook stands above the hook line it refines");
+        }
+      }
+    );
+  });
+
+  await check("the spoken line area stands before a line exists, its field above the Generate button (ADR 0254)", async (ctx) => {
+    // The same area in the empty state: the hook line field stands
+    // (empty) above the one button in its Generate state, so the
+    // control keeps one home and the order — line first, button
+    // under it — holds from the first visit.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+      },
+      "",
+      async () => {
+        const area = ctx.container.querySelector('[data-testid="hook-editors"]');
+        if (!area) {
+          throw new Error("the spoken line area does not stand before a hook line exists");
+        }
+        const generate = area.querySelector('[data-testid="hook-generate"]');
+        if (!generate) {
+          throw new Error("the Generate button does not stand inside the spoken line area");
+        }
+        const field = area.querySelector("#review-hook_line");
+        if (!field) {
+          throw new Error("the hook line field does not stand above the Generate button");
+        }
+        if (!(field.compareDocumentPosition(generate) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the Generate button stands above the hook line field");
+        }
+      }
+    );
+  });
+
   await check("a written hook's one button offers the clearer line and writes it only on accept (ADR 0249)", async (ctx) => {
     const CLEARER = "I'm trying to notice my mood, and I keep missing it every day.";
     const rewrites = [];
