@@ -1157,6 +1157,26 @@ async def _migration_0008_story_fields(conn):
     await conn.commit()
 
 
+async def _migration_0009_project_surface(conn):
+    """Project surface marker (ADR 0244): a Hook + CTA draft is a VIDEO
+    project — History, post kits and analytics must treat its renders
+    as video renders — but the page's own surfaces (its draft list, its
+    endpoints' guards) still have to tell its rows apart from wizard
+    projects, and no existing field can carry that without lying to a
+    prompt that reads it (objective, cta and tone are all prompt
+    inputs; story_type's name would lie on a video row). So the row
+    carries the surface it was created on, NULL for every row the
+    wizard made and for all existing rows. Added only when missing, so
+    a database that already has it passes through untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "surface" not in cols:
+        await conn.execute(
+            "ALTER TABLE studio_projects ADD COLUMN surface TEXT"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
@@ -1165,6 +1185,7 @@ MIGRATION_STEPS = (
     (6, "project cover text", _migration_0006_project_cover_text),
     (7, "project kind marker", _migration_0007_project_kind),
     (8, "story fields and the story kit column", _migration_0008_story_fields),
+    (9, "project surface marker", _migration_0009_project_surface),
 )
 
 

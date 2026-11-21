@@ -405,6 +405,23 @@ const apiStub = {
   // behavior every pre-verification check asserts. Checks that exercise the
   // verified paths override this with the drafts their fixtures name.
   getStudioProjects: async () => ({ projects: [] }),
+  // Hook + CTA (ADR 0244): no draft by default, so pages that mount
+  // beside the HookCta section see the page's empty state; the
+  // section's own checks override the create and the writes.
+  createHookCtaProject: async (payload) => ({
+    id: "hook-cta-1",
+    kind: "video",
+    surface: "hook_cta",
+    brand_profile_id: payload?.brand_profile_id || "p1",
+    duration_seconds: 5,
+    frame_count: 1,
+    status: "draft",
+    assets: [],
+    updated_at: "2026-11-20T10:00:00Z",
+  }),
+  getHookCtaProjects: async () => ({ projects: [] }),
+  generateHookLine: async () => ({}),
+  generateHookCta: async () => SEGMENT,
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Profile-matched direction dropdowns. Four options per field by default;
   // checks that exercise the picks override with their own sets. `lighting`,
@@ -3429,6 +3446,7 @@ async function main() {
       ["analytics", "/analytics"],
       ["demo-cta", "/demo-cta"],
       ["assets", "/assets"],
+      ["hook-cta", "/hook-cta"],
     ];
     try {
       for (const [id, path] of pages) {
@@ -11833,6 +11851,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   console.log("");
   console.log("Checking the Stories page shell...");
   await runStoriesRemovalChecks();
+  await runHookCtaChecks();
 
   // The frame is a map of destinations; the draft line is the one thing in it
   // that remembers a place the founder already is. It has to appear only when
@@ -12879,9 +12898,9 @@ async function runSidebarNavChecks() {
       const items = [...block.matchAll(/to:\s*"([^"]+)",\s*label:\s*"([^"]+)"/g)].map(
         (m) => ({ to: m[1], label: m[2] })
       );
-      if (items.length !== 7) {
+      if (items.length !== 8) {
         throw new Error(
-          `parsed ${items.length} nav items from Sidebar.jsx, expected 7. The ` +
+          `parsed ${items.length} nav items from Sidebar.jsx, expected 8. The ` +
             "pattern no longer matches the model, so this check would pass on nothing."
         );
       }
@@ -12899,6 +12918,7 @@ async function runSidebarNavChecks() {
         "/dashboard",
         "/brand",
         "/create",
+        "/hook-cta",
         "/demo-cta",
         "/history",
         "/assets",
@@ -12953,13 +12973,22 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
+      // Hook + CTA sits directly after Create Video (ADR 0244), where
+      // Stories sat: the short hook is the Create flow's sibling, not
+      // a finishing step, so it leads Demo + CTA rather than follows it.
+      if (!/to: "\/hook-cta", label: "Hook \+ CTA", icon: Zap, testId: "hook-cta-nav-link"/.test(src)) {
+        throw new Error(
+          "the Hook + CTA link changed its route, label, icon or testId. " +
+            "hook-cta-nav-link is the canonical selector for the page's link."
+        );
+      }
     }
   );
 }
 
 /**
  * The Dashboard is a routing home (ADR 0208): one state-aware next
- * action, the seven destinations as visual cards, and the newest renders
+ * action, the destinations as visual cards, and the newest renders
  * as pictures — never the removed dashboard's History restatement (no
  * totals, no failures, no Retry). These checks pin the route, the
  * default landing, the auth fallbacks, and the hero's precedence at
@@ -12995,7 +13024,7 @@ async function runDashboardChecks() {
   const expectGrid = (ctx) => {
     const cards = [...ctx.container.querySelectorAll('[data-testid^="dashboard-card-"]')];
     const hrefs = cards.map((c) => c.getAttribute("href"));
-    const expected = ["/create", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
+    const expected = ["/create", "/hook-cta", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
     if (hrefs.join("|") !== expected.join("|")) {
       throw new Error(
         `the workflow grid routes ${hrefs.join(" -> ") || "(none)"}, expected ${expected.join(" -> ")}`
@@ -13210,6 +13239,222 @@ async function runStoriesRemovalChecks() {
     if (TOURS.stories) throw new Error("the stories tour still exists");
     if (getTourIdForPath("/stories") !== null) {
       throw new Error("/stories still resolves to a tour");
+    }
+  });
+}
+
+/**
+ * The Hook + CTA page (ADR 0244): one founder job — pick an app, get
+ * a 4–5 second presenter hook that flows straight into the demo and
+ * CTA, plus its post kit. These checks pin the page's shape at the
+ * level the Stories section pinned its page: the route, the draft
+ * created on the app pick (and nothing spent creating it, ADR 0122),
+ * the hook written on its click and landing in the editor, and the
+ * render submitted at the hook's own picked seconds.
+ */
+async function runHookCtaChecks() {
+  const PROFILE = { id: "p1", brand_name: "Threadly", status: "approved" };
+  const HOOK = "I'm trying to clear my head before bed but my thoughts race.";
+  const hookRow = (overrides = {}) => ({
+    id: "hook-cta-9",
+    kind: "video",
+    surface: "hook_cta",
+    brand_profile_id: "p1",
+    duration_seconds: 5,
+    frame_count: 1,
+    status: "draft",
+    assets: [],
+    updated_at: "2026-11-20T10:00:00Z",
+    ...overrides,
+  });
+  // Mounts the page inside the stub scope and runs the check's
+  // interactions there: withApi restores the base stub when its body
+  // returns, so a click after the mount would hit the wrong stub.
+  async function inHookCta(ctx, extra = {}, params = "", body = async () => {}) {
+    const HookCta = load("pages/HookCta.jsx").default;
+    global.__SMOKE_PARAMS = params;
+    try {
+      await withApi(
+        {
+          getAppProfiles: async () => ({ profiles: [PROFILE] }),
+          getHookCtaProjects: async () => ({ projects: [] }),
+          ...extra,
+        },
+        async () => {
+          await mount(HookCta, {})(ctx);
+          await act(async () => {});
+          await body();
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  }
+  const saveStatus = (ctx) => ctx.container.querySelector('[data-testid="hook-cta-autosave-status"]');
+
+  await check("the Hook + CTA route exists behind the app shell", async () => {
+    const src = fs.readFileSync(path.join(SRC, "App.js"), "utf8");
+    if (!/lazy\(\(\)\s*=>\s*import\("\.\/pages\/HookCta"\)\)/.test(src)) {
+      throw new Error("the Hook + CTA page is not lazy-loaded like the other app pages");
+    }
+    if (!/path="\/hook-cta"/.test(src)) {
+      throw new Error("App.js has no /hook-cta route");
+    }
+  });
+
+  await check("the Hook + CTA shell creates the draft on the app pick and spends nothing", async (ctx) => {
+    const creates = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async (payload) => {
+          creates.push(payload);
+          return hookRow({ id: "hook-cta-1" });
+        },
+      },
+      "",
+      async () => {
+        // apiCalls is the whole suite's record, not this check's:
+        // only the calls this check's own interactions add count.
+        const callsBefore = apiCalls.length;
+        if (!ctx.text().includes("Threadly")) {
+          throw new Error("the approved app is not preselected in the picker");
+        }
+        // The app pick alone creates the draft — there is no second
+        // pick on this page, so preselecting the first approved app
+        // is the pick, and the draft exists by the time the shell
+        // settles.
+        if (creates.length !== 1) {
+          throw new Error(`the app pick created ${creates.length} drafts, expected exactly one`);
+        }
+        if (creates[0].brand_profile_id !== "p1") {
+          throw new Error(
+            `the draft was created with ${JSON.stringify(creates[0])}, expected the picked app`
+          );
+        }
+        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
+          throw new Error("the created draft shows no saved confirmation");
+        }
+        // The page's later cards stand from the moment the draft
+        // exists: direction, the hook, the render, the finish and
+        // the post kit — the six stages, one canvas.
+        for (const testid of [
+          "hook-cta-direction-card",
+          "hook-cta-hook-card",
+          "hook-cta-render-card",
+          "hook-cta-finish-card",
+          "hook-cta-post-kit",
+        ]) {
+          if (!ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} card did not render once the draft existed`);
+          }
+        }
+        // ADR 0122: a pick creates a draft row and nothing else — no
+        // hook, no render, no generation call of any kind.
+        const generationCalls = apiCalls.slice(callsBefore).filter((name) =>
+          ["generateHookLine", "generateHookCta", "generatePlan", "generatePlanAndStrategy", "generateVideo", "generateStrategy"].includes(name)
+        );
+        if (generationCalls.length) {
+          throw new Error(`picking spent generation calls: ${generationCalls.join(", ")}`);
+        }
+      }
+    );
+  });
+
+  await check("Generate hook writes the line and the editor holds it", async (ctx) => {
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        generateHookLine: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+      },
+      "",
+      async () => {
+        const button = ctx.container.querySelector('[data-testid="hook-generate"]');
+        if (!button) throw new Error("the Generate hook button did not render");
+        await clickEl(ctx, button);
+        await act(async () => {});
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field) throw new Error("the hook editor did not render after the hook was written");
+        if (field.value !== HOOK) {
+          throw new Error(`the editor holds "${field.value}", expected the written hook line`);
+        }
+        if (!ctx.container.querySelector('[data-testid="hook-editors"]')) {
+          throw new Error("the editors block did not open around the written hook");
+        }
+      }
+    );
+  });
+
+  await check("the render submits at the hook's own picked seconds", async (ctx) => {
+    const submits = [];
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () =>
+          hookRow({ id: "hook-cta-1", duration_seconds: 4, hook_line: HOOK, assets: face }),
+        getGenerations: async () => ({ generations: [] }),
+        generateHookCta: async (_id, payload) => {
+          submits.push(payload);
+          return { ...SEGMENT, id: "gen-hook-1", status: "submitted", duration: 4 };
+        },
+      },
+      "",
+      async () => {
+        const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
+        if (gate) throw new Error(`the render is gated with a hook and a photo saved: ${gate.textContent}`);
+        const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
+        if (!button) throw new Error("the render button did not render");
+        if (button.disabled) throw new Error("the render button is disabled with its gates passed");
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (submits.length !== 1) {
+          throw new Error(`the render submitted ${submits.length} times, expected once`);
+        }
+        if (submits[0].duration_seconds !== 4) {
+          throw new Error(
+            `the render asked for ${submits[0].duration_seconds}s, expected the hook's own 4s`
+          );
+        }
+      }
+    );
+  });
+
+  await check("the Hook + CTA tour walks the page's six stages", async () => {
+    const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
+    if (getTourIdForPath("/hook-cta") !== "hook-cta") {
+      throw new Error("/hook-cta does not resolve to the hook-cta tour");
+    }
+    const tour = TOURS["hook-cta"];
+    if (!tour) throw new Error("the hook-cta tour does not exist");
+    const targets = tour.steps.map((s) => s.target);
+    for (const anchor of [
+      "hook-cta-app-picker",
+      "hook-cta-direction-card",
+      "hook-generate",
+      "hook-editors",
+      "hook-render-panel",
+      "hook-cta-finish-card",
+      "hook-cta-post-kit",
+    ]) {
+      if (!targets.some((t) => t.includes(anchor))) {
+        throw new Error(`the tour never visits ${anchor}`);
+      }
+    }
+    // ADR 0118's fork-page split: the first step is the one anchor
+    // that exists on a first-run page; the rest are optional so a
+    // founder whose draft is not open yet simply skips them.
+    if (tour.steps[0].optional) throw new Error("the tour's app-pick step must be required");
+    if (tour.steps.slice(1).some((s) => !s.optional)) {
+      throw new Error("every Hook + CTA tour step past the app pick must be optional");
+    }
+  });
+
+  await check("the Hook + CTA page registers its first-run tour eligibility", async () => {
+    const src = fs.readFileSync(path.join(SRC, "pages", "HookCta.jsx"), "utf8");
+    if (!/useTourEligibility\(\s*"hook-cta",/.test(src)) {
+      throw new Error("HookCta.jsx does not register the hook-cta tour eligibility");
     }
   });
 }
@@ -15244,7 +15489,7 @@ async function runDemoCtaChecks() {
     const MIN = 55;
     const MAX = 60;
     // Keep the same assertions over every owner after splitting the panels.
-    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx"]
+    const text = ["pages/CreateVideo.jsx", "components/studio/SelectionPanels.jsx", "components/studio/ReviewPanels.jsx", "pages/HookCta.jsx"]
       .map((file) => fs.readFileSync(path.join(SRC, file), "utf8"))
       .join("\n");
     const found = [];

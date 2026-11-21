@@ -59,6 +59,30 @@ def _spoken_marker_hit(text: str, markers: tuple) -> str:
             return marker
     return ""
 _FIRST_PERSON_I = re.compile(r"\bI(?:['\u2019][A-Za-z]+)?\b")
+
+# The short-hook pick (ADR 0244, re-homing ADR 0238's story budgets):
+# a Hook + CTA hook runs 4 or 5 seconds, and its line is budgeted in
+# WORDS because a hook is read at the hook's faster pace — the word
+# budget is what keeps the line whole inside the beat. The 3-second
+# beat and its 7-word budget died with the Stories page (ADR 0243).
+SHORT_HOOK_SECONDS = (4, 5)
+SHORT_HOOK_WORD_BUDGETS = {4: 9, 5: 12}
+
+
+def short_hook_word_budget(seconds) -> int:
+    """The word budget for a short hook of `seconds` (ADR 0244).
+
+    An unknown length reads as the longer beat's budget rather than
+    failing: the caller validates the pick against SHORT_HOOK_SECONDS
+    before a line is written, so this only ever sees 4 or 5.
+    """
+    try:
+        secs = int(seconds or 0)
+    except (TypeError, ValueError):
+        secs = 0
+    return SHORT_HOOK_WORD_BUDGETS.get(secs, SHORT_HOOK_WORD_BUDGETS[5])
+
+
 SPOKEN_CHARS_PER_SECOND = 15
 def spoken_budget(seconds) -> int:
     """

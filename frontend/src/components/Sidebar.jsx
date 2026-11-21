@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  Zap,
   HelpCircle,
   CornerDownRight,
 } from "lucide-react";
@@ -30,7 +31,8 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * no longer has to lead the list to protect that first step. After it the
  * working sequence stands: App Profile, because everything else is made
  * from it and Create Video refuses to run without an approved one.
- * Create Video makes the hook video, Demo + CTA turns the finished hook into an export, History
+ * Create Video makes the hook video, Hook + CTA makes the short hook
+ * that flows straight into a demo, Demo + CTA turns the finished hook into an export, History
  * records those renders and exports, and Analytics reads the
  * founder's own logged results. The retired
  * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
@@ -63,6 +65,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Start here — pick your next step" },
   { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
+  { to: "/hook-cta", label: "Hook + CTA", icon: Zap, testId: "hook-cta-nav-link", hint: "A short hook, finished with your demo" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
   /* The library sits with the working pages, directly above Analytics: it holds

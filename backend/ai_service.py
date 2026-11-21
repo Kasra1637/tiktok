@@ -67,8 +67,9 @@ from ai_spoken import (
     _normalize_spoken, _opens_a_problem, _script_echoes_hook,
     _sets_scene, _spoken_marker_hit, _split_sentences, _summarize_line,
     _words_match, bind_spoken_words, certified_outcome_key_terms,
-    check_spoken_story, hook_ceiling,
-    partition_spoken_words, repair_spoken_story, spoken_budget,
+    SHORT_HOOK_SECONDS, check_spoken_story, hook_ceiling,
+    partition_spoken_words, repair_spoken_story, short_hook_word_budget,
+    spoken_budget,
     strip_quote_marks,
     spoken_targets, strategy_text, strip_leading_hook,
     trend_evidence_sentence, trim_spoken_body, trim_to_sentence,
@@ -2887,6 +2888,190 @@ async def generate_cover_text(
 # number and history as REWRITE_MAX_TOKENS; _chat_json's retry
 # doubles it to 12000 from there.
 POST_KIT_MAX_TOKENS = 6000
+
+
+# One Hook + CTA hook (ADR 0244): the line, its opening and closing
+# moves, and the place. The text model reasons at extra high and bills
+# that reasoning against max_tokens, so a small budget returns empty
+# content with a length finish (ADR 0183) — 6000 is the codebase's
+# standing answer to that failure shape, the post kit's number.
+HOOK_LINE_MAX_TOKENS = 6000
+
+HOOK_LINE_JSON_SCHEMA = _strict_object({
+    "hook_line": _str_prop(),
+    "hook_action": _str_prop(),
+    "closing_action": _str_prop(),
+    "location": _str_prop(),
+})
+
+
+async def generate_hook_line(project: dict, profile: dict) -> dict:
+    """
+    One hook for the Hook + CTA page (ADR 0244): ONE goal-first spoken
+    line for a 4- or 5-second presenter hook that flows straight into
+    the founder's demo, plus the render direction for its two beats.
+
+    The page has no angle and no script: the line is grounded in the
+    profile facts alone, exactly as the story plan was grounded (the
+    same facts dict, the same grounding and goal blocks with no angle
+    — the WHO line falls back to the profile's audience). The doctrine
+    is the hook doctrine, stated for a hook that stands alone: open
+    with the GOAL drawn from the app's desired outcomes and outcome
+    statements, first person, a trying-line; never name the place (the
+    viewer can see it); withhold the resolution — the demo that follows
+    is the answer. One finished sentence, held to two budgets: the
+    frame's word budget (ai_spoken.short_hook_word_budget — 4s ≤ 9
+    words, 5s ≤ 12, ADR 0238's numbers re-homed) and its character
+    budget (spoken_budget), the second being what keeps the render's
+    spoken-word partition from ever spilling the line into a script
+    this page does not have. The finished-sentence gate (ADR 0231)
+    judges the line whole. A reply over a budget or through the gate
+    gets one bounded correction; a reply still failing raises — an
+    over-long or unfinished line is never stored silently.
+
+    The direction carries the opening-action bookends (ADRs 0187 and
+    0223): hook_action is the opening move, already in motion in the
+    first frame, enacting the hook's own central action with its snap
+    complete inside the first half second; closing_action is the last
+    second's sharp behavior at the same energy, never a fade.
+    """
+    project = project or {}
+    profile = profile or {}
+    seconds = int(project.get("duration_seconds") or 0)
+    if seconds not in SHORT_HOOK_SECONDS:
+        seconds = 5
+    word_budget = short_hook_word_budget(seconds)
+    char_budget = spoken_budget(seconds)
+
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "platforms": _list("platforms"),
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "desired_outcomes": _list("desired_outcomes"),
+        "outcome_statements": profile.get("outcome_statements") or [],
+        "differentiators": profile.get("differentiation") or "(unstated)",
+        "known_limitations": profile.get("known_limitations") or "(none recorded)",
+    }
+
+    prompt = (
+        f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
+        f"{_angle_grounding_block(None)}\n\n"
+        f"{_angle_goal_block(None, '')}\n"
+    )
+    if (project.get("camera_setup") or "handheld") == "fixed":
+        prompt += (
+            "FIXED CAMERA: the camera is placed, not held — the location "
+            "must be indoors (inside a home, an office, a bed), never "
+            "outdoors; move an outdoor moment to its nearest indoor setting.\n"
+        )
+    prompt += (
+        f"\nFRAME: one presenter hook of {seconds} seconds, vertical 9:16, "
+        "that flows straight into the founder's app demo — the demo is "
+        "what answers the hook, so the hook itself never resolves.\n\n"
+        f"{_spoken_line_rules_block()}\n\n"
+        "HOOK RULES (this hook, on top of the craft above):\n"
+        "- hook_line opens with the GOAL: what she is trying to do in "
+        "this moment, drawn from the app's desired outcomes and outcome "
+        "statements above — a first-person trying-line (\"I'm trying to "
+        "keep count, Saturday afternoon and I keep losing count.\"). The "
+        "goal leads because it points forward; a light time grounding "
+        "may ride along. Never name the place — the viewer can already "
+        "see it. Never name the app or a feature. The resolution stays "
+        "withheld: no payoff, no result, no relief yet.\n"
+        f"- hook_line is ONE finished sentence of at most {word_budget} "
+        f"words and at most {char_budget} characters — what {seconds} "
+        "seconds holds at a natural pace. A thought that needs more "
+        "words does not fit this hook; write a smaller thought whole "
+        "rather than a bigger one cut off.\n"
+        "- hook_action: what the presenter physically does in the "
+        "opening — already in motion in the very first frame, head "
+        "already lifting, eyes already rising into the camera; the move "
+        "is rapid and enacts the hook's own central action, caught at "
+        "its sharpest instant, its snap complete inside the first half "
+        "second. Never an opening on a still, downward-looking frame.\n"
+        "- closing_action: the one sharp physical beat of the last "
+        "second, at the opening's energy — a look, a gesture, a held "
+        "reaction the demo can cut away from. Never a fade, never a "
+        "settle.\n"
+        "- location: the one place the hook happens, in words.\n\n"
+        "Return ONLY a JSON object: "
+        "{\"hook_line\": \"...\", \"hook_action\": \"...\", "
+        "\"closing_action\": \"...\", \"location\": \"...\"}"
+    )
+
+    system_message = (
+        "You are a short-form video creative director for mobile app "
+        "promotions. You write ONE short presenter hook a founder posts "
+        "as a regular TikTok or Instagram video, flowing straight into "
+        "their app demo. Write the spoken line in the voice of a "
+        "satisfied customer sharing their own experience, never as the "
+        "app's founder, owner or marketer. Ground everything ONLY in "
+        "the verified product facts below. Respond with STRICT JSON "
+        "only, no markdown fences."
+    )
+    correction = ""
+    last_failure = ""
+    for _attempt in range(2):
+        data = await _chat_json(
+            system_message=system_message,
+            prompt=prompt + correction,
+            context="Hook line",
+            max_tokens=HOOK_LINE_MAX_TOKENS,
+            attempts=2,
+            json_schema=HOOK_LINE_JSON_SCHEMA,
+        )
+        data = data if isinstance(data, dict) else {}
+        hook = " ".join(str(data.get("hook_line") or "").split()).strip()
+        if hook:
+            hook = character_policy.neutralize(hook)
+        hook_action = " ".join(str(data.get("hook_action") or "").split()).strip()
+        closing_action = " ".join(str(data.get("closing_action") or "").split()).strip()
+        location = " ".join(str(data.get("location") or "").split()).strip()
+        issues = []
+        if not hook:
+            issues.append("the hook line is missing")
+        else:
+            words = len(hook.split())
+            if words > word_budget:
+                issues.append(
+                    f"the hook line runs {words} words; at most "
+                    f"{word_budget} words fit {seconds} seconds")
+            if len(hook) > char_budget:
+                issues.append(
+                    f"the hook line runs {len(hook)} characters; at most "
+                    f"{char_budget} fit {seconds} seconds")
+            issues.extend(_spoken_gate_issues(hook, budget=char_budget))
+        if not issues:
+            return {
+                "hook_line": hook,
+                "hook_action": hook_action,
+                "closing_action": closing_action,
+                "location": location,
+            }
+        last_failure = "; ".join(issues)
+        correction = (
+            f"\n\nCorrection: your previous reply failed these checks: "
+            f"{last_failure}. Rewrite the whole reply so every check "
+            f"passes — the hook line is one finished sentence of at "
+            f"most {word_budget} words and at most {char_budget} "
+            "characters."
+        )
+    raise RuntimeError(
+        "The hook could not be written inside its length and finish "
+        f"rules ({last_failure}). Try again, or write the line yourself."
+    )
 
 
 async def generate_post_kit(project: dict, profile: dict) -> dict:

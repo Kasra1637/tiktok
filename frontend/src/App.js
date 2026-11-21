@@ -24,6 +24,9 @@ const GenerationHistory = lazy(() => import("./pages/GenerationHistory"));
 const BrandSetup = lazy(() => import("./pages/BrandSetup"));
 const AppProfileDetail = lazy(() => import("./pages/AppProfileDetail"));
 const CreateVideo = lazy(() => import("./pages/CreateVideo"));
+// Hook + CTA (ADR 0244): the short hook that flows straight into a
+// demo, on its own lazy chunk where the Stories page's chunk was.
+const HookCta = lazy(() => import("./pages/HookCta"));
 
 const AssetLibrary = lazy(() => import("./pages/AssetLibrary"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -152,6 +155,7 @@ function App() {
                         <Route path="/templates" element={<Navigate to="/create" replace />} />
                         <Route path="/templates/:templateId" element={<Navigate to="/create" replace />} />
                         <Route path="/create" element={<LazyPage><CreateVideo /></LazyPage>} />
+                        <Route path="/hook-cta" element={<LazyPage><HookCta /></LazyPage>} />
                         {/* Native Product Demo + CTA editor. The picker lives at
                             /demo-cta and the editor at /demo-cta/:generationId,
                             so a finished render is the input and the export is

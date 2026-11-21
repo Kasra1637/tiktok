@@ -45,6 +45,47 @@ test("angle generation carries the camera setup for the response's display", asy
   expect(mockPost.mock.calls[2][1]).toEqual({});
 });
 
+describe("Hook + CTA calls (ADR 0244)", () => {
+  test("creating a hook-cta draft posts to the hook-cta router", async () => {
+    await api.createHookCtaProject({ brand_profile_id: "p1" });
+    expect(mockPost.mock.calls[0][0]).toBe("/hook-cta/projects");
+    expect(mockPost.mock.calls[0][1]).toEqual({ brand_profile_id: "p1" });
+  });
+
+  test("the drafts list reads the studio list and keeps only hook-cta rows", async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        projects: [
+          { id: "h1", surface: "hook_cta" },
+          { id: "w1", surface: null },
+          { id: "w2" },
+          { id: "h2", surface: "hook_cta" },
+        ],
+      },
+    });
+    const out = await api.getHookCtaProjects("p1");
+    expect(mockGet.mock.calls[0][0]).toBe("/studio/projects");
+    expect(mockGet.mock.calls[0][1]).toEqual({ params: { brand_profile_id: "p1" } });
+    expect(out.projects.map((p) => p.id)).toEqual(["h1", "h2"]);
+  });
+
+  test("writing the hook posts to the hook endpoint with the chain limit", async () => {
+    await api.generateHookLine("h1", { frame_seconds: 4 });
+    expect(mockPost.mock.calls[0][0]).toBe("/hook-cta/projects/h1/hook");
+    expect(mockPost.mock.calls[0][1]).toEqual({ frame_seconds: 4 });
+    expect(mockPost.mock.calls[0][2]).toEqual({ timeout: 600000 });
+  });
+
+  test("the render submit posts to the generate endpoint on the default timeout", async () => {
+    await api.generateHookCta("h1", { model: "heygen-video-1", duration_seconds: 4 });
+    expect(mockPost.mock.calls[0][0]).toBe("/hook-cta/projects/h1/generate");
+    expect(mockPost.mock.calls[0][1]).toEqual({ model: "heygen-video-1", duration_seconds: 4 });
+    // The render submit stays on the client default: its wait is the
+    // polling progress bar with real position, not this request.
+    expect(mockPost.mock.calls[0][2]).toBeUndefined();
+  });
+});
+
 test("a small export saves in one request to the generation path", async () => {
   const blob = new Blob([new Uint8Array(100)]);
   const row = await api.saveDemoCtaExport("gen-1", blob, "demo-cta.mp4");

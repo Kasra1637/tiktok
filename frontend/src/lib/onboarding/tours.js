@@ -60,7 +60,7 @@ export const TOURS = {
         target: '[data-testid="dashboard-destinations"]',
         title: "Every workflow, one click away",
         body:
-          "The sidebar's destinations as cards: make a hook video, finish it in Demo + CTA, then read what happened in History and Analytics. Nothing here reports numbers — it routes.",
+          "The sidebar's destinations as cards: make a hook video, cut a short hook in Hook + CTA, finish it in Demo + CTA, then read what happened in History and Analytics. Nothing here reports numbers — it routes.",
       },
       {
         target: '[data-testid="dashboard-recents"]',
@@ -130,6 +130,69 @@ export const TOURS = {
         optional: true,
         body:
           "The flow ends in Demo + CTA, with your finished render already loaded — no hunting for the clip you just made. Add the demo you record and your closing message there; the export saves beside the original in History.",
+      },
+    ],
+  },
+
+  // Targets HookCta — the short hook that flows straight into a demo
+  // (ADR 0244), at /hook-cta, directly after Create Video in the
+  // sidebar. A fork page in ADR 0118's sense: its own tour, its own
+  // first-run eligibility, its own replay. The steps walk the page's
+  // six stages in order; only the app pick exists before a draft
+  // does, so every later step is optional and a first-run founder
+  // simply skips the ones whose cards are not on the page yet.
+  "hook-cta": {
+    id: "hook-cta",
+    label: "Hook + CTA tour",
+    steps: [
+      {
+        target: '[data-testid="hook-cta-app-picker"]',
+        title: "Start with an approved App Profile",
+        body:
+          "Everything on this page is written from one approved App Profile — its facts and audience. Picking an app opens its draft; the hook, the render and the post copy all come from that one profile.",
+      },
+      {
+        target: '[data-testid="hook-cta-direction-card"]',
+        title: "Set the direction first",
+        optional: true,
+        body:
+          "Camera, place, wardrobe and the presenter photo. The hook is written from these picks, so they come before the words — a fixed camera offers indoor places only, because that is what a placed camera can film.",
+      },
+      {
+        target: '[data-testid="hook-generate"]',
+        title: "One click writes the hook",
+        optional: true,
+        body:
+          "One goal-first line for a 4 or 5 second hook, with the opening move that carries it. Nothing is written until you press it — and the line withholds its answer on purpose, because your demo is the answer.",
+      },
+      {
+        target: '[data-testid="hook-editors"]',
+        title: "Sharpen the line",
+        optional: true,
+        body:
+          "Edit the line yourself, or ask for a clearer hook: the suggestion is shown as a suggestion and changes nothing until you accept it. The render speaks exactly the line saved here.",
+      },
+      {
+        target: '[data-testid="hook-render-panel"]',
+        title: "The render is the paid step",
+        optional: true,
+        placement: "top",
+        body:
+          "The hook renders at its own picked length — the saved video is exactly 4 or 5 seconds, never padded to a model's minimum. When it finishes, the clip appears here to preview and download.",
+      },
+      {
+        target: '[data-testid="hook-cta-finish-card"]',
+        title: "Finish with your demo and CTA",
+        optional: true,
+        body:
+          "Attach your demo — a screen recording, or your app screens as a sequence of images — and your call to action. The export joins them onto the end of the hook and saves beside it in History: one feed-ready video.",
+      },
+      {
+        target: '[data-testid="hook-cta-post-kit"]',
+        title: "Post copy comes with it",
+        optional: true,
+        body:
+          "When the render finishes, its post kit is written here — a caption that sells the watch and the hashtags for the post. The same kit rides with the render in History.",
       },
     ],
   },
@@ -403,6 +466,7 @@ export function getTourIdForPath(pathname) {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (path === "/dashboard") return "dashboard";
   if (path === "/create") return "create";
+  if (path === "/hook-cta") return "hook-cta";
   if (path === "/brand") return "brand";
   if (path === "/history") return "history";
   if (path === "/analytics") return "analytics";

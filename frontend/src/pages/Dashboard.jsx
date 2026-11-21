@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Smartphone,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import PageFrame from "../components/PageFrame";
 import PageHeader from "../components/PageHeader";
@@ -28,7 +29,7 @@ import { CREATE_ACTION, pickDashboardAction } from "../lib/dashboardNextAction";
  * The dashboard this replaces restated what Generation History already
  * shows — totals, failed generations, a Retry button — and then linked
  * out to pages already in the sidebar. This one carries no numbers and
- * no retries: one state-aware next action, the seven destinations as
+ * no retries: one state-aware next action, the destinations as
  * visual cards, and the newest renders as pictures. Its whole job is
  * to put the founder one click from the right workflow.
  *
@@ -44,6 +45,7 @@ import { CREATE_ACTION, pickDashboardAction } from "../lib/dashboardNextAction";
 // ways; the sidebar stays the owner of that vocabulary.
 const DESTINATIONS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "dashboard-card-create", hint: "Plan, review, render" },
+  { to: "/hook-cta", label: "Hook + CTA", icon: Zap, testId: "dashboard-card-hook-cta", hint: "A short hook, finished with your demo" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "dashboard-card-demo-cta", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "dashboard-card-history", hint: "Renders, exports, results" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "dashboard-card-assets", hint: "Presenter photos by app" },

@@ -154,7 +154,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-1][0] == 8
+            assert 8 in [step[0] for step in schema.MIGRATION_STEPS]
 
             db_path = tmp_path / "story-fields.db"
             await _apply(api, db_path)
@@ -179,6 +179,37 @@ class TestMigrationConvergence:
                 generation_cols = {r[1]: r for r in await cur.fetchall()}
                 assert "story_kit" in generation_cols
                 assert generation_cols["story_kit"][2] == "TEXT"
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_project_surface_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 9
+
+            db_path = tmp_path / "surface.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 9"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "surface" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                cols = {r[1]: r for r in await cur.fetchall()}
+                assert "surface" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["surface"]
+                assert col_type == "TEXT"
+                # Nullable with no default: every row the wizard made,
+                # and every existing row, reads NULL — only a surface
+                # that marks its drafts writes a value (ADR 0244).
+                assert notnull == 0
+                assert dflt is None
             finally:
                 await conn.close()
 

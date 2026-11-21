@@ -194,6 +194,16 @@ from routers.history import (
 )
 api_router.include_router(history_router)
 
+# Hook + CTA drafts: the short hook that flows straight into a demo
+# (single owner in routers.hook_cta), re-exporting the handlers the
+# tests still call from `server`.
+from routers.hook_cta import (
+    router as hook_cta_router,
+    configure_hook_cta,
+    create_hook_cta_project, generate_hook_cta_hook, generate_hook_cta,
+)
+api_router.include_router(hook_cta_router)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -335,6 +345,10 @@ configure_assets(sys.modules[__name__])
 # History router: configure with the composition root so call sites resolve
 # the patched DB helpers and the render-lifecycle helpers at call time.
 configure_history(sys.modules[__name__])
+
+# Hook + CTA router: configure with the composition root so call sites
+# resolve the patched DB helpers and the render submit at call time.
+configure_hook_cta(sys.modules[__name__])
 
 
 # The face-swap target is never uploaded by the client. It must be a file this
@@ -1703,12 +1717,13 @@ async def _submit_generation(
     # provider's floor and cut down to the 2-3s the template asked for.
     # There is no separately-rendered hook any more: the hook piece is
     # one render at one length, already at or above the floor, so a
-    # hook submit records 0. A story frame is that shape again (ADR
-    # 0239): ADR 0238 set frames to 3/4/5 seconds while both catalog
-    # models floor at 5, so an exact-duration submit below the model's
-    # floor records its own seconds here, and the persist cuts the
-    # saved tail back to exactly the beat — the line is budgeted to
-    # the short frame, so the cut takes only quiet tail. At or above
+    # hook submit records 0. A Hook + CTA hook is that shape again
+    # (ADR 0244, taking over the beat ADR 0239 built for story
+    # frames): the pick runs 4/5 seconds while both catalog models
+    # floor at 5, so an exact-duration submit below the model's floor
+    # records its own seconds here, and the persist cuts the saved
+    # tail back to exactly the pick — the line is budgeted to the
+    # short beat, so the cut takes only quiet tail. At or above
     # the floor the render already IS the beat: nothing is recorded.
     # The column and the post-render cut in the persist are kept
     # because generations recorded before the single-pass change still
@@ -2756,13 +2771,14 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     # request would stack on top of them. R2 upload below stays outside the
     # gate — network, not encode.
     head_trim_applied = False
-    story_trim_failed = False
+    beat_trim_failed = False
     if fresh and not restored:
         async with _FFMPEG_SLOT:
             # The project row, read once for the whole processing block:
-            # its kind decides how the length trim below reports a
-            # story's beat cut (ADR 0239), and its hook_seconds times
-            # the camera move further down.
+            # its kind names what a failed beat cut below was cutting
+            # (a legacy story row's renders predate the re-home, ADR
+            # 0244), and its hook_seconds times the camera move further
+            # down.
             project_row = await _fetch_one(
                 "SELECT kind, hook_seconds FROM studio_projects WHERE id = ?",
                 (row.get("studio_project_id") or "",),
@@ -2799,22 +2815,36 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             # as a sidecar would make every continuation resume from a
             # frame the viewer never saw.
             #
-            # A story's beat cut rides this same trim (ADR 0239): the
-            # submit records the frame's own seconds as trim_to_seconds
-            # when they sit below the model's floor, and the cut takes
-            # the quiet tail the line was never written to fill. Two
-            # differences from a legacy hook row: the cut is the
-            # requested outcome, not a deviation, so it writes no trim
-            # note — a note in the storage_error slot would raise the
-            # panel's "Durable copy missing" alert on every short story
-            # (the head cut's reasoning, ADR 0181) — and a failed cut
-            # names the story, not the hook.
-            is_story = (project_row or {}).get("kind") == "story"
+            # A beat cut rides this same trim (ADR 0239, re-homed by
+            # ADR 0244): the submit records the pick's own seconds as
+            # trim_to_seconds when they sit below the model's floor,
+            # and the cut takes the quiet tail the line was never
+            # written to fill. ADR 0239 keyed the beat on the project's
+            # kind ('story'); the rule now reads the generation row
+            # itself — a trim is a beat cut when the render was
+            # requested AT the cut length, which is exactly what an
+            # exact-duration submit records (requested_duration == the
+            # pick == the trim target). A Hook + CTA hook records that
+            # shape today; a legacy story row recorded it before the
+            # removal, so its renders keep their behavior untouched; a
+            # legacy hook row is the other shape — its trim target is
+            # the hook's seconds against a full-length request. Two
+            # differences for a beat cut: the cut is the requested
+            # outcome, not a deviation, so it writes no trim note — a
+            # note in the storage_error slot would raise the panel's
+            # "Durable copy missing" alert on every short beat (the
+            # head cut's reasoning, ADR 0181) — and a failed cut names
+            # what was being cut: the story for a legacy story row,
+            # the hook otherwise.
+            is_beat_cut = (
+                trim_to > 0
+                and int(row.get("requested_duration") or 0) == trim_to
+            )
             if trim_to > 0:
                 trimmed = await pipeline.replace_with_trimmed(local_path, trim_to)
                 if trimmed:
                     local_path = trimmed
-                    if not is_story:
+                    if not is_beat_cut:
                         trim_note = f"Cut down to {trim_to}s."
                     logger.info(
                         f"Generation {generation_id}: hook trimmed to {trim_to}s "
@@ -2823,10 +2853,15 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
                 else:
                     # Keep the full render rather than lose it, and say so:
                     # the delivered clip is longer than was asked for.
-                    if is_story:
-                        story_trim_failed = True
+                    if is_beat_cut:
+                        beat_trim_failed = True
+                        beat_noun = (
+                            "story"
+                            if (project_row or {}).get("kind") == "story"
+                            else "hook"
+                        )
                         storage_error = (
-                            f"Could not cut the story down to {trim_to}s, so it is "
+                            f"Could not cut the {beat_noun} down to {trim_to}s, so it is "
                             f"delivered at its full rendered length."
                         )
                     else:
@@ -2936,7 +2971,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
 
     # The row records the length the founder will actually get, not the
     # length that was asked of the model. A length trim sets the length
-    # outright — a story's beat cut included (ADR 0239); a failed story
+    # outright — a beat cut included (ADRs 0239/0244); a failed beat
     # cut instead records the model's floor, the full rendered length
     # the founder receives; a head cut (ADR 0181) shortens it by the
     # cut, in the accounting's whole seconds and never more than the
@@ -2944,7 +2979,7 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
     base_seconds = int(row.get("duration") or 0)
     if restored:
         delivered_seconds = base_seconds
-    elif story_trim_failed:
+    elif beat_trim_failed:
         delivered_seconds = int(
             video_providers.capability(row.get("model") or "")["min_duration"]
             - (_MODEL_HEAD_TRIM_SECONDS.get(row.get("model") or "", 0)

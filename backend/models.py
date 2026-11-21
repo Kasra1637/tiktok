@@ -489,6 +489,41 @@ class StudioGenerationRequest(BaseModel):
     resolution: Optional[str] = None
 
 
+class CreateHookCtaProjectRequest(BaseModel):
+    """Open a Hook + CTA draft (ADR 0244): a VIDEO project carrying the
+    hook_cta surface marker, created against an approved App Profile.
+
+    frame_seconds: the hook's length pick, 4 or 5 (ai_spoken's
+        SHORT_HOOK_SECONDS). The wizard's create clamps durations to
+        its own floor of 8, so this page keeps its own create; a pick
+        outside the two lengths is refused with a 400 at the endpoint.
+    """
+    brand_profile_id: str
+    camera_setup: str = "handheld"
+    frame_seconds: Optional[int] = None
+
+
+class GenerateHookLineRequest(BaseModel):
+    """Write (or rewrite) the draft's one hook line (ADR 0244).
+
+    frame_seconds: an optional change to the length pick, validated
+        against the same 4/5 set; the line is budgeted to the pick.
+    """
+    frame_seconds: Optional[int] = None
+
+
+class GenerateHookRequest(StudioGenerationRequest):
+    """Render the hook at its picked length (ADR 0244).
+
+    The submit goes through the exact-duration path: the pick is what
+    is asked of the model, and when it sits below the model's floor
+    the saved file is cut back to exactly the pick (ADR 0239's beat
+    trim, re-homed). segment_index names the segment being rendered —
+    always the hook segment, 0.
+    """
+    segment_index: int = 0
+
+
 class UpdateAssetRequest(BaseModel):
     """Edit asset metadata. The file itself is immutable once uploaded."""
     kind: Optional[str] = None

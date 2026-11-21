@@ -332,6 +332,24 @@ export const api = {
   createStudioProject: (payload) => client.post("/studio/projects", payload).then((r) => r.data),
   updateStudioProject: (id, payload) => client.patch(`/studio/projects/${id}`, payload).then((r) => r.data),
 
+  // Hook + CTA drafts (ADR 0244): a video project carrying the
+  // hook_cta surface marker, created through the page's own endpoint
+  // (the wizard's create clamps durations to its 8-second floor and
+  // a hook runs 4 or 5). The drafts list is the studio list filtered
+  // to the marker — the page's rows live beside the wizard's in one
+  // table, and the marker is what tells them apart.
+  createHookCtaProject: (payload) => client.post("/hook-cta/projects", payload).then((r) => r.data),
+  getHookCtaProjects: (profileId) =>
+    client
+      .get("/studio/projects", { params: { brand_profile_id: profileId } })
+      .then((r) => ({
+        projects: (r.data.projects || []).filter((p) => (p.surface || "") === "hook_cta"),
+      })),
+  // One click writes the draft's hook line and its render direction.
+  generateHookLine: (id, payload = {}) => client.post(`/hook-cta/projects/${id}/hook`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
+  // The hook renders at its own picked seconds (exact duration).
+  generateHookCta: (id, payload) => client.post(`/hook-cta/projects/${id}/generate`, payload).then((r) => r.data),
+
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The one-pass form of the two above: the server writes the plan, then
   // builds the strategy from it, and answers once with both. This is the
