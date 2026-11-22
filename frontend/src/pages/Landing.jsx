@@ -354,71 +354,9 @@ const NAV_LINKS = [
   { href: "#pipeline", label: "Your control" },
 ];
 
-/** Full-page cinema aperture arcs + ambient studio wash behind the entire landing page. Decorative only. */
+/** Full-page cinema aperture arcs behind the entire landing page. Decorative only. */
 function LandingBackdrop() {
-  return (
-    <>
-      <div aria-hidden="true" className="landing-aperture" />
-      <div aria-hidden="true" className="landing-spotlights">
-        {/* Hero key light (top-left indigo) */}
-        <div
-          className="landing-spot animate-float-slow"
-          style={{
-            top: "-12rem",
-            left: "4%",
-            width: "38rem",
-            height: "38rem",
-            background: "radial-gradient(circle, rgba(99, 102, 241, 0.22), transparent 66%)",
-          }}
-        />
-        {/* Hero rim accent (top-right coral) */}
-        <div
-          className="landing-spot animate-float-slower"
-          style={{
-            top: "-6rem",
-            right: "2%",
-            width: "30rem",
-            height: "30rem",
-            background: "radial-gradient(circle, rgba(254, 44, 85, 0.14), transparent 66%)",
-          }}
-        />
-        {/* Mid-page studio wash (right indigo) */}
-        <div
-          className="landing-spot animate-float-slower"
-          style={{
-            top: "34%",
-            right: "-6%",
-            width: "34rem",
-            height: "34rem",
-            background: "radial-gradient(circle, rgba(129, 140, 248, 0.13), transparent 68%)",
-          }}
-        />
-        {/* Lower-page studio wash (left coral-indigo blend) */}
-        <div
-          className="landing-spot animate-float-slow"
-          style={{
-            top: "64%",
-            left: "-6%",
-            width: "34rem",
-            height: "34rem",
-            background: "radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 68%)",
-          }}
-        />
-        {/* Closing CTA anchor glow (bottom-center indigo/coral) */}
-        <div
-          className="landing-spot animate-float-slower"
-          style={{
-            bottom: "-10rem",
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: "44rem",
-            height: "28rem",
-            background: "radial-gradient(circle, rgba(99, 102, 241, 0.18), rgba(254, 44, 85, 0.08) 45%, transparent 70%)",
-          }}
-        />
-      </div>
-    </>
-  );
+  return <div aria-hidden="true" className="landing-aperture" />;
 }
 
 const PIPELINE_BLOCKS = [

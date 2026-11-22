@@ -342,19 +342,6 @@ body {
     mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
     -webkit-mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
 }
-.landing-spotlights {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-}
-.landing-spot {
-    position: absolute;
-    border-radius: 9999px;
-    filter: blur(110px);
-    will-change: transform;
-}
 
 /* ---------- Surfaces ----------
    A card's padding AND radius live HERE, not in JSX utilities.
