@@ -1390,10 +1390,9 @@ h1,
 }
 .how-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-    min-height: 3rem;
+    gap: 7px;
 }
 .how-badge {
     position: relative;

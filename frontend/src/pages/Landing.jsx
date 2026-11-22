@@ -617,7 +617,7 @@ export default function Landing() {
                 </div>
                 <div className="how-head">
                   <span className="how-badge font-display" aria-hidden="true">{s.step}</span>
-                  <h3 className="font-display text-base font-semibold">{s.label}</h3>
+                  <h3 className="font-display text-sm font-semibold tracking-tight whitespace-nowrap">{s.label}</h3>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.line}</p>
                 <span className="how-outcome">{s.outcome}</span>
