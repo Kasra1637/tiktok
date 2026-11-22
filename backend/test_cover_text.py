@@ -369,7 +369,7 @@ def _plan_with_cover(monkeypatch, cover):
     async def capture(system_message, prompt, context, **kwargs):
         return {
             "hook_line": "Naming what I felt never worked.",
-            "script": "One sentence each night helped me understand the pattern.",
+            "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
             "cover_text": cover,
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
@@ -445,7 +445,7 @@ def test_plan_prompt_asks_for_three_to_five_words(monkeypatch):
         prompts.append(prompt)
         return {
             "hook_line": "Naming what I felt never worked.",
-            "script": "One sentence each night helped me understand the pattern.",
+            "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],

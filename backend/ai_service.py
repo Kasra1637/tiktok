@@ -68,7 +68,8 @@ from ai_spoken import (
     _sets_scene, _spoken_marker_hit, _split_sentences, _summarize_line,
     _words_match, bind_spoken_words, certified_outcome_key_terms,
     SHORT_HOOK_SECONDS, check_spoken_story, hook_ceiling,
-    partition_spoken_words, repair_spoken_story, short_hook_word_budget,
+    partition_spoken_words, repair_spoken_story, script_band_issue,
+    short_hook_word_budget,
     spoken_budget,
     strip_quote_marks,
     spoken_targets, strategy_text, strip_leading_hook,
@@ -4606,6 +4607,7 @@ async def rewrite_spoken_line(
     script: str = "",
     objective: str = "",
     max_chars: int = 0,
+    min_chars: int = 0,
     hook_focus: str = "",
     hook_tone: str = "",
     hook_shape: str = "",
@@ -4643,6 +4645,7 @@ async def rewrite_spoken_line(
         return await rewrite_whole_script(
             profile, angle, line,
             hook_line=hook_line, objective=objective, max_chars=max_chars,
+            min_chars=min_chars,
         )
     original = str(line or "").strip()
     if not original:
@@ -4752,6 +4755,7 @@ async def rewrite_whole_script(
     hook_line: str = "",
     objective: str = "",
     max_chars: int = 0,
+    min_chars: int = 0,
 ) -> str:
     """A clearer version of the whole script at once — the whole-script remake.
 
@@ -4773,6 +4777,12 @@ async def rewrite_whole_script(
     accepted and trimmed. A current script already past its ceiling is
     exactly what this fixes, so the remake is always attempted and a
     shorter compliant answer is the success case.
+
+    `min_chars`, when given, is the floor of the script's delivery band
+    (ADR 0255): a remake under it leaves the middle's seconds empty, so
+    it is rejected on the same one-correction terms as one past the
+    ceiling. Zero — every caller that does not pass it — keeps the
+    ceiling as the only bound.
 
     A suggestion only: nothing is saved here. The model's answer is
     taken whole — whitespace tidied, the identity rule applied — never
@@ -4798,6 +4808,12 @@ async def rewrite_whole_script(
             "inside it: the words are laid over the video when rendered, "
             "so a longer script overlaps and breaks the visual."
         )
+        if min_chars:
+            budget += (
+                f" It must also land at {min_chars} characters or more — "
+                "the floor of the band its seconds set — because a shorter "
+                "remake leaves the middle's seconds empty."
+            )
     else:
         budget = (
             " Keep roughly its length — its seconds are already set."
@@ -4866,6 +4882,18 @@ async def rewrite_whole_script(
                 f"\n\nCORRECTION: that remake is {len(candidate)} characters, "
                 f"but the script's seconds hold {max_chars}. Say the same "
                 "story in fewer, plainer words."
+            )
+            continue
+        if min_chars and len(candidate) < min_chars:
+            refusal = (
+                f"The remake kept coming back short — under the {min_chars} characters "
+                "the script's band starts at; try again, or edit the script yourself."
+            )
+            prompt += (
+                f"\n\nCORRECTION: that remake is {len(candidate)} characters, "
+                f"but the script's band starts at {min_chars}. Say the same "
+                "story fuller — the moment has more in it — in complete "
+                "sentences, without padding or filler."
             )
             continue
         # The finished-sentence gate (ADR 0231), judged as the script
@@ -5348,6 +5376,24 @@ async def generate_creative_plan(
     middle_budget = targets["script"]["ceiling"]
     hook_target = targets["hook"]["target"]
     script_target = targets["script"]["target"]
+    # The script's delivery band (ADR 0255): on the standard shape the
+    # script must land inside it, so the prompt states it, the editorial
+    # loop charges a draft outside it, and the craft correction below may
+    # not swap an in-band draft for one outside it. None on short shapes.
+    script_band = targets["script"].get("band")
+    band_rule = (
+        f" The script must land inside its delivery band — between "
+        f"{script_band['low']} and {script_band['high']} characters: over "
+        "the band is rewritten like over the ceiling, and under the band "
+        "leaves the middle's seconds empty, so aim inside the band, not "
+        "merely under the ceiling."
+        if script_band else ""
+    )
+    shorter_remark = (
+        "Inside the band, a complete thought is the aim — never pad to reach it."
+        if script_band else
+        "A shorter complete thought is better than a padded or unfinished one."
+    )
     # Character targets guide pacing, not grammar: a word-count floor made
     # the writer pad short thoughts while the character ceiling cut them back.
     # Prefer a complete shorter opening to conflicting minimum/maximum quotas.
@@ -5564,8 +5610,8 @@ async def generate_creative_plan(
         f"inside the middle. The hard ceilings are {hook_budget} and {middle_budget} characters: "
         "write shorter COMPLETE sentences if either line exceeds its ceiling. Never cut a sentence "
         "at a character boundary or move part of the hook into the script. The render is refused "
-        "if the spoken words cannot fit, so rewrite the thought rather than clip its words. "
-        "A shorter complete thought is better than a padded or unfinished one.\n"
+        "if the spoken words cannot fit, so rewrite the thought rather than clip its words."
+        f"{band_rule} {shorter_remark}\n"
         "- ONE STORY, TWO LINES: the hook line names ONE problem this viewer actually has, in "
         "their own words, and the script resolves that same problem — same subject, same viewer, "
         "the second line answering the first. Never restate the hook in the script, never open a "
@@ -5721,6 +5767,15 @@ async def generate_creative_plan(
             allows_question=allows_question,
             certified_outcome=certified_outcome,
         )
+        # The delivery band (ADR 0255): charged like a ceiling, so an
+        # out-of-band draft is rewritten by this same loop and refused on
+        # the same bounded attempts. Skipped when the script is already
+        # over its ceiling — that charge names the harder limit, and the
+        # two never fire together.
+        if script_band and len(script) <= middle_budget:
+            band_issue = script_band_issue(script, script_band)
+            if band_issue:
+                issues.append(band_issue)
         # No wording gate: no banned-claim or feature-list rewrite. Length
         # and shape issues above still retry; wording never fails a draft.
         if not issues:
@@ -5763,9 +5818,15 @@ async def generate_creative_plan(
             "form as the last few generations. "
             "Do not fix grammar merely by adding a period. Never split a sentence between fields. "
             f"hook_line must be at most {hook_budget} characters; script (MIDDLE ONLY) at most "
-            f"{middle_budget} characters. A shorter complete thought is fine.\n"
-            "Problems found: " + "; ".join(issues) + "\n"
-            "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
+            + f"{middle_budget} characters."
+            + (
+                f" The script must land between {script_band['low']} and "
+                f"{script_band['high']} characters — inside its delivery band.\n"
+                if script_band else
+                " A shorter complete thought is fine.\n"
+            )
+            + "Problems found: " + "; ".join(issues) + "\n"
+            + "Previous draft (data to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
         )
     # The hard loop has accepted a complete, fitting draft. HOOK BAKE-OFF
     # (ADR 0130): the draft's hook is the incumbent, not the answer — three
@@ -5855,6 +5916,13 @@ async def generate_creative_plan(
                     allows_question=allows_question,
                     certified_outcome=certified_outcome,
                 )
+                # The band binds the correction too (ADR 0255): a retry
+                # outside it may not replace a draft the loop accepted
+                # inside it, however it scores.
+                if script_band and len(retry_script) <= middle_budget:
+                    band_issue = script_band_issue(retry_script, script_band)
+                    if band_issue:
+                        retry_issues.append(band_issue)
                 if retry_issues:
                     logger.warning(
                         "Craft correction produced hard issues (%s); keeping the first draft.",
@@ -6857,6 +6925,41 @@ async def generate_video_strategy(
     strategy["template_version"] = int(template.get("version") or 1)
     strategy["content_angle_id"] = str((angle or {}).get("id") or "")
     strategy["brand_profile_id"] = str(profile.get("id") or "")
+    # The spoken-length gate (ADR 0255): with no approved plan, this
+    # strategy's own section scripts are the words a render speaks — the
+    # endpoint binds a plan's words over them only when a plan exists.
+    # The prompt above states the ceilings; until now nothing enforced
+    # them, so an over-long middle shipped exactly as written and was met
+    # downstream at the render instead. Length is arithmetic, not
+    # wording, so it fails loudly here like a missing field: the founder
+    # retries rather than paying for a render whose words its seconds
+    # cannot hold.
+    if not approved_plan:
+        _spoken_over = []
+        _hook_words = str(strategy.get("hook_line") or "")
+        if len(_hook_words) > _strategy_hook_budget:
+            _spoken_over.append(
+                f"hook line has {len(_hook_words)} characters, over its "
+                f"{_strategy_hook_budget} ceiling"
+            )
+        _sections = strategy.get("segments") or []
+        for _index, _budget, _name in (
+            (0, _strategy_hook_budget, "hook script"),
+            (1, _strategy_middle_budget, "middle script"),
+        ):
+            if len(_sections) > _index and isinstance(_sections[_index], dict):
+                _words = str(_sections[_index].get("script") or "")
+                if len(_words) > _budget:
+                    _spoken_over.append(
+                        f"{_name} has {len(_words)} characters, over its "
+                        f"{_budget} ceiling"
+                    )
+        if _spoken_over:
+            raise RuntimeError(
+                "Video strategy spoken words exceed their ceilings: "
+                + "; ".join(_spoken_over)
+                + ". Regenerate the strategy; no over-length draft was saved."
+            )
     return strategy
 
 

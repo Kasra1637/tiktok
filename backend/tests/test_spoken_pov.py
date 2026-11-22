@@ -90,7 +90,11 @@ def _fake_plan(monkeypatch, script):
 def test_persistent_quotes_still_ship_a_quote_free_plan(monkeypatch):
     import asyncio
     import ai_service
-    quoted = "At the desk, I say, 'Too much, too fast,' and the entry finally steadies for the morning."
+    quoted = (
+        "At the desk, I say, 'Too much, too fast,' and the entry finally "
+        "steadies for the morning. The words slow down, and the page "
+        "holds still for once."
+    )
     _fake_plan(monkeypatch, quoted)
     result = asyncio.run(ai_service.generate_creative_plan(
         profile={"brand_name": "Journal"},

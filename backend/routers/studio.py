@@ -1726,6 +1726,7 @@ async def suggest_line_rewrite(
     hook_line = (payload.hook_line or row.get("hook_line") or "").strip()
     script = (payload.script or row.get("script") or "").strip()
     max_chars = 0
+    min_chars = 0
     if role == "hook":
         # The hook's set length, the same aim the hook endpoint above
         # hands the hook rewrite (ADR 0130).
@@ -1742,6 +1743,13 @@ async def suggest_line_rewrite(
         max_chars = check_spoken_story(
             hook_line, original, row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
         )["script"]["ceiling"]
+        # The band's floor binds the remake too (ADR 0255): the whole
+        # script is a generation, and a remake under the band leaves the
+        # middle's seconds as empty as an under-band first draft would.
+        _band = ai_service.spoken_targets(
+            row.get("hook_seconds") or 3, row.get("duration_seconds") or 15,
+        )["script"].get("band")
+        min_chars = _band["low"] if _band else 0
     if role == "middle":
         # A missing duration falls back to fifteen seconds, the same reading
         # the craft score gives an old project: it must not be measured
@@ -1773,6 +1781,7 @@ async def suggest_line_rewrite(
                 profile or {}, angle, original, role,
                 hook_line=hook_line, script=script,
                 objective=row.get("objective") or "", max_chars=max_chars,
+                min_chars=min_chars,
                 **steering,
             ),
             user_id, studio_project_id=project_id,

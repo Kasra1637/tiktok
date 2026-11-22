@@ -34,7 +34,7 @@ def test_the_angle_bounds_reach_the_words_a_viewer_hears(monkeypatch):
 
     async def fake_chat_json(system_message, prompt, context, **kwargs):
         prompts.append(prompt)
-        return dict(_draft("Morning rush.", "One prompt helped me start."))
+        return dict(_draft("Morning rush.", "One prompt helped me start. The words came slowly at first, then the page filled on its own, and the morning felt smaller than it had at dawn."))
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
     angle = {

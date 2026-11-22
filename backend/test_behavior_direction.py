@@ -59,7 +59,9 @@ def _capture_prompt(monkeypatch, flow):
     captured = {}
     plan = {
         "hook_line": "Starting is where the setup friction wins.",
-        "script": "One timer makes the list feel smaller.",
+        "script": "One timer makes the list feel smaller. "
+        "I start the first task without the setup friction, and the "
+        "rest of the list waits its turn quietly behind it.",
         "beat_timeline": [
             {"start": 0, "end": 3, "label": "hook",
              "text": "Starting is where the setup friction wins."},

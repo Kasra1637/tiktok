@@ -98,7 +98,9 @@ def test_the_plan_prompt_carries_the_new_rules(monkeypatch):
         captured["prompt"] = prompt
         return {
             "hook_line": "Naming what I felt never worked.",
-            "script": "One sentence each night helped me understand the pattern.",
+            "script": "One sentence each night helped me understand the pattern. "
+            "I stopped guessing what the day had done to me, and the tight "
+            "feeling in my chest eased.",
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],

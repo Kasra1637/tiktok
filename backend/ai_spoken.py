@@ -221,15 +221,59 @@ def spoken_targets(hook_seconds=3, total_seconds=12) -> dict:
     hook_limit = hook_ceiling(hook_seconds)
     middle_seconds = max(1, int(total_seconds or 0) - int(hook_seconds or 0))
     script_ceiling = spoken_budget(middle_seconds)
+    script_target = min(SCRIPT_TARGET_CHARS, script_ceiling)
+    # The delivery band (ADR 0255, Kasra's sizing rule of Nov 21 2026): for
+    # the standard shape — a middle of ten seconds or more, whose target is
+    # the full SCRIPT_TARGET_CHARS — a generated script must LAND inside
+    # the band around its target, not merely under its ceiling: ten
+    # characters under the target to five over it, the top capped by the
+    # ceiling itself. At the 150 target that is exactly his 140 to 155.
+    # Shorter middles have no band: their target is their ceiling, so a
+    # window around it would be most of the line, and a complete shorter
+    # thought there stays a choice rather than a defect.
+    script_band = None
+    if middle_seconds >= 10:
+        script_band = {
+            "low": script_target - 10,
+            "high": min(script_ceiling, script_target + 5),
+        }
     return {
         "hook_seconds": int(hook_seconds or 0),
         "middle_seconds": middle_seconds,
         "hook": {"target": min(HOOK_TARGET_CHARS, hook_limit), "ceiling": hook_limit},
         "script": {
-            "target": min(SCRIPT_TARGET_CHARS, script_ceiling),
+            "target": script_target,
             "ceiling": script_ceiling,
+            "band": script_band,
         },
     }
+
+
+def script_band_issue(script, band) -> str:
+    """The editorial charge for a script outside its delivery band (ADR 0255).
+
+    One issue string, or "" when the script lands inside the band (or the
+    shape has none). Over the ceiling is the ceiling check's own charge and
+    is not restated here: the caller only asks about the band when the
+    script is under its ceiling, so the two never fire together.
+    """
+    if not band:
+        return ""
+    chars = len(str(script or "").strip())
+    if chars < band["low"]:
+        return (
+            f"script has {chars} characters, short of the {band['low']} its "
+            "delivery band starts at; write a fuller thought in complete "
+            "sentences — the seconds are there and a short script leaves "
+            "them empty"
+        )
+    if chars > band["high"]:
+        return (
+            f"script has {chars} characters, past the {band['high']} its "
+            "delivery band ends at; rewrite the thought tighter, complete "
+            "sentences only"
+        )
+    return ""
 def _split_sentences(text: str) -> list:
     """
     Split a line into sentences, each keeping its own terminator.

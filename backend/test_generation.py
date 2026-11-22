@@ -1108,53 +1108,58 @@ class TestPromptCeilingRefusal:
     the render is stopped. It used to name a lever they cannot pull ("the app's
     own wording") and give no size and no model, so a founder was told to fix
     something that is ours. These pin the sentence to the actions that exist.
+
+    ADR 0255 reworded it again: the fit now squeezes the app's direction
+    wording to its tightest before this guard can fire, so the refusal
+    names that cause and never advises cutting the script — the old
+    "Cut about N characters from the script" sent the founder to trim
+    the one part of the prompt the fit never touches.
     """
 
     def test_it_names_the_shortfall_the_ceiling_and_the_way_out(self):
         message = gp.prompt_ceiling_refusal(
             prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
-            spoken_chars=380,
             alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
         )
         assert "4294-character prompt" in message
         assert "204 over the 4090 HeyGen Video accepts" in message
         # The roomier model and its ceiling, so "pick another model" has a name.
         assert "MiniMax H3 Max accepts 6800" in message
-        assert "switch to MiniMax H3 Max on the Generate step" in message
-        # The actionable cut, sized, and free.
-        assert "Cut about 204 characters from the script" in message
+        assert "Switch to MiniMax H3 Max on the Generate step" in message
+        # The cause, named — and the script is never the lever.
+        assert "already squeezed to its tightest" in message
+        assert "cutting the script is not the fix" in message
+        assert "Cut about" not in message
         assert "nothing has been charged" in message
         assert "app's own wording" not in message
 
-    def test_an_impossible_trim_is_never_asked_for(self):
-        """
-        A ceiling squeezed below the fixed instructions leaves an overshoot no
-        script cut can close. Asking for it anyway would send the founder round
-        a loop that cannot end, so the model is named as the only lever.
-        """
+    def test_the_live_failure_shape_never_advises_cutting_the_script(self):
+        """Kasra's exact refusal, Nov 21 2026: 4099 over 4090 by 9, and the
+        old wording told him to cut those 9 from his script."""
         message = gp.prompt_ceiling_refusal(
-            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
-            spoken_chars=90,
+            prompt_chars=4099, ceiling=4090, model_name="HeyGen Video",
             alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
         )
-        assert "bigger than the 90 characters your script has" in message
-        assert "cutting the script cannot save this render" in message
+        assert "9 over the 4090 HeyGen Video accepts" in message
+        assert "Cut about 9 characters from the script" not in message
         assert "Cut about" not in message
-        # A new sentence, so it is capitalised — the only lever named.
         assert "Switch to MiniMax H3 Max on the Generate step" in message
+        assert "nothing has been charged" in message
 
     def test_with_no_roomier_model_it_says_so(self):
         """
         Already on the roomiest model, "pick another model" is advice with
-        nowhere to go. The words have to come down, and the message says that
+        nowhere to go. The scene and direction — the mass that scales —
+        have to come down at their source, and the message says that
         instead of pointing at a picker that cannot help.
         """
         message = gp.prompt_ceiling_refusal(
             prompt_chars=6900, ceiling=6800, model_name="MiniMax H3 Max",
-            spoken_chars=900, alternative=None,
+            alternative=None,
         )
-        assert "Cut about 100 characters from the script" in message
-        assert "no model in this workspace accepts a longer prompt" in message
+        assert "No model in this workspace accepts a longer prompt" in message
+        assert "shorten the scene and direction on the Hook + Story step" in message
+        assert "Cut about" not in message
         assert "switch to" not in message
         assert "nothing has been charged" in message
 
@@ -1162,11 +1167,170 @@ class TestPromptCeilingRefusal:
         """An alternative under the ceiling that just refused would re-refuse."""
         message = gp.prompt_ceiling_refusal(
             prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
-            spoken_chars=380,
             alternative={"name": "Smaller", "prompt_char_limit": 3000},
         )
         assert "Smaller" not in message
-        assert "no model in this workspace accepts a longer prompt" in message
+        assert "No model in this workspace accepts a longer prompt" in message
+
+
+class TestPromptFitGuarantee:
+    """
+    The builder's contract is that the FINAL assembled prompt fits the
+    budget it was given (ADR 0255).
+
+    The live failure: a fixed-camera project whose presenter stays silent.
+    The submit path reserves the silence direction's 459 characters from
+    HeyGen's 4,090, so the builder works to 3,631 — and handed back a
+    prompt over even that, which the guard then refused with instructions
+    to cut the script. Two faults combined: the condensed floor the fit
+    subtracts is the HANDHELD floor (2,475) while a fixed camera's
+    condensed fixed text measures 2,588, and the final walk restarted
+    its stepping from a scale sized as though the prompt in hand were
+    unscaled — eight decaying steps from ~0.83 never reach the ~0.03
+    scale where this prompt actually fits, so the walk ran out of steps
+    still over budget and returned the over-budget assembly.
+    """
+
+    SCRIPT = (
+        "At the market stall I count the coins twice and lose track of the "
+        "total. The list in my head slips away every time someone calls my "
+        "name across the rows."
+    )
+    HOOK = (
+        "I'm trying to keep count, Saturday morning, and the coins keep "
+        "slipping away from me."
+    )
+    ACTION = (
+        "Frame one is already moving: the hand snaps up holding the phone, thumb "
+        "turning it to the lens; on that beat the brows lift and the eyes widen, "
+        "jaw dropping open; the hand drops out of frame as the shoulders break "
+        "forward and they step in; end on the sharp look into the camera."
+    )
+    LOCATION = (
+        "the covered market hall in the old town, beside the vegetable stall by the "
+        "north entrance, early on a Saturday morning in June"
+    )
+
+    def _kwargs(self):
+        strategy = {
+            "hook_line": self.HOOK,
+            "hook_concept": (
+                "The viewer catches the middle of a gesture they did not see "
+                "start, so they have to stay to find out what it was about."
+            ),
+            "hook_action": self.ACTION,
+            "hook_dialogue": "Delivered straight to camera, quick and a little breathless, like a confession.",
+            "hook_promise": "the count finally holds",
+            "camera_setup": "fixed",
+            "final_beat": "They lower the phone slowly, look down at the coins in their palm, and give one small, satisfied nod.",
+            "audience_problem": "Market traders and flea-market sellers who count cash takings by hand several times a day and keep losing the total halfway through the count.",
+            "mechanism_beat": "The running total is kept out loud, coin by coin, so the count lives outside their head and a interruption no longer wipes it clean.",
+            "payoff_beat": "By the last coin the total is simply there, said once, and the morning rush no longer means starting the whole count again.",
+            "differentiation_beat": "Unlike a calculator app it never asks them to stop, unlock a phone and type with full hands in the middle of serving a customer.",
+            "primary_feature": "A voice-kept running total for cash counted by hand, built for people whose hands and eyes are busy with the money itself.",
+            "desired_outcome": "They finish the count once, trust the number, and get back to the customers waiting at the stall without the recount dread.",
+            "emotional_triggers": ["the recount dread", "mid-count interruption", "queue pressure", "quiet pride"],
+            "messaging_pillars": ["the total survives interruptions", "hands stay on the money", "one count, said once", "made for market mornings"],
+            "strategy_summary": "A market-morning story: the count keeps slipping at the stall until the total is kept out loud, coin by coin, and the recount dread is gone.",
+            "scene": {
+                "location": self.LOCATION,
+                "lighting": "soft morning light through the hall's glass roof, warm and even",
+                "color_palette": "warm ambers and greens, gentle contrast, nothing neon or cold",
+                "visual_style": "natural footage from a placed camera, true colours, even light",
+                "character_positioning": "centred in frame, the stall's stacked crates and hanging scale visible just behind the shoulder",
+                "wardrobe": "a plain rust-coloured overshirt over a white tee, sleeves pushed up",
+                "props": "a handful of coins, a paper list, stacked crates of oranges",
+            },
+            "performance": {
+                "movement": "small, quick, restless movements; hands busy with the coins throughout",
+                "voice_delivery": "fast, warm, a little out of breath, like telling a friend mid-errand",
+            },
+            "segments": [
+                {"role": "hook", "goal": "Stop the scroll inside the first half second with the coin fumble, mid-count, before a word is spoken.",
+                 "script": self.HOOK, "action": self.ACTION},
+                {"role": "middle", "goal": "Develop the fumble through one more lost count into the moment they finally reach for the phone.",
+                 "script": self.SCRIPT,
+                 "action": "The shoulders drop; the coins are counted again slowly, one by one, into the open palm, lips moving with each coin."},
+            ],
+        }
+        return dict(
+            strategy=strategy,
+            profile={"brand_name": "CoinCount", "app_category": "Finance",
+                     "must_not_show": ["bank logos", "card numbers", "a rival app", "cash totals on screen"]},
+            template={"opening_structure": "Open mid-action on the problem, the moment already going wrong.",
+                      "middle_structure": "Stay in the same moment and let it build to the reach for the phone."},
+            duration=15,
+            assets=[{"kind": "character_reference", "name": "Kasra reference photo"}],
+            plan={"hook_seconds": 4, "location": self.LOCATION},
+        )
+
+    def test_the_fixed_silent_build_fits_its_budget(self):
+        """The reproduced incident: builder budget 4,090 − 459 (the silent
+        reserve) on a fixed-camera strategy. The returned prompt must fit
+        the budget it was given, so the assembled prompt plus the silence
+        direction lands under HeyGen's real ceiling."""
+        assert 140 <= len(self.SCRIPT) <= 155  # an in-band script (ADR 0255)
+        prompt = gp.build_segment_prompt(
+            **self._kwargs(), prompt_budget=4090 - 459, script_sacred=True)
+        assert len(prompt) <= 4090 - 459, (
+            f"builder returned {len(prompt)} chars against a 3631 budget; "
+            "the submit guard would refuse a render the fit was meant to save"
+        )
+
+    def test_the_script_survives_the_squeeze_byte_identical(self):
+        """Fitting is the direction wording's job: the founder's spoken
+        script reaches the prompt whole, exactly as approved."""
+        prompt = gp.build_segment_prompt(
+            **self._kwargs(), prompt_budget=4090 - 459, script_sacred=True)
+        assert self.SCRIPT in prompt
+        assert self.HOOK in prompt
+
+    def test_the_fixed_floors_match_their_constants(self):
+        """The fit subtracts a floor per camera setup; a fixed camera's
+        fixed text is longer than the handheld text the one floor was
+        measured on, so it carries its own measured constants."""
+        empty = dict(profile={}, template={}, duration=10, assets={},
+                     plan={"hook_seconds": 3})
+        fixed_strategy = {"camera_setup": "fixed"}
+        full = gp.build_segment_prompt(strategy=fixed_strategy, **empty)
+        condensed = gp.build_segment_prompt(
+            strategy=fixed_strategy, prompt_budget=4096, **empty)
+        assert len(full) == gp.FIXED_FULL_PROMPT_FLOOR
+        assert len(condensed) == gp.FIXED_CONDENSED_PROMPT_FLOOR
+        assert gp.FIXED_CONDENSED_PROMPT_FLOOR > gp.CONDENSED_PROMPT_FLOOR
+
+    def test_the_fallback_build_also_fits_a_tight_budget(self):
+        """The no-strategy builder had no final walk at all: its correction
+        loop bottomed out at MIN_SCALE and returned whatever it had — here
+        3,180 characters against a 3,100 budget, measured on this fixture.
+        The budget is below anything the submit path passes; the pin is the
+        builder's own stated contract, that the scale is corrected until
+        the prompt fits."""
+        prose = (
+            "The morning rush is already building at the stall and the queue is watching. "
+            "Every coin has to be counted twice because the first count never survives "
+            "an interruption. It is the same small dread every single market day."
+        )
+        plan = {"hook_line": prose, "script": prose * 2,
+                "visual_direction": prose, "voice_direction": prose,
+                "tone": prose, "camera_setup": "fixed",
+                "beat_timeline": [
+                    {"start": i * 1.5, "end": i * 1.5 + 1.5,
+                     "label": "beat", "text": prose}
+                    for i in range(10)
+                ]}
+        prompt = gp.build_single_pass_prompt(
+            plan=plan,
+            profile={"brand_name": "Test",
+                     "must_not_show": ["a hospital corridor", "a competitor's app icon"]},
+            template={"name": "T", "opening_structure": prose,
+                      "middle_structure": prose, "hook_seconds": 3,
+                      "visual_style": prose, "camera_pacing": prose},
+            duration=15, prompt_budget=3100, script_sacred=True,
+        )
+        assert len(prompt) <= 3100, (
+            f"fallback builder returned {len(prompt)} chars against a 3100 budget"
+        )
 
 
 class TestRefusalNamesWhereThePhotoWent:

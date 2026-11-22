@@ -19,7 +19,7 @@ def test_banned_word_in_direction_is_accepted(monkeypatch):
     import ai_service
 
     calls = []
-    bad = _draft("Morning rush.", "One prompt helped me start.", visual="focus room")
+    bad = _draft("Morning rush.", "One prompt helped me start. The words came slowly at first, then the page filled on its own, and the morning felt smaller than it had at dawn.", visual="focus room")
 
     async def fake_chat_json(system_message, prompt, context, **kwargs):
         calls.append(prompt)
@@ -30,7 +30,7 @@ def test_banned_word_in_direction_is_accepted(monkeypatch):
         profile={"brand_name": "V", "claims_banned": ["focus"]},
         template={"name": "T"}, objective="ease_daily_moment", duration_seconds=20))
     # The banned WORDING never triggers the hard editorial retry; this draft
-    # scores 67 on craft, below the 80 bar, so exactly one script-only craft
+    # scores below the 80 bar, so exactly one script-only craft
     # correction runs (and keeps first draft, same words back). The hook
     # candidates call (ADR 0130) runs between the draft and that correction.
     assert len(calls) == 3, calls[2][:200] if len(calls) > 2 else calls
@@ -50,7 +50,7 @@ def test_the_angle_bounds_reach_the_words_a_viewer_hears(monkeypatch):
 
     async def fake_chat_json(system_message, prompt, context, **kwargs):
         prompts.append(prompt)
-        return dict(_draft("Morning rush.", "One prompt helped me start."))
+        return dict(_draft("Morning rush.", "One prompt helped me start. The words came slowly at first, then the page filled on its own, and the morning felt smaller than it had at dawn."))
 
     monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
     angle = {

@@ -113,7 +113,16 @@ MIN_SCALE = 0.10
 # ceiling, so the choice there is a terse brief or a refused render. A field
 # reduced to a single character still reads as a field, and the fixed
 # instructions and the founder's spoken words are untouched either way.
-FINAL_SCALE = 0.02
+#
+# It was 0.02 until ADR 0255: the traced fixed-camera silent build was
+# still 23 characters over its budget AT 0.02, because the assembly's
+# floor is set by the count of scaled fields (each holding _clip's own
+# eight-character minimum) plus the absolutes and the sacred words, and
+# that mass only settles under the budget below ~0.01 — measured
+# asymptote 3,616 against the 3,631 budget. The walk's floor is 0.005:
+# low enough for that mass to fit, still far above the point where a
+# field could reach a single character.
+FINAL_SCALE = 0.005
 
 # How the last fit walks, and how far each step shrinks the scale.
 #
@@ -122,7 +131,14 @@ FINAL_SCALE = 0.02
 # time rather than computing one scale and trusting the arithmetic. The decay is
 # generous because each step must actually move the assembled length, and many
 # fields do not scale with the clip limit at all.
-FINAL_FIT_STEPS = 8
+#
+# The walk used to stop after eight steps (ADR 0255): starting from a step
+# sized off an already-squeezed prompt, eight decays did not reach the scale
+# where a full fixed-camera prompt fits, and the walk returned the
+# over-budget assembly it exists to prevent. It now steps until the prompt
+# fits or FINAL_SCALE is reached — decaying by 0.7 from at most 1.0 takes
+# about twelve steps — and this cap only bounds a pathological case.
+FINAL_FIT_MAX_STEPS = 24
 FINAL_FIT_DECAY = 0.7
 
 # Whether to use the condensed fixed instructions, set the same way as the
@@ -253,6 +269,19 @@ CONDENSE_BELOW = 5000
 FULL_PROMPT_FLOOR = 4017
 CONDENSED_PROMPT_FLOOR = 2475
 
+# The same floors for a FIXED camera (ADR 0255). The pair above is the
+# handheld assembly's: a fixed camera swaps the handheld sentences for
+# its own — the set-down framing, the indoor restatement rule, the
+# room-fit clause — and that text is fixed in exactly the same sense, so
+# it has to come out of the budget before the variables get anything.
+# It was never measured separately, so every fit computation for a fixed
+# render under-counted the fixed text (the condensed floor by 113) and
+# the final walk stopped short of the scale that actually fits. Measured
+# the same way, on the same empty assembly: full 3988, condensed 2588.
+# A test pins both, as it pins the pair above.
+FIXED_FULL_PROMPT_FLOOR = 3988
+FIXED_CONDENSED_PROMPT_FLOOR = 2588
+
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
 # text has no duration-dependent beat layout, so the measured value holds
@@ -298,7 +327,14 @@ APP_NAME_PROMPT_CHARS = 60
 NATURAL_VARIABLE_SPACE = RENDER_PROMPT_LIMIT - FULL_PROMPT_FLOOR
 
 
-def _budget_scale(prompt_budget, condensed: bool) -> float:
+def _prompt_floors(strategy, condensed: bool) -> int:
+    """The measured fixed-text floor for this render's camera (ADR 0255)."""
+    if str((strategy or {}).get("camera_setup") or "handheld") == "fixed":
+        return FIXED_CONDENSED_PROMPT_FLOOR if condensed else FIXED_FULL_PROMPT_FLOOR
+    return CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+
+
+def _budget_scale(prompt_budget, condensed: bool, floor=None) -> float:
     """
     What fraction of each field budget this render may use.
 
@@ -310,8 +346,13 @@ def _budget_scale(prompt_budget, condensed: bool) -> float:
     Subtracting the floor first is the whole fix: what remains is the space the
     variables actually have, and dividing that by their natural size gives the
     fraction. The guard in the submit path remains the backstop for the residue.
+
+    `floor` overrides the handheld measurement for a fixed camera (ADR 0255).
+    The natural space stays the handheld one, which only squeezes a fixed
+    prompt marginally harder — the safe direction.
     """
-    floor = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+    if floor is None:
+        floor = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
     available = float(prompt_budget) - float(floor)
     scale = available / float(NATURAL_VARIABLE_SPACE)
     # A ceiling at or below the floor leaves the variables nothing. Squeeze to
@@ -910,6 +951,36 @@ def build_single_pass_prompt(
         if room <= 0:
             break
         scale = max(MIN_SCALE, scale * room / variable * 0.99)
+    # The same final walk its sibling takes (ADR 0255): this builder used
+    # to return whatever the correction loop bottomed out with, so a
+    # prose-saturated plan at a tight budget came back over it — the
+    # builder's own contract, corrected from the measured length until
+    # the prompt fits, was false exactly where the budget was tightest.
+    # The walk only ever tightens the app's direction wording; the
+    # spoken words ride under the same sacred rule as above.
+    if len(prompt) > budget:
+        variable = max(1, len(prompt) - SINGLE_PASS_PROMPT_FLOOR)
+        room = budget - SINGLE_PASS_PROMPT_FLOOR
+        step = min(1.0, room / variable * 0.95) if room > 0 else 1.0
+        step = min(step, scale)
+        for _ in range(FINAL_FIT_MAX_STEPS):
+            final_scale = max(FINAL_SCALE, step)
+            t_scale = _PROMPT_SCALE.set(final_scale)
+            t_condensed = _PROMPT_CONDENSED.set(condensed)
+            t_protect = _PROMPT_PROTECT.set(False)
+            t_sacred = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+            try:
+                prompt = _assemble_single_pass_prompt(
+                    plan, profile, template, duration, segment, is_extension,
+                )
+            finally:
+                _PROMPT_SCRIPT_SACRED.reset(t_sacred)
+                _PROMPT_PROTECT.reset(t_protect)
+                _PROMPT_CONDENSED.reset(t_condensed)
+                _PROMPT_SCALE.reset(t_scale)
+            if len(prompt) <= budget or final_scale <= FINAL_SCALE:
+                break
+            step *= FINAL_FIT_DECAY
     return prompt
 
 
@@ -1090,7 +1161,6 @@ def prompt_ceiling_refusal(
     prompt_chars: int,
     ceiling: int,
     model_name: str,
-    spoken_chars: int,
     alternative: Optional[dict] = None,
 ) -> str:
     """
@@ -1098,32 +1168,34 @@ def prompt_ceiling_refusal(
 
     This lives here, as a pure function, because the wording IS the refusal: the
     founder has just been stopped before any spend, and this sentence is the
-    only thing telling them what to do next. It used to read "shorten the script
-    or the app's own wording, or pick another model — nothing has been charged",
-    which names one lever the founder cannot pull (the app's fixed instructions
-    are ours), and gives no size and no model. A refusal has to name the next
-    step, and only steps that exist.
+    only thing telling them what to do next.
 
-    The levers that do exist:
+    This is the backstop, not the fit (ADR 0255). Both builders walk their
+    scale down until the assembled prompt fits, squeezing the app's own
+    direction wording — the script is sacred and is never the squeeze's
+    source. What reaches here is a prompt whose unscalable mass alone (the
+    fixed instructions, the spoken words, the scene's absolutes) exceeds
+    the model's ceiling even at the tightest assembly. The refusal
+    therefore never advises cutting the script: the old wording did
+    exactly that ("Cut about 9 characters from the script"), sending the
+    founder to trim the one part of the prompt the fit never touches,
+    for an overflow the direction wording caused. The levers that remain
+    are the ones that can actually change the outcome:
 
-    - The script. On a script-sacred provider it arrives whole, so a character
-      cut is a character saved. `spoken_chars` is the project's own hook line
-      plus script: when the overshoot is larger than that, trimming cannot
-      rescue the render — the ceiling is below what this project's words alone
-      need — and the message says so instead of asking for an impossible cut.
     - The model, and only to one this deployment offers above this ceiling.
       `alternative` is that model's capability record (or None when this is
-      already the roomiest), so the number quoted is the number the submit path
-      enforces rather than a name typed into a string.
+      already the roomiest), so the number quoted is the number the submit
+      path enforces rather than a name typed into a string.
+    - A shorter scene and direction, rebuilt on the Hook + Story step —
+      the mass that does scale, reduced at its source.
 
-    "Nothing has been charged" stays in every variant: the guard runs before the
-    provider call, and that reassurance is the difference between a refusal the
-    founder retries and one they abandon.
+    "Nothing has been charged" stays in every variant: the guard runs before
+    the provider call, and that reassurance is the difference between a
+    refusal the founder retries and one they abandon.
     """
     prompt_chars = int(prompt_chars)
     ceiling = int(ceiling)
     over = max(0, prompt_chars - ceiling)
-    spoken = max(0, int(spoken_chars or 0))
     name = (model_name or "this model").strip()
     message = (
         f"This script and photo assemble a {prompt_chars}-character prompt, {over} over "
@@ -1136,27 +1208,16 @@ def prompt_ceiling_refusal(
     if has_alternative:
         message += f" {alt_name} accepts {alt_ceiling}."
 
-    # The overshoot is larger than the project's own words: no cut to the script
-    # can close it, so name the model as the only lever rather than ask for a
-    # trim that would not exist.
-    if spoken and over > spoken:
-        message += (
-            f" The overshoot is bigger than the {spoken} characters your script has, so "
-            "cutting the script cannot save this render."
-        )
-        advice = (
-            f"Switch to {alt_name} on the Generate step"
-            if has_alternative
-            else "No model in this workspace accepts a longer prompt, so this project's "
-            "words have to come down before it can render"
-        )
-    else:
-        advice = f"Cut about {over} characters from the script"
-        advice += (
-            f", or switch to {alt_name} on the Generate step"
-            if has_alternative
-            else ", as no model in this workspace accepts a longer prompt"
-        )
+    message += (
+        " The app's direction around your words is already squeezed to its "
+        "tightest and still does not fit, so cutting the script is not the fix."
+    )
+    advice = (
+        f"Switch to {alt_name} on the Generate step"
+        if has_alternative
+        else "No model in this workspace accepts a longer prompt; shorten the "
+        "scene and direction on the Hook + Story step and build the strategy again"
+    )
     return f"{message} {advice} — nothing has been charged."
 
 
@@ -1796,7 +1857,7 @@ def build_segment_prompt(
         # its detail because someone passed -1.
         if budget > 0:
             condensed = budget < CONDENSE_BELOW
-            scale = _budget_scale(budget, condensed)
+            scale = _budget_scale(budget, condensed, _prompt_floors(strategy, condensed))
 
     # Normalised, not just ignored: the retry loop below tests the budget for
     # truthiness, and a negative one is truthy while no prompt can ever be <= it,
@@ -1841,7 +1902,7 @@ def build_segment_prompt(
         # pass inside.
         if scale <= MIN_SCALE:
             break
-        fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+        fixed = _prompt_floors(strategy, condensed)
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
         if room <= 0:
@@ -1865,7 +1926,7 @@ def build_segment_prompt(
     # ceiling becomes a guarantee rather than a hope that every value reaching
     # the prompt happens to be clipped.
     if budget and len(prompt) > budget:
-        fixed = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+        fixed = _prompt_floors(strategy, condensed)
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
         # Walk the scale down and MEASURE, rather than predicting one value and
@@ -1894,7 +1955,19 @@ def build_segment_prompt(
         # walk stops, and a budget at or under the fixed floor makes room
         # non-positive so the first scale is already FINAL_SCALE.
         step = min(1.0, room / variable * 0.95) if room > 0 else 1.0
-        for _ in range(FINAL_FIT_STEPS):
+        # Never step UP from where the correction loop ended (ADR 0255).
+        # The step above is sized from the current prompt's length as
+        # though it were unscaled variable text, but the loop has already
+        # squeezed that text: on the traced fixed-camera build the formula
+        # proposed 0.83 while the loop had bottomed out at 0.10, and the
+        # old eight-step cap decayed it only to ~0.069 — still above the
+        # ~0.03 where that prompt fits — so the walk handed back the
+        # over-budget assembly it was written to prevent, and the submit
+        # guard refused a render whose words were never the problem. The
+        # walk starts no higher than the loop's own scale and keeps
+        # stepping until the prompt fits or FINAL_SCALE is reached.
+        step = min(step, scale)
+        for _ in range(FINAL_FIT_MAX_STEPS):
             final_scale = max(FINAL_SCALE, step)
             token = _PROMPT_SCALE.set(final_scale)
             token2 = _PROMPT_CONDENSED.set(condensed)

@@ -1524,7 +1524,9 @@ class TestGeneratedPlanEditorialFlow:
         )
         good = TestGeneratedStoryRepair._plan(
             "Naming the feeling never worked.",
-            "The suggestions helped me find the words. I understood myself better after writing the entry.",
+            "The suggestions helped me find the words for what I was feeling. "
+            "I understood myself better after writing the entry, and my "
+            "chest felt lighter.",
         )
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -1613,7 +1615,10 @@ class TestPlanPromptSeedsVoiceDefault:
             def json(self_inner):
                 return {"choices": [{"message": {"content": json.dumps({
                     "hook_line": "I couldn't get started.",
-                    "script": "One prompt helped me start writing.", "beat_timeline": [],
+                    "script": "One prompt helped me start writing. "
+                    "I stopped staring at the blank page, and the first line "
+                    "came easier than the whole morning had felt all week.",
+                    "beat_timeline": [],
                     "visual_direction": "v",
                     "demo_brief": "Record yourself tapping the timer once.",
                     "overlays": [], "voice_direction": "vd",
@@ -1669,7 +1674,7 @@ class TestSpokenBudgetReachesThePlanPrompt:
     cause.
     """
 
-    def _capture(self, monkeypatch):
+    def _capture(self, monkeypatch, script="One prompt helped me start writing."):
         import ai_service
         captured = {}
 
@@ -1682,7 +1687,7 @@ class TestSpokenBudgetReachesThePlanPrompt:
             def json(self):
                 return {"choices": [{"message": {"content": json.dumps({
                     "hook_line": "I couldn't get started.",
-                    "script": "One prompt helped me start writing.", "beat_timeline": [],
+                    "script": script, "beat_timeline": [],
                     "visual_direction": "v",
                     "demo_brief": "Record yourself tapping the timer once.",
                     "overlays": [], "voice_direction": "vd",
@@ -1740,7 +1745,15 @@ class TestSpokenBudgetReachesThePlanPrompt:
     def test_the_budget_tracks_the_template_declared_hook(self, monkeypatch):
         """A 3s hook on a 15s piece squeezes the middle to 12s / 180 chars at the current pace."""
         import ai_service
-        captured = self._capture(monkeypatch)
+        # The stub's script sits inside the 12s middle's delivery band
+        # (ADR 0255), so the draft is accepted and the prompt under test
+        # is the plan prompt itself.
+        captured = self._capture(
+            monkeypatch,
+            script="One prompt helped me start writing. I stopped staring "
+            "at the blank page, and the first line came easier than the "
+            "whole morning had felt all week.",
+        )
         asyncio.run(ai_service.generate_creative_plan(
             profile={"brand_name": "ShiftLog"},
             template={"name": "T", "hook_seconds": 3},
@@ -2369,7 +2382,10 @@ class TestPlanRewriteAvoidsBannedClaims:
         import ai_service
         calls = []
         bad = self._draft(
-            "I couldn't get started.", "This app cures anxiety for good, try it.")
+            "I couldn't get started.",
+            "This app cures anxiety for good, try it. I open it every "
+            "morning and the noise in my head settles down before the "
+            "day even starts moving around me.")
 
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             calls.append(prompt)
@@ -2391,7 +2407,10 @@ class TestPlanRewriteAvoidsBannedClaims:
 
         async def fake_chat_json(system_message, prompt, context, **kwargs):
             return dict(self._draft(
-                "I couldn't get started.", "This app cures anxiety for good, try it."))
+                "I couldn't get started.",
+                "This app cures anxiety for good, try it. I open it every "
+                "morning and the noise in my head settles down before the "
+                "day even starts moving around me."))
         monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
         result = _run(ai_service.generate_creative_plan(
             profile={"brand_name": "Vocolens", "claims_banned": ["cures anxiety"]},

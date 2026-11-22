@@ -1486,12 +1486,16 @@ class TestModelSelectionAtTheApiBoundary:
         assert "character prompt" in detail
         assert "nothing has been charged" in detail
         assert " over the 200 " in detail, detail
-        # The ceiling here is below what the fixed instructions alone occupy, so
-        # the overshoot is larger than the script. The message has to say that
-        # cutting the script cannot rescue the render, and name the model as the
-        # only lever — a refusal that asks for an impossible trim is the failure
-        # this replaced ("shorten the script or the app's own wording").
-        assert "cutting the script cannot save this render" in detail, detail
+        # The ceiling here is below what the fixed instructions alone occupy:
+        # the fit has already squeezed the app's direction wording to its
+        # tightest and the unscalable mass still does not fit. The message
+        # names that cause and the model switch — and never advises cutting
+        # the script, the one part of the prompt the fit never touches
+        # (ADR 0255; the old wording's "Cut about N characters from the
+        # script" is the failure this replaced).
+        assert "already squeezed to its tightest" in detail, detail
+        assert "cutting the script is not the fix" in detail, detail
+        assert "Cut about" not in detail, detail
         assert "on the Generate step" in detail, detail
         assert calls == []
 

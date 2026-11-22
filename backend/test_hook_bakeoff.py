@@ -181,8 +181,8 @@ class TestHookBakeOff:
         re-measured under the first-person rubric, ADR 0145.)"""
         import ai_service
         script = (
-            "The list just sits there until the timer starts and the first task feels "
-            "small enough to touch. I still do not know why starting always feels bigger than the work."
+            "The list sits there until the timer starts and the first task feels "
+            "small enough to touch. I still do not know why starting feels bigger than the work."
         )
         plan = {
             "hook_line": "Starting is where the setup friction wins.",

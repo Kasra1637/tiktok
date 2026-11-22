@@ -27,7 +27,7 @@ WEAK_SCRIPT = (
 )
 STRONG_HOOK = "Bad moods weren't random. They followed busy mornings."
 STRONG_SCRIPT = (
-    "In the garden, I talked through my day. There it was again: flat afternoon, "
+    "In the garden, I talked through my whole day. There it was again: flat afternoon, "
     "busy morning. Now I can name it, but not what sets it off."
 )
 
@@ -301,17 +301,19 @@ def _plan(hook, script):
 def test_the_plan_loop_keeps_a_first_person_hook(monkeypatch):
     # ADR 0145: the editorial loop no longer rewrites a hook for speaking
     # in first person. This pair — first person, a named place, an open
-    # ending — is calibrated to the shipped rubric: it totals 80, at the
+    # ending — is calibrated to the shipped rubric: it totals over the
     # craft-retry bar, so no craft retry fires either, and the draft
     # lands as written with no EDITORIAL CORRECTION spent on it.
     # Recalibrated for ADR 0188: first person and the open ending are
     # each paid in one category now, which cost this pair 4 points; the
     # script earns them back with an insight the old draft lacked
     # ("because I said it out loud") and one fewer abstract noun, and
-    # the pair totals 80 again.
+    # the pair totals 80 again. Recalibrated for ADR 0255: the script
+    # also sits inside its delivery band (the porch step is named in
+    # it), and the pair totals 82 — still over the bar.
     good = _plan(
         "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
+        "I sit with my notebook open on the porch step and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 
@@ -339,7 +341,7 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
     )
     good = _plan(
         "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
+        "I sit with my notebook open on the porch step and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 
@@ -363,7 +365,9 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
 def test_the_plan_loop_allows_question_for_question_template(monkeypatch):
     good = _plan(
         "Why do Friday evenings always feel so off?",
-        "One prompt helped me start writing, and I finished the entry.",
+        "One prompt helped me start writing, and I finished the entry. "
+        "The words came slowly at first, and then the page filled before "
+        "I could doubt them.",
     )
 
     async def fake_chat(**kwargs):
@@ -668,7 +672,8 @@ CERTIFIED_OUTCOME = "Start before the kettle boils"
 GOOD_HOOK = "I start before the kettle boils."
 GOOD_SCRIPT = (
     "The kettle is on and the timer is already counting at my desk. "
-    "I start the task before my tea is ready."
+    "I start the task before my tea is ready, and the morning opens "
+    "up instead of stalling."
 )
 OFF_PROMISE_HOOK = "Naming the feeling never worked."
 

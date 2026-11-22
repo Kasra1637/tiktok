@@ -1703,9 +1703,10 @@ async def _submit_generation(
     # refused here rather than discovered as a provider 400 the founder pays for.
     #
     # The message is built from catalog data, not typed: the alternative model
-    # is the roomiest one this deployment actually offers above this ceiling, and
-    # the shortfall is compared against the project's own spoken words, so a
-    # founder is never told to cut more than their script contains.
+    # is the roomiest one this deployment actually offers above this ceiling.
+    # The fit has already squeezed the app's direction wording to its
+    # tightest by the time this guard can fire, so the refusal names that
+    # cause and never advises cutting the script (ADR 0255).
     if prompt_ceiling and len(prompt) > prompt_ceiling:
         capability = video_providers.capability(model_key)
         alternative = None
@@ -1723,8 +1724,6 @@ async def _submit_generation(
                 prompt_chars=len(prompt),
                 ceiling=int(prompt_ceiling),
                 model_name=capability.get("name", ""),
-                spoken_chars=len(plan_words.get("hook_line") or "")
-                + len(plan_words.get("script") or ""),
                 alternative=alternative,
             ),
         )

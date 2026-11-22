@@ -518,7 +518,8 @@ class TestChatModelRequestShape:
             "desired_emotion": "e", "claims_to_respect": [],
         }
         plan = {
-            "hook_line": "I couldn't get started.", "script": "One prompt helped me start writing.",
+            "hook_line": "I couldn't get started.", "script": "One prompt helped me start writing. "
+            "I stopped staring at the blank page, and the first line came easier than the whole morning had felt all week.",
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook", "text": "t"},
                 {"start": 3, "end": 20, "label": "middle", "text": "t"},
@@ -1203,7 +1204,8 @@ class TestAngleGoalPromptWiring:
             # 0127): this profile certifies "Starting without setup
             # friction", so a hook promising only the problem would now
             # be rewritten by the editorial loop instead of accepted.
-            "hook_line": "Starting is where the setup friction wins.", "script": "One timer makes the list feel smaller.",
+            "hook_line": "Starting is where the setup friction wins.", "script": "One timer makes the list feel smaller. "
+            "I start the first task without the setup friction, and the rest of the list waits its turn quietly behind it.",
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "Starting is where the setup friction wins."},
                               {"start": 3, "end": 15, "label": "middle", "text": "One timer makes the list feel smaller."}],
             "visual_direction": "Desk", "demo_brief": "Record the timer afterwards.",
@@ -1564,8 +1566,9 @@ class TestCreativePlanBudget:
         import ai_service
         plan = {
             "hook_line": "Naming the feeling never worked.",
-            "script": ("The suggestions helped me find the words. "
-                       "I understood myself better after writing the entry."),
+            "script": ("The suggestions helped me find the words for what I was feeling. "
+                       "I understood myself better after writing the entry, and my "
+                       "chest felt lighter."),
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook",
                  "text": "Naming the feeling never worked."},
@@ -1594,8 +1597,9 @@ class TestCreativePlanBudget:
         import ai_service
         plan = {
             "hook_line": "Naming the feeling never worked.",
-            "script": ("The suggestions helped me find the words. "
-                       "I understood myself better after writing the entry."),
+            "script": ("The suggestions helped me find the words for what I was feeling. "
+                       "I understood myself better after writing the entry, and my "
+                       "chest felt lighter."),
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook",
                  "text": "Naming the feeling never worked."},
@@ -1644,8 +1648,9 @@ class TestPlanChainReasoningEffort:
 
     PLAN = {
         "hook_line": "Naming the feeling never worked.",
-        "script": ("The suggestions helped me find the words. "
-                   "I understood myself better after writing the entry."),
+        "script": ("The suggestions helped me find the words for what I was feeling. "
+                   "I understood myself better after writing the entry, and my "
+                   "chest felt lighter."),
         "beat_timeline": [
             {"start": 0, "end": 3, "label": "hook",
              "text": "Naming the feeling never worked."},
@@ -2131,8 +2136,9 @@ class TestStrategyBudget:
         import ai_service
         plan = {
             "hook_line": "Naming the feeling never worked.",
-            "script": ("The suggestions helped me find the words. "
-                       "I understood myself better after writing the entry."),
+            "script": ("The suggestions helped me find the words for what I was feeling. "
+                       "I understood myself better after writing the entry, and my "
+                       "chest felt lighter."),
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook",
                  "text": "Naming the feeling never worked."},
@@ -2171,8 +2177,9 @@ class TestStrategyBudget:
         import ai_service
         plan = {
             "hook_line": "Naming the feeling never worked.",
-            "script": ("The suggestions helped me find the words. "
-                       "I understood myself better after writing the entry."),
+            "script": ("The suggestions helped me find the words for what I was feeling. "
+                       "I understood myself better after writing the entry, and my "
+                       "chest felt lighter."),
             "beat_timeline": [
                 {"start": 0, "end": 3, "label": "hook",
                  "text": "Naming the feeling never worked."},
@@ -3235,7 +3242,9 @@ class TestGeneratedStoryRepair:
         )
         good = self._plan(
             "Naming what I felt never worked.",
-            "The suggestions helped me name the feeling. I left the entry understanding myself better.",
+            "The suggestions helped me name the feeling. I left the entry "
+            "understanding myself better, and the tight knot in my chest "
+            "had loosened at last.",
         )
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -3260,7 +3269,9 @@ class TestGeneratedStoryRepair:
         )
         good = self._plan(
             "Typing my thoughts felt like a chore.",
-            "I spoke instead. The reflection helped me understand what was on my mind.",
+            "I spoke instead. The reflection helped me understand what was "
+            "on my mind, and the weight I carried into the evening felt "
+            "lighter than before.",
         )
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -3282,7 +3293,9 @@ class TestGeneratedStoryRepair:
         )
         good = self._plan(
             bad["hook_line"],
-            "The suggestions helped me find the words. I understood the feeling instead of circling around it.",
+            "The suggestions helped me find the words. I understood the "
+            "feeling instead of circling around it, and the evening opened "
+            "up a little more than before.",
         )
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
@@ -3298,7 +3311,9 @@ class TestGeneratedStoryRepair:
         import ai_service
         good = self._plan(
             "I used to feel like that.",
-            "Now I know what that feeling was like. Writing is something I look forward to.",
+            "Now I know what that feeling was like. The words came slower "
+            "than I wanted, but they came, and they were mine. Writing is "
+            "something I look forward to.",
         )
         rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
         result = _run(ai_service.generate_creative_plan(
@@ -3322,7 +3337,9 @@ class TestGeneratedStoryRepair:
         import ai_service
         good = self._plan(
             "Naming the feeling never worked.",
-            "The suggestions helped me find the words. I understood myself better after writing the entry.",
+            "The suggestions helped me find the words for what I was feeling. "
+            "I understood myself better after writing the entry, and my "
+            "chest felt lighter.",
         )
         rec = _patch_client(monkeypatch, [_completion(json.dumps(good))])
         result = _run(ai_service.generate_creative_plan(
@@ -3335,6 +3352,167 @@ class TestGeneratedStoryRepair:
         assert "MIDDLE ONLY" in prompt
         assert "full spoken script for BOTH" not in prompt
         assert "SELF-REVIEW" in prompt
+
+
+class TestScriptBand:
+    """
+    Kasra's sizing rule for generated scripts (ADR 0255, Nov 21 2026).
+
+    The live failure: a generated script arrived at 172 characters against
+    the band his video's shape allows, reached the render, and the prompt
+    guard refused the spend — the script should never have been delivered
+    at that length, and a short one is the same defect in the other
+    direction. For the standard shape (a middle whose target is the full
+    150 — any middle of ten seconds or more) a delivered script lands
+    INSIDE its band: 140 to 155 characters at the 150 target, over the
+    band rewritten like over the ceiling, under the band rewritten like
+    any other hard defect, and a draft that never lands refused after the
+    bounded attempts rather than shipped.
+    """
+
+    HOOK = "Naming the feeling never worked."
+    UNDER = (
+        "The suggestions helped me find the words. I understood myself "
+        "better after writing the entry."
+    )
+    INBAND = (
+        "The suggestions helped me find the words for what I was feeling. "
+        "I understood myself better after writing the entry, and my chest "
+        "felt lighter."
+    )
+    OVERBAND = INBAND + " The evening felt quieter."
+
+    def test_fixture_lengths_are_the_shapes_they_claim(self):
+        assert len(self.UNDER) < 140
+        assert 140 <= len(self.INBAND) <= 155
+        assert 155 < len(self.OVERBAND) <= 180
+
+    def test_an_under_band_script_is_rewritten_into_the_band(self, monkeypatch):
+        import ai_service
+        bad = TestGeneratedStoryRepair._plan(self.HOOK, self.UNDER)
+        good = TestGeneratedStoryRepair._plan(self.HOOK, self.INBAND)
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["script"] == self.INBAND
+        correction = rec.payloads[1]["messages"][1]["content"]
+        assert "EDITORIAL CORRECTION" in correction
+        assert "140" in correction and "155" in correction
+
+    def test_an_over_band_script_is_rewritten_into_the_band(self, monkeypatch):
+        import ai_service
+        bad = TestGeneratedStoryRepair._plan(self.HOOK, self.OVERBAND)
+        good = TestGeneratedStoryRepair._plan(self.HOOK, self.INBAND)
+        rec = _patch_client(monkeypatch, [
+            _completion(json.dumps(bad)), _completion(json.dumps(good)),
+        ])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+        ))
+        assert result["script"] == self.INBAND
+        correction = rec.payloads[1]["messages"][1]["content"]
+        assert "EDITORIAL CORRECTION" in correction
+
+    def test_a_script_that_never_lands_in_band_is_refused(self, monkeypatch):
+        import ai_service
+        bad = TestGeneratedStoryRepair._plan(self.HOOK, self.UNDER)
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(bad))])
+        with pytest.raises(RuntimeError, match="complete, fitting spoken sentences"):
+            _run(ai_service.generate_creative_plan(
+                profile={}, template={"hook_seconds": 3}, duration_seconds=15,
+            ))
+        assert len(rec.payloads) == 3, "editorial retries must be bounded"
+
+    def test_short_shapes_have_no_band(self, monkeypatch):
+        """A seven-second middle's target is its ceiling (105): there is no
+        150 target for a band to bracket, so a complete shorter script is
+        delivered exactly as before — no correction call is spent on it."""
+        import ai_service
+        plan = TestGeneratedStoryRepair._plan(self.HOOK, self.UNDER)
+        rec = _patch_client(monkeypatch, [_completion(json.dumps(plan))])
+        result = _run(ai_service.generate_creative_plan(
+            profile={}, template={"hook_seconds": 3}, duration_seconds=10,
+        ))
+        assert result["script"] == self.UNDER
+        for payload in rec.payloads:
+            assert "EDITORIAL CORRECTION" not in payload["messages"][1]["content"]
+
+    def _strategy_reply(self, middle_script):
+        import ai_service
+        strategy = {key: "x" for key in ai_service.REQUIRED_STRATEGY_KEYS}
+        strategy.update({
+            "scene": {}, "performance": {},
+            "segments": [
+                {"seconds": 3, "goal": "g", "script": "A short hook line.", "action": "a"},
+                {"seconds": 12, "goal": "g", "script": middle_script, "action": "a"},
+            ],
+            "messaging_pillars": [], "emotional_triggers": [],
+        })
+        return strategy
+
+    def test_a_planless_strategy_over_its_ceiling_is_refused(self, monkeypatch):
+        """The strategy generator is a script producer too: with no approved
+        plan to bind, its own section scripts are the words a render speaks,
+        and it accepted them at any length — the prompt stated the ceilings
+        and nothing enforced them (ADR 0255)."""
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            return self._strategy_reply("y" * 300)
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(RuntimeError, match="ceiling"):
+            _run(ai_service.generate_video_strategy(
+                profile={}, template={}, hook_seconds=3, total_duration=15,
+            ))
+
+    def test_a_planless_strategy_with_fitting_words_is_delivered(self, monkeypatch):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            return self._strategy_reply("A short middle line.")
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.generate_video_strategy(
+            profile={}, template={}, hook_seconds=3, total_duration=15,
+        ))
+        assert result["segments"][1]["script"] == "A short middle line."
+
+    def test_a_remake_under_the_band_gets_one_correction(self, monkeypatch):
+        """The whole-script remake is a generation too: bounded below by the
+        band as well as above by the ceiling, with one correction before it
+        refuses (ADR 0255)."""
+        import ai_service
+        replies = iter([{"line": "The words helped."}, {"line": self.INBAND}])
+        prompts = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return next(replies)
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.rewrite_whole_script(
+            {}, None, self.UNDER,
+            hook_line=self.HOOK, max_chars=180, min_chars=140,
+        ))
+        assert result == self.INBAND
+        assert "140" in prompts[1]
+
+    def test_a_remake_that_stays_under_the_band_is_refused(self, monkeypatch):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            return {"line": "The words helped."}
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        with pytest.raises(ai_service.RewriteRefusal, match="140"):
+            _run(ai_service.rewrite_whole_script(
+                {}, None, self.UNDER,
+                hook_line=self.HOOK, max_chars=180, min_chars=140,
+            ))
 
 
 class TestSpokenLineCraft:
@@ -3360,7 +3538,7 @@ class TestSpokenLineCraft:
             prompts.append(prompt)
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3388,7 +3566,7 @@ class TestSpokenLineCraft:
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
         good = dict(bad, hook_line="Naming what I felt never worked.",
-                    script="One sentence each night helped me understand the pattern.")
+                    script="One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
         ])
@@ -3411,7 +3589,7 @@ class TestSpokenLineCraft:
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
         good = dict(bad, hook_line="Naming what I felt never worked.",
-                    script="One sentence each night helped me understand the pattern.")
+                    script="One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
         ])
@@ -3435,7 +3613,8 @@ class TestSpokenLineCraft:
             "hook_line": "I used to feel like that.",
             "script": (
                 "Now I know what that feeling was like. Writing is something I "
-                "look forward to, and I finally understand where it came from."
+                "look forward to, and I finally understand where it came from. "
+                "The quiet felt earned."
             ),
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
@@ -3467,7 +3646,7 @@ class TestSpokenLineCraft:
             "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
         }
         good = dict(bad, hook_line="Naming what I felt never worked.",
-                    script="One sentence each night helped me understand the pattern.")
+                    script="One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.")
         rec = _patch_client(monkeypatch, [
             _completion(json.dumps(bad)), _completion(json.dumps(good)),
         ])
@@ -3489,7 +3668,7 @@ class TestSpokenLineCraft:
         import ai_service
         good = {
             "hook_line": "I used to dread mornings.",
-            "script": "One sentence each night helped me understand the pattern.",
+            "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
             "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
             "visual_direction": "v", "demo_brief": "d",
             "voice_direction": "vd", "sound_direction": "sd",
@@ -3552,7 +3731,7 @@ class TestSpokenLineCraft:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3619,7 +3798,8 @@ class TestHookScriptContinuity:
     HOOK = "My workday is still loud in my head."
     DANGLING_SCRIPT = (
         "I just start talking right here in the car. By the time I walk in, "
-        "the day is written down and I can finally put it down."
+        "the day is written down and I can finally put it down. "
+        "The house stays quiet."
     )
     CONTINUOUS_SCRIPT = (
         "I am sitting in my car outside my house and the loud day is still buzzing. "
@@ -3661,7 +3841,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3693,7 +3873,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3737,7 +3917,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3784,7 +3964,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3830,7 +4010,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3867,7 +4047,9 @@ class TestHookScriptContinuity:
             prompts["plan"].append(prompt)
             return {
                 "hook_line": "I'm trying to keep count of my good days.",
-                "script": "Saying the days out loud shows me the pattern.",
+                "script": "Saying the days out loud shows me the pattern. "
+                "I stopped losing the good ones in the noise of the week, "
+                "and the count finally held at long last.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3939,7 +4121,9 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "I don't want to type anything today, not even a word.",
-                "script": "So I just talked instead.",
+                "script": "So I just talked instead. The words came out plain, "
+                "one after another, and by the end of it the whole day felt "
+                "smaller and much easier to carry.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -3973,7 +4157,7 @@ class TestHookScriptContinuity:
             captured["prompt"] = prompt
             return {
                 "hook_line": "Naming what I felt never worked.",
-                "script": "One sentence each night helped me understand the pattern.",
+                "script": "One sentence each night helped me understand the pattern. I stopped guessing what the day had done to me, and the tight feeling in my chest eased.",
                 "beat_timeline": [{"start": 0, "end": 3, "label": "hook", "text": "t"}],
                 "visual_direction": "v", "demo_brief": "d",
                 "voice_direction": "vd", "sound_direction": "sd", "claims_used": [],
@@ -4058,7 +4242,12 @@ class TestCompleteSentences:
         return out, editorial or captured["prompt"]
 
     def test_the_prompt_demands_complete_sentences(self, monkeypatch):
-        _, prompt = self._generate(monkeypatch, "A full hook line here.", "A full script here.")
+        _, prompt = self._generate(
+            monkeypatch, "A full hook line here.",
+            "A full script here. It tells the moment in the order it "
+            "happened, in plain words, and it ends on the small part "
+            "that stayed with me longest.",
+        )
         assert "COMPLETE SENTENCES" in prompt
         assert "conjunction, preposition or article" in prompt
         assert "no semicolon joining a statement to a command" in prompt
@@ -4066,7 +4255,10 @@ class TestCompleteSentences:
     def test_an_overlong_hook_is_rewritten_as_a_complete_sentence(self, monkeypatch):
         hook = "First complete opener here. " + "filler words " * 60
         out, prompt = self._generate(
-            monkeypatch, hook, "A full script here.",
+            monkeypatch, hook,
+            "A full script here. It tells the moment in the order it "
+            "happened, in plain words, and it ends on the small part "
+            "that stayed with me longest.",
             corrected={"hook_line": "I finally found the words."},
         )
         assert out["hook_line"] == "I finally found the words."
@@ -4080,7 +4272,11 @@ class TestCompleteSentences:
     def test_an_overlong_script_is_rewritten_not_sliced(self, monkeypatch):
         script = "Opening sentence here. " + "filler words " * 900
         assert len(script) > 6000
-        replacement = "The suggestions helped me name it. I understood my feelings better."
+        replacement = (
+            "The suggestions helped me name it. I understood my feelings "
+            "better, and the rest of the evening felt quieter than the "
+            "long day had been. The quiet stayed."
+        )
         out, prompt = self._generate(
             monkeypatch, "A full hook line here.", script,
             corrected={"script": replacement},
