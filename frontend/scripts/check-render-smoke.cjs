@@ -13881,6 +13881,127 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("no fresh-generate button stands before a hook line exists (ADR 0265)", async (ctx) => {
+    // The new button's whole job is replacing a line on file with a
+    // fresh one from the current picks; before a line exists the
+    // one stateful button already generates the first hook, so the
+    // card carries no second generate control.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+      },
+      "",
+      async () => {
+        if (!ctx.container.querySelector('[data-testid="hook-generate"]')) {
+          throw new Error("the Generate the hook button did not render on the empty card");
+        }
+        if (ctx.container.querySelector('[data-testid="hook-generate-new"]')) {
+          throw new Error("a fresh-generate button stands on a card with no hook line to replace");
+        }
+      }
+    );
+  });
+
+  await check("a fresh hook from the current picks replaces the line on file (ADR 0265)", async (ctx) => {
+    // Kasra's order (Nov 22 2026): after a hook exists, changing
+    // the Focus pick left no way to write a brand-new hook from the
+    // new focus — the only path refined the old line. The new
+    // button runs the same fresh generation as the first Generate,
+    // from the picks as they stand, and its result is the line on
+    // file directly — no suggestion, no accept step. The
+    // clearer-hook suggestion beside it is untouched.
+    const FIRST_FOCUS = "Clearing the day's thoughts out loud";
+    const NEW_FOCUS = "Fall asleep without replaying the day";
+    const NEW_HOOK = "I'm trying to fall asleep without replaying the whole day again.";
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: FIRST_FOCUS, from_feature: "Voice entries" }],
+      desired_outcomes: [NEW_FOCUS],
+    };
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, hook_focus: FIRST_FOCUS });
+    const generateCalls = [];
+    const rewriteCalls = [];
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => row,
+        getGenerations: async () => ({ generations: [] }),
+        updateStudioProject: async (_id, patch) => {
+          row = { ...row, ...patch };
+          return row;
+        },
+        generateHookLine: async () => {
+          generateCalls.push({ focus: row.hook_focus });
+          row = { ...row, hook_line: NEW_HOOK };
+          return hookRow({ id: "hook-cta-1", hook_line: NEW_HOOK, hook_focus: row.hook_focus });
+        },
+        rewriteLine: async (_id, payload) => {
+          rewriteCalls.push(payload);
+          return { line: "unused" };
+        },
+      },
+      "",
+      async () => {
+        // Both controls stand: the untouched suggestion and the
+        // new fresh-generate button beside it.
+        const suggest = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
+        if (!suggest || !suggest.textContent.includes("Suggest a clearer hook")) {
+          throw new Error("Suggest a clearer hook does not stand beside the written hook");
+        }
+        const fresh = ctx.container.querySelector('[data-testid="hook-generate-new"]');
+        if (!fresh) throw new Error("the fresh-generate button does not stand beside the written hook");
+        if (!fresh.textContent.includes("Generate a new hook")) {
+          throw new Error(`the fresh-generate button reads "${fresh.textContent}", expected Generate a new hook`);
+        }
+        if (ctx.container.querySelector('[data-testid="hook-generate"]')) {
+          throw new Error("the first-generate button still stands beside the written hook");
+        }
+        // Change the Focus pick to the new focus; the pick alone
+        // generates nothing (ADR 0122 stands).
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), NEW_FOCUS);
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (generateCalls.length) {
+          throw new Error("changing the focus pick generated a hook on its own");
+        }
+        await clickEl(ctx, fresh);
+        await act(async () => {});
+        if (generateCalls.length !== 1) {
+          throw new Error(`the fresh-generate button spent ${generateCalls.length} generation calls, expected one`);
+        }
+        if (generateCalls[0].focus !== NEW_FOCUS) {
+          throw new Error(`the fresh hook was requested with focus "${generateCalls[0].focus}", expected the new pick "${NEW_FOCUS}"`);
+        }
+        // The new line is on file directly — no suggestion
+        // offered, no accept step, the rewrite endpoint never
+        // called.
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field || field.value !== NEW_HOOK) {
+          throw new Error(`the line on file is "${field && field.value}", expected the fresh hook`);
+        }
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-suggestion"]')) {
+          throw new Error("the fresh hook arrived as a rewrite suggestion instead of the line on file");
+        }
+        if (rewriteCalls.length) {
+          throw new Error("the fresh-generate button spent a rewrite call");
+        }
+        // The stale note the pick change raised is cleared: the
+        // line on file is now written from the current picks.
+        if (ctx.container.querySelector('[data-testid="hook-picks-stale-note"]')) {
+          throw new Error("the stale note still stands over a hook written from the current picks");
+        }
+        // And the suggestion control still stands, unchanged.
+        const suggestAfter = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
+        if (!suggestAfter || !suggestAfter.textContent.includes("Suggest a clearer hook")) {
+          throw new Error("Suggest a clearer hook changed when the fresh hook landed");
+        }
+      }
+    );
+  });
+
   await check("writing the hook shows a plain busy state with no countdown (ADR 0249)", async (ctx) => {
     let release = null;
     await inHookCta(
