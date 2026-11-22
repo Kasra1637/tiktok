@@ -51,6 +51,7 @@ import {
   DEFAULT_SCREEN,
   DEFAULTS,
   DEVICES,
+  deviceKindTag,
   ENVIRONMENTS,
   PRESETS,
   RANGES,
@@ -1955,6 +1956,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               Source replaced; export stays under this Hook + Story.
             </p>
           )}
+          {/* The frame line (ADR 0260): the device picker is gone by
+              design — the frame is fixed — so the active frame is named
+              here with its frame-type tag from the catalog, the same tag
+              every frame in DEVICES carries (Phone vs Web / Browser), so
+              the iPhone and browser frames read as their kind wherever
+              they are named. Naming only: no value changes. */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Frame</span>
+            <span className="font-semibold">{activeDevice.label}</span>
+            <span
+              data-testid="demo-cta-frame-tag"
+              className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]"
+            >
+              {deviceKindTag(activeDevice)}
+            </span>
+          </div>
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
               label="Base clip style"

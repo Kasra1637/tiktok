@@ -79,14 +79,25 @@ function objectionsToText(objections) {
     .join("\n\n");
 }
 
-function textToObjections(text) {
-  const blocks = (text || "").split(/\n\s*\n/);
-  const out = [];
-  for (const block of blocks) {
+/**
+ * The one block split both round-trip parsers — and the label-row badge
+ * below — read the text by: blank-line-separated blocks, each block's
+ * lines trimmed, trailing empties dropped so a block answered on fewer
+ * lines still counts its real lines rather than its padding. Sharing
+ * this is what keeps the badge's count the save path's count (ADR 0260):
+ * there is no second parser to drift.
+ */
+function splitTextBlocks(text) {
+  return (text || "").split(/\n\s*\n/).map((block) => {
     const lines = block.split("\n").map((l) => l.trim());
-    // Trailing empties dropped so an objection answered on two lines still
-    // saves, rather than requiring the founder to pad a blank third line.
     while (lines.length && !lines[lines.length - 1]) lines.pop();
+    return lines;
+  });
+}
+
+function textToObjections(text) {
+  const out = [];
+  for (const lines of splitTextBlocks(text)) {
     if (lines.length < OBJECTION_LINES) continue;
     out.push({
       objection: lines[0],
@@ -116,11 +127,8 @@ function outcomesToText(statements) {
 }
 
 function textToOutcomes(text) {
-  const blocks = (text || "").split(/\n\s*\n/);
   const out = [];
-  for (const block of blocks) {
-    const lines = block.split("\n").map((l) => l.trim());
-    while (lines.length && !lines[lines.length - 1]) lines.pop();
+  for (const lines of splitTextBlocks(text)) {
     if (lines.length < OUTCOME_LINES) continue;
     out.push({
       outcome: lines[0],
@@ -130,6 +138,44 @@ function textToOutcomes(text) {
     });
   }
   return out;
+}
+
+/**
+ * The label-row badge for the two block fields (ADR 0260): how many
+ * complete blocks the current text parses into, counted by the very
+ * parser the save path runs, and — the moment a block is missing a
+ * line — a warning naming how far that block got, because the parsers
+ * skip an incomplete block at save and until now nothing said so while
+ * there was still time to finish it. The last partial block is the one
+ * named: it is the one being written. Visibility only — what gets
+ * saved is untouched.
+ */
+function BlockCountBadge({ text, linesPerBlock, parse, singular, plural, testId }) {
+  if (!(text || "").trim()) return null;
+  const complete = parse(text).length;
+  const partials = splitTextBlocks(text).filter(
+    (lines) => lines.length > 0 && lines.length < linesPerBlock
+  );
+  const partial = partials[partials.length - 1];
+  const countLabel = `${complete} ${complete === 1 ? singular : plural}`;
+  if (!partial) {
+    return (
+      <span
+        data-testid={testId}
+        className="inline-flex items-center rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+      >
+        {countLabel}
+      </span>
+    );
+  }
+  return (
+    <span
+      data-testid={testId}
+      className="inline-flex items-center rounded-full border border-[color:var(--brand-coral)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-coral)]"
+    >
+      {countLabel} · unfinished block — {partial.length} of {linesPerBlock} lines, won’t save
+    </span>
+  );
 }
 
 /** One list item per line — for entries that themselves contain commas. */
@@ -173,12 +219,16 @@ function profileToForm(data) {
 /* Labelled form field wrapper. The label is the shared GroupLabel eyebrow —
    the same 12/600 uppercase muted label the angles page uses for its own
    fields — so a form row reads like a detail row. Hint stays 12/18 muted.
-   `listen` puts a speaker on the label row for the field's current text. */
-function Field({ label, hint, listen, children }) {
+   `listen` puts a speaker on the label row for the field's current text;
+   `badge` puts a live count chip beside the label on the same row. */
+function Field({ label, hint, listen, badge, children }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <GroupLabel as="label">{label}</GroupLabel>
+        <span className="flex min-w-0 items-center gap-2">
+          <GroupLabel as="label">{label}</GroupLabel>
+          {badge}
+        </span>
         {listen && (
           <ListenButton
             id={listen.id}
@@ -1128,6 +1178,16 @@ export default function BrandSetup() {
                   label="Feature-to-outcome statements"
                   hint="Four lines per statement, blank line between: the benefit / who feels it / the feature it comes from / how it helps. These become the video's pitch."
                   listen={listenParagraph("outcome_statements", "Feature-to-outcome statements")}
+                  badge={
+                    <BlockCountBadge
+                      text={form.outcome_statements}
+                      linesPerBlock={OUTCOME_LINES}
+                      parse={textToOutcomes}
+                      singular="statement"
+                      plural="statements"
+                      testId="outcome-statements-badge"
+                    />
+                  }
                 >
                   <Textarea
                     value={form.outcome_statements}
@@ -1208,6 +1268,16 @@ export default function BrandSetup() {
                   label="Why they would not try or download"
                   hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
                   listen={listenParagraph("viewer_objections", "Why they would not try or download")}
+                  badge={
+                    <BlockCountBadge
+                      text={form.viewer_objections}
+                      linesPerBlock={OBJECTION_LINES}
+                      parse={textToObjections}
+                      singular="objection"
+                      plural="objections"
+                      testId="viewer-objections-badge"
+                    />
+                  }
                 >
                   <Textarea
                     value={form.viewer_objections}

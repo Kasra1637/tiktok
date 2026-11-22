@@ -691,6 +691,14 @@ check("a truncated header sniffs as nothing, not as a guess",
 check("the device catalog survived the port",
   DC.DEVICES.length === 9 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8"
     && DC.DEVICES[7].id === "iphone_16_pro" && DC.DEVICES[8].id === "browser_window");
+// Every frame carries its frame-type tag (ADR 0260): handsets are Phone,
+// the window-bar frame is Web / Browser, and the tag helper resolves the
+// catalog's own entries — the iPhone included — to those exact labels.
+check("every device frame carries its frame-type tag",
+  DC.DEVICES.every((d) => d.kind === "phone" || d.kind === "browser")
+    && DC.DEVICES.filter((d) => d.kind === "browser").length === 1
+    && DC.DEVICE_KIND_LABELS.phone === "Phone" && DC.DEVICE_KIND_LABELS.browser === "Web / Browser"
+    && DC.deviceKindTag(DC.DEVICES[7]) === "Phone" && DC.deviceKindTag(DC.DEVICES[8]) === "Web / Browser");
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 // Aurora Waves was removed deliberately (a catalog trim, not port drift),

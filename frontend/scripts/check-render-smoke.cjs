@@ -381,6 +381,16 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 const apiStub = {
   recordFeedback: async () => ({}),
   getStudioVideoModels: async () => ({ default: "minimax-h3-max", models: [CAPABILITY] }),
+  // The landing hero pill's live counts (ADR 0260), shaped like the real
+  // GET /api/landing-proof response; the hero check below asserts the
+  // pill swaps these in over its deterministic baseline.
+  getLandingProof: async () => ({
+    plans_drafted: 12,
+    profiles_approved: 3,
+    hook_structures: 10,
+    live: true,
+    baseline: { plans_drafted: 0, profiles_approved: 0, hook_structures: 10 },
+  }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -11554,7 +11564,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // the casing is his, revised the same day (ADR 0157 addendum):
   // every word lowercase except the T of Turn; the S of Store was
   // capital in the first dictation and dropped minutes later.
-  // The whole headline carries one treatment,
+  // The headline's wording moved once more on Nov 21 2026 (ADR
+  // 0260, superseding ADR 0256's "app or website link" line): the
+  // URL is the input now, singular "a tailored video". The whole
+  // headline carries one treatment,
   // the animated brand gradient, and the sub-headline is his
   // earlier line tightened with every meaning beat kept. The "One
   // photo in" hero, the "steer the next one" line and the held
@@ -11564,7 +11577,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app or website link into tailored videos, in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your URL into a tailored video in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
@@ -11608,6 +11621,53 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
+  // The hero proof pill (ADR 0260): the strong EyebrowPill — the same
+  // component and treatment as the closing CTA's "Ready when you are" —
+  // standing directly above the H1, carrying the three counts from
+  // GET /api/landing-proof. The stub answers with live values, so the
+  // pill must show those, swapped in over its first-paint baseline.
+  await check("the hero proof pill stands over the headline with the live counts", async (ctx) => {
+    await mount(load("pages/Landing.jsx").default)(ctx);
+    await act(async () => {});
+    const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
+    if (!hero) throw new Error("no hero section rendered");
+    const pill = hero.querySelector('[data-testid="landing-proof-pill"]');
+    if (!pill) throw new Error("the hero proof pill is missing");
+    const h1 = hero.querySelector("h1");
+    if (!(pill.compareDocumentPosition(h1) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+      throw new Error("the proof pill does not stand above the headline");
+    }
+    for (const cls of ["eyebrow", "eyebrow-accent", "rounded-full", "border-[color:var(--indigo-15)]", "bg-[color:var(--indigo-8)]"]) {
+      if (!pill.className.includes(cls)) {
+        throw new Error(`the proof pill lost the strong EyebrowPill treatment (${cls})`);
+      }
+    }
+    const text = pill.textContent.replace(/\s+/g, " ").trim();
+    if (text !== "10 curated hook structures · 3 approved app profiles · 12 plans drafted") {
+      throw new Error(`the proof pill is not carrying the endpoint's counts: ${text}`);
+    }
+  });
+
+  // The pill's first-paint baseline is a frontend constant; its
+  // hook-structure count must equal the backend catalog's size, or the
+  // pill would open with a number the product cannot back. Count the
+  // curated templates in backend/template_library.py and compare.
+  await check("the proof pill baseline matches the curated catalog", async () => {
+    const landingSrc = fs.readFileSync(path.join(SRC, "pages", "Landing.jsx"), "utf8");
+    const baselineMatch = landingSrc.match(/LANDING_PROOF_BASELINE\s*=\s*\{[^}]*hook_structures:\s*(\d+)/);
+    if (!baselineMatch) throw new Error("Landing.jsx carries no proof baseline to pin");
+    const catalogSrc = fs.readFileSync(path.join(SRC, "..", "..", "backend", "template_library.py"), "utf8");
+    const listStart = catalogSrc.indexOf("CURATED_TEMPLATES = [");
+    const listEnd = catalogSrc.indexOf("\n]\n", listStart);
+    if (listStart < 0 || listEnd < 0) throw new Error("the curated template list could not be read");
+    const templateCount = (catalogSrc.slice(listStart, listEnd).match(/"name":/g) || []).length;
+    if (Number(baselineMatch[1]) !== templateCount) {
+      throw new Error(
+        `the proof baseline claims ${baselineMatch[1]} hook structures; the catalog holds ${templateCount}`
+      );
+    }
+  });
+
   // Features page: six alternating rows, code-built mockups, nav both ways.
   // Copy reuses the landing descriptions, so the claim pins above apply to
   // Landing only — here the shape is pinned: one H1, five rows each with a
@@ -11631,6 +11691,43 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (!ctx.container.querySelector('[data-testid="features-final-cta"]')) throw new Error("missing closing CTA");
     if (ctx.container.querySelector("a button, button a")) throw new Error("features actions must not nest interactive elements");
+  });
+
+  // The mockups follow the product (ADR 0260): the script mock's words
+  // wear the real generated-text highlight (ADR 0258) in a hook +
+  // two-beat shape — never the retired frame; the render mock shows a
+  // filled presenter under both platforms' safe-zone guides with no
+  // text banner burned into the clip; the demo mock frames a browser
+  // window over a three-step sequence timeline.
+  await check("Features mockups mirror the real script, render and demo", async (ctx) => {
+    const Features = load("pages/Features.jsx").default;
+    await mount(Features)(ctx);
+    const scriptRow = ctx.container.querySelector('[data-testid="features-row-script"]');
+    if (!scriptRow) throw new Error("no script feature row rendered");
+    const highlighted = scriptRow.querySelectorAll(".generated-highlight");
+    if (highlighted.length !== 3) {
+      throw new Error(`the script mock should highlight a hook and two beats, found ${highlighted.length}`);
+    }
+    if (scriptRow.querySelector(".spoken-line-frame")) {
+      throw new Error("the script mock resurrected the retired spoken-line frame");
+    }
+    const renderRow = ctx.container.querySelector('[data-testid="features-row-render"]');
+    if (!renderRow) throw new Error("no render feature row rendered");
+    if (!renderRow.querySelector('[data-testid="render-mock-safe-tiktok"]')) {
+      throw new Error("the render mock lost its TikTok safe-zone guide");
+    }
+    if (!renderRow.querySelector('[data-testid="render-mock-safe-instagram"]')) {
+      throw new Error("the render mock lost its Instagram safe-zone guide");
+    }
+    if (renderRow.textContent.includes("Your spoken hook")) {
+      throw new Error("the render mock still burns a text banner into the clip");
+    }
+    const demoRow = ctx.container.querySelector('[data-testid="features-row-demo"]');
+    if (!demoRow) throw new Error("no demo feature row rendered");
+    const timeline = demoRow.querySelector('[data-testid="demo-mock-timeline"]');
+    if (!timeline || !timeline.firstElementChild || timeline.firstElementChild.children.length !== 3) {
+      throw new Error("the demo mock's sequence timeline does not hold three steps");
+    }
   });
 
   // Every live route a tour can fire on, and the page component that route
@@ -15937,6 +16034,54 @@ async function runBrandSetupChecks() {
       );
     }
   );
+
+  // The block badges (ADR 0260): the two block fields count their
+  // complete blocks live on the label row — counted by the same parser
+  // the save path runs — and warn the moment a block is missing a
+  // line, instead of that block dropping silently at save.
+  await check("block fields count complete blocks and warn on an unfinished one", async (ctx) => {
+    await mountWith(ctx, handTyped);
+    const openGroup = async (id) => {
+      const bar = ctx.container.querySelector(`[data-testid="group-${id}"] button`);
+      if (!bar) throw new Error(`no ${id} group bar to open`);
+      await clickEl(ctx, bar, `the ${id} group does not open`);
+    };
+    await openGroup("does");
+    const outcomes = ctx.container.querySelector('[data-testid="app-outcome-statements-field"]');
+    if (!outcomes) throw new Error("no outcome statements field to type into");
+    await typeInto(
+      ctx, outcomes,
+      "Fall asleep faster\nNight-time scrollers\nSleep timer\nThe wind-down starts itself",
+      "type a complete statement"
+    );
+    let badge = ctx.container.querySelector('[data-testid="outcome-statements-badge"]');
+    if (!badge || badge.textContent.replace(/\s+/g, " ").trim() !== "1 statement") {
+      throw new Error(`a complete statement should read as one on the badge: ${badge?.textContent}`);
+    }
+    await typeInto(
+      ctx, outcomes,
+      "Fall asleep faster\nNight-time scrollers\nSleep timer\nThe wind-down starts itself\n\nWake up clear\nOverloaded planners",
+      "add an unfinished statement"
+    );
+    badge = ctx.container.querySelector('[data-testid="outcome-statements-badge"]');
+    const badgeText = badge?.textContent.replace(/\s+/g, " ").trim() || "";
+    if (!badgeText.includes("1 statement") || !badgeText.includes("unfinished block") || !badgeText.includes("2 of 4 lines")) {
+      throw new Error(`an unfinished statement should warn on the badge: ${badgeText}`);
+    }
+    await openGroup("direction");
+    const objections = ctx.container.querySelector('[data-testid="app-viewer-objections-field"]');
+    if (!objections) throw new Error("no viewer objections field to type into");
+    await typeInto(
+      ctx, objections,
+      "It is just another subscription\nThree habit trackers already\nIt costs nothing and works offline\n\nI do not have time",
+      "type a complete and an unfinished objection"
+    );
+    const objBadge = ctx.container.querySelector('[data-testid="viewer-objections-badge"]');
+    const objText = objBadge?.textContent.replace(/\s+/g, " ").trim() || "";
+    if (!objText.includes("1 objection") || !objText.includes("unfinished block") || !objText.includes("1 of 3 lines")) {
+      throw new Error(`an unfinished objection should warn on the badge: ${objText}`);
+    }
+  });
 }
 
 /**
@@ -15994,6 +16139,20 @@ async function runDemoCtaChecks() {
       }
     }
   );
+
+  // The frame line (ADR 0260): the editor names its active frame with
+  // the catalog's frame-type tag, resolved through the shared helper —
+  // a source pin, because the editor's canvas mount is heavier than
+  // the naming contract being pinned here.
+  await check("the Demo + CTA editor names its frame with its type tag", async () => {
+    const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
+    if (!src.includes('data-testid="demo-cta-frame-tag"')) {
+      throw new Error("the editor carries no frame-type tag");
+    }
+    if (!src.includes("deviceKindTag(activeDevice)")) {
+      throw new Error("the frame tag is not resolved from the active frame's catalog kind");
+    }
+  });
 
   await check(
     "the studio's own download is untouched by the native entry",

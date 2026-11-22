@@ -16,16 +16,25 @@
 const ASSET_BASE = `${process.env.PUBLIC_URL || ""}/demo-cta/`;
 
 export const DEVICES = [
-  { id: "s24", label: "Samsung Galaxy S24", body: "#0d0d10", rail: "#3a3a3f", aspect: 0.462, radiusRatio: 0.085, bezelRatio: 0.022, camera: "punch-center" },
-  { id: "s24_ultra", label: "Samsung Galaxy S24 Ultra", body: "#15161a", rail: "#46474c", aspect: 0.470, radiusRatio: 0.055, bezelRatio: 0.020, camera: "punch-center" },
-  { id: "note20", label: "Samsung Galaxy Note 20", body: "#111114", rail: "#2f3035", aspect: 0.455, radiusRatio: 0.060, bezelRatio: 0.024, camera: "punch-center" },
-  { id: "zflip", label: "Samsung Galaxy Z Flip5", body: "#1a1a1f", rail: "#3d3d44", aspect: 0.438, radiusRatio: 0.110, bezelRatio: 0.026, camera: "punch-center" },
-  { id: "lg_v60", label: "LG V60 ThinQ", body: "#0b0c10", rail: "#34353a", aspect: 0.460, radiusRatio: 0.070, bezelRatio: 0.030, camera: "notch-drop" },
-  { id: "lg_velvet", label: "LG Velvet", body: "#101218", rail: "#3a3c44", aspect: 0.448, radiusRatio: 0.090, bezelRatio: 0.028, camera: "notch-drop" },
-  { id: "lg_g8", label: "LG G8 ThinQ", body: "#0e0e12", rail: "#33343a", aspect: 0.472, radiusRatio: 0.075, bezelRatio: 0.034, camera: "notch-wide" },
-  { id: "iphone_16_pro", label: "iPhone 16 Pro", body: "#141418", rail: "#44454a", aspect: 0.461, radiusRatio: 0.115, bezelRatio: 0.020, camera: "dynamic-island" },
-  { id: "browser_window", label: "Browser / Web Card", body: "#101218", rail: "#323540", aspect: 0.520, radiusRatio: 0.045, bezelRatio: 0.016, camera: "window-bar" },
+  { id: "s24", kind: "phone", label: "Samsung Galaxy S24", body: "#0d0d10", rail: "#3a3a3f", aspect: 0.462, radiusRatio: 0.085, bezelRatio: 0.022, camera: "punch-center" },
+  { id: "s24_ultra", kind: "phone", label: "Samsung Galaxy S24 Ultra", body: "#15161a", rail: "#46474c", aspect: 0.470, radiusRatio: 0.055, bezelRatio: 0.020, camera: "punch-center" },
+  { id: "note20", kind: "phone", label: "Samsung Galaxy Note 20", body: "#111114", rail: "#2f3035", aspect: 0.455, radiusRatio: 0.060, bezelRatio: 0.024, camera: "punch-center" },
+  { id: "zflip", kind: "phone", label: "Samsung Galaxy Z Flip5", body: "#1a1a1f", rail: "#3d3d44", aspect: 0.438, radiusRatio: 0.110, bezelRatio: 0.026, camera: "punch-center" },
+  { id: "lg_v60", kind: "phone", label: "LG V60 ThinQ", body: "#0b0c10", rail: "#34353a", aspect: 0.460, radiusRatio: 0.070, bezelRatio: 0.030, camera: "notch-drop" },
+  { id: "lg_velvet", kind: "phone", label: "LG Velvet", body: "#101218", rail: "#3a3c44", aspect: 0.448, radiusRatio: 0.090, bezelRatio: 0.028, camera: "notch-drop" },
+  { id: "lg_g8", kind: "phone", label: "LG G8 ThinQ", body: "#0e0e12", rail: "#33343a", aspect: 0.472, radiusRatio: 0.075, bezelRatio: 0.034, camera: "notch-wide" },
+  { id: "iphone_16_pro", kind: "phone", label: "iPhone 16 Pro", body: "#141418", rail: "#44454a", aspect: 0.461, radiusRatio: 0.115, bezelRatio: 0.020, camera: "dynamic-island" },
+  { id: "browser_window", kind: "browser", label: "Browser / Web Card", body: "#101218", rail: "#323540", aspect: 0.520, radiusRatio: 0.045, bezelRatio: 0.016, camera: "window-bar" },
 ];
+
+// The frame-type tag each catalog frame wears wherever it is named
+// (ADR 0260): the eight handsets are one kind, the window-bar frame is
+// the other, so a web app's frame never reads as just another phone.
+export const DEVICE_KIND_LABELS = { phone: "Phone", browser: "Web / Browser" };
+
+export function deviceKindTag(device) {
+  return DEVICE_KIND_LABELS[device?.kind] || DEVICE_KIND_LABELS.phone;
+}
 
 export const PRESETS = [
   { id: "tiktok", label: "TikTok", w: 1080, h: 1920, note: "9:16" },

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends
 
 import observability
 import storage_service
+import template_library
 from auth import get_current_user_id, hosted_environment
 
 router = APIRouter()
@@ -141,6 +142,75 @@ async def health(user_id: str = Depends(get_current_user_id)):
             "R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME."
         )
     return out
+
+
+def landing_proof_baseline() -> dict:
+    """
+    The landing proof pill's deterministic floor (ADR 0260).
+
+    Every value here is true at any moment, in any deployment: a count of
+    rows in a database can never fall below zero, and the hook-structure
+    count is the curated catalog's size, read from the catalog itself in
+    this process. The landing page renders the pill from these values on
+    first paint and swaps in the live counts when the fetch lands, so the
+    pill never has to invent a number to avoid looking empty — and this
+    endpoint falls back to the same floor, named by `live: false`, when a
+    database read fails, rather than reporting a partial count as fact.
+    """
+    return {
+        "plans_drafted": 0,
+        "profiles_approved": 0,
+        "hook_structures": len(template_library.CURATED_TEMPLATES),
+    }
+
+
+async def landing_proof_report(fetch_one) -> dict:
+    """
+    The live counts behind GET /api/landing-proof, as a function of the
+    row read so the counting can be asserted without HTTP.
+
+    Sources, all counted at request time: `plans_drafted` is every row in
+    studio_projects (a project row exists only once a founder has a plan
+    drafted against an approved profile); `profiles_approved` is the
+    brand_profiles rows whose status is 'approved' — the state the
+    approval endpoint writes, not merely researched or drafted profiles;
+    `hook_structures` is the curated template catalog's size. A failed
+    read falls the whole report back to the baseline with `live: false`:
+    half-live evidence would quote one real number beside one floor
+    without saying which is which.
+    """
+    baseline = landing_proof_baseline()
+    counts = dict(baseline)
+    live = True
+    for key, sql in (
+        ("plans_drafted", "SELECT COUNT(*) AS n FROM studio_projects"),
+        (
+            "profiles_approved",
+            "SELECT COUNT(*) AS n FROM brand_profiles WHERE status = 'approved'",
+        ),
+    ):
+        try:
+            row = await fetch_one(sql, ())
+            counts[key] = int((row or {}).get("n") or 0)
+        except Exception:
+            live = False
+    if not live:
+        counts = dict(baseline)
+    return {**counts, "baseline": baseline, "live": live}
+
+
+@router.get("/landing-proof")
+async def landing_proof():
+    """
+    Public evidence for the landing hero pill (ADR 0260).
+
+    Unlike /api/health this is aggregate and anonymous by design: three
+    studio-wide counts a visitor may be shown, with no per-account rows
+    and nothing that identifies a founder. Unauthenticated because the
+    landing page is; the counts are the same whoever asks.
+    """
+    _require_configured()
+    return await landing_proof_report(_fetch_one)
 
 
 @router.get("/metrics")

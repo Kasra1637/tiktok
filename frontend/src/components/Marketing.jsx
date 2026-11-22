@@ -28,9 +28,10 @@ import { Button } from "./ui/button";
  * brand-indigo on indigo. `strong` is the same pill at one step deeper
  * border and fill, for text sitting on glass rather than on the page.
  */
-export function EyebrowPill({ strong = false, className, children }) {
+export function EyebrowPill({ strong = false, className, testId, children }) {
   return (
     <span
+      data-testid={testId}
       className={`eyebrow eyebrow-accent inline-flex items-center gap-1.5 rounded-full border px-3 py-1 ${
         strong
           ? "border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)]"

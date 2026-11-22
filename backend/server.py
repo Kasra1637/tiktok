@@ -104,6 +104,7 @@ from routers.health import (
     configure_health,
     health_database_report,
     health,
+    landing_proof,
     read_metrics,
 )
 api_router.include_router(health_router)
