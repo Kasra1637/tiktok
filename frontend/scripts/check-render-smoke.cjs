@@ -11575,13 +11575,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
       throw new Error("the hero headline does not carry the one animated gradient treatment");
     }
-    // The headline's size is Kasra's Nov 19 2026 dictation (ADR 0215):
-    // 42px on mobile, 50px from sm up, down from the 48/60 the Tailwind
-    // steps gave, carried as the fontSize tokens text-hero /
-    // sm:text-hero-wide (arbitrary sizes stay banned in marketing).
+    // The headline's size is Kasra's Nov 21 2026 dictation (ADR 0263,
+    // superseding ADR 0215's 42/50): 48px on mobile, 60px from sm up,
+    // carried as the fontSize tokens text-hero / sm:text-hero-wide
+    // (arbitrary sizes stay banned in marketing). The bump restores
+    // the hero's dominance over the page's 30/36px section headings.
     // Only the size moved — words, gradient, font, weight, leading and
-    // tracking stand — and the pin keeps the steps from quietly
-    // restoring the bigger sizes.
+    // tracking stand — and the pin keeps the tokens from being dropped
+    // in favour of Tailwind's steps.
     const h1Classes = h1.className.split(/\s+/);
     for (const cls of ["text-hero", "sm:text-hero-wide"]) {
       if (!h1Classes.includes(cls)) {

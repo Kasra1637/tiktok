@@ -16,13 +16,14 @@ module.exports = {
         display: ['"Space Grotesk"', 'Figtree', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace']
       },
-      // The landing hero headline's dictated sizes (ADR 0215): Kasra
-      // named 42px on mobile and 50px on desktop exactly, off the
-      // display ladder, so they ride as named tokens — arbitrary
-      // text sizes stay banned in marketing source.
+      // The landing hero headline's sizes (ADR 0215, superseded by
+      // ADR 0263): Kasra named 48px on mobile and 60px on desktop on
+      // Nov 21 2026, restoring the hero's dominance over the page's
+      // 30/36px section headings, so they ride as named tokens —
+      // arbitrary text sizes stay banned in marketing source.
       fontSize: {
-        hero: '42px',
-        'hero-wide': '50px'
+        hero: '48px',
+        'hero-wide': '60px'
       },
       borderRadius: {
         lg: 'var(--radius)',
