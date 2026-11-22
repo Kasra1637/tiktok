@@ -215,6 +215,7 @@ function HeroStory() {
     >
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
+          <div className="hero-story-notch" />
           <div className="hero-story-page1">
             <div className="hero-story-field">
               <Link2 className="h-3.5 w-3.5" />
@@ -255,29 +256,58 @@ function HeroStory() {
                 viewBox="0 0 200 160"
                 aria-hidden="true"
               >
-                {/* The scene behind her: a window with a soft
-                    moon, drifting shapes, a desk edge. */}
-                <rect x="120" y="12" width="68" height="86" rx="10" fill="var(--indigo-10)" />
-                <circle cx="154" cy="38" r="11" fill="var(--indigo-15)" />
-                <rect x="120" y="60" width="68" height="3" fill="var(--indigo-15)" />
-                <circle cx="24" cy="30" r="13" fill="var(--indigo-8)" />
-                <circle cx="36" cy="118" r="7" fill="var(--indigo-10)" />
+                <defs>
+                  <linearGradient id="hs-win-bg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(129, 140, 248, 0.24)" />
+                    <stop offset="100%" stopColor="rgba(99, 102, 241, 0.06)" />
+                  </linearGradient>
+                  <radialGradient id="hs-moon-glow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="rgba(199, 210, 254, 0.55)" />
+                    <stop offset="100%" stopColor="rgba(129, 140, 248, 0)" />
+                  </radialGradient>
+                  <linearGradient id="hs-top-grad" x1="0.2" y1="0" x2="0.8" y2="1">
+                    <stop offset="0%" stopColor="#818CF8" />
+                    <stop offset="55%" stopColor="var(--brand-indigo)" />
+                    <stop offset="100%" stopColor="var(--brand-indigo-dark)" />
+                  </linearGradient>
+                  <linearGradient id="hs-hair-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#4338CA" />
+                    <stop offset="100%" stopColor="#1E1B4B" />
+                  </linearGradient>
+                  <linearGradient id="hs-skin-grad" x1="0.2" y1="0" x2="0.8" y2="1">
+                    <stop offset="0%" stopColor="#E0E7FF" />
+                    <stop offset="100%" stopColor="#A5B4FC" />
+                  </linearGradient>
+                  <linearGradient id="hs-phone-screen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(129, 140, 248, 0.35)" />
+                    <stop offset="100%" stopColor="rgba(49, 46, 129, 0.5)" />
+                  </linearGradient>
+                </defs>
+                {/* The scene behind her: a lit studio window, soft bokeh, and desk edge. */}
+                <rect x="118" y="10" width="70" height="88" rx="12" fill="url(#hs-win-bg)" stroke="rgba(165, 180, 252, 0.16)" strokeWidth="1" />
+                <circle cx="154" cy="36" r="20" fill="url(#hs-moon-glow)" />
+                <circle cx="154" cy="36" r="9.5" fill="rgba(224, 231, 255, 0.45)" />
+                <rect x="118" y="58" width="70" height="2.5" fill="rgba(165, 180, 252, 0.16)" />
+                <circle cx="24" cy="28" r="14" fill="var(--indigo-8)" />
+                <circle cx="36" cy="116" r="7" fill="var(--indigo-10)" />
                 <rect x="0" y="134" width="200" height="26" fill="var(--indigo-8)" />
-                {/* Her top and neck. */}
-                <path d="M36 160 a56 52 0 0 1 112 0 Z" fill="var(--brand-indigo)" />
+                <line x1="0" y1="134" x2="200" y2="134" stroke="rgba(165, 180, 252, 0.14)" strokeWidth="1" />
+                {/* Her top and neck with soft rim light. */}
+                <path d="M36 160 a56 52 0 0 1 112 0 Z" fill="url(#hs-top-grad)" />
+                <path d="M40 156 a52 48 0 0 1 104 0" fill="none" stroke="rgba(224, 231, 255, 0.22)" strokeWidth="1.5" />
                 <rect x="86" y="82" width="12" height="30" rx="5" fill="#A5B4FC" />
-                {/* Her hair, then her face over it, then the
-                    fringe that frames it. */}
-                <ellipse cx="92" cy="58" rx="30" ry="34" fill="var(--brand-indigo-dark)" />
-                <ellipse cx="92" cy="62" rx="20" ry="24" fill="#C7D2FE" />
-                <path d="M72 56 a20 24 0 0 1 40 0 a25 10 0 0 1 -40 0 Z" fill="var(--brand-indigo-dark)" />
-                <circle cx="85" cy="70" r="2.1" fill="#312E81" />
-                <circle cx="99" cy="70" r="2.1" fill="#312E81" />
+                {/* Her hair, face, and framing fringe. */}
+                <ellipse cx="92" cy="58" rx="30" ry="34" fill="url(#hs-hair-grad)" />
+                <ellipse cx="92" cy="62" rx="20" ry="24" fill="url(#hs-skin-grad)" />
+                <path d="M72 56 a20 24 0 0 1 40 0 a25 10 0 0 1 -40 0 Z" fill="url(#hs-hair-grad)" />
+                <circle cx="85" cy="70" r="2.1" fill="#1E1B4B" />
+                <circle cx="99" cy="70" r="2.1" fill="#1E1B4B" />
                 <path d="M87 78 q5 4 10 0" fill="none" stroke="#312E81" strokeWidth="2" strokeLinecap="round" />
-                {/* The phone she holds, her hand at its edge. */}
-                <circle cx="131" cy="120" r="7.5" fill="#C7D2FE" />
-                <rect x="130" y="94" width="31" height="50" rx="7" fill="hsl(228 14% 10%)" stroke="var(--indigo-35)" strokeWidth="1.5" />
-                <path d="M142 112 l12 7 l-12 7 Z" fill="var(--brand-indigo)" />
+                {/* The phone she holds, with a glowing screen and her hand at its edge. */}
+                <circle cx="131" cy="120" r="7.5" fill="url(#hs-skin-grad)" />
+                <rect x="130" y="94" width="31" height="50" rx="7" fill="hsl(228 14% 10%)" stroke="rgba(165, 180, 252, 0.45)" strokeWidth="1.5" />
+                <rect x="133" y="98" width="25" height="42" rx="4.5" fill="url(#hs-phone-screen)" />
+                <path d="M142 112 l12 7 l-12 7 Z" fill="#E0E7FF" />
               </svg>
               <div className="hero-story-play">
                 <Play className="h-[18px] w-[18px]" fill="currentColor" />
@@ -289,6 +319,7 @@ function HeroStory() {
               <span className="hero-story-ripple" />
             </div>
           </div>
+          <div className="hero-story-homebar" />
         </div>
       </div>
     </div>
