@@ -190,7 +190,7 @@ export function useExportFlow(settings) {
       if (viewMode === "hand") {
         await prepareHandViewImages(envBg);
       }
-      if (appendUrl && appendMode === "hand") {
+      if ((appendUrl || appendImages?.length) && appendMode === "hand") {
         await prepareHandViewImages(appendEnv ?? envBg);
       }
       const response = await fetch(videoUrl, { signal: controller.signal });
