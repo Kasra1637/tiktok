@@ -13165,7 +13165,7 @@ async function runSidebarNavChecks() {
         );
       }
       // Hook + CTA has NO sidebar link of its own (ADR 0248, its
-      // placement refined by ADR 0251): Kasra asked for fewer
+      // placement refined by ADRs 0251/0259): Kasra asked for fewer
       // sidebar links, so the page is reached from the Create Video
       // entry's pop-up and the Dashboard's destination card — the
       // pop-up pinned in the check below — while its route stands
@@ -13182,27 +13182,34 @@ async function runSidebarNavChecks() {
   );
 
   await check(
-    "the Create Video sidebar entry opens the three ways as a pop-up",
+    "the Create Video sidebar entry links to Create Video and its chevron opens the two other ways",
     async () => {
-      // ADR 0251: the flow choice ADR 0248 put in a dropdown at the
-      // top of Create Video now lives on the sidebar's Create Video
-      // entry — clicking it opens a pop-up with the same three ways,
-      // each going exactly where the dropdown went: Create Video to
-      // its page, Hook + CTA to its page, and Demo + CTA to the
-      // remembered draft's finishing step (the plain page when no
-      // draft is remembered — the dropdown's no-draft landing was
-      // the wizard's first step, which is where /create opens).
+      // ADR 0259 (refining 0251): the pop-up holds only the two
+      // OTHER ways — Hook + CTA and Demo + CTA — each reading like
+      // a sidebar link: one bold title, one short explainer under
+      // it. The pop-up's own Create Video entry is gone because the
+      // sidebar entry itself is the classic-flow link again:
+      // clicking the row navigates to /create, and a separate
+      // chevron hit-area on the same row toggles the pop-up. Demo +
+      // CTA still goes to the remembered draft's finishing step
+      // (the plain page when no draft is remembered).
       // Source-level like the nav check above: the sidebar is not
       // mounted in this harness.
       const src = fs.readFileSync(
         path.join(__dirname, "..", "src", "components", "Sidebar.jsx"),
         "utf8"
       );
-      if (!src.includes('data-testid="create-flow-menu"') && !src.includes("create-flow-menu")) {
+      if (!src.includes("create-flow-menu")) {
         throw new Error("the sidebar carries no Create Video pop-up (create-flow-menu)");
       }
+      if (src.includes("create-flow-option-create")) {
+        throw new Error(
+          "the pop-up still offers Create Video itself. ADR 0259 removed " +
+            "that entry: the sidebar entry is the /create link, and the " +
+            "pop-up holds only the two other ways."
+        );
+      }
       for (const testId of [
-        "create-flow-option-create",
         "create-flow-option-hook-cta",
         "create-flow-option-demo-cta",
       ]) {
@@ -13210,14 +13217,35 @@ async function runSidebarNavChecks() {
           throw new Error(`the pop-up is missing its ${testId} option`);
         }
       }
-      for (const label of [
+      for (const wording of [
+        "Short hook, then your demo",
+        "Your demo and closing message",
+      ]) {
+        if (!src.includes(wording)) {
+          throw new Error(`the pop-up lost its sidebar-link explainer: ${wording}`);
+        }
+      }
+      for (const stale of [
         "Create Video — hook + story",
         "Hook + CTA — a short hook, finished with your demo",
         "Demo + CTA — add your demo and closing message",
       ]) {
-        if (!src.includes(label)) {
-          throw new Error(`the pop-up lost the switcher's option wording: ${label}`);
+        if (src.includes(stale)) {
+          throw new Error(`the pop-up still carries the old switcher wording: ${stale}`);
         }
+      }
+      // The entry itself is the classic-flow link again.
+      if (!src.includes('to="/create"')) {
+        throw new Error("the Create Video entry does not link to /create");
+      }
+      // The chevron is its own button, labelled for what it opens.
+      if (!src.includes("create-flow-toggle")) {
+        throw new Error(
+          "the Create Video entry has no separate pop-up toggle (create-flow-toggle)"
+        );
+      }
+      if (!src.includes('aria-label="Show other ways to create a video"')) {
+        throw new Error("the pop-up toggle does not name what it opens");
       }
       if (!src.includes('to="/hook-cta"')) {
         throw new Error("the pop-up's Hook + CTA option does not link to the Hook + CTA page");
@@ -13229,9 +13257,9 @@ async function runSidebarNavChecks() {
         );
       }
       if (!src.includes('aria-haspopup="menu"') || !src.includes('role="menu"')) {
-        throw new Error("the Create Video entry is not a menu trigger with a menu panel");
+        throw new Error("the Create Video pop-up is not a menu opened by a menu toggle");
       }
-      // The trigger keeps the canonical testid the tours anchor to.
+      // The entry keeps the canonical testid the tours anchor to.
       if (!src.includes('testId: "create-nav-link"')) {
         throw new Error("the Create Video nav item lost its create-nav-link testId");
       }
