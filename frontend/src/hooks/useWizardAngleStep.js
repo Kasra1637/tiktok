@@ -294,7 +294,7 @@ export function useWizardAngleStep({ profileId, angleId, objective, project, dis
     } finally {
       setGeneratingAngles(false);
     }
-  }, [profileId, angleId, generatingAngles, angles.length, anglesSessionFresh, revealAngles, handleRegenerateAngles, objective, cameraSetup, adoptAngles]);
+  }, [profileId, angleId, generatingAngles, angles.length, anglesSessionFresh, revealAngles, handleRegenerateAngles, objective, cameraSetup, adoptAngles, dispatchDraft]);
   // Cycle the selected angle's six goal suggestions. Free (no model call),
   // and the server persists the variant, so re-reading the list brings back
   // the exact new order for every consumer of the angles state.

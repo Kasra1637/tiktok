@@ -28,6 +28,8 @@ jest.mock("../components/SectionCard", () => ({ GroupLabel: ({ children }) => <s
 jest.mock("../components/ui/dialog", () => ({
   Dialog: ({ children, open }) => (open ? <div>{children}</div> : null),
   DialogContent: ({ children }) => <div>{children}</div>,
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogFooter: ({ children }) => <div>{children}</div>,
   DialogTitle: ({ children }) => <div>{children}</div>,
   DialogDescription: ({ children }) => <div>{children}</div>,
 }));

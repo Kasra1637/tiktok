@@ -8,7 +8,7 @@ jest.mock("../../lib/api", () => ({
   getErrorMessage: (err) => err?.message || "Something went wrong",
 }));
 jest.mock("../ui/button", () => ({
-  Button: ({ variant, size, ...props }) => <button {...props} />,
+  Button: ({ variant, size, busy, ...props }) => <button {...props} />,
 }));
 jest.mock("../ui/input", () => ({ Input: (props) => <input {...props} /> }));
 

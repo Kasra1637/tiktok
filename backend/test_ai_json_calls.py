@@ -3019,7 +3019,8 @@ class TestStrategyEndpointError:
     """The endpoint must name truncation rather than leaking a JSON message."""
 
     @pytest.fixture(scope="class")
-    def api(self):
+    @classmethod
+    def api(cls):
         tmpdir = importlib.import_module("tempfile").mkdtemp(prefix="tiktok-strategy-err-")
         os.environ["TURSO_DATABASE_URL"] = ""
         os.environ["OPENROUTER_API_KEY"] = "test-key-not-real"

@@ -1041,6 +1041,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       setAppendError(err?.message || "An added image couldn't be read.");
     });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appendImages]);
   // The "Export ready" card, so a finished export can put itself in front of
   // the founder. A ref rather than a scrollIntoView on mount because the card
