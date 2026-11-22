@@ -52,22 +52,22 @@ export const TOURS = {
     steps: [
       {
         target: '[data-testid="dashboard-next-action"]',
-        title: "Your next step, already chosen",
+        title: "Your next step, ready to go",
         body:
-          "This hero reads where you are — no profile yet, a draft in progress, a render in flight — and names the one action that moves you forward. Follow it and you are always one click from the right workflow.",
+          "Reads where you are—new app, open draft, or active render—and gives you one clear action to move forward.",
       },
       {
         target: '[data-testid="dashboard-destinations"]',
         title: "Every workflow, one click away",
         body:
-          "The sidebar's destinations as cards: make a hook video, cut a short hook in Hook + CTA, finish it in Demo + CTA, then read what happened in History and Analytics. Nothing here reports numbers — it routes.",
+          "Jump straight to Create Video, Hook + CTA, Demo + CTA, History, or Analytics from here or the sidebar.",
       },
       {
         target: '[data-testid="dashboard-recents"]',
-        title: "Your newest renders, as pictures",
+        title: "Your latest renders",
         optional: true,
         body:
-          "The last five renders you made, newest first. A tile opens its record in History, where the clip, its post copy and its recorded results live.",
+          "Your five newest clips. Click any tile to open its video, post copy, and results in History.",
       },
     ],
   },
@@ -88,26 +88,26 @@ export const TOURS = {
         target: '[data-testid="studio-progress-segment-profile"]',
         title: "Start with an approved App Profile",
         body:
-          "Everything here is written from one approved App Profile — its facts and audience. A draft can be reviewed and approved right on this step; nothing renders before an approval, wherever it happens.",
+          "Every script uses your approved product facts. You can review and approve a draft right on this step.",
       },
       {
         target: '[data-testid="studio-progress-segment-angle"]',
-        title: "Angle, then goal, then template",
+        title: "Angle, goal, then template",
         body:
-          "Angles are audience angles generated from your profile. Pick one and matching goals appear; pick a goal and templates are tailored to the pair. Looking around is free — only the render costs.",
+          "Pick an audience angle, set a goal, and choose a ranked template. Exploring and planning are free—only rendering is paid.",
       },
       {
         target: '[data-testid="template-photo"]',
         title: "One clear presenter photo",
         optional: true,
         body:
-          "A render needs a photo of the person on camera: one clear face, well lit. It is the identity reference every clip is built from, so the same photo across a series keeps the same presenter.",
+          "Upload a clear, well-lit face photo. Reuse the same photo across videos to keep a consistent presenter.",
       },
       {
         target: '[data-testid="studio-progress-segment-review"]',
-        title: "The plan is words; the strategy is filming",
+        title: "Review words & filming plan",
         body:
-          "One pass writes both, free: the plan is the words — the hook line and the spoken script — and the strategy is how those words get filmed: the scene, the camera, the opening move. Read them before paying for a render.",
+          "One free pass writes your hook, script, and scene direction. Edit anything before paying to render.",
       },
       {
         target: '[data-testid="quality-report"]',

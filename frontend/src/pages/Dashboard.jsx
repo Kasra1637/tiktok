@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Briefcase,
+  Check,
   Clapperboard,
   Compass,
   History as HistoryIcon,
   Images,
   LayoutDashboard,
+  ListChecks,
   Smartphone,
   TrendingUp,
   Zap,
@@ -138,9 +140,79 @@ function RecentTile({ row, index, posterFailed, onPosterError }) {
   );
 }
 
+function FirstVideoChecklist({ hasApprovedProfile, hasCompletedRender, hasDemoExport }) {
+  const steps = [
+    {
+      label: "Approve your App Profile",
+      detail: "Paste your URL and lock in product facts once.",
+      to: "/brand",
+      done: hasApprovedProfile,
+    },
+    {
+      label: "Generate your first hook",
+      detail: "Pick an angle, review the free script, and render.",
+      to: "/create",
+      done: hasCompletedRender,
+    },
+    {
+      label: "Add your demo & export MP4",
+      detail: "Pair your real footage, captions, and closing CTA.",
+      to: "/demo-cta",
+      done: hasDemoExport,
+    },
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
+  if (doneCount === steps.length) return null;
+
+  return (
+    <section className="surface card-enter space-y-4" data-testid="dashboard-first-video-checklist">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeading icon={ListChecks}>First video checklist</SectionHeading>
+        <span className="text-xs font-medium text-muted-foreground">
+          {doneCount} of {steps.length} complete
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <Link
+            key={step.to}
+            to={step.to}
+            className="inset-panel group flex items-start gap-3 transition-colors hover:border-[color:var(--indigo-35)]"
+          >
+            <span
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                step.done
+                  ? "bg-[color:var(--brand-indigo)] text-white"
+                  : "border border-[color:var(--hairline)] text-muted-foreground"
+              }`}
+              aria-hidden="true"
+            >
+              {step.done ? <Check className="h-3 w-3" /> : index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-sm font-semibold ${step.done ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                {step.label}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {step.detail}
+              </span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const [draft] = useState(() => readRecentDraft());
-  const [state, setState] = useState({ loading: true, failed: false, profilesCount: 0, generations: [] });
+  const [state, setState] = useState({
+    loading: true,
+    failed: false,
+    profilesCount: 0,
+    approvedProfilesCount: 0,
+    generations: [],
+  });
   const [posterFailed, setPosterFailed] = useState(() => new Set());
 
   useEffect(() => {
@@ -148,11 +220,13 @@ export default function Dashboard() {
     Promise.allSettled([api.getAppProfiles(), api.getGenerationHistory({ limit: 12 })]).then(
       ([profilesRes, historyRes]) => {
         if (cancelled) return;
+        const loadedProfiles =
+          profilesRes.status === "fulfilled" ? profilesRes.value.profiles || [] : [];
         setState({
           loading: false,
           failed: profilesRes.status === "rejected" || historyRes.status === "rejected",
-          profilesCount:
-            profilesRes.status === "fulfilled" ? (profilesRes.value.profiles || []).length : 0,
+          profilesCount: loadedProfiles.length,
+          approvedProfilesCount: loadedProfiles.filter((p) => p.status === "approved").length,
           generations:
             historyRes.status === "fulfilled" ? historyRes.value.generations || [] : [],
         });
@@ -175,6 +249,10 @@ export default function Dashboard() {
         generations: state.generations,
       });
   const recent = state.generations.slice(0, 5);
+  const hasCompletedRender = state.generations.some((g) => g.status === "completed");
+  const hasDemoExport = state.generations.some(
+    (g) => g.status === "completed" && g.segment_role === "demo_cta"
+  );
 
   return (
     <PageFrame className="space-y-6">
@@ -186,6 +264,14 @@ export default function Dashboard() {
       />
 
       {state.loading ? <HeroLoading /> : <NextActionHero action={action} />}
+
+      {!state.loading && !state.failed && (
+        <FirstVideoChecklist
+          hasApprovedProfile={state.approvedProfilesCount > 0}
+          hasCompletedRender={hasCompletedRender}
+          hasDemoExport={hasDemoExport}
+        />
+      )}
 
       <section className="space-y-4">
         <SectionHeading icon={Compass}>Where to next</SectionHeading>
