@@ -17907,6 +17907,268 @@ async function runDemoCtaChecks() {
     }
   });
 
+  await check("the second clip carries its own fine-tune framing, independent of the base", async (ctx) => {
+    // ADR 0266: Fine-tune framing — Phone size, Hand size & position,
+    // Mockup height, Phone screen position — existed only for the base
+    // clip, inside Base clip & look. The added segment painted with the
+    // base's phone size and lock-resolved hand framing, the base's
+    // mockup height and the one shared screen rect, so the second
+    // clip's framing was never its own choice. The Second clip group
+    // now carries the same disclosure with its own state (the Video
+    // crop is not repeated — ADR 0164's block already stands for the
+    // added clip), and the one painter both preview and export call
+    // resolves the framing per segment. This check drives the real
+    // controls and reads painted draw boxes back where the harness can
+    // see them (Floating paints the phone; Hand's photo never loads
+    // under jsdom, so hand and screen independence is pinned at the
+    // sliders — the same limit the base's own hand checks live with).
+    const draws = [];
+    const clip = installLoadedClipStubs({ width: 1920, height: 1080, onDraw: (...args) => draws.push(args) });
+    const disclosure = () => ctx.container.querySelector('[data-testid="append-fine-tune-framing"]');
+    const thumb = (testId) => ctx.container.querySelector(`[data-testid="${testId}"] [role="slider"]`);
+    const value = (testId) => (thumb(testId) ? Number(thumb(testId).getAttribute("aria-valuenow")) : NaN);
+    const press = async (testId, key) => {
+      await act(async () => thumb(testId).dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true })));
+      await clip.flush();
+    };
+    const openSection = async (selector, label) => {
+      const toggle = ctx.container.querySelector(selector);
+      if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, label);
+      }
+    };
+    // Sections are single-open: opening one group unmounts the other's
+    // controls, and the disclosure's open state is DOM state that a
+    // remount loses. Every visit below re-opens what it drives.
+    const openAppendFraming = async () => {
+      await openSection('[data-testid="demo-cta-second"] button', "open the second clip group");
+      if (!disclosure()) throw new Error("the Second clip group has no Fine-tune framing of its own");
+      if (!disclosure().open) {
+        await clickEl(ctx, disclosure().querySelector("summary"), "open the second clip's fine-tune framing");
+      }
+    };
+    const openBaseFraming = async () => {
+      await openSection('[data-testid="demo-cta-source"] > button', "open the base group");
+      const details = ctx.container.querySelector('[data-testid="fine-tune-framing"]');
+      if (!details) throw new Error("the base group has no Fine-tune framing");
+      if (!details.open) {
+        await clickEl(ctx, details.querySelector("summary"), "open the base fine-tune framing");
+      }
+    };
+    try {
+      await clip.loadClip(ctx);
+      const base = ctx.container.querySelector("video");
+      Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
+      await openSection('[data-testid="demo-cta-second"] button', "open the second clip group");
+      if (disclosure()) throw new Error("the Second clip group offers Fine-tune framing before any second media exists");
+      // The added clip: a square 720×720 upload.
+      const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      const overlay = ctx.container.querySelector('[data-testid="append-video"]');
+      if (!overlay) throw new Error("the added clip never mounted its preview element");
+      Object.defineProperty(overlay, "videoWidth", { configurable: true, value: 720 });
+      Object.defineProperty(overlay, "videoHeight", { configurable: true, value: 720 });
+      Object.defineProperty(overlay, "readyState", { configurable: true, value: 4 });
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("loadeddata")));
+      await clip.flush();
+
+      if (!disclosure()) throw new Error("the Second clip group has no Fine-tune framing of its own");
+      await clickEl(ctx, disclosure().querySelector("summary"), "open the second clip's fine-tune framing");
+      // The added clip starts in Real Video: only Mockup height stands.
+      // Phone size belongs to Floating; hand framing and the screen
+      // rect belong to Hand Holding.
+      if (thumb("append-phone-size-slider")) throw new Error("phone size leaked into the second clip's Real Video framing");
+      if (thumb("append-hand-zoom-slider")) throw new Error("hand framing leaked into the second clip's Real Video framing");
+      if (ctx.container.querySelector('[data-testid="append-screen-position-controls"]')) throw new Error("screen position leaked into the second clip's Real Video framing");
+      if (!thumb("append-mockup-height-slider")) throw new Error("the second clip's framing has no Mockup height slider");
+      if (value("append-mockup-height-slider") !== 1) throw new Error("the second clip's Mockup height does not start at 100%");
+
+      const seek = ctx.container.querySelector('[aria-label="Seek"]');
+      const paintBase = async () => {
+        await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+        await act(async () => base.dispatchEvent(new dom.window.Event("seeked")));
+        draws.length = 0;
+        await clip.flush();
+        const hits = draws.filter((a) => a[0] === base);
+        return hits[hits.length - 1];
+      };
+      const paintAppend = async () => {
+        await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+        await act(async () => overlay.dispatchEvent(new dom.window.Event("seeked")));
+        draws.length = 0;
+        await clip.flush();
+        const hits = draws.filter((a) => a[0] === overlay);
+        return hits[hits.length - 1];
+      };
+
+      // Floating: the added clip's own Phone size. Its painted phone
+      // grows by exactly the slider's ratio; the base's phone — painted
+      // through the same painter — does not move.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-mode-floating"]'), "float the second clip");
+      if (!thumb("append-phone-size-slider")) throw new Error("the second clip's floating framing has no Phone size slider");
+      if (value("append-phone-size-slider") !== 0.82) throw new Error("the second clip's Phone size does not start at the base's default");
+      const baseBox0 = await paintBase();
+      const appendBox0 = await paintAppend();
+      if (!baseBox0 || !appendBox0) throw new Error("a segment never painted in Floating");
+      await press("append-phone-size-slider", "End");
+      if (value("append-phone-size-slider") !== 1) throw new Error("the second clip's Phone size slider did not take the End press");
+      const appendBox1 = await paintAppend();
+      const grew = appendBox1[3] / appendBox0[3];
+      if (Math.abs(grew - 1 / 0.82) > (1 / 0.82) * 0.05) {
+        throw new Error(`the second clip's phone grew by ${grew.toFixed(3)}x, expected the slider's ${(1 / 0.82).toFixed(3)}x`);
+      }
+      const baseBox1 = await paintBase();
+      if (baseBox1[3] !== baseBox0[3] || baseBox1[4] !== baseBox0[4]) throw new Error("the base's phone moved with the second clip's Phone size");
+
+      // Mockup height is the added clip's own too, and its Reset
+      // returns it to 100%.
+      await press("append-mockup-height-slider", "End");
+      if (value("append-mockup-height-slider") !== 2) throw new Error("the second clip's Mockup height slider did not take the End press");
+      const mockReset = [...disclosure().querySelectorAll("button")].find((b) => b.textContent.trim() === "Reset");
+      if (!mockReset) throw new Error("the second clip's Mockup height has no Reset");
+      await clickEl(ctx, mockReset, "reset the second clip's mockup height");
+      if (value("append-mockup-height-slider") !== 1) throw new Error("reset did not return the second clip's Mockup height to 100%");
+
+      // The base's own Phone size is untouched by the added clip's,
+      // and driving it never reaches the added clip either.
+      await openBaseFraming();
+      if (value("phone-size-slider") !== 0.82) throw new Error("the base's Phone size moved with the second clip's slider");
+      await press("phone-size-slider", "Home");
+      if (value("phone-size-slider") !== 0.3) throw new Error("the base's Phone size slider did not take the Home press");
+      await openAppendFraming();
+      if (value("append-phone-size-slider") !== 1) throw new Error("the second clip's Phone size moved with the base's slider");
+
+      // Hand Holding: the added clip's own hand framing and screen
+      // rect stand, the phone size leaves.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-mode-hand"]'), "hand-hold the second clip");
+      if (thumb("append-phone-size-slider")) throw new Error("phone size leaked into the second clip's hand framing");
+      if (!thumb("append-hand-zoom-slider")) throw new Error("the second clip's hand framing has no Zoom slider");
+      if (!ctx.container.querySelector('[data-testid="append-screen-position-controls"]')) throw new Error("the second clip's hand framing has no screen position of its own");
+      if (value("append-hand-zoom-slider") !== 1) throw new Error("the second clip's hand Zoom does not start at 1x");
+      if (Math.abs(value("append-screen-left-slider") - 0.3275) > 0.001) throw new Error("the second clip's screen rect does not start at the photo screen");
+      await press("append-hand-zoom-slider", "End");
+      if (value("append-hand-zoom-slider") !== 3) throw new Error("the second clip's hand Zoom slider did not take the End press");
+      await press("append-screen-left-slider", "End");
+      if (value("append-screen-left-slider") !== 1) throw new Error("the second clip's screen Left slider did not take the End press");
+
+      // The base's hand framing and screen rect never moved: put the
+      // base in Hand Holding and read its own sliders back.
+      await openBaseFraming();
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-hand"]'), "hand-hold the base clip");
+      if (value("hand-zoom-slider") !== 1) throw new Error("the base's hand Zoom moved with the second clip's slider");
+      if (Math.abs(value("screen-left-slider") - 0.3275) > 0.001) throw new Error("the base's screen rect moved with the second clip's slider");
+      if (!ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base lost its own screen position controls");
+
+      // The base's screen control governs the base alone now: with the
+      // base back in Floating it leaves, even though the added clip is
+      // still hand-held — the added clip's own control stays.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-floating"]'), "float the base clip");
+      if (ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base's screen position still stands for a clip that is not hand-held");
+      await openAppendFraming();
+      if (!ctx.container.querySelector('[data-testid="append-screen-position-controls"]')) throw new Error("the second clip lost its screen position when the base floated");
+
+      // The added clip's resets return its own framing, not the base's.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-screen-reset-btn"]'), "reset the second clip's screen rect");
+      if (Math.abs(value("append-screen-left-slider") - 0.3275) > 0.001) throw new Error("reset did not return the second clip's screen rect to the photo screen");
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-hand-transform-reset-btn"]'), "reset the second clip's hand framing");
+      if (value("append-hand-zoom-slider") !== 1) throw new Error("reset did not return the second clip's hand Zoom to 1x");
+    } finally {
+      clip.restore();
+    }
+  });
+
+  await check("the second clip's fine-tune framing rides its draft, and drafts saved before it open on defaults", async (ctx) => {
+    // ADR 0266: the added clip's framing fields join the draft
+    // snapshot like its crop fields did (ADR 0164) — a reload restores
+    // the founder's framing whole. A draft saved before the fields
+    // existed carries none of them: restore skips absent keys, so the
+    // framing opens on the same defaults a fresh second clip gets,
+    // and the base's saved rect is untouched either way.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-framing", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const thumb = (testId) => ctx.container.querySelector(`[data-testid="${testId}"] [role="slider"]`);
+    const openSecond = async () => {
+      const toggle = ctx.container.querySelector('[data-testid="demo-cta-second"] button');
+      if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, "open the second clip group");
+      }
+    };
+    const openFraming = async () => {
+      await openSecond();
+      const details = ctx.container.querySelector('[data-testid="append-fine-tune-framing"]');
+      if (!details) throw new Error("the restored second clip has no Fine-tune framing");
+      if (!details.open) await clickEl(ctx, details.querySelector("summary"), "open the second clip's fine-tune framing");
+    };
+    try {
+      await mount(Editor, { generation: GEN })(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+      const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+      if (!probe) throw new Error("the uploaded clip was never probed");
+      await act(async () => {
+        probe.onloadedmetadata();
+      });
+      await clip.flush();
+      await clip.flush();
+      await openSecond();
+      const addedInput = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      Object.defineProperty(addedInput, "files", { configurable: true, value: [new dom.window.File(["second"], "second.mp4", { type: "video/mp4" })] });
+      await act(async () => addedInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-mode-floating"]'), "float the second clip");
+      await openFraming();
+      await act(async () => thumb("append-phone-size-slider").dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
+      await clip.flush();
+      if (Number(thumb("append-phone-size-slider").getAttribute("aria-valuenow")) !== 1) throw new Error("the second clip's Phone size did not take the End press");
+      await act(async () => ctx.root.unmount());
+      const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-framing");
+      if (!saved) throw new Error("no draft was saved");
+      if (saved.appendScale !== 1) throw new Error(`the draft stored appendScale=${saved.appendScale}, expected the founder's 1`);
+      if (saved.appendHandZoom !== 1 || saved.appendMockupStretchY !== 1) throw new Error("the draft did not store the second clip's remaining framing fields");
+      if (Math.abs(saved.appendScreenX - 0.3275) > 0.001) throw new Error("the draft did not store the second clip's own screen rect");
+
+      // Reload: the framing comes back whole.
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { generation: GEN })(ctx);
+      await clip.flush();
+      await clip.flush();
+      await openFraming();
+      if (Number(thumb("append-phone-size-slider").getAttribute("aria-valuenow")) !== 1) throw new Error("reload lost the second clip's Phone size");
+
+      // A draft saved before ADR 0266 carries no append framing keys:
+      // strip them from the stored edit and reload — the framing opens
+      // on defaults and nothing else about the draft changes. The strip
+      // lands after unmount so the closing flush cannot overwrite it
+      // with the live session's snapshot.
+      const legacy = { ...saved };
+      for (const key of ["appendScale", "appendHandZoom", "appendHandPanX", "appendHandPanY", "appendMockupStretchY", "appendScreenX", "appendScreenY", "appendScreenW", "appendScreenH"]) {
+        delete legacy[key];
+      }
+      await act(async () => ctx.root.unmount());
+      global.__SMOKE_DRAFTS.set("anonymous:gen-framing", legacy);
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { generation: GEN })(ctx);
+      await clip.flush();
+      await clip.flush();
+      await openFraming();
+      if (Number(thumb("append-phone-size-slider").getAttribute("aria-valuenow")) !== 0.82) throw new Error("a pre-0266 draft did not open the second clip's framing on defaults");
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
   await check("the second slot takes an image sequence: ordered stills with holds, saved in the draft", async (ctx) => {
     // ADR 0237: the added slot's other media kind. The stills are the
     // founder's app screens; the list is the control surface (order plus a

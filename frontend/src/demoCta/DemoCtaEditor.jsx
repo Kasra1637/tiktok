@@ -842,10 +842,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const [appendMode, setAppendMode] = useState("realistic");
   // The added clip keeps its own look: background, motion and hand scene
   // start from the same defaults as the base but diverge independently.
-  // The zoom locks and phone size stay shared — one timeline, one mockup
-  // geometry — so locks and sliders keep working across the cut. The
-  // video crop is NOT shared: each clip carries its own fit, zoom and
-  // offsets (ADR 0164), the added clip's block in its group below.
+  // The zoom locks stay the base's — one lock timeline across the cut —
+  // but the framing the locks resolve is no longer shared: each clip
+  // carries its own fine-tune framing (ADR 0266) as well as its own
+  // video crop — fit, zoom and offsets (ADR 0164), the added clip's
+  // blocks in its group below.
   const [appendBg, setAppendBg] = useState(DEFAULTS.bg);
   const [appendAnim, setAppendAnim] = useState(DEFAULTS.anim);
   const [appendEnv, setAppendEnv] = useState(DEFAULTS.envBg);
@@ -868,6 +869,24 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const [appendVideoScale, setAppendVideoScale] = useState(DEFAULTS.videoScale);
   const [appendVideoOffsetX, setAppendVideoOffsetX] = useState(DEFAULTS.videoOffsetX);
   const [appendVideoOffsetY, setAppendVideoOffsetY] = useState(DEFAULTS.videoOffsetY);
+  // The added clip's own Fine-tune framing (ADR 0266): phone size, hand
+  // size & position, mockup height and screen position, mirroring the
+  // base's disclosure group for group with the same defaults. The
+  // base's framing rides its zoom-lock timeline; this is a fixed
+  // treatment in plain state, the way the added clip's crop is held,
+  // and the painter resolves the two per segment. The screen rect is
+  // the added clip's own — the base's rect governs the base hand shot
+  // alone, and a draft saved before these fields existed restores them
+  // to the defaults below.
+  const [appendScale, setAppendScale] = useState(DEFAULTS.scale);
+  const [appendHandZoom, setAppendHandZoom] = useState(DEFAULTS.handZoom);
+  const [appendHandPanX, setAppendHandPanX] = useState(DEFAULTS.handPanX);
+  const [appendHandPanY, setAppendHandPanY] = useState(DEFAULTS.handPanY);
+  const [appendMockupStretchY, setAppendMockupStretchY] = useState(DEFAULTS.mockupStretchY);
+  const [appendScreenX, setAppendScreenX] = useState(DEFAULT_SCREEN.x);
+  const [appendScreenY, setAppendScreenY] = useState(DEFAULT_SCREEN.y);
+  const [appendScreenW, setAppendScreenW] = useState(DEFAULT_SCREEN.w);
+  const [appendScreenH, setAppendScreenH] = useState(DEFAULT_SCREEN.h);
   const [appendName, setAppendName] = useState("");
   const [appendError, setAppendError] = useState(null);
   const appendVideoRef = useRef(null);
@@ -913,6 +932,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     baseStart, appendStart, baseEnd, appendEnd,
     videoFit, videoScale, videoOffsetX, videoOffsetY,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
+    appendScale, appendHandZoom, appendHandPanX, appendHandPanY, appendMockupStretchY,
+    appendScreenX, appendScreenY, appendScreenW, appendScreenH,
     viewMode, envBg, screenX, screenY, screenW, screenH,
     handZoom, handPanX, handPanY,
     appendUrl, appendMeta, appendMode, appendBg, appendAnim, appendEnv, appendVideoRef, appendOverlays,
@@ -1302,8 +1323,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const exportEditKey = JSON.stringify([
     videoUrl, appendUrl, appendImages?.map((entry) => `${entry.id}:${entry.seconds}`).join("|") || "", baseStart, appendStart, baseEnd, appendEnd,
     device, preset, viewMode, appendMode, bg, anim, envBg,
-    appendBg, appendAnim, appendEnv, mockupStretchY, videoFit,
+    appendBg, appendAnim, appendEnv, mockupStretchY, appendMockupStretchY, videoFit,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
+    appendScale, appendHandZoom, appendHandPanX, appendHandPanY,
+    appendScreenX, appendScreenY, appendScreenW, appendScreenH,
     screenX, screenY, screenW, screenH, baseMuted, appendMuted,
     appendOverlays, transition, reduceMotion,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
@@ -1329,6 +1352,8 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     overlayAccent, captionFont, ctaFont, captionAnim, ctaAnim, captionScale, ctaScale, textStyle,
     appendMode, appendBg, appendAnim, appendEnv, appendOverlays, transition, baseMuted, appendMuted,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
+    appendScale, appendHandZoom, appendHandPanX, appendHandPanY, appendMockupStretchY,
+    appendScreenX, appendScreenY, appendScreenW, appendScreenH,
     zoomKeyframes, framing: editFraming,
   };
   const restoreEdit = (edit) => {
@@ -1355,6 +1380,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       appendOverlays: setAppendOverlays, transition: setTransition, baseMuted: setBaseMuted, appendMuted: setAppendMuted,
       appendVideoFit: setAppendVideoFit, appendVideoScale: setAppendVideoScale,
       appendVideoOffsetX: setAppendVideoOffsetX, appendVideoOffsetY: setAppendVideoOffsetY,
+      appendScale: setAppendScale, appendHandZoom: setAppendHandZoom,
+      appendHandPanX: setAppendHandPanX, appendHandPanY: setAppendHandPanY,
+      appendMockupStretchY: setAppendMockupStretchY,
+      appendScreenX: setAppendScreenX, appendScreenY: setAppendScreenY,
+      appendScreenW: setAppendScreenW, appendScreenH: setAppendScreenH,
       appendImages: setAppendImages,
       zoomKeyframes: setZoomKeyframes,
     };
@@ -1536,6 +1566,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setAppendVideoScale(DEFAULTS.videoScale);
     setAppendVideoOffsetX(DEFAULTS.videoOffsetX);
     setAppendVideoOffsetY(DEFAULTS.videoOffsetY);
+    setAppendScale(DEFAULTS.scale);
+    setAppendHandZoom(DEFAULTS.handZoom);
+    setAppendHandPanX(DEFAULTS.handPanX);
+    setAppendHandPanY(DEFAULTS.handPanY);
+    setAppendMockupStretchY(DEFAULTS.mockupStretchY);
+    setAppendScreenX(DEFAULT_SCREEN.x);
+    setAppendScreenY(DEFAULT_SCREEN.y);
+    setAppendScreenW(DEFAULT_SCREEN.w);
+    setAppendScreenH(DEFAULT_SCREEN.h);
   };
 
   useEffect(() => () => {
@@ -2067,7 +2106,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
             </div>
           </div>
-          {(viewMode === "hand" || (appendMeta && appendMode === "hand")) && (
+          {/* The base's rect governs the base hand shot alone (ADR
+              0266): the added clip's hand shot reads its own rect from
+              its own Fine-tune framing, so this control stands exactly
+              when the base is hand-held — it used to also stand for an
+              added hand clip, back when one rect drove both. */}
+          {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="screen-position-controls">
               <SubLabel>Phone screen position</SubLabel>
               {[
@@ -2277,6 +2321,90 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </label>
               )}
             </div>
+          )}
+          {/* The added clip's own Fine-tune framing (ADR 0266): the
+              base's disclosure mirrored group for group — Phone size,
+              Hand size & position, Mockup height, Phone screen
+              position — with the added clip's own state, standing with
+              the style picker (second media present, clip or image
+              sequence) while each group follows the added clip's own
+              style the way the base's groups follow its view. The
+              Video crop is not repeated inside it: the added clip's
+              own crop block stands below (ADR 0164). The hand group
+              carries no drag hint — canvas drag and scroll still drive
+              the base's lock framing, so the added clip's hand framing
+              is set by these sliders alone. */}
+          {(appendUrl || !!appendImages?.length) && (
+          <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="append-fine-tune-framing">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <span>Fine-tune framing</span>
+              <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+            </summary>
+            <div className="space-y-2 pb-2 pt-1">
+          {appendMode === "floating" && (
+              <ControlSlider label="Phone size" value={appendScale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setAppendScale} testId="append-phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
+          )}
+          {appendMode === "hand" && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+              <SubLabel>Hand size &amp; position</SubLabel>
+              <ControlSlider label="Zoom" value={appendHandZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setAppendHandZoom} testId="append-hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
+              <ControlSlider label="H position" value={appendHandPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setAppendHandPanX} testId="append-hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ControlSlider label="V position" value={appendHandPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setAppendHandPanY} testId="append-hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
+              <ResetButton testId="append-hand-transform-reset-btn" onClick={() => { setAppendHandZoom(1); setAppendHandPanX(0); setAppendHandPanY(0); }}>
+                Reset hand framing
+              </ResetButton>
+            </div>
+          )}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <SubLabel>Mockup height</SubLabel>
+            <div className="flex items-center gap-2">
+              <Slider
+                data-testid="append-mockup-height-slider"
+                value={[appendMockupStretchY]}
+                min={RANGES.mockupStretchY.min}
+                max={RANGES.mockupStretchY.max}
+                step={RANGES.mockupStretchY.step}
+                onValueChange={([next]) => setAppendMockupStretchY(next)}
+                className="flex-1"
+                aria-label="Second clip mockup height"
+              />
+              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+                {Math.round(appendMockupStretchY * 100)}%
+              </span>
+              <ResetButton onClick={() => setAppendMockupStretchY(1)}>Reset</ResetButton>
+            </div>
+          </div>
+          {appendMode === "hand" && (
+            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="append-screen-position-controls">
+              <SubLabel>Phone screen position</SubLabel>
+              {[
+                ["Left", appendScreenX, setAppendScreenX, "left"],
+                ["Top", appendScreenY, setAppendScreenY, "top"],
+                ["Width", appendScreenW, setAppendScreenW, "width"],
+                ["Height", appendScreenH, setAppendScreenH, "height"],
+              ].map(([label, val, setter, key]) => (
+                <div key={key} className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <FieldLabel>{label}</FieldLabel>
+                    <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
+                  </div>
+                  <Slider
+                    data-testid={`append-screen-${key}-slider`}
+                    value={[val]}
+                    min={RANGES.screen.min}
+                    max={RANGES.screen.max}
+                    step={RANGES.screen.step}
+                    onValueChange={([next]) => setter(next)}
+                  />
+                </div>
+              ))}
+              <ResetButton testId="append-screen-reset-btn" onClick={() => { setAppendScreenX(DEFAULT_SCREEN.x); setAppendScreenY(DEFAULT_SCREEN.y); setAppendScreenW(DEFAULT_SCREEN.w); setAppendScreenH(DEFAULT_SCREEN.h); }}>
+                Reset to photo screen
+              </ResetButton>
+            </div>
+          )}
+            </div>
+          </details>
           )}
           {/* The added clip's own Video crop (ADR 0164): the same block the
               base carries in Fine-tune framing — fit, consequence hint,
