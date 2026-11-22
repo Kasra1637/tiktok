@@ -1459,7 +1459,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
 
   const handleAppendImages = (files, mode = "replace") => {
     const picked = [...(files || [])].filter(
-      (f) => f && (f.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif)$/i.test(f.name || ""))
+      (f) => f && (f.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif|heic|heif|bmp|svg)$/i.test(f.name || ""))
     );
     if (!picked.length) {
       setAppendError("Choose image files — PNG or JPEG screenshots of your app.");
@@ -1884,7 +1884,10 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         )}
         {/* The images input is its own door for the same reason: one input
             per source. Which button opened it (a fresh set, or more for the
-            set on screen) rides the mode ref, so one input serves both. */}
+            set on screen) rides the mode ref, so one input serves both.
+            Capture e.target.files into a plain Array BEFORE clearing
+            e.target.value = "", because FileList is a live collection that
+            is emptied in-place by value = "" in real browsers. */}
         {videoUrl && (
         <input
           ref={appendImagesInputRef}
@@ -1895,9 +1898,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           data-testid="append-images-input"
           className="sr-only"
           onChange={(e) => {
-            const files = e.target.files;
+            const files = e.target.files ? Array.from(e.target.files) : [];
             e.target.value = "";
-            if (files?.length) handleAppendImages(files, appendImagesModeRef.current);
+            if (files.length) handleAppendImages(files, appendImagesModeRef.current);
           }}
         />
         )}

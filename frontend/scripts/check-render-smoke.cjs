@@ -17669,7 +17669,20 @@ async function runDemoCtaChecks() {
       const input = ctx.container.querySelector('[data-testid="append-images-input"]');
       if (!input) throw new Error("no images input");
       const files = ["home.png", "chart.png"].map((name) => new dom.window.File([new Uint8Array(8)], name, { type: "image/png" }));
-      Object.defineProperty(input, "files", { value: files, configurable: true });
+      // Real browsers return a live FileList on input.files and empty it
+      // in-place when input.value = "" is assigned. Model that live behavior
+      // so assigning e.target.value = "" before copying files fails this check.
+      const liveFileList = [...files];
+      Object.defineProperty(input, "files", { get: () => liveFileList, configurable: true });
+      const origValueDesc = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value");
+      Object.defineProperty(input, "value", {
+        get: () => origValueDesc?.get ? origValueDesc.get.call(input) : "",
+        set: (v) => {
+          if (v === "") liveFileList.length = 0;
+          if (origValueDesc?.set) origValueDesc.set.call(input, v);
+        },
+        configurable: true,
+      });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
       await clip.flush();
       await clip.flush();
@@ -17692,6 +17705,26 @@ async function runDemoCtaChecks() {
       const reordered = rowNames();
       if (!reordered[0].includes("chart.png") || !reordered[1].includes("home.png")) {
         throw new Error(`reorder did not take: ${JSON.stringify(reordered)}`);
+      }
+      // Adding more images appends as many additional images as the founder picks
+      // rather than wiping the existing sequence.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-images-add-more"]'), "click add more images");
+      liveFileList.push(
+        new dom.window.File([new Uint8Array(8)], "profile.png", { type: "image/png" }),
+        new dom.window.File([new Uint8Array(8)], "settings.png", { type: "image/png" })
+      );
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      await clip.flush();
+      await clip.flush();
+      const expanded = rowNames();
+      if (expanded.length !== 4 || !expanded[2].includes("profile.png") || !expanded[3].includes("settings.png")) {
+        throw new Error(`Add more images did not append the new stills: ${JSON.stringify(expanded)}`);
+      }
+      // Remove the two extras before testing reload parity on the original two.
+      for (const extraRow of [...ctx.container.querySelectorAll('[data-testid^="append-image-row-"]')].slice(2)) {
+        const extraId = extraRow.getAttribute("data-testid").replace("append-image-row-", "");
+        await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-remove-${extraId}"]`), "remove extra still");
       }
       await act(async () => ctx.root.unmount());
       const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-images");
