@@ -303,18 +303,44 @@ body {
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 75%);
 }
 
-/* Full-page Studio Spotlight & Dotted Canvas for the landing page.
-   Replaces the hero-only blueprint grid and aurora so the entire page
-   reads as one cohesive dark studio from hero to footer. */
-.landing-dots {
+/* Full-page Cinema Aperture Arcs & Ambient Wash for the landing page.
+   Large, ultra-faint concentric studio lens rings sweeping across the
+   full page, paired with soft drifting indigo and coral ambient glows. */
+.landing-aperture {
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    background-image: radial-gradient(rgba(199, 210, 254, 0.11) 1px, transparent 1px);
-    background-size: 28px 28px;
-    mask-image: radial-gradient(ellipse 92% 78% at 50% 35%, black 25%, transparent 95%);
-    -webkit-mask-image: radial-gradient(ellipse 92% 78% at 50% 35%, black 25%, transparent 95%);
+    background-image:
+        radial-gradient(circle at 72% 18%,
+            transparent 0,
+            transparent 219px,
+            rgba(165, 180, 252, 0.055) 220px,
+            transparent 221px,
+            transparent 379px,
+            rgba(165, 180, 252, 0.045) 380px,
+            transparent 381px,
+            transparent 559px,
+            rgba(165, 180, 252, 0.035) 560px,
+            transparent 561px,
+            transparent 759px,
+            rgba(165, 180, 252, 0.025) 760px,
+            transparent 761px
+        ),
+        radial-gradient(circle at 18% 76%,
+            transparent 0,
+            transparent 259px,
+            rgba(254, 44, 85, 0.04) 260px,
+            transparent 261px,
+            transparent 439px,
+            rgba(129, 140, 248, 0.035) 440px,
+            transparent 441px,
+            transparent 639px,
+            rgba(129, 140, 248, 0.025) 640px,
+            transparent 641px
+        );
+    mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
+    -webkit-mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
 }
 .landing-spotlights {
     position: absolute;

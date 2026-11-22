@@ -354,11 +354,11 @@ const NAV_LINKS = [
   { href: "#pipeline", label: "Your control" },
 ];
 
-/** Full-page studio spotlights + fine dot matrix behind the entire landing page. Decorative only. */
+/** Full-page cinema aperture arcs + ambient studio wash behind the entire landing page. Decorative only. */
 function LandingBackdrop() {
   return (
     <>
-      <div aria-hidden="true" className="landing-dots" />
+      <div aria-hidden="true" className="landing-aperture" />
       <div aria-hidden="true" className="landing-spotlights">
         {/* Hero key light (top-left indigo) */}
         <div
