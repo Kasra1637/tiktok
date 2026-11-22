@@ -11256,13 +11256,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (filledShapes.length < 5) {
       throw new Error("the presenter is not a filled, shaded figure in a scene");
     }
-    // The phone carries depth (ADR 0175): an indigo glow spilling
-    // onto the page in its shadow, and a glass sheen on the screen.
+    // The phone carries clean dark elevation depth and a glass sheen on the screen (no colored outer glow).
     const phoneRuleStart = css.indexOf(".hero-story-phone {");
     if (phoneRuleStart === -1) throw new Error("index.css carries no .hero-story-phone rule");
     const phoneRule = css.slice(phoneRuleStart, css.indexOf("}", phoneRuleStart));
-    if (!phoneRule.includes("rgba(99, 102, 241")) {
-      throw new Error("the phone casts no indigo glow onto the page behind it");
+    if (!phoneRule.includes("box-shadow:")) {
+      throw new Error("the phone carries no elevation shadow");
     }
     if (!css.includes(".hero-story-screen::after")) {
       throw new Error("the screen carries no glass reflection");
@@ -11346,7 +11345,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!researchRule.includes("rgba(255, 255, 255, 0.15)") || !researchRule.includes("color: #fff")) {
       throw new Error("the mockup's research control is not the accent button's white text on its white/15 border");
     }
-    if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)") || !researchRule.includes("var(--glow-indigo)")) {
+    if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)")) {
       throw new Error("the mockup's research control lacks the bevel's top rim over the indigo glow");
     }
     if (!researchRule.includes("border-radius: 12px") || researchRule.includes("999px") || researchRule.includes("90deg")) {
