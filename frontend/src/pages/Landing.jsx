@@ -137,7 +137,7 @@ const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    line: "Add your store or website URL, review the draft, and approve the facts — every video starts from them.",
+    line: "Add your website or store URL, review the draft, and approve the facts — every video starts from them.",
     outcome: "Built from your facts",
   },
   {
@@ -211,7 +211,7 @@ function HeroStory() {
     <div
       className="hero-story"
       role="img"
-      aria-label="How it works in one motion: type your store link, click Research my app to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video appears right there on the steps page and plays."
+      aria-label="How it works in one motion: type your app or website link, click Research my app to get your profile, step through App Profile, Audience and template, Review and submit, and Demo and CTA, click Generate the video, and the finished video appears right there on the steps page and plays."
     >
       <div className="hero-story-phone" aria-hidden="true">
         <div className="hero-story-screen">
@@ -219,7 +219,7 @@ function HeroStory() {
             <div className="hero-story-field">
               <Link2 className="h-3.5 w-3.5" />
               <span className="hero-story-typed">
-                <span className="hero-story-typed-text">yourapp.com/store</span>
+                <span className="hero-story-typed-text">yourapp.com/start</span>
                 <span className="hero-story-caret" />
               </span>
             </div>
@@ -439,7 +439,7 @@ export default function Landing() {
             className="animate-fade-up font-display text-hero font-semibold leading-[1.05] tracking-tight sm:text-hero-wide"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-gradient-headline">Turn your app store link into a tailored videos, in minutes.</span>
+            <span className="text-gradient-headline">Turn your app or website link into tailored videos, in minutes.</span>
           </h1>
 
           <p

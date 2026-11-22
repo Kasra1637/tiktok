@@ -15,6 +15,8 @@
   (`APP_RESEARCH_CAPS`, `research_app_profile`),
   `frontend/src/pages/BrandSetup.jsx`,
   `frontend/src/pages/AppProfileDetail.jsx`,
+  `frontend/src/pages/Landing.jsx`,
+  `frontend/public/index.html`,
   `frontend/src/demoCta/constants.js` (`DEVICES`, `CTA_COPY_VARIANTS`),
   `frontend/src/demoCta/DemoCtaEditor.jsx` (`drawPhone`),
   `frontend/src/demoCta/usePreviewLoop.js` (`drawPhone`),
@@ -60,11 +62,17 @@ narrowed the product:
   includes `og:title`, `twitter:title`, `og:site_name`, and `application-name`
   (deduplicated against the body), and `APP_RESEARCH_CAPS["support"]` in
   `backend/routers/brands.py` rises from 2,000 to 4,000 characters.
-- **Website-first research card.** `BrandSetup.jsx` titles the card "Research
-  your app", spans the website/product URL input across the top row, marks
-  App Store and Google Play URLs optional on the second row, and updates the
-  objections label on `BrandSetup.jsx` and `AppProfileDetail.jsx` to "Why they
-  would not try or download".
+- **Website-first research card and landing copy.** `BrandSetup.jsx` titles
+  the card "Research your app", spans the website/product URL input across the
+  top row, marks App Store and Google Play URLs optional on the second row,
+  and updates the objections label on `BrandSetup.jsx` and
+  `AppProfileDetail.jsx` to "Why they would not try or download". `Landing.jsx`
+  updates the hero `h1` to `"Turn your app or website link into tailored
+  videos, in minutes."`, types `"yourapp.com/start"` (17 chars, matching the
+  existing `steps(17)` typing track) in the hero phone field, leads Step 1 of
+  How it works with `"Add your website or store URL"`, and updates
+  `frontend/public/index.html` meta description from `"phone mockups"` to
+  `"device frames"`.
 - **iPhone and Browser/Web frames in Demo + CTA.** `DEVICES` adds
   `iphone_16_pro` (`camera: "dynamic-island"`) and `browser_window`
   (`camera: "window-bar"`, omitting hardware side buttons and painting a

@@ -10979,8 +10979,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const field = page1.querySelector(".hero-story-field");
     if (!field) throw new Error("page one never shows the store-link field");
     const typedText = field.querySelector(".hero-story-typed-text");
-    if (!typedText || typedText.textContent.trim() !== "yourapp.com/store") {
-      throw new Error("the field does not carry the typed store link");
+    if (!typedText || typedText.textContent.trim() !== "yourapp.com/start") {
+      throw new Error("the field does not carry the typed product link");
     }
     if (!field.querySelector(".hero-story-caret")) {
       throw new Error("the field carries no caret — the typing must read as typing");
@@ -11007,7 +11007,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!Number.isFinite(typingDone) || !Number.isFinite(wakeAt) || typingDone > wakeAt) {
       throw new Error("the research button wakes before the typing completes — typing must come first");
     }
-    if (!(story.getAttribute("aria-label") || "").includes("type your store link")) {
+    if (!(story.getAttribute("aria-label") || "").includes("type your app or website link")) {
       throw new Error("the figure's label no longer describes the typing");
     }
     // The field wears the app's real focus treatment while the
@@ -11479,7 +11479,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app store link into a tailored videos, in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app or website link into tailored videos, in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
