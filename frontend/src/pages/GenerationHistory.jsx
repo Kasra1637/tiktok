@@ -180,7 +180,7 @@ function LegacyStoryKit({ storyKit }) {
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Caption</dt>
             <dd className="min-w-0">
-              <span className="break-words text-base leading-relaxed text-foreground/90">{caption}</span>
+              <span className="generated-highlight break-words text-base leading-relaxed text-foreground/90">{caption}</span>
             </dd>
           </div>
         )}
@@ -188,7 +188,7 @@ function LegacyStoryKit({ storyKit }) {
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Screen text — add as a native text sticker</dt>
             <dd className="min-w-0">
-              <span className="post-kit-cover">{screenText}</span>
+              <span className="generated-highlight text-base font-semibold">{screenText}</span>
             </dd>
           </div>
         )}
@@ -1010,7 +1010,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                     {row.demo_brief && (
                       <div className="post-kit-row post-kit-row-stacked">
                         <dt className="eyebrow">Your demo brief</dt>
-                        <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">{row.demo_brief}</dd>
+                        <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90"><span className="generated-highlight">{row.demo_brief}</span></dd>
                       </div>
                     )}
                       </dl>

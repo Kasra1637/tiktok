@@ -128,7 +128,9 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           a single spec sheet instead of three stacked boxes that each carried
           their own redundant Copy button. Each label stands above its value
           (ADR 0159), and the panel carries no explainer line — the copy
-          stands on its own. */}
+          stands on its own. The generated values themselves wear the one
+          generated-text highlight (ADR 0258): plain words, light wash,
+          no box of their own inside the panel. */}
       <dl
         className="inset-panel divide-y divide-[color:var(--hairline)]"
         data-testid="post-kit-fields"
@@ -137,7 +139,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Caption</dt>
             <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
-              {String(caption)}
+              <span className="generated-highlight">{String(caption)}</span>
             </dd>
           </div>
         )}
@@ -159,7 +161,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Cover text</dt>
             <dd className="min-w-0">
-              <span className="post-kit-cover">{coverText}</span>
+              <span className="generated-highlight text-base font-semibold">{coverText}</span>
             </dd>
           </div>
         )}

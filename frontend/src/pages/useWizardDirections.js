@@ -118,6 +118,13 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft, 
           const merged = pick && !fresh.includes(pick) ? [pick, ...fresh] : [...fresh];
           return { ...previous, [field]: merged };
         });
+      } else {
+        // An empty success is the failure wearing a 200 (ADR 0257):
+        // the endpoint fails loudly when nothing survives its filters,
+        // and the hook never swallows an empty list either — the
+        // section's error line names it instead of the button dying
+        // silently in the founder's hand.
+        setRefreshError("AI direction options failed. Please try again.");
       }
     } catch (err) {
       setRefreshError(getErrorMessage(err));

@@ -54,7 +54,11 @@ export default function LineRewriteAction({
       {error && <p className="text-sm text-destructive-text" role="alert" data-testid={`${testIdPrefix}-error`}>{error}</p>}
       {live && (
         <div className="inset-panel space-y-3" data-testid={`${testIdPrefix}-suggestion`}>
-          <p className="text-base font-semibold">&ldquo;{live}&rdquo;</p>
+          {/* The suggested words wear the generated-text highlight
+              (ADR 0258), like the line they would replace; the panel
+              around them is the decision's own surface — the accept
+              and keep buttons live here — not the words' box. */}
+          <p className="text-base"><span className="generated-highlight font-semibold">{live}</span></p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" disabled={disabled} data-testid={`${testIdPrefix}-accept`}
               onClick={() => { onAccept(live); setSuggestion(null); }}>

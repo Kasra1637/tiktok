@@ -2349,6 +2349,21 @@ class TestGoalVerdictEvidencePayload:
         assert out["verdict_objective_evidence"] == {}
 
 
+def _make_direction_angle(server, profile_id, promise):
+    """Insert one generated angle row with the given opening promise."""
+    angle_id = str(uuid.uuid4())
+    _run(server._execute(
+        "INSERT INTO content_angles (id, brand_profile_id, kind, label, "
+        "target_audience, user_problem, hook_promise, app_feature, "
+        "desired_emotion, viewer_outcome, created_at, user_id, origin) "
+        "VALUES (?, ?, 'problem_solution', 'Angle', 'Nurses', "
+        "'Paperwork', ?, 'One-tap logging', 'Relief', "
+        "'Less admin', '2026-10-29T00:00:00', ?, 'generated')",
+        (angle_id, profile_id, promise, ANON),
+    ))
+    return angle_id
+
+
 class TestDirectionOptionsEndpoint:
     """Direction dropdowns follow the profile's category group."""
 
@@ -2396,6 +2411,41 @@ class TestDirectionOptionsEndpoint:
             profile_id=calm["id"], camera_setup="handheld", user_id=ANON))
         assert handheld["location"] == full["location"]
         assert len(handheld["location"]) == 4
+
+    def test_fixed_camera_still_offers_locations_when_the_angle_opens_outdoors(self, api):
+        # Kasra's dead end (Nov 21 2026): with a plan and strategy already
+        # generated he went BACK to change the location and the dropdown
+        # was empty. The state that empties it: the chosen angle opens
+        # outdoors and the camera is fixed. The angle fit removes every
+        # indoor option for conflicting with the outdoor scene, then the
+        # camera's indoor-only filter removes the outdoor moment the fit
+        # kept — and nothing tops the list back up. The dropdown must
+        # still offer the group's indoor places: under a fixed camera the
+        # camera's indoor rule, not the angle's outdoor place, is the
+        # place constraint on this list.
+        calm = _make_profile(api, ANON, name="Calm Outdoor Angle", category="Meditation")
+        angle_id = _make_direction_angle(
+            api, calm["id"],
+            "The person names the tight chest feeling on the park bench in the morning")
+        out = _run(api.profile_direction_options(
+            profile_id=calm["id"], angle_id=angle_id, camera_setup="fixed", user_id=ANON))
+        assert out["location"] == [
+            "Calm living room with a plant beside the chair",
+            "Tidy desk with a notebook",
+        ]
+
+    def test_handheld_with_an_outdoor_angle_still_leads_with_the_moment(self, api):
+        # The fixed-camera fallback must not disturb the handheld fit:
+        # the angle's own moment still heads the list (ADR 0084).
+        calm = _make_profile(api, ANON, name="Calm Moment", category="Meditation")
+        angle_id = _make_direction_angle(
+            api, calm["id"],
+            "The person names the tight chest feeling on the park bench in the morning")
+        out = _run(api.profile_direction_options(
+            profile_id=calm["id"], angle_id=angle_id, camera_setup="handheld", user_id=ANON))
+        assert out["location"][0] == (
+            "The person names the tight chest feeling on the park bench in the morning")
+        assert len(out["location"]) >= 3
 
 
 class TestDirectionRefresh:
@@ -2504,6 +2554,130 @@ class TestDirectionRefresh:
                 payload=RefreshDirectionOptionsRequest(field="location"),
                 user_id=ANON))
         assert err.value.status_code == 404
+
+    def test_fixed_camera_refresh_asks_for_indoor_places_and_keeps_them(self, api, monkeypatch):
+        # Kasra's second failure (Nov 21 2026): with a fixed camera and
+        # an angle that opens outdoors, "New options" for the location
+        # produced nothing at all. The prompt demanded options fit the
+        # angle's exact OUTDOOR place while the endpoint then discarded
+        # every non-indoor answer — the two instructions fought and the
+        # founder got an empty list. Under a fixed camera the camera's
+        # indoor rule replaces the angle's place as the constraint (the
+        # angle's time still binds), in the prompt and in the filter.
+        import ai_service
+        from models import RefreshDirectionOptionsRequest
+
+        prompts = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return {"options": [
+                "Her desk by the window",
+                "Quiet library corner, tall shelves",
+                "Calm living room with a plant beside the chair",
+                "Rooftop garden at blue hour",
+            ]}
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        profile = _make_profile(api, ANON, name="Fixed Refresh", category="Meditation")
+        angle_id = _make_direction_angle(
+            api, profile["id"],
+            "The person names the tight chest feeling on the park bench in the morning")
+        out = _run(api.refresh_profile_direction_options(
+            profile_id=profile["id"],
+            payload=RefreshDirectionOptionsRequest(
+                field="location", angle_id=angle_id, camera_setup="fixed"),
+            user_id=ANON))
+        assert out["options"] == [
+            "Her desk by the window",
+            "Quiet library corner, tall shelves",
+            "Calm living room with a plant beside the chair",
+        ]
+        assert "FIXED" in prompts[0]
+        assert "that exact place" not in prompts[0]
+
+    def test_refresh_retries_once_when_every_first_option_conflicts(self, api, monkeypatch):
+        # The other way "New options" died silently: the model's whole
+        # first reply conflicts with the angle's scene (all indoor
+        # against an outdoor opening), the endpoint filtered it to
+        # nothing and returned a 200 with an empty list, and the page
+        # treated the empty success as "nothing to do". One bounded
+        # retry — the rejected options joining the avoid list — is the
+        # house pattern for generation paths; the founder must end up
+        # with usable options, not silence.
+        import ai_service
+        from models import RefreshDirectionOptionsRequest
+
+        prompts = []
+        replies = [
+            {"options": [
+                "Calm living room with a plant beside the chair",
+                "Tidy desk with a notebook",
+                "Quiet library corner, tall shelves",
+                "Bedside table with a soft lamp",
+            ]},
+            {"options": [
+                "Quiet garden bench",
+                "Park path with tall trees",
+                "Riverside steps",
+                "Courthouse steps",
+            ]},
+        ]
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return replies[len(prompts) - 1]
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        profile = _make_profile(api, ANON, name="Retry Refresh", category="Meditation")
+        angle_id = _make_direction_angle(
+            api, profile["id"],
+            "The person names the tight chest feeling on the park bench in the morning")
+        out = _run(api.refresh_profile_direction_options(
+            profile_id=profile["id"],
+            payload=RefreshDirectionOptionsRequest(field="location", angle_id=angle_id),
+            user_id=ANON))
+        assert out["options"] == [
+            "Quiet garden bench",
+            "Park path with tall trees",
+            "Riverside steps",
+            "Courthouse steps",
+        ]
+        assert len(prompts) == 2
+        # The retry told the model what was already rejected.
+        assert "Calm living room with a plant beside the chair" in prompts[1]
+
+    def test_refresh_fails_loudly_when_no_reply_survives(self, api, monkeypatch):
+        # When even the bounded retry yields nothing usable, the answer
+        # is the standard failure (ADR 0242's sentence), never a 200
+        # with an empty list the page would swallow.
+        import ai_service
+        from models import RefreshDirectionOptionsRequest
+
+        calls = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            calls.append(prompt)
+            return {"options": [
+                "Calm living room with a plant beside the chair",
+                "Tidy desk with a notebook",
+                "Quiet library corner, tall shelves",
+                "Bedside table with a soft lamp",
+            ]}
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        profile = _make_profile(api, ANON, name="Hopeless Refresh", category="Meditation")
+        angle_id = _make_direction_angle(
+            api, profile["id"],
+            "The person names the tight chest feeling on the park bench in the morning")
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_direction_options(
+                profile_id=profile["id"],
+                payload=RefreshDirectionOptionsRequest(field="location", angle_id=angle_id),
+                user_id=ANON))
+        assert err.value.status_code == 502
+        assert err.value.detail == "AI direction options failed. Please try again."
+        assert len(calls) == 2
 
     def test_refresh_failure_detail_names_no_model_internals(self, api, monkeypatch):
         # ADR 0242: the founder reads this failure beside the dropdown,

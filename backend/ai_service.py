@@ -2040,16 +2040,23 @@ DIRECTION_REFRESH_MAX_TOKENS = 4000
 
 
 async def refresh_direction_options(profile: dict, field: str, avoid: Optional[list] = None,
-                                    angle: Optional[dict] = None) -> list:
+                                    angle: Optional[dict] = None, camera_setup: str = "") -> list:
     """Four fresh dropdown options for one direction field, profile-shaped.
 
     `avoid` carries the options already shown so the model returns genuinely
     new ones. Raises RuntimeError on an unknown field or an unusable reply.
+
+    For a location refresh under a fixed camera the camera's indoor rule
+    replaces the angle's place as the constraint (ADR 0257): the model is
+    told the camera is FIXED and placed indoors, so it stops proposing
+    the angle's outdoor place the endpoint would only discard. The
+    angle's time of day still binds.
     """
     field = (field or "").strip().lower()
     if field not in DIRECTION_REFRESH_FIELDS:
         raise RuntimeError(f"Unknown direction field: {field!r}.")
     profile = profile or {}
+    fixed_location = field == "location" and (camera_setup or "").strip().lower() == "fixed"
 
     def _list(name):
         val = profile.get(name)
@@ -2070,13 +2077,28 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     }
     angle_block = ""
     if isinstance(angle, dict) and angle:
+        if fixed_location:
+            fit_sentence = (
+                "\nThe hook_promise is the video's opening moment and fixes when it happens, "
+                "but the camera is FIXED and placed indoors: every location must be an indoor "
+                "place, whatever place the moment names. Keep its time of day — never offer a "
+                "time that contradicts it (no morning when it opens at night)."
+            )
+        else:
+            fit_sentence = (
+                "\nThe hook_promise is the video's opening moment and fixes where and when it happens: "
+                "every option must fit that exact place and time of day. Never offer a place, light or "
+                "time that contradicts it (no living room or lamp light when it opens outside, no night "
+                "when it opens in the morning)."
+            )
         angle_block = (
             "\n\nSELECTED ANGLE (suit the options to it):\n"
             f"{json.dumps({k: angle.get(k) or '' for k in ('kind', 'label', 'user_problem', 'hook_promise', 'viewer_outcome', 'desired_emotion')}, indent=2)}"
-            "\nThe hook_promise is the video's opening moment and fixes where and when it happens: "
-            "every option must fit that exact place and time of day. Never offer a place, light or "
-            "time that contradicts it (no living room or lamp light when it opens outside, no night "
-            "when it opens in the morning)."
+            + fit_sentence
+        )
+    elif fixed_location:
+        angle_block = (
+            "\n\nThe camera is FIXED and placed indoors: every location must be an indoor place."
         )
     avoid_list = [str(a) for a in (avoid or []) if str(a or "").strip()][:12]
     avoid_block = ("\n\nALREADY SHOWN (do not repeat any of these):\n" + "\n".join(f"- {a}" for a in avoid_list)) if avoid_list else ""

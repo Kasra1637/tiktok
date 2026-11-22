@@ -251,13 +251,17 @@ One render path, single-pass video generation via OpenRouter.
   plan drafts `cover_text` to the shared cover best-practice rules; Review
   shows it as plain text and regenerates it only as a suggestion the founder
   accepts — never auto-saved, never hand-edited in place — and the post kit
-  ships the accepted cover verbatim. The hook and script fields beside it
-  stand in the cover frame (ADR 0186): the History cover box
-  (`.post-kit-cover`, worn as `.spoken-line-frame`) wrapped around the
-  unchanged fields, so the spoken words read as finished lines; History's
-  own hook and Plan context stay plain text, wearing no frame. The frame
-  family carries no quotation marks and shows nothing on click, and the
-  demo brief stands in the same frame (ADR 0191).
+  ships the accepted cover verbatim. Generated text wears one highlight,
+  never a box (ADR 0258, superseding the cover frame of ADRs 0186/0191):
+  the hook and script fields beside it stand in `.generated-highlight-field`
+  (index.css, token `--generated-highlight`) around the unchanged fields,
+  so the spoken words read as finished lines, and the same wash
+  (`.generated-highlight`) backs every generated output — the post kit's
+  caption and cover, Review's cover value, suggestion previews, History's
+  demo brief and the legacy kit's texts. The highlight family carries no
+  quotation marks and shows nothing on click (ADR 0191's rules, carried
+  over), and the demo brief stands in the same wash; History's own hook
+  (the card's title) and Plan context's picked facts stay plain text.
 - Settled layout decisions are not open questions (ADR 0141): Review stays
   one column at every width, Analytics stays a calm ledger (its Clip
   results and Renders cards stand at one height, its Clip results read
@@ -305,7 +309,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and fifty-five decisions (0001–0255) now
+Read `docs/adr/README.md` first. Two hundred and fifty-eight decisions (0001–0258) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

@@ -28,13 +28,14 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
           The caller passes its own clip's name; the default is the
           wizard's, the editor's original home. */}
       <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated {clipLabel}.</p>
-      {/* The line stands in the cover frame (ADR 0186): the same sunken
-          box the History cover line sits in, so the words read as the
-          finished line. No quotation marks anywhere in the frame family
-          (ADR 0191) — the founder never wants them on the spoken lines.
-          The field inside is the same input — same id, same typing,
-          same live count below. */}
-      <div className="post-kit-cover spoken-line-frame">
+      {/* The line stands in the generated-text highlight (ADR 0258):
+          the same light wash every generated line wears, so the words
+          read as the finished line, not as a form in a box. No
+          quotation marks anywhere in the highlight family (ADR 0191)
+          — the founder never wants them on the spoken lines. The
+          field inside is the same input — same id, same typing, same
+          live count below. */}
+      <div className="generated-highlight-field">
         <Input id="review-hook_line" value={value} onChange={(e) => onChange(e.target.value)} />
       </div>
       {suggestClearerHook && (

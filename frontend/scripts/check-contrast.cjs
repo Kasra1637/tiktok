@@ -86,6 +86,11 @@ const PAIRS = [
   ["brand-indigo", "card"],
   ["brand-indigo", "muted"],
   ["brand-indigo", "secondary"],
+  // The generated-text highlight (ADR 0258): generated words ride on
+  // this wash on every page, so the text grades that appear on it are
+  // measured against it like any other surface.
+  ["foreground", "generated-highlight"],
+  ["muted-foreground", "generated-highlight"],
 ];
 
 for (const [fg, bg] of PAIRS) {

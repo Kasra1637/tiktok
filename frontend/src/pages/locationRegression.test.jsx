@@ -5,7 +5,7 @@ import { useWizardDirections } from "./useWizardDirections";
 import { hasCopyContext, effectiveCopyFilter } from "./historyRepair";
 
 jest.mock("../lib/api", () => ({
-  api: { getDirectionOptions: jest.fn() },
+  api: { getDirectionOptions: jest.fn(), refreshDirectionOptions: jest.fn() },
   getErrorMessage: (error) => error.message,
   durableMediaUrl: () => null,
 }));
@@ -85,6 +85,40 @@ test("direction Location selection dispatches the same editable Location field",
     await act(async () => { direction.pickScenePart("lighting")("Soft light"); });
     expect(dispatchDraft).toHaveBeenLastCalledWith({ type: "edit-field", field: "visual_direction", value: "Soft light", omitDefault: true });
     expect(container.querySelector('[data-testid="location-selection"]').textContent).toBe("Rooftop");
+  } finally {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  }
+});
+
+test("a refresh that returns no options names the failure instead of dying silently", async () => {
+  // Kasra's dead button (Nov 21 2026): "New options" for the location
+  // produced nothing and said nothing. The endpoint now fails loudly
+  // when nothing survives its filters (ADR 0257), and the hook must
+  // never swallow an empty success either — an empty list is the same
+  // failure wearing a 200, and the section's error line is where it
+  // belongs.
+  api.getDirectionOptions.mockResolvedValue({ location: ["Kitchen", "Rooftop"], lighting: [], wardrobe: [], voice: [], tone: [] });
+  api.refreshDirectionOptions.mockResolvedValue({ field: "location", options: [] });
+  const dispatchDraft = jest.fn();
+  let direction;
+  function Harness() {
+    direction = useWizardDirections({
+      profileId: "TEST_profile", project: { id: "TEST_project", location: "Kitchen" },
+      angle: null, dispatchDraft,
+    });
+    return <span data-testid="refresh-error">{direction.refreshError}</span>;
+  }
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(<Harness />); });
+    await act(async () => { await direction.refreshDirectionField("location")(); });
+    expect(container.querySelector('[data-testid="refresh-error"]').textContent)
+      .toBe("AI direction options failed. Please try again.");
+    // The offered list is untouched by the failed refresh.
+    expect(direction.directionOptions.location).toEqual(["Kitchen", "Rooftop"]);
   } finally {
     await act(async () => { root.unmount(); });
     container.remove();

@@ -1,6 +1,8 @@
 # 0191 — No quotation marks and no click border on the framed lines
 
-Status: accepted
+Status: partially superseded by 0258 (the sunken frame it kept is
+retired for the generated-text highlight; the no-quotation-mark and
+no-click-border rules stand and govern the highlight family)
 
 Supersedes the quote element and the focus treatment of ADR 0186;
 the sunken cover frame itself stands.

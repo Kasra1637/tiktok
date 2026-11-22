@@ -1693,17 +1693,23 @@ export default function CreateVideo() {
     cameraSetup: editValue("camera_setup", "handheld"),
   });
 
-  // The saved place a fixed camera cannot use (ADR 0220): the setup is
-  // fixed, the lists are loaded, a place is saved, and no offered indoor
-  // location matches it — so the pick reads empty and the section names
-  // why, instead of the value being rewritten behind the founder's back.
-  // The codebase's ineligible-value pattern (the gone template reads the
-  // same way); ADR 0219's plan rule guards generation in the meantime.
-  const directionLocationIneligible =
-    editValue("camera_setup", "handheld") === "fixed" &&
+  // A saved place the offered list cannot show (ADRs 0220/0257): the
+  // lists are loaded, a place is saved, and no offered location matches
+  // it — so the pick reads empty and the section names the place in
+  // force, instead of the value being rewritten behind the founder's
+  // back or the section pretending no place exists at all. Under a
+  // fixed camera the note says only that the place is not offered for
+  // that camera: it never claims the place is not indoor, which is
+  // false for a saved indoor place that simply is not in the fitted
+  // list (a refreshed option, the plan's own words). The codebase's
+  // ineligible-value pattern (the gone template reads the same way);
+  // ADR 0219's plan rule guards generation in the meantime.
+  const savedLocationUnlisted =
     Boolean(directionOptions) &&
     !dirSel.location &&
     Boolean(String(editValue("location", "") || "").trim());
+  const directionLocationIneligible =
+    editValue("camera_setup", "handheld") === "fixed" && savedLocationUnlisted;
 
   // The goal the plan is written toward: the wizard's own choice wins, and the
   // draft's stored goal is the fallback, so a complete draft landing on
@@ -2465,8 +2471,14 @@ export default function CreateVideo() {
                 {directionLocationIneligible && (
                   <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
                     Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
-                    not an indoor location, so it is not offered for a fixed camera. Pick an
-                    indoor location — the plan is written from the pick saved here.
+                    not offered for a fixed camera. Pick an indoor location from the
+                    list — the plan is written from the pick saved here.
+                  </p>
+                )}
+                {savedLocationUnlisted && !directionLocationIneligible && (
+                  <p className="text-sm text-muted-foreground" data-testid="direction-location-unlisted">
+                    Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
+                    not in this list — it still applies. Pick a listed place to change it.
                   </p>
                 )}
                 <DirectionSelect
@@ -3073,13 +3085,14 @@ export default function CreateVideo() {
             <div className="space-y-4">
               <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
               <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
-              {/* The script stands in the cover frame too (ADR 0186), the
-                  hook's treatment: the same textarea inside, still growing
-                  with its words, still counted live below. No quotation
-                  marks (ADR 0191), and no fixed tall height: the
-                  textarea's own auto-grow fits the frame to the words,
-                  so a short script holds no empty space beneath it. */}
-              <div className="post-kit-cover spoken-line-frame">
+              {/* The script stands in the generated-text highlight too
+                  (ADR 0258), the hook's treatment: the same textarea
+                  inside, still growing with its words, still counted
+                  live below. No quotation marks (ADR 0191), and no
+                  fixed tall height: the textarea's own auto-grow fits
+                  the highlight to the words, so a short script holds
+                  no empty space beneath it. */}
+              <div className="generated-highlight-field">
                 <Textarea
                   id="review-script"
                   value={editValue("script", "")}
@@ -3161,12 +3174,13 @@ export default function CreateVideo() {
               <label htmlFor="review-demo-brief" className="text-sm font-semibold">
                 What the demo should show
               </label>
-              {/* The demo brief joins the spoken lines' frame family
-                  (ADR 0191): the same sunken frame, fitted to its
-                  content by the textarea's auto-grow, no quotation
-                  marks, nothing shown on click. It is a note about the
-                  founder's own recording, never a spoken line. */}
-              <div className="post-kit-cover spoken-line-frame">
+              {/* The demo brief joins the spoken lines' highlight
+                  family (ADR 0191, treatment by ADR 0258): the same
+                  light wash, fitted to its content by the textarea's
+                  auto-grow, no quotation marks, nothing shown on
+                  click. It is a note about the founder's own recording,
+                  never a spoken line. */}
+              <div className="generated-highlight-field">
                 <Textarea
                   id="review-demo-brief"
                   value={editValue("demo_brief", "")}

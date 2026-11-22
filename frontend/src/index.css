@@ -216,6 +216,12 @@ code, .font-mono {
         --coral-12: rgba(254, 44, 85, 0.12);
         --coral-25: rgba(254, 44, 85, 0.25);
 
+        /* The generated-text highlight (ADR 0258): the one wash behind
+           words the app wrote. A solid token — the indigo tint
+           pre-composited over the card surface — so the contrast gate
+           can measure the text riding on it like any other surface. */
+        --generated-highlight: 238 28% 17%;
+
         /* Hairline that reads lighter than --border, for glass panel edges. */
         --hairline: rgba(255, 255, 255, 0.06);
         --hairline-strong: rgba(255, 255, 255, 0.1);
@@ -372,9 +378,10 @@ body {
  * reuse it, so every dense label/value stack reads as the same element.
  *
  * Caption, hashtags and cover text were three separate boxes, each carrying
- * its own Copy button; they are one panel now, so the row rhythm and the
- * cover frame live here instead of being re-typed as utilities at the call
- * site. The label column is fixed from 640px up so the three values align. */
+ * its own Copy button; they are one panel now, so the row rhythm lives here
+ * instead of being re-typed as utilities at the call site; the values'
+ * generated-text highlight is its own shared rule below. The label column
+ * is fixed from 640px up so the three values align. */
 .post-kit-row {
     display: grid;
     gap: 0.375rem;
@@ -387,41 +394,51 @@ body {
     padding-bottom: 0;
 }
 
-/* The cover line as it will sit over the video: a sunken frame, bold, short. */
-.post-kit-cover {
-    display: inline-block;
-    max-width: 100%;
-    border: 1px solid var(--hairline);
+/* Generated text wears a highlight, not a box (ADR 0258): the words
+ * the app wrote — the hook line, the script, the cover text, the demo
+ * brief, the post copy — read as plain written text with one very
+ * light indigo wash behind them, the same wash on every page and
+ * section. No border, no shadow, nothing that looks clickable: the
+ * wash is the whole treatment. This inline form is for standing text
+ * (a cover line, a caption, a brief in a record); its background
+ * clones across wrapped lines so a long value highlights as one
+ * unbroken run. Editable lines wear the block variant below. */
+.generated-highlight {
+    background-color: hsl(var(--generated-highlight));
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    overflow-wrap: anywhere;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+/* The block variant, for editable generated lines: the Review hook,
+ * script and demo brief fields and the Hook + CTA page's hook field
+ * stand in the same wash, block-wide, so the words read as the
+ * finished line rather than as a form waiting to be filled. The field
+ * inside keeps no chrome of its own — no border, no well, no padding
+ * of its own. The fields themselves are untouched: same elements,
+ * same ids, same live counts, same typing. ADR 0191's rules carry
+ * over: no quotation marks anywhere in this family, and nothing about
+ * the wash changes on click — it is identical at rest, hover and
+ * focus, with no transition to animate a change; the caret is the
+ * only sign of editing. The ruling is scoped to these highlighted
+ * fields: ordinary form fields keep their .input-well hover and
+ * focus treatment below. */
+.generated-highlight-field {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.125rem;
+    background-color: hsl(var(--generated-highlight));
     border-radius: 0.5rem;
-    background-color: hsl(228 14% 6% / 0.6);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
     padding: 0.375rem 0.75rem;
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.6;
     color: hsl(var(--foreground) / 0.9);
-    overflow-wrap: anywhere;
 }
-
-/* The Review spoken lines wear the cover frame (ADR 0186): the hook and
- * script fields stand inside the same sunken box, so the words read as
- * the finished line rather than as a form waiting to be filled. The
- * frame is the shape; the field inside keeps no chrome of its own — no
- * border, no well, no padding of its own. The fields themselves are
- * untouched: same elements, same ids, same live counts, same typing.
- * ADR 0191: no quotation marks anywhere in this family, and nothing
- * about the box changes on click — the frame's border and shadow are
- * identical at rest, hover and focus, with no transition to animate a
- * change; the caret is the only sign of editing. The founder's ruling
- * is scoped to these framed fields: ordinary form fields keep their
- * .input-well hover and focus treatment below. */
-.post-kit-cover.spoken-line-frame {
-    display: flex;
-    width: 100%;
-    align-items: flex-start;
-    gap: 0.125rem;
-}
-.spoken-line-frame .input-well {
+.generated-highlight-field .input-well {
     flex: 1 1 auto;
     min-width: 0;
     height: auto;
@@ -435,10 +452,11 @@ body {
     transition: none;
 }
 /* Restated at higher specificity than .input-well's hover and
- * focus-visible rules, so inside the frame those states change nothing. */
-.spoken-line-frame .input-well:hover,
-.spoken-line-frame .input-well:focus,
-.spoken-line-frame .input-well:focus-visible {
+ * focus-visible rules, so inside the highlight those states change
+ * nothing. */
+.generated-highlight-field .input-well:hover,
+.generated-highlight-field .input-well:focus,
+.generated-highlight-field .input-well:focus-visible {
     border: 0;
     background: transparent;
     box-shadow: none;

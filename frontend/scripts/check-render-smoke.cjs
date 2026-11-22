@@ -3064,6 +3064,75 @@ async function main() {
     }
   });
 
+  await check("the direction section names a saved place the offered list cannot show", async (ctx) => {
+    // ADR 0257: a saved place no offered option matches — the plan's
+    // own words, a refreshed option — used to read as an empty pick
+    // with no sign the video had a place at all, which is how a founder
+    // going back to change the location met a section that looked
+    // placeless. The section now names the place in force beside the
+    // empty pick; the pick itself still changes only by choosing.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, location: "The courthouse steps" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const note = ctx.container.querySelector('[data-testid="direction-location-unlisted"]');
+        if (!note) throw new Error("the saved-place note did not render");
+        if (!note.textContent.includes("The courthouse steps")) {
+          throw new Error("the saved-place note does not name the saved place");
+        }
+        if (ctx.container.querySelector('[data-testid="direction-location-ineligible"]')) {
+          throw new Error("the fixed-camera note rendered for a handheld setup");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the fixed-camera note never calls an indoor saved place outdoor", async (ctx) => {
+    // ADR 0257: the fixed-camera note used to assert the saved place
+    // "is not an indoor location" whenever the pick read empty — false
+    // for a saved indoor place that simply is not in the fitted list
+    // (a refreshed option). The note now says only what is true: the
+    // place is not offered for a fixed camera.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({
+          ...PROJECT_WITH_STRATEGY,
+          location: "Quiet library corner",
+          camera_setup: "fixed",
+        }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Calm living room with a plant beside the chair", "Tidy desk with a notebook"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+        }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const note = ctx.container.querySelector('[data-testid="direction-location-ineligible"]');
+        if (!note) throw new Error("the fixed-camera note did not render");
+        if (!note.textContent.includes("Quiet library corner")) {
+          throw new Error("the fixed-camera note does not name the saved place");
+        }
+        if (note.textContent.includes("is not an indoor location")) {
+          throw new Error("the fixed-camera note still misnames the saved place");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Per-render resolution choice (heygen-video-1 offers 480p beside 768p).
   //
@@ -6297,19 +6366,20 @@ async function main() {
     );
   });
 
-  // The spoken lines wear the cover frame (ADR 0186), and the frame
-  // family follows ADR 0191: the founder never wants quotation marks on
-  // the spoken lines, so the glyphs ADR 0186 flanked them with are gone
-  // entirely; the script frame fits its content instead of holding a
-  // fixed tall box; clicking into a framed field shows nothing (no
-  // :focus-within border or ring in the CSS); and the demo brief joins
-  // the same family. The fields themselves are untouched — same
-  // elements, same ids — and Review's own cover text stays OUT of the
-  // frame: it stands as plain text by the founder's standing rule
-  // (ADR 0145), so the frame's presence here must not leak onto it.
-  await check("Review spoken lines stand in the cover frame with no quote marks and no click border", async (ctx) => {
+  // Generated text wears the highlight, not a box (ADR 0258,
+  // superseding the cover frame of ADRs 0186/0191): the hook, script
+  // and demo brief fields stand in the one shared highlight treatment
+  // — a light indigo wash with no border and no shadow, so the words
+  // read as plain written text — and Review's cover text wears the
+  // same highlight as plain text in the flow (ADR 0145's no-box rule,
+  // unified). The frame family's other rules survive the move: no
+  // quotation marks, the script fits its content instead of holding a
+  // fixed tall box, and clicking into a highlighted field shows
+  // nothing (no :focus-within border or ring in the CSS). The fields
+  // themselves are untouched — same elements, same ids.
+  await check("Review generated lines wear the highlight, not a box", async (ctx) => {
     await withApi(
-      { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }) },
+      { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, cover_text: "Bakery queue, words won't come" }) },
       async () => {
         global.__SMOKE_PARAMS = "?project=p1";
         try {
@@ -6318,33 +6388,48 @@ async function main() {
           const hookField = ctx.container.querySelector("#review-hook_line");
           const scriptField = ctx.container.querySelector("#review-script");
           if (!hookField || !scriptField) throw new Error("a spoken line field is missing");
-          const hookFrame = hookField.closest(".post-kit-cover");
-          const scriptFrame = scriptField.closest(".post-kit-cover");
-          if (!hookFrame) throw new Error("the hook line does not stand in the cover frame");
-          if (!scriptFrame) throw new Error("the script does not stand in the cover frame");
-          if (hookFrame.textContent.includes("“") || hookFrame.textContent.includes("”")) {
-            throw new Error("the hook frame still carries quote marks");
+          const hookWrap = hookField.closest(".generated-highlight-field");
+          const scriptWrap = scriptField.closest(".generated-highlight-field");
+          if (!hookWrap) throw new Error("the hook line does not stand in the generated-text highlight");
+          if (!scriptWrap) throw new Error("the script does not stand in the generated-text highlight");
+          if (hookField.closest(".post-kit-cover") || scriptField.closest(".post-kit-cover")) {
+            throw new Error("a spoken line still stands in the retired cover frame");
           }
-          if (scriptFrame.textContent.includes("“") || scriptFrame.textContent.includes("”")) {
-            throw new Error("the script frame still carries quote marks");
+          if (hookWrap.textContent.includes("“") || hookWrap.textContent.includes("”")) {
+            throw new Error("the hook highlight still carries quote marks");
+          }
+          if (scriptWrap.textContent.includes("“") || scriptWrap.textContent.includes("”")) {
+            throw new Error("the script highlight still carries quote marks");
           }
           if ((scriptField.className || "").includes("min-h-[160px]")) {
             throw new Error("the script field still holds a fixed tall height instead of fitting its content");
           }
           const briefField = ctx.container.querySelector("#review-demo-brief");
           if (!briefField) throw new Error("the demo brief field is missing");
-          const briefFrame = briefField.closest(".post-kit-cover");
-          if (!briefFrame) throw new Error("the demo brief does not stand in the cover frame family");
-          if (briefFrame.textContent.includes("“") || briefFrame.textContent.includes("”")) {
-            throw new Error("the demo brief frame carries quote marks");
+          const briefWrap = briefField.closest(".generated-highlight-field");
+          if (!briefWrap) throw new Error("the demo brief does not stand in the generated-text highlight");
+          if (briefWrap.textContent.includes("“") || briefWrap.textContent.includes("”")) {
+            throw new Error("the demo brief highlight carries quote marks");
           }
           const css = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
-          if (/\.spoken-line-frame:focus-within/.test(css)) {
-            throw new Error("the spoken-line frame still changes its border on click (a :focus-within rule survives)");
+          if (/\.generated-highlight-field:focus-within/.test(css)) {
+            throw new Error("the highlight still changes its border on click (a :focus-within rule survives)");
+          }
+          if (/\.post-kit-cover/.test(css)) {
+            throw new Error("the retired cover frame is still defined in the CSS");
+          }
+          const hlRule = css.match(/\.generated-highlight\s*\{([^}]*)\}/);
+          if (!hlRule) throw new Error("the shared generated-text highlight is not defined in the CSS");
+          if (/(^|;)\s*border\s*:/.test(hlRule[1]) || /box-shadow\s*:/.test(hlRule[1])) {
+            throw new Error("the highlight carries a border or shadow — it must read as plain text, not a box");
           }
           const coverValue = ctx.container.querySelector('[data-testid="cover-text-value"]');
-          if (coverValue && coverValue.closest(".post-kit-cover")) {
-            throw new Error("Review's cover text took the frame — it stands plain by rule");
+          if (!coverValue) throw new Error("Review's cover text is missing");
+          if (!coverValue.querySelector(".generated-highlight")) {
+            throw new Error("Review's cover text does not wear the highlight");
+          }
+          if (coverValue.closest(".post-kit-cover")) {
+            throw new Error("Review's cover text took the retired frame");
           }
           // ADR 0249 unified the Hook + CTA page's hook button; the
           // wizard's own clearer-hook suggestion is NOT part of that
@@ -20411,11 +20496,10 @@ async function runDemoCtaChecks() {
     }
   });
 
-  // ADR 0191: the History Post copy cover box belongs to the same frame
-  // family as the Review spoken lines, and the founder's no-quotation
-  // rule covers the family — its quote glyphs come off too, so the box
-  // the design is referenced on matches the design.
-  await check("History post copy cover stands in the frame without quote marks", async (ctx) => {
+  // ADR 0258 (extending 0191): the History Post copy cover wears the
+  // same generated-text highlight as the Review spoken lines — no box,
+  // and the founder's no-quotation rule covers the family still.
+  await check("History post copy cover wears the highlight without quote marks", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -20431,13 +20515,14 @@ async function runDemoCtaChecks() {
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
         await mount(GenerationHistory)(ctx);
-        const cover = ctx.container.querySelector('.post-kit-cover');
-        if (!cover) throw new Error("the History card shows no cover text frame");
-        if (!(cover.textContent || "").includes("Stop writing empty pages")) {
-          throw new Error("the cover frame lost the cover text itself");
-        }
+        const highlighted = [...ctx.container.querySelectorAll('[data-testid^="history-post-copy-"] .generated-highlight')];
+        const cover = highlighted.find((el) => (el.textContent || "").includes("Stop writing empty pages"));
+        if (!cover) throw new Error("the History card shows no highlighted cover text");
         if (cover.textContent.includes("“") || cover.textContent.includes("”")) {
-          throw new Error("the History cover frame still carries quote marks");
+          throw new Error("the History cover highlight still carries quote marks");
+        }
+        if (ctx.container.querySelector(".post-kit-cover")) {
+          throw new Error("the retired cover frame still renders on the History card");
         }
       });
     } finally {

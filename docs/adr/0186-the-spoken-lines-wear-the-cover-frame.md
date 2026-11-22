@@ -1,6 +1,8 @@
 # ADR 0186: The spoken lines wear the cover frame
 
-Status: accepted
+Status: superseded by 0258 (the frame is retired — generated text
+wears one light highlight instead of the sunken box; the field
+integrity this record settled is untouched)
 
 On 2026-11-17 the founder held two screenshots side by
 side. In one, a History card's cover text: a small-caps

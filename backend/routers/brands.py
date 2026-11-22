@@ -2219,6 +2219,15 @@ async def profile_direction_options(
     (ADR 0219), and only locations the shared classifier calls indoor
     are offered for it — outdoor and unclassifiable alike are withheld,
     because unknown is never permission. Handheld offers every location.
+
+    Under a fixed camera the camera's indoor rule replaces the angle's
+    place as the constraint on this one list (ADR 0257): the angle fit
+    removes every indoor option for contradicting an outdoor opening,
+    and the indoor filter then removes the outdoor moment the fit kept,
+    which left the dropdown empty in exactly the state where a founder
+    goes back to change the place. When the two filters compose to
+    nothing, the list falls back to the group's own indoor places,
+    still held to the angle's time of day.
     """
     _require_configured()
     profile = await _cfg("_fetch_one")(
@@ -2227,6 +2236,7 @@ async def profile_direction_options(
     if not profile:
         raise HTTPException(status_code=404, detail="App Profile not found")
     options = template_library.direction_options_for_profile(profile)
+    static_locations = list(options.get("location") or [])
     angle = None
     if (angle_id or "").strip():
         angle = await _cfg("_fetch_one")(
@@ -2237,13 +2247,18 @@ async def profile_direction_options(
     # that contradicts its opening moment is ever offered.
     options = angle_scene.fit_direction_options(options, angle)
     if (camera_setup or "").strip().lower() == "fixed":
-        options = {
-            **options,
-            "location": [
-                option for option in options.get("location") or []
+        locations = [
+            option for option in options.get("location") or []
+            if template_library.location_setting(option) == "indoor"
+        ]
+        if not locations:
+            scene = angle_scene.angle_scene(angle)
+            locations = [
+                option for option in static_locations
                 if template_library.location_setting(option) == "indoor"
-            ],
-        }
+                and not angle_scene.conflict_reason(option, {**scene, "place": ""})
+            ]
+        options = {**options, "location": locations}
     return options
 
 
@@ -2261,6 +2276,16 @@ async def refresh_profile_direction_options(
     constraint, not a trust boundary. A location refresh for a fixed
     camera is filtered to indoor locations, exactly like the static
     list (ADRs 0219/0220).
+
+    The filters can empty a whole reply — every option indoors against
+    an outdoor opening, or every option at a clashing time — and an
+    empty success is a dead button on the page (ADR 0257). So a reply
+    that filters to nothing earns ONE bounded retry with the rejected
+    options added to the avoid list, and if that also yields nothing
+    the endpoint fails with the standard sentence instead of returning
+    an empty list. Under a fixed camera the location filter holds the
+    angle's time but not its place: the camera's indoor rule is the
+    place constraint there, in the prompt and in the filter alike.
     """
     _require_configured()
     _require_ai_configured()
@@ -2278,27 +2303,45 @@ async def refresh_profile_direction_options(
             "SELECT * FROM content_angles WHERE id = ? AND brand_profile_id = ? AND user_id = ?",
             (payload.angle_id.strip(), profile_id, user_id),
         )
-    try:
-        options = await _cfg("_log_model_call")(
-            "direction_options", "text", TEXT_MODEL,
-            lambda: ai_service.refresh_direction_options(profile, field,
-                                                          payload.avoid or [], angle),
-            user_id,
-            brand_profile_id=profile_id,
-        )
-    except RuntimeError as e:
-        # The founder-facing sentence only (ADR 0242): the raw model
-        # error — finish reasons and all — is not wording for the
-        # dropdown's reader. It is not lost: _log_model_call has
-        # already recorded the failure with its error server-side.
-        raise HTTPException(status_code=502, detail="AI direction options failed. Please try again.")
+    camera_fixed = field == "location" and (payload.camera_setup or "").strip().lower() == "fixed"
     scene = angle_scene.angle_scene(angle)
-    options = [o for o in options if not angle_scene.conflict_reason(o, scene)]
-    if field == "location" and (payload.camera_setup or "").strip().lower() == "fixed":
-        options = [
-            o for o in options
-            if template_library.location_setting(o) == "indoor"
-        ]
+    filter_scene = {**scene, "place": ""} if camera_fixed else scene
+
+    def _usable(raw_options):
+        kept = [o for o in raw_options if not angle_scene.conflict_reason(o, filter_scene)]
+        if camera_fixed:
+            kept = [
+                o for o in kept
+                if template_library.location_setting(o) == "indoor"
+            ]
+        return kept
+
+    avoid = list(payload.avoid or [])
+    options = []
+    for _attempt in range(2):
+        try:
+            raw_options = await _cfg("_log_model_call")(
+                "direction_options", "text", TEXT_MODEL,
+                lambda avoid=avoid: ai_service.refresh_direction_options(
+                    profile, field, avoid, angle,
+                    camera_setup=payload.camera_setup or ""),
+                user_id,
+                brand_profile_id=profile_id,
+            )
+        except RuntimeError as e:
+            # The founder-facing sentence only (ADR 0242): the raw model
+            # error — finish reasons and all — is not wording for the
+            # dropdown's reader. It is not lost: _log_model_call has
+            # already recorded the failure with its error server-side.
+            raise HTTPException(status_code=502, detail="AI direction options failed. Please try again.")
+        options = _usable(raw_options)
+        if options:
+            break
+        # Nothing in this reply can be offered; ask once more without
+        # repeating it (the service caps the avoid list itself).
+        avoid = avoid + list(raw_options or [])
+    if not options:
+        raise HTTPException(status_code=502, detail="AI direction options failed. Please try again.")
     return {"field": field, "options": options}
 
 

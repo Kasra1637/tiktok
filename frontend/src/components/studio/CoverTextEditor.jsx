@@ -6,7 +6,8 @@ import { api, getErrorMessage } from "../../lib/api";
 /**
  * The cover text in Review (ADR 0145): the words on screen for the
  * opening's first two seconds, appearing ONCE as plain text in the
- * section's flow, directly under its subtitle — no box of any kind.
+ * section's flow, directly under its subtitle — no box of any kind,
+ * wearing the one generated-text highlight (ADR 0258).
  * The 9:16 frame this used to preview in and the boxed field under it
  * are both gone: the founder found the words cramped and clipped in
  * the frame and repeated in the field. The words shown here are
@@ -58,10 +59,13 @@ export default function CoverTextEditor({
     <div className="space-y-4" data-testid="cover-text-section">
       <p className="text-sm font-semibold">Cover text</p>
       <p className="text-sm text-muted-foreground" data-subtitle="">The words on screen in the first two seconds of your clip.</p>
-      {/* The cover itself, as plain text in the flow: the words the
-          founder reads here are the words that ship on the opening. */}
+      {/* The cover itself, as plain text in the flow wearing the
+          generated-text highlight (ADR 0258), like every other line
+          the app wrote: the words the founder reads here are the
+          words that ship on the opening. The empty state's line is
+          guidance, not generated words, so it stays unhighlighted. */}
       <p className="text-base" data-testid="cover-text-value">
-        {value?.trim() ? value : <span className="text-muted-foreground">A few words for the opening frame</span>}
+        {value?.trim() ? <span className="generated-highlight">{value}</span> : <span className="text-muted-foreground">A few words for the opening frame</span>}
       </p>
       <div className="space-y-3">
         {!live && (
@@ -76,7 +80,7 @@ export default function CoverTextEditor({
         {error && <p className="text-sm text-destructive-text" role="alert" data-testid="cover-text-suggest-error">{error}</p>}
         {live && (
           <div className="space-y-3" data-testid="cover-text-suggestion">
-            <p className="text-base font-semibold">&ldquo;{live.text}&rdquo;</p>
+            <p className="text-base"><span className="generated-highlight font-semibold">{live.text}</span></p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" disabled={disabled} data-testid="cover-text-accept"
                 onClick={() => { onChange(live.text); setSuggestion(null); }}>
