@@ -25,12 +25,18 @@ export const DEVICES = [
   { id: "lg_g8", kind: "phone", label: "LG G8 ThinQ", body: "#0e0e12", rail: "#33343a", aspect: 0.472, radiusRatio: 0.075, bezelRatio: 0.034, camera: "notch-wide" },
   { id: "iphone_16_pro", kind: "phone", label: "iPhone 16 Pro", body: "#141418", rail: "#44454a", aspect: 0.461, radiusRatio: 0.115, bezelRatio: 0.020, camera: "dynamic-island" },
   { id: "browser_window", kind: "browser", label: "Browser / Web Card", body: "#101218", rail: "#323540", aspect: 0.520, radiusRatio: 0.045, bezelRatio: 0.016, camera: "window-bar" },
+  { id: "desktop_browser", kind: "desktop", label: "Desktop Browser (16:9)", body: "#101218", rail: "#323540", aspect: 0.880, heightRatio: 0.520, radiusRatio: 0.028, bezelRatio: 0.012, camera: "window-bar" },
+  { id: "desktop_monitor", kind: "desktop", label: "Desktop Monitor", body: "#111319", rail: "#3f424e", aspect: 0.880, heightRatio: 0.520, radiusRatio: 0.024, bezelRatio: 0.014, camera: "monitor-stand" },
 ];
 
 // The frame-type tag each catalog frame wears wherever it is named
-// (ADR 0260): the eight handsets are one kind, the window-bar frame is
-// the other, so a web app's frame never reads as just another phone.
-export const DEVICE_KIND_LABELS = { phone: "Phone", browser: "Web / Browser" };
+// (ADR 0260): the eight handsets are Phone, the portrait browser card is
+// Web / Browser, and the landscape widescreen frames are Desktop / Monitor.
+export const DEVICE_KIND_LABELS = {
+  phone: "Phone",
+  browser: "Web / Browser",
+  desktop: "Desktop / Monitor",
+};
 
 export function deviceKindTag(device) {
   return DEVICE_KIND_LABELS[device?.kind] || DEVICE_KIND_LABELS.phone;

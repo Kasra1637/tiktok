@@ -73,11 +73,16 @@ narrowed the product:
   How it works with `"Add your website or store URL"`, and updates
   `frontend/public/index.html` meta description from `"phone mockups"` to
   `"device frames"`.
-- **iPhone and Browser/Web frames in Demo + CTA.** `DEVICES` adds
-  `iphone_16_pro` (`camera: "dynamic-island"`) and `browser_window`
-  (`camera: "window-bar"`, omitting hardware side buttons and painting a
-  three-dot window header), and `CTA_COPY_VARIANTS` adds
-  `"Start free in your browser — link in bio"`.
+- **iPhone, Browser/Web, and Desktop/Monitor frames in Demo + CTA.** `DEVICES`
+  adds `iphone_16_pro` (`camera: "dynamic-island"`), `browser_window`
+  (`camera: "window-bar"`, portrait web card), `desktop_browser` (`aspect:
+  0.880`, `heightRatio: 0.520`, `camera: "window-bar"`, landscape 16:9 browser
+  window), and `desktop_monitor` (`aspect: 0.880`, `heightRatio: 0.520`,
+  `camera: "monitor-stand"`, widescreen desktop display with metallic stand
+  pedestal and top webcam indicator). `DemoCtaEditor.jsx` exposes the `Frame`
+  `AppSelect` picker in both `Base clip & look` (`device-frame-select`) and
+  `Second clip` (`append-device-frame-select`) with undo/redo draft parity, and
+  `CTA_COPY_VARIANTS` adds `"Start free in your browser — link in bio"`.
 - **Sentence-boundary mixed-case protection.** `sentenceCase` in
   `frontend/src/lib/copyCase.js` preserves mixed-case tokens (`macOS`, `iOS`,
   `eBay`) after sentence boundaries as well as at the start of a string.

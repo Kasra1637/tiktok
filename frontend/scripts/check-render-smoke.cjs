@@ -16557,10 +16557,9 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // The frame line (ADR 0260): the editor names its active frame with
-  // the catalog's frame-type tag, resolved through the shared helper —
-  // a source pin, because the editor's canvas mount is heavier than
-  // the naming contract being pinned here.
+  // The frame line & picker: the editor names its active frame with
+  // the catalog's frame-type tag, resolved through the shared helper, and
+  // lets the founder switch between Phone, Web / Browser, and Desktop / Monitor.
   await check("the Demo + CTA editor names its frame with its type tag", async () => {
     const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
     if (!src.includes('data-testid="demo-cta-frame-tag"')) {
@@ -16568,6 +16567,9 @@ async function runDemoCtaChecks() {
     }
     if (!src.includes("deviceKindTag(activeDevice)")) {
       throw new Error("the frame tag is not resolved from the active frame's catalog kind");
+    }
+    if (!src.includes('testId="device-frame-select"') || !src.includes('testId="append-device-frame-select"')) {
+      throw new Error("the editor does not expose the device frame picker on base and second clip");
     }
   });
 

@@ -687,18 +687,25 @@ check("a truncated header sniffs as nothing, not as a guess",
     && DC.sniffRecordingContainer(new Uint8Array(8)) === null
     && DC.sniffRecordingContainer(new Uint8Array([0x3c, 0x21, 0x44, 0x4f, 0x43, 0x54, 0x59, 0x50])) === null);
 
-// Catalog parity with the standalone app plus iPhone and Web/Browser frames (ADR 0256).
+// Catalog parity with the standalone app plus iPhone, Web/Browser, and Desktop/Monitor frames (ADR 0256).
 check("the device catalog survived the port",
-  DC.DEVICES.length === 9 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8"
-    && DC.DEVICES[7].id === "iphone_16_pro" && DC.DEVICES[8].id === "browser_window");
+  DC.DEVICES.length === 11 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8"
+    && DC.DEVICES[7].id === "iphone_16_pro" && DC.DEVICES[8].id === "browser_window"
+    && DC.DEVICES[9].id === "desktop_browser" && DC.DEVICES[10].id === "desktop_monitor");
 // Every frame carries its frame-type tag (ADR 0260): handsets are Phone,
-// the window-bar frame is Web / Browser, and the tag helper resolves the
-// catalog's own entries — the iPhone included — to those exact labels.
+// the portrait window-bar frame is Web / Browser, and the landscape widescreen
+// frames are Desktop / Monitor.
 check("every device frame carries its frame-type tag",
-  DC.DEVICES.every((d) => d.kind === "phone" || d.kind === "browser")
+  DC.DEVICES.every((d) => d.kind === "phone" || d.kind === "browser" || d.kind === "desktop")
     && DC.DEVICES.filter((d) => d.kind === "browser").length === 1
-    && DC.DEVICE_KIND_LABELS.phone === "Phone" && DC.DEVICE_KIND_LABELS.browser === "Web / Browser"
-    && DC.deviceKindTag(DC.DEVICES[7]) === "Phone" && DC.deviceKindTag(DC.DEVICES[8]) === "Web / Browser");
+    && DC.DEVICES.filter((d) => d.kind === "desktop").length === 2
+    && DC.DEVICE_KIND_LABELS.phone === "Phone"
+    && DC.DEVICE_KIND_LABELS.browser === "Web / Browser"
+    && DC.DEVICE_KIND_LABELS.desktop === "Desktop / Monitor"
+    && DC.deviceKindTag(DC.DEVICES[7]) === "Phone"
+    && DC.deviceKindTag(DC.DEVICES[8]) === "Web / Browser"
+    && DC.deviceKindTag(DC.DEVICES[9]) === "Desktop / Monitor"
+    && DC.deviceKindTag(DC.DEVICES[10]) === "Desktop / Monitor");
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 // Aurora Waves was removed deliberately (a catalog trim, not port drift),

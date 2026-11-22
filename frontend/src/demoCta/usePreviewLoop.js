@@ -473,7 +473,7 @@ export function usePreviewLoop(settings) {
     const pre = PRESETS.find((p) => p.id === preset) || PRESETS[0];
 
     const phoneW = BASE_PHONE_H * dev.aspect;
-    const phoneH = BASE_PHONE_H * mockupStretchY;
+    const phoneH = BASE_PHONE_H * (dev.heightRatio || 1) * mockupStretchY;
 
     let cw = pre.w;
     let ch = pre.h;
@@ -1142,7 +1142,7 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.fillRect(bx, by, bw, bh * 0.25);
   ctx.restore();
 
-  if (dev.camera !== "window-bar") {
+  if (dev.camera !== "window-bar" && dev.camera !== "monitor-stand") {
     ctx.fillStyle = shade(railColor, -10);
     ctx.fillRect(x + w - w * 0.008, y + h * 0.18, w * 0.012, h * 0.06);
     ctx.fillRect(x - w * 0.004, y + h * 0.16, w * 0.012, h * 0.05);
@@ -1154,6 +1154,25 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   const sw = bw - bezel * 2;
   const sh = bh - bezel * 2;
   const sr = Math.max(0, br - bezel * 0.85);
+  if (dev.camera === "monitor-stand") {
+    const neckW = w * 0.13;
+    const neckH = h * 0.11;
+    const neckX = x + (w - neckW) / 2;
+    const neckY = y + h - h * 0.006;
+    const standGrad = ctx.createLinearGradient(neckX, neckY, neckX + neckW, neckY);
+    standGrad.addColorStop(0, shade(railColor, -20));
+    standGrad.addColorStop(0.5, shade(railColor, 22));
+    standGrad.addColorStop(1, shade(railColor, -20));
+    ctx.fillStyle = standGrad;
+    ctx.fillRect(neckX, neckY, neckW, neckH);
+    const baseW = w * 0.34;
+    const baseH = Math.max(4, h * 0.028);
+    const baseX = x + (w - baseW) / 2;
+    const baseY = neckY + neckH - 1;
+    roundRect(ctx, baseX, baseY, baseW, baseH, baseH * 0.45);
+    ctx.fillStyle = standGrad;
+    ctx.fill();
+  }
   ctx.save();
   roundRect(ctx, sx, sy, sw, sh, sr);
   ctx.clip();
@@ -1211,18 +1230,25 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
     const iw = sw * 0.28; const ih = sh * 0.026;
     roundRect(ctx, sx + (sw - iw) / 2, sy + ih * 0.45, iw, ih, ih / 2); ctx.fill();
   } else if (dev.camera === "window-bar") {
-    const barH = sh * 0.032;
-    ctx.fillStyle = "rgba(16, 18, 24, 0.82)";
+    const barH = Math.max(12, Math.min(sh, sw) * 0.036);
+    ctx.fillStyle = "rgba(16, 18, 24, 0.86)";
     ctx.fillRect(sx, sy, sw, barH);
     const dotR = barH * 0.18;
     const dotY = sy + barH / 2;
-    const dotColors = ["rgba(255,255,255,0.38)", "rgba(255,255,255,0.26)", "rgba(255,255,255,0.18)"];
+    const dotColors = ["rgba(255,255,255,0.42)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0.18)"];
     dotColors.forEach((color, idx) => {
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(sx + sw * 0.045 + idx * (dotR * 3.2), dotY, dotR, 0, Math.PI * 2);
+      ctx.arc(sx + barH * 0.7 + idx * (dotR * 3.2), dotY, dotR, 0, Math.PI * 2);
       ctx.fill();
     });
+  } else if (dev.camera === "monitor-stand") {
+    // Subtle top webcam dot in the upper monitor bezel.
+    const camR = Math.max(2, bezel * 0.22);
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    ctx.beginPath();
+    ctx.arc(sx + sw / 2, by + bezel * 0.5, camR, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 

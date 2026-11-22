@@ -722,10 +722,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const [appendEnd, setAppendEnd] = useState(null);
   const baseWindow = clipWindow(videoMeta?.d, baseStart, undefined, baseEnd);
   const baseDuration = baseWindow.duration;
-  // Fixed frame: Samsung Galaxy S24 Ultra. The picker is gone by design —
-  // one frame, no choice — so this is state only so the painters keep
-  // reading it like any other value.
-  const [device] = useState(DEFAULTS.device);
+  // Selectable device frame (Option 3: Phones, Portrait Browser Card, and
+  // Landscape Desktop Browser / Desktop Monitor). Defaults to S24 Ultra.
+  const [device, setDevice] = useState(DEFAULTS.device);
   const preset = "tiktok";
   const [bg, setBg] = useState(DEFAULTS.bg);
   const [anim, setAnim] = useState(DEFAULTS.anim);
@@ -1323,7 +1322,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
 
   const editSnapshot = {
     baseMedia, appendMedia, appendImages, baseStart, appendStart, baseEnd, appendEnd, sourceReplaced, openingProfileId,
-    bg, anim, mockupStretchY, videoFit, viewMode, envBg, screenX, screenY, screenW, screenH,
+    device, bg, anim, mockupStretchY, videoFit, viewMode, envBg, screenX, screenY, screenW, screenH,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyText, storyTiming, storyOffsetY,
     ctaEnabled, ctaHeadline, ctaHandle, ctaDuration, ctaOffsetX, ctaOffsetY, ctaTimingMode,
@@ -1344,7 +1343,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     if (!edit.appendImages?.length) clearAppendImages();
     const setters = {
       baseStart: setBaseStart, appendStart: setAppendStart, baseEnd: setBaseEnd, appendEnd: setAppendEnd, sourceReplaced: setSourceReplaced, openingProfileId: setOpeningProfileId,
-      bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit, viewMode: setViewMode,
+      device: setDevice, bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit, viewMode: setViewMode,
       envBg: setEnvBg, screenX: setScreenX, screenY: setScreenY, screenW: setScreenW, screenH: setScreenH,
       hookEnabled: setHookEnabled, hookText: setHookText, hookDuration: setHookDuration, hookOffsetX: setHookOffsetX, hookOffsetY: setHookOffsetY,
       storyEnabled: setStoryEnabled, storyText: setStoryText, storyTiming: setStoryTiming, storyOffsetY: setStoryOffsetY,
@@ -1773,7 +1772,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const activeDevice = DEVICES.find((d) => d.id === device) || DEVICES[0];
   const activePreset = PRESETS.find((p) => p.id === preset) || PRESETS[0];
   const safetyCw = activePreset.id === "source" ? Math.round(BASE_PHONE_H * activeDevice.aspect) : activePreset.w;
-  const safetyCh = activePreset.id === "source" ? Math.round(BASE_PHONE_H * mockupStretchY) : activePreset.h;
+  const safetyCh = activePreset.id === "source" ? Math.round(BASE_PHONE_H * (activeDevice.heightRatio || 1) * mockupStretchY) : activePreset.h;
   const hookSafety = hookEnabled
     ? checkOverlaySafety(
         getHookBounds(safetyCw, safetyCh, hookText, hookOffsetX, hookOffsetY, fontStack(captionFont), captionScale),
@@ -1960,21 +1959,35 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               Source replaced; export stays under this Hook + Story.
             </p>
           )}
-          {/* The frame line (ADR 0260): the device picker is gone by
-              design — the frame is fixed — so the active frame is named
-              here with its frame-type tag from the catalog, the same tag
-              every frame in DEVICES carries (Phone vs Web / Browser), so
-              the iPhone and browser frames read as their kind wherever
-              they are named. Naming only: no value changes. */}
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Frame</span>
-            <span className="font-semibold">{activeDevice.label}</span>
-            <span
-              data-testid="demo-cta-frame-tag"
-              className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]"
-            >
-              {deviceKindTag(activeDevice)}
-            </span>
+          {/* The frame line & picker: names the active frame with its catalog
+              frame-type tag (Phone, Web / Browser, Desktop / Monitor) and
+              lets the founder switch between Phone handsets, Browser / Web
+              Card, Desktop Browser (16:9), and Desktop Monitor. */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">Frame</span>
+                <span className="font-semibold">{activeDevice.label}</span>
+              </div>
+              <span
+                data-testid="demo-cta-frame-tag"
+                className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]"
+              >
+                {deviceKindTag(activeDevice)}
+              </span>
+            </div>
+            <AppSelect
+              value={device}
+              onChange={(nextId) => { invalidateSequence(); setDevice(nextId); }}
+              className={CONTROL_CLASS}
+              wrapClassName="w-full"
+              ariaLabel="Device frame"
+              testId="device-frame-select"
+              options={DEVICES.map((d) => ({
+                value: d.id,
+                label: `${d.label} · ${deviceKindTag(d)}`,
+              }))}
+            />
           </div>
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
@@ -2223,6 +2236,26 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           )}
           {appendMeta && appendMode === "floating" && (
             <>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <SubLabel>Device frame</SubLabel>
+                  <span className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]">
+                    {deviceKindTag(activeDevice)}
+                  </span>
+                </div>
+                <AppSelect
+                  value={device}
+                  onChange={(nextId) => { invalidateSequence(); setDevice(nextId); }}
+                  className={CONTROL_CLASS}
+                  wrapClassName="w-full"
+                  ariaLabel="Second clip device frame"
+                  testId="append-device-frame-select"
+                  options={DEVICES.map((d) => ({
+                    value: d.id,
+                    label: `${d.label} · ${deviceKindTag(d)}`,
+                  }))}
+                />
+              </div>
               <BackgroundPicker value={appendBg} onChange={setAppendBg} prefix="append-" />
               <AnimationPicker value={appendAnim} onChange={setAppendAnim} prefix="append-" />
             </>
@@ -3323,11 +3356,30 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.fillRect(bx, by, bw, bh * 0.25);
   ctx.restore();
 
-  if (dev.camera !== "window-bar") {
+  if (dev.camera !== "window-bar" && dev.camera !== "monitor-stand") {
     ctx.fillStyle = shade(railColor, -10);
     ctx.fillRect(x + w - w * 0.008, y + h * 0.18, w * 0.012, h * 0.06);
     ctx.fillRect(x - w * 0.004, y + h * 0.16, w * 0.012, h * 0.05);
-    ctx.fillRect(x - w * 0.004, y + h * 0.235, w * 0.012, w * 0.06);
+    ctx.fillRect(x - w * 0.004, y + h * 0.235, w * 0.012, h * 0.06);
+  }
+  if (dev.camera === "monitor-stand") {
+    const neckW = w * 0.13;
+    const neckH = h * 0.11;
+    const neckX = x + (w - neckW) / 2;
+    const neckY = y + h - h * 0.006;
+    const standGrad = ctx.createLinearGradient(neckX, neckY, neckX + neckW, neckY);
+    standGrad.addColorStop(0, shade(railColor, -20));
+    standGrad.addColorStop(0.5, shade(railColor, 22));
+    standGrad.addColorStop(1, shade(railColor, -20));
+    ctx.fillStyle = standGrad;
+    ctx.fillRect(neckX, neckY, neckW, neckH);
+    const baseW = w * 0.34;
+    const baseH = Math.max(4, h * 0.028);
+    const baseX = x + (w - baseW) / 2;
+    const baseY = neckY + neckH - 1;
+    roundRect(ctx, baseX, baseY, baseW, baseH, baseH * 0.45);
+    ctx.fillStyle = standGrad;
+    ctx.fill();
   }
 
   const sx = bx + bezel;
@@ -3392,18 +3444,24 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
     const iw = sw * 0.28; const ih = sh * 0.026;
     roundRect(ctx, sx + (sw - iw) / 2, sy + ih * 0.45, iw, ih, ih / 2); ctx.fill();
   } else if (dev.camera === "window-bar") {
-    const barH = sh * 0.032;
-    ctx.fillStyle = "rgba(16, 18, 24, 0.82)";
+    const barH = Math.max(12, Math.min(sh, sw) * 0.036);
+    ctx.fillStyle = "rgba(16, 18, 24, 0.86)";
     ctx.fillRect(sx, sy, sw, barH);
     const dotR = barH * 0.18;
     const dotY = sy + barH / 2;
-    const dotColors = ["rgba(255,255,255,0.38)", "rgba(255,255,255,0.26)", "rgba(255,255,255,0.18)"];
+    const dotColors = ["rgba(255,255,255,0.42)", "rgba(255,255,255,0.28)", "rgba(255,255,255,0.18)"];
     dotColors.forEach((color, idx) => {
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(sx + sw * 0.045 + idx * (dotR * 3.2), dotY, dotR, 0, Math.PI * 2);
+      ctx.arc(sx + barH * 0.7 + idx * (dotR * 3.2), dotY, dotR, 0, Math.PI * 2);
       ctx.fill();
     });
+  } else if (dev.camera === "monitor-stand") {
+    const camR = Math.max(2, bezel * 0.22);
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    ctx.beginPath();
+    ctx.arc(sx + sw / 2, by + bezel * 0.5, camR, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 
