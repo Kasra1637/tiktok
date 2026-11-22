@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AuthedOnly,
@@ -10,9 +9,8 @@ import {
 import {
   Sparkles, Clapperboard, Film, Target,
   FileText, X, Check, Briefcase, ShieldCheck, Video,
-  Play, Link2, Zap,
+  Play, Link2,
 } from "lucide-react";
-import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { EyebrowPill, MarketingHeader, MarketingFooter, FinalCta } from "../components/Marketing";
 
@@ -421,51 +419,6 @@ function SectionHeading({ eyebrow, title, lede, id }) {
   );
 }
 
-/**
- * The hero's proof pill (ADR 0260): the same strong EyebrowPill the
- * closing CTA wears, carrying three counts the backend counts live —
- * curated hook structures, approved app profiles, plans drafted. First
- * paint renders LANDING_PROOF_BASELINE, the deterministic floor
- * GET /api/landing-proof also returns: zero is the floor either database
- * count can never fall below, and the structure count is the curated
- * catalog's size, pinned against backend/template_library.py by the
- * render smoke gate so the two cannot drift apart. The live counts swap
- * in when the fetch lands; a failed fetch simply keeps the floor, and
- * the pill's seat above the headline never moves.
- */
-const LANDING_PROOF_BASELINE = { plans_drafted: 0, profiles_approved: 0, hook_structures: 10 };
-
-function proofCount(value, fallback) {
-  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
-}
-
-function HeroProofPill() {
-  const [proof, setProof] = useState(LANDING_PROOF_BASELINE);
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getLandingProof()
-      .then((data) => {
-        if (cancelled || !data) return;
-        setProof({
-          plans_drafted: proofCount(data.plans_drafted, LANDING_PROOF_BASELINE.plans_drafted),
-          profiles_approved: proofCount(data.profiles_approved, LANDING_PROOF_BASELINE.profiles_approved),
-          hook_structures: proofCount(data.hook_structures, LANDING_PROOF_BASELINE.hook_structures),
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return (
-    <EyebrowPill strong testId="landing-proof-pill" className="animate-fade-up mb-5">
-      <Zap className="h-3 w-3" />
-      {proof.hook_structures} curated hook structures · {proof.profiles_approved} approved app profiles · {proof.plans_drafted} plans drafted
-    </EyebrowPill>
-  );
-}
-
 export default function Landing() {
   return (
     <div className="relative min-h-screen hero-wash">
@@ -482,12 +435,11 @@ export default function Landing() {
         <div className="grid-overlay" />
         <div className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-20 text-center sm:pt-28 lg:grid lg:grid-cols-[1.02fr_1fr] lg:items-center lg:gap-14 lg:text-left">
         <div className="min-w-0">
-          <HeroProofPill />
           <h1
             className="animate-fade-up font-display text-hero font-semibold leading-[1.05] tracking-tight sm:text-hero-wide"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-gradient-headline">Turn your URL into a tailored video in minutes.</span>
+            <span className="text-gradient-headline">Turn your apps URL into a tailored video in minutes.</span>
           </h1>
 
           <p

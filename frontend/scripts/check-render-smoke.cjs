@@ -381,16 +381,6 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 const apiStub = {
   recordFeedback: async () => ({}),
   getStudioVideoModels: async () => ({ default: "minimax-h3-max", models: [CAPABILITY] }),
-  // The landing hero pill's live counts (ADR 0260), shaped like the real
-  // GET /api/landing-proof response; the hero check below asserts the
-  // pill swaps these in over its deterministic baseline.
-  getLandingProof: async () => ({
-    plans_drafted: 12,
-    profiles_approved: 3,
-    hook_structures: 10,
-    live: true,
-    baseline: { plans_drafted: 0, profiles_approved: 0, hook_structures: 10 },
-  }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -11566,8 +11556,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // capital in the first dictation and dropped minutes later.
   // The headline's wording moved once more on Nov 21 2026 (ADR
   // 0260, superseding ADR 0256's "app or website link" line): the
-  // URL is the input now, singular "a tailored video". The whole
-  // headline carries one treatment,
+  // URL is the input now, singular "a tailored video". Kasra
+  // corrected it again the same day (ADR 0261): "Just say apps
+  // URL" — "apps" with no apostrophe, everything else the same.
+  // The whole headline carries one treatment,
   // the animated brand gradient, and the sub-headline is his
   // earlier line tightened with every meaning beat kept. The "One
   // photo in" hero, the "steer the next one" line and the held
@@ -11577,7 +11569,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your URL into a tailored video in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your apps URL into a tailored video in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
@@ -11621,50 +11613,27 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The hero proof pill (ADR 0260): the strong EyebrowPill — the same
-  // component and treatment as the closing CTA's "Ready when you are" —
-  // standing directly above the H1, carrying the three counts from
-  // GET /api/landing-proof. The stub answers with live values, so the
-  // pill must show those, swapped in over its first-paint baseline.
-  await check("the hero proof pill stands over the headline with the live counts", async (ctx) => {
+  // The hero proof pill is gone (ADR 0261, superseding that part
+  // of ADR 0260 the same day it shipped): Kasra rejected the pill
+  // and every copy draft offered for it, and ordered the hero back
+  // to opening with the headline alone. The pin asserts the
+  // absence: no landing-proof-pill anywhere on the page, and the
+  // headline is the first thing standing in its hero column. The
+  // closing CTA's own EyebrowPill ("Ready when you are") is a
+  // different seat and stands untouched. GET /api/landing-proof
+  // stays live on the backend, unused by the page.
+  await check("the hero opens with the headline and no proof pill", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     await act(async () => {});
+    if (ctx.container.querySelector('[data-testid="landing-proof-pill"]')) {
+      throw new Error("the removed hero proof pill is back");
+    }
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
-    const pill = hero.querySelector('[data-testid="landing-proof-pill"]');
-    if (!pill) throw new Error("the hero proof pill is missing");
     const h1 = hero.querySelector("h1");
-    if (!(pill.compareDocumentPosition(h1) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-      throw new Error("the proof pill does not stand above the headline");
-    }
-    for (const cls of ["eyebrow", "eyebrow-accent", "rounded-full", "border-[color:var(--indigo-15)]", "bg-[color:var(--indigo-8)]"]) {
-      if (!pill.className.includes(cls)) {
-        throw new Error(`the proof pill lost the strong EyebrowPill treatment (${cls})`);
-      }
-    }
-    const text = pill.textContent.replace(/\s+/g, " ").trim();
-    if (text !== "10 curated hook structures · 3 approved app profiles · 12 plans drafted") {
-      throw new Error(`the proof pill is not carrying the endpoint's counts: ${text}`);
-    }
-  });
-
-  // The pill's first-paint baseline is a frontend constant; its
-  // hook-structure count must equal the backend catalog's size, or the
-  // pill would open with a number the product cannot back. Count the
-  // curated templates in backend/template_library.py and compare.
-  await check("the proof pill baseline matches the curated catalog", async () => {
-    const landingSrc = fs.readFileSync(path.join(SRC, "pages", "Landing.jsx"), "utf8");
-    const baselineMatch = landingSrc.match(/LANDING_PROOF_BASELINE\s*=\s*\{[^}]*hook_structures:\s*(\d+)/);
-    if (!baselineMatch) throw new Error("Landing.jsx carries no proof baseline to pin");
-    const catalogSrc = fs.readFileSync(path.join(SRC, "..", "..", "backend", "template_library.py"), "utf8");
-    const listStart = catalogSrc.indexOf("CURATED_TEMPLATES = [");
-    const listEnd = catalogSrc.indexOf("\n]\n", listStart);
-    if (listStart < 0 || listEnd < 0) throw new Error("the curated template list could not be read");
-    const templateCount = (catalogSrc.slice(listStart, listEnd).match(/"name":/g) || []).length;
-    if (Number(baselineMatch[1]) !== templateCount) {
-      throw new Error(
-        `the proof baseline claims ${baselineMatch[1]} hook structures; the catalog holds ${templateCount}`
-      );
+    if (!h1) throw new Error("the hero headline is missing");
+    if (h1.parentElement.firstElementChild !== h1) {
+      throw new Error("something stands above the hero headline again");
     }
   });
 

@@ -382,10 +382,6 @@ export const api = {
   // return: nothing is left to do after this render except the founder's own
   // demo and call to action.
   getStudioVideoModels: () => client.get("/studio/video-models").then((r) => r.data),
-  // The landing hero pill's evidence (ADR 0260): public, aggregate counts
-  // counted live by the backend. The page renders its deterministic
-  // baseline first and swaps these in when they land.
-  getLandingProof: () => client.get("/landing-proof").then((r) => r.data),
   generateVideo: (projectId, payload = {}) =>
     client.post(`/studio/projects/${projectId}/generate`, payload).then((r) => r.data),
   getGenerations: (params = {}) => client.get("/generations", { params }).then((r) => r.data),

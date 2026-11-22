@@ -1,7 +1,9 @@
 # 0260 — The landing hero carries live proof
 
-Status: accepted (headline wording supersedes ADR 0256's hero line;
-the ScriptMockup treatment follows ADR 0258)
+Status: accepted; superseded in part by ADR 0261 (the hero proof
+pill is removed and the headline reworded the same day; the
+endpoint, the Features mockups, the frame-type tags and the
+BrandSetup badges stand)
 
 ## Context
 
