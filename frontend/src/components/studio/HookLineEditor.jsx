@@ -18,6 +18,10 @@ import LineRewriteAction from "./LineRewriteAction";
  * Video's Review above all.
  */
 export default function HookLineEditor({ projectId, value, onChange, disabled, clipLabel = "Hook + Story clip", suggestClearerHook = true }) {
+  const text = String(value || "");
+  // The wash is worn only while the line exists (ADR 0264): an
+  // unwritten hook is a plain field, never an empty indigo bar.
+  const washed = Boolean(text.trim());
   return (
     <div className="space-y-4">
       <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
@@ -34,9 +38,20 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
           quotation marks anywhere in the highlight family (ADR 0191)
           — the founder never wants them on the spoken lines. The
           field inside is the same input — same id, same typing, same
-          live count below. */}
-      <div className="generated-highlight-field">
-        <Input id="review-hook_line" value={value} onChange={(e) => onChange(e.target.value)} />
+          live count below. The seat hugs the words (ADR 0264): while
+          the line exists the wrapper shrink-wraps and the input is
+          sized to its text, so the wash ends where the words do
+          instead of stretching the full width of the card. */}
+      <div
+        className={washed ? "generated-highlight-field" : undefined}
+        style={washed ? { width: "fit-content", maxWidth: "100%" } : undefined}
+      >
+        <Input
+          id="review-hook_line"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={washed ? { width: `${Math.max(text.length, 1)}ch` } : undefined}
+        />
       </div>
       {suggestClearerHook && (
         <LineRewriteAction

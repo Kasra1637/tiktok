@@ -139,7 +139,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Caption</dt>
             <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
-              <span className="generated-highlight">{String(caption)}</span>
+              <span key={String(caption)} className="generated-highlight">{String(caption)}</span>
             </dd>
           </div>
         )}
@@ -161,7 +161,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
           <div className="post-kit-row post-kit-row-stacked">
             <dt className="eyebrow">Cover text</dt>
             <dd className="min-w-0">
-              <span className="generated-highlight text-base font-semibold">{coverText}</span>
+              <span key={coverText} className="generated-highlight text-base font-semibold">{coverText}</span>
             </dd>
           </div>
         )}

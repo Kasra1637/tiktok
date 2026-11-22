@@ -790,7 +790,6 @@ export default function CreateVideo() {
     // gates on every angles refresh (e.g. shuffle), collapsing a revealed
     // list to the CTA. Depend on the resolved id instead; a dangling pick
     // (id set, row gone) still reads as no angle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, angle?.id, objective]);
   // The detail card prefers the full library, but a failed library fetch must
   // not blank a chosen template the recommendation rows already carry.
@@ -954,11 +953,11 @@ export default function CreateVideo() {
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
   const reduceMotion = useReducedMotionPreference();
-  const scrollToSubstep = useCallback((id) => {
+  const scrollToSubstep = (id) => {
     document
       .getElementById(id)
       ?.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-  }, [reduceMotion]);
+  };
   // Auto-scroll to the section a pick just unlocked, in the order the
   // Audience & template screen finishes: angle unlocks the video goals,
   // a finished tailoring run unlocks the templates, and a hand-picked
@@ -973,7 +972,7 @@ export default function CreateVideo() {
     if (!angleId || angleId === prevAngleId) return;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep("substep-goal"));
-  }, [angleId, step, scrollToSubstep]);
+  }, [angleId, step]);
   const prevRecommendationsVisibleRef = useRef(false);
   useEffect(() => {
     const wasVisible = prevRecommendationsVisibleRef.current;
@@ -982,7 +981,7 @@ export default function CreateVideo() {
     if (!visible || wasVisible) return;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep("substep-template"));
-  }, [recommendationsVisible, visibleRecommendations, step, scrollToSubstep]);
+  }, [recommendationsVisible, visibleRecommendations, step]);
   // Set only by a hand pick below, and consumed by the effect that follows,
   // so the automatic preselect of the top template never jumps past the
   // template cards to the photo section the founder has not chosen yet.
@@ -996,7 +995,7 @@ export default function CreateVideo() {
     handPickedTemplateRef.current = false;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep(TEMPLATE_PHOTO_ID));
-  }, [templateId, step, scrollToSubstep]);
+  }, [templateId, step]);
 
 
 
@@ -3093,7 +3092,13 @@ export default function CreateVideo() {
                   fixed tall height: the textarea's own auto-grow fits
                   the highlight to the words, so a short script holds
                   no empty space beneath it. */}
-              <div className="generated-highlight-field">
+              {/* The seat is worn only while the script exists
+                  (ADR 0264): an unwritten plan's field is a plain
+                  field, never an empty indigo bar. A written script
+                  wraps at the column, so its text block's natural
+                  width is the field's own — the wash fits it as
+                  before, height and all. */}
+              <div className={String(editValue("script", "")).trim() ? "generated-highlight-field" : undefined}>
                 <Textarea
                   id="review-script"
                   value={editValue("script", "")}
@@ -3181,7 +3186,11 @@ export default function CreateVideo() {
                   auto-grow, no quotation marks, nothing shown on
                   click. It is a note about the founder's own recording,
                   never a spoken line. */}
-              <div className="generated-highlight-field">
+              {/* Same existence rule (ADR 0264): the brief's
+                  placeholder is guidance, not generated text, so
+                  the empty brief stands as a plain field and the
+                  wash arrives only with actual words. */}
+              <div className={String(editValue("demo_brief", "")).trim() ? "generated-highlight-field" : undefined}>
                 <Textarea
                   id="review-demo-brief"
                   value={editValue("demo_brief", "")}

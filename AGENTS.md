@@ -262,6 +262,13 @@ One render path, single-pass video generation via OpenRouter.
   quotation marks and shows nothing on click (ADR 0191's rules, carried
   over), and the demo brief stands in the same wash; History's own hook
   (the card's title) and Plan context's picked facts stay plain text.
+  The wash stands only where words are (ADR 0264): the field seats
+  render only for a non-blank value (an empty field is a plain field,
+  placeholders never earn the wash), the highlight hugs its text
+  (fit-content; the hook seat shrink-wraps), and the wash merges in
+  half a second after the words land — a background-only fade on the
+  same signature ease, declared only inside the reduced-motion
+  no-preference gate.
 - Settled layout decisions are not open questions (ADR 0141): Review stays
   one column at every width, Analytics stays a calm ledger (its Clip
   results and Renders cards stand at one height, its Clip results read
@@ -309,7 +316,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and sixty-two decisions (0001–0262) now
+Read `docs/adr/README.md` first. Two hundred and sixty-four decisions (0001–0264) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
 ceilings, Grok retirement, no silent fallback), joined by 0053 (generation

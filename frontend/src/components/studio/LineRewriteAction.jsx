@@ -58,7 +58,7 @@ export default function LineRewriteAction({
               (ADR 0258), like the line they would replace; the panel
               around them is the decision's own surface — the accept
               and keep buttons live here — not the words' box. */}
-          <p className="text-base"><span className="generated-highlight font-semibold">{live}</span></p>
+          <p className="text-base"><span key={live} className="generated-highlight font-semibold">{live}</span></p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" disabled={disabled} data-testid={`${testIdPrefix}-accept`}
               onClick={() => { onAccept(live); setSuggestion(null); }}>

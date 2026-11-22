@@ -128,7 +128,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
           size="sm"
           disabled={busy}
           onClick={() => onDetach({ id: attachment.asset_id, label: name, kind: attachment.kind })}
-          title="Detach from current video"
+          title="Stops using this photo for the video you are building"
         >
           <X className="h-3.5 w-3.5" /> Remove
         </Button>
@@ -269,7 +269,7 @@ function AssetRow({
                 disabled={busy}
                 busy={busy}
                 onClick={() => onDetach(asset)}
-                title="Detach from current video"
+                title="Stops using this photo for the video you are building"
               >
                 <X className="h-3.5 w-3.5" /> Remove
               </Button>
@@ -686,7 +686,10 @@ export default function AssetLibrary({
     setNotice(null);
     try {
       await api.attachAsset(projectId, { asset_id: asset.id });
-      setNotice(`Now using "${asset.label || asset.name || asset.kind}" for this video.`);
+      // No announcement (ADR 0263): the row's own Attached state is
+      // the confirmation, and it is already on screen — the old
+      // "Now using ... for this video." notice repeated it inside
+      // the Presenter Photo card.
       await load();
       onProjectChanged?.();
       onChanged?.();
@@ -920,7 +923,7 @@ export default function AssetLibrary({
         className={embedded ? undefined : "page-content-enter"}
         title={embedded ? undefined : "Presenter photos"}
         icon={UserRound}
-        description={embedded ? undefined : "Upload a clear, front-facing photo in good lighting. It becomes your video's presenter reference."}
+        description={embedded ? undefined : "A clear photo of the person you want on camera. It becomes the video's presenter reference."}
         data-testid="asset-upload-panel"
       >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">

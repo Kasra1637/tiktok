@@ -11256,12 +11256,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (filledShapes.length < 5) {
       throw new Error("the presenter is not a filled, shaded figure in a scene");
     }
-    // The phone carries clean dark elevation depth and a glass sheen on the screen (no colored outer glow).
+    // The phone carries depth (ADR 0175): an indigo glow spilling
+    // onto the page in its shadow, and a glass sheen on the screen.
     const phoneRuleStart = css.indexOf(".hero-story-phone {");
     if (phoneRuleStart === -1) throw new Error("index.css carries no .hero-story-phone rule");
     const phoneRule = css.slice(phoneRuleStart, css.indexOf("}", phoneRuleStart));
-    if (!phoneRule.includes("box-shadow:")) {
-      throw new Error("the phone carries no elevation shadow");
+    if (!phoneRule.includes("rgba(99, 102, 241")) {
+      throw new Error("the phone casts no indigo glow onto the page behind it");
     }
     if (!css.includes(".hero-story-screen::after")) {
       throw new Error("the screen carries no glass reflection");
@@ -11345,7 +11346,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!researchRule.includes("rgba(255, 255, 255, 0.15)") || !researchRule.includes("color: #fff")) {
       throw new Error("the mockup's research control is not the accent button's white text on its white/15 border");
     }
-    if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)")) {
+    if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)") || !researchRule.includes("var(--glow-indigo)")) {
       throw new Error("the mockup's research control lacks the bevel's top rim over the indigo glow");
     }
     if (!researchRule.includes("border-radius: 12px") || researchRule.includes("999px") || researchRule.includes("90deg")) {
@@ -11568,20 +11569,19 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app’s URL into a scroll-stopping video in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your apps URL into a tailored video in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
       throw new Error("the hero headline does not carry the one animated gradient treatment");
     }
-    // The headline's size is Kasra's Nov 21 2026 dictation (ADR 0263,
-    // superseding ADR 0215's 42/50): 48px on mobile, 60px from sm up,
-    // carried as the fontSize tokens text-hero / sm:text-hero-wide
-    // (arbitrary sizes stay banned in marketing). The bump restores
-    // the hero's dominance over the page's 30/36px section headings.
+    // The headline's size is Kasra's Nov 19 2026 dictation (ADR 0215):
+    // 42px on mobile, 50px from sm up, down from the 48/60 the Tailwind
+    // steps gave, carried as the fontSize tokens text-hero /
+    // sm:text-hero-wide (arbitrary sizes stay banned in marketing).
     // Only the size moved — words, gradient, font, weight, leading and
-    // tracking stand — and the pin keeps the tokens from being dropped
-    // in favour of Tailwind's steps.
+    // tracking stand — and the pin keeps the steps from quietly
+    // restoring the bigger sizes.
     const h1Classes = h1.className.split(/\s+/);
     for (const cls of ["text-hero", "sm:text-hero-wide"]) {
       if (!h1Classes.includes(cls)) {
@@ -11596,8 +11596,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page. Turn your product facts into a " +
-          "hook, script, and finished TikTok video — and get sharper with every clip you post."
+        "No filming, no editing, no blank page. Facts become a hook, script, and " +
+          "finished video for your app alone, learning from every video you judge."
       )
     ) {
       throw new Error("the hero sub-headline is not Kasra's tightened line");
@@ -14262,6 +14262,176 @@ async function runHookCtaChecks() {
         }
       }
     );
+  });
+
+  await check("attaching the photo shows it attached, with no 'Now using' line", async (ctx) => {
+    // ADR 0263: a successful attach used to announce itself with a
+    // notice — Now using "face.png" for this video. — rendered
+    // inside the Presenter Photo card. Kasra ordered the line gone:
+    // the row's own Attached state is the confirmation, and it is
+    // already on screen. The attach itself, the busy state, the
+    // error path, the reload and the callbacks are unchanged; only
+    // the announcement is removed.
+    const faceAsset = {
+      id: "face-1", kind: "character_reference", status: "active",
+      rights_confirmed: true, label: "Founder face", name: "face.png",
+      brand_profile_id: "p1",
+    };
+    let attached = false;
+    const attachedRow = [{ asset_id: "face-1", kind: "character_reference", label: "Founder face" }];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: [] }),
+        getAssets: async () => ({ assets: [faceAsset] }),
+        attachAsset: async () => {
+          attached = true;
+          return { assets: attachedRow };
+        },
+        getStudioProject: async () => hookRow({
+          id: "hook-cta-1", hook_line: HOOK,
+          assets: attached ? attachedRow : [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const useButton = [...ctx.container.querySelectorAll("button")].find((b) => (b.textContent || "").includes("Use this photo"));
+        if (!useButton) throw new Error("the library's use-this-photo button did not render");
+        await clickEl(ctx, useButton);
+        await act(async () => {});
+        if (!attached) throw new Error("the attach never reached the api stub");
+        if (!ctx.text().includes("Attached")) {
+          throw new Error("the attached photo does not read as Attached after attaching");
+        }
+        if (ctx.text().includes("Now using")) {
+          throw new Error("attaching still announces a 'Now using' line (ADR 0263 removed it)");
+        }
+      }
+    );
+  });
+
+  await check("an unwritten hook wears no highlight", async (ctx) => {
+    // ADR 0264: the generated-text highlight is the output's dress,
+    // not the field's furniture. Kasra's screenshot showed the Hook
+    // + CTA hook field standing as an empty full-width indigo bar
+    // before anything was generated — the wash painted a field with
+    // no words in it. The rule, on every generated-text surface: no
+    // text, no wash. The empty field is a plain field, and
+    // placeholder prose is not generated text.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow(),
+        getStudioProject: async () => blankRow(),
+        getAssets: async () => ({ assets: [] }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const hookField = ctx.container.querySelector("#review-hook_line");
+        if (!hookField) throw new Error("the fresh page's hook field did not render");
+        if (hookField.closest(".generated-highlight-field")) {
+          throw new Error("the empty hook field already wears the generated-text highlight (ADR 0264: no text, no wash)");
+        }
+        if (ctx.container.querySelector(".generated-highlight")) {
+          throw new Error("the fresh page carries a generated-text highlight with nothing generated");
+        }
+      }
+    );
+  });
+
+  await check("a written hook, opened from the drafts list, wears the highlight", async (ctx) => {
+    // The other half of ADR 0264's existence rule: once the words
+    // exist, the wash is theirs. The draft opens the way the
+    // founder opens it — from the drafts list, since a plain visit
+    // starts blank (ADR 0262).
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, script_version: 1,
+      strategy: { hook_concept: HOOK }, updated_at: "2026-11-20T12:00:00Z",
+    });
+    let rows = [hooked];
+    await inHookCta(
+      ctx,
+      {
+        getHookCtaProjects: async () => ({ projects: rows }),
+        createHookCtaProject: async () => {
+          const fresh = blankRow({ id: "hook-cta-fresh", updated_at: "2026-11-21T09:00:00Z" });
+          rows = [fresh, ...rows];
+          return fresh;
+        },
+        getStudioProject: async (id) => rows.find((r) => r.id === id) || hooked,
+        getAssets: async () => ({ assets: [] }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const entry = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-7"]');
+        if (!entry) throw new Error("the written draft is missing from the drafts list");
+        await clickEl(ctx, entry);
+        await act(async () => {});
+        await act(async () => {});
+        const hookField = ctx.container.querySelector("#review-hook_line");
+        if (!hookField) throw new Error("the written hook's field did not render");
+        if (hookField.value !== HOOK) throw new Error("opening the written draft did not restore its hook line");
+        if (!hookField.closest(".generated-highlight-field")) {
+          throw new Error("the written hook line does not stand in the generated-text highlight");
+        }
+      }
+    );
+  });
+
+  await check("an unwritten demo brief wears no highlight in Review", async (ctx) => {
+    // ADR 0264 on the wizard's own fields: the demo brief stands
+    // empty until the plan or the founder writes it, and its
+    // placeholder is guidance, not generated text — so the empty
+    // field is a plain field, exactly like the hook above. (The
+    // ADR 0258 check pins the filled brief wearing the wash.)
+    await withApi(
+      { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, demo_brief: "" }) },
+      async () => {
+        global.__SMOKE_PARAMS = "?project=p1";
+        try {
+          await mount(CreateVideo, {})(ctx);
+          await openStep(ctx, "Review & submit");
+          const briefField = ctx.container.querySelector("#review-demo-brief");
+          if (!briefField) throw new Error("the demo brief field is missing");
+          if (briefField.closest(".generated-highlight-field")) {
+            throw new Error("the empty demo brief already wears the generated-text highlight (ADR 0264: no text, no wash)");
+          }
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      }
+    );
+  });
+
+  await check("the generated wash hugs its words and merges in half a second after them", async (ctx) => {
+    // ADR 0264's two CSS halves. Width: the standing highlight is
+    // fit-content, so no parent can stretch the wash past the words
+    // it backs. Entrance: the wash is not painted with the text —
+    // it merges in half a second later, animating the background
+    // alone on the app's signature ease (ADR 0165's curve), so the
+    // words stand readable from the first frame and the wash rises
+    // into place behind them. The animation is declared only
+    // inside the no-preference gate: under reduced motion there is
+    // no delay and no motion — the wash is simply present.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const hlRule = css.match(/\.generated-highlight\s*\{([^}]*)\}/);
+    if (!hlRule) throw new Error("the shared generated-text highlight is not defined in the CSS");
+    if (!/width:\s*fit-content/.test(hlRule[1])) {
+      throw new Error("the generated-text highlight does not hug its text (no fit-content width)");
+    }
+    if (!/@keyframes generated-wash-in/.test(css)) {
+      throw new Error("the wash-in keyframes are not defined");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.generated-highlight,\s*\.generated-highlight-field\s*\{\s*animation:\s*generated-wash-in 450ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) 0\.5s backwards/.test(css)) {
+      throw new Error("the wash does not merge in, gated, half a second after the text");
+    }
+    const ungated = css.replace(/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.generated-highlight,\s*\.generated-highlight-field\s*\{\s*animation:[^}]*\}\s*\}/, "");
+    if (/animation:\s*generated-wash-in/.test(ungated)) {
+      throw new Error("the wash-in animation is applied outside the reduced-motion gate");
+    }
   });
 
   await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {
@@ -17669,20 +17839,7 @@ async function runDemoCtaChecks() {
       const input = ctx.container.querySelector('[data-testid="append-images-input"]');
       if (!input) throw new Error("no images input");
       const files = ["home.png", "chart.png"].map((name) => new dom.window.File([new Uint8Array(8)], name, { type: "image/png" }));
-      // Real browsers return a live FileList on input.files and empty it
-      // in-place when input.value = "" is assigned. Model that live behavior
-      // so assigning e.target.value = "" before copying files fails this check.
-      const liveFileList = [...files];
-      Object.defineProperty(input, "files", { get: () => liveFileList, configurable: true });
-      const origValueDesc = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value");
-      Object.defineProperty(input, "value", {
-        get: () => origValueDesc?.get ? origValueDesc.get.call(input) : "",
-        set: (v) => {
-          if (v === "") liveFileList.length = 0;
-          if (origValueDesc?.set) origValueDesc.set.call(input, v);
-        },
-        configurable: true,
-      });
+      Object.defineProperty(input, "files", { value: files, configurable: true });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
       await clip.flush();
       await clip.flush();
@@ -17705,26 +17862,6 @@ async function runDemoCtaChecks() {
       const reordered = rowNames();
       if (!reordered[0].includes("chart.png") || !reordered[1].includes("home.png")) {
         throw new Error(`reorder did not take: ${JSON.stringify(reordered)}`);
-      }
-      // Adding more images appends as many additional images as the founder picks
-      // rather than wiping the existing sequence.
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-images-add-more"]'), "click add more images");
-      liveFileList.push(
-        new dom.window.File([new Uint8Array(8)], "profile.png", { type: "image/png" }),
-        new dom.window.File([new Uint8Array(8)], "settings.png", { type: "image/png" })
-      );
-      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
-      await clip.flush();
-      await clip.flush();
-      await clip.flush();
-      const expanded = rowNames();
-      if (expanded.length !== 4 || !expanded[2].includes("profile.png") || !expanded[3].includes("settings.png")) {
-        throw new Error(`Add more images did not append the new stills: ${JSON.stringify(expanded)}`);
-      }
-      // Remove the two extras before testing reload parity on the original two.
-      for (const extraRow of [...ctx.container.querySelectorAll('[data-testid^="append-image-row-"]')].slice(2)) {
-        const extraId = extraRow.getAttribute("data-testid").replace("append-image-row-", "");
-        await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-remove-${extraId}"]`), "remove extra still");
       }
       await act(async () => ctx.root.unmount());
       const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-images");

@@ -65,7 +65,7 @@ export default function CoverTextEditor({
           words that ship on the opening. The empty state's line is
           guidance, not generated words, so it stays unhighlighted. */}
       <p className="text-base" data-testid="cover-text-value">
-        {value?.trim() ? <span className="generated-highlight">{value}</span> : <span className="text-muted-foreground">A few words for the opening frame</span>}
+        {value?.trim() ? <span key={value} className="generated-highlight">{value}</span> : <span className="text-muted-foreground">A few words for the opening frame</span>}
       </p>
       <div className="space-y-3">
         {!live && (
@@ -80,7 +80,7 @@ export default function CoverTextEditor({
         {error && <p className="text-sm text-destructive-text" role="alert" data-testid="cover-text-suggest-error">{error}</p>}
         {live && (
           <div className="space-y-3" data-testid="cover-text-suggestion">
-            <p className="text-base"><span className="generated-highlight font-semibold">{live.text}</span></p>
+            <p className="text-base"><span key={live.text} className="generated-highlight font-semibold">{live.text}</span></p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" disabled={disabled} data-testid="cover-text-accept"
                 onClick={() => { onChange(live.text); setSuggestion(null); }}>
