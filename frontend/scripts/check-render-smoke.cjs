@@ -13614,6 +13614,27 @@ async function runHookCtaChecks() {
     updated_at: "2026-11-20T10:00:00Z",
     ...overrides,
   });
+  // A draft exactly as the create endpoint leaves it, in the
+  // serialized shape _public_project returns (ADR 0262): no hook, no
+  // script, no strategy, no photo, and every pick the page offers at
+  // its create-time value — the voice on silent (ADR 0248), the
+  // length at the create's 5 seconds, no place, wardrobe, focus or
+  // tone chosen. The fresh-start checks below are written against
+  // this shape because it is the shape the page treats as a blank
+  // canvas.
+  const blankRow = (overrides = {}) => hookRow({
+    hook_line: "",
+    script: "",
+    strategy: {},
+    script_version: 0,
+    location: "",
+    visual_direction: "",
+    tone: "",
+    voice_mode: "silent",
+    hook_focus: "",
+    hook_shape: "auto",
+    ...overrides,
+  });
   // Mounts the page inside the stub scope and runs the check's
   // interactions there: withApi restores the base stub when its body
   // returns, so a click after the mount would hit the wrong stub.
@@ -13970,41 +13991,177 @@ async function runHookCtaChecks() {
     }
   });
 
-  await check("the page reopens the app's newest draft instead of minting a new one", async (ctx) => {
-    // The button fix (ADR 0246): a visit used to create a fresh empty
-    // draft and open THAT, so the render read "no hook yet" and its
-    // button stayed gated while the founder's hooked draft sat in
-    // the list below. The newest existing draft is the one that opens.
-    const creates = [];
+  await check("a fresh visit starts blank over a worked draft, and the draft opens only on its own click", async (ctx) => {
+    // The fresh start (ADR 0262, superseding 0246's reopen): Kasra's
+    // live page kept opening on his last draft — its hook standing
+    // in the editor, its picks set, its finished render standing in
+    // the frame — so a plain visit now presents a blank canvas
+    // instead: "It didn't clear out. Also make sure nothing else is
+    // left over." The worked draft is not deleted or hidden: it
+    // stands in the list below under its own hook line, and its own
+    // click opens it whole, render included.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
-    const hooked = hookRow({ id: "hook-cta-7", hook_line: HOOK, assets: face, updated_at: "2026-11-20T12:00:00Z" });
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
+      strategy: { hook_concept: HOOK }, updated_at: "2026-11-20T12:00:00Z",
+    });
+    const done = { ...SEGMENT, id: "gen-hook-old", studio_project_id: "hook-cta-7", status: "completed" };
+    let rows = [hooked];
+    const creates = [];
     await inHookCta(
       ctx,
       {
-        getHookCtaProjects: async () => ({ projects: [hooked] }),
-        createHookCtaProject: async (payload) => {
-          creates.push(payload);
-          return hookRow({ id: "hook-cta-new" });
+        getHookCtaProjects: async () => ({ projects: rows }),
+        createHookCtaProject: async () => {
+          const fresh = blankRow({ id: "hook-cta-fresh", updated_at: "2026-11-21T09:00:00Z" });
+          rows = [fresh, ...rows];
+          creates.push(fresh.id);
+          return fresh;
         },
-        getGenerations: async () => ({ generations: [] }),
+        getStudioProject: async (id) => rows.find((r) => r.id === id) || hooked,
+        getGenerations: async ({ studio_project_id } = {}) => ({
+          generations: studio_project_id === "hook-cta-7" ? [done] : [],
+        }),
       },
       "",
       async () => {
-        if (creates.length !== 0) {
-          throw new Error(`the visit minted ${creates.length} new drafts beside the existing one`);
+        if (creates.length !== 1) {
+          throw new Error(`the fresh visit minted ${creates.length} canvases beside the worked draft, expected one`);
         }
         const field = ctx.container.querySelector("#review-hook_line");
-        if (!field || field.value !== HOOK) {
-          throw new Error("the reopened draft's hook line is not standing in the editor");
+        if (!field) throw new Error("the hook editor did not render on the fresh canvas");
+        if (field.value !== "") {
+          throw new Error(`the last draft's hook is standing in the editor on a fresh visit: ${field.value}`);
+        }
+        if (ctx.container.querySelector('[data-testid="platform-preview-video"]')) {
+          throw new Error("the last draft's finished render is standing in the frame on a fresh visit");
+        }
+        const finish = ctx.container.querySelector('[data-testid="hook-cta-finish-card"]');
+        if (!finish || !finish.textContent.includes("Render the hook above first")) {
+          throw new Error("the finish card does not treat the fresh visit as unrendered");
+        }
+        // The worked draft stands in the list under its own hook
+        // line, and it does not read as the open one.
+        const entry = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-7"]');
+        if (!entry) throw new Error("the worked draft is missing from the drafts list");
+        if (!entry.textContent.includes(HOOK)) {
+          throw new Error("the worked draft's list entry does not carry its hook line");
+        }
+        if (entry.getAttribute("aria-current")) {
+          throw new Error("the worked draft reads as open on a fresh visit");
+        }
+        // Its own click opens it whole: the hook back in the editor,
+        // the finished render back in the frame, the button live.
+        await clickEl(ctx, entry);
+        await act(async () => {});
+        await act(async () => {});
+        const opened = ctx.container.querySelector("#review-hook_line");
+        if (!opened || opened.value !== HOOK) {
+          throw new Error("opening the draft from the list did not restore its hook line");
+        }
+        if (!ctx.container.querySelector('[data-testid="platform-preview-video"]')) {
+          throw new Error("opening the draft from the list did not restore its finished render");
         }
         const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
-        if (gate) throw new Error(`the render is gated on the reopened draft: ${gate.textContent}`);
+        if (gate) throw new Error(`the render is gated on the draft opened from the list: ${gate.textContent}`);
         const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!button || button.disabled) {
-          throw new Error("the render button is not enabled on the reopened draft");
+          throw new Error("the render button is not enabled on the draft opened from the list");
         }
       }
     );
+  });
+
+  await check("a fresh visit reuses the app's untouched draft, and the next visit mints nothing either", async (ctx) => {
+    // No draft spam (ADR 0262): the blank canvas is the app's own
+    // untouched draft when one exists — minting a new empty row per
+    // visit was ADR 0246's original bug, and the fresh start must
+    // not bring it back. The worked draft is the NEWEST row here
+    // (Kasra's case: the render he made last), the untouched one
+    // older — the visit must pass the worked one by and stand on
+    // the blank one, twice, creating nothing either time.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
+      strategy: { hook_concept: HOOK }, updated_at: "2026-11-21T12:00:00Z",
+    });
+    const blank = blankRow({ id: "hook-cta-blank", updated_at: "2026-11-20T08:00:00Z" });
+    const creates = [];
+    const stubs = {
+      getHookCtaProjects: async () => ({ projects: [hooked, blank] }),
+      createHookCtaProject: async () => {
+        creates.push(1);
+        return blankRow({ id: "hook-cta-new" });
+      },
+      getGenerations: async () => ({ generations: [] }),
+    };
+    const expectBlankCanvas = async () => {
+      if (creates.length !== 0) {
+        throw new Error(`the visit minted ${creates.length} drafts beside the untouched one`);
+      }
+      const field = ctx.container.querySelector("#review-hook_line");
+      if (!field || field.value !== "") {
+        throw new Error("the visit did not open on the blank canvas");
+      }
+      const open = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-blank"]');
+      if (!open || !open.getAttribute("aria-current")) {
+        throw new Error("the untouched draft is not the one standing open");
+      }
+    };
+    await inHookCta(ctx, stubs, "", expectBlankCanvas);
+    // A second fresh visit, nothing edited in between: unmount the
+    // page and mount it again against the same stubs — the same
+    // canvas stands open and the draft count has not moved.
+    await act(async () => { ctx.root.render(null); });
+    await inHookCta(ctx, stubs, "", expectBlankCanvas);
+  });
+
+  await check("the first fresh visit beside a worked draft mints one canvas, and the next visit reuses it", async (ctx) => {
+    // The growth cap (ADR 0262): with no untouched draft to reuse,
+    // the first fresh visit creates the canvas — the same single
+    // row a first-ever visit creates (ADR 0244) — and the next
+    // visit reuses that row instead of minting another, so plain
+    // visits stop adding drafts after the first.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
+      strategy: { hook_concept: HOOK }, updated_at: "2026-11-20T12:00:00Z",
+    });
+    let rows = [hooked];
+    const creates = [];
+    const stubs = {
+      getHookCtaProjects: async () => ({ projects: rows }),
+      createHookCtaProject: async () => {
+        const fresh = blankRow({ id: "hook-cta-fresh", updated_at: "2026-11-21T09:00:00Z" });
+        rows = [fresh, ...rows];
+        creates.push(fresh.id);
+        return fresh;
+      },
+      getGenerations: async () => ({ generations: [] }),
+    };
+    await inHookCta(ctx, stubs, "", async () => {
+      if (creates.length !== 1) {
+        throw new Error(`the first fresh visit minted ${creates.length} canvases, expected one`);
+      }
+      const field = ctx.container.querySelector("#review-hook_line");
+      if (!field || field.value !== "") {
+        throw new Error("the first fresh visit did not open on the blank canvas");
+      }
+    });
+    await act(async () => { ctx.root.render(null); });
+    await inHookCta(ctx, stubs, "", async () => {
+      if (creates.length !== 1) {
+        throw new Error(`the second fresh visit brought the mint count to ${creates.length}, expected it to stay at one`);
+      }
+      const field = ctx.container.querySelector("#review-hook_line");
+      if (!field || field.value !== "") {
+        throw new Error("the second fresh visit did not open on the blank canvas");
+      }
+      const open = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-fresh"]');
+      if (!open || !open.getAttribute("aria-current")) {
+        throw new Error("the second visit did not reuse the canvas the first one minted");
+      }
+    });
   });
 
   await check("the length pick on a written hook saves, and the render button stays enabled", async (ctx) => {

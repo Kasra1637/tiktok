@@ -55,7 +55,10 @@ import {
  * One stacked canvas of section cards, NOT the Create Video wizard:
  * the founder picks an app, the page holds the saved draft that pick
  * makes, and the direction, the hook, the render, the demo finish and
- * the post kit stack below as further cards on the same canvas.
+ * the post kit stack below as further cards on the same canvas. A
+ * plain visit starts fresh on a blank draft (ADR 0262): earlier
+ * drafts wait in the list at the foot of the page and open only when
+ * the founder clicks one.
  *
  * The draft is a VIDEO project carrying the hook_cta surface marker
  * (ADR 0244): its renders are ordinary video generations, so History,
@@ -139,6 +142,38 @@ function hookCtaDraftReducer(state, action) {
 
 function isHookCtaProject(project) {
   return (project?.kind || "video") === "video" && (project?.surface || "") === "hook_cta";
+}
+
+// A draft nothing has touched since the create endpoint wrote it
+// (ADR 0262): no hook and no script, no strategy, no photo attached,
+// and every pick the page offers still at its create-time value —
+// the voice on silent (ADR 0248), the length at the create's 5
+// seconds, no place, wardrobe, focus or tone chosen. A render cannot
+// hide behind these fields either: a render needs a hook, and a
+// hook writes the line, the strategy and the script version. Such a
+// row is indistinguishable from a brand-new draft, so it is the one
+// row a fresh visit may stand on as its blank canvas; anything with
+// a mark on it is the founder's work and opens only on its own
+// click. The test reads only what this page itself can move — the
+// create's audience copy from the profile is the profile's, not a
+// pick.
+function isUntouchedHookCtaDraft(project) {
+  if (!isHookCtaProject(project)) return false;
+  const strategy = project.strategy;
+  return (
+    !String(project.hook_line || "").trim() &&
+    !String(project.script || "").trim() &&
+    (!strategy || (typeof strategy === "object" && Object.keys(strategy).length === 0)) &&
+    (project.script_version || 0) === 0 &&
+    !(project.assets || []).length &&
+    !String(project.location || "").trim() &&
+    !String(project.visual_direction || "").trim() &&
+    !String(project.tone || "").trim() &&
+    !String(project.hook_focus || "").trim() &&
+    (project.hook_shape || "auto") === "auto" &&
+    (project.voice_mode || "") === "silent" &&
+    Number(project.duration_seconds || 5) === 5
+  );
 }
 
 export default function HookCta() {
@@ -229,17 +264,22 @@ export default function HookCta() {
           setDrafts(rows);
           setDraftsFor(profileId);
           setDraftsSettled(true);
-          // A returning founder lands back on their newest draft,
-          // not on a fresh one: the page used to mint a new empty
-          // draft on every visit and open that, so the render read
-          // "no hook yet" and its button stayed gated while the
-          // founder's hooked draft sat in the list below (Kasra's
-          // live report, Nov 20 2026 — the button fix in ADR 0246).
-          // The list is newest-first, so the first row is the draft
-          // to reopen. A ?project= link names its own draft and wins;
-          // a draft already open is never swapped under the founder.
-          if (!requestedProjectId && !projectRef.current && rows.length > 0) {
-            adoptOpenedDraft(rows[0]);
+          // A plain visit opens FRESH (ADR 0262, superseding the
+          // reopen ADR 0246 added): Kasra's page kept landing on his
+          // last draft — its hook in the editor, its picks set, its
+          // finished render standing in the frame — "the fucking
+          // shit is still fucking showing here from before. It
+          // didn't clear out." So no worked draft is ever adopted
+          // here: the only row a visit may stand on is a completely
+          // untouched one, which reads exactly like the new draft
+          // it is, and when none exists the create effect below
+          // mints the canvas instead. Worked drafts open only on
+          // their own click in the list below, or by a ?project=
+          // link, which names its draft and wins. A draft already
+          // open is never swapped under the founder.
+          if (!requestedProjectId && !projectRef.current) {
+            const fresh = rows.find(isUntouchedHookCtaDraft);
+            if (fresh) adoptOpenedDraft(fresh);
           }
         }
       })
@@ -262,13 +302,19 @@ export default function HookCta() {
   // wizard's ensureProject rule: as soon as an app is chosen, the
   // draft is created in the background. A draft calls no model, so
   // doing this eagerly costs nothing. It waits for the drafts read
-  // above to settle empty for THIS app: creating first and asking
-  // later is how every visit used to mint a duplicate empty draft
-  // beside the one the founder had already started (ADR 0246).
+  // above to settle for THIS app, and it stands down when that read
+  // found a completely untouched draft: the read adopts that row as
+  // the visit's blank canvas (ADR 0262), and creating anyway would
+  // mint a duplicate empty beside it — creating first and asking
+  // later is how every visit used to mint one (ADR 0246). Worked
+  // drafts in the list do NOT stand it down: a fresh visit beside
+  // them mints its one canvas, and the next visit reuses that row.
   const creatingKeyRef = useRef("");
   useEffect(() => {
     if (!profileId || project) return undefined;
-    if (!draftsSettled || draftsFor !== profileId || drafts.length > 0) return undefined;
+    if (!draftsSettled || draftsFor !== profileId || drafts.some(isUntouchedHookCtaDraft)) {
+      return undefined;
+    }
     const key = profileId;
     if (creatingKeyRef.current === key) return undefined;
     creatingKeyRef.current = key;
@@ -292,7 +338,7 @@ export default function HookCta() {
       // than sit on a key whose draft it never adopted.
       if (creatingKeyRef.current === key) creatingKeyRef.current = "";
     };
-  }, [profileId, project, draftsSettled, draftsFor, drafts.length]);
+  }, [profileId, project, draftsSettled, draftsFor, drafts]);
 
   // Autosave: save ~1s after the last pick change, through the same
   // validated PATCH every draft edit rides. Silent saves never block
