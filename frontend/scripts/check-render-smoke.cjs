@@ -11568,7 +11568,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your apps URL into a tailored video in minutes.") {
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app’s URL into a scroll-stopping video in minutes.") {
       throw new Error("the hero headline is not Kasra's dictated line");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
@@ -11596,8 +11596,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page. Facts become a hook, script, and " +
-          "finished video for your app alone, learning from every video you judge."
+        "No filming, no editing, no blank page. Turn your product facts into a " +
+          "hook, script, and finished TikTok video — and get sharper with every clip you post."
       )
     ) {
       throw new Error("the hero sub-headline is not Kasra's tightened line");

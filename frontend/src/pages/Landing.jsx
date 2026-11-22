@@ -19,37 +19,37 @@ const FEATURES = [
     icon: Briefcase,
     title: "Facts you approve",
     description:
-      "Your website or store listings become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product itself.",
+      "Paste your site or store link once to lock in real product facts. Every video stays accurate and on-brand, so you never waste time rewriting from scratch again.",
   },
   {
     icon: Target,
     title: "One clear outcome",
     description:
-      "A required audience angle and video goal you set steer the templates and the script, so each post aims at one viewer and one outcome — not everyone and nothing.",
+      "Target one specific buyer and one clear goal per clip. Instead of generic promos people scroll past, every second of your video is built to earn real attention.",
   },
   {
     icon: FileText,
     title: "Your voice, one script",
     description:
-      "Your facts become a hook and script in your own voice, the opening ranked to earn the watch, graded on craft before you pay — no grade ever blocks your renders.",
+      "Get a scroll-stopping hook and script written in your own voice, scored before you spend a cent. Fix weak lines early and ship only openings worth watching now.",
   },
   {
     icon: Clapperboard,
     title: "Never filmed",
     description:
-      "Your approved plan and one presenter photo render into a finished Hook + Story clip. No camera, no crew, no reshoot when a line changes — edit and render again.",
+      "Turn your script and one photo into a finished presenter video in minutes. No camera, no studio, and no reshoots when a line changes—just edit and render again.",
   },
   {
     icon: Film,
     title: "Demo, finished",
     description:
-      "Bring your real footage to Demo + CTA: device frames, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one TikTok MP4.",
+      "Drop your real screen recording into a clean phone or browser frame with smooth zoom, captions, and a strong closing CTA—exported as one ready-to-post MP4 file.",
   },
   {
     icon: Video,
     title: "Results that teach",
     description:
-      "Post it, paste the link and the numbers — views, 3-second retention, average watch, saves, shares. After three posted clips, the lessons steer your next videos.",
+      "Log your views, retention, saves, and shares after posting. Once three clips are in, HookForge learns what holds viewers and steers your next clips to win more.",
   },
 ];
 
@@ -137,31 +137,31 @@ const FLOW_STEPS = [
   {
     step: "1",
     label: "Introduce your app",
-    line: "Add your website or store URL, review the draft, and approve the facts — every video starts from them.",
+    line: "Paste your website or store link and approve the facts once — every future video starts from them.",
     outcome: "Built from your facts",
   },
   {
     step: "2",
     label: "Pick goal + viewer",
-    line: "Pick an audience angle and set a goal — both are required before anything downstream is written.",
+    line: "Choose the exact buyer you want to reach and the outcome you want — so every video has a clear job.",
     outcome: "One viewer, one outcome",
   },
   {
     step: "3",
     label: "Pick your template",
-    line: "Compare the ranked templates and their caveats, then add a clear presenter photo.",
+    line: "Choose from proven openings ranked for your app, then upload one clear presenter photo.",
     outcome: "Openings that earn the watch",
   },
   {
     step: "4",
     label: "Review then render",
-    line: "The plan is free: review it, edit and save it, check the craft grade — only the render is paid.",
+    line: "The script and plan are free to edit and polish — you only pay when you are ready to render the video.",
     outcome: "A clip worth posting",
   },
   {
     step: "5",
     label: "Add your real demo",
-    line: "Style a base clip, add a Second clip or a phone overlay, export one MP4, and publish them yourself.",
+    line: "Pair your clip with real product footage, captions, and a closing CTA, then export one ready-to-post MP4.",
     outcome: "Your demo stays yours",
   },
 ];
@@ -335,16 +335,17 @@ function HeroStory() {
  * quietly flatters the product.
  */
 const WEEK_WITHOUT = [
-  "Rewrite your app’s story from memory for every single script.",
-  "Guess which opening your audience might sit through.",
-  "Stare at a blank page and call it a content strategy.",
-  "Dig through folders hunting last month’s clips, links, and numbers.",
+  "Rewrite your app’s story from scratch every time you try to post.",
+  "Guess which hook might stop the scroll — and watch views stall.",
+  "Spend hours filming, retaking, and editing instead of shipping.",
+  "Post inconsistently with no clear idea which angles actually worked.",
 ];
 
 const WEEK_WITH = [
-  "Start every video from the App Profile you already approved.",          "Compare openings by fit scores, reasons, limitations.",
-  "Edit a finished script draft instead of inventing one.",
-  "Find every clip beside its posted link and real results in History.",
+  "Start every video from your approved product facts in seconds.",
+  "Pick proven hooks ranked to hold your exact buyer’s attention.",
+  "Edit a finished script and render in minutes — zero filming required.",
+  "Ship consistently and let your real post results sharpen the next clip.",
 ];
 
 const NAV_LINKS = [
@@ -398,7 +399,7 @@ const QUESTIONS = [
   },
   {
     question: "Will my clip have sound, and how can I export it?",
-    answer: "Audio depends on the video model you choose; some models produce silent clips. Demo + CTA exports one 1080×1920 MP4 at 30 fps. Use a current Chrome or Edge browser; unsupported encoding is reported, not silently replaced with another format.",
+    answer: "Audio depends on the video model you pick; you can generate with sound or silent for voiceover. Demo + CTA exports a crisp 1080×1920 MP4 at 30 fps directly in Chrome or Edge, ready for TikTok, Reels, and Shorts.",
   },
   {
     question: "Does HookForge post or track results for me?",
@@ -436,15 +437,15 @@ export default function Landing() {
             className="animate-fade-up font-display text-hero font-semibold leading-[1.05] tracking-tight sm:text-hero-wide"
             style={{ animationDelay: "60ms" }}
           >
-            <span className="text-gradient-headline">Turn your apps URL into a tailored video in minutes.</span>
+            <span className="text-gradient-headline">Turn your app’s URL into a scroll-stopping video in minutes.</span>
           </h1>
 
           <p
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            No filming, no editing, no blank page. Facts become a hook, script, and
-            finished video for your app alone, learning from every video you judge.
+            No filming, no editing, no blank page. Turn your product facts into a
+            hook, script, and finished TikTok video — and get sharper with every clip you post.
           </p>
 
           <div

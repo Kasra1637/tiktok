@@ -283,9 +283,9 @@ body {
    flat rectangle. Colors are unchanged. */
 .hero-wash {
     background:
-        radial-gradient(1000px circle at 25% 5%, rgba(129, 140, 248, 0.08), transparent 50%),
-        radial-gradient(800px circle at 75% 0%, rgba(254, 44, 85, 0.06), transparent 45%),
-        radial-gradient(900px circle at 50% 100%, rgba(99, 102, 241, 0.05), transparent 55%),
+        radial-gradient(1000px circle at 25% 5%, rgba(129, 140, 248, 0.035), transparent 50%),
+        radial-gradient(800px circle at 75% 0%, rgba(254, 44, 85, 0.025), transparent 45%),
+        radial-gradient(900px circle at 50% 100%, rgba(99, 102, 241, 0.04), transparent 55%),
         linear-gradient(180deg, hsl(228, 14%, 7%) 0%, hsl(228, 14%, 8%) 100%);
     background-attachment: fixed;
 }
