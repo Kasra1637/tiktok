@@ -303,6 +303,33 @@ body {
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 75%);
 }
 
+/* Full-page Studio Spotlight & Dotted Canvas for the landing page.
+   Replaces the hero-only blueprint grid and aurora so the entire page
+   reads as one cohesive dark studio from hero to footer. */
+.landing-dots {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: radial-gradient(rgba(199, 210, 254, 0.11) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse 92% 78% at 50% 35%, black 25%, transparent 95%);
+    -webkit-mask-image: radial-gradient(ellipse 92% 78% at 50% 35%, black 25%, transparent 95%);
+}
+.landing-spotlights {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.landing-spot {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(110px);
+    will-change: transform;
+}
+
 /* ---------- Surfaces ----------
    A card's padding AND radius live HERE, not in JSX utilities.
    Outer section widths (`max-w-6xl`, AppShell `max-w-[1400px]`) are untouched —
