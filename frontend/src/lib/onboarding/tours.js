@@ -209,7 +209,7 @@ export const TOURS = {
         target: '[data-testid="app-research-card"]',
         title: "Research, then trust but verify",
         body:
-          "Paste your app's website, App Store or Google Play URL, then choose Research app for video. Research creates a draft, not an approved profile.",
+          "Paste your website URL (plus App Store or Google Play links if you have them), then choose Research app for video. Research creates a draft, not an approved profile.",
       },
       {
         target: '[data-testid="brand-manual-card"]',

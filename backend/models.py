@@ -70,7 +70,7 @@ class BrandContextRequest(BaseModel):
 
 class AppProfileResearchRequest(BaseModel):
     """
-    Research a mobile app from its public pages and generate a draft App Profile.
+    Research an app or software product from its public pages and generate a draft App Profile.
 
     A website URL, an App Store URL, a Google Play URL, or any combination
     is accepted — at least one is required. The website often carries the

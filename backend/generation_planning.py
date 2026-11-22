@@ -266,8 +266,11 @@ CONDENSE_BELOW = 5000
 # sentence landed the saturated prompt over 4,090, and fixed text is
 # the only text the squeeze cannot take back. Measured: full floor
 # rose 3 (4014 -> 4017), condensed rose 11 (2464 -> 2475).
-FULL_PROMPT_FLOOR = 4017
-CONDENSED_PROMPT_FLOOR = 2475
+#
+# ADR 0256 drops "mobile " from the fixed header ("for the app {app_name}"),
+# reducing all five measured floors by 7 characters.
+FULL_PROMPT_FLOOR = 4010
+CONDENSED_PROMPT_FLOOR = 2468
 
 # The same floors for a FIXED camera (ADR 0255). The pair above is the
 # handheld assembly's: a fixed camera swaps the handheld sentences for
@@ -277,10 +280,10 @@ CONDENSED_PROMPT_FLOOR = 2475
 # It was never measured separately, so every fit computation for a fixed
 # render under-counted the fixed text (the condensed floor by 113) and
 # the final walk stopped short of the scale that actually fits. Measured
-# the same way, on the same empty assembly: full 3988, condensed 2588.
+# the same way, on the same empty assembly: full 3981, condensed 2581.
 # A test pins both, as it pins the pair above.
-FIXED_FULL_PROMPT_FLOOR = 3988
-FIXED_CONDENSED_PROMPT_FLOOR = 2588
+FIXED_FULL_PROMPT_FLOOR = 3981
+FIXED_CONDENSED_PROMPT_FLOOR = 2581
 
 # The same measurement for the OTHER builder, taken at the same duration (10s)
 # so the two are comparable, and identical at 8s and 15s: this builder's fixed
@@ -301,8 +304,8 @@ FIXED_CONDENSED_PROMPT_FLOOR = 2588
 # ADR 0223 lands here too: the hook sentence puts the voice on the first
 # frame (no lead-in pause or silent beat before the first word) and the
 # opening sentence states the half-second snap and the sharpest instant.
-# Measured: this floor rose 123 (2835 -> 2958).
-SINGLE_PASS_PROMPT_FLOOR = 2958
+# Measured: this floor rose 123 (2835 -> 2958), then fell 7 to 2951 (ADR 0256).
+SINGLE_PASS_PROMPT_FLOOR = 2951
 
 # The app's own name, in the prompt, clipped.
 #
@@ -1025,7 +1028,7 @@ def _assemble_single_pass_prompt(
 
     sections.append(
         f"Create ONE continuous {duration}-second vertical (9:16) promotional video "
-        f"for the mobile app {app_name}. It must be a single coherent take containing "
+        f"for the app {app_name}. It must be a single coherent take containing "
         f"both the opening hook and its middle, with no visible cut to a separate clip, "
         f"no black frames, and no title card."
     )
@@ -2030,7 +2033,7 @@ def _assemble_prompt(
     if not condensed:
         sections.append(
             f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
-            f"mobile app {app_name}, containing exactly TWO sections: a HOOK in the opening "
+            f"app {app_name}, containing exactly TWO sections: a HOOK in the opening "
             f"seconds, then a MIDDLE that develops it. It must read as a single take — no visible "
             f"cut to a separate clip, no black frames, no title card."
         )
@@ -2054,7 +2057,7 @@ def _assemble_prompt(
     else:
         sections.append(
             f"Create ONE continuous {seconds}-second vertical (9:16) promotional video for the "
-            f"mobile app {app_name}, in two sections. "
+            f"app {app_name}, in two sections. "
             + (
                 "End on the moment the presenter reaches for their phone, and do not ask the viewer "
                 "to download or install anything."

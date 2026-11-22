@@ -31,11 +31,11 @@ def strip_html_to_text(html: str) -> str:
     return text.strip()
 def _html_meta_descriptions(html: str) -> list:
     """
-    content= of description/og:description/twitter:description meta tags.
+    content= of description/title/site-name OpenGraph, Twitter and standard meta tags.
 
     Parsed per-tag so attribute order does not matter (content-first tags
-    are common on store listings). Returns [] on any markup surprise rather
-    than half a tag.
+    are common on store listings and web app shells). Returns [] on any markup
+    surprise rather than half a tag.
     """
     found = []
     for tag in re.findall(r"(?is)<meta\b[^>]*>", html or ""):
@@ -44,7 +44,15 @@ def _html_meta_descriptions(html: str) -> list:
             for k, v in re.findall(r"""(\w+)\s*=\s*["'](.*?)["']""", tag)
         )
         name = (attrs.get("name") or attrs.get("property") or "").strip().lower()
-        if name in ("description", "og:description", "twitter:description"):
+        if name in (
+            "description",
+            "og:description",
+            "twitter:description",
+            "og:title",
+            "twitter:title",
+            "og:site_name",
+            "application-name",
+        ):
             content = (attrs.get("content") or "").strip()
             if content:
                 found.append(content)

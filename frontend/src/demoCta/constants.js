@@ -23,6 +23,8 @@ export const DEVICES = [
   { id: "lg_v60", label: "LG V60 ThinQ", body: "#0b0c10", rail: "#34353a", aspect: 0.460, radiusRatio: 0.070, bezelRatio: 0.030, camera: "notch-drop" },
   { id: "lg_velvet", label: "LG Velvet", body: "#101218", rail: "#3a3c44", aspect: 0.448, radiusRatio: 0.090, bezelRatio: 0.028, camera: "notch-drop" },
   { id: "lg_g8", label: "LG G8 ThinQ", body: "#0e0e12", rail: "#33343a", aspect: 0.472, radiusRatio: 0.075, bezelRatio: 0.034, camera: "notch-wide" },
+  { id: "iphone_16_pro", label: "iPhone 16 Pro", body: "#141418", rail: "#44454a", aspect: 0.461, radiusRatio: 0.115, bezelRatio: 0.020, camera: "dynamic-island" },
+  { id: "browser_window", label: "Browser / Web Card", body: "#101218", rail: "#323540", aspect: 0.520, radiusRatio: 0.045, bezelRatio: 0.016, camera: "window-bar" },
 ];
 
 export const PRESETS = [
@@ -145,6 +147,7 @@ export const OVERLAY_ANIMS = [
 
 export const CTA_COPY_VARIANTS = [
   "Try it free — link in bio",
+  "Start free in your browser — link in bio",
   "Download free on the App Store",
   "Start your first entry — link in bio",
 ];

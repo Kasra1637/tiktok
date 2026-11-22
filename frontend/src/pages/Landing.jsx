@@ -19,7 +19,7 @@ const FEATURES = [
     icon: Briefcase,
     title: "Facts you approve",
     description:
-      "Your website and store listing become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product itself.",
+      "Your website or store listings become an App Profile you review and approve once — then reuse on every video, so the story never drifts from the product itself.",
   },
   {
     icon: Target,
@@ -43,7 +43,7 @@ const FEATURES = [
     icon: Film,
     title: "Demo, finished",
     description:
-      "Bring your real footage to Demo + CTA: phone mockups, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one TikTok MP4.",
+      "Bring your real footage to Demo + CTA: device frames, framing and zoom, a second clip or a live overlay, hook text and an end card — exported as one TikTok MP4.",
   },
   {
     icon: Video,

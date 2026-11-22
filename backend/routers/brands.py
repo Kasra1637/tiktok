@@ -1078,13 +1078,13 @@ async def _auto_generate_content_angles(profile: dict, user_id: str) -> None:
 
 
 # Per-source page-text caps for multi-URL research. Store listings are dense
-# with reviews; support pages are supplementary — keep them small so the
-# combined prompt stays well within the text model's context.
+# with reviews; support pages (/features, /docs) carry concrete product specs
+# for web/SaaS apps while keeping the combined prompt within the text model's context.
 APP_RESEARCH_CAPS = {
     "website": 6000,
     "app_store": 6000,
     "google_play": 6000,
-    "support": 2000,
+    "support": 4000,
 }
 APP_RESEARCH_MAX_SUPPORT_URLS = 5
 BRAND_URL_TEXT_MAX_CHARS = 8000
@@ -1249,7 +1249,7 @@ async def update_brand(brand_id: str, payload: BrandProfileUpdateRequest, user_i
 
 @router.post("/app-profiles/research", status_code=201)
 async def research_app_profile(payload: AppProfileResearchRequest, user_id: str = Depends(get_current_user_id)):
-    """Research a mobile app from its public pages and draft an App Profile.
+    """Research an app or software product from its public pages and draft an App Profile.
 
     Fetches the website, App Store and Google Play pages plus up to 5 support
     URLs, then asks OpenRouter to draft the full profile. The result is stored

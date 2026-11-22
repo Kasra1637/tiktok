@@ -26,7 +26,11 @@ describe("sentenceCase", () => {
 
   test("never rewrites brand names with internal capitals", () => {
     expect(sentenceCase("iOS is the platform")).toBe("iOS is the platform");
+    expect(sentenceCase("macOS and web apps run fast")).toBe("macOS and web apps run fast");
     expect(sentenceCase("eBay sellers do this")).toBe("eBay sellers do this");
+    expect(sentenceCase("works in any browser. macOS and iOS sync live")).toBe(
+      "Works in any browser. macOS and iOS sync live"
+    );
   });
 
   test("leading whitespace does not stop the match", () => {

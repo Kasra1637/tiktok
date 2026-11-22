@@ -507,7 +507,7 @@ export default function AppProfileDetail() {
   ];
   const listenObjections = () => [
     {
-      label: "Why they would not download",
+      label: "Why they would not try or download",
       values: (profile?.viewer_objections || []).map((objection) =>
         [
           objection.objection,
@@ -833,7 +833,7 @@ return (
           </ProfileCard>
         ) : null}
           {Array.isArray(profile?.viewer_objections) && profile.viewer_objections.length > 0 && (
-            <ProfileCard eyebrow="Why they would not download" icon={MessageCircleQuestion} listen={{ id: "objections", label: "Why they would not download", getBlocks: listenObjections }}>
+            <ProfileCard eyebrow="Why they would not try or download" icon={MessageCircleQuestion} listen={{ id: "objections", label: "Why they would not try or download", getBlocks: listenObjections }}>
               <div className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-2">
               {profile.viewer_objections.map((o, i) => (
                 <StatementCard

@@ -3302,10 +3302,12 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   ctx.fillRect(bx, by, bw, bh * 0.25);
   ctx.restore();
 
-  ctx.fillStyle = shade(railColor, -10);
-  ctx.fillRect(x + w - w * 0.008, y + h * 0.18, w * 0.012, h * 0.06);
-  ctx.fillRect(x - w * 0.004, y + h * 0.16, w * 0.012, h * 0.05);
-  ctx.fillRect(x - w * 0.004, y + h * 0.235, w * 0.012, w * 0.06);
+  if (dev.camera !== "window-bar") {
+    ctx.fillStyle = shade(railColor, -10);
+    ctx.fillRect(x + w - w * 0.008, y + h * 0.18, w * 0.012, h * 0.06);
+    ctx.fillRect(x - w * 0.004, y + h * 0.16, w * 0.012, h * 0.05);
+    ctx.fillRect(x - w * 0.004, y + h * 0.235, w * 0.012, w * 0.06);
+  }
 
   const sx = bx + bezel;
   const sy = by + bezel;
@@ -3365,6 +3367,22 @@ function drawPhone(ctx, x, y, w, h, dev, video, videoFit, videoScale, videoOffse
   } else if (dev.camera === "notch-wide") {
     const nw = sw * 0.34; const nh = sh * 0.028;
     roundRect(ctx, sx + (sw - nw) / 2, sy, nw, nh, nh * 0.6); ctx.fill();
+  } else if (dev.camera === "dynamic-island") {
+    const iw = sw * 0.28; const ih = sh * 0.026;
+    roundRect(ctx, sx + (sw - iw) / 2, sy + ih * 0.45, iw, ih, ih / 2); ctx.fill();
+  } else if (dev.camera === "window-bar") {
+    const barH = sh * 0.032;
+    ctx.fillStyle = "rgba(16, 18, 24, 0.82)";
+    ctx.fillRect(sx, sy, sw, barH);
+    const dotR = barH * 0.18;
+    const dotY = sy + barH / 2;
+    const dotColors = ["rgba(255,255,255,0.38)", "rgba(255,255,255,0.26)", "rgba(255,255,255,0.18)"];
+    dotColors.forEach((color, idx) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(sx + sw * 0.045 + idx * (dotR * 3.2), dotY, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
   ctx.restore();
 

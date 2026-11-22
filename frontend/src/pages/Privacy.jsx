@@ -5,7 +5,7 @@ export default function Privacy() {
     <LegalPage title="Privacy Policy" updated="September 2026">
       <LegalSection number={1} title="Overview">
         <p>
-          HookForge ("we," "our," or "the app") is an internal template-based tool that helps mobile app founders research reusable hook mechanics and generate short-form promotional videos from approved App Profiles. Exact-match video recreation is disabled. This Privacy Policy explains how we collect, use, and protect information when you use our application.
+          HookForge ("we," "our," or "the app") is an internal template-based tool that helps app and software founders research reusable hook mechanics and generate short-form promotional videos from approved App Profiles. Exact-match video recreation is disabled. This Privacy Policy explains how we collect, use, and protect information when you use our application.
         </p>
       </LegalSection>
 
@@ -28,7 +28,7 @@ export default function Privacy() {
 
       <LegalSection number={3} title="How We Use Your Information">
         <LegalList>
-          <LegalItem>To research mobile apps and draft reviewable App Profiles</LegalItem>
+          <LegalItem>To research apps and software products and draft reviewable App Profiles</LegalItem>
           <LegalItem>To analyze video hooks and abstract reusable template mechanics</LegalItem>
           <LegalItem>To generate template-based promotional videos from approved profiles and authorized assets</LegalItem>
           <LegalItem>To display trend research results relevant to your selected niche</LegalItem>

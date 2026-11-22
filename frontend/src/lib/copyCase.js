@@ -90,8 +90,11 @@ export function sentenceCase(value) {
     // would look like it worked only for values that happened to be flush.
     .replace(/^\s*([a-z])/, (_match, letter) => letter.toUpperCase())
     .replace(
-      new RegExp(`${SENTENCE_BOUNDARY.source}([a-z])`, "g"),
-      (_match, lead, letter) => lead + letter.toUpperCase()
+      new RegExp(`${SENTENCE_BOUNDARY.source}([a-z][^\\s]*)`, "g"),
+      (_match, lead, token) =>
+        MIXED_CASE_TOKEN.test(token)
+          ? lead + token
+          : lead + token[0].toUpperCase() + token.slice(1)
     );
 }
 

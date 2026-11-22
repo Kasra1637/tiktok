@@ -269,7 +269,7 @@ export default function BrandSetup() {
     { label: "When is the app reached for", values: spokenList("usage_moments") },
     { label: "The proof moment", values: [form.proof_moment] },
     { label: "Never show in the video", values: spokenList("must_not_show") },
-    { label: "Why they would not download", values: [form.viewer_objections] },
+    { label: "Why they would not try or download", values: [form.viewer_objections] },
   ];
   const listenAudience = () => [
     { label: "Target audience", values: [form.target_audience] },
@@ -765,28 +765,29 @@ export default function BrandSetup() {
           through it. */}
       <SectionCard
         className="page-content-enter"
-        title="Research a mobile app"
+        title="Research your app"
         icon={Smartphone}
-        description="Website, App Store and Google Play URLs — the draft appears below for review."
+        description="Paste your website or store URLs — the draft appears below for review."
       >
-          <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card" aria-label="Research a mobile app">
+          <form onSubmit={handleResearchApp} className="flex min-w-0 flex-col gap-2" data-testid="app-research-card" aria-label="Research your app">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
-                placeholder="Website URL (carries your positioning)"
+                placeholder="Website or product URL (carries your positioning)"
+                className="sm:col-span-2"
                 data-testid="website-url-input"
               />
               <Input
                 value={appstoreUrl}
                 onChange={(e) => setAppstoreUrl(e.target.value)}
-                placeholder="Apple App Store URL"
+                placeholder="Apple App Store URL (optional)"
                 data-testid="appstore-url-input"
               />
               <Input
                 value={playUrl}
                 onChange={(e) => setPlayUrl(e.target.value)}
-                placeholder="Google Play URL"
+                placeholder="Google Play URL (optional)"
                 data-testid="play-url-input"
               />
             </div>
@@ -799,7 +800,7 @@ export default function BrandSetup() {
                 <Input
                   value={supportUrls}
                   onChange={(e) => setSupportUrls(e.target.value)}
-                  placeholder="Supporting URLs, comma-separated (optional)"
+                  placeholder="Supporting URLs, comma-separated (optional, e.g. /features or docs)"
                   data-testid="support-urls-input"
                 />
                 <Textarea
@@ -1044,7 +1045,7 @@ export default function BrandSetup() {
                     <Input
                       value={form.app_category}
                       onChange={handleFieldChange("app_category")}
-                      placeholder="For example: Health & Fitness"
+                      placeholder="For example: Productivity, AI Writing, Health & Fitness"
                       data-testid="app-category-field"
                     />
                   </Field>
@@ -1063,7 +1064,7 @@ export default function BrandSetup() {
                     <Input
                       value={form.platforms}
                       onChange={handleFieldChange("platforms")}
-                      placeholder="For example: iOS, Android"
+                      placeholder="For example: Web, iOS, Android, macOS, Chrome"
                       data-testid="app-platforms-field"
                     />
                   </Field>
@@ -1204,9 +1205,9 @@ export default function BrandSetup() {
                     blank line — the "does now" line is what makes an objection
                     answerable rather than just a complaint to acknowledge. */}
                 <Field
-                  label="Why they would not download"
+                  label="Why they would not try or download"
                   hint="Three lines per objection, blank line between: the objection / what they use now / your honest answer. These become the video's argument."
-                  listen={listenParagraph("viewer_objections", "Why they would not download")}
+                  listen={listenParagraph("viewer_objections", "Why they would not try or download")}
                 >
                   <Textarea
                     value={form.viewer_objections}

@@ -103,6 +103,23 @@ class TestStoreListingExtraction:
         assert ai_service.page_text_with_metadata(
             "<html><body><p>Just body text.</p></body></html>") == "Just body text."
 
+    def test_web_app_og_title_and_site_name_survive(self):
+        """
+        Web and SaaS landing pages often put their positioning headline in
+        og:title/twitter:title or og:site_name when <title> is just the brand.
+        """
+        html = (
+            '<html><head><title>Linear</title>'
+            '<meta property="og:site_name" content="Linear Workspace">'
+            '<meta property="og:title" content="Linear \u2013 Plan and build software products">'
+            '<meta name="twitter:description" content="Issue tracking and sprint planning for web teams.">'
+            '</head><body><h1>Linear</h1></body></html>'
+        )
+        out = ai_service.page_text_with_metadata(html)
+        assert "Linear Workspace" in out
+        assert "Plan and build software products" in out
+        assert "Issue tracking and sprint planning for web teams." in out
+
 
 class TestJsShellBoundary:
     def test_a_script_rendered_shell_yields_only_its_title(self):

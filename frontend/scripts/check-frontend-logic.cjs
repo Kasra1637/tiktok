@@ -687,9 +687,10 @@ check("a truncated header sniffs as nothing, not as a guess",
     && DC.sniffRecordingContainer(new Uint8Array(8)) === null
     && DC.sniffRecordingContainer(new Uint8Array([0x3c, 0x21, 0x44, 0x4f, 0x43, 0x54, 0x59, 0x50])) === null);
 
-// Catalog parity with the standalone app: nothing dropped in the port.
+// Catalog parity with the standalone app plus iPhone and Web/Browser frames (ADR 0256).
 check("the device catalog survived the port",
-  DC.DEVICES.length === 7 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8");
+  DC.DEVICES.length === 9 && DC.DEVICES[0].id === "s24" && DC.DEVICES[6].id === "lg_g8"
+    && DC.DEVICES[7].id === "iphone_16_pro" && DC.DEVICES[8].id === "browser_window");
 check("the preset catalog survived the port",
   DC.PRESETS.length === 1 && DC.PRESETS[0].id === "tiktok");
 // Aurora Waves was removed deliberately (a catalog trim, not port drift),
@@ -1296,7 +1297,8 @@ check("Story paints only inside its window using hook styling and local video ti
 })(), "Story leaked outside its window or diverged from the shared hook painter");
 
 check("CTA variants and builtin look presets are populated",
-  Array.isArray(DC.CTA_COPY_VARIANTS) && DC.CTA_COPY_VARIANTS.length === 3 &&
+  Array.isArray(DC.CTA_COPY_VARIANTS) && DC.CTA_COPY_VARIANTS.length === 4 &&
+  DC.CTA_COPY_VARIANTS.includes("Start free in your browser — link in bio") &&
   Array.isArray(DC.BUILTIN_LOOK_PRESETS) && DC.BUILTIN_LOOK_PRESETS.length >= 3,
   "missing copy variants or look presets");
 
