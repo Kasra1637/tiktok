@@ -128,7 +128,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
           size="sm"
           disabled={busy}
           onClick={() => onDetach({ id: attachment.asset_id, label: name, kind: attachment.kind })}
-          title="Stops using this photo for the video you are building"
+          title="Detach from current video"
         >
           <X className="h-3.5 w-3.5" /> Remove
         </Button>
@@ -269,7 +269,7 @@ function AssetRow({
                 disabled={busy}
                 busy={busy}
                 onClick={() => onDetach(asset)}
-                title="Stops using this photo for the video you are building"
+                title="Detach from current video"
               >
                 <X className="h-3.5 w-3.5" /> Remove
               </Button>
@@ -920,7 +920,7 @@ export default function AssetLibrary({
         className={embedded ? undefined : "page-content-enter"}
         title={embedded ? undefined : "Presenter photos"}
         icon={UserRound}
-        description={embedded ? undefined : "A clear photo of the person you want on camera. It becomes the video's presenter reference."}
+        description={embedded ? undefined : "Upload a clear, front-facing photo in good lighting. It becomes your video's presenter reference."}
         data-testid="asset-upload-panel"
       >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">

@@ -582,7 +582,7 @@ export default function HookCta() {
           <SectionCard title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground" data-subtitle="">
-                Only approved App Profiles can make a hook in this studio.
+                Pick an approved app to start a fresh hook.
               </p>
               <AppPicker
                 profiles={approved}
@@ -600,7 +600,7 @@ export default function HookCta() {
                         {describeUnapprovedCount(unapproved.length)}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
-                        Draft profiles need a review before a hook can use them.
+                        Approve draft profiles first so they can generate hooks.
                       </p>
                       <Button variant="secondary" size="sm" asChild className="mt-3">
                         <Link to="/brand">Review in App Profile</Link>

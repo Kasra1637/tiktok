@@ -47,7 +47,7 @@ function EditorRoute({ generationId }) {
       .then((row) => {
         if (!row || row.status !== "completed") {
           setError(
-            "This render is not a finished clip, so there is nothing to edit. Pick a completed render instead."
+            "This clip isn't finished yet. Pick a completed video to edit."
           );
           setGeneration(null);
           return;
@@ -59,7 +59,7 @@ function EditorRoute({ generationId }) {
         const sourceUrl = durableMediaUrl(row);
         if (!sourceUrl) {
           setError(
-            "This render has no saved copy the browser can open. Open this clip in History to retry the durable save, or upload your own footage."
+            "Clip not saved yet. Retry saving in History or upload your own footage."
           );
           setGeneration(null);
           return;

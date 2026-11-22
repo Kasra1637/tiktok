@@ -754,7 +754,7 @@ export default function BrandSetup() {
       <PageHeader
         icon={Briefcase}
         title="App Profile"
-        description="Review and approve app details before creating videos."
+        description="Lock in your product facts once — every video starts from here."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {profiles.length > 1 && (

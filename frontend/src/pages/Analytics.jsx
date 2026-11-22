@@ -253,7 +253,7 @@ export default function Analytics() {
       ) : !hasAnything ? (
         <EmptyState
           icon={Activity}
-          title="Nothing captured yet"
+          title="No posted results yet"
           description="Create a clip, then add its posted link, views, and your vote in History."
           action={
             <div className="flex flex-col items-center gap-3">
@@ -885,7 +885,7 @@ function SignalReasons({ summary, events = [], profileId = "" }) {
   const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
   return (
     <SectionCard
-      title="Reasons you gave"
+      title="What you liked & disliked"
       icon={ListChecks}
       description="Your own codes on past rework."
       data-testid="analytics-reasons"

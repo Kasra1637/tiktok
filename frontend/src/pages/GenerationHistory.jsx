@@ -1458,7 +1458,8 @@ export default function GenerationHistory() {
       <PageHeader
         data-testid="history-header"
         icon={HistoryIcon}
-        title="Generation History"
+        title="History"
+        description="Review finished clips, copy post kits, and log real results."
       />
       <div className="history-filters space-y-2" aria-label="History filters">
         <div className="flex flex-wrap items-center gap-2">
@@ -1696,7 +1697,7 @@ export default function GenerationHistory() {
       ) : shouldShowHistoryEmpty({ loading, error, rowsLength: rows.length }) ? (
         <EmptyState
           icon={Film}
-          title="Nothing generated yet"
+          title="No videos yet"
           description="Create Video saves generated Hook + Story clips here."
           action={
             <div className="flex flex-col items-center gap-3">
