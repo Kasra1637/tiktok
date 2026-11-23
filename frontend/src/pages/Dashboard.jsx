@@ -165,6 +165,24 @@ function FirstVideoChecklist({ hasApprovedProfile, hasCompletedRender, hasDemoEx
 
   return (
     <section className="surface card-enter space-y-4" data-testid="dashboard-first-video-checklist">
+      {/* The count as a bar (ADR 0282): the same doneCount the text beside
+          the heading states, drawn as one thin indigo track across the top
+          of the card so progress reads at a glance. The fill animates its
+          width; the text count stays for anyone who wants the number. */}
+      <div
+        className="h-1 overflow-hidden rounded-full bg-[color:var(--indigo-10)]"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={steps.length}
+        aria-valuenow={doneCount}
+        aria-label="First video checklist progress"
+        data-testid="dashboard-first-video-progress"
+      >
+        <div
+          className="h-full rounded-full bg-[color:var(--brand-indigo)] transition-[width] duration-500"
+          style={{ width: `${(doneCount / steps.length) * 100}%` }}
+        />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionHeading icon={ListChecks}>First video checklist</SectionHeading>
         <span className="text-xs font-semibold text-muted-foreground">

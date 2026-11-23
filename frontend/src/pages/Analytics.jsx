@@ -7,6 +7,7 @@ import PageFrame from "../components/PageFrame";
 import { SectionCard } from "../components/SectionCard";
 import { AppPicker } from "../components/AppPicker";
 import { EmptyState } from "../components/EmptyState";
+import { AnalyticsEmptyArt, AppProfileEmptyArt } from "../components/EmptyStateArt";
 import { Skeleton } from "../components/ui/skeleton";
 import { FactChip, FactList } from "../components/FactChip";
 import { api, getErrorMessage } from "../lib/api";
@@ -241,7 +242,7 @@ export default function Analytics() {
         )}
         {loading ? null : error ? null : !profiles?.length && !hasAnything ? (
           <EmptyState
-            icon={TrendingUp}
+            illustration={<AppProfileEmptyArt />}
             title="No app yet"
             description="Create an App Profile to get started. Signals appear here as you work with it."
             action={
@@ -252,7 +253,7 @@ export default function Analytics() {
           />
       ) : !hasAnything ? (
         <EmptyState
-          icon={Activity}
+          illustration={<AnalyticsEmptyArt />}
           title="No posted results yet"
           description="Create a clip, then add its posted link, views, and your vote in History."
           action={

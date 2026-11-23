@@ -5087,6 +5087,35 @@ async function main() {
     if (pct() !== "38%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
   });
 
+  // ADR 0283: the active segment wears the crisp underline accent and a
+  // done step's badge carries the one-shot completion pulse; both styles
+  // live in index.css, the pulse inside the reduced-motion gate.
+  await check("the rail's active step wears a crisp underline and a done badge pulses once", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const active = ctx.container.querySelector('[data-testid^="studio-progress-segment-"][aria-current="step"]');
+    if (!active) throw new Error("the rail has no active segment");
+    if (!active.classList.contains("rail-segment-active")) {
+      throw new Error("the active rail segment carries no crisp underline accent");
+    }
+    const done = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
+    if (!done || done.getAttribute("data-state") !== "done") {
+      throw new Error("the profile segment is not done in this mount");
+    }
+    if (!done.querySelector(".rail-done-badge")) {
+      throw new Error("the done step's badge carries no completion pulse");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!css.includes(".rail-segment-active") || !css.includes("inset 0 -2px 0")) {
+      throw new Error("index.css carries no inset underline for the active rail segment");
+    }
+    if (!css.includes("@keyframes rail-done-pulse") || !css.includes(".rail-done-badge")) {
+      throw new Error("index.css carries no completion pulse for the rail's done badge");
+    }
+  });
+
   // The action bar names the one next action beside the arrow-only pair, so a
   // founder never has to guess what the wizard is waiting on. The line never
   // repeats the task line above and never carries the old "Continue when
@@ -10781,9 +10810,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (ctx.container.querySelector("a button, button a")) throw new Error("landing actions must not nest interactive elements");
     const questions = ctx.container.querySelectorAll('[data-testid="landing-questions"] details');
     // Eight since ADR 0278 added the getting-started, Hook + CTA and
-    // scroll-stopping questions Kasra ordered; the count moves only
-    // with the set.
-    if (questions.length !== 8 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
+    // scroll-stopping questions Kasra ordered; seven since ADR 0281
+    // removed the script-editing question and reordered the set
+    // most-important-first. The count moves only with the set.
+    if (questions.length !== 7 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
   });
 
   // Kasra's rule for the What you get grid (ADR 0156): exactly six cards —
@@ -12734,6 +12764,10 @@ async function runAnalyticsChecks() {
     expectText(ctx, "No posted results yet", "an empty Analytics page is not explained");
     expectText(ctx, "add its posted link, views, and your vote in History", "the empty Analytics next step is not named");
     if (!ctx.container.querySelector('a[href^="/create"]')) throw new Error("empty Analytics has no next action");
+    // ADR 0284: the empty state carries its branded mini-illustration.
+    if (!ctx.container.querySelector('[data-testid="empty-art-analytics"]')) {
+      throw new Error("the empty Analytics state carries no mini-illustration");
+    }
   });
 
   await check("no app at all points at the profile editor", async (ctx) => {
@@ -12751,6 +12785,10 @@ async function runAnalyticsChecks() {
     expectText(ctx, "Create an App Profile", "a founder with no app is told nothing");
     if (!ctx.container.querySelector('a[href="/brand"]')) {
       throw new Error("there is no way forward from an empty Analytics page");
+    }
+    // ADR 0284: the no-app state carries its own mini-illustration.
+    if (!ctx.container.querySelector('[data-testid="empty-art-profile"]')) {
+      throw new Error("the no-app Analytics state carries no mini-illustration");
     }
   });
 
@@ -13375,6 +13413,29 @@ async function runDashboardChecks() {
       throw new Error(
         `the auth fallbacks are ${defaults.join(", ") || "(none)"}, expected two /dashboard defaults`
       );
+    }
+  });
+
+  await check("the first video checklist draws its count as a progress bar", async (ctx) => {
+    const { forgetDraft } = load("lib/recentDraft.js");
+    forgetDraft();
+    // The default stub: an approved profile and no renders yet, so exactly
+    // one of the three steps is done.
+    await mountDashboard(ctx);
+    const card = ctx.container.querySelector('[data-testid="dashboard-first-video-checklist"]');
+    if (!card) throw new Error("the first video checklist did not render");
+    if (!card.textContent.includes("1 of 3 complete")) {
+      throw new Error(`the checklist count reads "${card.textContent.trim()}", expected "1 of 3 complete"`);
+    }
+    const bar = card.querySelector('[data-testid="dashboard-first-video-progress"]');
+    if (!bar) throw new Error("the checklist has no progress bar across its top");
+    if (bar.getAttribute("role") !== "progressbar" || bar.getAttribute("aria-valuemax") !== "3" || bar.getAttribute("aria-valuenow") !== "1") {
+      throw new Error("the checklist progress bar does not state 1 of 3 to assistive tech");
+    }
+    const fill = bar.firstElementChild;
+    const width = fill ? parseFloat(fill.style.width) : NaN;
+    if (!fill || Math.abs(width - 100 / 3) > 0.5) {
+      throw new Error(`the checklist progress fill is ${fill && fill.style.width}, expected about 33.3% for 1 of 3`);
     }
   });
 
@@ -20726,6 +20787,23 @@ async function runDemoCtaChecks() {
       hand.prepareHandViewImages = originalPrepare;
       global.fetch = originalFetch;
       clip.restore();
+    }
+  });
+
+  await check("an empty History wears its branded mini-illustration", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    global.__SMOKE_PARAMS = "";
+    await withApi({
+      getGenerationHistory: async () => ({ generations: [] }),
+      getAppProfiles: async () => ({ profiles: [PROFILE] }),
+    }, async () => {
+      await mount(GenerationHistory)(ctx);
+    });
+    expectText(ctx, "No videos yet", "an empty History page is not explained");
+    // ADR 0284: the empty state carries the clip-frame illustration in
+    // the landing line-art family, not a bare icon tile.
+    if (!ctx.container.querySelector('[data-testid="empty-art-history"]')) {
+      throw new Error("the empty History state carries no mini-illustration");
     }
   });
 

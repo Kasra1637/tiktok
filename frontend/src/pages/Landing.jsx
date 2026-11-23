@@ -390,12 +390,8 @@ const QUESTIONS = [
     answer: "Your product's link and one clear photo of your presenter. HookForge studies the link, drafts the hook and script from your product facts, and builds the video around your photo — no filming, no blank page.",
   },
   {
-    question: "Can I use footage I already have?",
-    answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first — the studio finishes what you bring.",
-  },
-  {
-    question: "Can I change the script before generating?",
-    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the craft grade — all before anything renders, never after.",
+    question: "How does my photo become a video that stops the scroll?",
+    answer: "Your photo becomes the presenter — a real person on screen, already moving from the first frame, not a still picture that talks. The hook lands in the first two seconds, the story keeps the scene alive around them, and your real demo and closing message finish the job. The whole video is built for TikTok and ready in a few minutes, with no filming or editing from you.",
   },
   {
     question: "What is Hook + CTA?",
@@ -406,16 +402,16 @@ const QUESTIONS = [
     answer: "Your photo guides the AI presenter; it is not a recording of you or a clone of your voice. Check the likeness and delivery in the finished clip before using it.",
   },
   {
-    question: "How does my photo become a video that stops the scroll?",
-    answer: "Your photo becomes the presenter — a real person on screen, already moving from the first frame, not a still picture that talks. The hook lands in the first two seconds, the story keeps the scene alive around them, and your real demo and closing message finish the job. The whole video is built for TikTok and ready in a few minutes, with no filming or editing from you.",
+    question: "Does HookForge post or track results for me?",
+    answer: "No. Download your videos and publish them yourself. In History, add the posted TikTok link and paste back the results — views, 3-second retention, average watch, saves, and shares. Analytics lines those numbers up against each clip’s craft score, and from three posted clips the patterns start steering your next videos. Views are manually logged, not synced from TikTok, and do not prove conversions.",
+  },
+  {
+    question: "Can I use footage I already have?",
+    answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first — the studio finishes what you bring.",
   },
   {
     question: "Will my clip have sound, and how can I export it?",
     answer: "Audio depends on the video model you pick; you can generate with sound or silent for voiceover. Demo + CTA exports a crisp 1080×1920 MP4 at 30 fps directly in Chrome or Edge, ready for TikTok, Reels, and Shorts.",
-  },
-  {
-    question: "Does HookForge post or track results for me?",
-    answer: "No. Download your videos and publish them yourself. In History, add the posted TikTok link and paste back the results — views, 3-second retention, average watch, saves, and shares. Analytics lines those numbers up against each clip’s craft score, and from three posted clips the patterns start steering your next videos. Views are manually logged, not synced from TikTok, and do not prove conversions.",
   },
 ];
 

@@ -1,7 +1,7 @@
 import { IconTile } from "./IconTile";
 import { useReducedMotionPreference } from "../lib/reducedMotion";
 
-export function EmptyState({ icon, title, description, action, headingLevel = "h2" }) {
+export function EmptyState({ icon, illustration, title, description, action, headingLevel = "h2" }) {
   const Heading = headingLevel;
   const reduceMotion = useReducedMotionPreference();
 
@@ -21,14 +21,24 @@ export function EmptyState({ icon, title, description, action, headingLevel = "h
           }}
         />
         <div className="relative flex flex-col items-center justify-center gap-4">
-          {icon && (
+          {/* An illustration (ADR 0284) stands in the icon tile's seat when
+              a page brings one; the tile stays the default everywhere else. */}
+          {illustration ? (
+            <span
+              className="card-enter block w-40 max-w-full"
+              style={reduceMotion ? { animation: "none" } : undefined}
+              aria-hidden="true"
+            >
+              {illustration}
+            </span>
+          ) : icon ? (
             <span
               className="card-enter"
               style={reduceMotion ? { animation: "none" } : undefined}
             >
               <IconTile icon={icon} size="empty" />
             </span>
-          )}
+          ) : null}
           <Heading className="font-display text-base font-semibold tracking-tight">{title}</Heading>
           {description && (
             <p className="max-w-md text-base leading-relaxed text-muted-foreground">{description}</p>

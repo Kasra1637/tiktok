@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
+import { HistoryEmptyArt } from "../components/EmptyStateArt";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { AppSelect } from "../components/AppSelect";
@@ -1703,7 +1704,7 @@ export default function GenerationHistory() {
         </div>
       ) : shouldShowHistoryEmpty({ loading, error, rowsLength: rows.length }) ? (
         <EmptyState
-          icon={Film}
+          illustration={<HistoryEmptyArt />}
           title="No videos yet"
           description="Create Video saves generated Hook + Story clips here."
           action={

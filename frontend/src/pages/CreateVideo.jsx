@@ -3583,11 +3583,11 @@ export default function CreateVideo() {
               data-state={isLocked ? "locked" : s.state}
               data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
+              className={`tap-chip flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all duration-300 ${
                 isLocked
                   ? "border-dashed border-[color:var(--hairline)] opacity-70 hover:border-[color:var(--indigo-35)]"
                   : active
-                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
+                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] rail-segment-active"
                     : s.state === "done"
                       ? "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
                       : "border-dashed border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
@@ -3595,9 +3595,9 @@ export default function CreateVideo() {
             >
               <span
                 aria-hidden="true"
-                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-300 ${
                   s.state === "done"
-                    ? "bg-[color:var(--brand-indigo)] text-white"
+                    ? "bg-[color:var(--brand-indigo)] text-white rail-done-badge"
                     : "border border-current text-muted-foreground"
                 }`}
               >
