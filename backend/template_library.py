@@ -739,12 +739,18 @@ CONTENT_ANGLE_KINDS = [
 # was created by the wizard or an operator.
 TEMPLATE_ORIGINS = ["curated", "research_draft", "custom"]
 
-# The single asset kind the product accepts. Drives the studio's asset picker
+# The asset kinds the product accepts. Drives the studio's asset picker
 # and the facets endpoint. There used to be nine (screenshots, recordings,
-# logos, photos, audio...); every video is now generated from the founder's
-# photograph plus App Profile facts, so the character reference stands alone.
+# logos, photos, audio...); the library then went face-only, because every
+# video is generated from the founder's photograph plus App Profile facts.
+# ADR 0274 revived exactly two of the retired kinds — screen_recording for
+# video clips and screenshot for images — so everything a founder adds in
+# Demo + CTA is also held in the library. The character reference remains
+# the only kind that can be attached to a project.
 ASSET_KINDS = [
     "character_reference",
+    "screen_recording",
+    "screenshot",
 ]
 
 # The honest evidence note for templates that have no measured performance yet.
@@ -786,8 +792,8 @@ MIN_HOOK_SECONDS = 2
 # ---------------------------------------------------------------------------
 # Each entry is abstract. `content_slots` are the fill-in points the creative
 # plan fills for a specific app; `required_assets` is always exactly
-# ["character_reference"] — the face that anchors every video. Nothing else
-# is ever uploaded, attached, or composited.
+# ["character_reference"] — the face that anchors every video. Other asset
+# kinds are held in the library (ADR 0274) but never attached or composited.
 CURATED_TEMPLATES = [
     {
         "name": "Pattern Interrupt",
@@ -1101,11 +1107,10 @@ def normalize_asset_kind(kind: Optional[str]) -> str:
     """
     Map free-form kind input onto the controlled vocabulary.
 
-    Face-only library: anything that is not the character reference
-    normalizes to "". Callers treat "" as absent — the upload endpoint
-    refuses it, the list filter matches nothing — so a retired or mistyped
-    kind can never silently become a screenshot overlay the way the old
-    "screenshot" fallback allowed.
+    Anything outside ASSET_KINDS normalizes to "". Callers treat "" as
+    absent — the upload endpoint refuses it, the list filter matches
+    nothing — so a retired or mistyped kind can never silently become a
+    screenshot overlay the way the old "screenshot" fallback allowed.
     """
     k = (kind or "").strip().lower().replace("-", "_").replace(" ", "_")
     return k if k in ASSET_KINDS else ""

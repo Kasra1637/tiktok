@@ -242,7 +242,7 @@ export const TOURS = {
   // Targets AssetLibrary at /assets and /app-profiles/:id/assets.
   assets: {
     id: "assets",
-    label: "Asset Library tour",
+    label: "Assets tour",
     steps: [
       {
         target: '[data-testid="asset-profile-picker"], [data-testid="asset-library-header"]',

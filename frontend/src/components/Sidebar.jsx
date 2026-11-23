@@ -72,9 +72,11 @@ const NAV_ITEMS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
   { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
-  /* The library sits with the working pages, directly above Analytics: it holds
-     the presenter photos the renders above are generated from. */
-  { to: "/assets", label: "Asset Library", icon: Images, testId: "assets-nav-link", hint: "Presenter photos by app" },
+  /* Assets sits with the working pages, directly above Analytics: it holds
+     the presenter photos the renders above are generated from, and the
+     clips and images founders add in Demo + CTA (ADR 0274). "Assets" is
+     Kasra's name for the stored files and the place they live. */
+  { to: "/assets", label: "Assets", icon: Images, testId: "assets-nav-link", hint: "Photos and clips by app" },
   /* Results, last: it is the one page that only means something once the pages
      above it have produced something. Leading with it would open on an empty
      ledger for anyone still setting up. */

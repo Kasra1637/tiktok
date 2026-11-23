@@ -198,16 +198,82 @@ class TestAssetLibrary:
 
     def test_upload_rejects_a_retired_kind(self, api, tmp_root):
         """
-        Face-only product: screenshots, recordings, logos, photos, and audio
-        are refused at the door — the pipeline that consumed them is gone.
+        Kinds the library never took back (ADR 0274 revived exactly two —
+        screenshot and screen_recording) stay refused at the door: logos,
+        audio, and anything unrecognized are not assets the product holds.
         """
         profile = _profile(api, "Retired Kind")
         src = _make_image(tmp_root / "shot.png")
-        for kind in ("screenshot", "screen_recording", "logo", "audio", "nonsense"):
+        for kind in ("logo", "audio", "nonsense"):
             with pytest.raises(HTTPException) as err:
                 _upload(api, profile["id"], kind, "shot.png", src)
             assert err.value.status_code == 400
-            assert "Only the character reference" in str(err.value.detail)
+            assert "cannot be uploaded" in str(err.value.detail)
+
+    def test_upload_accepts_a_video_clip_as_a_screen_recording(self, api, tmp_root):
+        """
+        ADR 0274: a Demo + CTA clip joins the library as a screen_recording,
+        through the same storage path as the presenter photo. It is not a
+        face, so the face pre-flight must not run on it — no count, no
+        warning — and its length is measured, not taken on trust.
+        """
+        profile = _profile(api, "Clip Upload")
+        src = _make_clip(tmp_root / "demo.mp4", seconds=1)
+        created = _upload(api, profile["id"], "screen_recording", "demo.mp4", src)
+        assert created["kind"] == "screen_recording"
+        assert Path(created["file_path"]).is_file()
+        assert created["media_url"].startswith(f"/api/media/assets/{created['id']}")
+        assert created["face_count"] is None
+        assert "face_warning" not in created
+        assert created["duration_seconds"] > 0
+
+    def test_upload_accepts_an_image_as_a_screenshot(self, api, tmp_root):
+        """
+        ADR 0274: an image-sequence still joins the library as a screenshot.
+        A solid-color screenshot has no face; if the character reference's
+        face check leaked onto this kind it would land as face_count 0 with
+        a warning, so both must be absent.
+        """
+        profile = _profile(api, "Image Upload")
+        src = _make_image(tmp_root / "screen.png")
+        created = _upload(api, profile["id"], "screenshot", "screen.png", src)
+        assert created["kind"] == "screenshot"
+        assert Path(created["file_path"]).is_file()
+        assert created["face_count"] is None
+        assert "face_warning" not in created
+
+    def test_upload_rejects_an_image_declared_as_a_clip(self, api, tmp_root):
+        """The extension must match the kind: a still is not a video clip."""
+        profile = _profile(api, "Image As Clip")
+        src = _make_image(tmp_root / "still.png")
+        with pytest.raises(HTTPException) as err:
+            _upload(api, profile["id"], "screen_recording", "still.png", src)
+        assert err.value.status_code == 400
+        assert ".mp4" in str(err.value.detail)
+
+    def test_upload_rejects_a_clip_declared_as_an_image(self, api, tmp_root):
+        """The extension must match the kind: a clip is not a still image."""
+        profile = _profile(api, "Clip As Image")
+        src = _make_clip(tmp_root / "clip.mp4", seconds=1)
+        with pytest.raises(HTTPException) as err:
+            _upload(api, profile["id"], "screenshot", "clip.mp4", src)
+        assert err.value.status_code == 400
+        assert ".png" in str(err.value.detail)
+
+    def test_listing_returns_every_accepted_kind(self, api, tmp_root):
+        """The library lists everything the server holds (ADR 0274)."""
+        profile = _profile(api, "All Kinds Listed")
+        face = _upload(api, profile["id"], "character_reference", "face.png",
+                       _make_image(tmp_root / "face.png"))
+        shot = _upload(api, profile["id"], "screenshot", "shot.png",
+                       _make_image(tmp_root / "shot.png"))
+        clip = _upload(api, profile["id"], "screen_recording", "clip.mp4",
+                       _make_clip(tmp_root / "clip.mp4", seconds=1))
+        listed = _run(api.list_assets(profile_id=profile["id"], user_id=ANON))
+        by_id = {a["id"]: a["kind"] for a in listed["assets"]}
+        assert by_id[face["id"]] == "character_reference"
+        assert by_id[shot["id"]] == "screenshot"
+        assert by_id[clip["id"]] == "screen_recording"
 
     def test_upload_rejects_empty_file(self, api, tmp_root):
         profile = _profile(api, "Empty Asset")

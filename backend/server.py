@@ -170,7 +170,7 @@ from routers.assets import (
     configure_assets,
     _public_asset, _asset_usage_index, _attach_usage,
     _asset_dir, _ensure_asset_file,
-    ASSET_MAX_BYTES, ASSET_IMAGE_TYPES, ASSET_ALLOWED_EXT, ASSET_AUDIO_ROLES,
+    ASSET_MAX_BYTES, ASSET_MEDIA_TYPES, ASSET_ALLOWED_EXT, ASSET_AUDIO_ROLES,
     list_assets, get_asset_usage, upload_asset, update_asset, delete_asset,
     attach_asset_to_project, detach_asset_from_project,
 )

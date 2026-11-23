@@ -353,7 +353,10 @@ class TestTemplateListing:
         # offered two lengths no studio-eligible model could produce in a single
         # pass — a length is a render length, not a plan for several.
         assert facets["supported_durations"] == [8, 10, 12, 15]
-        assert facets["asset_kinds"] == ["character_reference"]
+        # ADR 0274: the library accepts the presenter photo plus the two
+        # Demo + CTA kinds — video clips and images — alongside it.
+        assert facets["asset_kinds"] == [
+            "character_reference", "screen_recording", "screenshot"]
 
     def test_facets_state_how_many_renders_each_length_costs(self, api):
         """The length picker labels the render cost before the length is chosen.

@@ -79,6 +79,7 @@ import { useOpeningMessages } from "./useOpeningMessages";
 import { TRANSITIONS } from "./transitions";
 import { useEditSession } from "./editSession";
 import { readDraft } from "./draftStorage";
+import { uploadEntryToLibrary } from "./libraryUpload";
 import { IMAGE_SECONDS, clampImageSeconds, composeImageFrame, imageSequenceDuration } from "./imageSequence";
 import { createImageSequencePlayer } from "./imagePlayer";
 import { TrimTimeline } from "./TrimTimeline";
@@ -908,6 +909,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const appendScratchRef = useRef(null);
   const appendImagesInputRef = useRef(null);
   const appendImagesModeRef = useRef("replace");
+  // ADR 0274: the draft entries already filed into the Assets library, by
+  // entry id. A ref, not draft state — filing is a side effect of adding,
+  // not part of the edit — so undo, redo, and draft restore never re-file
+  // an entry, and the draft snapshot (and its parity check) is untouched.
+  const librarySentRef = useRef(new Set());
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
 
@@ -1179,7 +1185,22 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     };
   }, [sourceUrl, draftReady, generation?.id, clearExportErrors]);
 
-  const handleFile = (file) => {
+  // ADR 0274: file one library copy of a media entry the founder just
+  // added. A side effect only — the helper swallows failures, sends
+  // nothing without an app profile, and never files an entry twice — so
+  // editing, preview, draft save, and export keep working from the local
+  // blob exactly as they did before the library grew.
+  const fileEntryToLibrary = (entry, kind) => {
+    uploadEntryToLibrary({
+      profileId: openingProfileId,
+      entryId: entry.id,
+      file: entry.blob,
+      kind,
+      sent: librarySentRef.current,
+    });
+  };
+
+  const handleFile = (file, { saveToLibrary = false } = {}) => {
     if (!file) return;
     setError(null);
     setSaveError(null);
@@ -1202,7 +1223,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     const url = URL.createObjectURL(file);
     sourceObjectUrlRef.current = url;
     setVideoUrl(url);
-    setBaseMedia({ id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "video" });
+    const entry = { id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "video" };
+    setBaseMedia(entry);
+    // Only the founder's own pick files a library copy: the History
+    // attach path reuses this handler, and a finished render is already
+    // stored on the server as a generation — filing it again would hold
+    // the same bytes twice, against the store-once rule (ADR 0274).
+    if (saveToLibrary) fileEntryToLibrary(entry, "screen_recording");
     setSourceFileName(file.name || "video");
     setSourceReplaced(true);
   };
@@ -1482,7 +1509,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setAppendStart(0);
     setAppendEnd(null);
     setAppendUrl(url);
-    setAppendMedia({ id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "added clip" });
+    const entry = { id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "added clip" };
+    setAppendMedia(entry);
+    fileEntryToLibrary(entry, "screen_recording");
     setAppendName(file.name || "added clip");
   };
 
@@ -1502,6 +1531,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       name: file.name || "image",
       seconds: IMAGE_SECONDS.default,
     }));
+    entries.forEach((entry) => fileEntryToLibrary(entry, "screenshot"));
     if (mode === "add" && appendImages?.length) {
       setAppendImages([...appendImages, ...entries]);
       return;
@@ -1897,7 +1927,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (file) handleFile(file);
+            if (file) handleFile(file, { saveToLibrary: true });
           }}
         />
         {/* The added clip drives a separate input for the same reason: one input

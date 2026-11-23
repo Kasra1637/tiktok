@@ -187,7 +187,7 @@ def test_assets_router_is_owned_by_routers_assets():
                  "_public_asset", "_asset_usage_index", "_attach_usage",
                  "_asset_dir", "_ensure_asset_file"):
         assert getattr(server, name) is getattr(assets, name), name
-    for name in ("ASSET_MAX_BYTES", "ASSET_IMAGE_TYPES", "ASSET_ALLOWED_EXT",
+    for name in ("ASSET_MAX_BYTES", "ASSET_MEDIA_TYPES", "ASSET_ALLOWED_EXT",
                  "ASSET_AUDIO_ROLES"):
         assert getattr(server, name) is getattr(assets, name), name
 

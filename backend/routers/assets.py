@@ -1,10 +1,13 @@
 """Asset library routes for one App Profile: single owner.
 
-The founder's photograph — the one permitted upload — its usage history, and
-the attach/detach wiring onto studio projects all live here. server.py stays
-thin composition: it includes this router and re-exports the helpers its
-serializers and the render path still call (`_public_asset`,
-`_asset_usage_index`, `_asset_dir`, `_ensure_asset_file`).
+Everything the library holds for one app — the founder's photograph, the
+video clips and images a founder adds in Demo + CTA (ADR 0274), their
+usage history, and the attach/detach wiring onto studio projects — lives
+here. Only the photograph attaches: clips and images are stored and
+listed, never fed to a project. server.py stays thin composition: it
+includes this router and re-exports the helpers its serializers and the
+render path still call (`_public_asset`, `_asset_usage_index`,
+`_asset_dir`, `_ensure_asset_file`).
 
 Shared stateless deps (auth, models, media_signing, pipeline, storage_service,
 template_library) import here directly. The DB helpers and the couple of
@@ -25,6 +28,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 import media_signing
+import overlays
 import pipeline
 import storage_service
 import template_library
@@ -51,11 +55,19 @@ def _cfg(name):
 
 
 ASSET_MAX_BYTES = 200 * 1024 * 1024  # 200 MB ceiling
-ASSET_IMAGE_TYPES = {
+# Each accepted kind's media family (ADR 0274): the presenter photo and a
+# Demo + CTA image are stills; a Demo + CTA clip is a video. The extension
+# allow-list is per family, so a file can never be stored under a kind its
+# bytes do not match. The video set is the app's own — the same three the
+# Demo + CTA export endpoint accepts.
+ASSET_MEDIA_TYPES = {
     "character_reference": "image",
+    "screenshot": "image",
+    "screen_recording": "video",
 }
 ASSET_ALLOWED_EXT = {
     "image": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
+    "video": {".mp4", ".mov", ".webm"},
 }
 ASSET_AUDIO_ROLES = ("background", "voiceover")
 GENERATED_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -268,16 +280,19 @@ async def upload_asset(
     user_id: str = Depends(get_current_user_id),
 ):
     """
-    Upload the founder's photograph into one App Profile's library.
+    Upload one file into one App Profile's library.
 
-    Face-only product: the character reference is the single permitted
-    upload. Every video is generated from that photograph plus App Profile
-    facts, so screenshots, recordings, logos, photos, and audio are refused
-    here rather than accepted into a pipeline that can no longer use them.
+    Three kinds are accepted (ADR 0274): the character reference — the
+    founder's photograph, still the only asset a project can attach — plus
+    the two Demo + CTA kinds, screen_recording for a video clip and
+    screenshot for an image, so everything a founder adds there is held
+    here too. Logos, audio, and every other retired kind stay refused.
 
-    The file extension must match. That check exists because a video file
-    declared as a photograph would make the identity pass feed the wrong
-    input and produce a silently broken submission.
+    The file extension must match the kind's media family. That check
+    exists because a video file declared as a photograph would make the
+    identity pass feed the wrong input and produce a silently broken
+    submission — and a still declared as a clip would do the same to the
+    library's video group.
     """
     profile = await _cfg("_fetch_one")(
         "SELECT id FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
@@ -286,10 +301,10 @@ async def upload_asset(
         raise HTTPException(status_code=404, detail="App Profile not found")
 
     asset_kind = template_library.normalize_asset_kind(kind)
-    if asset_kind != "character_reference":
+    if not asset_kind:
         await _cfg("_record_asset_event")(
             "upload_rejected",
-            f"Only the character reference can be uploaded (asked for: {kind}).",
+            f"That kind of asset cannot be uploaded (asked for: {kind}).",
             user_id,
             brand_profile_id=profile_id, asset_kind=kind,
             filename=file.filename or "",
@@ -297,12 +312,12 @@ async def upload_asset(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Only the character reference can be uploaded. Every video is "
-                "generated from your photograph plus the App Profile — "
-                "screenshots, recordings, logos, and audio are not accepted."
+                "That kind of asset cannot be uploaded. The library holds "
+                "a character reference photo, video clips, and images — "
+                "logos and audio are not accepted."
             ),
         )
-    expected_type = ASSET_IMAGE_TYPES.get(asset_kind)
+    expected_type = ASSET_MEDIA_TYPES.get(asset_kind)
 
     raw = await file.read()
     if not raw:
@@ -344,22 +359,31 @@ async def upload_asset(
     target = _asset_dir(profile_id) / f"{asset_id}{ext}"
     _cfg("_write_durable_upload_cache")(target, raw)
 
-    # No playability probe: the only uploadable kind is a still photograph,
-    # so there is no audio whose decodability would need verifying up front.
+    # A clip's length is measured, never taken from the caller — the same
+    # rule the Demo + CTA export follows — so the library row states how
+    # long the clip it holds actually is. Stills have no duration.
     duration_seconds = None
+    if asset_kind == "screen_recording":
+        try:
+            duration_seconds = overlays.probe_duration(target) or None
+        except Exception:  # a probe failure must not fail the upload
+            duration_seconds = None
 
-    # Pre-flight face count. The provider's privacy filter fires on photos
-    # where no single face anchors the frame, so count locally and warn now
-    # rather than at generation time. Never blocks the upload: the detector
-    # can be wrong (stylised photo, sunglasses), and a warning the founder
-    # can overrule beats a refusal they cannot.
+    # Pre-flight face count, for the character reference only. The
+    # provider's privacy filter fires on photos where no single face
+    # anchors the frame, so count locally and warn now rather than at
+    # generation time. Never blocks the upload: the detector can be wrong
+    # (stylised photo, sunglasses), and a warning the founder can overrule
+    # beats a refusal they cannot. A clip or a screenshot is not a face,
+    # so the check does not run on them and their rows carry no count.
     face_count = None
-    try:
-        from face_crop import count_faces_from_path
-        face_count = count_faces_from_path(target)
-    except Exception as e:  # never fail an upload over detection
-        logger.warning(f"Face count skipped for {asset_id} ({e}).")
-        face_count = None
+    if asset_kind == "character_reference":
+        try:
+            from face_crop import count_faces_from_path
+            face_count = count_faces_from_path(target)
+        except Exception as e:  # never fail an upload over detection
+            logger.warning(f"Face count skipped for {asset_id} ({e}).")
+            face_count = None
 
     now = now_iso()
     await _cfg("_execute")(
@@ -404,14 +428,14 @@ async def update_asset(
 
     updates = payload.model_dump(exclude_unset=True)
     if "kind" in updates:
-        # Face-only library: a retired or mistyped kind normalizes to "" and
-        # must not be written, or the row would advertise an asset the
-        # product can no longer accept.
+        # A retired or mistyped kind normalizes to "" and must not be
+        # written, or the row would advertise an asset the product does
+        # not accept. The three library kinds (ADR 0274) may be written.
         kind = template_library.normalize_asset_kind(updates["kind"])
-        if kind != "character_reference":
+        if not kind:
             raise HTTPException(
                 status_code=400,
-                detail="Only the character reference can be stored in the library.",
+                detail="That kind of asset cannot be stored in the library.",
             )
         updates["kind"] = kind
     set_clauses, values = [], []

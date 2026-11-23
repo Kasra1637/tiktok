@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import PageHeader from "../components/PageHeader";
 import PageFrame from "../components/PageFrame";
 import EmptyState from "../components/EmptyState";
-import { SectionCard } from "../components/SectionCard";
+import { SectionCard, GroupLabel } from "../components/SectionCard";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, mediaUrl } from "../lib/api";
@@ -19,19 +19,38 @@ import { DeleteAssetConfirmDialog } from "../components/studio/DeleteAssetConfir
 import {
   Images, AlertTriangle, Upload, Trash2, Archive, ArchiveRestore,
   ShieldCheck, Paperclip, UserRound, Music, Link2, Check, ImageOff, X, Info,
+  Film,
 } from "lucide-react";
 
-// Face-only product: the character reference is the single permitted upload.
-// It is the only kind passed to the video model as an identity reference —
-// the face the video is generated from. Rows of retired kinds can still sit
-// in the library from before; they can be archived or deleted here but never
-// attached again.
+// The library holds three kinds (ADR 0274): the character reference — the
+// only kind passed to the video model as an identity reference, and the
+// only kind that can be attached to a project — plus the Demo + CTA kinds,
+// screen_recording (a video clip) and screenshot (an image), which the
+// editor files here when a founder adds them. Rows of retired kinds can
+// still sit in the library from before; they can be archived or deleted
+// here but never attached again.
 //
-// Uploads are therefore unconditional rather than chosen. This used to be a
+// Uploads from this page are therefore unconditional rather than chosen:
+// the page's own upload is the presenter photo. This used to be a
 // one-option <select>: a dropdown whose only possible answer was the only
 // possible value, which read as a choice the founder had to get right and
 // changed nothing. The kind is now sent as a constant.
 const UPLOAD_KIND = "character_reference";
+
+// The kinds the library accepts today. Anything else on a row is retired.
+const LIBRARY_KINDS = ["character_reference", "screen_recording", "screenshot"];
+
+// Plain-words names for the kinds a founder meets as files, shown on the
+// row beside its facts. The character reference needs none — the section
+// it lives in already says it is the presenter photo.
+const KIND_LABELS = {
+  screen_recording: "Video clip",
+  screenshot: "Image",
+};
+
+function isVideoAsset(asset) {
+  return asset.kind === "screen_recording" || asset.kind === "background_video";
+}
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -153,11 +172,11 @@ function AssetRow({
   highlight = false,
   uploadWarning = "",
 }) {
-  const isVideo = asset.kind === "screen_recording" || asset.kind === "background_video";
+  const isVideo = isVideoAsset(asset);
   const isAudio = asset.kind === "audio";
   // Rows of retired kinds still render — archive and delete stay available so
   // the library can be cleaned — but they can never be attached again.
-  const isRetired = asset.kind !== "character_reference";
+  const isRetired = !LIBRARY_KINDS.includes(asset.kind);
   const uses = asset.used_in || [];
   const attachable = Boolean(projectId && onAttach);
   const usable = attachable && asset.status === "active" && asset.rights_confirmed;
@@ -219,8 +238,11 @@ function AssetRow({
               ("Archived", "Rights unconfirmed") and stay badges; a date and a
               duration are measurements, and this is the same vocabulary the
               generation row uses for them. */}
-          {(asset.created_at || asset.duration_seconds) && (
+          {(KIND_LABELS[asset.kind] || asset.created_at || asset.duration_seconds) && (
             <FactList className="mt-1">
+              {KIND_LABELS[asset.kind] ? (
+                <FactChip>{KIND_LABELS[asset.kind]}</FactChip>
+              ) : null}
               {asset.created_at ? (
                 <FactChip>Uploaded {new Date(asset.created_at).toLocaleDateString()}</FactChip>
               ) : null}
@@ -232,7 +254,7 @@ function AssetRow({
           <UsageHistory uses={uses} />
         </div>
         <div className="flex shrink-0 gap-1">
-          {attachable && !isAudio && !isRetired && !attached && !slotHeldByAnother && (
+          {attachable && asset.kind === "character_reference" && !attached && !slotHeldByAnother && (
             <Button
               variant="secondary"
               size="sm"
@@ -328,11 +350,11 @@ function AssetRow({
       )}
       {isRetired && (
         <p className="text-sm text-muted-foreground">
-          Retired kind — uploads went face-only. Archive or delete it to clean up;
-          it can no longer be attached to a project.
+          Retired kind — it can no longer be attached to a project.
+          Archive or delete it to clean up.
         </p>
       )}
-      {attachable && !usable && !attached && (
+      {attachable && asset.kind === "character_reference" && !usable && !attached && (
         <p className="text-sm text-muted-foreground">
           {asset.status !== "active"
             ? "Restore this asset before attaching it."
@@ -344,14 +366,32 @@ function AssetRow({
 }
 
 /**
- * The standalone list with a hook-text-style search.
+ * The standalone list, grouped by photo and by video, with a search.
  *
- * One photo per app is the norm, but retired kinds and archives accumulate,
- * and a founder hunting "the group shot to delete" should not scroll for it.
- * The filter is client-side over the loaded list — the endpoint has no text
- * query — and a query that matches nothing says so instead of rendering an
- * empty list.
+ * Kasra's grouping (ADR 0274): photos — presenter photos and images —
+ * under one heading, video clips under another, so a founder hunting a
+ * file finds it by what it is before they read a single name. Retired
+ * audio rows, when any survive, get a group of their own rather than
+ * being filed under a heading they do not match. A group with nothing
+ * in it does not render.
+ *
+ * The filter is client-side over the loaded list — the endpoint has no
+ * text query — and it crosses the groups: one search over everything,
+ * not one per group. A query that matches nothing says so instead of
+ * rendering an empty list.
  */
+const ASSET_GROUPS = [
+  { id: "photos", label: "Photos", icon: Images },
+  { id: "videos", label: "Videos", icon: Film },
+  { id: "audio", label: "Audio", icon: Music },
+];
+
+function assetGroupId(asset) {
+  if (isVideoAsset(asset)) return "videos";
+  if (asset.kind === "audio") return "audio";
+  return "photos";
+}
+
 function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
   const q = query.trim().toLowerCase();
   const listed = q
@@ -371,7 +411,7 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search photos…"
+            placeholder="Search assets…"
             aria-label="Search assets by name or kind"
             data-testid="asset-search"
             data-active={query ? "true" : undefined}
@@ -389,7 +429,16 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
           No assets match “{query.trim()}”. Clear the search to see everything.
         </p>
       ) : (
-        listed.map((a) => <div key={a.id}>{renderRow(a)}</div>)
+        ASSET_GROUPS.map((group) => {
+          const rows = listed.filter((a) => assetGroupId(a) === group.id);
+          if (!rows.length) return null;
+          return (
+            <div key={group.id} data-testid={`asset-group-${group.id}`} className="space-y-4">
+              <GroupLabel icon={group.icon}>{group.label}</GroupLabel>
+              {rows.map((a) => <div key={a.id}>{renderRow(a)}</div>)}
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -542,9 +591,14 @@ export default function AssetLibrary({
     embedded && !attachedAsset && !attachedReference
       ? otherAssets.filter((a) => a.kind === "character_reference")
       : [];
-  const collapsedAssets = presenterCandidates.length
-    ? otherAssets.filter((a) => a.kind !== "character_reference")
-    : otherAssets;
+  // Video assets never appear in the embedded picker at all (ADR 0274):
+  // it is a photo picker, and a clip behind the "other photos" fold would
+  // be a video hiding in a photo control.
+  const collapsedAssets = (
+    presenterCandidates.length
+      ? otherAssets.filter((a) => a.kind !== "character_reference")
+      : otherAssets
+  ).filter((a) => !isVideoAsset(a));
 
   const load = useCallback(async () => {
     if (!activeProfileId) return;
@@ -776,7 +830,7 @@ export default function AssetLibrary({
           <PageHeader
             data-testid="asset-library-header"
             icon={Images}
-            title="Asset Library"
+            title="Assets"
           />
         )}
         {loading ? (
@@ -853,7 +907,7 @@ export default function AssetLibrary({
         <PageHeader
           data-testid="asset-library-header"
           icon={Images}
-          title="Asset Library"
+          title="Assets"
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {/* Shown whenever there is something to switch between. With a
@@ -1083,7 +1137,7 @@ export default function AssetLibrary({
         // it says what the photo is for — so that branch stays.
         embedded ? null : (
           <p className="text-base text-muted-foreground">
-            No photos yet. In Create Video, an uploaded photo attaches to your draft and guides its presenter.
+            Nothing here yet. Upload a presenter photo above, or add clips and images in Demo + CTA — they are filed here too.
           </p>
         )
       ) : embedded ? (

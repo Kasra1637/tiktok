@@ -13166,6 +13166,16 @@ async function runSidebarNavChecks() {
             "is the canonical selector for the sidebar's first link."
         );
       }
+      // ADR 0274: the library's visible name is Kasra's word for the
+      // stored files — "Assets" — while its route and testid stay put,
+      // like every other rename in this list.
+      if (!/to: "\/assets", label: "Assets", icon: Images, testId: "assets-nav-link"/.test(src)) {
+        throw new Error(
+          "the Assets link changed its label, route, icon or testId. assets-nav-link " +
+            "is the canonical selector for the library link, /assets is its route, " +
+            "and \"Assets\" is the name Kasra picked for the stored files (ADR 0274)."
+        );
+      }
       // Hook + CTA has NO sidebar link of its own (ADR 0248, its
       // placement refined by ADRs 0251/0259): Kasra asked for fewer
       // sidebar links, so the page is reached from the Create Video
@@ -16881,7 +16891,7 @@ async function runDemoCtaChecks() {
       ["BrandSetup.jsx", "App Profile", ["Lock in your product facts once — every video starts from here."]],
       ["DemoCtaStudio.jsx", "Demo + CTA", ["Style a finished clip: phone or full-frame, then add CTA.", "Style any clip: phone mockup or full-frame for History."]],
       ["CreateVideo.jsx", "Create Video", []],
-      ["AssetLibrary.jsx", "Asset Library", []],
+      ["AssetLibrary.jsx", "Assets", []],
       ["GenerationHistory.jsx", "History", ["Review finished clips, copy post kits, and log real results."]],
       ["Analytics.jsx", "Analytics", ["Your recent renders and how they performed."]],
       ["Dashboard.jsx", "Dashboard", ["One next step up top, and every workflow one click away."]],
@@ -17685,6 +17695,121 @@ async function runDemoCtaChecks() {
     } finally {
       await act(async () => ctx.root.unmount());
       clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("Demo + CTA files each added clip and image into the Assets library once", async (ctx) => {
+    // ADR 0274: adding a base clip, a second clip, or an image-sequence
+    // still in the editor also stores that file once in the Assets
+    // library, under its own name and the matching kind — a side effect
+    // of the add, fired from the same pick that loads the editor.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-lib", brand_profile_id: "b1" };
+    const uploads = [];
+    global.__SMOKE_DRAFTS = new Map();
+    // Component code resolves FormData from Node's global scope, whose
+    // FormData cannot hold a jsdom File (it stringifies it) — so the
+    // form the helper builds would lose the file before the stub could
+    // read it. Swap in the jsdom realm's FormData for these two checks,
+    // the same kind of surgery installLoadedClipStubs does for URL.
+    const nodeFormData = global.FormData;
+    global.FormData = dom.window.FormData;
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const pick = async (testid, file) => {
+      const input = ctx.container.querySelector(`[data-testid="${testid}"]`);
+      if (!input) throw new Error(`no ${testid} input`);
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+    };
+    try {
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [COMPLETED] }),
+          uploadAsset: async (profileId, form) => {
+            uploads.push({ profileId, kind: form.get("kind"), name: form.get("file")?.name });
+            return { id: `asset-${uploads.length}` };
+          },
+        },
+        async () => {
+          await mount(Editor, { generation: GEN })(ctx);
+          await pick("demo-cta-file-input", new dom.window.File([new Uint8Array(16)], "base.mp4", { type: "video/mp4" }));
+          const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+          if (!probe) throw new Error("the uploaded base clip was never probed");
+          await act(async () => {
+            probe.onloadedmetadata();
+          });
+          await clip.flush();
+          await clip.flush();
+          await pick("append-upload-input", new dom.window.File(["second"], "second.mp4", { type: "video/mp4" }));
+          await pick("append-images-input", new dom.window.File(["img"], "shot.png", { type: "image/png" }));
+          await clip.flush();
+        }
+      );
+      const seen = uploads.map((u) => `${u.profileId}:${u.kind}:${u.name}`);
+      const expected = [
+        "b1:screen_recording:base.mp4",
+        "b1:screen_recording:second.mp4",
+        "b1:screenshot:shot.png",
+      ];
+      if (seen.join("|") !== expected.join("|")) {
+        throw new Error(`library uploads were ${seen.join(", ") || "none"}, expected ${expected.join(", ")}`);
+      }
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      global.FormData = nodeFormData;
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("a failed library upload never breaks the Demo + CTA editor", async (ctx) => {
+    // ADR 0274: the library copy is a side effect. When it fails, the
+    // editor flow completes unchanged — the clip loads, and the failure
+    // never surfaces as a founder-facing error.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-lib-fail", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    // Same FormData realm swap as the upload check above: without it the
+    // form build itself fails before the stub can throw, and this check
+    // would pass without ever exercising the failure it names.
+    const nodeFormData = global.FormData;
+    global.FormData = dom.window.FormData;
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    try {
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [COMPLETED] }),
+          uploadAsset: async () => {
+            throw new Error("library down");
+          },
+        },
+        async () => {
+          await mount(Editor, { generation: GEN })(ctx);
+          const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+          if (!input) throw new Error("no file input");
+          const file = new dom.window.File([new Uint8Array(16)], "base.mp4", { type: "video/mp4" });
+          Object.defineProperty(input, "files", { value: [file], configurable: true });
+          await act(async () => {
+            input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+          });
+          await clip.flush();
+          await clip.flush();
+          if (!ctx.container.querySelector("video")) {
+            throw new Error("the clip did not load after the failed library upload");
+          }
+          if ((ctx.container.textContent || "").includes("library down")) {
+            throw new Error("the library failure surfaced in the editor");
+          }
+        }
+      );
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      global.FormData = nodeFormData;
       delete global.__SMOKE_DRAFTS;
     }
   });
@@ -21961,6 +22086,115 @@ async function runDemoCtaChecks() {
         }
         if (!text.includes("1 of 2 match")) {
           throw new Error("the search reports no count of what matched");
+        }
+      }
+    );
+  });
+
+  await check("Assets groups its list by photo and video, and search crosses both", async (ctx) => {
+    // ADR 0274: the library holds everything — presenter photos, Demo +
+    // CTA clips, and image-sequence stills — grouped the way Kasra asked
+    // ("listed by photo and video, so user can find easily"), searchable
+    // by name across the groups, with an honest empty state.
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    const stamp = new Date().toISOString();
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAssets: async () => ({
+          assets: [
+            { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: stamp, used_in: [] },
+            { id: "a2", kind: "screenshot", status: "active", rights_confirmed: true, label: "Checkout screen", name: "checkout.png", created_at: stamp, used_in: [] },
+            { id: "a3", kind: "screen_recording", status: "active", rights_confirmed: true, name: "demo-clip.mp4", duration_seconds: 12, created_at: stamp, used_in: [] },
+          ],
+        }),
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1" })(ctx);
+        const photos = ctx.container.querySelector('[data-testid="asset-group-photos"]');
+        const videos = ctx.container.querySelector('[data-testid="asset-group-videos"]');
+        if (!photos || !videos) {
+          throw new Error("the library list is not grouped by photo and video");
+        }
+        if (!photos.textContent.includes("Founder photo") || !photos.textContent.includes("Checkout screen")) {
+          throw new Error("the Photos group does not hold the photo and the image");
+        }
+        if (photos.textContent.includes("demo-clip.mp4")) {
+          throw new Error("the clip sits in the Photos group");
+        }
+        if (!videos.textContent.includes("demo-clip.mp4")) {
+          throw new Error("the Videos group does not hold the clip");
+        }
+        if (!videos.textContent.includes("Video clip")) {
+          throw new Error("the clip row carries no plain-words kind label");
+        }
+        const shotRow = [...photos.querySelectorAll("div")].find(
+          (d) => d.className.includes("inset-panel") && (d.textContent || "").includes("Checkout screen")
+        );
+        if (!shotRow || !shotRow.textContent.includes("Image")) {
+          throw new Error("the image row carries no plain-words kind label");
+        }
+        if ((ctx.container.textContent || "").includes("Retired kind")) {
+          throw new Error("a live library kind is badged as retired");
+        }
+        const clipRow = [...videos.querySelectorAll("div")].find(
+          (d) => d.className.includes("inset-panel") && (d.textContent || "").includes("demo-clip.mp4")
+        );
+        if (!clipRow || !clipRow.querySelector('[aria-label="Delete asset"]') || !clipRow.querySelector('[aria-label="Archive asset"]')) {
+          throw new Error("the clip row lacks the archive/delete every row carries");
+        }
+        // Search filters across both groups, by name.
+        const search = ctx.container.querySelector('[data-testid="asset-search"]');
+        if (!search) throw new Error("the library has no search");
+        await typeInto(ctx, search, "demo-clip", "search the library");
+        let text = ctx.container.textContent || "";
+        if (!text.includes("demo-clip.mp4") || text.includes("Founder photo")) {
+          throw new Error("the search does not narrow the library to the clip");
+        }
+        // And a query that matches nothing says so, honestly.
+        await typeInto(ctx, search, "nothing-matches-this", "search for nothing");
+        text = ctx.container.textContent || "";
+        if (!text.includes("No assets match")) {
+          throw new Error("a search with no match shows no honest empty state");
+        }
+      }
+    );
+  });
+
+  await check("the embedded presenter picker still shows photos only", async (ctx) => {
+    // ADR 0274: the library grew, but the Presenter Photo picker embedded
+    // in the studio is a photo picker — a video asset must not leak into
+    // it, not even behind its "other photos" fold.
+    const AssetLibrary = load("pages/AssetLibrary.jsx").default;
+    const stamp = new Date().toISOString();
+    await withApi(
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAssets: async () => ({
+          assets: [
+            { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: stamp, used_in: [] },
+            { id: "a2", kind: "screen_recording", status: "active", rights_confirmed: true, label: "Demo clip", name: "demo.mp4", created_at: stamp, used_in: [] },
+          ],
+        }),
+      },
+      async () => {
+        await mount(AssetLibrary, { profileId: "p1", projectId: "proj1", projectAssets: [], embedded: true })(ctx);
+        let text = ctx.container.textContent || "";
+        if (!text.includes("Founder photo")) {
+          throw new Error("the presenter photo is missing from the picker");
+        }
+        if (text.includes("Demo clip")) {
+          throw new Error("a video asset leaked into the presenter photo picker");
+        }
+        const fold = [...ctx.container.querySelectorAll("button")].find(
+          (b) => (b.textContent || "").includes("other photo")
+        );
+        if (fold) {
+          await clickEl(ctx, fold, "open the other photos fold");
+          text = ctx.container.textContent || "";
+          if (text.includes("Demo clip")) {
+            throw new Error("a video asset hides behind the picker's other-photos fold");
+          }
         }
       }
     );
