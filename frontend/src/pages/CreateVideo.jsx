@@ -790,6 +790,7 @@ export default function CreateVideo() {
     // gates on every angles refresh (e.g. shuffle), collapsing a revealed
     // list to the CTA. Depend on the resolved id instead; a dangling pick
     // (id set, row gone) still reads as no angle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, angle?.id, objective]);
   // The detail card prefers the full library, but a failed library fetch must
   // not blank a chosen template the recommendation rows already carry.
@@ -953,11 +954,11 @@ export default function CreateVideo() {
   // discarded the adjustment the click was overriding.
   const templateChosenByHand = useRef(false);
   const reduceMotion = useReducedMotionPreference();
-  const scrollToSubstep = (id) => {
+  const scrollToSubstep = useCallback((id) => {
     document
       .getElementById(id)
       ?.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-  };
+  }, [reduceMotion]);
   // Auto-scroll to the section a pick just unlocked, in the order the
   // Audience & template screen finishes: angle unlocks the video goals,
   // a finished tailoring run unlocks the templates, and a hand-picked
@@ -972,7 +973,7 @@ export default function CreateVideo() {
     if (!angleId || angleId === prevAngleId) return;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep("substep-goal"));
-  }, [angleId, step]);
+  }, [angleId, step, scrollToSubstep]);
   const prevRecommendationsVisibleRef = useRef(false);
   useEffect(() => {
     const wasVisible = prevRecommendationsVisibleRef.current;
@@ -981,7 +982,7 @@ export default function CreateVideo() {
     if (!visible || wasVisible) return;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep("substep-template"));
-  }, [recommendationsVisible, visibleRecommendations, step]);
+  }, [recommendationsVisible, visibleRecommendations, step, scrollToSubstep]);
   // Set only by a hand pick below, and consumed by the effect that follows,
   // so the automatic preselect of the top template never jumps past the
   // template cards to the photo section the founder has not chosen yet.
@@ -995,7 +996,7 @@ export default function CreateVideo() {
     handPickedTemplateRef.current = false;
     if (step !== 1) return;
     requestAnimationFrame(() => scrollToSubstep(TEMPLATE_PHOTO_ID));
-  }, [templateId, step]);
+  }, [templateId, step, scrollToSubstep]);
 
 
 
