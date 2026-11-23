@@ -433,6 +433,10 @@ export default function Landing() {
       <section className="relative overflow-hidden" data-testid="landing-hero">
         <div className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-20 text-center sm:pt-28 lg:grid lg:grid-cols-[1.02fr_1fr] lg:items-center lg:gap-14 lg:text-left">
         <div className="min-w-0">
+          <EyebrowPill testId="landing-hero-badge" className="animate-fade-up mb-5">
+            Learns from your input
+          </EyebrowPill>
+
           <h1
             className="animate-fade-up font-display text-hero font-semibold leading-[1.05] tracking-tight sm:text-hero-wide"
             style={{ animationDelay: "60ms" }}
@@ -444,8 +448,7 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            No filming, no editing, no blank page. Turn your product facts into a
-            hook, script, and finished TikTok video — and get sharper with every clip you post.
+            No filming, no editing, no blank page—get the hook, script, and finished cut automatically.
           </p>
 
           <div

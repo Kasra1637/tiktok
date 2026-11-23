@@ -21,9 +21,11 @@ module.exports = {
       // Nov 21 2026, restoring the hero's dominance over the page's
       // 30/36px section headings, so they ride as named tokens —
       // arbitrary text sizes stay banned in marketing source.
+      // ADR 0277 (Nov 22 2026): Kasra eased both sizes down two
+      // points — 46px on mobile, 58px from sm up.
       fontSize: {
-        hero: '48px',
-        'hero-wide': '60px'
+        hero: '46px',
+        'hero-wide': '58px'
       },
       borderRadius: {
         lg: 'var(--radius)',

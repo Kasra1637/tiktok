@@ -11576,6 +11576,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // change and ruled to KEEP the new copy as it stands. The pins
   // below therefore assert the current lines verbatim; the retired
   // lines above stay asserted absent where they were.
+  //
+  // ADR 0276 (Nov 22 2026): Kasra replaced the sub-headline with his
+  // own shorter line — "No filming, no editing, no blank page—get
+  // the hook, script, and finished cut automatically." The headline
+  // pin is unchanged; the sub-headline pin below asserts his line.
   await check("the hero headline and sub-headline are Kasra's chosen copy", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
@@ -11592,8 +11597,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // ADR 0215 set the tokens to 42/50px; the parallel ADR 0263
     // re-decided their values to 48px on mobile and 60px from sm up,
     // and Kasra kept that stack (ADR 0268) — the class pin below is
-    // unchanged, because only the token values moved. The pin keeps
-    // the retired utility steps from quietly coming back.
+    // unchanged, because only the token values moved. ADR 0277
+    // eased the values down two points, to 46px and 58px; the
+    // classes still did not move. The pin keeps the retired utility
+    // steps from quietly coming back.
     const h1Classes = h1.className.split(/\s+/);
     for (const cls of ["text-hero", "sm:text-hero-wide"]) {
       if (!h1Classes.includes(cls)) {
@@ -11608,8 +11615,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page. Turn your product facts into a " +
-          "hook, script, and finished TikTok video — and get sharper with every clip you post."
+        "No filming, no editing, no blank page—get the hook, script, and finished cut automatically."
       )
     ) {
       throw new Error("the hero sub-headline is not the pinned line (ADR 0268)");
@@ -11625,16 +11631,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  // The hero proof pill is gone (ADR 0261, superseding that part
-  // of ADR 0260 the same day it shipped): Kasra rejected the pill
-  // and every copy draft offered for it, and ordered the hero back
-  // to opening with the headline alone. The pin asserts the
-  // absence: no landing-proof-pill anywhere on the page, and the
-  // headline is the first thing standing in its hero column. The
-  // closing CTA's own EyebrowPill ("Ready when you are") is a
-  // different seat and stands untouched. GET /api/landing-proof
-  // stays live on the backend, unused by the page.
-  await check("the hero opens with the headline and no proof pill", async (ctx) => {
+  // The hero proof pill stays gone (ADR 0261, superseding that part
+  // of ADR 0260 the same day it shipped): no landing-proof-pill
+  // anywhere on the page, and GET /api/landing-proof stays live on
+  // the backend, unused by the page. What stands above the headline
+  // since ADR 0277 (Kasra's order, Nov 22 2026) is a different
+  // thing: a plain EyebrowPill label in the section-eyebrow style —
+  // "Learns from your input" — carrying no counts and no proof
+  // copy. The pin asserts the badge's seat as the first thing in
+  // the hero column and its exact words, with the headline right
+  // under it. The closing CTA's own EyebrowPill ("Ready when you
+  // are") is a different seat and stands untouched.
+  await check("the hero opens with the learning badge and no proof pill", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     await act(async () => {});
     if (ctx.container.querySelector('[data-testid="landing-proof-pill"]')) {
@@ -11644,8 +11652,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
     if (!h1) throw new Error("the hero headline is missing");
-    if (h1.parentElement.firstElementChild !== h1) {
-      throw new Error("something stands above the hero headline again");
+    const badge = hero.querySelector('[data-testid="landing-hero-badge"]');
+    if (!badge) throw new Error("the hero learning badge is missing (ADR 0277)");
+    if (badge.textContent.trim() !== "Learns from your input") {
+      throw new Error("the hero badge does not carry the pinned line (ADR 0277)");
+    }
+    if (h1.parentElement.firstElementChild !== badge) {
+      throw new Error("the learning badge does not stand above the hero headline (ADR 0277)");
     }
   });
 
