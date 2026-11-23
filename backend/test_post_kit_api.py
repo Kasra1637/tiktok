@@ -430,6 +430,51 @@ class TestPostKitCaptionGuards:
         assert "captions" not in kit
         assert len(kit["hashtags"]) == 5
 
+    def test_hook_only_render_can_write_a_post_kit(self, api, monkeypatch):
+        """A short Hook + CTA render has its approved hook line and NO
+        script (ADR 0244) — the hook is its whole spoken piece. It must be
+        able to carry post copy like any other render. The old both-required
+        guard raised here, which is the red 'needs the approved hook and
+        script' error on every hook render's History card (both the kit
+        written at completion and the Generate post copy click)."""
+        seen = {}
+
+        async def fake_chat(**kwargs):
+            seen.update(kwargs)
+            return {
+                "caption": "I keep missing my own patterns — what would you notice first?",
+                "hashtags": ["#moodpatterns", "#adhd", "#journaling", "#routine", "#selfcheck"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        project["script"] = ""  # hook-only render, exactly as Hook + CTA stores it
+        kit = _run(api.ai_service.generate_post_kit(project, profile))
+        assert kit["caption"].endswith("?")
+        assert len(kit["hashtags"]) == 5
+        # The model is told the shape it was given, so the caption is
+        # grounded in the hook instead of an invented script.
+        brief = str(seen.get("system_message", "")) + str(seen.get("prompt", ""))
+        assert "short hook" in brief
+
+    def test_a_render_with_no_words_at_all_is_still_loud(self, api, monkeypatch):
+        """A hook-only render is fine; a render with NEITHER hook nor
+        script still fails loudly rather than inventing copy."""
+        async def fake_chat(**kwargs):
+            return {
+                "caption": "Stop writing empty pages — the first line is the hardest part. What stalls you?",
+                "hashtags": ["#FocusTimer", "#a", "#b", "#c", "#d"],
+                "cover_text": "Stop writing empty pages",
+            }
+
+        monkeypatch.setattr(api.ai_service, "_chat_json", fake_chat)
+        project, profile = self._materials()
+        project["hook_line"] = ""
+        project["script"] = ""
+        with pytest.raises(RuntimeError, match="hook or script"):
+            _run(api.ai_service.generate_post_kit(project, profile))
+
     def test_too_few_hashtags_is_loud(self, api, monkeypatch):
         async def fake_chat(**kwargs):
             return {

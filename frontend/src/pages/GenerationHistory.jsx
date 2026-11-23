@@ -903,8 +903,15 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </div>
               )}
               {/* Identity lives once, in the summary at this record's head above — nothing below repeats it. */}
+              {/* The two record sections ride one grid. At the paired
+                  breakpoint they stand side by side and STRETCH to one
+                  height, so a short slot (a hook render's Plan context
+                  has no demo brief; a fresh kit's Post copy fills in)
+                  reads as the same sized panel as its neighbour instead
+                  of a ragged half-height box — the same paired rhythm
+                  on every card (ADR 0153). */}
               {(row.post_kit || row.story_kit || showEmptyKit || showEmptyStoryKit || row.audience || row.demo_brief || row.location) && (
-                <div className={`history-record-sections grid grid-cols-1 items-start gap-3${sectionsPaired ? " history-record-sections-paired" : ""}`}>
+                <div className={`history-record-sections grid grid-cols-1 items-stretch gap-3${sectionsPaired ? " history-record-sections-paired" : ""}`}>
                   {showEmptyStoryKit && (
                     <div
                       className="space-y-2 rounded-xl border border-dashed border-[color:var(--hairline-strong)] px-3 pb-3 pt-1.5"

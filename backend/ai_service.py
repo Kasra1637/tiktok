@@ -3404,8 +3404,9 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     family, which routes a clip to nobody in particular. When the volume
     research cannot speak (no source, no counts), the pool's first five
     ship on wording alone — the kit never waits on, or dies with, the
-    research. Grounded strictly in this render's own hook, script, and
-    CTA plus the profile's verified facts. Anything outside that fails
+    research. Grounded strictly in this render's own words — its hook and
+    script when it has them (a short Hook + CTA render has a hook and no
+    script) — and its CTA plus the profile's verified facts. Anything outside that fails
     loudly instead of shipping as post copy: banned claims raise,
     guarantee language raises, unmentioned prices/plans/outcomes are
     forbidden with clamped lengths, and a hashtag set off the strategy
@@ -3422,8 +3423,13 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
     hook = str((project or {}).get("hook_line") or "").strip()
     script = str((project or {}).get("script") or "").strip()
     cta = str((project or {}).get("cta") or "").strip()
-    if not hook or not script:
-        raise RuntimeError("Post kit needs the render's approved hook and script.")
+    # A short Hook + CTA render has its approved hook line and NO script
+    # (ADR 0244) — the hook IS its whole spoken piece. It must be able to
+    # carry post copy like any other render, so require the render's own
+    # words in one form or the other, never both. The caption is grounded in
+    # whichever the render actually has, and the model is told which shape.
+    if not hook and not script:
+        raise RuntimeError("Post kit needs the render's approved hook or script.")
 
     def _bits(*names):
         out = []
@@ -3446,7 +3452,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         "features": feature_bits or "(unstated)",
         "use_moments": moment_bits or "(unstated)",
         "hook_line": hook,
-        "script": script,
+        "script": script or "(no extended script — a short hook; the hook line above is the whole spoken piece)",
         "call_to_action": cta or "(none)",
         "plan_objective": (project or {}).get("objective") or "(unstated)",
         "plan_audience": (project or {}).get("audience") or "(unstated)",

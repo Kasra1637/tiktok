@@ -23459,6 +23459,12 @@ await check(
           if (!stack?.className.includes("gap-3") || stack.className.includes("gap-2")) {
             throw new Error("the record sections do not ride the related-blocks gap");
           }
+          // The two panels stand at ONE height (the founder's paired-card
+          // standard): a short slot stretches to its neighbour instead of
+          // ending ragged halfway down the card.
+          if (!stack?.className.includes("items-stretch") || stack?.className.includes("items-start")) {
+            throw new Error("the paired record sections do not stretch to one height");
+          }
           const contextRule = context.querySelector("dl")?.parentElement;
           if (!contextRule?.className.includes("border-t")) {
             throw new Error("plan context lacks the header hairline post copy carries");
