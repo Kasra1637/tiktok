@@ -16,7 +16,7 @@ import { isWinnerRow, nextTakeFor, pickNextTake } from "../lib/nextTake";
 import { useVerifiedDraftIds } from "../hooks/useVerifiedDraftIds";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import TourStartLink from "../components/onboarding/TourStartLink";
-import { TrendingUp, AlertTriangle, Activity, Clapperboard, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown, ChevronRight } from "lucide-react";
+import { TrendingUp, AlertTriangle, Activity, ListChecks, CalendarDays, ThumbsUp, ThumbsDown, Minus, Crown, Download, RotateCcw, LayoutTemplate, PenLine, CopyPlus, ChevronDown } from "lucide-react";
 
 // Compare the same saved results History displays; activity stays separate
 // from reach, and neither views nor workflow signals imply conversions.
@@ -269,21 +269,14 @@ export default function Analytics() {
           <p data-testid="analytics-scope" className="text-sm text-muted-foreground">
             Your {renders?.length ?? 0} newest renders{selectedId ? " for this app" : " across all apps, unassigned exports included"}. Everything below uses this same set.
           </p>
-          {/* The summary/verdict band shares the desktop width two-across
-              (audit 2026-11-14, finding 6): these cards used to stack
-              full-width in one long ledger. The per-clip ledger inside
-              Clip results and the weekly chart below keep the full width —
-              they are the wide reads. The pair stretches to one height
-              (ADR 0159), the rule the History cards follow: Renders no
-              longer ends early over dead space while Clip results runs
-              long beside it. */}
+          {/* Clip results stands alone at full width — a wide read,
+              like the weekly chart below. It used to share the desktop
+              width two-across with the Renders funnel card, the pair
+              stretched to one height (ADR 0159); Kasra removed the
+              Renders section (ADR 0272), so the pairing grid went
+              with it and the ledger keeps the whole row. */}
           {renders?.length > 0 && (
-            <div className="grid items-stretch gap-6 lg:grid-cols-2">
-              <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} verdictSummary={verdictSummary} />
-              {renders !== null && renders.length > 0 && (
-                <RenderFunnel generations={renders} profileId={selectedId} />
-              )}
-            </div>
+            <ClipResults generations={renders} profileId={selectedId} pick={takePick} draftIds={draftIds} verdictSummary={verdictSummary} />
           )}
           {renders !== null && renders.length > 0 && (
             <RenderActivity generations={renders} />
@@ -558,132 +551,6 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
           Ranked by recorded views; missing counts sort last.
         </p>
       </div>
-    </SectionCard>
-  );
-}
-
-/** One render inside a status group: its identity and landing day, both
- * linking to the History row that owns it. */
-function StatusRenderRow({ row, historyHref }) {
-  const date = shortDate(row.created_at);
-  return (
-    <li className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary/20">
-      <Link
-        to={`${historyHref}#generation-${row.id}`}
-        className="min-w-0 truncate text-sm text-[color:var(--brand-indigo)] hover:underline"
-      >
-        {clipName(row)}
-      </Link>
-      {date && <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{date}</span>}
-    </li>
-  );
-}
-
-// How many renders a status shows before pointing at History for the rest.
-// Twenty since ADR 0159: the funnel card stands as tall as Clip results
-// beside it, and the honest fill for that height is the renders themselves,
-// not a six-row list and a pointer at the rest.
-const STATUS_LIST_LIMIT = 20;
-
-/**
- * The render funnel: every generation for this app, counted by status and
- * openable to the renders behind each count.
- *
- * Same rows History shows, so the counts here and the rows there can never
- * disagree. Archived renders keep their own group rather than folding into
- * completed — an archived clip was finished, but it is not on the shelf
- * anymore, and merging the two would overstate what is usable.
- *
- * The first status with rows opens on arrival: a count you can expand is only
- * worth reading if the expansion is visible, and one group open keeps the card
- * shorter than the four lists it stands for.
- */
-function RenderFunnel({ generations = [], profileId = "" }) {
-  const byStatus = {
-    completed: generations.filter((g) => g?.status === "completed"),
-    failed: generations.filter((g) => g?.status === "failed"),
-    archived: generations.filter((g) => g?.status === "archived"),
-    active: generations.filter((g) => !["completed", "failed", "archived"].includes(g?.status)),
-  };
-  const groups = [
-    { key: "completed", label: "Completed" },
-    { key: "failed", label: "Failed" },
-    { key: "active", label: "In progress" },
-    { key: "archived", label: "Archived" },
-  ];
-  const [openStatus, setOpenStatus] = useState(
-    () => groups.find((group) => byStatus[group.key].length)?.key || null
-  );
-  const historyHref = profileId ? `/history?profile=${encodeURIComponent(profileId)}` : "/history";
-  return (
-    <SectionCard
-      title="Renders"
-      icon={Clapperboard}
-      description="Open a status to see the renders behind it."
-      data-testid="analytics-funnel"
-    >
-      <ul className="divide-y divide-[color:var(--hairline)]">
-        {groups.filter((group) => byStatus[group.key].length).map((group) => {
-          const rows = byStatus[group.key];
-          const isOpen = openStatus === group.key;
-          const panelId = `analytics-status-panel-${group.key}`;
-          const shown = rows.slice(0, STATUS_LIST_LIMIT);
-          return (
-            <li key={group.key} data-testid={`analytics-status-${group.key}`}>
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                aria-controls={isOpen ? panelId : undefined}
-                onClick={() => setOpenStatus((current) => (current === group.key ? null : group.key))}
-                data-testid={`analytics-status-toggle-${group.key}`}
-                className="focus-ring flex w-full items-center justify-between gap-4 rounded-xl px-2 py-2 text-left text-sm transition-colors hover:bg-secondary/20 hover:text-foreground"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[color:var(--hairline)] bg-secondary/30">
-                    <ChevronRight
-                      className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
-                    />
-                  </span>
-                  <span className="truncate text-muted-foreground">{group.label}</span>
-                </span>
-                <FactChip>{rows.length}</FactChip>
-              </button>
-              {isOpen && (
-                <div id={panelId} className="ml-3 space-y-1 border-l border-[color:var(--hairline)] py-1 pl-3">
-                  <ul className="space-y-0.5 text-xs">
-                    {shown.map((row) => <StatusRenderRow key={row.id} row={row} historyHref={historyHref} />)}
-                  </ul>
-                  {rows.length > shown.length && (
-                    <Link
-                      to={historyHref}
-                      className="inline-block px-2 text-xs text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
-                    >
-                      +{rows.length - shown.length} more in History
-                    </Link>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {groups.some((group) => !byStatus[group.key].length) && (
-          <li data-testid="analytics-status-empty" className="flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm">
-            <span className="min-w-0 truncate text-muted-foreground">{groups.filter((group) => !byStatus[group.key].length).map((group) => group.label).join(" · ")} — nothing here</span>
-            <FactChip>0</FactChip>
-          </li>
-        )}
-      </ul>
-      <p className="flex items-center justify-between gap-4 border-t border-[color:var(--hairline)] pt-3 text-sm text-muted-foreground">
-        <span>{generations.length} total</span>
-        <Link
-          to={historyHref}
-          data-testid="analytics-funnel-history"
-          title="Open this app in History"
-          className="underline-offset-2 transition hover:text-foreground hover:underline"
-        >
-          View in History
-        </Link>
-      </p>
     </SectionCard>
   );
 }

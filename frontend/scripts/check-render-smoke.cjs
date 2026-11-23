@@ -10744,7 +10744,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     for (const pattern of [
       /own video.*don’t need to generate a Hook \+ Story first/,
       /not a recording of you or a clone of your voice/,
-      /Audio depends.*some models produce silent clips/,
+      /Audio depends on the video model you pick; you can generate with sound or silent for voiceover/,
       /1080×1920 MP4 at 30 fps.*Chrome or Edge/,
       /publish them yourself.*posted TikTok link.*manually logged, not synced from TikTok.*do not prove conversions/,
     ]) {
@@ -10760,7 +10760,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const steps = [...ctx.container.querySelectorAll('[data-testid="landing-how-it-works"] h3')];
     if (steps.length !== 5) throw new Error("expected five workflow steps");
     const workflow = ctx.container.querySelector('[data-testid="landing-how-it-works"]').textContent;
-    for (const phrase of ["approve the facts", "set a goal", "both are required", "presenter photo", "save it", "Second clip", "publish them yourself"]) {
+    // One verbatim action phrase per step, in step order (ADR 0268
+    // re-pinned these to the kept copy polish: the steps were reworded,
+    // so the phrases now name what each step actually says today —
+    // approve the facts, pick goal + viewer, the presenter photo, review
+    // then render, and the ready-to-post export).
+    for (const phrase of ["approve the facts", "Pick goal + viewer", "presenter photo", "Review then render", "export one ready-to-post MP4"]) {
       if (!workflow.includes(phrase)) throw new Error(`missing workflow action: ${phrase}`);
     }
     if (workflow.includes("Tone is optional")) {
@@ -11564,24 +11569,32 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // earlier line tightened with every meaning beat kept. The "One
   // photo in" hero, the "steer the next one" line and the held
   // "One link, one photo" headline (never shipped) stay off.
+  //
+  // ADR 0268 (Nov 22 2026): a parallel agent's copy pass replaced
+  // both lines — headline "Turn your app's URL into a
+  // scroll-stopping video in minutes.", sub-headline opening "Turn
+  // your product facts into a hook…" — and Kasra reviewed the
+  // change and ruled to KEEP the new copy as it stands. The pins
+  // below therefore assert the current lines verbatim; the retired
+  // lines above stay asserted absent where they were.
   await check("the hero headline and sub-headline are Kasra's chosen copy", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
     if (!hero) throw new Error("no hero section rendered");
     const h1 = hero.querySelector("h1");
-    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your apps URL into a tailored video in minutes.") {
-      throw new Error("the hero headline is not Kasra's dictated line");
+    if (!h1 || h1.textContent.replace(/\s+/g, " ").trim() !== "Turn your app’s URL into a scroll-stopping video in minutes.") {
+      throw new Error("the hero headline is not the pinned line (ADR 0268)");
     }
     if (!h1.querySelector(".text-gradient-headline") || h1.querySelector(".text-shine") || h1.querySelector(".text-gradient-brand")) {
       throw new Error("the hero headline does not carry the one animated gradient treatment");
     }
-    // The headline's size is Kasra's Nov 19 2026 dictation (ADR 0215):
-    // 42px on mobile, 50px from sm up, down from the 48/60 the Tailwind
-    // steps gave, carried as the fontSize tokens text-hero /
+    // The headline's size rides the named fontSize tokens text-hero /
     // sm:text-hero-wide (arbitrary sizes stay banned in marketing).
-    // Only the size moved — words, gradient, font, weight, leading and
-    // tracking stand — and the pin keeps the steps from quietly
-    // restoring the bigger sizes.
+    // ADR 0215 set the tokens to 42/50px; the parallel ADR 0263
+    // re-decided their values to 48px on mobile and 60px from sm up,
+    // and Kasra kept that stack (ADR 0268) — the class pin below is
+    // unchanged, because only the token values moved. The pin keeps
+    // the retired utility steps from quietly coming back.
     const h1Classes = h1.className.split(/\s+/);
     for (const cls of ["text-hero", "sm:text-hero-wide"]) {
       if (!h1Classes.includes(cls)) {
@@ -11596,11 +11609,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page. Facts become a hook, script, and " +
-          "finished video for your app alone, learning from every video you judge."
+        "No filming, no editing, no blank page. Turn your product facts into a " +
+          "hook, script, and finished TikTok video — and get sharper with every clip you post."
       )
     ) {
-      throw new Error("the hero sub-headline is not Kasra's tightened line");
+      throw new Error("the hero sub-headline is not the pinned line (ADR 0268)");
     }
     if (text.includes("One photo in, a posted TikTok out")) {
       throw new Error("the retired hero copy is still on the hero");
@@ -11865,6 +11878,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // The two cards are one grid row. Bullets that are not length-matched make
   // the longer side wrap and gain a line the other side does not, which is a
   // visible asymmetry inside the section whose whole job is the contrast.
+  // ADR 0268: the kept copy polish reworded all eight bullets and the pairs
+  // no longer sit within a character of each other (rows now run 3, 1, 6 and
+  // 3 chars apart). Kasra kept that copy, so the pin holds the pairs' exact
+  // current lengths instead of the old ±1 balance — any one-line edit to any
+  // bullet still changes a length and fails here, so the drift this check
+  // exists to catch is still caught.
+  // ADR 0269: row 2's with-bullet was rewritten in the copy itself (the
+  // "proven hooks" claim became the comparison line, restoring the
+  // fit-limitations disclosure), landing at 63 chars — the pair is now
+  // 63/63 and the rows run 3, 0, 6 and 3 chars apart.
   await check("the problem/solution bullets are length-matched", async (ctx) => {
     await mount(Landing)(ctx);
     const row = /lucide-x[\s\S]*?lucide-check/;
@@ -11878,7 +11901,27 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const with_ = text("lucide-check");
     if (without.length === 0) throw new Error("found no X-marked rows to compare");
     if (with_.length === 0) throw new Error("found no check-marked rows to compare");
-    expectBalanced(without, with_, 1, "problem/solution bullets");
+    const expectedLengths = [
+      [65, 62],
+      [63, 63],
+      [63, 69],
+      [68, 71],
+    ];
+    if (without.length !== expectedLengths.length || with_.length !== expectedLengths.length) {
+      throw new Error(
+        `problem/solution bullets: expected ${expectedLengths.length} rows per side, got ${without.length} and ${with_.length}`
+      );
+    }
+    for (let i = 0; i < expectedLengths.length; i += 1) {
+      const [wantWithout, wantWith] = expectedLengths[i];
+      if (without[i].length !== wantWithout || with_[i].length !== wantWith) {
+        throw new Error(
+          `problem/solution bullets: row ${i + 1} lengths drifted from the ADR 0268/0269 pin\n` +
+            `        without (${without[i].length}, pinned ${wantWithout}): ${JSON.stringify(without[i])}\n` +
+            `        with    (${with_[i].length}, pinned ${wantWith}): ${JSON.stringify(with_[i])}`
+        );
+      }
+    }
   });
 
   console.log("");
@@ -12666,7 +12709,10 @@ async function runAnalyticsChecks() {
     if (ctx.container.querySelector('[data-testid="analytics-signals"]')) {
       throw new Error("an empty signals card renders with nothing to count");
     }
-    expectText(ctx, "Nothing captured yet", "an empty Analytics page is not explained");
+    // The empty state is an EmptyState block now (ADR 0268 re-pin): its
+    // title says nothing is posted yet and its line names the next step.
+    expectText(ctx, "No posted results yet", "an empty Analytics page is not explained");
+    expectText(ctx, "add its posted link, views, and your vote in History", "the empty Analytics next step is not named");
     if (!ctx.container.querySelector('a[href^="/create"]')) throw new Error("empty Analytics has no next action");
   });
 
@@ -12688,83 +12734,15 @@ async function runAnalyticsChecks() {
     }
   });
 
-  // The funnel, activity and reasons cards below are the Analytics depth:
-  // renders counted by status off the same rows History shows, renders per
-  // week, and the founder's own reason codes. Each hides when its data is
-  // missing rather than rendering an empty card, the same rule the signals
-  // card follows above.
+  // The activity and reasons cards below are the Analytics depth:
+  // renders per week, and the founder's own reason codes. Each hides
+  // when its data is missing rather than rendering an empty card,
+  // the same rule the signals card follows above. (The render
+  // funnel that once stood in this group was removed with its
+  // card, ADR 0272; its three checks went with it.)
   const dayAgo = new Date(Date.now() - 86400000).toISOString();
 
-  await check("the render funnel counts every clip by status", async (ctx) => {
-    await mountAnalytics(ctx, {
-      getFeedback: async () => ({
-        feedback: [],
-        summary: { total: 0, top_signals: [], top_reasons: [] },
-      }),
-      getGenerationHistory: async () => ({
-        generations: [
-          { id: "g1", status: "completed", created_at: dayAgo },
-          { id: "g2", status: "completed", created_at: dayAgo },
-          { id: "g3", status: "failed", created_at: dayAgo },
-        ],
-      }),
-    });
-    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
-    if (!card) throw new Error("the render funnel is not on the page");
-    for (const row of ["Completed", "Failed", "In progress", "Archived", "3 total"]) {
-      if (!card.textContent.includes(row)) {
-        throw new Error(`the funnel does not count "${row}"`);
-      }
-    }
-    if (!card.querySelector('[data-testid="analytics-funnel-history"]')) {
-      throw new Error("the funnel has no way back to the History rows it counts");
-    }
-    if (ctx.text().includes("Nothing captured yet")) {
-      throw new Error("renders exist but the page still claims nothing was captured");
-    }
-  });
 
-  // Each status is a disclosure: the count is the summary and the renders
-  // behind it are the content, so the funnel is browsable instead of a dead
-  // tally. The first status with rows opens on arrival.
-  await check("a render status opens the clips behind its count", async (ctx) => {
-    await mountAnalytics(ctx, {
-      getFeedback: async () => ({
-        feedback: [],
-        summary: { total: 0, top_signals: [], top_reasons: [] },
-      }),
-      getGenerationHistory: async () => ({
-        generations: [
-          { id: "g1", status: "completed", hook_line: "Completed clip", created_at: dayAgo },
-          { id: "g2", status: "failed", hook_line: "Failed clip", created_at: dayAgo },
-        ],
-      }),
-    });
-    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
-    if (!card) throw new Error("the render funnel is not on the page");
-    const completed = card.querySelector('[data-testid="analytics-status-toggle-completed"]');
-    if (!completed) throw new Error("a filled status has no disclosure");
-    if (completed.getAttribute("aria-expanded") !== "true") {
-      throw new Error("the first status with rows does not open on arrival");
-    }
-    if (!card.textContent.includes("Completed clip")) {
-      throw new Error("an open status does not name the render behind it");
-    }
-    const failed = card.querySelector('[data-testid="analytics-status-toggle-failed"]');
-    if (!failed) throw new Error("the failed status has no disclosure");
-    if (failed.getAttribute("aria-expanded") !== "false" || failed.getAttribute("aria-controls")) {
-      throw new Error("a closed status still claims an expanded panel");
-    }
-    await clickEl(ctx, failed, "open the failed status");
-    const opened = card.querySelector('[data-testid="analytics-status-toggle-failed"]');
-    if (opened.getAttribute("aria-expanded") !== "true") {
-      throw new Error("opening a status did not expand it");
-    }
-    const link = [...card.querySelectorAll('a')].find((a) => /#generation-g2$/.test(a.getAttribute("href") || ""));
-    if (!link || !/Failed clip/.test(link.textContent || "")) {
-      throw new Error("an open status does not link its render to its History row");
-    }
-  });
 
   await check("renders per week buckets clips into Monday-start weeks", async (ctx) => {
     // dayAgo is not guaranteed to share this Monday-start week with today: on
@@ -12854,43 +12832,15 @@ async function runAnalyticsChecks() {
     }
   });
 
-  await check("empty render statuses collapse to one shared line", async (ctx) => {
-    await mountAnalytics(ctx, {
-      getFeedback: async () => ({
-        feedback: [],
-        summary: { total: 0, top_signals: [], top_reasons: [] },
-      }),
-      getGenerationHistory: async () => ({
-        generations: [
-          { id: "g1", status: "completed", hook_line: "Only clip", created_at: dayAgo },
-        ],
-      }),
-    });
-    const card = ctx.container.querySelector('[data-testid="analytics-funnel"]');
-    if (!card) throw new Error("the render funnel is not on the page");
-    const shared = card.querySelector('[data-testid="analytics-status-empty"]');
-    if (!shared) throw new Error("empty statuses have no shared collapsed line");
-    for (const label of ["Failed", "In progress", "Archived"]) {
-      if (!shared.textContent.includes(label)) {
-        throw new Error(`the shared empty line does not name "${label}"`);
-      }
-    }
-    for (const key of ["failed", "active", "archived"]) {
-      if (card.querySelector(`[data-testid="analytics-status-${key}"]`)) {
-        throw new Error(`empty status "${key}" still renders its own row`);
-      }
-    }
-  });
 
-  // Equal-height top pair (ADR 0159): Clip results and Renders
-  // stretch to one height in their shared grid — the rule the
-  // History cards already follow — instead of Renders ending early
-  // over dead space. The Renders card fills its height with real
-  // content: its open status shows its renders rather than stopping
-  // at six and pointing at History for the rest of a short list.
-  await check("Analytics stands Clip results and Renders at one height", async (ctx) => {
-    const generations = Array.from({ length: 17 }, (_, i) => ({
-      id: `pair-${i + 1}`,
+  // ADR 0272: the Renders funnel card that shared this grid is
+  // removed on Kasra's order, so Clip results stands alone. This
+  // check pins the new contract: the ledger is on the page and the
+  // Renders card is not — the absence is asserted so the card
+  // cannot quietly return.
+  await check("Analytics stands Clip results alone, with no Renders card", async (ctx) => {
+    const generations = Array.from({ length: 3 }, (_, i) => ({
+      id: `solo-${i + 1}`,
       status: "completed",
       hook_line: `Clip ${i + 1}`,
       created_at: dayAgo,
@@ -12903,31 +12853,22 @@ async function runAnalyticsChecks() {
       getGenerationHistory: async () => ({ generations }),
     });
     const results = ctx.container.querySelector('[data-testid="analytics-results"]');
-    const funnel = ctx.container.querySelector('[data-testid="analytics-funnel"]');
-    if (!results || !funnel) throw new Error("the Analytics top pair is not on the page");
-    const pair = results.parentElement;
-    if (!pair || pair !== funnel.parentElement) {
-      throw new Error("the two cards do not share one grid");
+    if (!results) throw new Error("Clip results is not on the page");
+    if (ctx.container.querySelector('[data-testid="analytics-funnel"]')) {
+      throw new Error("the Renders card removed by ADR 0272 is back on the page");
     }
-    if (pair.className.includes("items-start")) {
-      throw new Error("the pair still starts each card at its own height");
-    }
-    if (!pair.className.includes("items-stretch")) {
-      throw new Error("the pair does not stretch its cards to one height");
-    }
-    if (!funnel.textContent.includes("Clip 17")) {
-      throw new Error("the open Completed group stops before its last render");
-    }
-    if (funnel.textContent.includes("more in History")) {
-      throw new Error("a seventeen-render group still hides renders behind a History pointer");
+    if (!results.textContent.includes("Clip 1")) {
+      throw new Error("Clip results does not name its renders standing alone");
     }
   });
 
   // Expanding the ledger must not grow the card (ADR 0160): the
-  // expanded region scrolls inside its bound, so the pair keeps one
-  // height in both states and Show less never scrolls away with the
-  // entries. The collapsed region carries no bound at all (ADR 0209),
-  // so its first entries always stand whole.
+  // expanded region scrolls inside its bound, so Show less never
+  // scrolls away with the entries. The collapsed region carries no
+  // bound at all (ADR 0209), so its first entries always stand
+  // whole. (The one-height pair this once shared with the Renders
+  // card went with that card, ADR 0272; the ledger bound is the
+  // surviving half and is what this check guards.)
   await check("expanding Clip results bounds its ledger region instead of growing the card", async (ctx) => {
     const generations = Array.from({ length: 17 }, (_, i) => ({
       id: `bound-${i + 1}`,
@@ -12943,12 +12884,7 @@ async function runAnalyticsChecks() {
       getGenerationHistory: async () => ({ generations }),
     });
     const results = ctx.container.querySelector('[data-testid="analytics-results"]');
-    const funnel = ctx.container.querySelector('[data-testid="analytics-funnel"]');
-    if (!results || !funnel) throw new Error("the Analytics top pair is not on the page");
-    const pair = results.parentElement;
-    if (!pair || pair !== funnel.parentElement || !pair.className.includes("items-stretch")) {
-      throw new Error("the pair does not stretch its cards to one height");
-    }
+    if (!results) throw new Error("Clip results is not on the page");
     const region = results.querySelector('[data-testid="analytics-results-table"]');
     if (!region) throw new Error("the clips ledger region is not marked");
     if (region.className.includes("clips-scroll-region")) {
@@ -13248,17 +13184,19 @@ async function runSidebarNavChecks() {
   );
 
   await check(
-    "the Create Video sidebar entry links to Create Video and its chevron opens the two other ways",
+    "the Create Video sidebar entry links to Create Video and its chevron opens the one other way",
     async () => {
-      // ADR 0259 (refining 0251): the pop-up holds only the two
-      // OTHER ways — Hook + CTA and Demo + CTA — each reading like
-      // a sidebar link: one bold title, one short explainer under
+      // ADR 0259 (refining 0251): the pop-up holds only the OTHER
+      // ways — Hook + CTA and Demo + CTA — each reading like a
+      // sidebar link: one bold title, one short explainer under
       // it. The pop-up's own Create Video entry is gone because the
       // sidebar entry itself is the classic-flow link again:
       // clicking the row navigates to /create, and a separate
-      // chevron hit-area on the same row toggles the pop-up. Demo +
-      // CTA still goes to the remembered draft's finishing step
-      // (the plain page when no draft is remembered).
+      // chevron hit-area on the same row toggles the pop-up.
+      // ADR 0273 (Nov 22 2026): Kasra removed the Demo + CTA entry
+      // — a finishing step, reached inside the flows — so the
+      // pop-up now holds exactly one way, Hook + CTA, and builds
+      // no finishing-step link at all.
       // Source-level like the nav check above: the sidebar is not
       // mounted in this harness.
       const src = fs.readFileSync(
@@ -13275,18 +13213,19 @@ async function runSidebarNavChecks() {
             "pop-up holds only the two other ways."
         );
       }
-      for (const testId of [
-        "create-flow-option-hook-cta",
-        "create-flow-option-demo-cta",
-      ]) {
+      for (const testId of ["create-flow-option-hook-cta"]) {
         if (!src.includes(testId)) {
           throw new Error(`the pop-up is missing its ${testId} option`);
         }
       }
-      for (const wording of [
-        "Short hook, then your demo",
-        "Your demo and closing message",
-      ]) {
+      if (src.includes("create-flow-option-demo-cta")) {
+        throw new Error(
+          "the pop-up still offers Demo + CTA. ADR 0273 removed that entry: " +
+            "the pop-up holds only Hook + CTA, and Demo + CTA is reached " +
+            "inside the create flows."
+        );
+      }
+      for (const wording of ["Short hook, then your demo"]) {
         if (!src.includes(wording)) {
           throw new Error(`the pop-up lost its sidebar-link explainer: ${wording}`);
         }
@@ -13295,6 +13234,7 @@ async function runSidebarNavChecks() {
         "Create Video — hook + story",
         "Hook + CTA — a short hook, finished with your demo",
         "Demo + CTA — add your demo and closing message",
+        "Your demo and closing message",
       ]) {
         if (src.includes(stale)) {
           throw new Error(`the pop-up still carries the old switcher wording: ${stale}`);
@@ -13316,10 +13256,10 @@ async function runSidebarNavChecks() {
       if (!src.includes('to="/hook-cta"')) {
         throw new Error("the pop-up's Hook + CTA option does not link to the Hook + CTA page");
       }
-      if (!src.includes("step=finish")) {
+      if (src.includes("step=finish")) {
         throw new Error(
-          "the pop-up's Demo + CTA option never builds the finishing-step link " +
-            "for a remembered draft"
+          "the sidebar still builds a finishing-step link. ADR 0273 removed " +
+            "the pop-up's Demo + CTA option, which was its only builder."
         );
       }
       if (!src.includes('aria-haspopup="menu"') || !src.includes('role="menu"')) {
@@ -13371,7 +13311,7 @@ async function runDashboardChecks() {
   const expectGrid = (ctx) => {
     const cards = [...ctx.container.querySelectorAll('[data-testid^="dashboard-card-"]')];
     const hrefs = cards.map((c) => c.getAttribute("href"));
-    const expected = ["/create", "/hook-cta", "/demo-cta", "/history", "/assets", "/analytics", "/brand"];
+    const expected = ["/create", "/hook-cta", "/history", "/assets", "/analytics", "/brand"];
     if (hrefs.join("|") !== expected.join("|")) {
       throw new Error(
         `the workflow grid routes ${hrefs.join(" -> ") || "(none)"}, expected ${expected.join(" -> ")}`
@@ -16932,13 +16872,17 @@ async function runDemoCtaChecks() {
 
   // Titles stay on every page; subtitles are optional when they only repeat
   // the page's controls. Keep the useful guidance and both asset states explicit.
+  // ADR 0268 re-pinned two entries to the kept copy polish: App Profile's
+  // subtitle was reworded, and the History page's title was shortened to
+  // "History" and gained a subtitle that names its three jobs — purposeful
+  // by this check's own standard, so it is pinned rather than banned.
   await check("topic page headers keep titles and purposeful subtitles", async () => {
     const pages = [
-      ["BrandSetup.jsx", "App Profile", ["Review and approve app details before creating videos."]],
+      ["BrandSetup.jsx", "App Profile", ["Lock in your product facts once — every video starts from here."]],
       ["DemoCtaStudio.jsx", "Demo + CTA", ["Style a finished clip: phone or full-frame, then add CTA.", "Style any clip: phone mockup or full-frame for History."]],
       ["CreateVideo.jsx", "Create Video", []],
       ["AssetLibrary.jsx", "Asset Library", []],
-      ["GenerationHistory.jsx", "Generation History", []],
+      ["GenerationHistory.jsx", "History", ["Review finished clips, copy post kits, and log real results."]],
       ["Analytics.jsx", "Analytics", ["Your recent renders and how they performed."]],
       ["Dashboard.jsx", "Dashboard", ["One next step up top, and every workflow one click away."]],
     ];
@@ -17031,13 +16975,28 @@ async function runDemoCtaChecks() {
     }
 
     const problems = [];
+    // ADR 0268: one kept subtitle stands outside the length budget — the
+    // Hook + CTA app picker's "Pick an approved app to start a fresh
+    // hook." is a complete instruction at 43 chars, and Kasra kept the
+    // copy as it stands. It is exempted by exact string only: the pin
+    // below requires it to appear exactly once, so editing it (it then
+    // falls back under the budget) or deleting it both fail here, and
+    // no other subtitle may ride the exemption.
+    const PINNED_SUBTITLES = ["Pick an approved app to start a fresh hook."];
     for (const { cls, copy } of found) {
       const line = text.split("\n").findIndex((l) => l.includes(`data-subtitle=""`) && l.includes(cls.split(" ").pop()));
       if (!/\btext-sm\b/.test(cls) || /\btext-base\b|\btext-lg\b|\btext-xs\b/.test(cls)) {
         problems.push(`not text-sm (class "${cls.trim()}") — "${copy}"`);
       }
+      if (PINNED_SUBTITLES.includes(copy)) continue;
       if (copy.length < MIN || copy.length > MAX) {
         problems.push(`${copy.length} chars — "${copy}"`);
+      }
+    }
+    for (const pinned of PINNED_SUBTITLES) {
+      const count = found.filter(({ copy }) => copy === pinned).length;
+      if (count !== 1) {
+        problems.push(`pinned subtitle stands ${count} times, not once — "${pinned}"`);
       }
     }
     if (problems.length) {
@@ -19190,7 +19149,10 @@ async function runDemoCtaChecks() {
     try {
       await withApi({ getGeneration: async () => { calls++; return { id: "missing-source", status: "completed" }; } }, async () => {
         await mount(DemoCtaStudio)(ctx);
-        expectText(ctx, "retry the durable save");
+        // The recovery wording was re-pinned by ADR 0268 to the kept
+        // copy: the alert names the History retry in its own words.
+        // The exits and the refetch below are the guard itself.
+        expectText(ctx, "Retry saving in History");
         for (const href of ["/history#generation-missing-source", "/demo-cta"]) {
           if (!ctx.container.querySelector(`a[href="${href}"]`)) throw new Error(`editor dead end: ${href}`);
         }
@@ -21611,7 +21573,12 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History keeps its title without a redundant subtitle", async (ctx) => {
+  // ADR 0268: the kept title unification shortened this page's title to
+  // "History" and gave it a subtitle naming its three jobs. The guard's
+  // point stands — the header must not drift or grow a second,
+  // redundant line — so the pin now asserts the one title and the one
+  // purposeful subtitle verbatim.
+  await check("History keeps its title and its one purposeful subtitle", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     await withApi(
       {
@@ -21621,8 +21588,12 @@ async function runDemoCtaChecks() {
       async () => {
         await mount(GenerationHistory)(ctx);
         const header = ctx.container.querySelector('[data-testid="history-header"]');
-        if (header?.querySelector('h1')?.textContent !== "Generation History" || header.querySelector('p')) {
-          throw new Error("History must retain its title without the redundant subtitle");
+        if (header?.querySelector('h1')?.textContent !== "History") {
+          throw new Error("History must retain its pinned title");
+        }
+        const subtitle = header.querySelector('p')?.textContent?.replace(/\s+/g, " ").trim();
+        if (subtitle !== "Review finished clips, copy post kits, and log real results.") {
+          throw new Error("History must keep its one pinned subtitle, no more and no less");
         }
       }
     );
@@ -24792,16 +24763,13 @@ await check(
   });
 
   // Finding 6: two desktop surfaces use the width the desktop gives them.
-  // Analytics' summary/verdict band sits two-across at lg (the clip ledger
-  // and the weekly chart keep the full width), and Scene details' spec
-  // rows form a two-column definition grid at lg while prose stays stacked.
-  // The band's grid stretches since ADR 0159 — the pair stands at one
-  // height — so the pattern below pins items-stretch, not items-start.
-  await check("Analytics and Scene details use the desktop width", async () => {
-    const analytics = fs.readFileSync(path.join(SRC, "pages", "Analytics.jsx"), "utf8");
-    if (!/grid items-stretch gap-6 lg:grid-cols-2[\s\S]{0,300}<ClipResults/.test(analytics)) {
-      throw new Error("the Analytics summary/verdict band is not gridded two-across at lg");
-    }
+  // Scene details' spec rows form a two-column definition grid at lg
+  // while prose stays stacked. The Analytics half of this check — the
+  // summary/verdict band sitting two-across at lg — retired with the
+  // Renders card (ADR 0272): Clip results is a wide read and keeps
+  // the full width now, like the weekly chart below it, so only the
+  // Scene details assertions stand.
+  await check("Scene details use the desktop width", async () => {
     const panel = fs.readFileSync(path.join(SRC, "components", "HookContinuityPanel.jsx"), "utf8");
     if (!/specGrid\s*\n\s*rows=\{\[/.test(panel) && !/specGrid/.test(panel)) {
       throw new Error("the Scene details block no longer opts into the spec grid");

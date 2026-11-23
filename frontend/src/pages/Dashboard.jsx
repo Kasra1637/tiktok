@@ -48,7 +48,6 @@ import { CREATE_ACTION, pickDashboardAction } from "../lib/dashboardNextAction";
 const DESTINATIONS = [
   { to: "/create", label: "Create Video", icon: Clapperboard, testId: "dashboard-card-create", hint: "Plan, review, render" },
   { to: "/hook-cta", label: "Hook + CTA", icon: Zap, testId: "dashboard-card-hook-cta", hint: "A short hook, finished with your demo" },
-  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "dashboard-card-demo-cta", hint: "Style clips, join, export" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "dashboard-card-history", hint: "Renders, exports, results" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "dashboard-card-assets", hint: "Presenter photos by app" },
   { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "dashboard-card-analytics", hint: "Results, verdicts, learnings" },
@@ -168,7 +167,7 @@ function FirstVideoChecklist({ hasApprovedProfile, hasCompletedRender, hasDemoEx
     <section className="surface card-enter space-y-4" data-testid="dashboard-first-video-checklist">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionHeading icon={ListChecks}>First video checklist</SectionHeading>
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className="text-xs font-semibold text-muted-foreground">
           {doneCount} of {steps.length} complete
         </span>
       </div>
@@ -274,7 +273,7 @@ export default function Dashboard() {
       )}
 
       <section className="space-y-4">
-        <SectionHeading icon={Compass}>Where to next</SectionHeading>
+        <SectionHeading icon={Compass}>Where to Start Next</SectionHeading>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="dashboard-destinations">
           {DESTINATIONS.map((destination, index) => {
             const Icon = destination.icon;

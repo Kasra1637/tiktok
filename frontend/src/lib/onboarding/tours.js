@@ -60,7 +60,7 @@ export const TOURS = {
         target: '[data-testid="dashboard-destinations"]',
         title: "Every workflow, one click away",
         body:
-          "Jump straight to Create Video, Hook + CTA, Demo + CTA, History, or Analytics from here or the sidebar.",
+          "Jump straight to Create Video, Hook + CTA, History, or Analytics from here or the sidebar.",
       },
       {
         target: '[data-testid="dashboard-recents"]',
@@ -417,13 +417,6 @@ export const TOURS = {
         optional: true,
         body:
           "Recorded views sort highest first; missing counts stay last. Review the clip in History or reuse its existing draft. Compare your judgment alongside reach; a high count does not prove conversion or cause.",
-      },
-      {
-        target: '[data-testid="analytics-funnel"]',
-        title: "Every clip, counted by status",
-        optional: true,
-        body:
-          "Counts use the loaded set of up to 200 recent renders for the selected scope, not lifetime totals. History starts with 100 and can show more. Archived renders are counted separately from completed.",
       },
       {
         target: '[data-testid="analytics-signals"]',

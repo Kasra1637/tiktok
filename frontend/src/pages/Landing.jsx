@@ -31,7 +31,7 @@ const FEATURES = [
     icon: FileText,
     title: "Your voice, one script",
     description:
-      "Get a scroll-stopping hook and script written in your own voice, scored before you spend a cent. Fix weak lines early and ship only openings worth watching now.",
+      "Get a hook and script written in your own voice, graded on craft before you spend a cent. Fix the weak lines early — no grade ever blocks your renders. Ship it.",
   },
   {
     icon: Clapperboard,
@@ -149,7 +149,7 @@ const FLOW_STEPS = [
   {
     step: "3",
     label: "Pick your template",
-    line: "Choose from proven openings ranked for your app, then upload one clear presenter photo.",
+    line: "Choose from ranked suggestions for your app, then upload one clear presenter photo.",
     outcome: "Openings that earn the watch",
   },
   {
@@ -343,7 +343,7 @@ const WEEK_WITHOUT = [
 
 const WEEK_WITH = [
   "Start every video from your approved product facts in seconds.",
-  "Pick proven hooks ranked to hold your exact buyer’s attention.",
+  "Compare suggested openings by fit scores, reasons, limitations.",
   "Edit a finished script and render in minutes — zero filming required.",
   "Ship consistently and let your real post results sharpen the next clip.",
 ];

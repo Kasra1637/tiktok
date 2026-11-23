@@ -153,21 +153,19 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
  *
  * ADR 0251 made the whole entry a pop-up trigger offering three
  * ways, its own Create Video way among them. Kasra's ruling
- * (Nov 21 2026): the pop-up holds only the two OTHER ways — Hook +
+ * (Nov 21 2026): the pop-up holds only the OTHER ways — Hook +
  * CTA and Demo + CTA — each reading like a normal sidebar link,
  * one bold title with one short explainer under it, the shape the
  * History link reads in. A pop-up that also lists the page its own
  * entry opens is one entry too many, so the entry itself is the
  * /create link again — NavItem's row, keeping the canonical
  * create-nav-link testid the tours anchor to — and a separate
- * chevron hit-area on the same row toggles the two-way pop-up.
- * The ways go exactly where they have always gone: Hook + CTA to
- * its page; Demo + CTA to the remembered draft's finishing step,
- * or the plain Create Video page when no draft is remembered (the
- * no-draft landing is the wizard's first step, which is where
- * that page opens). The Dashboard keeps its own Hook + CTA card —
- * only the entry's arrangement is refined, nothing else in 0251
- * moves.
+ * chevron hit-area on the same row toggles the pop-up. ADR 0273
+ * (Nov 22 2026) then removed the Demo + CTA entry on Kasra's
+ * order — it is a finishing step, reached inside the flows — so
+ * the pop-up now holds exactly one way: Hook + CTA, to its page.
+ * The Dashboard keeps its own Hook + CTA card — only the entry's
+ * arrangement is refined, nothing else in 0251 moves.
  *
  * The entry stands active on the Hook + CTA page too — the
  * pop-up's ways are one family under this entry — while
@@ -183,11 +181,8 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
  */
 function CreateFlowMenu({ item, collapsed, active, onNavigate, testIdPrefix }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(() => readRecentDraft());
   const wrapRef = useRef(null);
   const { pathname } = useLocation();
-
-  useEffect(() => subscribeRecentDraft(setDraft), []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -228,14 +223,6 @@ function CreateFlowMenu({ item, collapsed, active, onNavigate, testIdPrefix }) {
 
   const Icon = item.icon;
   const onCreate = pathname === "/create" || pathname.startsWith("/create/");
-  // The dropdown's Demo + CTA, preserved: an open draft's finishing
-  // step. The remembered draft is the shell's own memory of the
-  // draft the founder was last inside (recentDraft) — the same
-  // memory the Continue line below reads.
-  const demoHref =
-    draft && draft.projectId
-      ? `/create?project=${encodeURIComponent(draft.projectId)}&step=finish`
-      : "/create";
   const pick = () => {
     setOpen(false);
     if (onNavigate) onNavigate();
@@ -313,20 +300,6 @@ function CreateFlowMenu({ item, collapsed, active, onNavigate, testIdPrefix }) {
               <span className="truncate text-sm font-semibold leading-tight">Hook + CTA</span>
               <span className="truncate text-xs leading-tight text-muted-foreground">
                 Short hook, then your demo
-              </span>
-            </span>
-          </Link>
-          <Link
-            role="menuitem"
-            data-testid={`${testIdPrefix}create-flow-option-demo-cta`}
-            to={demoHref}
-            onClick={pick}
-            className={optionClass}
-          >
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-semibold leading-tight">Demo + CTA</span>
-              <span className="truncate text-xs leading-tight text-muted-foreground">
-                Your demo and closing message
               </span>
             </span>
           </Link>
