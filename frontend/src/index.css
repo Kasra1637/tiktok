@@ -283,9 +283,9 @@ body {
    flat rectangle. Colors are unchanged. */
 .hero-wash {
     background:
-        radial-gradient(1000px circle at 25% 5%, rgba(129, 140, 248, 0.08), transparent 50%),
-        radial-gradient(800px circle at 75% 0%, rgba(254, 44, 85, 0.06), transparent 45%),
-        radial-gradient(900px circle at 50% 100%, rgba(99, 102, 241, 0.05), transparent 55%),
+        radial-gradient(1000px circle at 25% 5%, rgba(129, 140, 248, 0.046), transparent 50%),
+        radial-gradient(800px circle at 75% 0%, rgba(254, 44, 85, 0.033), transparent 45%),
+        radial-gradient(900px circle at 50% 100%, rgba(99, 102, 241, 0.04), transparent 55%),
         linear-gradient(180deg, hsl(228, 14%, 7%) 0%, hsl(228, 14%, 8%) 100%);
     background-attachment: fixed;
 }
@@ -301,6 +301,46 @@ body {
     background-size: 64px 64px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 75%);
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 75%);
+}
+
+/* Full-page Cinema Aperture Arcs & Ambient Wash for the landing page.
+   Large, ultra-faint concentric studio lens rings sweeping across the
+   full page, paired with soft drifting indigo and coral ambient glows. */
+.landing-aperture {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        radial-gradient(circle at 72% 18%,
+            transparent 0,
+            transparent 219px,
+            rgba(165, 180, 252, 0.055) 220px,
+            transparent 221px,
+            transparent 379px,
+            rgba(165, 180, 252, 0.045) 380px,
+            transparent 381px,
+            transparent 559px,
+            rgba(165, 180, 252, 0.035) 560px,
+            transparent 561px,
+            transparent 759px,
+            rgba(165, 180, 252, 0.025) 760px,
+            transparent 761px
+        ),
+        radial-gradient(circle at 18% 76%,
+            transparent 0,
+            transparent 259px,
+            rgba(254, 44, 85, 0.04) 260px,
+            transparent 261px,
+            transparent 439px,
+            rgba(129, 140, 248, 0.035) 440px,
+            transparent 441px,
+            transparent 639px,
+            rgba(129, 140, 248, 0.025) 640px,
+            transparent 641px
+        );
+    mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
+    -webkit-mask-image: radial-gradient(ellipse 95% 88% at 50% 42%, black 35%, transparent 98%);
 }
 
 /* ---------- Surfaces ----------
@@ -1391,10 +1431,9 @@ h1,
 }
 .how-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-    min-height: 3rem;
+    gap: 7px;
 }
 .how-badge {
     position: relative;
@@ -1406,7 +1445,6 @@ h1,
     height: 24px;
     border-radius: 0.5rem;
     background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
-    box-shadow: var(--glow-indigo);
     color: #fff;
     font-size: 0.875rem;
     font-weight: 600;
@@ -1490,8 +1528,8 @@ h1,
     inset: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 18px 14px 14px;
+    gap: 11px;
+    padding: 28px 14px 20px;
     border-radius: 24px;
 }
 .hero-story-page1 {
@@ -1505,13 +1543,16 @@ h1,
     flex: 1;
     width: min(80%, 248px);
     display: flex;
-    padding: 10px;
-    border: 1px solid var(--indigo-25);
-    border-radius: 32px;
-    background: hsl(228 14% 10%);
-    /* Depth (ADR 0175): a weighted shadow under the phone and a
-       faint indigo glow spilling onto the page behind it. */
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 10px 22px rgba(0, 0, 0, 0.4), 0 0 90px rgba(99, 102, 241, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    padding: 9px;
+    border: 1px solid rgba(165, 180, 252, 0.28);
+    border-radius: 34px;
+    background: linear-gradient(155deg, hsl(228 16% 16%) 0%, hsl(228 14% 8%) 50%, hsl(228 14% 12%) 100%);
+    /* Depth: clean dark elevation shadows and bezel rim, no colored glow. */
+    box-shadow:
+        0 28px 56px rgba(0, 0, 0, 0.52),
+        0 10px 22px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.45);
 }
 .hero-story-screen {
     position: relative;
@@ -1520,9 +1561,50 @@ h1,
     flex-direction: column;
     gap: 12px;
     padding: 18px 14px 14px;
-    border-radius: 24px;
+    border-radius: 26px;
     overflow: hidden;
-    background: linear-gradient(180deg, var(--indigo-8), transparent 55%), hsl(228 14% 12%);
+    background:
+        radial-gradient(110% 55% at 50% 0%, rgba(99, 102, 241, 0.16), transparent 62%),
+        linear-gradient(180deg, var(--indigo-8), transparent 55%),
+        hsl(228 14% 11%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+/* Dynamic Island notch & bottom home indicator inside the phone screen. */
+.hero-story-notch {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    width: 62px;
+    height: 14px;
+    border-radius: 999px;
+    background: hsl(228 18% 6%);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+}
+.hero-story-notch::after {
+    content: "";
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 35% 35%, rgba(129, 140, 248, 0.55), rgba(30, 27, 75, 0.9));
+}
+.hero-story-homebar {
+    position: absolute;
+    bottom: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    width: 72px;
+    height: 3.5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
 }
 /* A glass reflection lies over the screen (ADR 0175): a faint
    diagonal sheen, strongest at the top corner and gone by the
@@ -1553,7 +1635,7 @@ h1,
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--brand-indigo);
+    background: linear-gradient(90deg, var(--brand-indigo), #A5B4FC);
     transform-origin: left center;
 }
 /* Page one's process UI — the link field and the research
@@ -1631,8 +1713,20 @@ h1,
     color: #fff;
     font-size: 13px;
     font-weight: 600;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), var(--glow-indigo);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
     opacity: 0;
+}
+.hero-story-research::after,
+.hero-story-generate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(108deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+    background-size: 240% 100%;
+    background-position: 140% 0;
+    opacity: 0;
+    pointer-events: none;
 }
 .hero-story-research-ripple {
     position: absolute;
@@ -1703,7 +1797,7 @@ h1,
     color: #fff;
     font-size: 13px;
     font-weight: 600;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), var(--glow-indigo);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
 .hero-story-ripple {
     position: absolute;
@@ -1769,11 +1863,23 @@ h1,
     width: 46px;
     height: 46px;
     border-radius: 999px;
-    background: var(--brand-indigo);
+    background: linear-gradient(180deg, #818CF8 0%, var(--brand-indigo) 100%);
     color: #fff;
     display: grid;
     place-items: center;
-    box-shadow: 0 10px 26px rgba(99, 102, 241, 0.45);
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(255, 255, 255, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.hero-story-play::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: inherit;
+    border: 1.5px solid rgba(165, 180, 252, 0.45);
+    opacity: 0;
+    pointer-events: none;
 }
 /* The beats slide between pages (ADR 0175): page one exits
    left, page two enters from the right — and since ADR 0176
@@ -1908,6 +2014,47 @@ h1,
     0%, 80% { transform: scaleX(0); opacity: 1; }
     97%, 100% { transform: scaleX(1); opacity: 1; }
 }
+@keyframes hs-phone-float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-5px); }
+}
+@keyframes hs-research-sheen {
+    0%, 21% { background-position: 140% 0; opacity: 0; }
+    23% { opacity: 1; }
+    27% { background-position: -40% 0; opacity: 0; }
+    100% { background-position: -40% 0; opacity: 0; }
+}
+@keyframes hs-generate-sheen {
+    0%, 64% { background-position: 140% 0; opacity: 0; }
+    66% { opacity: 1; }
+    70% { background-position: -40% 0; opacity: 0; }
+    100% { background-position: -40% 0; opacity: 0; }
+}
+@keyframes hs-badge-1 {
+    0%, 47% { transform: scale(0.75); }
+    51% { transform: scale(1.14); }
+    54%, 100% { transform: scale(1); }
+}
+@keyframes hs-badge-2 {
+    0%, 51% { transform: scale(0.75); }
+    55% { transform: scale(1.14); }
+    58%, 100% { transform: scale(1); }
+}
+@keyframes hs-badge-3 {
+    0%, 55% { transform: scale(0.75); }
+    59% { transform: scale(1.14); }
+    62%, 100% { transform: scale(1); }
+}
+@keyframes hs-badge-4 {
+    0%, 59% { transform: scale(0.75); }
+    63% { transform: scale(1.14); }
+    66%, 100% { transform: scale(1); }
+}
+@keyframes hs-play-halo {
+    0%, 82% { transform: scale(0.85); opacity: 0; }
+    87% { transform: scale(1.12); opacity: 0.7; }
+    95%, 100% { transform: scale(1.38); opacity: 0; }
+}
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-page1 { animation: hs-page1 13s linear infinite; }
 }
@@ -1973,6 +2120,16 @@ h1,
 }
 @media (prefers-reduced-motion: no-preference) {
     .hero-story-progress > span { animation: hs-progress 13s linear infinite; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .hero-story-phone { animation: hs-phone-float 6.5s ease-in-out infinite; }
+    .hero-story-research::after { animation: hs-research-sheen 13s linear infinite; }
+    .hero-story-generate::after { animation: hs-generate-sheen 13s linear infinite; }
+    .hero-story-step.is-1 .hero-story-step-badge { animation: hs-badge-1 13s linear infinite; }
+    .hero-story-step.is-2 .hero-story-step-badge { animation: hs-badge-2 13s linear infinite; }
+    .hero-story-step.is-3 .hero-story-step-badge { animation: hs-badge-3 13s linear infinite; }
+    .hero-story-step.is-4 .hero-story-step-badge { animation: hs-badge-4 13s linear infinite; }
+    .hero-story-play::before { animation: hs-play-halo 13s linear infinite; }
 }
 
 /* ---------- Studio Button System (Specular Bevel + Soft Light Sweep) ----------
