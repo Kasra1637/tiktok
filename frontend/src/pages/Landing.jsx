@@ -386,16 +386,28 @@ const PIPELINE_BLOCKS = [
 
 const QUESTIONS = [
   {
+    question: "What do I need to get started?",
+    answer: "Your product's link and one clear photo of your presenter. HookForge studies the link, drafts the hook and script from your product facts, and builds the video around your photo — no filming, no blank page.",
+  },
+  {
     question: "Can I use footage I already have?",
     answer: "Yes. Open Demo + CTA with your own video, including a screen recording. You don’t need to generate a Hook + Story first — the studio finishes what you bring.",
   },
   {
     question: "Can I change the script before generating?",
-    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the craft grade — all before you pay for a render, never after.",
+    answer: "That is the point. Edit the hook, script, tone, and creative directions, then save them and review the craft grade — all before anything renders, never after.",
+  },
+  {
+    question: "What is Hook + CTA?",
+    answer: "The short route. A four-to-five-second hook is rendered on its own, then you finish it on the same page with your real demo and closing message, and a post kit — caption, cover text, and five hashtags picked by volume — comes with it.",
   },
   {
     question: "Does the video use my real face and voice?",
     answer: "Your photo guides the AI presenter; it is not a recording of you or a clone of your voice. Check the likeness and delivery in the finished clip before using it.",
+  },
+  {
+    question: "How does my photo become a video that stops the scroll?",
+    answer: "Your photo becomes the presenter — a real person on screen, already moving from the first frame, not a still picture that talks. The hook lands in the first two seconds, the story keeps the scene alive around them, and your real demo and closing message finish the job. The whole video is built for TikTok and ready in a few minutes, with no filming or editing from you.",
   },
   {
     question: "Will my clip have sound, and how can I export it?",
@@ -434,7 +446,7 @@ export default function Landing() {
         <div className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-20 text-center sm:pt-28 lg:grid lg:grid-cols-[1.02fr_1fr] lg:items-center lg:gap-14 lg:text-left">
         <div className="min-w-0">
           <EyebrowPill testId="landing-hero-badge" className="animate-fade-up mb-5">
-            Learns from your input
+            Optimizing from your input
           </EyebrowPill>
 
           <h1
@@ -448,7 +460,7 @@ export default function Landing() {
             className="animate-fade-up mx-auto mt-7 max-w-2xl text-base leading-relaxed text-muted-foreground"
             style={{ animationDelay: "120ms" }}
           >
-            No filming, no editing, no blank page—get the hook, script, and finished cut automatically.
+            No filming, no editing, no blank page—get tailored video, captions and hashtags automatically.
           </p>
 
           <div

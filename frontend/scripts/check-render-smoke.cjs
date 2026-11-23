@@ -10780,7 +10780,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     if (ctx.container.querySelector("a button, button a")) throw new Error("landing actions must not nest interactive elements");
     const questions = ctx.container.querySelectorAll('[data-testid="landing-questions"] details');
-    if (questions.length !== 5 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
+    // Eight since ADR 0278 added the getting-started, Hook + CTA and
+    // scroll-stopping questions Kasra ordered; the count moves only
+    // with the set.
+    if (questions.length !== 8 || [...questions].some((q) => !q.querySelector("summary") || !q.querySelector("p")?.textContent)) throw new Error("buyer questions are incomplete");
   });
 
   // Kasra's rule for the What you get grid (ADR 0156): exactly six cards —
@@ -11579,8 +11582,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   //
   // ADR 0276 (Nov 22 2026): Kasra replaced the sub-headline with his
   // own shorter line — "No filming, no editing, no blank page—get
-  // the hook, script, and finished cut automatically." The headline
-  // pin is unchanged; the sub-headline pin below asserts his line.
+  // the hook, script, and finished cut automatically." ADR 0280
+  // (Nov 23 2026) replaced that line with his next one, naming the
+  // tailored video, captions and hashtags. The headline pin is
+  // unchanged; the sub-headline pin below asserts his current line.
   await check("the hero headline and sub-headline are Kasra's chosen copy", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     const hero = ctx.container.querySelector('[data-testid="landing-hero"]');
@@ -11615,7 +11620,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const text = hero.textContent.replace(/\s+/g, " ");
     if (
       !text.includes(
-        "No filming, no editing, no blank page—get the hook, script, and finished cut automatically."
+        "No filming, no editing, no blank page—get tailored video, captions and hashtags automatically."
       )
     ) {
       throw new Error("the hero sub-headline is not the pinned line (ADR 0268)");
@@ -11641,7 +11646,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // copy. The pin asserts the badge's seat as the first thing in
   // the hero column and its exact words, with the headline right
   // under it. The closing CTA's own EyebrowPill ("Ready when you
-  // are") is a different seat and stands untouched.
+  // are") is a different seat and stands untouched. The badge's
+  // words changed once since: ADR 0279 (Kasra's order, Nov 23
+  // 2026) replaced "Learns from your input" with "Optimizing
+  // from your input" — same seat, same style, no counts.
   await check("the hero opens with the learning badge and no proof pill", async (ctx) => {
     await mount(load("pages/Landing.jsx").default)(ctx);
     await act(async () => {});
@@ -11654,8 +11662,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!h1) throw new Error("the hero headline is missing");
     const badge = hero.querySelector('[data-testid="landing-hero-badge"]');
     if (!badge) throw new Error("the hero learning badge is missing (ADR 0277)");
-    if (badge.textContent.trim() !== "Learns from your input") {
-      throw new Error("the hero badge does not carry the pinned line (ADR 0277)");
+    if (badge.textContent.trim() !== "Optimizing from your input") {
+      throw new Error("the hero badge does not carry the pinned line (ADR 0279)");
     }
     if (h1.parentElement.firstElementChild !== badge) {
       throw new Error("the learning badge does not stand above the hero headline (ADR 0277)");
