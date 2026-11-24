@@ -29,6 +29,60 @@ _DIMENSIONS = (
     ("trust_compliance", "Trust & compliance", 10),
 )
 
+# The most each category can actually award (ADR 0300). Every scorer
+# clamps to its weight, but two cannot reach it: Hook's positive cues
+# sum to 17 of its 20, and Audience truth's to 13 of its 15 — so the
+# report's honest ceiling is 95, not the 100 the weights sum to. The
+# 0-10 display scale divides by these caps, never by the weights, so
+# a perfect pair reads 10, zero reads 0, and every category bar can
+# fill. The points themselves do not move: the scorer is untouched.
+_ACHIEVABLE_MAX = {"hook_stopping_power": 17, "audience_truth": 13}
+
+
+def _achievable_max(key, weight):
+    return _ACHIEVABLE_MAX.get(key, weight)
+
+
+def _score10(score, achievable):
+    """The honest 0-10 reading of a points score (ADR 0300)."""
+    if achievable <= 0:
+        return 0.0
+    return round(score / achievable * 10, 1)
+
+
+def with_score10(report):
+    """Fill the 0-10 fields into a report stored before ADR 0300.
+
+    Reports are frozen at submit (ADR 0117); one saved before the
+    scale change carries points only. The fill is computed from the
+    report's own dimensions, so an old render reads on the same
+    true scale as a fresh one. A report already carrying the fields
+    is returned unchanged.
+    """
+    if not isinstance(report, dict) or "score10" in report:
+        return report
+    dimensions = report.get("dimensions") or {}
+    achievable_total = 0
+    for key, dimension in dimensions.items():
+        if not isinstance(dimension, dict):
+            continue
+        achievable = _achievable_max(
+            key, dimension.get("weight") or dimension.get("max") or 0
+        )
+        dimension.setdefault("achievable_max", achievable)
+        dimension.setdefault(
+            "score10", _score10(dimension.get("score") or 0, achievable)
+        )
+        achievable_total += achievable
+    if achievable_total <= 0:
+        achievable_total = sum(
+            _achievable_max(key, weight) for key, _label, weight in _DIMENSIONS
+        )
+    report["achievable_max"] = achievable_total
+    report["score10"] = _score10(report.get("total") or 0, achievable_total)
+    report["max10"] = 10
+    return report
+
 # Normalized cues: punctuation is stripped before matching, so "can't" is
 # "can t" and "weren't" is "weren t". Every cue is a whole phrase surrounded
 # by spaces, never a substring.
@@ -574,12 +628,21 @@ def _grade(total):
 
 def _report(dimensions, next_steps):
     total = sum(item["score"] for item in dimensions.values())
+    achievable_total = sum(
+        item["achievable_max"] for item in dimensions.values()
+    )
     grade, band = _grade(total)
     return {
         "version": VERSION,
         "advisory": True,
         "total": total,
         "max": 100,
+        # The honest scale (ADR 0300): what the points can actually
+        # reach, and the same standing read out of 10 — the scale
+        # every surface shows. `total`/`max` stay as the raw points.
+        "achievable_max": achievable_total,
+        "score10": _score10(total, achievable_total),
+        "max10": 10,
         "grade": grade,
         "band": band,
         "dimensions": dimensions,
@@ -590,12 +653,15 @@ def _report(dimensions, next_steps):
 def _empty_report():
     dimensions = {}
     for key, label, weight in _DIMENSIONS:
+        achievable = _achievable_max(key, weight)
         dimensions[key] = {
             "key": key,
             "label": label,
             "weight": weight,
             "score": 0,
             "max": weight,
+            "achievable_max": achievable,
+            "score10": _score10(0, achievable),
             "evidence": ["No spoken lines to score."],
             "next_step": "Write a hook and a script first.",
         }
@@ -659,12 +725,15 @@ def assess_spoken_quality(
             score, evidence, next_step = _score_trust(
                 hook, body, check, app_name, allows_question
             )
+        achievable = _achievable_max(key, weight)
         dimensions[key] = {
             "key": key,
             "label": label,
             "weight": weight,
             "score": score,
             "max": weight,
+            "achievable_max": achievable,
+            "score10": _score10(score, achievable),
             "evidence": evidence,
             "next_step": next_step,
         }

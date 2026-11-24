@@ -1131,7 +1131,9 @@ def _quality_report_for_row(row):
     """
     stored = _parse_quality_report((row or {}).get("quality_report"))
     if stored is not None:
-        return stored
+        # A report frozen before ADR 0300 carries points only; fill
+        # its honest 0-10 reading so every surface shows one scale.
+        return creative_quality.with_score10(stored)
     hook = (row or {}).get("hook_line")
     script = (row or {}).get("script")
     if not (hook or script):

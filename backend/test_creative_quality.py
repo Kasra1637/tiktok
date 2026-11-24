@@ -271,3 +271,54 @@ def test_report_sums_to_its_total_and_exposes_one_next_step():
     assert report["max"] == 100
     assert report["next_steps"]
     assert all(dimension["next_step"] for dimension in _dims(report).values())
+
+
+def test_report_carries_the_honest_0_to_10_scale():
+    """ADR 0300: the displayed scale divides by what the scorer can
+    actually award — Hook caps at 17 of 20 and Audience truth at 13
+    of 15, so the true ceiling is 95, and a perfect reading is 10."""
+    report = creative_quality.assess_spoken_quality(
+        SAMPLE_HOOK, SAMPLE_SCRIPT, hook_seconds=3, total_seconds=15
+    )
+
+    assert report["achievable_max"] == 95
+    assert report["max10"] == 10
+    assert report["score10"] == round(report["total"] / 95 * 10, 1)
+    dims = _dims(report)
+    assert dims["hook_stopping_power"]["achievable_max"] == 17
+    assert dims["audience_truth"]["achievable_max"] == 13
+    assert dims["clarity"]["achievable_max"] == 10
+    for dimension in dims.values():
+        assert dimension["score10"] == round(
+            dimension["score"] / dimension["achievable_max"] * 10, 1
+        )
+
+
+def test_with_score10_fills_a_stored_points_only_report():
+    """ADR 0300: a report frozen before the scale change gains its
+    0-10 fields from its own dimensions; a current report is
+    returned untouched."""
+    stored = {
+        "total": 79,
+        "max": 100,
+        "grade": "B",
+        "dimensions": {
+            "hook_stopping_power": {"key": "hook_stopping_power", "score": 16, "max": 20, "weight": 20},
+            "audience_truth": {"key": "audience_truth", "score": 12, "max": 15, "weight": 15},
+            "clarity": {"key": "clarity", "score": 8, "max": 10, "weight": 10},
+            "concreteness": {"key": "concreteness", "score": 7, "max": 10, "weight": 10},
+            "story_arc": {"key": "story_arc", "score": 11, "max": 15, "weight": 15},
+            "spoken_naturalness": {"key": "spoken_naturalness", "score": 9, "max": 10, "weight": 10},
+            "demo_handoff": {"key": "demo_handoff", "score": 6, "max": 10, "weight": 10},
+            "trust_compliance": {"key": "trust_compliance", "score": 10, "max": 10, "weight": 10},
+        },
+    }
+    filled = creative_quality.with_score10(stored)
+    assert filled["achievable_max"] == 95
+    assert filled["score10"] == round(79 / 95 * 10, 1)
+    assert filled["dimensions"]["hook_stopping_power"]["score10"] == round(16 / 17 * 10, 1)
+
+    fresh = creative_quality.assess_spoken_quality(
+        SAMPLE_HOOK, SAMPLE_SCRIPT, hook_seconds=3, total_seconds=15
+    )
+    assert creative_quality.with_score10(fresh) is fresh

@@ -3731,7 +3731,7 @@ async function main() {
           throw new Error("the craft card is missing");
         }
         expectText(ctx, "Craft check", "the craft card is missing its name");
-        expectText(ctx, "56/100", "the craft score is missing");
+        expectText(ctx, "5.9/10", "the craft score is missing");
         expectText(ctx, "Advisory only", "the craft card does not say it is advisory");
         expectAbsent(ctx, "Blocks rendering", "the craft card reads as a gate");
       });
@@ -3778,18 +3778,19 @@ async function main() {
         }
         expectText(ctx, "Hook stopping power", "a dimension label is missing");
         expectText(ctx, "Trust & compliance", "a dimension label is missing");
-        expectText(ctx, "16/20", "a dimension score is missing");
+        expectText(ctx, "9.4/10", "a dimension score is missing");
         // The redesign: dimensions are compact tiles side by side, each with
-        // a bar filled in proportion to its own weighted max — the maxima
-        // differ on purpose, so the bar (not the raw score) is what compares.
+        // a bar filled in proportion to its own achievable max on the honest
+        // 0-10 scale (ADR 0300) — the maxima differ on purpose, so the bar
+        // (not the raw score) is what compares.
         if (!list.className.includes("grid")) {
           throw new Error("the dimensions are still a stacked list, not a side-by-side grid");
         }
         const hookTile = [...list.querySelectorAll("li")].find((li) => li.textContent.includes("Hook stopping power"));
         const hookBar = hookTile && hookTile.querySelector('[role="progressbar"]');
         if (!hookBar) throw new Error("a dimension tile carries no score bar");
-        if (hookBar.getAttribute("aria-valuenow") !== "16" || hookBar.getAttribute("aria-valuemax") !== "20") {
-          throw new Error("the hook tile's bar does not carry its 16/20 score");
+        if (hookBar.getAttribute("aria-valuenow") !== "9.4" || hookBar.getAttribute("aria-valuemax") !== "10") {
+          throw new Error("the hook tile's bar does not carry its 9.4/10 score");
         }
         // The weakest tile is marked so the eye lands on what to fix first:
         // Demo handoff (6/10) is the lowest proportion in this fixture.
@@ -3882,7 +3883,7 @@ async function main() {
           throw new Error("the cover text area still states a score");
         }
         const craft = ctx.container.querySelector('[data-testid="quality-report"]');
-        if (!craft || !craft.textContent.includes("13/20")) {
+        if (!craft || !craft.textContent.includes("7.6/10")) {
           throw new Error("the craft check below no longer shows the hook dimension score");
         }
       });
@@ -13224,7 +13225,7 @@ async function runAnalyticsChecks() {
     };
     const craft = card.querySelector('[data-testid="result-craft-fit-1"]');
     nowrap(craft, "the craft grade");
-    if (!craft.textContent.includes("B · 76")) throw new Error("the craft grade lost its value");
+    if (!craft.textContent.includes("B · 8")) throw new Error("the craft grade lost its value");
     const pill = card.querySelector('[data-testid="result-vote-fit-2"] span');
     nowrap(pill, "the verdict pill");
     if (!pill.textContent.includes("Not rated")) throw new Error("the verdict pill lost its label");
@@ -25348,7 +25349,7 @@ await check(
         }
         // The structure, not just the words: a header carrying the score,
         // and the two labeled sections for this clip's own verdict.
-        if (!tip.textContent.includes("16/20")) {
+        if (!tip.textContent.includes("9.4/10")) {
           throw new Error("the tooltip header does not carry the dimension's score");
         }
         if (!tip.textContent.includes("On this clip")) {

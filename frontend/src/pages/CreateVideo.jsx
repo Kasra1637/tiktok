@@ -298,15 +298,45 @@ const DIMENSION_EXPLANATIONS = {
  * structure: header, explanation, labeled sections.
  * Nothing new prints on the card; the explanation is on demand only.
  */
+// The Craft check's honest 0-10 scale (ADR 0300, the founder's
+// ruling): the points a category can actually award fall short of
+// its weight in two categories — Hook caps at 17 of 20, Audience
+// truth at 13 of 15 — so the true ceiling is 95 of the 100 points,
+// and a score shown "of 100" could never reach its own top. Every
+// surface now shows the score out of 10, divided by what is
+// actually achievable: zero is the worst, ten is the best a pair
+// can earn. The server sends score10 on every fresh report; the
+// caps mirror the server's only so a report saved before the
+// scale change still reads true.
+const CRAFT_ACHIEVABLE_CAPS = { hook_stopping_power: 17, audience_truth: 13 };
+const craftAchievableMax = (dimension) =>
+  Number(dimension?.achievable_max)
+  || CRAFT_ACHIEVABLE_CAPS[dimension?.key]
+  || Number(dimension?.max)
+  || 0;
+const craftScore10 = (score, achievable) =>
+  achievable > 0 ? Math.round(((Number(score) || 0) / achievable) * 100) / 10 : 0;
+const craftReportScore10 = (report, dimensions) => {
+  if (typeof report?.score10 === "number") return report.score10;
+  const achievableTotal = dimensions.length > 0
+    ? dimensions.reduce((sum, dimension) => sum + craftAchievableMax(dimension), 0)
+    : 95;
+  return craftScore10(report?.total, achievableTotal);
+};
+const craftDimensionScore10 = (dimension) =>
+  typeof dimension?.score10 === "number"
+    ? dimension.score10
+    : craftScore10(dimension?.score, craftAchievableMax(dimension));
+const formatScore10 = (value) => {
+  const rounded = Math.round((Number(value) || 0) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+};
+
 function CraftCheckCard({ report }) {
   const dimensions = Object.values(report?.dimensions || {});
-  const max = Number(report?.max) || 100;
-  const total = Number(report?.total) || 0;
-  const fraction = Math.max(0, Math.min(1, max > 0 ? total / max : 0));
-  const ratioOf = (dimension) => {
-    const dimensionMax = Number(dimension?.max) || 0;
-    return dimensionMax > 0 ? (Number(dimension?.score) || 0) / dimensionMax : 1;
-  };
+  const total10 = craftReportScore10(report, dimensions);
+  const fraction = Math.max(0, Math.min(1, total10 / 10));
+  const ratioOf = (dimension) => craftDimensionScore10(dimension) / 10;
   const weakestRatio = dimensions.length > 0
     ? Math.min(...dimensions.map(ratioOf))
     : null;
@@ -318,7 +348,7 @@ function CraftCheckCard({ report }) {
         <div
           className="relative h-16 w-16 shrink-0"
           role="img"
-          aria-label={`Craft score ${total} of ${max}${report?.grade ? `, grade ${report.grade}` : ""}`}
+          aria-label={`Craft score ${formatScore10(total10)} of 10${report?.grade ? `, grade ${report.grade}` : ""}`}
         >
           <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90" aria-hidden="true">
             <circle
@@ -350,7 +380,7 @@ function CraftCheckCard({ report }) {
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold">Craft check</p>
           <p className="text-sm text-muted-foreground">
-            {total}/{max}
+            {formatScore10(total10)}/10
           </p>
           <p className="text-sm text-muted-foreground">
             {qualityBandNote(report)}
@@ -361,7 +391,8 @@ function CraftCheckCard({ report }) {
         <TooltipProvider delayDuration={200}>
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="quality-dimensions">
             {dimensions.map((dimension) => {
-              const pct = Math.round(ratioOf(dimension) * 100);
+              const score10 = craftDimensionScore10(dimension);
+              const pct = Math.round(score10 * 10);
               const isWeakest = weakestRatio !== null && ratioOf(dimension) === weakestRatio;
               const evidence = Array.isArray(dimension.evidence)
                 ? dimension.evidence.filter((line) => String(line || "").trim())
@@ -380,13 +411,13 @@ function CraftCheckCard({ report }) {
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <p className="text-sm font-semibold">{dimension.label}</p>
-                        <p className="text-sm text-muted-foreground">{dimension.score}/{dimension.max}</p>
+                        <p className="text-sm text-muted-foreground">{formatScore10(score10)}/10</p>
                       </div>
                       <div
                         role="progressbar"
                         aria-valuemin={0}
-                        aria-valuemax={Number(dimension.max) || 0}
-                        aria-valuenow={Number(dimension.score) || 0}
+                        aria-valuemax={10}
+                        aria-valuenow={score10}
                         aria-label={dimension.label}
                         className="h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--indigo-8)]"
                       >
@@ -411,12 +442,12 @@ function CraftCheckCard({ report }) {
                   <TooltipContent
                     data-testid={`quality-dimension-tip-${dimension.key}`}
                     className="max-w-xs space-y-2.5"
-                    aria-label={`${dimension.label}: ${dimension.score} of ${dimension.max}`}
+                    aria-label={`${dimension.label}: ${formatScore10(score10)} of 10`}
                   >
                     <div className="flex items-baseline justify-between gap-3">
                       <p className={TOOLTIP_LABEL_CLASS}>{dimension.label}</p>
                       <p className="text-primary-foreground/70">
-                        {dimension.score}/{dimension.max}
+                        {formatScore10(score10)}/10
                       </p>
                     </div>
                     {DIMENSION_EXPLANATIONS[dimension.key] && (
@@ -446,7 +477,7 @@ function CraftCheckCard({ report }) {
                       </div>
                     )}
                     {!DIMENSION_EXPLANATIONS[dimension.key] && !evidence.length && !dimension.next_step && (
-                      <p>{dimension.label} — scored out of {dimension.max}.</p>
+                      <p>{dimension.label} — scored out of 10.</p>
                     )}
                   </TooltipContent>
                 </Tooltip>
@@ -2776,9 +2807,9 @@ export default function CreateVideo() {
                     ? [{
                         label: "Craft check",
                         values: [
-                          `${Number(report.total) || 0} of ${Number(report.max) || 100}. ${qualityBandNote(report)}`,
+                          `${formatScore10(craftReportScore10(report, Object.values(report.dimensions || {})))} of 10. ${qualityBandNote(report)}`,
                           ...Object.values(report.dimensions || {}).map(
-                            (d) => `${d.label}: ${d.score} of ${d.max}.`
+                            (d) => `${d.label}: ${formatScore10(craftDimensionScore10(d))} of 10.`
                           ),
                         ],
                       }]

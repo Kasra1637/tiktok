@@ -362,6 +362,17 @@ function snapshotFacts(snapshot) {
 }
 
 /** A short, local date for the renders inside a status group. */
+// Craft scores read on the honest 0-10 scale (ADR 0300). The
+// server fills score10 into stored reports on read; the fallback
+// divides by the true 95-point ceiling for any report that still
+// carries points only.
+function craftScore10Label(report) {
+  const value = typeof report?.score10 === "number"
+    ? report.score10
+    : Math.round(((Number(report?.total) || 0) / 95) * 100) / 10;
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 function shortDate(value) {
   const t = Date.parse(value);
   if (Number.isNaN(t)) return "";
@@ -505,7 +516,7 @@ function ClipResults({ generations, profileId, pick, draftIds, verdictSummary })
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap" data-testid={`result-craft-${row.id}`}>
                         <span className="text-muted-foreground">Craft</span>
                         {row.quality_report ? (
-                          <span className="font-mono tabular-nums">{row.quality_report.grade} · {row.quality_report.total}</span>
+                          <span className="font-mono tabular-nums">{row.quality_report.grade} · {craftScore10Label(row.quality_report)}</span>
                         ) : (
                           <span className="text-muted-foreground">Not scored</span>
                         )}
