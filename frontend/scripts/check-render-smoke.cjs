@@ -15150,8 +15150,8 @@ async function runHookCtaChecks() {
         if (!card) throw new Error("the Hook card did not render");
         const focusControl = card.querySelector('[data-testid="hook-picks-focus"]');
         const before = await offeredOptionValues(ctx, focusControl);
-        if (!before.includes(FRAGMENT)) {
-          throw new Error("the fragment was not among the offered focus lines before the refresh");
+        if (before.includes(FRAGMENT)) {
+          throw new Error("the fragment was offered as a focus line before the refresh (ADR 0307: a fragment is never offered)");
         }
         await clickEl(ctx, focusControl);
         const refresh = card.querySelector('[data-testid="hook-picks-focus-refresh"]');
@@ -25267,13 +25267,31 @@ await check(
   // here (it hides where speechSynthesis is missing, by design); the pin
   // is on the wiring: the import and the mounted builder over the plan
   // and strategy.
-  await check("the Review step wires read-aloud over the plan and strategy", async () => {
+  await check("the Review step carries no read-aloud button", async () => {
+    // ADR 0302: the founder ordered the speaker icon out of the
+    // Review step — the tab row stands alone there now. The
+    // ListenButton component and its other surfaces stay.
     const src = fs.readFileSync(path.join(SRC, "pages", "CreateVideo.jsx"), "utf8");
-    if (!/import \{ ListenButton \} from "\.\.\/components\/ListenButton"/.test(src)) {
-      throw new Error("CreateVideo no longer imports the shared ListenButton");
+    if (/ListenButton/.test(src)) {
+      throw new Error("CreateVideo carries a listen button again");
     }
-    if (!/testId="listen-review-plan"/.test(src)) {
-      throw new Error("the Review step no longer mounts its listen button");
+    if (/listen-review-plan/.test(src)) {
+      throw new Error("the Review step mounts its listen button again");
+    }
+  });
+
+  // ADR 0306: a finished login lands on the Dashboard — always. Both
+  // auth pages force the redirect, so no return-to-page, stored path
+  // or Clerk default can land a signed-in user anywhere else.
+  await check("sign-in and sign-up land on the dashboard, always", async () => {
+    for (const page of ["SignIn.jsx", "SignUp.jsx"]) {
+      const src = fs.readFileSync(path.join(SRC, "pages", page), "utf8");
+      if (!src.includes('forceRedirectUrl="/dashboard"')) {
+        throw new Error(`${page} no longer forces the dashboard landing`);
+      }
+      if (!src.includes('fallbackRedirectUrl="/dashboard"')) {
+        throw new Error(`${page} lost its dashboard fallback`);
+      }
     }
   });
 

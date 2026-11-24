@@ -63,7 +63,7 @@ describe("VoiceModeControl", () => {
     const view = await mount({ value: "silent", silentText: "", silentTextName: "the hook line" });
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
-    expect(note.textContent).toContain("the hook line will show here once it is written");
+    expect(note.textContent).toContain("The hook line will appear here once it is written.");
     await view.unmount();
   });
 });

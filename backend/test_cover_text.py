@@ -155,7 +155,33 @@ def test_generate_cover_text_accepts_a_fresh_cover(monkeypatch):
     assert out == COVER
 
 
-def test_generate_cover_text_refuses_an_echo_after_one_correction(monkeypatch):
+def test_generate_cover_text_lands_after_two_long_drafts(monkeypatch):
+    import ai_service
+    # ADR 0304: three attempts, and the shared cover rules name an
+    # aim inside the range — the founder hit the two-attempt loop's
+    # refusal on live covers that ran long.
+    prompts = []
+    queue = [
+        {"cover_text": "One two three four five six seven"},
+        {"cover_text": "One two three four five six seven eight"},
+        {"cover_text": COVER},
+    ]
+
+    async def fake_chat(**kwargs):
+        prompts.append(kwargs["prompt"])
+        return queue.pop(0) if queue else {}
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    out = asyncio.run(ai_service.generate_cover_text(
+        {"brand_name": "Voice Journal"}, None, HOOK, SCRIPT,
+        current_cover="Old cover",
+    ))
+    assert out == COVER
+    assert len(prompts) == 3
+    assert "Aim for 4 words" in prompts[0]
+
+
+def test_generate_cover_text_refuses_a_persistent_echo(monkeypatch):
     import ai_service
     _stub_chat(monkeypatch, [
         {"cover_text": "Old cover"}, {"cover_text": "Old cover"},
@@ -282,6 +308,7 @@ def test_generate_cover_text_refuses_a_cover_that_stays_long(monkeypatch):
     import ai_service
     _stub_chat(monkeypatch, [
         {"cover_text": SEVEN_WORDS}, {"cover_text": SEVEN_WORDS},
+        {"cover_text": SEVEN_WORDS},
     ])
     with pytest.raises(ai_service.RewriteRefusal, match="running long"):
         asyncio.run(ai_service.generate_cover_text(
@@ -312,6 +339,7 @@ def test_generate_cover_text_corrects_a_cut_off_cover(monkeypatch):
 def test_generate_cover_text_refuses_a_persistent_cut_off_cover(monkeypatch):
     import ai_service
     _stub_chat(monkeypatch, [
+        {"cover_text": "Bakery queue, words won't come and"},
         {"cover_text": "Bakery queue, words won't come and"},
         {"cover_text": "Bakery queue, words won't come and"},
     ])

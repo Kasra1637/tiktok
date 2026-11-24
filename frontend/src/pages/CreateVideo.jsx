@@ -27,7 +27,6 @@ import { Skeleton } from "../components/ui/skeleton";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 
 import HookContinuityPanel from "../components/HookContinuityPanel";
-import { ListenButton } from "../components/ListenButton";
 import {
   Tooltip,
   TooltipContent,
@@ -2782,51 +2781,6 @@ export default function CreateVideo() {
                 </button>
               ))}
             </div>
-            {/* Read-aloud for the step that carries the most text in the
-                app (audit 2026-11-14, finding 3): the plan and the
-                strategy, built from the data model like every other
-                section's listen button — never scraped from the DOM. It
-                sits in the step header so both halves of the step reach
-                it, and renders nothing where the browser cannot speak. */}
-            <ListenButton
-              id="review-plan"
-              label="The plan and strategy"
-              testId="listen-review-plan"
-              className="ml-auto"
-              getBlocks={() => {
-                const strategy = project?.strategy;
-                const sceneRows = strategy
-                  ? [...Object.entries(strategy.scene || {}), ...Object.entries(strategy.performance || {})]
-                  : [];
-                const report = project?.quality_report;
-                return [
-                  { label: "Hook", values: [editValue("hook_line", "")] },
-                  { label: "Script", values: [editValue("script", "")] },
-                  { label: "What the demo should show", values: [editValue("demo_brief", "")] },
-                  ...(report
-                    ? [{
-                        label: "Craft check",
-                        values: [
-                          `${formatScore10(craftReportScore10(report, Object.values(report.dimensions || {})))} of 10. ${qualityBandNote(report)}`,
-                          ...Object.values(report.dimensions || {}).map(
-                            (d) => `${d.label}: ${formatScore10(craftDimensionScore10(d))} of 10.`
-                          ),
-                        ],
-                      }]
-                    : []),
-                  ...(strategy
-                    ? [
-                        { label: "Hook concept", values: [strategy.hook_concept] },
-                        { label: "Why this works for this app", values: [strategy.strategy_summary] },
-                        {
-                          label: "Scene details",
-                          values: sceneRows.map(([key, value]) => `${String(key).replaceAll("_", " ")}: ${value}`),
-                        },
-                      ]
-                    : []),
-                ];
-              }}
-            />
           </div>
         )}
         {!project?.script_version && planFailed && !busy ? (

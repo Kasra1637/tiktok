@@ -382,6 +382,21 @@ class TestGenerateHookLine:
         assert len(calls) == 2
         assert "correction" in str(calls[1]).lower() or "12 words" in str(calls[1])
 
+    def test_a_reply_corrected_twice_still_lands(self, monkeypatch):
+        import ai_service
+        # ADR 0301: the loop runs three attempts — Sonnet 5.5's first
+        # live hook missed the 4-second word budget by one word on
+        # both of the old loop's two attempts, correction named, and
+        # the founder got a failure for a one-word miss.
+        long_hook = " ".join(["word"] * 13) + "."
+        calls = _stub_chat(monkeypatch, [
+            _hook_reply(hook_line=long_hook),
+            _hook_reply(hook_line=long_hook),
+            _hook_reply()])
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == HOOK
+        assert len(calls) == 3
+
     def test_a_persistently_over_budget_reply_is_refused(self, monkeypatch):
         import ai_service
         long_hook = " ".join(["word"] * 13) + "."
@@ -736,6 +751,69 @@ class TestGenerateHookLineSteering:
             STATEMENT_OUTCOME, FLAT_OUTCOME]
         assert ai_service.profile_outcome_lines(PROFILE_FACTS) == [
             "Clearing the day's thoughts out loud"]
+
+    def test_the_focus_lines_never_offer_a_fragment(self):
+        """ADR 0307: the pick vocabulary drops the chopped pieces an old
+        profile still stores — "triggers", "and growth over time",
+        "from your own words" — while the raw lines stay whole for the
+        refresh's avoid list."""
+        import ai_service
+        profile = {
+            "outcome_statements": [
+                {"outcome": "See your own rhythms", "from_feature": "Patterns"},
+                {"outcome": "triggers", "from_feature": "Patterns"},
+            ],
+            "desired_outcomes": [
+                "and growth over time",
+                "from your own words",
+                "Fall asleep without replaying the day",
+            ],
+        }
+        assert ai_service.profile_focus_lines(profile) == [
+            "See your own rhythms",
+            "Fall asleep without replaying the day",
+        ]
+        assert "triggers" in ai_service.profile_outcome_lines(profile)
+
+    def test_the_focus_lines_stop_at_six(self):
+        """Kasra's order (Nov 23 2026): the Focus pick shows six lines
+        at a time — the first six that stand alone, never more."""
+        import ai_service
+        profile = {
+            "desired_outcomes": [
+                f"Outcome number {word} stands alone"
+                for word in ["one", "two", "three", "four", "five", "six", "seven", "eight"]
+            ],
+        }
+        lines = ai_service.profile_focus_lines(profile)
+        assert len(lines) == 6
+        assert lines[-1] == "Outcome number six stands alone"
+
+    def test_the_focus_lines_stop_at_six(self):
+        """ADR 0307 (Kasra's order, Nov 23 2026): the pick shows six
+        lines at a time — the first six that stand alone, in the
+        profile's own order; the rest are not offered."""
+        import ai_service
+        profile = {
+            "desired_outcomes": [
+                "Fall asleep without replaying the day",
+                "See your own rhythms",
+                "Name the feeling in plain words",
+                "Spot the pattern before it builds",
+                "End the day feeling settled",
+                "Trust what your body is saying",
+                "Carry the calm into the morning",
+                "Notice the shift as it happens",
+            ],
+        }
+        assert ai_service.profile_focus_lines(profile) == [
+            "Fall asleep without replaying the day",
+            "See your own rhythms",
+            "Name the feeling in plain words",
+            "Spot the pattern before it builds",
+            "End the day feeling settled",
+            "Trust what your body is saying",
+        ]
 
     def test_unpicked_the_prompt_is_the_prompt_it_always_was(self, monkeypatch):
         import ai_service

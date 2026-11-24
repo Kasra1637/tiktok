@@ -1126,7 +1126,7 @@ async def update_studio_project(
                 "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?",
                 (row.get("brand_profile_id"), user_id),
             )
-            if focus not in ai_service.profile_outcome_lines(profile or {}):
+            if focus not in ai_service.profile_focus_lines(profile or {}):
                 raise HTTPException(
                     status_code=400,
                     detail=(

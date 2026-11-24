@@ -13,9 +13,11 @@ import { GroupLabel } from "../SectionCard";
  *
  * FOCUS is one of the app profile's own outcome lines — the list
  * below is the whole vocabulary, built from the profile the same
- * way the backend builds it (`profile_outcome_lines` in
+ * way the backend builds it (`profile_focus_lines` in
  * ai_service.py: the evidenced outcome statements first, then the
- * flat desired outcomes they do not already say). It is NOT the
+ * flat desired outcomes they do not already say, with the chopped
+ * fragments an old profile still stores filtered out by the
+ * completeness bar below, ADR 0307). It is NOT the
  * retired angle picker: no angle is created, stored or scored —
  * the pick names which of the app's outcomes the hook leads with,
  * and the backend proves membership again when the pick saves and
@@ -42,12 +44,36 @@ import { GroupLabel } from "../SectionCard";
  * control only asks and shows the wait and the failure.
  */
 
+// The completeness bar (ADR 0249, mirrored from `_outcome_stands_alone`
+// in ai_service.py): a lone word names a topic, a conjunction or
+// preposition opener is a chopped sentence's tail, and a line ending
+// on a conjunction or a comma stops mid-list. The Focus pick never
+// offers a line that fails it (ADR 0307) — a profile researched
+// before the bar can still store the pieces.
+const OUTCOME_FRAGMENT_OPENERS = new Set([
+  "and", "but", "or", "nor", "yet", "so",
+  "on", "in", "at", "from", "with", "without", "by", "for", "to",
+  "of", "over", "under", "after", "before", "into", "through",
+  "about", "between", "during", "upon", "within", "toward", "towards",
+]);
+const OUTCOME_FRAGMENT_ENDERS = new Set(["and", "or", "but", "nor"]);
+
+function outcomeStandsAlone(text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  const strip = (word) => word.replace(/^["'“”‘’()\[\],]+|["'“”‘’()\[\],]+$/g, "").toLowerCase();
+  if (OUTCOME_FRAGMENT_OPENERS.has(strip(words[0]))) return false;
+  if (String(text).trim().endsWith(",")) return false;
+  if (OUTCOME_FRAGMENT_ENDERS.has(strip(words[words.length - 1]))) return false;
+  return true;
+}
+
 export function profileOutcomeLines(profile) {
   const lines = [];
   const seen = new Set();
   const add = (text) => {
     const line = String(text || "").split(/\s+/).join(" ").trim();
-    if (line && !seen.has(line)) {
+    if (line && outcomeStandsAlone(line) && !seen.has(line)) {
       seen.add(line);
       lines.push(line);
     }
@@ -61,7 +87,9 @@ export function profileOutcomeLines(profile) {
   } else if (desired) {
     add(desired);
   }
-  return lines;
+  // Six at a time (Kasra's order, Nov 23 2026, ADR 0307): the first
+  // six lines that stand alone, in the profile's own order.
+  return lines.slice(0, 6);
 }
 
 const TONE_OPTIONS = [
@@ -124,13 +152,15 @@ export default function HookPicksControl({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <GroupLabel icon={Focus}>Focus</GroupLabel>
-          {/* The refresh (ADR 0288, Kasra's order): one click writes a
-              fresh outcome layer onto the profile from its stored
-              facts — the fresh ideas land in this list, and a stored
-              list carrying old fragments is replaced whole. Offered
-              only where the host wires it. */}
+          {/* The outcome refresh (ADR 0288, Kasra's order): one click
+              writes a fresh outcome layer onto the profile from its
+              stored facts — the fresh ideas land in this list, and a
+              stored list carrying old fragments is replaced whole.
+              Offered only where the host wires it. ADR 0308: the
+              button is named Buffet and stands on the left, beside
+              the label — no button on the right of this row. */}
           {onRefreshFocus && (
             <Button
               type="button"
@@ -142,7 +172,7 @@ export default function HookPicksControl({
               data-testid={`${testId}-focus-refresh`}
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              {focusRefreshing ? "Refreshing" : "Refresh"}
+              Buffet
             </Button>
           )}
         </div>

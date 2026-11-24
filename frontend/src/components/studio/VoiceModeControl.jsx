@@ -69,15 +69,14 @@ export default function VoiceModeControl({
         </p>
       ) : (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
-          The character stays silent in this video — no voice, and the mouth does not move at
-          all. For a voice on TikTok, paste this text into TikTok&rsquo;s
-          text-to-speech so TikTok reads it aloud:
+          The character stays silent in this video — no voice, and the mouth never moves.
+          For a voice on TikTok, paste this line into TikTok&rsquo;s text-to-speech:{" "}
           {text ? (
-            <span className="mt-1 block font-semibold text-foreground">&ldquo;{text}&rdquo;</span>
+            <span className="font-semibold text-foreground">&ldquo;{text}&rdquo;</span>
           ) : (
-            <span className="mt-1 block">
-              {silentTextName} will show here once it is written — that exact text
-              is the one to paste.
+            <span>
+              {silentTextName.charAt(0).toUpperCase() + silentTextName.slice(1)} will
+              appear here once it is written.
             </span>
           )}
         </p>

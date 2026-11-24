@@ -43,6 +43,8 @@ export default function SignIn() {
           routing="path"
           path="/sign-in"
           signUpUrl="/sign-up"
+          forceRedirectUrl="/dashboard"
+          fallbackRedirectUrl="/dashboard"
           appearance={{
             elements: {
               rootBox: "mx-auto w-full max-w-[400px]",

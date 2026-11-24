@@ -238,6 +238,39 @@ def test_middle_rewrite_keeps_the_lines_budget(monkeypatch):
     assert "40" in calls[1]["prompt"]
 
 
+def test_middle_rewrite_lands_after_two_overruns(monkeypatch):
+    # ADR 0304: three attempts, and the budget names an aim inside
+    # the limit — a live remake-class failure on the old two-attempt
+    # loop is what the founder ordered fixed.
+    calls = []
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"line": "Writing in my journal is honestly the very last thing I want to do."},
+        {"line": "Writing in my journal is honestly the very last thing I want to do."},
+        {"line": "Journaling is the last thing I want."},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_spoken_line(
+        {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT, max_chars=40))
+    assert line == "Journaling is the last thing I want."
+    assert len(calls) == 3
+    assert "Aim for about 35" in calls[0]["prompt"]
+
+
+def test_hook_rewrite_lands_after_two_overruns(monkeypatch):
+    # ADR 0304, the hook surface of the same fix (rewrite_hook_line).
+    calls = []
+    long_line = "word " * 14 + "end."
+    monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
+        {"hook_line": long_line},
+        {"hook_line": long_line},
+        {"hook_line": "Typing feels impossible when my head is this loud."},
+    ], calls))
+    line = asyncio.run(ai_service.rewrite_hook_line(
+        {}, None, "I don't want to type anything", max_chars=60))
+    assert line == "Typing feels impossible when my head is this loud."
+    assert len(calls) == 3
+    assert "Aim for about 55" in calls[0]["prompt"]
+
+
 def test_middle_rewrite_refuses_a_persistent_overrun(monkeypatch):
     monkeypatch.setattr(
         ai_service, "_chat_json",

@@ -49,6 +49,47 @@ describe("profileOutcomeLines", () => {
     expect(profileOutcomeLines(profile)).toEqual(OUTCOMES);
   });
 
+  test("chopped fragments an old profile still stores are never offered", () => {
+    const profile = {
+      outcome_statements: [
+        { outcome: "See your own rhythms", from_feature: "Patterns" },
+        { outcome: "triggers", from_feature: "Patterns" },
+      ],
+      desired_outcomes: [
+        "and growth over time",
+        "from your own words",
+        "Fall asleep without replaying the day",
+      ],
+    };
+    expect(profileOutcomeLines(profile)).toEqual([
+      "See your own rhythms",
+      "Fall asleep without replaying the day",
+    ]);
+  });
+
+  test("the pick shows six lines at a time, the first six that stand alone", () => {
+    const profile = {
+      desired_outcomes: [
+        "Fall asleep without replaying the day",
+        "See your own rhythms",
+        "Name the feeling in plain words",
+        "Spot the pattern before it builds",
+        "End the day feeling settled",
+        "Trust what your body is saying",
+        "Carry the calm into the morning",
+        "Notice the shift as it happens",
+      ],
+    };
+    expect(profileOutcomeLines(profile)).toEqual([
+      "Fall asleep without replaying the day",
+      "See your own rhythms",
+      "Name the feeling in plain words",
+      "Spot the pattern before it builds",
+      "End the day feeling settled",
+      "Trust what your body is saying",
+    ]);
+  });
+
   test("an empty profile offers no lines", () => {
     expect(profileOutcomeLines(null)).toEqual([]);
     expect(profileOutcomeLines({})).toEqual([]);

@@ -3496,8 +3496,8 @@ class TestScriptBand:
 
     def test_a_remake_under_the_band_gets_one_correction(self, monkeypatch):
         """The whole-script remake is a generation too: bounded below by the
-        band as well as above by the ceiling, with one correction before it
-        refuses (ADR 0255)."""
+        band as well as above by the ceiling, with bounded corrections
+        before it refuses (ADR 0255; three attempts since ADR 0303)."""
         import ai_service
         replies = iter([{"line": "The words helped."}, {"line": self.INBAND}])
         prompts = []
@@ -3513,6 +3513,31 @@ class TestScriptBand:
         ))
         assert result == self.INBAND
         assert "140" in prompts[1]
+
+    def test_a_remake_over_the_ceiling_twice_still_lands(self, monkeypatch):
+        """ADR 0303: the remake runs three attempts and its first prompt
+        names an aim inside the band — Sonnet 5.5's first live remake
+        ran past the 180 ceiling on both of the old loop's two
+        attempts and the founder was told to try again or edit it
+        himself, for a length the instruction never gave a target
+        inside the edges."""
+        import ai_service
+        replies = iter([
+            {"line": "y" * 200}, {"line": "y" * 190}, {"line": self.INBAND}])
+        prompts = []
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            prompts.append(prompt)
+            return next(replies)
+
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+        result = _run(ai_service.rewrite_whole_script(
+            {}, None, self.UNDER,
+            hook_line=self.HOOK, max_chars=180, min_chars=140,
+        ))
+        assert result == self.INBAND
+        assert len(prompts) == 3
+        assert "160" in prompts[0]
 
     def test_a_remake_that_stays_under_the_band_is_refused(self, monkeypatch):
         import ai_service

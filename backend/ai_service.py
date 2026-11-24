@@ -3067,8 +3067,9 @@ async def generate_cover_text(
     in plain words, one concrete felt detail, never the place, the
     resolution withheld, and
     never a copy of the spoken hook. A reply that hands back the
-    current cover unchanged, copies the hook, or runs long gets one
-    bounded correction; a reply still failing after it raises
+    current cover unchanged, copies the hook, or runs long gets
+    bounded corrections — three attempts (ADR 0304); a reply still
+    failing after them raises
     RewriteRefusal with the reason, so the founder never sees a fake
     improvement — the clearer-line rewrites' honesty contract.
     """
@@ -3096,7 +3097,7 @@ async def generate_cover_text(
         'Return JSON: {"cover_text": "..."}'
     )
     refusal = "No usable cover text came back; try again, or write the cover yourself."
-    for _ in range(2):
+    for _ in range(3):
         raw = await _chat_json(
             system_message="You write one TikTok cover text. Return one JSON object only.",
             prompt=prompt,
@@ -3196,12 +3197,14 @@ def profile_outcome_lines(profile: dict) -> list:
     The evidenced outcome statements first — each is one feature's
     resulting benefit, phrased as what the user gets — then the flat
     desired outcomes the statements do not already say. Deduped on
-    the normalized text, order preserved. This list is the Hook +
-    CTA focus pick's whole vocabulary (ADR 0247): the pick is one of
-    these lines — the studio PATCH proves membership against this
-    list when the pick saves, and generation resolves the pick
-    against it again, so a line the profile no longer carries
-    steers nothing.
+    the normalized text, order preserved. The Hook + CTA focus pick's
+    vocabulary is this list passed through the completeness bar
+    (`profile_focus_lines`, ADR 0307, narrowing ADR 0247): the studio
+    PATCH proves membership against that list when the pick saves,
+    and generation resolves the pick against it again, so a line the
+    profile no longer carries — or a fragment it still stores —
+    steers nothing. This raw list still serves the outcome refresh's
+    avoid list, which needs every stored line, fragments included.
     """
     profile = profile or {}
     lines = []
@@ -3225,6 +3228,32 @@ def profile_outcome_lines(profile: dict) -> list:
     elif desired:
         _add(desired)
     return lines
+
+
+def profile_focus_lines(profile: dict) -> list:
+    """The outcome lines the Focus pick may offer (ADR 0307).
+
+    `profile_outcome_lines` returns the profile's lines as stored —
+    the refresh's avoid list needs them whole, fragments included.
+    But a profile researched before the completeness bar (ADR 0249)
+    can still STORE chopped pieces ("triggers", "and growth over
+    time", "from your own words"), and the pick offered them as
+    options verbatim. The pick's vocabulary is the stored lines that
+    stand alone under the same bar; the stored profile itself is
+    untouched, and a pick saved earlier that names a fragment simply
+    stops resolving, like a line the profile no longer carries.
+    """
+    return [
+        line for line in profile_outcome_lines(profile)
+        if _outcome_stands_alone(line)
+    ][:FOCUS_LINE_LIMIT]
+
+
+# The Focus pick shows six lines at a time (Kasra's order, Nov 23
+# 2026, part of ADR 0307): the first six lines that stand alone, in
+# the profile's own order — the rest wait for the outcome refresh
+# to bring a fresh layer forward.
+FOCUS_LINE_LIMIT = 6
 
 
 # The Hook + CTA hook picks (ADR 0247): the closed sets the founder
@@ -3258,7 +3287,7 @@ def _hook_steering_block(project: dict, profile: dict) -> str:
     project = project or {}
     lines = []
     focus = " ".join(str(project.get("hook_focus") or "").split()).strip()
-    if focus and focus in profile_outcome_lines(profile):
+    if focus and focus in profile_focus_lines(profile):
         lines.append(
             f"- FOCUS: the founder picked the outcome this hook leads "
             f"with: \"{focus}\". The GOAL the hook opens with is this "
@@ -3337,9 +3366,13 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     judges the line whole, and a question-shaped line is also judged
     for a dangling question (ADR 0249): a bare tail that asks about
     nothing is charged by name in the same correction. A reply over a
-    budget or through the gate gets one bounded correction; a reply
-    still failing raises — an over-long or unfinished line is never
-    stored silently.
+    budget or through the gate gets bounded corrections — three
+    attempts, the plan chain's count (ADR 0301: Sonnet 5.5's first
+    live hook missed the 4-second word budget by one word on both of
+    the old loop's two attempts, the correction naming the miss each
+    time, and the founder got a failure for a one-word overage); a
+    reply still failing raises — an over-long or unfinished line is
+    never stored silently.
 
     The direction carries the opening-action bookends (ADRs 0187 and
     0223): hook_action is the opening move, already in motion in the
@@ -3471,7 +3504,7 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     )
     correction = ""
     last_failure = ""
-    for _attempt in range(2):
+    for _attempt in range(3):
         data = await _chat_json(
             system_message=system_message,
             prompt=prompt + correction,
@@ -4153,7 +4186,7 @@ def _cover_text_rules_block() -> str:
     """
     return (
         "COVER TEXT — the words that sit on the video's opening frame (post copy, never spoken):\n"
-        "- SHORT and punchy: 3 to 5 words — all a viewer can read inside the first two seconds, every word earning its place.\n"
+        "- SHORT and punchy: 3 to 5 words — all a viewer can read inside the first two seconds, every word earning its place. Aim for 4 words — the middle of the range — so the first draft lands inside it, not at its edge (ADR 0304).\n"
         "- Eye catching, punchy and enticing: curiosity up front — it makes the viewer want the answer the video is holding back.\n"
         "- First person, the person's own voice; never a label, a title, or ad copy.\n"
         "- The ache up front, in plain words, with one concrete felt detail — never the place.\n"
@@ -4604,8 +4637,9 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
 
     A suggestion only: nothing is saved here. A reply that fails a
     repair-able check — the current hook handed back unchanged, a line
-    past its set length, a question the angle does not invite — gets one
-    bounded correction; a reply still failing after it raises
+    past its set length, a question the angle does not invite — gets
+    bounded corrections — three attempts (ADR 0304); a reply still
+    failing after them raises
     RewriteRefusal with the reason, so the founder never sees a fake
     improvement.
 
@@ -4625,7 +4659,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     words are laid over the video when rendered, so a line past its set
     length overlaps and breaks the visual. Generation is therefore sized
     by the set length rather than checked after the fact — an
-    over-length reply is rejected, corrected once with the count named,
+    over-length reply is rejected, corrected with the count named,
     and still refused if it stays over.
     """
     original = str(hook_line or "").strip()
@@ -4644,6 +4678,12 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
         "longer line overlaps and breaks the visual."
         if max_chars else ""
     )
+    if max_chars:
+        budget += (
+            f" Aim for about {max(1, max_chars - 5)} characters — a "
+            "breath inside the set length — so the first draft lands "
+            "inside it, not at its edge (ADR 0304)."
+        )
     # The steering picks (ADR 0247), present only from the Hook + CTA
     # page's clearer-hook surface: plain sentences appended to the
     # rewrite instruction, empty for every other caller.
@@ -4695,7 +4735,7 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
     )
     line = ""
     refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
-    for _ in range(2):
+    for _ in range(3):
         raw = await _chat_json(
             system_message="You sharpen one spoken TikTok hook line. Return one JSON object only.",
             prompt=prompt,
@@ -4820,7 +4860,8 @@ async def rewrite_spoken_line(
 
     A suggestion only: nothing is saved here. A reply that fails a
     repair-able check — handed back unchanged, a question, over the room —
-    gets one correction; a reply still failing after it raises
+    gets bounded corrections — three attempts (ADR 0304); a reply
+    still failing after them raises
     RewriteRefusal with the reason, so the founder never sees a fake
     improvement.
     """
@@ -4849,6 +4890,9 @@ async def rewrite_spoken_line(
             "— the rest of the script already uses the remainder — so the "
             "rewrite must fit inside that: the words are laid over the video "
             "when rendered, so a longer line overlaps and breaks the visual."
+            f" Aim for about {max(1, max_chars - 5)} characters — a "
+            "breath inside the limit — so the first draft lands inside "
+            "it, not at its edge (ADR 0304)."
         )
     else:
         budget = (
@@ -4873,7 +4917,7 @@ async def rewrite_spoken_line(
         'Return JSON: {"line": "..."}'
     )
     refusal = "The rewrite came back unchanged; try again, or edit the line yourself."
-    for _ in range(2):
+    for _ in range(3):
         raw = await _chat_json(
             system_message="You sharpen one spoken line from a TikTok script. Return one JSON object only.",
             prompt=prompt,
@@ -5001,6 +5045,14 @@ async def rewrite_whole_script(
                 f" It must also land at {min_chars} characters or more — "
                 "the floor of the band its seconds set — because a shorter "
                 "remake leaves the middle's seconds empty."
+                f" Aim for about {(min_chars + max_chars) // 2} characters "
+                "— the middle of the band — so the first draft lands "
+                "inside it, not at an edge (ADR 0303)."
+            )
+        else:
+            budget += (
+                f" Aim for about {max(1, max_chars - 10)} characters — "
+                "safely inside the limit, not at its edge (ADR 0303)."
             )
     else:
         budget = (
@@ -5033,7 +5085,7 @@ async def rewrite_whole_script(
     # whitespace collapsed — so a script handed back with its line
     # breaks tidied away still counts as unchanged.
     echo = re.sub(r"\s+", " ", character_policy.neutralize(original)).strip().lower()
-    for _ in range(2):
+    for _ in range(3):
         raw = await _chat_json(
             system_message="You rewrite one spoken TikTok script, whole. Return one JSON object only.",
             prompt=prompt,
