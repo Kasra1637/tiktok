@@ -1,4 +1,4 @@
-import { RecommendationCard, TemplateShape, AngleSelector, AngleGoalPicker, PresenterPhotoControl, MissingRequirements, TEMPLATE_PHOTO_ID } from "../components/studio/SelectionPanels";
+import { RecommendationCard, AngleSelector, AngleGoalPicker, PresenterPhotoControl, MissingRequirements, TEMPLATE_PHOTO_ID } from "../components/studio/SelectionPanels";
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
@@ -62,7 +62,7 @@ import { useDesktopWidth } from "../lib/desktopWidth";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Image as ImageIcon, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -1456,16 +1456,6 @@ export default function CreateVideo() {
         ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     });
   };
-  const scrollToTemplatePhoto = () => {
-    setStep(1);
-    // After the step renders, not before: the element does not exist yet.
-    requestAnimationFrame(() => {
-      document
-        .getElementById(TEMPLATE_PHOTO_ID)
-        ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-    });
-  };
-
   // Autosave mirrors the Demo + CTA editor's draft rhythm (save shortly
   // after every change), but through the server path, not browser storage:
   // Review edits are plan text the render speaks, so only a real save counts.
@@ -2688,50 +2678,12 @@ export default function CreateVideo() {
               </div>
             )}
 
-            {template && (
-              <div className="inset-panel text-base">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{template.name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {humanize(template.category)}
-                  </Badge>
-                  {/* Says which of the two states the founder is in. A
-                      preselected template is a starting point scored for this
-                      app and this goal, and clicking any other card replaces it
-                      — but nothing on screen would otherwise distinguish that
-                      from a pick they made. */}
-                  {!templateChosenByHand.current && (
-                    <Badge variant="secondary" className="text-xs">
-                      Suggested
-                    </Badge>
-                  )}
-                </div>
-                {/* Trimmed: the picked card above already shows the outcome and
-                    why-it-fits, so repeating them here doubled the reading.
-                    This box keeps only what the card doesn't: the length +
-                    middle (TemplateShape) and the photo jump. Once a plan
-                    exists the middle is the approved script, never the
-                    template's generic middle (ADR 0108). */}
-                <TemplateShape template={template} middle={project?.script || project?.spoken_middle || ""} />
-                {/* The requirement is stated in one line rather than as a
-                    checklist. It was a fourth place the same photograph was
-                    reported — template card, upload panel, asset row, and the
-                    "Attached" block below all showed it — and the photo section
-                    immediately underneath is where the photo actually lives, so
-                    the card's job is to say whether anything is still owed and
-                    point at it. */}
-                {template.required_assets?.length > 0 && project && missingIdentity.length > 0 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2"
-                    onClick={scrollToTemplatePhoto}
-                  >
-                    <ImageIcon className="h-3.5 w-3.5" /> Add your photo below
-                  </Button>
-                )}
-              </div>
-            )}
+            {/* No picked-template detail panel (ADR 0296): the box that
+                restated the picked card — its name, category, Suggested
+                badge, piece length and middle, plus the photo jump — is
+                removed at Kasra's order. The selected card in the grid
+                above is the pick's whole statement, and the photo section
+                stands immediately below. */}
 
             {/* No template rating (ADR 0124): per-element thumbs stopped
                 teaching generation — the whole-video verdict in History
@@ -3608,10 +3560,14 @@ export default function CreateVideo() {
           below sm each segment is badge and label only — its percentage
           steps aside for the live score at the end, and its state line
           steps aside for the section header's chip below, which says the
-          same words; the aria-label keeps both at every width. */}
+          same words; the aria-label keeps both at every width. The
+          segments wear no button chrome (ADR 0298): no border, no card,
+          no resting fill — flat tabs on the nav's hairline track, the
+          active one marked by its indigo underline and label alone, so
+          the page's filled shapes belong to its actions only. */}
       <div data-testid="studio-progress-rail" className="space-y-2">
         <div className="flex min-w-0 items-center gap-2">
-        <nav aria-label="Progress" className="flex min-w-0 flex-1 items-stretch gap-1 sm:gap-1.5">
+        <nav aria-label="Progress" className="flex min-w-0 flex-1 items-stretch gap-1 border-b border-[color:var(--hairline)] sm:gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
           // Cumulative quarters: the segment states how much of the workflow
@@ -3642,14 +3598,8 @@ export default function CreateVideo() {
               data-state={isLocked ? "locked" : s.state}
               data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border px-2 py-2 text-left transition-all duration-300 sm:gap-2 sm:px-2.5 ${
-                isLocked
-                  ? "border-dashed border-[color:var(--hairline)] opacity-70 hover:border-[color:var(--indigo-35)]"
-                  : active
-                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] rail-segment-active"
-                    : s.state === "done"
-                      ? "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
-                      : "border-dashed border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-6)]"
+              className={`tap-chip flex min-w-0 flex-1 items-center gap-1.5 px-2 py-2 text-left transition-colors duration-300 hover:bg-[color:var(--indigo-8)] sm:gap-2 sm:px-2.5 ${
+                isLocked ? "opacity-70" : active ? "rail-segment-active" : ""
               }`}
             >
               <span

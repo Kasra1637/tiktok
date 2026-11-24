@@ -1133,7 +1133,7 @@ async function main() {
     for (const button of substeps) {
       if (button.className.includes("border")) {
         throw new Error(
-          `${button.dataset.testid} still wears pill chrome; the wizard nav must be the only pill row`
+          `${button.dataset.testid} still wears pill chrome; no wizard nav row wears pill chrome`
         );
       }
       if (!button.getAttribute("aria-label")) {
@@ -1148,6 +1148,16 @@ async function main() {
     for (const pill of ctx.container.querySelectorAll("[data-testid^='studio-progress-segment-']")) {
       if (!pill.className.includes("tap-chip")) {
         throw new Error(`${pill.dataset.testid} lost its coarse-pointer tap target`);
+      }
+      // No button chrome on the top rail either (ADR 0298): the segments
+      // are flat tabs, so no border token and no resting fill token — the
+      // page's filled, bordered shapes belong to its actions alone. The
+      // hover wash is a state, not a costume, and is allowed.
+      const chrome = (pill.className || "").split(/\s+/).filter(
+        (token) => token.includes("border") || token.startsWith("bg-") || token.startsWith("rounded")
+      );
+      if (chrome.length > 0) {
+        throw new Error(`${pill.dataset.testid} still wears button chrome: ${chrome.join(" ")}`);
       }
     }
   });
@@ -7918,24 +7928,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (!text.includes("Top Pick")) {
       throw new Error("the top recommendation is not preselected");
     }
-    if (!text.includes("Suggested")) {
-      throw new Error("a preselected template is not labelled as a suggestion");
+    // The picked-template detail panel is gone (ADR 0296): no Suggested
+    // badge, no piece-length line, no curated middle restated under the
+    // grid. The selected card is the pick's whole statement.
+    if (text.includes("Suggested")) {
+      throw new Error("the removed detail panel's Suggested badge still renders");
     }
-    // The chosen template's declared length and curated middle, on the card.
-    // This is where the founder learns the piece is not 20s and not their
-    // choice, which once lived on its own step before the merge.
-    if (!text.includes(`${TEMPLATE.default_duration}s piece`)) {
-      throw new Error("the template card does not state the length this template produces");
+    if (text.includes(`${TEMPLATE.default_duration}s piece`)) {
+      throw new Error("the removed detail panel's piece length still renders");
     }
-    if (!text.includes(TEMPLATE.middle_structure)) {
-      throw new Error("the template card does not show the template's middle structure");
+    if (text.includes(TEMPLATE.middle_structure)) {
+      throw new Error("the removed detail panel's middle still renders");
     }
   });
 
   await check("the selected template card survives a failed template list", async (ctx) => {
-    // The rows come from recommendations; only the selected card reads the
-    // full library. When the library fails, the card falls back to the
-    // recommendation rows instead of vanishing.
+    // The rows come from recommendations, and since the detail panel's
+    // removal (ADR 0296) nothing on this step reads the full library to
+    // state the pick. When the library fails, the rows still render.
     global.__SMOKE_PARAMS = "";
     await withApi(
       {
@@ -7960,12 +7970,6 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const text = ctx.text();
         if (!text.includes("Top Pick")) {
           throw new Error("recommendation rows vanished with the library");
-        }
-        if (!text.includes("Suggested")) {
-          throw new Error("the selected template card needs the failed library");
-        }
-        if (!text.includes(`${TEMPLATE.default_duration}s piece`)) {
-          throw new Error("the selected card lost its length without the library");
         }
       }
     );

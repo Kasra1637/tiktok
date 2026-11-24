@@ -543,8 +543,10 @@ body {
 
 /* The wizard rail's active step and done badge (ADR 0283): the active
  * segment carries a crisp indigo underline inside its own frame — an
- * inset shadow, so the accent never shifts the layout — over the
- * segment's existing indigo border and wash. A done step's filled
+ * inset shadow, so the accent never shifts the layout — on the
+ * rail's hairline track (the segments wear no border or wash since
+ * ADR 0298; the underline and the indigo label are the whole mark).
+ * A done step's filled
  * badge settles with one soft indigo pulse as it lands: an entrance
  * on the app's signature ease, declared only inside the no-preference
  * gate; under reduced motion there is no pulse and the badge is

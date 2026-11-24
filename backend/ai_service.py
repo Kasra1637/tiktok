@@ -131,18 +131,22 @@ DEFAULT_VISION_MODEL = "openai/gpt-6.2-sol"
 # The app-wide reasoning level: medium since ADR 0295 (extra high
 # before it, ADR 0211; Max before that, ADR 0110). Kasra's ruling was
 # speed across the whole app on the new model — every chat call
-# thinks at medium, and the chained plan flow below sits one level
-# under this, the same structure ADR 0211 set.
+# thinks at medium, the chained plan flow below included (ADR 0297).
 REASONING_EFFORT = "medium"
-# The plan-and-strategy chain runs one level down from the pin above,
-# at Low (ADR 0211's structure, its levels moved by ADR 0295). It is
-# the one flow that chains three to seven reasoning calls behind a
-# single click — the plan's editorial loop, the hook bake-off, the
-# craft correction, then the strategy — and at Max the founder waited
-# 90-100+ seconds for the pair. The pin stands for every other flow;
-# this constant is passed explicitly by the chain's call sites only,
-# through _chat_json's per-call override.
-PLAN_CHAIN_REASONING_EFFORT = "low"
+# The plan-and-strategy chain runs at the same pin as everything
+# else (ADR 0297; it sat one level under the pin from ADR 0211
+# until then, at Low under ADR 0295). It is the one flow that
+# chains three to seven reasoning calls behind a single click —
+# the plan's editorial loop, the hook bake-off, the craft
+# correction, then the strategy — and it is also the most
+# gate-constrained flow in the app: three editorial attempts, each
+# held to complete sentences inside tight character budgets and
+# the delivery band. At Low on the new model the founder's first
+# live plan generation failed all three attempts and saved
+# nothing; Kasra named medium for generation, so the chain runs
+# at medium. This constant is passed explicitly by the chain's
+# call sites only, through _chat_json's per-call override.
+PLAN_CHAIN_REASONING_EFFORT = "medium"
 
 
 def _model_from_env(var: str, default: str) -> str:

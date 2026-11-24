@@ -549,10 +549,10 @@ class TestChatModelRequestShape:
             assert payload["response_format"]["type"] == "json_schema"
         # The direct flows (profile research, angles) keep the pinned
         # medium level; the plan chain's three calls — draft, hook
-        # candidates, craft correction — run at Low, one level under
-        # (ADR 0211's structure, ADR 0295's levels).
+        # candidates, craft correction — run at medium too since
+        # ADR 0297 retired the one-level-under structure.
         assert [p["reasoning_effort"] for p in rec.payloads] == [
-            "medium", "medium", "low", "low", "low"]
+            "medium", "medium", "medium", "medium", "medium"]
 
 
 class TestLiveAngleGoals:
@@ -1638,16 +1638,19 @@ class TestCreativePlanBudget:
 
 class TestPlanChainReasoningEffort:
     """
-    ADR 0211's structure at ADR 0295's levels: the plan-and-strategy
-    chain runs one level below the app-wide pin — Low under Medium.
+    ADR 0297's ruling: the plan-and-strategy chain runs at the
+    app-wide pin — Medium, the level Kasra named (ADR 0211's
+    one-level-below structure, Low under Medium at ADR 0295, is
+    retired after the founder's first live plan generation on the
+    new model failed all three editorial attempts at Low).
 
     One click on Generate plan chains three to seven reasoning calls
     behind it — the plan's editorial loop, the hook bake-off and its
     correction, the craft correction, then the strategy call — and at
     the old global Max pin the founder waited 90-100+ seconds for the
     pair. The chain's call sites pass
-    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("low") through
-    _chat_json, one level below the app-wide default
+    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("medium") through
+    _chat_json, the same level as the app-wide default
     (REASONING_EFFORT="medium"; the TestChatModelRequestShape pins
     above pin that default). The override rides the same declaration
     gate as the default (ADR 0003): the field goes only to the
@@ -1671,10 +1674,10 @@ class TestPlanChainReasoningEffort:
         "claims_used": [],
     }
 
-    def test_the_chain_is_low_and_the_default_is_medium(self):
+    def test_the_chain_is_medium_and_the_default_is_medium(self):
         import ai_service
         assert ai_service.REASONING_EFFORT == "medium"
-        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "low"
+        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "medium"
 
     def test_an_overridden_call_sends_the_override(self, monkeypatch):
         import ai_service
@@ -1692,8 +1695,8 @@ class TestPlanChainReasoningEffort:
             reasoning_effort="high")) == {"a": 1}
         assert "reasoning_effort" not in rec.payloads[0]
 
-    def test_the_plan_chain_carries_low_on_every_call(self, monkeypatch):
-        """Draft, doubled retry, candidates, craft correction — Low throughout."""
+    def test_the_plan_chain_carries_medium_on_every_call(self, monkeypatch):
+        """Draft, doubled retry, candidates, craft correction — medium throughout."""
         import ai_service
         half = '{"hook_line": "I couldn\'t name what I was feeling.', \
             '"script": "The sugg'
@@ -1709,9 +1712,9 @@ class TestPlanChainReasoningEffort:
         # draft, its doubled retry, the bake-off candidates call
         # (ADR 0130) and the 80-bar craft correction (ADR 0115).
         assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["low"] * 4
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["medium"] * 4
 
-    def test_the_bake_off_correction_call_carries_low(self, monkeypatch):
+    def test_the_bake_off_correction_call_carries_medium(self, monkeypatch):
         """When every candidate breaks a gate, its correction is chained too."""
         import ai_service
         script = ("At the kitchen table I speak for sixty seconds before "
@@ -1746,9 +1749,9 @@ class TestPlanChainReasoningEffort:
         ))
         assert [p["max_tokens"] for p in rec.payloads] == [
             ai_service.HOOK_CANDIDATES_MAX_TOKENS, ai_service.REWRITE_MAX_TOKENS]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["low", "low"]
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["medium", "medium"]
 
-    def test_the_strategy_call_carries_low(self, monkeypatch):
+    def test_the_strategy_call_carries_medium(self, monkeypatch):
         import ai_service
         strategy = {
             "strategy_summary": "s", "audience_problem": "p",
@@ -1775,7 +1778,7 @@ class TestPlanChainReasoningEffort:
         assert result["strategy_summary"] == "s"
         assert len(rec.payloads) == 1, "a good reply must not cost a retry"
         assert rec.payloads[0]["max_tokens"] == ai_service.STRATEGY_MAX_TOKENS
-        assert rec.payloads[0]["reasoning_effort"] == "low"
+        assert rec.payloads[0]["reasoning_effort"] == "medium"
 
 
 class _PostKitBudgetGate(_BudgetGate):

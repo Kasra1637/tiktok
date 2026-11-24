@@ -11,12 +11,6 @@ import { sentenceCase } from "../../lib/copyCase";
 import { angleDetails, angleFitScore, formatVerdicts, goalFitScore } from "../../lib/angleSubtitle";
 import { angleSetAge } from "../../lib/angleFreshness";
 import { BUSY_ETA_SECONDS } from "../../lib/busyEta";
-import {
-  readPieceSeconds,
-  sectionSplit,
-  clampHookSeconds,
-  DEFAULT_HOOK_SECONDS,
-} from "../../lib/videoLength";
 import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown, Image as ImageIcon } from "lucide-react";
 
 import AssetLibrary from "../../pages/AssetLibrary";
@@ -277,52 +271,6 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
 
 function humanize(value) {
   return String(value || "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
- * The middle's curated structure, under whichever name the row still carries.
- *
- * `middle_structure` replaced `continuation_structure` and a separate
- * `cta_pattern`: the old pair described a chain with a closing beat, which is
- * not what a template declares any more. Rows seeded before the change still
- * carry the retired name, and the backend reads it as a fallback for the same
- * reason. Reading only the new name would leave those templates showing a blank
- * where the curated middle lives, which reads as a template with nothing after
- * its opening.
- */
-function middleStructure(template) {
-  return String(template?.middle_structure || template?.continuation_structure || "");
-}
-
-/**
- * The shape of the piece a template produces: its length, its two section
- * lengths, and the curated middle.
- *
- * Shown on the template card because the template is where the length comes
- * from. A founder choosing between two openings is also choosing between two
- * lengths, and a picker on the step after this used to make that look
- * independent. The numbers are the ones the project will be seeded with, so
- * nothing on the later steps can quietly disagree.
- */
-export function TemplateShape({ template, middle: actualMiddle = "" }) {
-  const total = readPieceSeconds(null, template);
-  const hook = clampHookSeconds(template?.hook_seconds) || DEFAULT_HOOK_SECONDS;
-  const split = sectionSplit(total, hook);
-  // Once a plan exists, the middle THIS video speaks is the approved script,
-  // never the template's generic middle about a different video (ADR 0108).
-  const spokenMiddle = String(actualMiddle || "").trim();
-  const middle = spokenMiddle
-    ? spokenMiddle.split(/(?<=[.!?])\s+/)[0]
-    : middleStructure(template);
-  return (
-    <div className="mt-2 space-y-1">
-      <p className="text-sm">
-        <span className="font-semibold">{total}s piece</span>: a {split.hookSeconds}s hook, then a{" "}
-        {split.middleSeconds}s middle.
-      </p>
-      {middle && <p className="text-sm text-muted-foreground">{sentenceCase(middle)}</p>}
-    </div>
-  );
 }
 
 /**
