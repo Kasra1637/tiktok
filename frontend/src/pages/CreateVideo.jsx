@@ -506,6 +506,17 @@ const TEMPLATE_GONE_MESSAGE = "That template is no longer available — pick ano
  * themselves after reading, and ticking the step for it would claim the
  * workflow is finished when the last read is still ahead of them.
  */
+// A plan version whose spoken words are both blank (ADR 0290): the
+// row exists — a direction change can leave one behind — but nothing
+// is written, so nothing about it may read as done or ready.
+function planWordsMissing(project) {
+  return (
+    Boolean(project?.script_version) &&
+    !String(project?.hook_line || "").trim() &&
+    !String(project?.script || "").trim()
+  );
+}
+
 function stepCompletion({ profileId, objective, angleId, templateId, project, missingIdentity, hasEdits, hasFinishedRender }) {
   const hasPhoto = missingIdentity.length === 0;
   return STEPS.map((step) => {
@@ -523,6 +534,11 @@ function stepCompletion({ profileId, objective, angleId, templateId, project, mi
       // they had changed and not stored. And the render below needs the photo,
       // so a plan without one leaves this step reporting what is owed.
       if (!project?.script_version) state = "todo";
+      // An empty plan is not a reviewed plan (ADR 0290): the version
+      // exists but holds no words, so the step stays unwritten until
+      // a regeneration lands real words — Ready and Go to render
+      // stay off with it.
+      else if (planWordsMissing(project)) state = "todo";
       else if (hasEdits || (templateId && !hasPhoto)) state = "blocked";
     } else if (step.key === "finish") {
       // The finishing step is satisfied by the render itself. The demo and
@@ -1822,6 +1838,18 @@ export default function CreateVideo() {
     hasFinishedRender: Boolean(finishedGeneration),
   });
 
+  /* The empty-plan state (ADR 0290): the plan on file holds no words
+     and the founder holds no unsaved spoken words either, so there
+     is nothing to read, check or save — Read the plan shows only the
+     notice and the Regenerate plan button, which pulses for the
+     click the way the final Generate does. A pending spoken edit
+     stands the state down: the form stays so the words can be saved.
+     Defined here, above renderStep(), because the step JSX reads it. */
+  const planEmpty =
+    planWordsMissing(project) &&
+    edits.hook_line === undefined &&
+    edits.script === undefined;
+
   // Sequential unlock: a step is sealed until every previous step is done.
   // The rail and canvas headers wear the padlock (dimming + "locked" chip)
   // and the body opens on a lock banner naming the predecessor, so the
@@ -1901,6 +1929,10 @@ export default function CreateVideo() {
     footerHint = finishedGeneration
       ? null
       : "Render the piece first \u2014 the finished clip opens here.";
+  } else if (planEmpty) {
+    // The empty plan's own line (ADR 0290): not "generate a plan" —
+    // one exists; it holds no words, and regenerating is the click.
+    footerHint = "The plan is empty — regenerate it above to write it.";
   } else if (activeStepState?.state === "todo") {
     footerHint = "Generate a plan above, read it, then render.";
   } else if (activeStepState?.state === "blocked") {
@@ -2983,6 +3015,7 @@ export default function CreateVideo() {
                   busyStartedAt={planFlightStartedAt}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
+                  className={planEmpty ? "generate-invite" : undefined}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {busy ? "Regenerating plan" : "Regenerate plan"}
@@ -2997,6 +3030,23 @@ export default function CreateVideo() {
                 )}
               </div>
             )}
+            {/* The empty plan (ADR 0290): the whole form stands down —
+                no hook, script or cover fields, no checks, no dead
+                Save button — and only the notice stands, with the
+                Regenerate plan button above as the one action. The
+                full page returns the moment a regeneration lands
+                words; a plan holding words is never hidden. */}
+            {planEmpty ? (
+              <div className="inset-panel space-y-2" data-testid="plan-empty-notice">
+                <p className="text-base font-semibold">This plan is empty</p>
+                <p className="text-sm text-muted-foreground">
+                  The plan on file holds no words — the hook, script and cover are
+                  blank, so there is nothing to read or render yet. Regenerate the
+                  plan above to write it.
+                </p>
+              </div>
+            ) : (
+              <>
             {/* No plan thumbs here any more (ADR 0124): a thumbs-down used
                 to order a fresh plan, and a thumbs-up recorded a verdict
                 on the words alone. Neither could say whether the finished
@@ -3303,6 +3353,8 @@ export default function CreateVideo() {
             <MissingRequirements
               identity={missingIdentity}
             />
+              </>
+            )}
 
             {/* The render panel closes this step below, so the plan above
                 has been read before any render runs. */}
@@ -3549,10 +3601,15 @@ export default function CreateVideo() {
           states its step's cumulative quarter (25 / 50 / 75 / 100%) and the live
           score sits at the end; all of it derives from the same step states,
           so the readouts can never disagree. It scrolls with the page — a
-          pinned bar over the plan form read as a second, floating layer. */}
+          pinned bar over the plan form read as a second, floating layer.
+          On phones the rail sheds what the screen cannot carry (ADR 0285):
+          below sm each segment is badge and label only — its percentage
+          steps aside for the live score at the end, and its state line
+          steps aside for the section header's chip below, which says the
+          same words; the aria-label keeps both at every width. */}
       <div data-testid="studio-progress-rail" className="space-y-2">
-        <div className="flex items-center gap-2">
-        <nav aria-label="Progress" className="flex flex-1 items-stretch gap-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+        <nav aria-label="Progress" className="flex min-w-0 flex-1 items-stretch gap-1 sm:gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
           // Cumulative quarters: the segment states how much of the workflow
@@ -3583,7 +3640,7 @@ export default function CreateVideo() {
               data-state={isLocked ? "locked" : s.state}
               data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all duration-300 ${
+              className={`tap-chip flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border px-2 py-2 text-left transition-all duration-300 sm:gap-2 sm:px-2.5 ${
                 isLocked
                   ? "border-dashed border-[color:var(--hairline)] opacity-70 hover:border-[color:var(--indigo-35)]"
                   : active
@@ -3619,12 +3676,12 @@ export default function CreateVideo() {
                     names what was chosen, the rest say what is owed. Truncated
                     because an angle label can be a sentence; the full text
                     lives in the aria-label above. */}
-                <span className="truncate text-xs text-muted-foreground" aria-hidden="true">
+                <span className="hidden truncate text-xs text-muted-foreground sm:block" aria-hidden="true">
                   {isLocked ? `locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[s.state]}
                 </span>
               </span>
               <span
-                className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline"
                 aria-hidden="true"
               >
                 {cumulative}%
@@ -3685,7 +3742,7 @@ export default function CreateVideo() {
           gate set, at either width. Disclosure queues no request of any
           kind (ADR 0098), and paging queues none either (ADR 0122). */}
       <div
-        className="page-content-enter space-y-3"
+        className="page-content-enter space-y-2 lg:space-y-3"
         data-testid="wizard-canvas"
         data-layout={desktopPages ? "pages" : "canvas"}
       >

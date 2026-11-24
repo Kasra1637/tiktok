@@ -483,6 +483,56 @@ class TestRenderGuard:
         assert "Hook line" in exc.value.detail
         assert "Nothing has been charged" in exc.value.detail
 
+    def test_stale_segment_words_do_not_refuse_a_consistent_plan(self, api):
+        # Kasra's case, Nov 23 2026: the plan's approved words agree with
+        # the Location (a bench by a window, indoors), but the strategy on
+        # file still carries an older middle written for a park bench.
+        # The audit must judge the approved words, not the stale copy —
+        # the render goes ahead and the segments speak the plan's words.
+        project = {
+            "id": "p1",
+            "location": "Inside a quiet room with a bench by a window and a small side table beside the bench",
+            "hook_line": "Finally, I'm trying to find a word for vague sense feeling.",
+            "script": (
+                "At the bench by the window I speak my day out loud before sleep. "
+                "My chest feeling stays tight and heavy all evening. "
+                "I still don't know what sets it off."
+            ),
+            "hook_seconds": 5,
+            "duration_seconds": 15,
+        }
+        strategy = desk_strategy()
+        strategy["segments"][1]["script"] = (
+            "At the park bench by the pond I talk through my whole morning out loud."
+        )
+        patched = api._guard_render_scene(strategy, project)
+        assert patched["scene"]["location"] == project["location"]
+        assert patched["segments"][0]["script"] == project["hook_line"]
+        middle = patched["segments"][1]["script"]
+        assert "park" not in middle
+        assert "window" in middle
+
+    def test_conflicting_plan_words_still_refuse_the_render(self, api):
+        # The other direction: the approved words themselves name another
+        # place. Binding them in must surface the contradiction, never
+        # hide it — the render still refuses, naming the middle.
+        project = {
+            "id": "p1",
+            "location": "Inside a quiet room with a bench by a window and a small side table beside the bench",
+            "hook_line": "Finally, I'm trying to find a word for vague sense feeling.",
+            "script": (
+                "At the park bench by the pond I talk through my whole morning out loud. "
+                "My chest stays tight the whole time."
+            ),
+            "hook_seconds": 5,
+            "duration_seconds": 15,
+        }
+        with pytest.raises(HTTPException) as exc:
+            api._guard_render_scene(desk_strategy(), project)
+        assert exc.value.status_code == 409
+        assert "Middle" in exc.value.detail
+        assert "Nothing has been charged" in exc.value.detail
+
     def test_the_guard_splits_lighting_and_completes_the_scene(self, api):
         # A Location that still carries its time of day, a strategy whose
         # scene fields name no props, and a placeholder camera line: the guard

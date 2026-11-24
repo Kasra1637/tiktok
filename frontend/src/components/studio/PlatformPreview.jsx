@@ -22,6 +22,12 @@ import { useState } from "react";
  * video. A clip the browser cannot play says so inside the frame,
  * in the panels' own words; the host panel owns that state and any
  * retry it offers.
+ *
+ * The bands carry no words (ADR 0287, Kasra's order): the HANDLE
+ * ZONE / CAPTION ZONE labels and the dashed-zones helper line under
+ * the frame are gone — the founder does not need the platforms'
+ * furniture named, only kept clear of — and the whole preview
+ * column hugs the frame's own width instead of spanning its card.
  */
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;
@@ -40,17 +46,13 @@ const ZONES = {
 const heightPct = (px) => `${(px / CANVAS_H) * 100}%`;
 const widthPct = (px) => `${(px / CANVAS_W) * 100}%`;
 
-function ZoneBand({ style, label }) {
+function ZoneBand({ style }) {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none absolute border border-dashed border-white/35 bg-white/5"
       style={style}
-    >
-      <span className="absolute left-1 top-1 text-xs font-semibold uppercase tracking-wide text-white/60">
-        {label}
-      </span>
-    </div>
+    />
   );
 }
 
@@ -64,7 +66,7 @@ export default function PlatformPreview({
   const zones = ZONES[platform];
 
   return (
-    <div className="space-y-3" data-testid="platform-preview">
+    <div className="mx-auto w-full max-w-[280px] space-y-3" data-testid="platform-preview">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold">Preview</p>
         <div className="flex gap-2" role="group" aria-label="Safe zones for">
@@ -87,7 +89,7 @@ export default function PlatformPreview({
         </div>
       </div>
 
-      <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-[1.6rem] border border-[color:var(--hairline-strong)] bg-neutral-900 shadow-lg">
+      <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[1.6rem] border border-[color:var(--hairline-strong)] bg-neutral-900 shadow-lg">
         {videoBroken ? (
           <div className="absolute inset-0 flex items-center justify-center px-6">
             <p className="text-center text-sm text-white/60">
@@ -122,27 +124,23 @@ export default function PlatformPreview({
           </div>
         )}
 
-        {/* The safe zones for the picked platform, as quiet guides. */}
+        {/* The safe zones for the picked platform, as quiet guides —
+            dashed bands only, no words on them (ADR 0287). */}
         <div data-testid="platform-preview-zones" data-platform={platform}>
           <ZoneBand
-            label="Handle zone"
             style={{ top: 0, left: 0, right: 0, height: heightPct(zones.top) }}
           />
           <ZoneBand
-            label="Caption zone"
             style={{ bottom: 0, left: 0, right: 0, height: heightPct(zones.bottom) }}
           />
           <ZoneBand
-            label=""
             style={{ top: 0, bottom: 0, left: 0, width: widthPct(zones.side) }}
           />
           <ZoneBand
-            label=""
             style={{ top: 0, bottom: 0, right: 0, width: widthPct(zones.side) }}
           />
           {zones.rail && (
             <ZoneBand
-              label="Rail"
               style={{
                 right: 0,
                 top: heightPct(zones.rail.fromY),
@@ -153,11 +151,6 @@ export default function PlatformPreview({
           )}
         </div>
       </div>
-
-      <p className="text-sm text-muted-foreground">
-        The dashed zones are {zones.label}&rsquo;s own furniture — handle,
-        caption and buttons. Keep the presenter clear of them.
-      </p>
     </div>
   );
 }

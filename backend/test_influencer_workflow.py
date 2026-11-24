@@ -350,7 +350,12 @@ class TestAppSpecificity:
         project, _profile, _template = _make_project(api, spec)
         _store_strategy(api, project["id"], hook_line, persona, scene,
                         problem=problem, feature=feature, cta=cta)
-        _mark_ready(api, project["id"])
+        # The plan carries the payoff as its script: in production the
+        # strategy's middle copy is derived from the plan's approved words,
+        # and the render guard binds those words over the strategy's copies
+        # before the build (ADR 0286). A placeholder plan script here would
+        # be what the middle speaks.
+        _mark_ready(api, project["id"], script=persona["payoff"])
         calls = _mock_submit(api, monkeypatch)
         _run(api.submit_project_generation(
             project_id=project["id"],

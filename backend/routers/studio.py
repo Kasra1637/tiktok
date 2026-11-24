@@ -740,6 +740,13 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       should show it. Spoken words are never rewritten, so a hook line or a
       section script that still names another place fails the render with the
       field named and nothing charged.
+    - The strategy's spoken copies are rebound from the project's approved
+      words before the audit (ADR 0286): the segments carry a derived copy
+      of the plan's words, and a plan regenerated or edited after the
+      strategy was built leaves that copy stale. The audit judges the words
+      the founder approved — a stale copy can no longer refuse a render
+      whose approved words agree with the Location, and approved words
+      that themselves contradict it still refuse, naming the section.
     - Location is split so it names the place only, with its lighting and time
       of day moved into Lighting.
     - Props and Movement are completed from the hook/middle actions and the
@@ -759,6 +766,22 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
       instead of sending it to the provider; spoken words are never
       rewritten or refused for this.
     """
+    if not isinstance(strategy, dict) or not strategy:
+        return strategy
+    # The approved words the render will speak, bound into the strategy's
+    # spoken copies as the guard's first step (ADR 0286) — before the
+    # audit below judges them, and before the Location check can return
+    # early: a project with no Location still renders from its strategy,
+    # and its segments must carry the approved (repaired) words, not a
+    # stale or unrepaired copy. With no approved plan on the project
+    # this is a no-op and the strategy keeps its own words — the legacy
+    # path bind_spoken_words documents.
+    strategy, _overflow = bind_spoken_words(
+        strategy,
+        {"hook_line": project.get("hook_line"), "script": project.get("script")},
+        project.get("hook_seconds") or 3,
+        project.get("duration_seconds") or 0,
+    )
     # The plan's Location is the canonical field; `visual_direction` is the
     # legacy mirror a pre-rename row still carries.
     location = str(project.get("location") or project.get("visual_direction") or "").strip()
@@ -770,7 +793,7 @@ def _guard_render_scene(strategy: dict, project: dict, render_index: int = 0, ex
             + " " + " ".join(str((strategy or {}).get(k) or "")
                              for k in ("hook_promise", "hook_concept")),
         )
-    if not location or not isinstance(strategy, dict) or not strategy:
+    if not location:
         return strategy
     audit = angle_scene.reconcile_location(strategy, location, thorough=True)
     if audit["blocked"]:

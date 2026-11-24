@@ -2132,6 +2132,125 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     return cleaned
 
 
+# Outcome refresh (ADR 0288): the Focus pick's fresh ideas. The outcome
+# layer a profile was researched with can go stale in two ways — the
+# founder wants new angles on what the app does for people, and a
+# profile researched before ADR 0249's completeness bar can still
+# carry its fragments ("triggers", "and growth over time") in the
+# stored lists, where the Focus pick offers them as broken options.
+# One refresh answers both: a fresh layer written from the profile's
+# STORED facts — no new sources, no re-research — held to the
+# research run's own bars, and saved over the old layer by the
+# endpoint, so every surface the outcomes feed reads whole lines.
+OUTCOME_REFRESH_MAX_TOKENS = 4000
+
+
+async def generate_outcome_refresh(profile: dict) -> dict:
+    """A fresh outcome layer for an existing profile, from its stored facts.
+
+    Returns {"outcome_statements", "desired_outcomes"} normalized by the
+    same code a research run is accepted through — `_normalize_outcome_
+    statements` (each statement linked to a core feature verbatim, each
+    outcome standing alone) and the flat list's completeness bar — so a
+    refreshed layer can contain no fragment a research run would have
+    dropped. The current lines ride along as an avoid list: a refresh
+    that hands back the same lines is not fresh. Raises RuntimeError
+    when the reply cannot yield a usable layer (fewer than three
+    linked statements survive the bars); the caller then changes
+    nothing, so a failed refresh never halves a profile's outcomes.
+    """
+    profile = profile or {}
+
+    def _list(name):
+        val = profile.get(name)
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v).strip()]
+        if val:
+            return [str(val)]
+        return []
+
+    facts = {
+        "app_name": profile.get("brand_name") or "(unnamed app)",
+        "category": profile.get("app_category") or profile.get("niche") or "(unstated)",
+        "description": profile.get("brand_description") or "(unstated)",
+        "audience": profile.get("target_audience") or "(unstated)",
+        "features": _list("core_features"),
+        "use_cases": _list("primary_use_cases"),
+        "problems": _list("problems_solved"),
+        "differentiators": profile.get("differentiation") or "(unstated)",
+    }
+    current = profile_outcome_lines(profile)
+    avoid_block = (
+        "\n\nLINES ALREADY ON THE PROFILE (write fresh ones — do not repeat any of these):\n"
+        + "\n".join(f"- {line}" for line in current)
+    ) if current else ""
+    prompt = (
+        f"VERIFIED APP FACTS (the profile as it stands — use ONLY these):\n"
+        f"{json.dumps(facts, indent=2)}{avoid_block}\n\n"
+        "Write a FRESH outcome layer for this app: what its users get, in "
+        "benefit phrasing a viewer would recognise from their own life. "
+        "Rules: use ONLY functionality evidenced by the facts above; never "
+        "invent ratings, download counts, or features. Do NOT report "
+        "pricing, plan names or trial terms. "
+        "Write 3-6 outcome_statements, one per evidenced core feature. Each "
+        "outcome and how_it_helps must be benefit phrasing, never a "
+        "restatement of the feature spec, and never a guaranteed result. "
+        "from_feature must name a core_features entry verbatim. "
+        "Also write 3-6 desired_outcomes: the flat list of the same "
+        "benefits in the user's own words. "
+        "Every outcome, in desired_outcomes and in outcome_statements "
+        "alike, stands alone: one complete, punchy phrase naming a single "
+        "real user outcome, plain enough to recognize and pick at a "
+        "glance. Never chop one sentence into several entries at its "
+        "commas — a piece that only makes sense attached to another "
+        "phrase (a lone word like 'triggers', an 'and …' continuation, a "
+        "trailing 'on your terms') is not an outcome; write the whole "
+        "thought as one entry or leave it out. "
+        "Return ONLY a JSON object of the form {\"outcome_statements\": "
+        "[{\"outcome\": \"...\", \"who_feels_it\": \"...\", \"from_feature\": "
+        "\"...\", \"how_it_helps\": \"...\"}], \"desired_outcomes\": [\"...\"]}."
+    )
+    parsed = await _chat_json(
+        system_message=(
+            "You write the outcome layer of an app profile: the benefits "
+            "its users get, in their own words. Respond with STRICT JSON "
+            "only, no markdown fences."
+        ),
+        prompt=prompt,
+        context="Outcome refresh",
+        max_tokens=OUTCOME_REFRESH_MAX_TOKENS,
+        timeout=90,
+        json_schema=_strict_object({
+            "outcome_statements": {
+                "type": "array",
+                "items": _strict_object({
+                    "outcome": _str_prop(),
+                    "who_feels_it": _str_prop(),
+                    "from_feature": _str_prop(),
+                    "how_it_helps": _str_prop(),
+                }),
+            },
+            "desired_outcomes": _str_array_prop(),
+        }),
+    )
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Outcome refresh response was not an object.")
+    result = {
+        "outcome_statements": parsed.get("outcome_statements"),
+        "desired_outcomes": [
+            str(v).strip() for v in (parsed.get("desired_outcomes") or [])
+            if str(v or "").strip()
+        ][:8],
+    }
+    _normalize_outcome_statements(result)
+    result["desired_outcomes"] = [
+        v for v in result["desired_outcomes"] if _outcome_stands_alone(v)
+    ]
+    if len(result["outcome_statements"]) < 3:
+        raise RuntimeError("Outcome refresh response contained too few usable outcomes.")
+    return result
+
+
 async def generate_content_angles(profile: dict, max_angles: int = 4,
                                   angle_feedback: Optional[dict] = None,
                                   objective: str = "",
@@ -3182,7 +3301,12 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     with the GOAL drawn from the app's desired outcomes and outcome
     statements, first person, a trying-line; never name the place (the
     viewer can see it); withhold the resolution — the demo that follows
-    is the answer. One finished sentence, held to two budgets: the
+    is the answer. Since ADR 0289 the goal is stated as the pain it
+    relieves: the line names the internal pain the app resolves,
+    concretely, never the app's activity, and ends on the open ache
+    so the demo lands as its answer — the same doctrine the plan
+    prompt's spoken-line rules carry, so both hook surfaces generate
+    the same way. One finished sentence, held to two budgets: the
     frame's word budget (ai_spoken.short_hook_word_budget — 4s ≤ 9
     words, 5s ≤ 12, ADR 0238's numbers re-homed) and its character
     budget (spoken_budget), the second being what keeps the render's
@@ -3259,14 +3383,22 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "what answers the hook, so the hook itself never resolves.\n\n"
         f"{_spoken_line_rules_block()}\n\n"
         "HOOK RULES (this hook, on top of the craft above):\n"
-        "- hook_line opens with the GOAL: what she is trying to do in "
-        "this moment, drawn from the app's desired outcomes and outcome "
-        "statements above — a first-person trying-line (\"I'm trying to "
-        "keep count, Saturday afternoon and I keep losing count.\"). The "
-        "goal leads because it points forward; a light time grounding "
-        "may ride along. Never name the place — the viewer can already "
-        "see it. Never name the app or a feature. The resolution stays "
-        "withheld: no payoff, no result, no relief yet.\n"
+        "- hook_line opens with the GOAL: the internal pain she is "
+        "trying to get out of, named concretely in her own words — the "
+        "blank feeling, the tight chest, the thoughts she keeps "
+        "losing — drawn from the app's desired outcomes and outcome "
+        "statements above, as a first-person trying-line (\"I'm trying "
+        "to find a word for this tight feeling.\"). Speak to the pain "
+        "the app resolves, never the app's activity: talking about "
+        "journaling is vague, and nobody cares about writing a "
+        "journal. Never an abstract label for the pain ('notice "
+        "feelings', 'feel better') — the felt thing itself. The goal "
+        "leads because it points forward; a light time grounding may "
+        "ride along. Never name the place — the viewer can already "
+        "see it. Never name the app or a feature. The resolution "
+        "stays withheld: no payoff, no result, no relief yet — and "
+        "the line ends on the open ache, pointing forward, so the "
+        "demo that follows lands as the answer to this exact pain.\n"
         f"- hook_line is ONE finished sentence of at most {word_budget} "
         f"words and at most {char_budget} characters — what {seconds} "
         "seconds holds at a natural pace. A thought that needs more "
@@ -4047,20 +4179,20 @@ def _spoken_line_rules_block() -> str:
         "'I' is the goal, not a ration. Never a diary log of the day. "
         "Plain power words are fine (never, still, every time). No "
         "clickbait, hype or exaggeration.\n"
-        "- NAME THE ACTION: say the real task in the viewer's own words, never a "
-        "vague stand-in. For a journaling app that is \"I don't want to write in my "
-        "journal today\", not \"I don't want to type anything\" or \"typing is the "
-        "last thing I want to do\". No \"it\", \"this\", \"that\", \"anything\" or "
-        "\"stuff\" where the activity belongs.\n"
+        "- NAME THE PAIN, NOT THE ACTIVITY: the hook speaks to the pain "
+        "the app resolves, never its activity. Talking about "
+        "journaling is vague, and nobody cares about writing a "
+        "journal; they care about the blank feeling. No vague "
+        "stand-in and no abstract label ('notice feelings') where "
+        "the pain belongs. The activity belongs to the script.\n"
         "- OPEN WITH THE GOAL, NOT THE PLACE: the hook opens with what the "
-        "speaker is TRYING TO DO in the story's moment — the intention the "
-        "GOAL in the ANGLE + GOAL RULE names for this video, turned into "
-        "her own plain first-person trying-line ('I'm trying to keep "
-        "count', 'I'm trying to get one honest line down'). The lived "
-        "attempt in her words, never the goal's label and never the app's "
-        "words for it. Never a vague stand-in for the attempt. Bad: 'I'm "
-        "trying to feel better'; say the concrete thing she is trying to "
-        "do instead. And never the place: Never name or announce the "
+        "speaker is TRYING TO DO about that pain — the intention the "
+        "GOAL in the ANGLE + GOAL RULE names for this video, as her "
+        "first-person trying-line ('I'm trying to find a word for "
+        "this tight feeling'). The goal IS the pain's relief: the felt "
+        "pain named concretely and her attempt on it — never the "
+        "goal's label or the app's words. Bad: 'I'm trying to feel "
+        "better'. And never the place: Never name or announce the "
         "place in the hook — no 'at the mural', no 'in the car', not as "
         "the opening and not anywhere in the line — because the viewer "
         "can already see the place; naming it spends the hook's strongest "
@@ -4102,7 +4234,9 @@ def _spoken_line_rules_block() -> str:
         "count') — because a bare attempt only states a situation, and a "
         "situation does not stop a scroll. "
         "WITHHOLD THE RESOLUTION: name the problem and stop there — no fix, "
-        "no payoff, no what worked; the demo that follows is the answer. ONE "
+        "no payoff, no what worked — and the last words leave the pain "
+        "pointing forward, so the demo that follows lands as the answer "
+        "to this exact ache. ONE "
         "STATEMENT: one thought only, never two statements jammed into one "
         "line. FELT DETAIL, NOT VERDICTS: a concrete thing the moment or the "
         "body does, never an abstract verdict word like 'borrowed'. The "

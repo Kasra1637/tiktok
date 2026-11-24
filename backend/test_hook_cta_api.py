@@ -747,6 +747,13 @@ class TestGenerateHookLineSteering:
         assert "FOUNDER'S STEERING" not in prompt
         assert "HOOK RULES (this hook, on top of the craft above):" in prompt
         assert "- hook_line opens with the GOAL:" in prompt
+        # The pain-first doctrine (ADR 0289, Kasra's order Nov 23
+        # 2026): the goal the hook opens with is the internal pain
+        # the app resolves, never its activity, and the line ends
+        # toward the demo that answers it.
+        assert "the internal pain she is trying to get out of" in prompt
+        assert "nobody cares about writing a journal" in prompt
+        assert "the demo that follows lands as the answer to this exact pain" in prompt
         assert "Return ONLY a JSON object" in prompt
 
     def test_the_picked_prompt_differs_only_by_the_steering_block(self, monkeypatch):

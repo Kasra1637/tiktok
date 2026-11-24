@@ -662,15 +662,19 @@ export default function HookRenderPanel({
 
       {/* The finished hook in the phone frame (ADR 0245): the founder
           sees the clip under each platform's furniture before it
-          flows into the Demo + CTA finish. Before a render lands the
-          frame holds its placeholder; the clip itself moves here
-          from the bare player this panel used to show. */}
-      <PlatformPreview
-        videoUrl={generation?.status === "completed" ? downloadUrl || "" : ""}
-        posterUrl={posterUrl || ""}
-        videoBroken={previewBroken}
-        onVideoError={() => setPreviewBroken(true)}
-      />
+          flows into the Demo + CTA finish. The preview area stands
+          ONLY once the render is done (ADR 0287, Kasra's order):
+          before that there is no frame and no placeholder — the
+          panel above narrates the wait, and an empty frame with
+          zones read as technical clutter. */}
+      {generation?.status === "completed" && (
+        <PlatformPreview
+          videoUrl={downloadUrl || ""}
+          posterUrl={posterUrl || ""}
+          videoBroken={previewBroken}
+          onVideoError={() => setPreviewBroken(true)}
+        />
+      )}
 
       <GenerateAnotherConfirmDialog
         confirm={rerollConfirm}

@@ -310,6 +310,13 @@ export const api = {
       field, avoid, angle_id: angleId || undefined, camera_setup: cameraSetup || undefined,
     }, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
 
+  // A fresh outcome layer for the profile (ADR 0288): one text model
+  // call written from the profile's stored facts, saved over the old
+  // outcome_statements and desired_outcomes. Returns the updated
+  // profile, so the Focus pick's options are the fresh lines at once.
+  refreshProfileOutcomes: (profileId) =>
+    client.post(`/app-profiles/${profileId}/outcomes/refresh`, {}, { timeout: AI_CALL_TIMEOUT }).then((r) => r.data),
+
   // Hook templates. The standalone library is gone: the wizard picks from
   // profile-scoped recommendations. Only the read endpoints the wizard needs
   // survive here.

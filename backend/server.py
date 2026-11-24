@@ -135,7 +135,7 @@ from routers.brands import (
     create_manual_content_angle, update_content_angle, content_angle_regen_impact,
     regenerate_content_angles, regenerate_angle_goal_suggestions,
     live_angle_goals, angle_goal_suggestions, profile_direction_options,
-    refresh_profile_direction_options, delete_content_angle,
+    refresh_profile_direction_options, refresh_profile_outcomes, delete_content_angle,
     list_templates, template_facets, recommend_templates,
     ensure_objective_templates,
 )
@@ -1582,18 +1582,14 @@ async def _submit_generation(
             "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
             (content_angle_id, user_id),
         )
-    # The strategy carries the spoken words too — the hook in section 0 and the
-    # middle in section 1 — so the same repaired words are bound into it. Only
-    # when something was rewritten: an untouched plan needs no rebinding, and a
-    # strategy the founder wrote by hand keeps the words this otherwise leaves
-    # alone.
-    if strategy and spoken_repair["rewritten"]:
-        strategy, _ = bind_spoken_words(
-            strategy,
-            plan_words,
-            project.get("hook_seconds") or 3,
-            project.get("duration_seconds") or 0,
-        )
+    # The strategy carries the spoken words too — the hook in section 0 and
+    # the middle in section 1. They are bound from the plan's approved words
+    # inside _guard_render_scene, immediately before the audit that judges
+    # them (ADR 0286): the words may have changed in an earlier request —
+    # a regenerated plan, a Review edit — while the strategy on file kept
+    # its copies, and the audit must judge the approved words. The guard
+    # receives render_plan below so the words it binds are the repaired
+    # words this render speaks.
     # One place for the whole render (ADR 0090): every place-bearing direction
     # line is reconciled to the plan's Location before the prompt is built, and
     # spoken words that still name another place refuse the render here — the
@@ -1618,7 +1614,7 @@ async def _submit_generation(
         )
         exclude = [row.get("final_beat") for row in prior_beats if row.get("final_beat")]
         strategy = _guard_render_scene(
-            strategy, project, render_index=render_index, exclude=exclude,
+            strategy, render_plan, render_index=render_index, exclude=exclude,
             content_angle=content_angle,
         )
         # The prompt's WHERE line names the place only; split_location keeps the

@@ -388,6 +388,16 @@ body {
     padding: 20px;
 }
 
+/* On phones the step card tightens one step (ADR 0285): 16px is the
+   compact gutter, and the stacked canvas below lg is long — the
+   narrower gutter widens every content column inside the step and
+   shortens each card. From 768px up the settled 20px stands. */
+@media (max-width: 767px) {
+    .surface-step {
+        padding: 16px;
+    }
+}
+
 /* Wizard density: a step's blocks sit inside TWO 20px gutters — the step
    card's own padding plus the inset panel's — which is 40px of air before
    any content. Scoped to the wizard so the global tokens, and the design

@@ -77,12 +77,20 @@ def test_conflicting_example_is_flagged_for_replacement():
     assert angle_scene.template_angle_fit(tpl, OFFICE)["example_conflicts"] is True
 
 
-def test_prompts_bind_the_angle_moment_and_name_the_action():
+def test_prompts_bind_the_angle_moment_and_name_the_pain():
     import ai_service
     assert "ANGLE SCENE" in ai_service.scene_location_guidance(OFFICE)
     assert "steps outside an office building" in ai_service.scene_location_guidance(OFFICE)
     assert "ANGLE SCENE" not in ai_service.scene_location_guidance()
-    assert "NAME THE ACTION" in ai_service._spoken_line_rules_block()
+    # The pain-first doctrine (ADR 0289, Kasra's order Nov 23 2026):
+    # the hook names the internal pain the app resolves, never the
+    # app's activity — the old NAME THE ACTION rule, whose exemplar
+    # was a journaling line, is superseded.
+    block = ai_service._spoken_line_rules_block()
+    assert "NAME THE PAIN, NOT THE ACTIVITY" in block
+    assert "NAME THE ACTION" not in block
+    assert "nobody cares about writing a journal" in block
+    assert "the demo that follows lands as the answer" in block
     assert "PLACE + TIME" in ai_service._angle_goal_block(OFFICE, "")
 
 
@@ -138,7 +146,7 @@ def test_hook_rewrite_returns_the_clearer_line(monkeypatch):
         {"brand_name": "Voice Journal"}, OFFICE, "I don't want to type anything"))
     assert line == "I don't want to write in my journal today."
     assert "I don't want to type anything" in seen["prompt"]
-    assert "NAME THE ACTION" in seen["prompt"]
+    assert "NAME THE PAIN, NOT THE ACTIVITY" in seen["prompt"]
     assert seen["json_schema"] is ai_service.HOOK_REWRITE_JSON_SCHEMA
 
 

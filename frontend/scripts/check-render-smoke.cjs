@@ -5116,6 +5116,38 @@ async function main() {
     }
   });
 
+  // ADR 0285: the wizard fits the phone. Below sm each rail segment is
+  // badge and label only — its percentage and its state line step aside
+  // (the rail-end score and the section chips carry both) — the canvas
+  // stacks tighter below lg, and the step card's gutter tightens on
+  // phones in index.css. Desktop classes stand untouched.
+  await check("the wizard rail and canvas carry their phone fits", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const segments = ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]');
+    if (segments.length !== 4) throw new Error(`the rail does not show four segments: ${segments.length}`);
+    for (const seg of segments) {
+      const pct = [...seg.querySelectorAll("span")].find((el) => /^\d+%$/.test(el.textContent.trim()));
+      if (!pct || !pct.classList.contains("hidden") || !pct.classList.contains("sm:inline")) {
+        throw new Error("a rail segment's percentage does not step aside on phones");
+      }
+      const state = seg.querySelector('span.truncate[aria-hidden="true"]');
+      if (!state || !state.classList.contains("hidden") || !state.classList.contains("sm:block")) {
+        throw new Error("a rail segment's state line does not step aside on phones");
+      }
+    }
+    const canvas = ctx.container.querySelector('[data-testid="wizard-canvas"]');
+    if (!canvas || !canvas.classList.contains("space-y-2") || !canvas.classList.contains("lg:space-y-3")) {
+      throw new Error("the wizard canvas does not stack tighter on phones");
+    }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/@media \(max-width: 767px\)\s*\{\s*\.surface-step\s*\{\s*padding: 16px;/.test(css)) {
+      throw new Error("index.css carries no phone gutter for the wizard's step cards");
+    }
+  });
+
   // The action bar names the one next action beside the arrow-only pair, so a
   // founder never has to guess what the wizard is waiting on. The line never
   // repeats the task line above and never carries the old "Continue when
@@ -5255,6 +5287,62 @@ async function main() {
     } finally {
       global.__SMOKE_PARAMS = "";
       apiCalls.length = 0;
+    }
+  });
+
+  await check("an empty plan hides its form, pulses Regenerate, and never reads ready", async (ctx) => {
+    // ADR 0290 (Kasra's live case, Nov 23 2026): after a camera
+    // switch the plan on file was "Plan v1 · empty" — blank hook,
+    // script and cover — yet the step read ready, the bar lit Go to
+    // render, and Save edits stood dead with nothing to save. An
+    // empty plan now hides the whole form behind one notice, the
+    // Regenerate plan button pulses like the final Generate, and
+    // the step counts as unwritten until real words land.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, hook_line: "", script: "" }),
+        getGenerations: async () => ({ generations: [] }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review & submit");
+        const notice = ctx.container.querySelector('[data-testid="plan-empty-notice"]');
+        if (!notice) throw new Error("the empty plan shows no notice");
+        if (!notice.textContent.includes("This plan is empty")) {
+          throw new Error("the notice does not name the empty plan");
+        }
+        if (ctx.container.querySelector("#review-hook_line")) {
+          throw new Error("the empty plan still shows the hook field");
+        }
+        if (ctx.container.querySelector('[data-testid="plan-save-button"]')) {
+          throw new Error("the empty plan still shows the Save edits button");
+        }
+        const status = ctx.container.querySelector('[data-testid="plan-version-status"]');
+        if (!status || !status.textContent.includes("empty — regenerate to write it")) {
+          throw new Error("the version line does not name the empty plan");
+        }
+        const regen = ctx.container.querySelector('[data-testid="plan-regenerate-button"]');
+        if (!regen) throw new Error("the Regenerate plan button is gone");
+        if (!regen.classList.contains("generate-invite")) {
+          throw new Error("the Regenerate plan button does not pulse in the empty state");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-goto-render"]')) {
+          throw new Error("the bar still offers Go to render over an empty plan");
+        }
+        if (ctx.container.querySelector('[data-testid="wizard-generate-video"]')) {
+          throw new Error("the bar still offers Generate over an empty plan");
+        }
+        const hint = (ctx.container.querySelector('[data-testid="wizard-footer-hint"]')?.textContent || "").trim();
+        if (!hint.includes("The plan is empty")) {
+          throw new Error(`the bar's line does not name the empty plan: ${JSON.stringify(hint)}`);
+        }
+        const segment = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
+        if (!segment || segment.dataset.state === "done") {
+          throw new Error("the rail counts the empty plan's step as done");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
     }
   });
 
@@ -14143,15 +14231,17 @@ async function runHookCtaChecks() {
     }
   });
 
-  await check("a fresh visit starts blank over a worked draft, and the draft opens only on its own click", async (ctx) => {
+  await check("a fresh visit starts blank over a worked draft, no drafts list stands, and the draft opens through its own link", async (ctx) => {
     // The fresh start (ADR 0262, superseding 0246's reopen): Kasra's
     // live page kept opening on his last draft — its hook standing
     // in the editor, its picks set, its finished render standing in
     // the frame — so a plain visit now presents a blank canvas
     // instead: "It didn't clear out. Also make sure nothing else is
-    // left over." The worked draft is not deleted or hidden: it
-    // stands in the list below under its own hook line, and its own
-    // click opens it whole, render included.
+    // left over." The worked draft is not deleted: it stays in the
+    // database, its renders stay in History, and its own link opens
+    // it whole, render included. The drafts list that stood at the
+    // page's foot is removed (ADR 0287, Kasra's order, superseding
+    // the list half of ADR 0262).
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     const hooked = hookRow({
       id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
@@ -14192,21 +14282,30 @@ async function runHookCtaChecks() {
         if (!finish || !finish.textContent.includes("Render the hook above first")) {
           throw new Error("the finish card does not treat the fresh visit as unrendered");
         }
-        // The worked draft stands in the list under its own hook
-        // line, and it does not read as the open one.
-        const entry = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-7"]');
-        if (!entry) throw new Error("the worked draft is missing from the drafts list");
-        if (!entry.textContent.includes(HOOK)) {
-          throw new Error("the worked draft's list entry does not carry its hook line");
+        // No drafts list stands on the page (ADR 0287): the worked
+        // draft is not offered here at all.
+        if (ctx.container.querySelector('[data-testid="hook-cta-drafts-card"]')) {
+          throw new Error("the removed drafts list still stands on the page");
         }
-        if (entry.getAttribute("aria-current")) {
-          throw new Error("the worked draft reads as open on a fresh visit");
+        if (ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-7"]')) {
+          throw new Error("the worked draft is still offered as a list entry");
         }
-        // Its own click opens it whole: the hook back in the editor,
-        // the finished render back in the frame, the button live.
-        await clickEl(ctx, entry);
-        await act(async () => {});
-        await act(async () => {});
+      }
+    );
+    // Its own link opens it whole: the hook back in the editor, the
+    // finished render back in the frame, the button live.
+    await act(async () => { ctx.root.render(null); });
+    await inHookCta(
+      ctx,
+      {
+        getHookCtaProjects: async () => ({ projects: rows }),
+        getStudioProject: async (id) => rows.find((r) => r.id === id) || hooked,
+        getGenerations: async ({ studio_project_id } = {}) => ({
+          generations: studio_project_id === "hook-cta-7" ? [done] : [],
+        }),
+      },
+      "?project=hook-cta-7",
+      async () => {
         const opened = ctx.container.querySelector("#review-hook_line");
         if (!opened || opened.value !== HOOK) {
           throw new Error("opening the draft from the list did not restore its hook line");
@@ -14215,10 +14314,10 @@ async function runHookCtaChecks() {
           throw new Error("opening the draft from the list did not restore its finished render");
         }
         const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
-        if (gate) throw new Error(`the render is gated on the draft opened from the list: ${gate.textContent}`);
+        if (gate) throw new Error(`the render is gated on the draft opened through its link: ${gate.textContent}`);
         const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!button || button.disabled) {
-          throw new Error("the render button is not enabled on the draft opened from the list");
+          throw new Error("the render button is not enabled on the draft opened through its link");
         }
       }
     );
@@ -14255,9 +14354,8 @@ async function runHookCtaChecks() {
       if (!field || field.value !== "") {
         throw new Error("the visit did not open on the blank canvas");
       }
-      const open = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-blank"]');
-      if (!open || !open.getAttribute("aria-current")) {
-        throw new Error("the untouched draft is not the one standing open");
+      if (ctx.container.querySelector('[data-testid="hook-cta-drafts-card"]')) {
+        throw new Error("the removed drafts list still stands on the page");
       }
     };
     await inHookCta(ctx, stubs, "", expectBlankCanvas);
@@ -14309,9 +14407,8 @@ async function runHookCtaChecks() {
       if (!field || field.value !== "") {
         throw new Error("the second fresh visit did not open on the blank canvas");
       }
-      const open = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-fresh"]');
-      if (!open || !open.getAttribute("aria-current")) {
-        throw new Error("the second visit did not reuse the canvas the first one minted");
+      if (ctx.container.querySelector('[data-testid="hook-cta-drafts-card"]')) {
+        throw new Error("the removed drafts list still stands on the page");
       }
     });
   });
@@ -14493,11 +14590,12 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("a written hook, opened from the drafts list, wears the highlight", async (ctx) => {
+  await check("a written hook, opened through its own link, wears the highlight", async (ctx) => {
     // The other half of ADR 0264's existence rule: once the words
     // exist, the wash is theirs. The draft opens the way the
-    // founder opens it — from the drafts list, since a plain visit
-    // starts blank (ADR 0262).
+    // founder opens it — through its own link, since a plain visit
+    // starts blank (ADR 0262) and the drafts list is removed
+    // (ADR 0287).
     const hooked = hookRow({
       id: "hook-cta-7", hook_line: HOOK, script_version: 1,
       strategy: { hook_concept: HOOK }, updated_at: "2026-11-20T12:00:00Z",
@@ -14516,13 +14614,8 @@ async function runHookCtaChecks() {
         getAssets: async () => ({ assets: [] }),
         getGenerations: async () => ({ generations: [] }),
       },
-      "",
+      "?project=hook-cta-7",
       async () => {
-        const entry = ctx.container.querySelector('[data-testid="hook-cta-draft-hook-cta-7"]');
-        if (!entry) throw new Error("the written draft is missing from the drafts list");
-        await clickEl(ctx, entry);
-        await act(async () => {});
-        await act(async () => {});
         const hookField = ctx.container.querySelector("#review-hook_line");
         if (!hookField) throw new Error("the written hook's field did not render");
         if (hookField.value !== HOOK) throw new Error("opening the written draft did not restore its hook line");
@@ -14776,7 +14869,7 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the render stage holds the phone frame's placeholder before any render", async (ctx) => {
+  await check("the render stage holds no preview before any render", async (ctx) => {
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     await inHookCta(
       ctx,
@@ -14786,13 +14879,13 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        const frame = ctx.container.querySelector('[data-testid="platform-preview"]');
-        if (!frame) throw new Error("the phone frame did not render in the render stage");
-        if (!frame.textContent.includes("The frame previews here once it renders.")) {
-          throw new Error("the frame does not hold its placeholder before a render");
+        // ADR 0287 (Kasra's order): the preview area stands only
+        // once the render is done — before that, no frame at all.
+        if (ctx.container.querySelector('[data-testid="platform-preview"]')) {
+          throw new Error("the preview area stands before any render exists");
         }
-        if (frame.querySelector("video")) {
-          throw new Error("the frame shows a video before any render exists");
+        if (ctx.container.querySelector("video")) {
+          throw new Error("the render stage shows a video before any render exists");
         }
       }
     );
@@ -14887,6 +14980,63 @@ async function runHookCtaChecks() {
         const savedBefore = events.slice(0, generateAt).filter((e) => e.patch).map((e) => e.patch);
         if (!savedBefore.some((p) => p.hook_shape === "question")) {
           throw new Error("the hook was written before its picks had saved");
+        }
+      }
+    );
+  });
+
+  await check("the Focus refresh replaces the outcome layer and offers the fresh lines at once", async (ctx) => {
+    // ADR 0288 (Kasra's order, Nov 23 2026): the button beside the
+    // Focus pick refreshes the profile's outcome layer from its
+    // stored facts — a stored list carrying comma-chopped fragments
+    // ("and growth over time", from his own saved profile) is
+    // replaced whole, and the fresh lines are the pick's options
+    // without a page reload.
+    const FRAGMENT = "and growth over time";
+    const FRESH = "A word for the tight feeling before sleep";
+    const staleProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: "A name for what you felt", from_feature: "Voice entries" }],
+      desired_outcomes: [FRAGMENT],
+    };
+    const freshProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: FRESH, from_feature: "Voice entries" }],
+      desired_outcomes: ["See your own rhythms and growth over time"],
+    };
+    const calls = [];
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [staleProfile] }),
+        getAppProfile: async () => staleProfile,
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        refreshProfileOutcomes: async (id) => { calls.push(id); return freshProfile; },
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the Hook card did not render");
+        const focusControl = card.querySelector('[data-testid="hook-picks-focus"]');
+        const before = await offeredOptionValues(ctx, focusControl);
+        if (!before.includes(FRAGMENT)) {
+          throw new Error("the fragment was not among the offered focus lines before the refresh");
+        }
+        await clickEl(ctx, focusControl);
+        const refresh = card.querySelector('[data-testid="hook-picks-focus-refresh"]');
+        if (!refresh) throw new Error("the Focus refresh button did not render");
+        await clickEl(ctx, refresh);
+        await act(async () => {});
+        await act(async () => {});
+        if (calls.length !== 1 || calls[0] !== PROFILE.id) {
+          throw new Error(`the refresh called the endpoint ${JSON.stringify(calls)}, expected once for the profile`);
+        }
+        const after = await offeredOptionValues(ctx, focusControl);
+        if (!after.includes(FRESH)) {
+          throw new Error("the fresh outcome line is not offered after the refresh");
+        }
+        if (after.includes(FRAGMENT)) {
+          throw new Error("the fragment is still offered after the refresh");
         }
       }
     );

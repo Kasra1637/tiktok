@@ -193,7 +193,7 @@ forgotten utility produced a square card.
 Card padding is unified in `index.css`: `.surface` / `.surface-solid` are
 `20px` on phones and `28px` from 768px up; `.surface-compact` (cards that are
 items in a grid) stays `16px`; `.inset-panel` is `20px`; `.surface-flush` is `0` for a card whose first
-child is a full-bleed row. `.surface-step` is the Create Video canvas's step card — one per step, `20px` at every width — and its own `.inset-panel` asides tighten to `16px` (the wizard-density override) so a step reads denser than the global 20px-plus-20px stack. Do not add `p-*` to card JSX.
+child is a full-bleed row. `.surface-step` is the Create Video canvas's step card — one per step, `16px` on phones and `20px` from 768px up (ADR 0285) — and its own `.inset-panel` asides tighten to `16px` (the wizard-density override) so a step reads denser than the global 20px-plus-20px stack. Do not add `p-*` to card JSX.
 
 **Never nest `.surface` inside `.surface`.** A card inside an identical card
 is a box in a box: same fill, same border, same gutter. The level inside a

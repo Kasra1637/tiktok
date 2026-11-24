@@ -7,7 +7,6 @@ import {
   Clapperboard,
   Compass,
   Film,
-  History as HistoryIcon,
   PenLine,
   Share2,
   Sparkles,
@@ -57,8 +56,10 @@ import {
  * makes, and the direction, the hook, the render, the demo finish and
  * the post kit stack below as further cards on the same canvas. A
  * plain visit starts fresh on a blank draft (ADR 0262): earlier
- * drafts wait in the list at the foot of the page and open only when
- * the founder clicks one.
+ * drafts stay in the database and their renders in History, and a
+ * draft opens only through its own link — the drafts list that used
+ * to stand at the foot of the page is removed (ADR 0287, Kasra's
+ * order, superseding ADR 0262's list half).
  *
  * The draft is a VIDEO project carrying the hook_cta surface marker
  * (ADR 0244): its renders are ordinary video generations, so History,
@@ -381,17 +382,6 @@ export default function HookCta() {
     dispatch({ type: "profile-selected", id });
   };
 
-  const openDraft = async (id) => {
-    if (!id || id === project?.id) return;
-    setError(null);
-    try {
-      const opened = await api.getStudioProject(id);
-      adoptOpenedDraft(opened);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    }
-  };
-
   // The effective value of any draft field: a pending edit wins,
   // then the saved row, then the caller's fallback. Every control
   // below reads through this, so what the founder sees is always
@@ -436,6 +426,29 @@ export default function HookCta() {
     };
   }, [profileId]);
   const focusOptions = profileOutcomeLines(profileDetail);
+
+  // The Focus refresh (ADR 0288): one click writes a fresh outcome
+  // layer onto the profile from its stored facts and the returned
+  // profile becomes the detail read, so the pick's options are the
+  // fresh lines at once. A pick the new layer no longer carries
+  // reads as the app's choice, the same as any line a profile stops
+  // carrying (ADR 0247). The failure is the refresh's own line,
+  // beside the control that asked.
+  const [focusRefreshing, setFocusRefreshing] = useState(false);
+  const [focusRefreshError, setFocusRefreshError] = useState("");
+  const refreshFocusOutcomes = async () => {
+    if (!profileId || focusRefreshing) return;
+    setFocusRefreshing(true);
+    setFocusRefreshError("");
+    try {
+      const updated = await api.refreshProfileOutcomes(profileId);
+      setProfileDetail(updated);
+    } catch (err) {
+      setFocusRefreshError(getErrorMessage(err));
+    } finally {
+      setFocusRefreshing(false);
+    }
+  };
 
   // A steering pick changed while a hook is on file (ADR 0247): the
   // line predates the picks until the founder regenerates it
@@ -721,6 +734,9 @@ export default function HookCta() {
                   focusOptions={focusOptions}
                   focus={editValue("hook_focus", "")}
                   onFocusChange={(value) => changePick("hook_focus", value, { omitDefault: true, fallback: "" })}
+                  onRefreshFocus={refreshFocusOutcomes}
+                  focusRefreshing={focusRefreshing}
+                  focusRefreshError={focusRefreshError}
                   tone={editValue("tone", "")}
                   onToneChange={(value) => changePick("tone", value, { omitDefault: true, fallback: "" })}
                   shape={editValue("hook_shape", "auto")}
@@ -732,9 +748,9 @@ export default function HookCta() {
               {/* The spoken line area (ADR 0254): the label, the line
                   itself and the card's one hook button at the area's
                   foot, in that order in BOTH states — ADR 0265's
-                  fresh-generate button joins the foot under the
-                  stateful button once a line exists, without moving
-                  it. Kasra ruled the
+                  fresh-generate button joins the foot beside the
+                  stateful button, in one row, once a line exists
+                  (the row is ADR 0287), without moving it. Kasra ruled the
                   button refines the line, so it stands inside this
                   area under the editor — it used to render ahead of
                   the area, above the line it refines. The area
@@ -765,14 +781,17 @@ export default function HookCta() {
                     founder's words and written only on accept. The
                     editor above mounts without its own rewrite, so
                     the suggestion stands exactly once in the card.
-                    The separate fresh-generate button under it
-                    (ADR 0265) is not a state of this control and no
+                    The separate fresh-generate button beside it
+                    (ADR 0265; the row is ADR 0287 — Kasra ordered the
+                    two hook buttons side by side in one row, not
+                    stacked) is not a state of this control and no
                     part of the suggestion's flow — it runs the first
                     generation again from the current picks. The
                     generate busy state is plain: no countdown rides
                     this wait (Kasra's order) — the plan and angle
                     countdowns elsewhere keep theirs. */}
                 <div className="space-y-2">
+                  <div className="flex flex-wrap items-start gap-2">
                   {hasHook ? (
                     <LineRewriteAction
                       projectId={project.id}
@@ -796,16 +815,17 @@ export default function HookCta() {
                     </Button>
                   )}
                   {/* The fresh generate (ADR 0265): its own button,
-                      standing under the stateful control once a line
-                      exists. It runs the first generation again —
-                      the same generateHook handler, flushing the
-                      picks as they stand now — and its result is
-                      the line on file directly, never a suggestion:
-                      Kasra ordered it because a changed Focus left
-                      no way to write a brand-new hook from the new
-                      focus, only to refine the old line. Before a
-                      line exists it does not stand — the stateful
-                      button already generates the first hook. */}
+                      standing beside the stateful control in the
+                      same row once a line exists (ADR 0287). It runs
+                      the first generation again — the same
+                      generateHook handler, flushing the picks as
+                      they stand now — and its result is the line on
+                      file directly, never a suggestion: Kasra
+                      ordered it because a changed Focus left no way
+                      to write a brand-new hook from the new focus,
+                      only to refine the old line. Before a line
+                      exists it does not stand — the stateful button
+                      already generates the first hook. */}
                   {hasHook && (
                     <Button
                       variant="accent"
@@ -818,6 +838,7 @@ export default function HookCta() {
                       {hookBusy ? "Writing the hook" : "Generate a new hook"}
                     </Button>
                   )}
+                  </div>
                   {hookError && (
                     <p role="alert" className="text-sm text-destructive-text" data-testid="hook-generate-error">
                       {hookError}
@@ -911,68 +932,6 @@ export default function HookCta() {
             </SectionCard>
           )}
 
-          {drafts.length > 0 && (
-            <SectionCard title="Hook + CTA drafts for this app" icon={HistoryIcon} data-testid="hook-cta-drafts-card">
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Open a draft to keep working on the hook you started here.
-              </p>
-              <div className="space-y-2">
-                {drafts.map((row) => {
-                  const isCurrent = project?.id === row.id;
-                  const body = (
-                    <>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-display text-sm font-semibold">
-                          Hook + CTA draft
-                        </span>
-                        {isCurrent && (
-                          <span className="text-xs font-semibold text-[color:var(--brand-indigo)]">
-                            Open now
-                          </span>
-                        )}
-                      </div>
-                      {/* A draft is told apart by its own hook line
-                          (ADR 0242's pattern): length and date made
-                          two drafts read as the same draft twice. A
-                          draft with no hook yet says so. */}
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {String(row.hook_line || "").trim()
-                          ? String(row.hook_line).trim()
-                          : "No hook yet"}
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {row.duration_seconds}s hook · Updated{" "}
-                        {new Date(row.updated_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
-                    </>
-                  );
-                  return isCurrent ? (
-                    <div
-                      key={row.id}
-                      className="row-pad w-full rounded-xl border border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                      data-testid={`hook-cta-draft-${row.id}`}
-                      aria-current="true"
-                    >
-                      {body}
-                    </div>
-                  ) : (
-                    <button
-                      key={row.id}
-                      type="button"
-                      onClick={() => openDraft(row.id)}
-                      className="card-pickable row-pad w-full rounded-xl border border-[color:var(--hairline)] text-left hover:border-[color:var(--indigo-35)]"
-                      data-testid={`hook-cta-draft-${row.id}`}
-                    >
-                      {body}
-                    </button>
-                  );
-                })}
-              </div>
-            </SectionCard>
-          )}
         </>
       )}
     </PageFrame>

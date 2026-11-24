@@ -2704,3 +2704,131 @@ class TestDirectionRefresh:
                 user_id=ANON))
         assert err.value.status_code == 502
         assert err.value.detail == "AI direction options failed. Please try again."
+
+
+class TestOutcomeRefresh:
+    """The Focus pick's refresh (ADR 0288): a fresh outcome layer from
+    the profile's stored facts, saved over the old one.
+
+    Kasra's case, Nov 23 2026: his saved Vocolens profile predated
+    ADR 0249's completeness bar, so its stored outcome lists still
+    carried comma-chopped fragments — "triggers", "and growth over
+    time", "from your own words" — and the Hook + CTA Focus dropdown
+    offered them as broken options. The refresh is the remedy he
+    ordered beside that list: one click, a fresh layer written from
+    the profile's own facts and held to the research bars, and the
+    fragments are gone because the layer they lived in is replaced.
+    """
+
+    FRAGMENTS = ["See your own rhythms", "triggers", "and growth over time"]
+
+    def _profile_with_fragments(self, api):
+        import json as _json
+        profile = _make_profile(api, ANON, name="Fragmented", category="Journaling")
+        statements = [{
+            "outcome": "A name for what you felt",
+            "who_feels_it": "people who go blank",
+            "from_feature": "Task timer",
+            "how_it_helps": "Speaking instead of typing gets the feeling out",
+        }, {
+            "outcome": "from your own words",
+            "who_feels_it": "people who go blank",
+            "from_feature": "Reminders",
+            "how_it_helps": "The words are theirs, not a form's",
+        }]
+        _run(api._execute(
+            "UPDATE brand_profiles SET outcome_statements = ?, desired_outcomes = ? WHERE id = ?",
+            (_json.dumps(statements), _json.dumps(self.FRAGMENTS), profile["id"])))
+        return _run(api.get_app_profile(profile["id"], ANON))
+
+    def _fake_layer(self, monkeypatch, seen, layer):
+        import ai_service
+
+        async def fake_chat_json(system_message, prompt, context, **kwargs):
+            seen["prompt"] = prompt
+            return layer
+        monkeypatch.setattr(ai_service, "_chat_json", fake_chat_json)
+
+    def test_refresh_replaces_the_layer_with_whole_lines(self, api, monkeypatch):
+        import ai_service
+        seen = {}
+        self._fake_layer(monkeypatch, seen, {
+            "outcome_statements": [
+                {"outcome": "A word for the tight feeling before sleep",
+                 "who_feels_it": "people who go blank",
+                 "from_feature": "Task timer",
+                 "how_it_helps": "Naming it loosens its grip on the evening"},
+                {"outcome": "triggers",
+                 "who_feels_it": "people who go blank",
+                 "from_feature": "Reminders",
+                 "how_it_helps": "A fragment the bar must drop"},
+                {"outcome": "Your own rhythms, visible at a glance",
+                 "who_feels_it": "people who feel surprised by their mood",
+                 "from_feature": "Reminders",
+                 "how_it_helps": "The pattern shows up without hunting for it"},
+                {"outcome": "Checking in even when words will not come",
+                 "who_feels_it": "people who go blank",
+                 "from_feature": "Task timer",
+                 "how_it_helps": "Speaking counts as checking in"},
+            ],
+            "desired_outcomes": [
+                "See your own rhythms and growth over time",
+                "and growth over time",
+                "Emotional clarity without hunting for labels",
+            ],
+        })
+        profile = self._profile_with_fragments(api)
+        out = _run(api.refresh_profile_outcomes(profile_id=profile["id"], user_id=ANON))
+        outcomes = [s["outcome"] for s in out["outcome_statements"]]
+        # The fragment statement the model offered is dropped by the
+        # same bar a research run is accepted through; the whole ones
+        # stand, linked to their features.
+        assert outcomes == [
+            "A word for the tight feeling before sleep",
+            "Your own rhythms, visible at a glance",
+            "Checking in even when words will not come",
+        ]
+        assert out["desired_outcomes"] == [
+            "See your own rhythms and growth over time",
+            "Emotional clarity without hunting for labels",
+        ]
+        # The Focus vocabulary is whole now: none of the stored
+        # fragments survive in the lines the pick offers.
+        lines = ai_service.profile_outcome_lines(out)
+        for fragment in self.FRAGMENTS + ["from your own words"]:
+            assert fragment not in lines
+        # The old lines rode along as the avoid list — fresh means new.
+        assert "triggers" in seen["prompt"]
+        assert "Task timer" in seen["prompt"]
+
+    def test_refresh_with_too_few_usable_outcomes_changes_nothing(self, api, monkeypatch):
+        seen = {}
+        self._fake_layer(monkeypatch, seen, {
+            "outcome_statements": [
+                {"outcome": "One whole outcome is not a layer",
+                 "who_feels_it": "people who stall",
+                 "from_feature": "Task timer",
+                 "how_it_helps": "It helps"},
+                {"outcome": "triggers",
+                 "who_feels_it": "people who stall",
+                 "from_feature": "Reminders",
+                 "how_it_helps": "A fragment, dropped"},
+            ],
+            "desired_outcomes": ["See your own rhythms and growth over time"],
+        })
+        profile = self._profile_with_fragments(api)
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_outcomes(profile_id=profile["id"], user_id=ANON))
+        assert err.value.status_code == 502
+        assert err.value.detail == "AI outcome refresh failed. Please try again."
+        # The stored layer is untouched: a failed refresh never halves
+        # a profile's outcomes.
+        stored = _run(api.get_app_profile(profile["id"], ANON))
+        assert stored["desired_outcomes"] == self.FRAGMENTS
+
+    def test_refresh_missing_profile_404s(self, api, monkeypatch):
+        seen = {}
+        self._fake_layer(monkeypatch, seen, {"outcome_statements": [], "desired_outcomes": []})
+        with pytest.raises(HTTPException) as err:
+            _run(api.refresh_profile_outcomes(profile_id=str(uuid.uuid4()), user_id=ANON))
+        assert err.value.status_code == 404

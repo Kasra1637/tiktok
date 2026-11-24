@@ -212,11 +212,14 @@ class TestSinglePassGeneration:
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         assert len(calls) == 1
         prompt = calls[0]["prompt"]
-        # The strategy's hook line is what the video opens on, NOT the plan's
-        # hook_line. They are two different fields and the strategy is the one
-        # the founder reviewed as the video's own words -- build_single_pass_prompt
-        # read the plan's copy, which is the generic path this no longer takes.
-        assert FAKE_STRATEGY["hook_line"] in prompt
+        # The video opens on the plan's approved hook line. The strategy's
+        # segment scripts are derived copies of the plan's words, never a
+        # second source: the render guard binds the approved words over them
+        # before the prompt is built (ADR 0286), so this fixture's divergent
+        # strategy copy ("You do not have a writing problem.") never reaches
+        # the prompt -- the founder reviewed and edited the plan's words.
+        assert "Stop writing empty pages" in prompt
+        assert FAKE_STRATEGY["hook_line"] not in prompt
         assert "ONE continuous" in prompt
 
     def test_generation_records_provenance(self, api, monkeypatch):
@@ -1093,7 +1096,9 @@ class TestListingAndCapabilities:
         gen = _run(api.submit_project_generation(
             project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         detail = _run(api.get_generation(gen["id"], ANON))
-        assert FAKE_STRATEGY["hook_line"] in detail["prompt_used"]
+        # The stored prompt speaks the plan's approved hook line; the
+        # strategy's derived copy is bound over before the build (ADR 0286).
+        assert "Stop writing empty pages" in detail["prompt_used"]
 
     def test_detail_carries_the_projects_demo_brief(self, api, monkeypatch):
         """
@@ -1507,9 +1512,12 @@ class TestModelSelectionAtTheApiBoundary:
         the direction tail is gone. The regression: the retry withdrew
         protection and trimmed the script to fit.
 
-        The plan words are short enough to survive repair untouched, so no
-        rebinding fires and the strategy's own section scripts are what the
-        builder receives — exactly the words asserted below.
+        The words asserted below are the plan's approved words, which this
+        fixture writes onto the project row itself. The render guard binds
+        them over the strategy's section scripts before the build (ADR 0286),
+        so the builder receives the hook line on the hook section and the
+        script on the middle — the strategy's own combined hook copy is a
+        derived draft and never reaches the prompt.
         """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
@@ -1565,8 +1573,11 @@ class TestModelSelectionAtTheApiBoundary:
             f"this 409s after the founder asked for it."
         )
         assert hook_line in prompt, "the hook line lost its tail"
-        assert hook_script in prompt, "the hook script lost its tail"
         assert middle_script in prompt, "the middle script lost its tail"
+        assert hook_script not in prompt, (
+            "the strategy's combined hook copy reached the prompt — the "
+            "render must speak the approved plan words, not the derived copy"
+        )
         assert big not in prompt, "direction wording survived whole"
 
     def test_heygen_renders_a_long_app_name_on_a_full_strategy(self, api, monkeypatch):
@@ -1837,4 +1848,9 @@ class TestSpokenWordsBeforeTheRender:
         # Nothing is rewritten that does not have to be: the approved words are
         # the words, and no extra judgement is run over them on the way out.
         assert "spoken_repair" not in result
-        assert FAKE_STRATEGY["hook_line"] in calls[0]["prompt"]
+        # The words are the PLAN's (ADR 0286): the strategy's spoken copies
+        # are derived from them by bind_spoken_words, so when the two
+        # differ — this fixture's strategy carries a line the plan does
+        # not — the prompt speaks the plan's hook line, not the stale copy.
+        assert "Stop writing empty pages" in calls[0]["prompt"]
+        assert FAKE_STRATEGY["hook_line"] not in calls[0]["prompt"]

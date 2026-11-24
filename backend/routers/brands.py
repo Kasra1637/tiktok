@@ -2345,6 +2345,53 @@ async def refresh_profile_direction_options(
     return {"field": field, "options": options}
 
 
+@router.post("/app-profiles/{profile_id}/outcomes/refresh")
+async def refresh_profile_outcomes(
+    profile_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """A fresh outcome layer for the profile, from its stored facts (ADR 0288).
+
+    The Hook + CTA Focus pick offers the profile's outcome lines, and
+    Kasra's saved profile still carried fragments from a research run
+    that predated ADR 0249's completeness bar — "triggers", "and
+    growth over time" — as broken options. The refresh writes a fresh
+    layer from the facts already on the profile (no new sources, no
+    re-research), held to the research bars by the same normalizers,
+    and saves it over the old layer in the same request, so the Focus
+    list — and every other surface the outcomes feed — reads whole
+    lines. A reply that cannot yield a usable layer fails with the
+    standard sentence and changes nothing.
+    """
+    _require_configured()
+    _require_ai_configured()
+    profile = await _cfg("_fetch_one")(
+        "SELECT * FROM brand_profiles WHERE id = ? AND user_id = ?", (profile_id, user_id)
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="App Profile not found")
+    try:
+        layer = await _cfg("_log_model_call")(
+            "outcome_refresh", "text", TEXT_MODEL,
+            lambda: ai_service.generate_outcome_refresh(profile),
+            user_id,
+            brand_profile_id=profile_id,
+        )
+    except RuntimeError:
+        # The founder-facing sentence only (ADR 0242's pattern): the raw
+        # model error is recorded server-side by _log_model_call already.
+        raise HTTPException(status_code=502, detail="AI outcome refresh failed. Please try again.")
+    await _cfg("_execute")(
+        "UPDATE brand_profiles SET outcome_statements = ?, desired_outcomes = ?, updated_at = ? "
+        "WHERE id = ? AND user_id = ?",
+        (
+            json.dumps(_normalize_outcome_value(layer["outcome_statements"])),
+            json.dumps(layer["desired_outcomes"]),
+            now_iso(), profile_id, user_id,
+        ),
+    )
+    return await _cfg("_fetch_one")("SELECT * FROM brand_profiles WHERE id = ?", (profile_id,))
+
+
 @router.delete("/app-profiles/{profile_id}/content-angles/{angle_id}")
 async def delete_content_angle(profile_id: str, angle_id: str, user_id: str = Depends(get_current_user_id)):
     _require_configured()

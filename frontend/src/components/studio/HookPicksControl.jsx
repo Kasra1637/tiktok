@@ -1,5 +1,6 @@
-import { Focus, HelpCircle, MessagesSquare } from "lucide-react";
+import { Focus, HelpCircle, MessagesSquare, RefreshCw } from "lucide-react";
 import { AppSelect } from "../AppSelect";
+import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
 
@@ -34,6 +35,11 @@ import { GroupLabel } from "../SectionCard";
  * stale note says the line predates the picks and names the
  * remedy — the one hook button, Suggest a clearer hook, which the
  * founder presses themselves (ADR 0249's unified control).
+ *
+ * The Focus block also carries the outcome refresh (ADR 0288): the
+ * host wires a handler that writes a fresh outcome layer onto the
+ * profile, and the new lines arrive through focusOptions — this
+ * control only asks and shows the wait and the failure.
  */
 
 export function profileOutcomeLines(profile) {
@@ -99,6 +105,9 @@ export default function HookPicksControl({
   focusOptions = [],
   focus = "",
   onFocusChange,
+  onRefreshFocus,
+  focusRefreshing = false,
+  focusRefreshError = "",
   tone = "",
   onToneChange,
   shape = "auto",
@@ -115,7 +124,28 @@ export default function HookPicksControl({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <GroupLabel icon={Focus}>Focus</GroupLabel>
+        <div className="flex items-center justify-between gap-2">
+          <GroupLabel icon={Focus}>Focus</GroupLabel>
+          {/* The refresh (ADR 0288, Kasra's order): one click writes a
+              fresh outcome layer onto the profile from its stored
+              facts — the fresh ideas land in this list, and a stored
+              list carrying old fragments is replaced whole. Offered
+              only where the host wires it. */}
+          {onRefreshFocus && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onRefreshFocus}
+              disabled={disabled || focusRefreshing}
+              busy={focusRefreshing}
+              data-testid={`${testId}-focus-refresh`}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              {focusRefreshing ? "Refreshing" : "Refresh"}
+            </Button>
+          )}
+        </div>
         <AppSelect
           id="hook-cta-hook-focus"
           testId={`${testId}-focus`}
@@ -132,6 +162,11 @@ export default function HookPicksControl({
         <p className="text-sm text-muted-foreground">
           The outcome the hook leads with — one of your app&rsquo;s own outcomes.
         </p>
+        {focusRefreshError && (
+          <p role="alert" className="text-sm text-destructive-text" data-testid={`${testId}-focus-refresh-error`}>
+            {focusRefreshError}
+          </p>
+        )}
       </div>
 
       <div className="space-y-2">
