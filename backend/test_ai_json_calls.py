@@ -354,40 +354,41 @@ class TestTemperatureIsDataDriven:
 
 class TestChatModelRequestShape:
     """
-    Claude Sonnet 5.5 replaces GPT-6.2 Sol on every chat flow
-    (ADR 0299; Sol replaced Muse Ember one day earlier, ADR 0295).
-    The consequences that travel with the model are pinned here
-    rather than re-discovered as production 400s:
+    Muse Ember is restored on every chat flow (ADR 0310), after
+    one day on GPT-6.2 Sol (ADR 0295) and one evening on Claude
+    Sonnet 5.5 (ADR 0299). The consequences that travel with the
+    model are pinned here rather than re-discovered as production
+    400s:
 
-    - temperature is sent ONLY where the endpoint declares it. None
-      of Sonnet 5.5's five endpoints declares it, so the field is
-      left off the shipped slug — the offline fallback omits it for
-      the Claude 5 families too. _post_chat's retry stays as the
-      net under both the declared data and the offline fallback;
-    - reasoning_effort=medium (ADR 0295, carried through ADR 0299)
+    - temperature is sent ONLY where the endpoint declares it. Muse
+      Ember declares temperature on its endpoints, so the field is
+      sent for it; the offline fallback sends it too. _post_chat's
+      retry stays as the net under both the declared data and the
+      offline fallback;
+    - reasoning_effort=medium (ADR 0297, kept through the restore)
       is sent for the shipped slug, and for no other slug;
     - max_tokens stays (OpenRouter maps it), and reasoning tokens are billed
       against the same budget, which the truncation retry already covers.
     """
 
-    def test_chat_models_point_at_claude_sonnet_5_5(self):
+    def test_chat_models_point_at_muse_ember(self):
         import ai_service
-        assert ai_service.TEXT_MODEL == "anthropic/claude-sonnet-5.5"
-        assert ai_service.VISION_MODEL == "anthropic/claude-sonnet-5.5"
+        assert ai_service.TEXT_MODEL == "meta/muse-ember"
+        assert ai_service.VISION_MODEL == "meta/muse-ember"
         assert ai_service.REASONING_EFFORT == "medium"
 
-    def test_the_shipped_default_gets_medium_and_no_temperature(self, monkeypatch):
+    def test_the_shipped_default_gets_temperature_and_medium(self, monkeypatch):
         """
-        None of Sonnet 5.5's endpoints declares temperature, so the
-        field is left off rather than spent discovering by 400 — and
-        reasoning_effort=medium (ADR 0295, carried through ADR 0299)
-        travels with every call to the shipped slug.
+        Muse Ember declares temperature on its endpoints, so the
+        field is sent rather than spent discovering by 400 — and
+        reasoning_effort=medium (ADR 0297) travels with every call
+        to the shipped slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
-        assert rec.payloads[0]["model"] == "anthropic/claude-sonnet-5.5"
-        assert "temperature" not in rec.payloads[0]
+        assert rec.payloads[0]["model"] == "meta/muse-ember"
+        assert rec.payloads[0]["temperature"] == 0.4
         assert rec.payloads[0]["reasoning_effort"] == "medium"
 
     def test_no_reasoning_effort_for_an_override_model(self, monkeypatch):

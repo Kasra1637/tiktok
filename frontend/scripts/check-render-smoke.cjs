@@ -8209,7 +8209,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("a card with no reasons or limitations shows neither block", async (ctx) => {
+  await check("a card with no reasons still carries its verdict block, empty", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi(
       {
@@ -8239,9 +8239,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
     );
     const text = ctx.text();
-    // An empty heading is worse than no heading.
-    if (text.includes("Why it fits")) {
-      throw new Error("an empty reasons block is still rendered");
+    // ADR 0309 supersedes the old "an empty heading is worse than no heading"
+    // rule for this card: the skeleton is fixed, so the WHY IT FITS block
+    // stands on every card — but with no reasons it carries no verdict, no
+    // reason text and no detail list; the block is present and empty.
+    if (!text.includes("Why it fits")) {
+      throw new Error("the verdict block is missing from the card's skeleton");
+    }
+    if (ctx.container.querySelector('[data-testid="template-fit-verdict"]')) {
+      throw new Error("a card with no reasons shows a verdict");
+    }
+    if (!ctx.container.querySelector('[data-slot="verdict"]')) {
+      throw new Error("the card carries no verdict slot");
     }
     if (!text.includes("Fit 5")) {
       throw new Error("the fit score is missing");
@@ -8389,6 +8398,81 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (bounds !== 0) throw new Error(`the shared asset need is still read on ${bounds} places instead of nowhere in this section`);
     if (!ctx.text().includes("Framed for Productivity rather than Health")) {
       throw new Error("the one differentiating limitation did not stay on its own card");
+    }
+  });
+
+  await check("every template card carries the same skeleton, top to bottom", async (ctx) => {
+    // ADR 0309 (Kasra's order): the cards rendered only the blocks their
+    // fields filled, so one row read as three different layouts. Every card
+    // now renders the same slots in the same order — name, badges, outcome,
+    // example, shape, develops, moment, verdict — whether or not a slot
+    // carries text, stands at the row's height, and anchors its verdict to
+    // its foot. jsdom has no layout, so the skeleton is pinned structurally:
+    // the slot sequence, the reserved lines, and the full-height column.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9,
+              why_it_fits: ["Puts the timer at the centre of the piece."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+            {
+              template: ORDERED_TEMPLATES[1],
+              score: 8,
+              why_it_fits: ["Names the habit in the first seconds."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+          shared_reasons: [],
+          shared_limitations: [],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "ease_daily_moment",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+      }
+    );
+    const grid = ctx.container.querySelector('[data-testid="templates-grid"]');
+    if (!grid) throw new Error("the templates grid is not rendered");
+    const cards = [...grid.children].map((wrap) => wrap.firstElementChild).filter(Boolean);
+    if (cards.length !== 2) throw new Error(`expected two template cards, saw ${cards.length}`);
+    const SKELETON = ["name", "badges", "outcome", "example", "shape", "develops", "moment", "verdict"];
+    for (const card of cards) {
+      const slots = [...card.querySelectorAll("[data-slot]")].map((el) => el.dataset.slot);
+      if (JSON.stringify(slots) !== JSON.stringify(SKELETON)) {
+        throw new Error(`a card's structure differs from the shared skeleton: ${slots.join(", ")}`);
+      }
+      for (const cls of ["flex", "h-full", "flex-col"]) {
+        if (!card.classList.contains(cls)) {
+          throw new Error(`a template card does not stand at the row's height (missing ${cls})`);
+        }
+      }
+      const name = card.querySelector('[data-slot="name"]');
+      if (!name.classList.contains("min-h-12")) {
+        throw new Error("the name slot does not reserve its two lines");
+      }
+      const outcome = card.querySelector('[data-slot="outcome"]');
+      if (!outcome.classList.contains("min-h-12")) {
+        throw new Error("the outcome slot does not reserve its two lines");
+      }
+      const verdict = card.querySelector('[data-slot="verdict"]');
+      if (!verdict.classList.contains("mt-auto")) {
+        throw new Error("the verdict block is not anchored to the card's foot");
+      }
     }
   });
 

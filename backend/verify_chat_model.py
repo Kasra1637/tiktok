@@ -2,16 +2,15 @@
 Live chat-model verification: real calls, nothing mocked.
 
 The suite proves the request SHAPE the studio sends; only a real provider
-response proves that shape is ACCEPTED. Two facts about the Claude
-Sonnet 5.5 swap (ADR 0299) cannot be settled by a mocked test, and
+response proves that shape is ACCEPTED. Two facts about the Muse
+Ember restoration (ADR 0310) cannot be settled by a mocked test, and
 this script settles both:
 
   1. Structured output. Every research / angles / plan / script call depends on
-     OpenRouter strict json_schema (response_format). Sonnet 5.5 declares
-     response_format on all five endpoints (structured_outputs on three),
-     but OpenRouter routes support per endpoint, so this
-     proves the endpoint the studio actually reaches accepts the envelope and
-     returns JSON that satisfies a strict schema.
+     OpenRouter strict json_schema (response_format). Muse Ember carried
+     these flows until ADR 0295, but OpenRouter routes support per endpoint,
+     so this proves the endpoint the studio actually reaches accepts the
+     envelope and returns JSON that satisfies a strict schema.
 
   2. The reasoning effort question. Every call now pins reasoning_effort to
      medium for the shipped slug (see ai_service._reasoning_effort_param).

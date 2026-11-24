@@ -95,15 +95,15 @@ logger = logging.getLogger(__name__)
 
 # Models
 #
-# Both chat models default to Claude Sonnet 5.5 (ADR 0299):
-# Anthropic's Sonnet tier, multimodal (text+image in) with
-# structured-output support, a 1M-token context window and reasoning
-# effort pinned to medium. It replaces GPT-6.2 Sol — shipped one day
-# earlier (ADR 0295) — at the same listed price ($2/$10 per 1M, read
-# off OpenRouter on Nov 23 2026): Kasra's call after the model
-# comparison, picking the strongest same-price model on his
-# benchmark table (69.45% against Sol's 65.07%) for every written
-# surface at once: research, angles, plan, hooks, covers, post kit.
+# Both chat models default to Muse Ember (ADR 0310): Meta's Muse
+# tier, multimodal (text+image in) with structured-output support —
+# the app's original model, restored at Kasra's order on Nov 23 2026
+# after one day on GPT-6.2 Sol (ADR 0295) and one evening on Claude
+# Sonnet 5.5 (ADR 0299). The written quality on the newer models did
+# not beat what Ember produced under the app's own instructions, so
+# the original model takes back every written surface at once:
+# research, angles, plan, hooks, covers, post kit. Its listed price
+# is $0.10/$0.50 per 1M (read off OpenRouter on Nov 23 2026).
 #
 # Both slugs are overridable from the environment so a model swap is a config
 # change rather than a code change, the same way the video provider already
@@ -113,24 +113,27 @@ logger = logging.getLogger(__name__)
 # shape — _reasoning_effort_param sends it for the shipped slug only.
 #
 # Consequences that travel with the shipped default everywhere below:
-# - temperature is NOT declared by Sonnet 5.5's endpoints either
-#   (measured on the endpoints listing, Nov 23 2026: five endpoints,
-#   none declares it), so it is not sent. CHAT_TEMPERATURE stays 0.4
-#   in code (Kasra's ruling, kept through both swaps); the guard in
-#   _temperature_param reads the live declaration and simply leaves
-#   the field off a model that does not take it, and stays the net
-#   for any override whose endpoints declare something else.
+# - temperature IS declared by Muse Ember's endpoints, so the 0.4
+#   in CHAT_TEMPERATURE is sent again, exactly as it was before
+#   ADR 0295. The guard in _temperature_param reads the live
+#   declaration and leaves the field off a model that does not take
+#   it (the GPT-6 and Sonnet endpoints declared none), and stays
+#   the net for any override whose endpoints declare something else.
+# - reasoning stays at medium (ADR 0297 stands): the effort pin was
+#   Kasra's separate later ruling for speed, not part of either
+#   model swap. Ember ran at extra high before ADR 0295; restoring
+#   that is a separate order if he gives it.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
 #   reasoning tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
-# - structured outputs (strict json_schema) ride on response_format,
-#   declared by all five of Sonnet 5.5's endpoints; structured_outputs
-#   itself is declared by three of the five, and the local
-#   parse-and-retry in _chat_json stays as defense-in-depth for the
-#   endpoints that treat the schema as a hint rather than a guarantee.
-DEFAULT_TEXT_MODEL = "anthropic/claude-sonnet-5.5"
-DEFAULT_VISION_MODEL = "anthropic/claude-sonnet-5.5"
+# - structured outputs (strict json_schema) are supported on Muse
+#   Ember — it carried every flow in this app until ADR 0295 — and
+#   the local parse-and-retry in _chat_json stays as
+#   defense-in-depth for endpoints that treat the schema as a hint
+#   rather than a guarantee.
+DEFAULT_TEXT_MODEL = "meta/muse-ember"
+DEFAULT_VISION_MODEL = "meta/muse-ember"
 # The app-wide reasoning level: medium since ADR 0295 (extra high
 # before it, ADR 0211; Max before that, ADR 0110). Kasra's ruling was
 # speed across the whole app on the new model — every chat call
@@ -4218,8 +4221,7 @@ def _spoken_line_rules_block() -> str:
         "to a friend, not app copy. Use plain, loose words, never analytical or "
         "formal ones. Bad: 'noticing it repeat makes the dip feel less random' "
         "-- say 'it's weirdly the same every day' instead. Bad: 'weekly' -- say "
-        "'every week' instead. Same for any frequency: 'daily' is 'every day', "
-        "'monthly' is 'every month'. "
+        "'every week' instead. Same for any frequency word. "
         "Never use the app's own feature names or product nouns in a spoken "
         "line — nobody says them to their phone. Bad: 'now reflections sound "
         "like me' — name the thing in everyday words instead: 'what I wrote', "
@@ -4270,7 +4272,7 @@ def _spoken_line_rules_block() -> str:
         "capital at its start and its own full stop at its end (a ? or ! "
         "where the form allows). Nothing trails off on a joining word "
         "('and', 'but', 'because', 'the'), no fragment stands in for a "
-        "sentence in the script either, and the hook joins no clauses with "
+        "sentence either, and the hook joins no clauses with "
         "a semicolon. The open ending is a complete sentence whose thought "
         "stays open — never an unfinished sentence. Finished in "
         "MEANING too (ADR 0249): a question carries its object ('why "
@@ -4310,26 +4312,28 @@ def _spoken_line_rules_block() -> str:
         "place nowhere in it: the viewer can see the mural; what stops "
         "the scroll is what she is trying to do there.\n"
         "- EXTENSION: the script continues the hook — it answers its question "
-        "in the first clause: the answer lands inside the first sentence "
-        "itself, never after a looking-back preamble ('Looking back over my "
+        "in the first clause: the answer lands inside its first sentence, "
+        "never after a looking-back preamble ('Looking back over my "
         "recent days' opens in retrospect, not in the story), and that first "
         "sentence lands inside the moment — through what she does and "
         "feels: one concrete action, one body detail ('I press my "
         "palm to my stomach'). Never the place — the viewer sees it: "
         "no 'at the kitchen table', no 'at the bus stop'. "
-        "Then it finishes or develops the hook. One person, one "
-        "story, one thought: no new problem, no second hook, no hook said "
-        "again. Echo the hook's single key image or feeling word once, as "
-        "the payoff — never restate its sentence or idea. The middle is TWO "
+        "One story, "
+        "one thought: no new problem, no second hook, no hook said "
+        "again. Echo the hook's key image or feeling word once "
+        "— never restate its sentence or idea. The middle is TWO "
         "BEATS MAX: one concrete action, then one lingering thought. Cut "
         "filler items from lists. Keep the emotional arc: problem, then "
-        "insight, then the shift in feeling.\n"
+        "insight, then the shift in feeling — landed BEFORE the last "
+        "line, which stays open on the question the demo answers: the "
+        "demo completes it, so never wrap up or resolve there (ADR 0311).\n"
         "- LIVE POV: spoken live straight to camera in first person, every "
         "word something a real person would say out loud. No narration "
         "about the speaker or the scene, no stage directions, no 'I said "
         "quietly', no describing what the camera already shows, no quoting "
         "own words back as a past event, and no quotation marks anywhere "
-        "in the script — speak the line directly.\n"
+        "in the script.\n"
         "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
         "understood or ended up doing. Describe the change in their life, never "
         "a feature or a screen, and never narrate scrolling, reading, or "
@@ -4342,7 +4346,7 @@ def _spoken_line_rules_block() -> str:
         "stretching one. Lead with the person doing the thing, never with "
         "a scene phrase trailing into a comma before she arrives — that is "
         "written order, not talking. Cut softeners — hedges "
-        "that pad a line without adding meaning, like 'I keep thinking'; say "
+        "that pad a line, like 'I keep thinking'; say "
         "the thing itself instead. No corporate language, jargon or filler, and none of the "
         "AI-sounding openers: 'in today's fast-paced world', 'imagine a world "
         "where', 'the best part?', 'take it to the next level'.\n"

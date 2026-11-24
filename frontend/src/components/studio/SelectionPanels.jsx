@@ -56,6 +56,16 @@ function formatTemplateUse(n) {
  * is the caveat ON it. Rendering them identically made a warning look like
  * supporting evidence.
  *
+ * One fixed skeleton on every card (ADR 0309, Kasra's order): the same slots
+ * in the same order with the same styling from top to bottom — name, badges,
+ * outcome, example, shape, develops, moment, verdict — whether or not a slot
+ * carries text. A slot with nothing to say holds its line empty rather than
+ * collapsing, so a missing field never reshapes the card; the name reserves
+ * two lines and the outcome two, the verdict block anchors to the card's
+ * foot, and every card in the row stands at the row's height. Text itself is
+ * never cut to fit: a longer line simply takes its lines, the way the house
+ * equal-height pattern (profileUi) already rules.
+ *
  * A div with button semantics rather than a <button> because the whole card is
  * the control. There is no longer a nested toggle — the previous one called
  * stopPropagation on click but not on keydown, so Enter and Space on the link
@@ -135,15 +145,17 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
       }}
       aria-pressed={selected}
       style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
-      className={`card-pickable animate-fade-up w-full rounded-xl border p-4 text-left ${
+      className={`card-pickable animate-fade-up flex h-full w-full flex-col rounded-xl border p-4 text-left ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
           : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-base font-semibold">{r.template.name}</span>
-        <span className="flex flex-wrap items-center gap-2">
+      <div>
+        <span className="block min-h-12 text-base font-semibold" data-slot="name">
+          {r.template.name}
+        </span>
+        <span className="mt-1 flex flex-wrap items-center gap-2" data-slot="badges">
           <Badge variant="outline" className="text-xs">
             {r.suggested_duration}s
           </Badge>
@@ -164,46 +176,79 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           {selected && <Check className="h-4 w-4 text-[color:var(--brand-indigo)]" />}
         </span>
       </div>
-      {outcome && (
-        <p className="mt-1 text-base text-foreground/90" data-testid="template-outcome">
-          {outcome}
-        </p>
-      )}
-      {example && (
-        <p className="mt-1 text-sm text-foreground/80">
-          <span className="text-muted-foreground">Sounds like: </span>
-          &ldquo;{example}&rdquo;
-        </p>
-      )}
-      {opening && (
-        <p className="mt-1 text-sm text-muted-foreground" data-testid="template-structure">
-          <span className="text-muted-foreground">Shape: </span>
-          {opening}
-        </p>
-      )}
-      {development && (
-        <p className="mt-1 text-sm text-foreground/80" data-testid="template-development">
-          <span className="text-muted-foreground">Develops as: </span>
-          {development}
-        </p>
-      )}
-      {moment && !misfit && (
-        <p className="mt-1 text-sm text-foreground/80" data-testid="template-angle-moment">
-          <span className="text-muted-foreground">In your video: </span>
-          {staging || moment}
-        </p>
-      )}
-      {misfit && (
-        <p className="mt-1 text-sm font-semibold text-foreground" data-testid="template-angle-misfit">
+      {/* The fixed skeleton (ADR 0309): every slot renders on every card, in
+          this order, with this styling. A slot whose field is empty holds its
+          line blank — the testid rides only on a slot carrying text, so the
+          checks keep reading "the line that says it" exactly as before. */}
+      <p
+        className="mt-1 min-h-12 text-base text-foreground/90"
+        data-slot="outcome"
+        {...(outcome ? { "data-testid": "template-outcome" } : {})}
+      >
+        {outcome}
+      </p>
+      <p className="mt-1 min-h-5 text-sm text-foreground/80" data-slot="example">
+        {example && (
+          <>
+            <span className="text-muted-foreground">Sounds like: </span>
+            &ldquo;{example}&rdquo;
+          </>
+        )}
+      </p>
+      <p
+        className="mt-1 min-h-5 text-sm text-muted-foreground"
+        data-slot="shape"
+        {...(opening ? { "data-testid": "template-structure" } : {})}
+      >
+        {opening && (
+          <>
+            <span className="text-muted-foreground">Shape: </span>
+            {opening}
+          </>
+        )}
+      </p>
+      <p
+        className="mt-1 min-h-5 text-sm text-foreground/80"
+        data-slot="develops"
+        {...(development ? { "data-testid": "template-development" } : {})}
+      >
+        {development && (
+          <>
+            <span className="text-muted-foreground">Develops as: </span>
+            {development}
+          </>
+        )}
+      </p>
+      {misfit ? (
+        <p
+          className="mt-1 min-h-5 text-sm font-semibold text-foreground"
+          data-slot="moment"
+          data-testid="template-angle-misfit"
+        >
           {misfit}
         </p>
+      ) : (
+        <p
+          className="mt-1 min-h-5 text-sm text-foreground/80"
+          data-slot="moment"
+          {...(moment ? { "data-testid": "template-angle-moment" } : {})}
+        >
+          {moment && (
+            <>
+              <span className="text-muted-foreground">In your video: </span>
+              {staging || moment}
+            </>
+          )}
+        </p>
       )}
-      {reasons.length > 0 && (
-        <div className="mt-2 space-y-2">
-          <p className="eyebrow">Why it fits</p>
-          {/* The verdict: the strongest match, in body weight with the same
-              tick the step pills use for "positive", so it reads as the reason
-              rather than one of several. */}
+      {/* The verdict block anchors to the foot of the card (mt-auto), so the
+          WHY IT FITS lines up across the row however the middle slots ran. */}
+      <div className="mt-auto space-y-2 pt-2" data-slot="verdict">
+        <p className="eyebrow">Why it fits</p>
+        {/* The verdict: the strongest match, in body weight with the same
+            tick the step pills use for "positive", so it reads as the reason
+            rather than one of several. */}
+        {verdict ? (
           <p
             className="flex items-start gap-1.5 text-base text-foreground"
             data-testid="template-fit-verdict"
@@ -211,8 +256,10 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
             <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--brand-indigo)]" />
             <span>{sentenceCase(verdict)}</span>
           </p>
-        </div>
-      )}
+        ) : (
+          <p className="min-h-6" aria-hidden="true" />
+        )}
+      </div>
       {/* Supporting detail and limitations tuck into a disclosure: the card
           leads with its verdict, and the rest opens on demand. The verdict
           stays outside any list, and a single-reason card with no limits
