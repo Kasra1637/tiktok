@@ -564,6 +564,20 @@ def _strict_object(properties: dict) -> dict:
     }
 
 
+# The Craft evaluation reply (ADR 0312): one entry per checklist
+# category — a score, the findings on this clip, and the lift.
+CRAFT_EVALUATION_SCHEMA = _strict_object({
+    "dimensions": _strict_object({
+        key: _strict_object({
+            "score": {"type": "number"},
+            "evidence": _str_array_prop(),
+            "next_step": _str_prop(),
+        })
+        for key, _label, _weight in creative_quality._DIMENSIONS
+    })
+})
+
+
 APP_PROFILE_JSON_SCHEMA = _strict_object({
     "brand_name": _str_prop(),
     "brand_description": _str_prop(),
@@ -1104,6 +1118,78 @@ async def _chat_json(
     if last_error:
         raise last_error
     raise UnusableResponse(f"{context}: model returned no usable response")
+
+
+async def assess_spoken_quality_with_model(
+    hook_line,
+    script,
+    *,
+    hook_seconds=3,
+    total_seconds=15,
+    app_name="",
+    allows_question=True,
+    spoken_check=None,
+    cover_text="",
+):
+    """The Craft check, evaluated by the app's text model (ADR 0312).
+
+    The checklist's own methodology — its eight categories, caps, cue
+    vocabularies and lifts, assembled by
+    `creative_quality.evaluation_rubric` — is handed to TEXT_MODEL as
+    a rubric, and the model's per-category scores, findings and lifts
+    come back in the report shape every surface already renders. The
+    model does not learn between ratings: the rubric is handed over
+    fresh on every call, so it rates by the checklist's methodology
+    the same way every time.
+
+    Any failure — a provider error, a timeout, a reply the report
+    builder cannot use — falls back to the deterministic scorer, so
+    the check never breaks a page because its evaluator is a model.
+    Generation's internal craft comparisons (the hook bake-off, the
+    editorial retry) keep the deterministic scorer: they compare many
+    candidates per generation and are not the rendered report.
+    """
+    hook = str(hook_line or "").strip()
+    body = str(script or "").strip()
+    if hook or body:
+        try:
+            data = await _chat_json(
+                "You are the craft evaluator inside a TikTok studio app. "
+                "You score two spoken lines — a hook and a short script — "
+                "against the app's own craft checklist, exactly as the "
+                "checklist defines it, and return only the JSON object.",
+                creative_quality.evaluation_prompt(
+                    hook, body,
+                    cover_text=cover_text,
+                    app_name=app_name,
+                    hook_seconds=hook_seconds,
+                    total_seconds=total_seconds,
+                    allows_question=allows_question,
+                ),
+                "Craft evaluation",
+                max_tokens=2500,
+                attempts=1,
+                timeout=45,
+                json_schema=CRAFT_EVALUATION_SCHEMA,
+            )
+            return creative_quality.report_from_evaluation(
+                data, cover_text=cover_text, hook_line=hook
+            )
+        except Exception as error:
+            logger.warning(
+                "Craft evaluation by %s failed (%s: %s); "
+                "scoring with the deterministic checklist instead.",
+                TEXT_MODEL, type(error).__name__, error,
+            )
+    return creative_quality.assess_spoken_quality(
+        hook_line, script,
+        hook_seconds=hook_seconds,
+        total_seconds=total_seconds,
+        app_name=app_name,
+        allows_question=allows_question,
+        spoken_check=spoken_check,
+        cover_text=cover_text,
+    )
 
 
 async def analyze_hook(frame_paths: list, session_id: str, music_context: dict = None, transcript_text: str = "") -> dict:

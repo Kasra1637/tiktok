@@ -1551,8 +1551,13 @@ class TestGeneratedPlanEditorialFlow:
         assert bound["segments"][1]["script"] == good["script"]
         assert overflow == {}
         # 2 editorial payloads + 1 hook candidates call (ADR 0130)
-        # + 1 script-only craft correction at the 80 bar.
-        assert len(rec.payloads) == 4
+        # + 1 script-only craft correction at the 80 bar
+        # + 1 craft evaluation on the project read above (ADR 0312:
+        # the Review read's report is the model's, against the
+        # checklist's rubric; here it reads a canned plan reply,
+        # fails validation and falls back to the deterministic
+        # report the assertions above never look at).
+        assert len(rec.payloads) == 5
 
     def test_generation_uses_project_hook_length_not_template_length(self, api, monkeypatch):
         from models import GeneratePlanRequest, UpdateStudioProjectRequest
@@ -1592,7 +1597,10 @@ class TestGeneratedPlanEditorialFlow:
         after = _run(api.get_studio_project(project["id"], ANON))
         for key in ("hook_line", "script", "script_version", "beat_timeline"):
             assert after[key] == before[key]
-        assert len(rec.payloads) == 3
+        # 3 payloads from the failed generation + 1 craft evaluation
+        # on the read above (ADR 0312), which falls back to the
+        # deterministic report against the canned reply.
+        assert len(rec.payloads) == 4
 
 
 class TestPlanPromptSeedsVoiceDefault:

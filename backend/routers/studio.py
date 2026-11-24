@@ -1083,6 +1083,24 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     # reopening it is what repairs it — see _backfill_two_section_projects.
     await _backfill_two_section_projects([row])
     payload = _public_project(row)
+    # The Review card's craft report is the model's evaluation, against
+    # the checklist's own rubric (ADR 0312): _public_project's
+    # deterministic mirror is replaced here, on the single-project
+    # read the wizard loads, with the same inputs it used — and the
+    # deterministic report is the evaluation's own fallback, so a
+    # failed model call still returns the mirror's report. List and
+    # mutation payloads keep the deterministic mirror: a list read
+    # cannot wait on a model per project.
+    if payload.get("hook_line") or payload.get("script"):
+        payload["quality_report"] = await ai_service.assess_spoken_quality_with_model(
+            payload.get("hook_line"),
+            payload.get("script"),
+            hook_seconds=payload.get("hook_seconds") or 3,
+            total_seconds=payload.get("duration_seconds") or 0,
+            app_name="",
+            spoken_check=payload.get("spoken_check"),
+            cover_text=payload.get("cover_text") or "",
+        )
     # The Review step's verdict evidence (ADR 0127): a pure read of the
     # profile's verdict summary, attached for display only — it never
     # generates anything (ADR 0122) and is absent when there are none.

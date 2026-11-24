@@ -626,6 +626,23 @@ def _grade(total):
     return "F", "off_brief"
 
 
+def _weak_next_steps(dimensions):
+    """The report's next steps: the lifts of the weak categories.
+
+    Weak is under 70% of a category's weight, weakest first; at most
+    three lifts are named. Shared by the deterministic report and the
+    model-evaluated report (ADR 0312) so both read the same way.
+    """
+    ranked = sorted(
+        dimensions.values(),
+        key=lambda item: (item["score"] / item["weight"], item["key"]),
+    )
+    weak = [item for item in ranked if item["score"] / item["weight"] < 0.7]
+    if weak:
+        return [item["next_step"] for item in weak[:3]]
+    return ["No craft dimension needs a rewrite; keep this pair."]
+
+
 def _report(dimensions, next_steps):
     total = sum(item["score"] for item in dimensions.values())
     achievable_total = sum(
@@ -738,16 +755,7 @@ def assess_spoken_quality(
             "next_step": next_step,
         }
 
-    ranked = sorted(
-        dimensions.values(),
-        key=lambda item: (item["score"] / item["weight"], item["key"]),
-    )
-    weak = [item for item in ranked if item["score"] / item["weight"] < 0.7]
-    if weak:
-        next_steps = [item["next_step"] for item in weak[:3]]
-    else:
-        next_steps = ["No craft dimension needs a rewrite; keep this pair."]
-    report = _report(dimensions, next_steps)
+    report = _report(dimensions, _weak_next_steps(dimensions))
     report["cover_text"] = {"text": cover, "scored_with_hook": bool(cover and hook)}
     # The grade is the total's alone (ADR 0202, Kasra's ruling of
     # Nov 18 2026): Trust & compliance scores and counts toward the
@@ -756,4 +764,386 @@ def assess_spoken_quality(
     # F / band off_brief however high the total ran — a 72 displayed
     # as F, its two charges being unfinished sentences — and the
     # report carried a capped_by marker no surface read.
+    return report
+
+
+# ---------------------------------------------------------------------------
+# The model-evaluated check (ADR 0312).
+#
+# The founder's ruling: an intelligence should evaluate the hook and
+# the script, using the same metrics and methodology the checklist
+# already uses. So the checklist writes itself out as a rubric — the
+# eight categories and caps from _DIMENSIONS/_ACHIEVABLE_MAX, the cue
+# vocabularies above, the earns/loses of each scorer transcribed in
+# _METHODOLOGY, and each category's lift taken from the scorer itself
+# — and `ai_service` hands that rubric to the app's text model on
+# every evaluation. The model does not learn between ratings: it is
+# handed the rubric fresh each time, so it rates by the checklist's
+# methodology the same way every time. Its reply is validated and
+# clamped here, into the exact report shape the deterministic scorer
+# produces; anything unusable raises, and the caller falls back to
+# `assess_spoken_quality`.
+# ---------------------------------------------------------------------------
+
+_METHODOLOGY = {
+    "hook_stopping_power": {
+        "base": 7,
+        "earns": (
+            "names a cost or recurring problem (+3)",
+            "a concrete anchor — a time, place or object — in the hook (+2; "
+            "the cover text can carry the anchor instead, +2)",
+            "a contrast or curiosity gap (+2)",
+            "compressed enough to land in the first three seconds — at "
+            "most 60 characters and 12 words (+2)",
+            "names a trigger the viewer can recognise (+1)",
+        ),
+        "loses": (
+            "opens as a journal entry, so the viewer is overhearing rather "
+            "than being addressed (-3)",
+            "narrates using the app — a screen the generated clip never "
+            "shows (-2)",
+            "asks for a download, follow or sign-up instead of opening a "
+            "problem (-5)",
+            "abstract mood words carry the idea (-1 each, up to -3)",
+        ),
+        "cues": (
+            ("problem cues", _PROBLEM_CUES),
+            ("curiosity cues", _CURIOSITY_CUES),
+            ("concrete anchors", _CONCRETE_CUES),
+            ("app-behavior cues", _APP_BEHAVIOR_CUES),
+            ("promotion cues", _PROMOTION_CUES),
+            ("abstract mood words", _ABSTRACT_NOUNS),
+            ("journal-entry openers", _JOURNAL_OPENERS),
+        ),
+    },
+    "audience_truth": {
+        "base": 9,
+        "earns": (
+            "the hook speaks in first person, the way the viewer talks "
+            "about their own life (+2)",
+            "a routine or object the viewer recognises (+1)",
+            "addresses the viewer directly (+1)",
+        ),
+        "loses": (
+            "the hook reports the viewer in the third person instead of "
+            "speaking as them (-1)",
+            "generic mood language stands in for the viewer's own words "
+            "(-1 each, up to -2)",
+            "describes using the app rather than a moment in the viewer's "
+            "life (-2)",
+            "a promotional ask appears in a customer line (-2)",
+            "founder or marketer voice appears in a customer line (-2)",
+        ),
+        "cues": (
+            ("concrete anchors", _CONCRETE_CUES),
+            ("abstract mood words", _ABSTRACT_NOUNS),
+            ("app-behavior cues", _APP_BEHAVIOR_CUES),
+            ("promotion cues", _PROMOTION_CUES),
+            ("founder and marketer words", _FOUNDER_CUES),
+        ),
+    },
+    "clarity": {
+        "base": 7,
+        "earns": (
+            "every sentence stays short enough to follow on one listen — "
+            "24 words at most (+2)",
+            "the hook is one short thought — 12 words at most (+1)",
+        ),
+        "loses": (
+            "a sentence runs past 24 words (-1 each, up to -3)",
+            "a demonstrative ('that surprise feels') makes the subject "
+            "unclear (-1)",
+        ),
+        "cues": (("unclear demonstratives", _UNCLEAR_CUES),),
+    },
+    "concreteness": {
+        "base": 3,
+        "earns": (
+            "a place is named (+2)",
+            "a physical action is named (+2)",
+            "a time or routine is named (+2)",
+            "a sensory or body detail grounds the scene (+1)",
+        ),
+        "loses": (
+            "abstract nouns carry part of the meaning (-1 each, up to -3)",
+            "the payoff is a vague stand-in, not a specific lived thing (-2)",
+        ),
+        "cues": (
+            ("places", _PLACE_CUES),
+            ("physical actions", _ACTION_CUES),
+            ("times and routines", _TIME_CUES),
+            ("sensory and body details", _SENSORY_CUES),
+            ("abstract nouns", _ABSTRACT_NOUNS),
+        ),
+    },
+    "story_arc": {
+        "base": 0,
+        "earns": (
+            "the hook opens a problem (+3 for two or more problem cues, "
+            "+2 for one; +1 for a negative state that is not yet a "
+            "concrete problem)",
+            "the script answers with an insight, not a restatement (+3)",
+            "a shift or a name for what changed lands before the last "
+            "line (+3 — resolution cues count before the last line only; "
+            "the open ending itself is paid in Demo handoff, not here)",
+            "the script echoes the hook's image (+1)",
+            "the script opens in a scene (+1)",
+            "the script does not simply repeat the hook (+1)",
+            "a concrete action precedes the insight (+1)",
+            "the story stays out of the app's screens (+1)",
+            "every reference is established (+1)",
+        ),
+        "loses": (
+            "the script repeats the hook's words instead of continuing "
+            "it (-2)",
+            "a quotation reports the speaker's words instead of speaking "
+            "them live (-2)",
+            "the script narrates itself or describes what the camera "
+            "shows (-2)",
+            "the script does not answer the hook in its first clause (-1)",
+            "the payoff names a vague stand-in ('a word', 'that vague "
+            "sense') (-2)",
+        ),
+        "cues": (
+            ("problem cues", _PROBLEM_CUES),
+            ("insight cues", _INSIGHT_CUES),
+            ("shift and resolution cues", _RESOLUTION_CUES),
+            ("physical actions", _ACTION_CUES),
+            ("app-behavior cues", _APP_BEHAVIOR_CUES),
+        ),
+    },
+    "spoken_naturalness": {
+        "base": 8,
+        "earns": (
+            "contractions make it sound spoken (+1)",
+            "average sentence length is conversational — 14 words at "
+            "most (+1)",
+        ),
+        "loses": (
+            "a sentence runs past 18 words; a spoken line needs a breath "
+            "(-2 each, up to -4)",
+            "a fronted modifier ('In the garden stretching, ...') reads "
+            "as written copy on first pass (-2)",
+            "written-copy phrasing is hard to say out loud (-1 each, up "
+            "to -2)",
+            "quotation marks turn live speech into a quote of past "
+            "words (-3)",
+            "self-narration reports the speaker instead of speaking "
+            "live (-3)",
+        ),
+        "cues": (("written-copy phrasing", _WRITTEN_CUES),),
+    },
+    "demo_handoff": {
+        "base": 5,
+        "note": "Scored on the script's last line only — this category "
+                "owns the ending.",
+        "earns": (
+            "the last line leaves a gap the demo can answer (+4)",
+            "the last line names the question the demo will answer (+2)",
+        ),
+        "loses": (
+            "the last line resolves the feeling, so the demo has no "
+            "question left (-3)",
+            "the last line narrates the app instead of the viewer's next "
+            "question (-2)",
+        ),
+        "cues": (
+            ("gap cues", _GAP_CUES),
+            ("question cues in the last line", ("what sets", "why", "how", "what if", "what makes")),
+            ("closure cues", _CLOSURE_CUES),
+            ("app-behavior cues", _APP_BEHAVIOR_CUES),
+        ),
+    },
+    "trust_compliance": {
+        "base": 10,
+        "earns": (
+            "a clean pair — no promotion, app-name, personal-history or "
+            "screen-action issue found — keeps the full 10",
+        ),
+        "loses": (
+            "each spoken-line defect costs -3: a line over its length "
+            "ceiling (the hook's seconds at speaking pace, the script's "
+            "likewise), an unfinished sentence or a fragment standing in "
+            "for one, a question where the plan does not allow one, a "
+            "personal-history claim, or screen narration",
+            "the spoken lines name the app itself (-2)",
+        ),
+        "cues": (
+            ("promotion cues", _PROMOTION_CUES),
+            ("app-behavior cues", _APP_BEHAVIOR_CUES),
+            ("founder and marketer words", _FOUNDER_CUES),
+        ),
+    },
+}
+
+
+def _scorer_lifts():
+    """Each category's lift, read out of the scorers themselves.
+
+    The next_step strings are constant for any non-empty pair, so a
+    probe pair recovers them exactly — the rubric quotes the
+    checklist's own words rather than a paraphrase.
+    """
+    probe_hook = "I keep losing count every morning"
+    probe_script = "I press my palm to my stomach and count again."
+    check = ai_spoken.check_spoken_story(probe_hook, probe_script, 3, 15)
+    return {
+        "hook_stopping_power": _score_hook(probe_hook)[2],
+        "audience_truth": _score_audience(probe_hook, probe_script)[2],
+        "clarity": _score_clarity(probe_hook, probe_script)[2],
+        "concreteness": _score_concreteness(probe_hook, probe_script)[2],
+        "story_arc": _score_story(probe_hook, probe_script, check)[2],
+        "spoken_naturalness": _score_naturalness(probe_hook, probe_script)[2],
+        "demo_handoff": _score_handoff(probe_script)[2],
+        "trust_compliance": _score_trust(probe_hook, probe_script, check, "", True)[2],
+    }
+
+
+def evaluation_rubric():
+    """The checklist written out for the evaluating model (ADR 0312).
+
+    Assembled from this module's own material: the categories, weights
+    and reachable caps, the cue vocabularies the scorers match, the
+    earns/loses of each scorer transcribed in _METHODOLOGY, and each
+    scorer's own lift. Nothing here is a second methodology.
+    """
+    lifts = _scorer_lifts()
+    achievable_total = sum(
+        _achievable_max(key, weight) for key, _label, weight in _DIMENSIONS
+    )
+    lines = [
+        "THE CRAFT CHECKLIST — the app's own methodology. Rate by this "
+        "and nothing else.",
+        "",
+        "The check is advisory: it answers \"is this a good customer "
+        "story?\" for two spoken lines — a hook (the opening seconds) "
+        "and a script (the story that follows it) — plus the cover "
+        "text, which lands in the same first two seconds as the hook, "
+        "so Hook stopping power reads the opening whole: the spoken "
+        "line plus the cover.",
+        "Eight categories, each scored in points. The app adds the "
+        "eight scores into a total and grades it: 85 or more is A "
+        "(distinctive), 70 or more B (strong), 55 or more C (competent "
+        "but generic), 40 or more D (performance risk), under 40 F "
+        "(off brief). You return only the per-category scores, "
+        "findings and lifts — the app does the adding and the grading.",
+        f"Score within the cap each category can actually award, "
+        f"given in its heading: the eight caps add to {achievable_total}, "
+        "not 100, because two categories' cues cannot reach their "
+        "nominal weights.",
+        "For each category return \"score\" (a number), \"evidence\" "
+        "(the findings: short lines naming what THIS pair does, in the "
+        "checklist's own style — e.g. \"Names a cost or recurring "
+        "problem ('never').\" or \"The hook states a situation rather "
+        "than a problem.\") and \"next_step\" (the lift: the one change "
+        "that would most raise this category's score).",
+        "",
+    ]
+    for index, (key, label, weight) in enumerate(_DIMENSIONS, start=1):
+        achievable = _achievable_max(key, weight)
+        method = _METHODOLOGY[key]
+        lines.append(
+            f"{index}. {label} — worth {weight} points, "
+            f"can actually award {achievable}."
+        )
+        lines.append(f"   The deterministic checklist starts this category at {method['base']}.")
+        if method.get("note"):
+            lines.append(f"   {method['note']}")
+        lines.append("   What earns: " + "; ".join(method["earns"]) + ".")
+        lines.append("   What loses: " + "; ".join(method["loses"]) + ".")
+        for cue_label, cues in method["cues"]:
+            lines.append(
+                f"   {cue_label}: " + ", ".join(f"'{cue}'" for cue in cues) + "."
+            )
+        lines.append(f"   The checklist's own lift: \"{lifts[key]}\"")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def evaluation_prompt(hook, script, *, cover_text="", app_name="",
+                      hook_seconds=3, total_seconds=15, allows_question=True):
+    """The full evaluation request: the rubric plus the pair to score."""
+    cover = str(cover_text or "").strip()
+    named = str(app_name or "").strip()
+    parts = [
+        evaluation_rubric(),
+        "",
+        "THE PAIR TO SCORE",
+        f"Hook line (spoken in the first {int(hook_seconds or 3)} seconds): {hook}",
+        f"Cover text (on screen in the same first two seconds): {cover or '(none)'}",
+        f"Script (the story that follows, spoken inside a "
+        f"{int(total_seconds or 15)}-second clip): {script}",
+    ]
+    if named:
+        parts.append(
+            f"The app's name is \"{named}\" — under Trust & compliance, "
+            "the spoken lines must never name it."
+        )
+    if not allows_question:
+        parts.append(
+            "For this pair the plan does not allow a question hook — "
+            "under Trust & compliance a question counts as a defect."
+        )
+    parts.append(
+        "Return one JSON object: {\"dimensions\": {\"hook_stopping_power\": "
+        "{\"score\": <number>, \"evidence\": [\"<finding on this clip>\"], "
+        "\"next_step\": \"<the lift>\"}, ...}} — all eight categories, "
+        "keyed exactly: " + ", ".join(key for key, _label, _weight in _DIMENSIONS) + "."
+    )
+    return "\n".join(parts)
+
+
+def report_from_evaluation(data, *, cover_text="", hook_line=""):
+    """Build the stored report shape from the model's evaluation.
+
+    Validates the reply against the checklist's structure: every
+    category present, a numeric score, at least one finding and a
+    lift. Scores are clamped to the cap each category can actually
+    award (ADR 0300), so the total, grade and 0-10 reading flow
+    through the same math as a deterministic report. Anything
+    unusable raises ValueError — the caller falls back to the
+    deterministic scorer.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("craft evaluation is not a JSON object")
+    raw_dimensions = data.get("dimensions")
+    if not isinstance(raw_dimensions, dict):
+        raise ValueError("craft evaluation carries no dimensions object")
+    dimensions = {}
+    for key, label, weight in _DIMENSIONS:
+        entry = raw_dimensions.get(key)
+        if not isinstance(entry, dict):
+            raise ValueError(f"craft evaluation is missing {key}")
+        raw_score = entry.get("score")
+        if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+            raise ValueError(f"craft evaluation score for {key} is not a number")
+        evidence = entry.get("evidence")
+        if (
+            not isinstance(evidence, list)
+            or not evidence
+            or not all(isinstance(line, str) and line.strip() for line in evidence)
+        ):
+            raise ValueError(f"craft evaluation findings for {key} are unusable")
+        next_step = entry.get("next_step")
+        if not isinstance(next_step, str) or not next_step.strip():
+            raise ValueError(f"craft evaluation lift for {key} is unusable")
+        achievable = _achievable_max(key, weight)
+        score = _clamp(int(round(raw_score)), 0, achievable)
+        dimensions[key] = {
+            "key": key,
+            "label": label,
+            "weight": weight,
+            "score": score,
+            "max": weight,
+            "achievable_max": achievable,
+            "score10": _score10(score, achievable),
+            "evidence": [line.strip() for line in evidence],
+            "next_step": next_step.strip(),
+        }
+    report = _report(dimensions, _weak_next_steps(dimensions))
+    cover = str(cover_text or "").strip()
+    report["cover_text"] = {
+        "text": cover,
+        "scored_with_hook": bool(cover and str(hook_line or "").strip()),
+    }
     return report

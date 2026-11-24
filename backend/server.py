@@ -1829,9 +1829,11 @@ async def _submit_generation(
     # founder saw for these exact words — and a later performance snapshot
     # can be joined against it. Advisory only: computing it can never refuse
     # the render, and empty words store no report rather than a zero score.
+    # The evaluation is the model's, against the checklist's own rubric
+    # (ADR 0312), with the deterministic scorer as its fallback.
     frozen_quality_report = None
     if plan_words.get("hook_line") or plan_words.get("script"):
-        frozen_quality_report = creative_quality.assess_spoken_quality(
+        frozen_quality_report = await ai_service.assess_spoken_quality_with_model(
             plan_words.get("hook_line"),
             plan_words.get("script"),
             hook_seconds=project.get("hook_seconds") or 3,
