@@ -458,15 +458,22 @@ export function AngleSelector({
           <RefreshCw className="h-3.5 w-3.5" />
           {generating ? "Regenerating angles" : "Regenerate angles"}
             </Button>
-            {angleSetFreshness && !generating && (
-              <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
-                Refreshed {angleSetFreshness}
-              </p>
-            )}
-            {!objective && !generating && (
-              <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
-                Pick a goal first — regenerating aims fresh angles at it.
-              </p>
+            {(angleSetFreshness || !objective) && !generating && (
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                {angleSetFreshness && (
+                  <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
+                    Refreshed {angleSetFreshness}
+                  </p>
+                )}
+                {angleSetFreshness && !objective && (
+                  <span aria-hidden="true" className="text-sm text-muted-foreground">·</span>
+                )}
+                {!objective && (
+                  <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
+                    Pick a goal first — regenerating aims fresh angles at it.
+                  </p>
+                )}
+              </div>
             )}
             {cameraSetup === "fixed" && !generating && (
               <p className="text-sm text-muted-foreground" data-testid="angles-fixed-indoor-note">

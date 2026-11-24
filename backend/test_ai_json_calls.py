@@ -354,43 +354,46 @@ class TestTemperatureIsDataDriven:
 
 class TestChatModelRequestShape:
     """
-    Muse Ember (Max) replaces Claude Haiku 5.5 on every chat flow. The
+    GPT-6.2 Sol replaces Muse Ember on every chat flow (ADR 0295). The
     consequences that travel with the model are pinned here rather than
     re-discovered as production 400s:
 
-    - temperature is sent ONLY where the endpoint declares it. Muse Ember
-      declares temperature on its endpoints, so the field is sent for it; the
-      offline fallback sends it too. _post_chat's retry stays as the net under
-      both the declared data and the offline fallback;
-    - reasoning_effort=xhigh (extra high, ADR 0211) is sent for the
+    - temperature is sent ONLY where the endpoint declares it. The GPT-6
+      endpoints declare no temperature, so the field is left off the
+      shipped slug — the offline fallback omits it for the family too.
+      _post_chat's retry stays as the net under both the declared data
+      and the offline fallback;
+    - reasoning_effort=medium (ADR 0295) is sent for the
       shipped slug, and for no other slug;
     - max_tokens stays (OpenRouter maps it), and reasoning tokens are billed
       against the same budget, which the truncation retry already covers.
     """
 
-    def test_chat_models_point_at_muse_ember(self):
+    def test_chat_models_point_at_gpt_6_2_sol(self):
         import ai_service
-        assert ai_service.TEXT_MODEL == "meta/muse-ember"
-        assert ai_service.VISION_MODEL == "meta/muse-ember"
-        assert ai_service.REASONING_EFFORT == "xhigh"
+        assert ai_service.TEXT_MODEL == "openai/gpt-6.2-sol"
+        assert ai_service.VISION_MODEL == "openai/gpt-6.2-sol"
+        assert ai_service.REASONING_EFFORT == "medium"
 
-    def test_the_shipped_default_gets_temperature_and_xhigh(self, monkeypatch):
+    def test_the_shipped_default_gets_medium_and_no_temperature(self, monkeypatch):
         """
-        Muse Ember declares temperature on its endpoints, so the field is sent
-        rather than spent discovering by 400 — and reasoning_effort=xhigh
-        (extra high, ADR 0211) travels with every call to the shipped slug.
+        The GPT-6 endpoints declare no temperature, so the field is left
+        off rather than spent discovering by 400 — and
+        reasoning_effort=medium (ADR 0295) travels with every call to
+        the shipped slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
-        assert rec.payloads[0]["model"] == "meta/muse-ember"
-        assert rec.payloads[0]["temperature"] == 0.4
-        assert rec.payloads[0]["reasoning_effort"] == "xhigh"
+        assert rec.payloads[0]["model"] == "openai/gpt-6.2-sol"
+        assert "temperature" not in rec.payloads[0]
+        assert rec.payloads[0]["reasoning_effort"] == "medium"
 
     def test_no_reasoning_effort_for_an_override_model(self, monkeypatch):
         """
-        An effort level meant for Muse Ember is not a parameter another model
-        declared, so an env override changes the request shape with the slug.
+        An effort level meant for the shipped model is not a parameter
+        another model declared, so an env override changes the request
+        shape with the slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
@@ -404,7 +407,9 @@ class TestChatModelRequestShape:
         monkeypatch.setitem(
             ai_service._TEMPERATURE_SUPPORT, "meta/muse-ember", True)
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
-        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.5)) == {"a": 1}
+        assert _run(ai_service._chat_json(
+            "sys", "prompt", "Ctx", model="meta/muse-ember",
+            temperature=0.5)) == {"a": 1}
         assert rec.payloads[0]["temperature"] == 0.5
 
     def test_chat_temperature_is_the_documented_default(self):
@@ -433,7 +438,9 @@ class TestChatModelRequestShape:
         refusal = _Response(
             {"error": {"message": "Unsupported value: temperature"}}, status=400)
         rec = _patch_client(monkeypatch, [refusal, _completion('{"a": 1}')])
-        assert _run(ai_service._chat_json("sys", "prompt", "Ctx", temperature=0.4)) == {"a": 1}
+        assert _run(ai_service._chat_json(
+            "sys", "prompt", "Ctx", model="meta/muse-ember",
+            temperature=0.4)) == {"a": 1}
         assert len(rec.payloads) == 2
         assert rec.payloads[0]["temperature"] == 0.4
         assert "temperature" not in rec.payloads[1]
@@ -541,10 +548,11 @@ class TestChatModelRequestShape:
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
         # The direct flows (profile research, angles) keep the pinned
-        # extra-high level; the plan chain's three calls — draft, hook
-        # candidates, craft correction — run at High (ADR 0211).
+        # medium level; the plan chain's three calls — draft, hook
+        # candidates, craft correction — run at Low, one level under
+        # (ADR 0211's structure, ADR 0295's levels).
         assert [p["reasoning_effort"] for p in rec.payloads] == [
-            "xhigh", "xhigh", "high", "high", "high"]
+            "medium", "medium", "low", "low", "low"]
 
 
 class TestLiveAngleGoals:
@@ -1630,20 +1638,20 @@ class TestCreativePlanBudget:
 
 class TestPlanChainReasoningEffort:
     """
-    ADR 0211: the plan-and-strategy chain runs at High, not Max.
+    ADR 0211's structure at ADR 0295's levels: the plan-and-strategy
+    chain runs one level below the app-wide pin — Low under Medium.
 
     One click on Generate plan chains three to seven reasoning calls
     behind it — the plan's editorial loop, the hook bake-off and its
     correction, the craft correction, then the strategy call — and at
     the old global Max pin the founder waited 90-100+ seconds for the
     pair. The chain's call sites pass
-    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("high") through
-    _chat_json, one level below the app-wide default, which the same
-    decision drops from Max to extra high (REASONING_EFFORT="xhigh";
-    the TestChatModelRequestShape pins above pin that new default).
-    The override rides the same declaration gate as the default
-    (ADR 0003): the field goes only to the shipped slug, never to a
-    model that did not declare it.
+    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("low") through
+    _chat_json, one level below the app-wide default
+    (REASONING_EFFORT="medium"; the TestChatModelRequestShape pins
+    above pin that default). The override rides the same declaration
+    gate as the default (ADR 0003): the field goes only to the
+    shipped slug, never to a model that did not declare it.
     """
 
     PLAN = {
@@ -1663,10 +1671,10 @@ class TestPlanChainReasoningEffort:
         "claims_used": [],
     }
 
-    def test_the_chain_is_high_and_the_default_is_xhigh(self):
+    def test_the_chain_is_low_and_the_default_is_medium(self):
         import ai_service
-        assert ai_service.REASONING_EFFORT == "xhigh"
-        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "high"
+        assert ai_service.REASONING_EFFORT == "medium"
+        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "low"
 
     def test_an_overridden_call_sends_the_override(self, monkeypatch):
         import ai_service
@@ -1684,8 +1692,8 @@ class TestPlanChainReasoningEffort:
             reasoning_effort="high")) == {"a": 1}
         assert "reasoning_effort" not in rec.payloads[0]
 
-    def test_the_plan_chain_carries_high_on_every_call(self, monkeypatch):
-        """Draft, doubled retry, candidates, craft correction — no Max."""
+    def test_the_plan_chain_carries_low_on_every_call(self, monkeypatch):
+        """Draft, doubled retry, candidates, craft correction — Low throughout."""
         import ai_service
         half = '{"hook_line": "I couldn\'t name what I was feeling.', \
             '"script": "The sugg'
@@ -1701,9 +1709,9 @@ class TestPlanChainReasoningEffort:
         # draft, its doubled retry, the bake-off candidates call
         # (ADR 0130) and the 80-bar craft correction (ADR 0115).
         assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["high"] * 4
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["low"] * 4
 
-    def test_the_bake_off_correction_call_carries_high(self, monkeypatch):
+    def test_the_bake_off_correction_call_carries_low(self, monkeypatch):
         """When every candidate breaks a gate, its correction is chained too."""
         import ai_service
         script = ("At the kitchen table I speak for sixty seconds before "
@@ -1738,9 +1746,9 @@ class TestPlanChainReasoningEffort:
         ))
         assert [p["max_tokens"] for p in rec.payloads] == [
             ai_service.HOOK_CANDIDATES_MAX_TOKENS, ai_service.REWRITE_MAX_TOKENS]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["high", "high"]
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["low", "low"]
 
-    def test_the_strategy_call_carries_high(self, monkeypatch):
+    def test_the_strategy_call_carries_low(self, monkeypatch):
         import ai_service
         strategy = {
             "strategy_summary": "s", "audience_problem": "p",
@@ -1767,7 +1775,7 @@ class TestPlanChainReasoningEffort:
         assert result["strategy_summary"] == "s"
         assert len(rec.payloads) == 1, "a good reply must not cost a retry"
         assert rec.payloads[0]["max_tokens"] == ai_service.STRATEGY_MAX_TOKENS
-        assert rec.payloads[0]["reasoning_effort"] == "high"
+        assert rec.payloads[0]["reasoning_effort"] == "low"
 
 
 class _PostKitBudgetGate(_BudgetGate):

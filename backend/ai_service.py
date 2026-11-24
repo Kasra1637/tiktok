@@ -95,11 +95,14 @@ logger = logging.getLogger(__name__)
 
 # Models
 #
-# Both chat models default to Muse Ember (Max): Meta's smallest and most
-# efficient Muse tier, multimodal (text+image in) with structured-output
-# support, a 1M-token context window and reasoning effort pinned to extra
-# high. It replaces Claude Haiku 5.5 at the same listed price ($0.10/$0.50
-# per 1M).
+# Both chat models default to GPT-6.2 Sol (ADR 0295): OpenAI's everyday
+# GPT-6.2 tier, multimodal (text+image in) with structured-output
+# support, a 1.05M-token context window and reasoning effort pinned to
+# medium. It replaces Muse Ember at a higher listed price ($2/$10 per
+# 1M against Ember's $0.10/$0.50, both read off OpenRouter on Nov 23
+# 2026) — Kasra's call, made for stronger instruction-following across
+# every written surface at once: research, angles, plan, hooks,
+# covers, post kit.
 #
 # Both slugs are overridable from the environment so a model swap is a config
 # change rather than a code change, the same way the video provider already
@@ -109,32 +112,37 @@ logger = logging.getLogger(__name__)
 # shape — _reasoning_effort_param sends it for the shipped slug only.
 #
 # Consequences that travel with the shipped default everywhere below:
-# - temperature IS declared by the Muse Ember endpoints, so it is sent. The
-#   guard in _temperature_param reads that declaration; it stays the net for
-#   any override whose endpoints declare something else.
+# - temperature is NOT declared by the GPT-6 endpoints, so it is not
+#   sent. CHAT_TEMPERATURE stays 0.4 in code (Kasra's ruling, kept
+#   through the swap); the guard in _temperature_param reads the live
+#   declaration and simply leaves the field off a model that does not
+#   take it, and stays the net for any override whose endpoints
+#   declare something else.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
 #   reasoning tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
-# - structured outputs (strict json_schema) are supported on Muse Ember and
-#   are compatible with reasoning; the local parse-and-retry in _chat_json stays
-#   as defense-in-depth for endpoints that treat the schema as a hint rather
-#   than a guarantee.
-DEFAULT_TEXT_MODEL = "meta/muse-ember"
-DEFAULT_VISION_MODEL = "meta/muse-ember"
-# The app-wide reasoning level: extra high since ADR 0211 (Max before
-# it, ADR 0110). Kasra's ruling was speed across the whole app — every
-# chat call thinks one level less, and the chained plan flow below
-# sits one level under this.
-REASONING_EFFORT = "xhigh"
+# - structured outputs (strict json_schema) are supported on GPT-6.2
+#   Sol and are compatible with reasoning; the local parse-and-retry
+#   in _chat_json stays as defense-in-depth for endpoints that treat
+#   the schema as a hint rather than a guarantee.
+DEFAULT_TEXT_MODEL = "openai/gpt-6.2-sol"
+DEFAULT_VISION_MODEL = "openai/gpt-6.2-sol"
+# The app-wide reasoning level: medium since ADR 0295 (extra high
+# before it, ADR 0211; Max before that, ADR 0110). Kasra's ruling was
+# speed across the whole app on the new model — every chat call
+# thinks at medium, and the chained plan flow below sits one level
+# under this, the same structure ADR 0211 set.
+REASONING_EFFORT = "medium"
 # The plan-and-strategy chain runs one level down from the pin above,
-# at High (ADR 0211). It is the one flow that chains three to seven
-# reasoning calls behind a single click — the plan's editorial loop,
-# the hook bake-off, the craft correction, then the strategy — and at
-# Max the founder waited 90-100+ seconds for the pair. The pin stands
-# for every other flow; this constant is passed explicitly by the
-# chain's call sites only, through _chat_json's per-call override.
-PLAN_CHAIN_REASONING_EFFORT = "high"
+# at Low (ADR 0211's structure, its levels moved by ADR 0295). It is
+# the one flow that chains three to seven reasoning calls behind a
+# single click — the plan's editorial loop, the hook bake-off, the
+# craft correction, then the strategy — and at Max the founder waited
+# 90-100+ seconds for the pair. The pin stands for every other flow;
+# this constant is passed explicitly by the chain's call sites only,
+# through _chat_json's per-call override.
+PLAN_CHAIN_REASONING_EFFORT = "low"
 
 
 def _model_from_env(var: str, default: str) -> str:
@@ -430,9 +438,9 @@ def _reasoning_effort_param(model: str, effort: Optional[str] = None) -> dict:
     """
     The pinned reasoning level, for the shipped model only.
 
-    Extra high is how this model is specified to run at all since
-    ADR 0211 (Max before it). The field is sent as
-    `reasoning_effort`, which the Muse Ember endpoints declare, and only for
+    Medium is how this model is specified to run at all since
+    ADR 0295 (extra high before it, ADR 0211). The field is sent as
+    `reasoning_effort`, which the shipped slug's endpoints declare, and only for
     that slug: an override pointed at another model is taken as given for its
     request shape (see _temperature_param — declared data, offline fallback,
     refuse-and-retry), and an effort level meant for one model is not a
@@ -947,7 +955,8 @@ async def _chat_json(
 
     Only after the retries are exhausted does it raise.
 
-    `temperature` is sent to models that take it (Muse Ember does), and a
+    `temperature` is sent to models that take it (the shipped model's
+    endpoints do not declare it, so the field is left off there), and a
     provider that refuses the field costs the field
     rather than the call — see _post_chat; `json_schema`, when given, is sent as
     OpenRouter structured output (strict JSON Schema) while the parse-and-retry
@@ -3042,8 +3051,9 @@ async def generate_cover_text(
     """One fresh cover text for the project's opening (ADR 0145).
 
     A suggestion only: nothing is saved here. Written to the shared
-    COVER TEXT rules — a few words, first person, the moment and place
-    up front, one concrete felt detail, the resolution withheld, and
+    COVER TEXT rules — a few words, first person, the ache up front
+    in plain words, one concrete felt detail, never the place, the
+    resolution withheld, and
     never a copy of the spoken hook. A reply that hands back the
     current cover unchanged, copies the hook, or runs long gets one
     bounded correction; a reply still failing after it raises
@@ -3625,7 +3635,7 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '    "about (the low-competition classification anchor), one or two "\n'
         '    "from the niche\'s own community or interest vocabulary, and one "\n'
         '    "broad app-category tag; the app\'s own name may be one of them"],\n'
-        '  "cover_text": "the cover text, written to these rules: 3 to 5 words, eye catching, punchy and enticing, first person in the person\'s own voice (never a label or title), the moment and place up front with one concrete felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
+        '  "cover_text": "the cover text, written to these rules: 3 to 5 words, eye catching, punchy and enticing, first person in the person\'s own voice (never a label or title), the ache up front in plain words with one concrete felt detail, never the place, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
         "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
@@ -4134,7 +4144,7 @@ def _cover_text_rules_block() -> str:
         "- SHORT and punchy: 3 to 5 words — all a viewer can read inside the first two seconds, every word earning its place.\n"
         "- Eye catching, punchy and enticing: curiosity up front — it makes the viewer want the answer the video is holding back.\n"
         "- First person, the person's own voice; never a label, a title, or ad copy.\n"
-        "- The moment and the place up front, with one concrete felt detail.\n"
+        "- The ache up front, in plain words, with one concrete felt detail — never the place.\n"
         "- It works WITH the opening image: never repeat what the picture already shows.\n"
         "- It withholds the resolution — the video still has something to answer.\n"
         "- Never a copy of the spoken hook: a second angle on the same moment, not a duplicate."
@@ -4258,9 +4268,10 @@ def _spoken_line_rules_block() -> str:
         "in the first clause: the answer lands inside the first sentence "
         "itself, never after a looking-back preamble ('Looking back over my "
         "recent days' opens in retrospect, not in the story), and that first "
-        "sentence lands inside the moment — it names the place she is in, "
-        "with its article ('at the bus stop', never 'at bus stop'), the "
-        "place the hook must not name living in the script's words instead. "
+        "sentence lands inside the moment — through what she does and "
+        "feels: one concrete action, one body detail ('I press my "
+        "palm to my stomach'). Never the place — the viewer sees it: "
+        "no 'at the kitchen table', no 'at the bus stop'. "
         "Then it finishes or develops the hook. One person, one "
         "story, one thought: no new problem, no second hook, no hook said "
         "again. Echo the hook's single key image or feeling word once, as "
@@ -4928,8 +4939,9 @@ async def rewrite_whole_script(
     hook untouched — instead of sharpening one sentence at a time. It
     rides the shared spoken-line rules block, so the craft lessons of
     ADR 0201 come with it: the remake opens on the moment itself, its
-    first sentence names the place and answers the hook in the same
-    sentence, preamble openings are banned, no sentence runs past 18
+    first sentence answers the hook from what she is doing and feeling
+    in it — never the place, which the viewer can already see —
+    preamble openings are banned, no sentence runs past 18
     words, every sentence is finished, the ending stays open on the
     strongest concrete line and never lands on a vague stand-in payoff.
     It stays statements: the hook carries the question and the script
@@ -4993,8 +5005,10 @@ async def rewrite_whole_script(
         "loose words a real person says out loud to a friend. The hook "
         "stays untouched — the remake follows it and never repeats it. "
         "The remake opens on the moment itself: its first sentence "
-        "stands in the scene, names the place and answers the hook in "
-        "the same sentence, with no looking-back preamble before it. "
+        "answers the hook from what she is doing and feeling in it — "
+        "the concrete action, the body detail — and never names the "
+        "place, which the viewer can already see, with no looking-back "
+        "preamble before it. "
         "Every sentence finished, no sentence past 18 words, statements "
         "only — the hook carries the question and the script never asks "
         "one. End on the strongest concrete line, its thought left open, "
@@ -5731,7 +5745,7 @@ async def generate_creative_plan(
         "Return ONLY a JSON object with this exact schema:\n"
         "{\n"
         f'  "hook_line": "one complete spoken opening sentence about this viewer problem, in the form the HOOK FORM rule picks for this angle and problem (question only when the problem is a silent self-question, otherwise a statement, confession, or blunt observation — never a fixed default), at most {hook_budget} characters, in the speaker\'s own first-person voice — \'I\' is the voice of the hook, not a ration. It lands in the first second: open with what she is trying to do — the goal for this video as a plain first-person trying-line, never naming or announcing the place (the viewer can already see it) — and name ONE specific, recognizable feeling from this video\'s own story (physical where possible), with one lived detail, spoken to one person in plain spoken words (never like an ad), opening the question the script answers right away — short enough to say in one breath, and never reusing fixed wording (every hook unique to its video)",\n'
-        '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: 3 to 5 words, first person, the moment and place up front, one felt detail, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
+        '  "cover_text": "the cover text for this clip, written to the COVER TEXT rules above: 3 to 5 words, first person, the ache up front in plain words, one felt detail, never the place, the resolution withheld — a second angle on the hook\'s moment, never a copy of hook_line",\n'
         '  "script": "MIDDLE ONLY (the story after the hook): two beats max — one concrete action, then one lingering thought — written for the arc problem, then insight, then the shift in feeling; cut filler items from lists. Spoken live straight to camera in first person, plain natural spoken words a real person would say out loud: no narration about the speaker or the scene, no stage directions, no quoting own words back as a past event, no quotation marks anywhere. Answer the hook\'s question in the first clause. Echo the hook\'s single key image or feeling word once, as the payoff — never restate the hook\'s sentence or idea. Include one concrete lived detail and end on the strongest specific line (never a vague \'a word\' or \'that vague sense\')",\n'
         f'  "beat_timeline": [{{"start": 0, "end": {hook_seconds}, "label": "hook", "text": "what happens and what is said — the movement first: a rapid movement already underway in the first frame, its snap complete inside the first half second, that physically performs the story\'s central action at its sharpest instant, through the channel this story calls for, never a resting pose or a slow settle"}}, {{"start": {hook_seconds}, "end": {duration_seconds}, "label": "middle", "text": "what happens and what is said — ending on a sharp closing beat with the opening\'s energy, the story\'s action left visibly unfinished, never a soft fade or a passive smile hold"}}],\n'
         '  "location": "the physical place and its visible surroundings ONLY - never lighting words and never a time of day; those are set separately",\n'
@@ -7023,8 +7037,8 @@ async def generate_video_strategy(
     # for the current STRATEGY_MAX_TOKENS floor is recorded at the
     # constant (ADR 0129). A third attempt gives one more shortened
     # retry before the cut-off is named. Still inside the provider
-    # output ceiling of the models this service can be pointed at (Muse
-    # Ember's output ceiling is far above the base used here).
+    # output ceiling of the models this service can be pointed at (the
+    # shipped model's output ceiling is far above the base used here).
     # No wording gate: the strategy is accepted as written. Missing fields
     # still fail loudly; wording never fails a draft.
     raw = await _chat_json(

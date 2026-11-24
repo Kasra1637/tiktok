@@ -54,14 +54,16 @@ def test_both_lines_must_be_finished_sentences():
     assert "never an unfinished sentence" in block
 
 
-def test_the_script_opens_inside_the_scene_and_answers_at_once():
-    # Concreteness pays +2 for a place named anywhere in the pair, and
-    # the hook may never name it (ADR 0182) — so the place lives in the
-    # script's words. Story arc pays for the scene in the first
-    # sentence and charges when the answer waits behind a preamble.
+def test_the_script_opens_inside_the_moment_and_answers_at_once():
+    # Neither spoken line names the place (ADR 0294, Kasra's order):
+    # the viewer can already see it, so the script's first sentence
+    # answers from what she does and feels — one concrete action, one
+    # body detail — and the answer never waits behind a preamble.
     block = _block()
-    assert "at the bus stop" in block
-    assert "at bus stop" in block  # named as the article-dropping shape to avoid
+    assert "Never the place" in block
+    assert "at the kitchen table" in block  # a place-opening to avoid
+    assert "at the bus stop" in block  # a place-opening to avoid
+    assert "press my palm to my stomach" in block
     assert "Looking back over my recent days" in block
     assert "opens in retrospect" in block
     assert "first sentence" in block

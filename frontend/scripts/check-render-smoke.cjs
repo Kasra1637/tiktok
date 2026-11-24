@@ -1431,6 +1431,34 @@ async function main() {
         }
       });
 
+      await check("the angle freshness and the aim hint share one line", async (ctx) => {
+        // ADR 0291 (Kasra's order): the set's date and the pick-a-goal hint
+        // read as one status line under Regenerate, never two stacked lines.
+        const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
+        try {
+          await withApi(
+            { getContentAngles: async () => ({ angles: rows }) },
+            async () => {
+              global.__SMOKE_PARAMS = "";
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              await passAngleGate(ctx);
+              const fresh = ctx.container.querySelector('[data-testid="angle-set-freshness"]');
+              const hint = ctx.container.querySelector('[data-testid="angles-aim-hint"]');
+              if (!fresh || !hint) {
+                throw new Error("the status line is missing a piece");
+              }
+              if (fresh.parentElement !== hint.parentElement) {
+                throw new Error("the freshness and the aim hint do not share one line");
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
       await check("Review's angle gate names the angle in its own words", async (ctx) => {
         // ADR 0229: Review carries no angle redirect at all — the gate is
         // a sentence in the panel's own words naming the step that holds
@@ -5346,6 +5374,52 @@ async function main() {
     }
   });
 
+  await check("the empty plan's Regenerate stops pulsing once generation starts", async (ctx) => {
+    // ADR 0293 (Kasra's order): the pulse is an invitation to click.
+    // Once the founder has clicked and the regeneration is in flight,
+    // the invitation stands down — the button's busy face narrates
+    // the wait instead.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let releasePlan;
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, hook_line: "", script: "" }),
+        getGenerations: async () => ({ generations: [] }),
+        generatePlanAndStrategy: async () => {
+          await new Promise((resolve) => { releasePlan = resolve; });
+          return PROJECT_WITH_STRATEGY;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openStep(ctx, "Review & submit");
+        const regen = ctx.container.querySelector('[data-testid="plan-regenerate-button"]');
+        if (!regen) throw new Error("the Regenerate plan button is gone");
+        if (!regen.classList.contains("generate-invite")) {
+          throw new Error("the Regenerate plan button does not pulse before the click");
+        }
+        await clickEl(ctx, regen, "the Regenerate plan button does nothing");
+        await act(async () => {});
+        const doc = ctx.container.ownerDocument;
+        const dialog = doc.querySelector('[data-testid="regenerate-plan-dialog"]');
+        if (!dialog) throw new Error("the regenerate ask never opened");
+        const confirm = dialog.querySelector('[data-testid="regenerate-plan-confirm"]');
+        if (!confirm) throw new Error("the plan dialog carries no confirm button");
+        await clickEl(ctx, confirm, "the plan dialog confirm does nothing");
+        await act(async () => {});
+        const flying = ctx.container.querySelector('[data-testid="plan-regenerate-button"]');
+        if (!flying) throw new Error("the Regenerate plan button vanished mid-flight");
+        if (!flying.disabled) throw new Error("the Regenerate plan button is not busy mid-flight");
+        if (flying.classList.contains("generate-invite")) {
+          throw new Error("the Regenerate plan button still pulses while generation runs");
+        }
+        await act(async () => { releasePlan(); });
+        await act(async () => {});
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("the bar narrates a render in flight and offers neither Generate nor the arrow", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     try {
@@ -8317,6 +8391,58 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // tailored templates, so leaving it optional meant the strongest
   // recommendation input was silently dropped whenever a founder skipped it -
   // and the step still claimed to be "scored for this app".
+  await check("the templates Regenerate stands in its own spot under the label", async (ctx) => {
+    // ADR 0292 (Kasra's order): the tailored templates' Regenerate button
+    // leaves the section label's row and stands in its own block under the
+    // label, the same spot Regenerate angles holds above the angle list.
+    global.__SMOKE_PARAMS = "";
+    await withApi(
+      {
+        getTemplates: async () => ({ templates: ORDERED_TEMPLATES }),
+        getTemplateRecommendations: async () => ({
+          recommendations: [
+            {
+              template: ORDERED_TEMPLATES[0],
+              score: 9,
+              why_it_fits: ["Puts the timer at the centre of the piece."],
+              limitations: [],
+              suggested_duration: TEMPLATE.default_duration,
+            },
+          ],
+          shared_reasons: [],
+          shared_limitations: [],
+        }),
+        ensureObjectiveTemplates: async () => ({
+          templates: ORDERED_TEMPLATES,
+          generated: false,
+          objective: "ease_daily_moment",
+          error: null,
+        }),
+      },
+      async () => {
+        await mount(CreateVideo, {})(ctx);
+        await openTemplateStep(ctx);
+        await passTemplatesGate(ctx);
+      }
+    );
+    const button = ctx.container.querySelector('[data-testid="regenerate-templates-button"]');
+    if (!button) throw new Error("no Regenerate button beside the tailored set");
+    const label = [...ctx.container.querySelectorAll("span")].find(
+      (el) => el.textContent === "Tailored template for this app" || el.textContent === "Recommended templates"
+    );
+    if (!label) throw new Error("the templates section label is missing");
+    // The first element holding both must be the section stack itself, with
+    // the label standing in it directly — a shared row wrapper fails here.
+    let row = button.parentElement;
+    while (row && !row.contains(label)) row = row.parentElement;
+    if (!row || label.parentElement !== row) {
+      throw new Error("the Regenerate button still shares the label's row");
+    }
+    if (!(label.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+      throw new Error("the Regenerate button does not stand under the label");
+    }
+  });
+
   await check("the merged step refuses to rank anything without an objective", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi(

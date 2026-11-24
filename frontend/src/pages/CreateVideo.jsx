@@ -1842,9 +1842,12 @@ export default function CreateVideo() {
      and the founder holds no unsaved spoken words either, so there
      is nothing to read, check or save — Read the plan shows only the
      notice and the Regenerate plan button, which pulses for the
-     click the way the final Generate does. A pending spoken edit
-     stands the state down: the form stays so the words can be saved.
-     Defined here, above renderStep(), because the step JSX reads it. */
+     click the way the final Generate does. The pulse is the
+     invitation, so it stands down while a regeneration runs (ADR
+     0293): the button's busy face narrates that wait instead. A
+     pending spoken edit stands the state down: the form stays so
+     the words can be saved. Defined here, above renderStep(),
+     because the step JSX reads it. */
   const planEmpty =
     planWordsMissing(project) &&
     edits.hook_line === undefined &&
@@ -2603,25 +2606,24 @@ export default function CreateVideo() {
             )}
             {objective && !tailoring && recommendationsVisible && visibleRecommendations.length > 0 && (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <GroupLabel icon={Target}>
-                    {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
-                  </GroupLabel>
-                  {profileId && objective && (
-                    <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => runTailoring(true)}
-                        disabled={tailoring}
-                        title="Replace this goal's tailored templates with a fresh set"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" /> Regenerate
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                <GroupLabel icon={Target}>
+                  {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
+                </GroupLabel>
+                {profileId && objective && (
+                  <div className="pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => runTailoring(true)}
+                      disabled={tailoring}
+                      title="Replace this goal's tailored templates with a fresh set"
+                      data-testid="regenerate-templates-button"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                    </Button>
+                  </div>
+                )}
                 {/* Shared fit notes, read once: the scorer reasons per factor
                     (goal, category, angle kind), so every card in this set can
                     earn identical bullets. Repeating those on each card turned
@@ -3015,7 +3017,7 @@ export default function CreateVideo() {
                   busyStartedAt={planFlightStartedAt}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
-                  className={planEmpty ? "generate-invite" : undefined}
+                  className={planEmpty && !busy ? "generate-invite" : undefined}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {busy ? "Regenerating plan" : "Regenerate plan"}

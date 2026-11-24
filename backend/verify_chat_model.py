@@ -2,17 +2,18 @@
 Live chat-model verification: real calls, nothing mocked.
 
 The suite proves the request SHAPE the studio sends; only a real provider
-response proves that shape is ACCEPTED. Two facts about the Muse Ember (Max)
-swap cannot be settled by a mocked test, and this script settles both:
+response proves that shape is ACCEPTED. Two facts about the GPT-6.2 Sol
+swap (ADR 0295) cannot be settled by a mocked test, and this script
+settles both:
 
   1. Structured output. Every research / angles / plan / script call depends on
-     OpenRouter strict json_schema (response_format). Muse Ember declares
+     OpenRouter strict json_schema (response_format). GPT-6.2 Sol declares
      structured outputs, but OpenRouter routes support per endpoint, so this
      proves the endpoint the studio actually reaches accepts the envelope and
      returns JSON that satisfies a strict schema.
 
   2. The reasoning effort question. Every call now pins reasoning_effort to
-     Max for the shipped slug (see ai_service._reasoning_effort_param).
+     medium for the shipped slug (see ai_service._reasoning_effort_param).
      This probe is the proof that the endpoint accepts that value alongside
      the strict schema above: a refusal costs the first probe and names the
      field rather than silently running at another level.
@@ -113,7 +114,7 @@ async def _reasoning_effort_probe(ai_service, model: str, effort: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live chat-model verification.")
-    ap.add_argument("--effort", default="max",
+    ap.add_argument("--effort", default="medium",
                     help="reasoning effort to probe for acceptance")
     ap.add_argument("--model", default="",
                     help="model slug to probe (default: the configured TEXT_MODEL)")
