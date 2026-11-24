@@ -354,38 +354,39 @@ class TestTemperatureIsDataDriven:
 
 class TestChatModelRequestShape:
     """
-    GPT-6.2 Sol replaces Muse Ember on every chat flow (ADR 0295). The
-    consequences that travel with the model are pinned here rather than
-    re-discovered as production 400s:
+    Claude Sonnet 5.5 replaces GPT-6.2 Sol on every chat flow
+    (ADR 0299; Sol replaced Muse Ember one day earlier, ADR 0295).
+    The consequences that travel with the model are pinned here
+    rather than re-discovered as production 400s:
 
-    - temperature is sent ONLY where the endpoint declares it. The GPT-6
-      endpoints declare no temperature, so the field is left off the
-      shipped slug — the offline fallback omits it for the family too.
-      _post_chat's retry stays as the net under both the declared data
-      and the offline fallback;
-    - reasoning_effort=medium (ADR 0295) is sent for the
-      shipped slug, and for no other slug;
+    - temperature is sent ONLY where the endpoint declares it. None
+      of Sonnet 5.5's five endpoints declares it, so the field is
+      left off the shipped slug — the offline fallback omits it for
+      the Claude 5 families too. _post_chat's retry stays as the
+      net under both the declared data and the offline fallback;
+    - reasoning_effort=medium (ADR 0295, carried through ADR 0299)
+      is sent for the shipped slug, and for no other slug;
     - max_tokens stays (OpenRouter maps it), and reasoning tokens are billed
       against the same budget, which the truncation retry already covers.
     """
 
-    def test_chat_models_point_at_gpt_6_2_sol(self):
+    def test_chat_models_point_at_claude_sonnet_5_5(self):
         import ai_service
-        assert ai_service.TEXT_MODEL == "openai/gpt-6.2-sol"
-        assert ai_service.VISION_MODEL == "openai/gpt-6.2-sol"
+        assert ai_service.TEXT_MODEL == "anthropic/claude-sonnet-5.5"
+        assert ai_service.VISION_MODEL == "anthropic/claude-sonnet-5.5"
         assert ai_service.REASONING_EFFORT == "medium"
 
     def test_the_shipped_default_gets_medium_and_no_temperature(self, monkeypatch):
         """
-        The GPT-6 endpoints declare no temperature, so the field is left
-        off rather than spent discovering by 400 — and
-        reasoning_effort=medium (ADR 0295) travels with every call to
-        the shipped slug.
+        None of Sonnet 5.5's endpoints declares temperature, so the
+        field is left off rather than spent discovering by 400 — and
+        reasoning_effort=medium (ADR 0295, carried through ADR 0299)
+        travels with every call to the shipped slug.
         """
         import ai_service
         rec = _patch_client(monkeypatch, [_completion('{"a": 1}')])
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
-        assert rec.payloads[0]["model"] == "openai/gpt-6.2-sol"
+        assert rec.payloads[0]["model"] == "anthropic/claude-sonnet-5.5"
         assert "temperature" not in rec.payloads[0]
         assert rec.payloads[0]["reasoning_effort"] == "medium"
 

@@ -316,7 +316,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Two hundred and ninety-nine decisions (0001–0298; two
+Read `docs/adr/README.md` first. Three hundred decisions (0001–0299; two
 share the number 0263, written in parallel on Nov 21–22 2026) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt

@@ -95,14 +95,15 @@ logger = logging.getLogger(__name__)
 
 # Models
 #
-# Both chat models default to GPT-6.2 Sol (ADR 0295): OpenAI's everyday
-# GPT-6.2 tier, multimodal (text+image in) with structured-output
-# support, a 1.05M-token context window and reasoning effort pinned to
-# medium. It replaces Muse Ember at a higher listed price ($2/$10 per
-# 1M against Ember's $0.10/$0.50, both read off OpenRouter on Nov 23
-# 2026) — Kasra's call, made for stronger instruction-following across
-# every written surface at once: research, angles, plan, hooks,
-# covers, post kit.
+# Both chat models default to Claude Sonnet 5.5 (ADR 0299):
+# Anthropic's Sonnet tier, multimodal (text+image in) with
+# structured-output support, a 1M-token context window and reasoning
+# effort pinned to medium. It replaces GPT-6.2 Sol — shipped one day
+# earlier (ADR 0295) — at the same listed price ($2/$10 per 1M, read
+# off OpenRouter on Nov 23 2026): Kasra's call after the model
+# comparison, picking the strongest same-price model on his
+# benchmark table (69.45% against Sol's 65.07%) for every written
+# surface at once: research, angles, plan, hooks, covers, post kit.
 #
 # Both slugs are overridable from the environment so a model swap is a config
 # change rather than a code change, the same way the video provider already
@@ -112,22 +113,24 @@ logger = logging.getLogger(__name__)
 # shape — _reasoning_effort_param sends it for the shipped slug only.
 #
 # Consequences that travel with the shipped default everywhere below:
-# - temperature is NOT declared by the GPT-6 endpoints, so it is not
-#   sent. CHAT_TEMPERATURE stays 0.4 in code (Kasra's ruling, kept
-#   through the swap); the guard in _temperature_param reads the live
-#   declaration and simply leaves the field off a model that does not
-#   take it, and stays the net for any override whose endpoints
-#   declare something else.
+# - temperature is NOT declared by Sonnet 5.5's endpoints either
+#   (measured on the endpoints listing, Nov 23 2026: five endpoints,
+#   none declares it), so it is not sent. CHAT_TEMPERATURE stays 0.4
+#   in code (Kasra's ruling, kept through both swaps); the guard in
+#   _temperature_param reads the live declaration and simply leaves
+#   the field off a model that does not take it, and stays the net
+#   for any override whose endpoints declare something else.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
 #   reasoning tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
 #   treats as truncation and retries with a doubled budget.
-# - structured outputs (strict json_schema) are supported on GPT-6.2
-#   Sol and are compatible with reasoning; the local parse-and-retry
-#   in _chat_json stays as defense-in-depth for endpoints that treat
-#   the schema as a hint rather than a guarantee.
-DEFAULT_TEXT_MODEL = "openai/gpt-6.2-sol"
-DEFAULT_VISION_MODEL = "openai/gpt-6.2-sol"
+# - structured outputs (strict json_schema) ride on response_format,
+#   declared by all five of Sonnet 5.5's endpoints; structured_outputs
+#   itself is declared by three of the five, and the local
+#   parse-and-retry in _chat_json stays as defense-in-depth for the
+#   endpoints that treat the schema as a hint rather than a guarantee.
+DEFAULT_TEXT_MODEL = "anthropic/claude-sonnet-5.5"
+DEFAULT_VISION_MODEL = "anthropic/claude-sonnet-5.5"
 # The app-wide reasoning level: medium since ADR 0295 (extra high
 # before it, ADR 0211; Max before that, ADR 0110). Kasra's ruling was
 # speed across the whole app on the new model — every chat call
@@ -339,7 +342,8 @@ CHAT_TEMPERATURE = 0.4
 
 # Whether an endpoint accepts a `temperature` field is a MEASURED fact, not a
 # property of the model family, and it moves: every GPT-5/6 endpoint declares
-# no temperature, while Muse Ember, Gemini, Qwen, GLM and DeepSeek all declare
+# no temperature, and neither does any Claude Sonnet 5.5 endpoint, while Muse
+# Ember, Gemini, Qwen, GLM and DeepSeek all declare
 # it — and older models inside those same families differ again. A
 # hand-maintained prefix list cannot be right for all of them, so the decision
 # is read from OpenRouter's per-endpoint declaration (supported_parameters) and
@@ -349,7 +353,10 @@ CHAT_TEMPERATURE = 0.4
 # not been fetched: a cold process, a network failure, the test suite. The retry
 # in _post_chat covers whatever it gets wrong, so a bad fallback costs one round
 # trip and never a call.
-_TEMPERATURE_OMITTED_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+_TEMPERATURE_OMITTED_PREFIXES = (
+    "gpt-5", "gpt-6", "o1", "o3", "o4",
+    "claude-sonnet-5", "claude-fable-5", "claude-opus-5",
+)
 
 # {normalized slug: True when EVERY declared endpoint accepts a temperature}.
 # Empty until refresh_temperature_support() runs.
@@ -443,7 +450,8 @@ def _reasoning_effort_param(model: str, effort: Optional[str] = None) -> dict:
     The pinned reasoning level, for the shipped model only.
 
     Medium is how this model is specified to run at all since
-    ADR 0295 (extra high before it, ADR 0211). The field is sent as
+    ADR 0295 (carried through ADR 0299; extra high before it,
+    ADR 0211). The field is sent as
     `reasoning_effort`, which the shipped slug's endpoints declare, and only for
     that slug: an override pointed at another model is taken as given for its
     request shape (see _temperature_param — declared data, offline fallback,

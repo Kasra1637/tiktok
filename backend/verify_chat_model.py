@@ -2,13 +2,14 @@
 Live chat-model verification: real calls, nothing mocked.
 
 The suite proves the request SHAPE the studio sends; only a real provider
-response proves that shape is ACCEPTED. Two facts about the GPT-6.2 Sol
-swap (ADR 0295) cannot be settled by a mocked test, and this script
-settles both:
+response proves that shape is ACCEPTED. Two facts about the Claude
+Sonnet 5.5 swap (ADR 0299) cannot be settled by a mocked test, and
+this script settles both:
 
   1. Structured output. Every research / angles / plan / script call depends on
-     OpenRouter strict json_schema (response_format). GPT-6.2 Sol declares
-     structured outputs, but OpenRouter routes support per endpoint, so this
+     OpenRouter strict json_schema (response_format). Sonnet 5.5 declares
+     response_format on all five endpoints (structured_outputs on three),
+     but OpenRouter routes support per endpoint, so this
      proves the endpoint the studio actually reaches accepts the envelope and
      returns JSON that satisfies a strict schema.
 
